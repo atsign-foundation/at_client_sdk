@@ -183,7 +183,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [123] | `AtKeysIo.update` never creates, so a keyfile deleted mid-flight stays deleted               | 2026-08-28 | LIVE                      |
 | [124] | The signing root's mint lock is sized against starvation, not contention                     | 2026-08-28 | LIVE                      |
 | [125] | A Hive store's identity is its storage path, not its atSign                                  | 2026-08-28 | LIVE                      |
-| [126] | The mint barrier is deleted: legacy authentication and data signing are one keypair         | 2026-08-30 | LIVE                      |
+| [126] | The mint barrier is deleted: legacy authentication and data signing are one keypair         | 2026-08-30 | AMENDED 2026-08-30        |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted

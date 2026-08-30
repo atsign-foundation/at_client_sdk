@@ -17,6 +17,8 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, EnvelopeType, signEnvelope, verifyEnvelope;
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
+import 'package:at_client/src/signing/resolved_signing_algo.dart'
+    show recordResolvedSigningAlgo;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -99,6 +101,18 @@ void main() {
 
   SigningKeyMinting minter() =>
       SigningKeyMinting(atClient, enrollment: enrollment);
+
+  /// Makes this client a **retrofitted** enrollment: its authentication key is
+  /// ML-DSA-65, so the authentication and data signing keys are two different
+  /// keys and the enrollment genuinely lacks any rsa2048 signing key until one
+  /// is minted.
+  ///
+  /// Without this the fixture is a **legacy** enrollment — an rsa2048 APKAM
+  /// and no typed signing material — where the one keypair does both jobs, so
+  /// the enrollment already holds the rsa2048 signing key the in-use set names
+  /// and the mint is correctly a no-op.
+  void asRetrofittedEnrollment() =>
+      recordResolvedSigningAlgo(atClient, SigningAlgoType.mldsa65);
 
   /// One reconciliation, returning what it minted and asserting it retired
   /// nothing.
@@ -213,12 +227,13 @@ void main() {
     });
 
     test('a single rsa2048 key is advertised in the bare form', () async {
-      // What a rollout-1 client healing an enrollment that predates
-      // enrollment-time minting publishes. Every deployed `_apsk` consumer
-      // base64-decodes the value as an RSA key, so a one-entry JSON array
-      // here is fail-closed but service-breaking for anything already
-      // running — the breakage rollout 1 exists to prevent, arriving from
-      // the heal path instead of the request path.
+      // A retrofitted enrollment minting the rsa2048 signing key its stage
+      // names. Every deployed `_apsk` consumer base64-decodes the value as an
+      // RSA key, so a one-entry JSON array here is fail-closed but
+      // service-breaking for anything already running — the breakage rollout 1
+      // exists to prevent, arriving from the heal path instead of the request
+      // path.
+      asRetrofittedEnrollment();
       when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
           dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048}));
 
@@ -240,6 +255,7 @@ void main() {
     });
 
     test('several algorithms are advertised strongest first', () async {
+      asRetrofittedEnrollment();
       when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
           dataSigningKeyAlgorithms: const {
             SigningAlgoType.rsa2048,
@@ -323,6 +339,10 @@ void main() {
     /// The rollout-1 starting position: this enrollment holds an RSA-2048
     /// signing key of its own and advertises it.
     Future<void> atRollout1() async {
+      // A retrofitted enrollment, which is what this group is about: the move
+      // from {rsa2048} to {mldsa65} is a transition an enrollment makes after
+      // its authentication key has already gone post-quantum.
+      asRetrofittedEnrollment();
       inUse({SigningAlgoType.rsa2048});
       expect((await minter().reconcileSigningKeys()).minted,
           [SigningAlgoType.rsa2048]);
@@ -547,6 +567,12 @@ void main() {
     });
 
     test('an envelope signed before the withdrawal still verifies', () async {
+      // A retrofitted enrollment, as everywhere in this group. The null
+      // enrollment id is only how this row reaches the simpler publish path
+      // (a direct put rather than an `enroll:update`); the claim below is
+      // about what a withdrawal does to an envelope, not about enrollment
+      // identity.
+      asRetrofittedEnrollment();
       when(() => atLookUp.enrollmentId).thenReturn(null);
       final published = <String>[];
       when(() => atClient.get(any(),
@@ -602,6 +628,12 @@ void main() {
     test(
         'a two-member in-use set signs twice, and a one-algorithm verifier '
         'still verifies', () async {
+      // A retrofitted enrollment, as everywhere in this group. The null
+      // enrollment id is only how this row reaches the simpler publish path
+      // (a direct put rather than an `enroll:update`); the claim below is
+      // about what a withdrawal does to an envelope, not about enrollment
+      // identity.
+      asRetrofittedEnrollment();
       when(() => atLookUp.enrollmentId).thenReturn(null);
       final published = <String>[];
       when(() => atClient.get(any(),
@@ -647,6 +679,83 @@ void main() {
       // rather than the first entry, so the upgrade takes effect for it.
       await verifyEnvelope(two,
           signerPublicKey: published.last, expecting: EnvelopeType.app);
+    });
+  });
+
+  /// A legacy enrollment's authentication keypair IS its data signing keypair
+  /// — one rsa2048 key doing both jobs. `AtKeys.signingKeysFor` cannot see it,
+  /// because it reads typed per-enrollment material and a legacy keyfile
+  /// carries flat fields, so the mint used to conclude the enrollment held no
+  /// signing key, generate a SECOND rsa2048 keypair and publish it — dropping
+  /// the original from `_apsk` and leaving whatever it signed unverifiable.
+  ///
+  /// The whole value of the fix is its SCOPE, so the discriminating cases are
+  /// here beside it.
+  group('a legacy enrollment already holds its data signing key', () {
+    void inUse(Set<SigningAlgoType> algorithms) {
+      when(() => atClient.getPreferences())
+          .thenReturn(AtClientPreference(dataSigningKeyAlgorithms: algorithms));
+    }
+
+    test('so an in-use set naming rsa2048 mints nothing', () async {
+      // The fixture is legacy by construction: an rsa2048 APKAM keypair and a
+      // keyfile with no typed signing material.
+      inUse({SigningAlgoType.rsa2048});
+
+      final reconciled = await minter().reconcileSigningKeys();
+
+      expect(reconciled.minted, isEmpty,
+          reason: 'the enrollment holds an rsa2048 signing key already — the '
+              'one it authenticates with. A second one is the same algorithm '
+              'and buys nothing');
+      expect(reconciled.retired, isEmpty);
+      expect(updates, isEmpty,
+          reason: 'and nothing is published, so the advertisement goes on '
+              'naming the key that signed what this enrollment has signed');
+      expect(await heldKeyIds(), isEmpty);
+    });
+
+    test('an ML-DSA-authenticating enrollment holding none still mints one',
+        () async {
+      // ⛔ **The control that makes the scope mean something, and the only
+      // state that discriminates the two forms.** ML-DSA authentication key,
+      // no typed signing material, in-use set naming ML-DSA:
+      //
+      // - excluding **rsa2048** leaves mldsa65 missing, so it is minted;
+      // - excluding **whatever the authentication keypair reports** empties
+      //   `missing`, nothing is ever minted, and `_apsk` advertises the
+      //   authentication key as its sole active entry — the auth/signing split
+      //   collapsing on the posture that exists to create it, silently.
+      //
+      // Reachable today: an enrollment created at pqActive before the enrolment
+      // path minted a signing key of its own is in exactly this state.
+      asRetrofittedEnrollment();
+      inUse({SigningAlgoType.mldsa65});
+
+      expect((await minter().reconcileSigningKeys()).minted,
+          [SigningAlgoType.mldsa65]);
+      expect(await heldKeyIds(), ['mldsa65']);
+    });
+
+    test('and a legacy enrollment at pqActive mints ML-DSA too', () async {
+      // rsa2048 authentication, ML-DSA wanted: the exclusion cannot fire,
+      // because it names rsa2048 and rsa2048 is not what the set wants.
+      inUse({SigningAlgoType.mldsa65});
+
+      expect((await minter().reconcileSigningKeys()).minted,
+          [SigningAlgoType.mldsa65]);
+    });
+
+    test('and a RETROFITTED enrollment still mints rsa2048', () async {
+      // The other half of the scope: once the authentication key is ML-DSA the
+      // two keys are genuinely different, so the enrollment really does lack
+      // an rsa2048 signing key and really must mint one.
+      asRetrofittedEnrollment();
+      inUse({SigningAlgoType.rsa2048});
+
+      expect((await minter().reconcileSigningKeys()).minted,
+          [SigningAlgoType.rsa2048]);
+      expect(await heldKeyIds(), ['rsa2048']);
     });
   });
 

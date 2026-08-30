@@ -12889,25 +12889,46 @@ Two things, and the second is why the first is safe:
    it, and the 45-second bound added on 2026-08-29 with its test file.
 2. **A legacy enrollment uses its authentication keypair for authentication AND
    for data signing, and never mints a data signing keypair of its own** —
-   implemented by excluding that keypair's algorithm from the `missing` list
-   `SigningKeyMinting.reconcileSigningKeys` computes, **and only when the
-   enrollment holds no typed signing material at all**. The scope is not
-   decoration; see the trap below.
+   implemented by excluding **rsa2048** from the `missing` list
+   `SigningKeyMinting.reconcileSigningKeys` computes, when the enrollment holds
+   no typed signing material **and its authentication keypair is rsa2048**. The
+   scope is not decoration; see the trap below.
 
-⚠️ **The exclusion must be scoped to `heldSigningKeys.isEmpty`, or it collapses
-the split it exists to protect.** `authenticationSigningKey.algorithm` is
-`signingAlgoOf(atClient)` — the recorded key-material resolution — so on a
-**retrofitted** enrollment it reports mldsa65, not rsa2048. An unscoped
-"exclude every algorithm the authentication keypair satisfies" therefore fires
-on row 4 of the table below: at `pqActive` `wanted` is `{mldsa65}`, `missing`
-collapses to empty while `superseded` is still `[rsa2048]`, and the enrollment
-retires its working rsa2048 data signing keypair without minting the ML-DSA one.
-`_apsk` stays coherent — `apskEntries` re-advertises the authentication keypair
-whenever `signing` is empty, and `signingKeys` falls back to the same key — so
-nothing goes unverifiable and nothing goes red. What is lost is the auth/signing
-split itself, silently, on the posture that exists to create it. Scoping the
-exclusion to an enrollment holding no typed signing material leaves all four
-rows correct.
+⚠️ **AMENDED 2026-08-30, in the same commit as the implementation: the
+exclusion names `rsa2048`, not "whatever algorithm the authentication keypair
+reports".** This rule originally read *"excluding that keypair's algorithm …
+and only when the enrollment holds no typed signing material at all"*, and the
+trap recorded below was that an **unscoped** exclusion would fire on a
+retrofitted enrollment. Gating on `heldSigningKeys.isEmpty` does close that
+particular hole — a retrofitted enrollment at `pqReady` holds typed material,
+so the gate never opens — but it leaves a second one, and the second is worse
+because nothing at all is minted.
+
+**The state that discriminates the two forms:** an enrollment whose
+authentication keypair is **ML-DSA-65** and which holds **no typed signing
+material**, at `pqActive`. `authenticationSigningKey.algorithm` is
+`signingAlgoOf(atClient)`, so it reports mldsa65. Excluding *that* algorithm
+empties `missing` while `wanted` is `{mldsa65}`, so **no ML-DSA data signing
+keypair is ever minted**, and `apskEntries` goes on advertising the
+authentication keypair as the sole active entry — the auth/signing split
+collapsing on the posture that exists to create it, silently and with nothing
+going red. Excluding **rsa2048** cannot fire there at all, because rsa2048 is
+not what that set wants.
+
+That state is reachable rather than theoretical: an enrollment created by
+`sendEnrollRequest` at `pqActive` before the enrolment path minted a signing
+key of its own is in exactly it.
+
+⛔ **A correction to the reasoning, not only the scope.** An earlier draft of
+this argued that the unscoped form would leave *"`missing` empty while
+`superseded` still held rsa2048"*. That cannot happen: `superseded` is derived
+from `held` (`signing_key_minting.dart`), so when `held` is empty `superseded`
+is empty too. The retirement-without-replacement it described is not a
+reachable state, and the real hazard is the mint that never happens.
+
+Pinned by `signing_key_minting_test.dart`'s *"an ML-DSA-authenticating
+enrollment holding none still mints one"*, which is the only case that tells
+the two forms apart — the rsa2048 rows pass under both.
 
 ### The naming that settled it
 

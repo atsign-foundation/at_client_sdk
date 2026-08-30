@@ -1,5 +1,21 @@
 ## 3.15.0-rc1
 
+- fix: **a legacy enrolment no longer mints a second copy of the signing key it
+  already holds.** On an enrolment with no typed signing material the APKAM
+  authentication keypair *is* the data signing keypair — one rsa2048 key doing
+  both jobs — but `AtKeys.signingKeysFor` reads typed per-enrolment material
+  only, so a legacy keyfile's flat fields were invisible and rsa2048 read as
+  absent. The mint then generated a second rsa2048 keypair and published it,
+  dropping the original from `_apsk` and leaving whatever it had signed
+  unverifiable, for no gain: the algorithm was identical.
+  - **Scoped to rsa2048**, and the scope is the whole of its correctness.
+    Excluding whatever algorithm the authentication keypair reports would fire
+    at `pqActive`, where it reports ML-DSA-65 on an enrolment holding no typed
+    material — nothing would ever be minted and the advertisement would name
+    the authentication key as its sole active entry, which is the
+    authentication/signing split collapsing on the posture that exists to
+    create it.
+
 - feat: **an enrolment mints the data signing key its posture names**, not
   rsa2048 unconditionally. `mintAdvertisedSigningKey` is the one home for it,
   shared by the self-retrofit, the PQ-native activation and `at_onboarding_cli`'s

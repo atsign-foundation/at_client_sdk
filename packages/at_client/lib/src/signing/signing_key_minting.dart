@@ -135,10 +135,33 @@ class SigningKeyMinting with ApkamSigning {
     }
 
     final held = await heldSigningKeys;
+    // On an enrollment holding no typed signing material, the APKAM
+    // authentication keypair IS its data signing keypair — one key doing both
+    // jobs, which is what a legacy keyfile carries and what [apskEntries]
+    // advertises for it. [AtKeys.signingKeysFor] cannot see it, because it
+    // reads typed per-enrollment material and a legacy keyfile carries flat
+    // fields, so rsa2048 reads as absent on an enrollment that holds it.
+    // Minting a second rsa2048 keypair buys nothing — the algorithm is
+    // identical — and publishing it drops the original from `_apsk`, leaving
+    // whatever that key signed unverifiable.
+    //
+    // **Scoped to rsa2048, and the scope is the whole of its correctness.**
+    // The authentication keypair is the data signing keypair only while the
+    // two are one key, which is a legacy enrollment and therefore rsa2048.
+    // Excluding whatever algorithm the authentication keypair reports would
+    // fire at `pqActive`, where it reports mldsa65 on an enrollment holding no
+    // typed material: `missing` would empty, no ML-DSA signing key would ever
+    // be minted, and the advertisement would name the authentication key as
+    // its sole active entry — the auth/signing split collapsing on the posture
+    // that exists to create it, with nothing going red.
+    final authenticationIsAlsoTheSigningKey = held.isEmpty &&
+        authenticationSigningKey?.algorithm == SigningAlgoType.rsa2048;
     final missing = [
       for (final algorithm in SigningAlgoType.strongestFirst)
         if (wanted.contains(algorithm) &&
-            !held.any((key) => key.algorithm == algorithm))
+            !held.any((key) => key.algorithm == algorithm) &&
+            !(authenticationIsAlsoTheSigningKey &&
+                algorithm == SigningAlgoType.rsa2048))
           algorithm
     ];
     // What this build can sign with and the set no longer names. A held key
