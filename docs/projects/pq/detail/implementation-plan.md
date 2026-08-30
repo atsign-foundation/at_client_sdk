@@ -4831,11 +4831,167 @@ through the refusal, and nothing does.
 
 ## 16. Demoted from the live plan, 2026-08-22
 
-These sections closed and were moved here whole, leaving a one-line row in
-the live plan's `## DONE` table. Nothing was summarised away: demotion
-follows completion, never length, and the reasoning behind a closed item is
-the part a later reader needs. Their anchors are unchanged, so a link that
-used to reach them in the live plan now reaches them here.
+These sections closed and were moved here whole. Nothing was summarised away:
+demotion follows completion, never length, and the reasoning behind a closed
+item is the part a later reader needs. Their anchors are unchanged, so a link
+that used to reach them in the live plan now reaches them here.
+
+⚠️ **This said each demotion left "a one-line row in the live plan's `## DONE`
+table" until 2026-08-30.** There is no `## DONE` table any more — a closed item
+leaves nothing behind in the live plan, which is what makes moving the body
+here rather than deleting it the whole of the record.
+
+### The PQ data-signing-key programme — eight commits, discharged 2026-08-30
+
+Moved here whole on 2026-08-30, the day the last commit landed. It sat in
+`## TODO` as a P0 while it was owed; with nothing left owed, the live list's
+own convention is that the row goes. Nothing is summarised away — the
+measurements below are the reason it is here rather than deleted, and several
+of them are recorded nowhere else: commit 6's real blast radius, why the 28
+functional failures were fixtures rather than the rule, why the CLI pack is
+not a differential for commit 5, and that the e2e approvers needed no posture
+change.
+
+⛔ **Design settled with gkc 2026-08-30. Supersedes the former rows for the mint
+barrier and for `sendEnrollRequest`'s stranded key package.** The design is in
+`untracked/pq-data-signing-key-states.md` and the sequence in
+`untracked/pq-commit-sequencing-plan.md` — ⚠️ **both gitignored — but the
+write-up is DONE**: each of the seven landed commits carried its own amendment,
+and both untracked files are now partly stale, so the tracked docs win.
+
+✅ **1, 2, 3, 5, 6, 8 and 9 are DONE** — `3308eddcb`, `56f2e5d39`, `b8e4d5291`;
+re-derive with `git log --oneline`. ⛔ **4 is DROPPED** ([ruling
+127](decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30)).
+✅ **Eight commits. SEVEN DONE, ONE DROPPED — the programme is complete as of
+2026-08-30.** What each turned out to be, and what proves it, is
+[below](../implementation-plan.md#why-commit-7-needs-no-atserver-change). 1
+at_auth files the advertised signing key's private half on the ordinary
+enrollment path. 2 at_onboarding_cli mints and advertises one per algorithm in
+`dataSigningKeyAlgorithms` — **the algorithm the enrollment will keep**,
+rsa2048 at pqReady and mldsa65 at pqActive, not rsa2048 unconditionally — and
+the same for `pq_native_onboard`. 3 `reconcileSigningKeys` stops miscounting a
+legacy enrollment's rsa2048, **scoped to rsa2048** or it collapses the
+auth/signing split at pqActive. ⛔ 4 **dropped**: a null-id client publishing
+its own `_apsk.primary` is a mechanism `signing_key_minting_test.dart`
+specifies, and 7 — which was to replace it — was recorded here as refused by
+the atServer. ⚠️ **That reading was too wide**: only the auto-approve branch
+refuses it, and 7 is reachable on today's atServer. 4 stays dropped on its
+first reason alone — the null-id publish is a pinned capability, and a client
+that never retrofits still needs it. See [ruling
+127](decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30)
+for the residual it leaves open. ✅ 5 **the mint barrier is deleted**. ⚠️ **2
+and 3 did NOT fully carry it** — it still guarded one state, an enrolment
+authenticating post-quantum that holds no signing key, and `serialiseApskWrite`
+does not cover that because the lock serialises `_apsk` **writers** and this is
+a **reader**. Deleted anyway (gkc): the state has no holder outside this tree,
+and the deadlock is measured. [Ruling
+126](decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30)
+is amended in place, because its own safety sentence was what was false. ✅ 6
+`AtClientPreference` refuses an empty signing set with non-rsa2048 auth, and
+any explicit authentication axis weaker than its posture. [Ruling
+113](decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)
+amended. ⚠️ **The blast radius was TWELVE sites across four packages, not the
+seven the design named** — the doc keyed its sweep on the literal
+`authenticationKeyAlgorithm:`, while rule B keys on the RESOLVED value, so a
+site naming only an empty `dataSigningKeyAlgorithms:` against a pq posture
+trips it while appearing nowhere in that list. One such site was an assertion
+rather than a fixture, so the rule **deleted a pinned property** (that an
+explicit empty set beats the posture) rather than breaking a test. ⛔ **And the
+doc's prescribed fix for the pinning fixtures — "rebase on pqReady" — would
+have created fresh rule-D violations**; they take a non-empty signing set
+instead, keeping the posture. The retired justification string was duplicated
+in **two** packages, not one. 7 a pre-enrollment atSign retrofits at a PQ
+posture. ✅ 8 a client with `!configuresPqProviders` neither approves a pq
+request nor sweeps. **The discriminator is the ABSENCE of a wrapped symmetric
+key**, not the advertised key package — a package rides every mode, and the
+code already computed the right signal for its own reasons, so refusing after
+it costs no extra round trip. A legacy request is still approved normally,
+which is the whole of what such a client is for. The sweep is refused in
+`EnrollmentServiceImpl` **and** gated in the startup: the gate is the startup's
+answer, the throw is every other caller's. ⚠️ **`MockAtClient.getPreferences()`
+is a CONCRETE override**, so `when(...)` cannot stub a posture — the mock and
+its builder took a `posture` argument for this. ⚠️ **The refusal reddened 28
+functional tests, and the FIXTURES were wrong, not the rule** — their approvers
+named `PqPosture.legacy` to get two of its *other* axes (no retrofit, no
+namespace seeding) and silently also got "no post-quantum providers", which was
+never the intent and only became load-bearing when something asked. 15 approver
+constructions now name `legacyPlusPqProviders`, which is legacy in every axis
+except that one. The grid's legacy RECEIVER cell is deliberately left alone. ✅
+9 a privileged approver without the root private signs a chain link when it
+holds a data signing key, and conveys **nothing** when it holds neither — that
+third arm is the one that must not guess, because `signingKeys` falls back to
+the APKAM key and that key is dropped rather than retired. [Ruling
+67](decisions.md#67-workstream-bi-the-sweep-anchors-to-the-root-2026-08-10)
+amended: its "the every-start pull heals possession" does not hold, since the
+pull and the sweep are both startup steps, so nothing re-attempts the link for
+an enrolment approved while its approver was unpossessed.
+
+⛔ **1 and 2 are a pair** — advertising without filing is worse than today. 1 is
+separable only because it is a no-op alone. ✅ **7 IS DONE, and it needed no
+atServer change — measured live 2026-08-30,
+[below](../implementation-plan.md#what-commit-7-turned-out-to-be).** Only the
+self-enrolment AUTO-APPROVE branch refuses a pre-enrollment connection; the
+route that works is request → approve on the same connection, because
+`isAuthorized` grants a null enrollment id full access, so such a client is its
+own approver. Proven end to end against a live atServer, with the atServer's
+own "authenticated as the owner" refusal as the control. **What 7 must get
+right**: sibling clones need distinct device names, because
+`preventDuplicateEnrollRequest` runs on this path.
+`enroll_verb_handler.dart:406` gates the self-enrolment auto-approve on
+`authType == AuthType.apkam`, and a pre-enrollment client authenticates with
+the flat `at_pkam_publickey`, which sets `pkamLegacy` and a null enrollment id
+— so it cannot enter that branch at all, and :410-414 refuses a null id
+outright. 7 IS a client-only item.
+
+**Two live tests moved with 1-3, both re-fixtured rather than weakened**:
+`self_enrollment_retrofit_live_test.dart` pinned the retrofit’s key package as
+RS256 at pqActive, which was the rsa2048 hardcode; `apsk_server_side_test.dart`
+healed a legacy-shaped enrolment, which is exactly the mint 3 removes — its
+enrolment now authenticates post-quantum, which is the only shape the heal path
+still serves.
+
+✅ **Rulings 67, 113 and 126 are all amended in place**, each in the commit that
+changed it, and each marked AMENDED in the ledger index.
+
+**Commit 7 was the largest and least specified**, and it was right about that:
+what it actually needed was a measurement, not a session — the atServer change
+it was waiting on did not exist.
+
+**What actually proves 5, and what does not.** ⛔ **The CLI pack is NOT a
+differential for it.** `tests/at_onboarding_cli_functional_tests` ran green —
+19 tests, 1m34s, all five files, the approve path exercised — but the 45-second
+bound added on 2026-08-29 means it would have passed before the deletion too,
+just slower. It establishes **no regression**, not that the deadlock is gone;
+and the barrier's own warning is absent because the code that emits it was
+deleted, which is a control drawn from the property under test. **The proof is
+the unit guard**: `pq_client_bootstrap_test.dart`'s *"a signer answers while a
+startup step is still parked"* parks the sweep so the startup is genuinely
+mid-flight and has not reached the mint, then asserts a signer returns.
+Mutation-proven — making `signingKeys` await anything reddens exactly that
+test, quoting its own reason, with the other sixteen green.
+
+✅ **The e2e pack IS run**: 62 passed at base port 26000, including commit 6's
+`long_lived_atsign_guard_test.dart` change. ⛔ **Its approvers need NO posture
+change** — measured, not assumed: the three retrofit files pass with their
+approvers at `PqPosture.legacy`, because those enrolments carry their own
+wrapped key and the refusal keys on the absence of one. Moving them breaks
+`TestPreferences`' one-posture-per-atSign memoisation, which is what a first
+attempt did.
+
+✅ **7, as built.** `_settleEnrollmentIdentity` drops its `enrollmentId == null`
+return; `AtClientImpl.firstEnrollmentIdentity()` names what a client with no
+enrollment asks to be, with a **per-device** device name rather than the bare
+`firstDevice` the design named — measured, the bare constant leaves every
+sibling clone after the first refused at every start for ever. at_auth approves
+its own `pending` response when the **session** carries no enrollment id, which
+is the discriminator because `pending` also means an atServer too old to
+auto-approve an APKAM retrofit, and that one keeps its deny-and-throw. A third
+change: an `on Error` clause beside the `on Exception` one, because the
+method's dartdoc promises nothing is fatal while `retrofitIdentity` throws
+`ArgumentError`. ⚠️ **`AtOnboardingPreference` inherits the `pqReady` default,
+so every `at_activate` command now self-enrols a pre-enrollment atSign and
+rewrites its `.atKeys`** — ruled INTENDED by gkc, and two legacy-shaped groups
+of the CLI pack were re-fixtured at `PqPosture.legacy`.
 
 ### 14.30 A content notification can outrun the key that opens it
 
