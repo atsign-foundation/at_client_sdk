@@ -10939,6 +10939,38 @@ must.
 
 ## 113. PqPosture: three postures, and the rollout they drive (2026-08-18)
 
+⚠️ **Amended 2026-08-30 — the axes remain independent, within two coherence
+rules the `AtClientPreference` constructor now enforces.** This ruling's
+"individual axes still win" was stated without qualification, and it licensed
+two combinations that cannot be built coherently:
+
+1. **An empty `dataSigningKeyAlgorithms` requires rsa2048 authentication.** An
+   enrollment holding no data signing key signs data with its authentication
+   key, and `apskEntries` advertises that key as the sole active entry. The
+   bare `_apsk` form — the only spelling an un-upgraded peer parses, since it
+   base64-decodes the value as an RSA key — states a single active **rsa2048**
+   entry and nothing else. So any other authentication algorithm beside an
+   empty set forces the JSON array onto exactly the record `legacy` exists to
+   keep readable.
+2. **A posture is a floor.** An explicit `authenticationKeyAlgorithm` may raise
+   what the posture names and may not lower it. This one had no ruling behind
+   it at all — it followed from "individual axes still win", and its only
+   written justification was a `reason:` string, duplicated in two packages,
+   describing *"a deployment whose atServer cannot verify ML-DSA PKAM yet"*.
+   No such deployment has a holder: nothing released carries post-quantum key
+   material. `AtClientPreference`'s own dartdoc already routed an app that must
+   not move to `PqPosture.legacy` rather than to an axis override, and
+   `_settleEnrollmentIdentity` already said "a posture is a floor" — which an
+   override lowering an axis below it is exactly what a floor prevents.
+
+**Left legal, deliberately:** a `dataSigningKeyAlgorithms` **weaker** than the
+posture. `pqActive` with `{rsa2048}` mints rsa2048 and keeps `_apsk` bare,
+which is coherent. Not extended without a ruling.
+
+The axes stay independent wherever there are genuinely two keys; an empty
+signing set is one key wearing both hats, and that is what rule 1 constrains.
+This narrows the independence rather than reversing it.
+
 ⚠️ **Amended 2026-08-29 — `configuresPqProviders` is a tenth axis**, and the
 table below gains a row for it. It is false in `legacy` alone, which is what
 makes that stage a stand-in for a build predating the post-quantum providers

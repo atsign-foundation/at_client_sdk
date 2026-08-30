@@ -72,11 +72,27 @@ class AtClientPreference {
   /// `AtClientImpl.retrofitIsDue`. An app that must not move names
   /// [PqPosture.legacy] explicitly.
   ///
-  /// Individual axes still win: an explicit [authenticationKeyAlgorithm] or
+  /// Individual axes still win, **within two coherence rules the constructor
+  /// enforces**: an explicit [authenticationKeyAlgorithm] or
   /// [dataSigningKeyAlgorithms] argument, an assigned [crypto], or a per-call
   /// algorithm each override the posture's value for that one axis.
   /// [disallowLegacyEncryption] and [PqPosture.configuresPqProviders] are the deliberate
   /// exceptions and are settable only through the posture.
+  ///
+  /// The two rules, both refused at construction:
+  ///
+  /// - **An empty [dataSigningKeyAlgorithms] requires rsa2048 authentication.**
+  ///   With no data signing key the authentication key signs data and is what
+  ///   `_apsk` advertises, and the bare advertisement — the one an un-upgraded
+  ///   peer can parse — states a single active rsa2048 entry and nothing else.
+  /// - **A posture is a floor.** An explicit axis may raise what the posture
+  ///   names and may not lower it. An app that must not move names
+  ///   [PqPosture.legacy], rather than keeping a stronger posture and weakening
+  ///   an axis it is made of.
+  ///
+  /// The axes stay independent wherever there are genuinely two keys; an empty
+  /// signing set is one key wearing both hats, which is what the first rule
+  /// constrains.
   ///
   /// Final at construction, like [disallowLegacyEncryption] and for the same
   /// reason: what a client writes must not change meaning mid-run. A client
@@ -194,6 +210,54 @@ class AtClientPreference {
     // is mutable: an app may still turn seeding on or off after construction,
     // and the posture only decides where it starts.
     seedNamespaceKeys = posture.seedNamespaceKeys;
+
+    // The two coherence rules below are in the BODY because each needs both
+    // resolved axes at once, and an initializer list gives no point where both
+    // are available.
+    //
+    // ⚠️ **They read different things, and the difference is the whole of their
+    // correctness.** Inside this body the bare names `authenticationKeyAlgorithm`
+    // and `dataSigningKeyAlgorithms` are the *parameters* — nullable, and null
+    // exactly when the caller named no value. `this.`-qualified, they are the
+    // *resolved* fields. The first rule is about what this preference IS, so it
+    // reads the fields; the second is about what the caller ASKED FOR, so it
+    // reads the parameter, where non-null is what "explicit" means.
+
+    // An enrollment with no data signing key signs data with its authentication
+    // key, and `apskEntries` advertises that key as the sole active entry. The
+    // bare `_apsk` form — the one spelling an un-upgraded peer can parse, since
+    // it base64-decodes the value as an RSA key — exists only for a single
+    // active rsa2048 entry. So a non-rsa2048 authentication key beside an empty
+    // signing set forces the JSON array onto exactly the record that shape is
+    // there to keep readable.
+    if (this.dataSigningKeyAlgorithms.isEmpty &&
+        this.authenticationKeyAlgorithm != SigningAlgoType.rsa2048) {
+      throw ArgumentError.value(
+          this.authenticationKeyAlgorithm,
+          'authenticationKeyAlgorithm',
+          'an enrollment holding no data signing key signs with its '
+              'authentication key, and that key is what `_apsk` advertises — so '
+              'it must be one the bare form can state, which is rsa2048. Give '
+              'dataSigningKeyAlgorithms a member, or authenticate with rsa2048');
+    }
+
+    // A posture is a floor. An axis named explicitly may raise what the posture
+    // asks for and may not lower it: an app that must not move names
+    // `PqPosture.legacy`, rather than keeping a stronger posture and weakening
+    // one of the axes it is made of.
+    final asked = authenticationKeyAlgorithm;
+    if (asked != null &&
+        asked != posture.authenticationKeyAlgorithm &&
+        SigningAlgoType.strongestOf(
+                {asked, posture.authenticationKeyAlgorithm}) ==
+            posture.authenticationKeyAlgorithm) {
+      throw ArgumentError.value(
+          asked,
+          'authenticationKeyAlgorithm',
+          'is weaker than ${posture.authenticationKeyAlgorithm.name}, which '
+              'this posture names. A posture is a floor: name a posture that '
+              'wants ${asked.name}, or PqPosture.legacy to stay where you are');
+    }
   }
 
   /// Where [other] would change what a **running** client does — one line per

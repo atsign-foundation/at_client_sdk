@@ -1,5 +1,24 @@
 ## 3.15.0-rc1
 
+- **Breaking:** `AtClientPreference` now refuses two incoherent axis
+  combinations at construction, where before it accepted them silently.
+  - **An empty `dataSigningKeyAlgorithms` requires rsa2048 authentication.** An
+    enrolment holding no data signing key signs data with its authentication
+    key, and that key is what `_apsk` advertises. The bare advertisement — the
+    only spelling an un-upgraded peer can parse, since it base64-decodes the
+    value as an RSA key — states a single active rsa2048 entry and nothing
+    else, so any other authentication algorithm beside an empty set forces the
+    JSON array onto exactly the record that shape exists to keep readable.
+  - **A posture is a floor.** An explicitly named `authenticationKeyAlgorithm`
+    may raise what the posture asks for and may not lower it. An app that must
+    not move names `PqPosture.legacy`, rather than keeping a stronger posture
+    and weakening an axis it is made of. A `dataSigningKeyAlgorithms` weaker
+    than the posture is deliberately still allowed: `pqActive` with `{rsa2048}`
+    mints rsa2048 and keeps `_apsk` bare, which is coherent.
+  - The axes stay independent wherever there are genuinely two keys. An empty
+    signing set is one key wearing both hats, which is what the first rule
+    constrains — so this narrows, rather than reverses, their independence.
+
 - fix: **a legacy enrolment no longer mints a second copy of the signing key it
   already holds.** On an enrolment with no typed signing material the APKAM
   authentication keypair *is* the data signing keypair — one rsa2048 key doing

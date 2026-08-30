@@ -255,11 +255,17 @@ void main() {
           true);
       // Naming the other axes explicitly does not move it either, which is
       // what makes this posture-only rather than merely posture-defaulted.
+      //
+      // A legal mixture, because the coherence rules bind the axes: the
+      // authentication algorithm is the posture's own, and a signing set
+      // WEAKER than the posture is deliberately still allowed — pqActive with
+      // {rsa2048} mints rsa2048 and keeps `_apsk` bare, which is coherent.
       expect(
           AtClientPreference(
-              posture: PqPosture.pqActive,
-              authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
-              dataSigningKeyAlgorithms: const {}).disallowLegacyEncryption,
+                  posture: PqPosture.pqActive,
+                  authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
+                  dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})
+              .disallowLegacyEncryption,
           true);
     });
 
@@ -369,17 +375,26 @@ void main() {
           SigningAlgoType.mldsa65);
       expect(
           AtClientPreference(
-                  posture: PqPosture.pqReady,
-                  authenticationKeyAlgorithm: SigningAlgoType.rsa2048)
-              .authenticationKeyAlgorithm,
-          SigningAlgoType.rsa2048,
-          reason: 'a deployment whose atServer cannot verify ML-DSA PKAM yet '
-              'says so here, without giving up the rest of the stage');
-      expect(
-          AtClientPreference(
                   authenticationKeyAlgorithm: SigningAlgoType.mldsa65)
               .authenticationKeyAlgorithm,
-          SigningAlgoType.mldsa65);
+          SigningAlgoType.mldsa65,
+          reason: 'raising an axis above the posture is what "beats it" means '
+              'now — the default posture wants ML-DSA here anyway, and naming '
+              'it explicitly is still allowed');
+    });
+
+    test('but an explicit value may not be WEAKER than the posture', () {
+      // ⛔ This read the other way until 2026-08-30, pinning `pqReady` beside an
+      // explicit rsa2048 as supported, for 'a deployment whose atServer cannot
+      // verify ML-DSA PKAM yet'. No such deployment has a holder: nothing
+      // released carries post-quantum key material. A posture is a floor, and
+      // an app that must not move names PqPosture.legacy instead of keeping a
+      // stronger posture and weakening an axis it is made of.
+      expect(
+          () => AtClientPreference(
+              posture: PqPosture.pqReady,
+              authenticationKeyAlgorithm: SigningAlgoType.rsa2048),
+          throwsA(isA<ArgumentError>()));
     });
 
     test('it is a separate axis from the data signing keys', () {
@@ -404,10 +419,22 @@ void main() {
               .dataSigningKeyAlgorithms,
           {SigningAlgoType.mldsa65});
       expect(
+          () => AtClientPreference(
+              posture: PqPosture.pqActive, dataSigningKeyAlgorithms: const {}),
+          throwsA(isA<ArgumentError>()),
+          reason: '⛔ this pinned an empty set beside pqActive as supported '
+              'until 2026-08-30. An enrollment holding no data signing key '
+              'signs with its authentication key and advertises it, and '
+              'pqActive authenticates with ML-DSA — which the bare `_apsk` '
+              'form cannot state, so the record becomes the array a deployed '
+              'reader cannot parse. Emptying the set needs rsa2048 beside it');
+      expect(
           AtClientPreference(
-              posture: PqPosture.pqActive,
+              posture: PqPosture.legacy,
               dataSigningKeyAlgorithms: const {}).dataSigningKeyAlgorithms,
-          isEmpty);
+          isEmpty,
+          reason: 'and the control: an empty set is still exactly what legacy '
+              'means, because legacy authenticates with rsa2048');
       expect(
           AtClientPreference(
                   dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})

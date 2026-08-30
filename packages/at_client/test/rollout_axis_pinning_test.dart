@@ -34,6 +34,18 @@ void main() {
         ..hiveStoragePath = 'test/hive'
         ..commitLogPath = 'test/hive/path';
 
+  /// The same, but holding a data signing key.
+  ///
+  /// Needed wherever a row varies the AUTHENTICATION axis alone: an enrollment
+  /// with no data signing key signs with its authentication key, so an empty
+  /// set is coherent only beside rsa2048 authentication, and the constructor
+  /// refuses the pair. Both sides of such a comparison carry the same set, so
+  /// the authentication algorithm stays the only thing that differs.
+  AtClientPreference signing({SigningAlgoType? authenticationKeyAlgorithm}) =>
+      preference(
+          authenticationKeyAlgorithm: authenticationKeyAlgorithm,
+          dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048});
+
   /// The smallest posture that refuses legacy writes.
   ///
   /// It cannot be "the default with one flag flipped": `PqPosture` rejects
@@ -193,8 +205,8 @@ void main() {
               dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})),
           [contains('dataSigningKeyAlgorithms')]);
       expect(
-          now.rolloutDifferencesFrom(
-              preference(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
+          signing().rolloutDifferencesFrom(
+              signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
           [contains('authenticationKeyAlgorithm')]);
     });
 
@@ -218,8 +230,8 @@ void main() {
       // diagnostic that also named the signing set would send a reader looking
       // for a setting nobody wrote.
       expect(
-          preference().rolloutDifferencesFrom(
-              preference(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
+          signing().rolloutDifferencesFrom(
+              signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
           ['authenticationKeyAlgorithm (asked mldsa65, running rsa2048)']);
       expect(
           preference().rolloutDifferencesFrom(preference(
@@ -250,9 +262,9 @@ void main() {
     });
 
     test('the difference reads as asked-versus-running', () {
-      final running = preference();
+      final running = signing();
       final asked =
-          preference(authenticationKeyAlgorithm: SigningAlgoType.mldsa65);
+          signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65);
 
       expect(running.rolloutDifferencesFrom(asked).single,
           'authenticationKeyAlgorithm (asked mldsa65, running rsa2048)',
@@ -265,12 +277,16 @@ void main() {
       // An axis given explicitly beats the posture's, which is the documented
       // contract. So these two agree on both key axes and differ only on what
       // the posture itself carries.
-      final postured = preference(
-          posture: PqPosture.pqActive,
-          authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
-          dataSigningKeyAlgorithms: const {});
-      final plain =
-          preference(authenticationKeyAlgorithm: SigningAlgoType.rsa2048);
+      //
+      // ⚠️ This used to LOWER pqActive's axes to legacy's values. A posture is
+      // a floor, so the comparison is made the other way now: the legacy-posture
+      // side is RAISED to the values pqActive carries. The property under test
+      // is unchanged — two preferences agreeing on both key axes and differing
+      // only in what the posture itself carries.
+      final postured = preference(posture: PqPosture.pqActive);
+      final plain = preference(
+          authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
+          dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65});
 
       final differences = postured.rolloutDifferencesFrom(plain);
       expect(differences.any((d) => d.contains('authenticationKeyAlgorithm')),
@@ -292,9 +308,9 @@ void main() {
     test('names the axis, the client and what to do about it', () {
       expect(
           () => AtClientImpl.refuseChangedRolloutAxes(
-              running: preference(),
-              asked: preference(
-                  authenticationKeyAlgorithm: SigningAlgoType.mldsa65),
+              running: signing(),
+              asked:
+                  signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65),
               cacheKey: '$atSign|enroll-a'),
           throwsA(isA<ArgumentError>().having(
               (e) => '$e',
@@ -316,11 +332,11 @@ void main() {
       // The guard existing is not the guard running. What makes this row worth
       // its cost is that it drives AtClientImpl.create twice, which is the
       // production path a second AtClientManager takes.
-      final first = await AtClientImpl.create(atSign, 'wavi', preference());
+      final first = await AtClientImpl.create(atSign, 'wavi', signing());
 
       await expectLater(
           AtClientImpl.create(atSign, 'wavi',
-              preference(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
+              signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
           throwsA(isA<ArgumentError>().having(
               (e) => '$e', 'message', contains('authenticationKeyAlgorithm'))));
 
@@ -329,7 +345,7 @@ void main() {
       // for a build that refuses every second create.
       expect(
           identical(
-              await AtClientImpl.create(atSign, 'wavi', preference()), first),
+              await AtClientImpl.create(atSign, 'wavi', signing()), first),
           isTrue);
     });
 

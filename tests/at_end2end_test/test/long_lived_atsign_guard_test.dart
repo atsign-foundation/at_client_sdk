@@ -69,7 +69,14 @@ void main() {
               protectedAtSign,
               AtClientPreference(
                   posture: PqPosture.legacy,
-                  authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
+                  authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
+                  // Non-empty, because an enrollment holding no data signing
+                  // key signs with its authentication key and the constructor
+                  // refuses a non-rsa2048 one there. Without it this row throws
+                  // an ArgumentError at construction while the assertion below
+                  // names a StateError — a red for the wrong reason, which
+                  // proves nothing about the guard.
+                  dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})),
           throwsA(isA<StateError>()
               .having((e) => e.message, 'message', contains('RETROFIT'))),
           reason: 'retrofitIsDue reads authenticationKeyAlgorithm, not the '

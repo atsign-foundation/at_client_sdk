@@ -114,7 +114,13 @@ void main() {
     await enrolleeKeysIo.write(atSign, AtKeys());
     final preference = TestUtils.getPreference(atSign,
         posture: legacyPlusPqProviders,
-        authenticationKeyAlgorithm: SigningAlgoType.mldsa65)
+        authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
+        // ⚠️ Non-empty, and it costs this client the mint it was being kept
+        // out of. An enrollment with no data signing key signs data with its
+        // authentication key, and the constructor refuses a non-rsa2048 one
+        // there — so an ML-DSA-authenticating enrollment must own a signing
+        // key. rsa2048 rather than ML-DSA keeps `_apsk` in the bare form.
+        dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})
       // A store of its own. Two clients of one atSign sharing a storage path
       // share their keystore, and this one is supposed to hold only what its
       // own approval conveyed.

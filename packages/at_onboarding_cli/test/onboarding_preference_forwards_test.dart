@@ -41,19 +41,41 @@ void main() {
       // The mixture case the superclass documents: an explicitly set axis
       // beats the group it came from. Without forwarding there was no way to
       // express it at all from a CLI app.
+      // A signing set weaker than the posture is deliberately still allowed:
+      // pqActive with {rsa2048} mints rsa2048 and keeps `_apsk` bare, which is
+      // coherent. It is the AUTHENTICATION axis that may not be lowered.
       final preference = AtOnboardingPreference(
         posture: PqPosture.pqActive,
-        authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
         dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048},
       );
 
-      expect(preference.authenticationKeyAlgorithm, SigningAlgoType.rsa2048,
-          reason: 'a deployment whose atServer cannot verify ML-DSA PKAM yet '
-              'says so here without giving up the rest of the stage');
-      expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048});
+      expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048},
+          reason: 'the explicitly set axis beats the group it came from, and '
+              'without forwarding there was no way to express it at all from '
+              'a CLI app');
+      expect(preference.authenticationKeyAlgorithm, SigningAlgoType.mldsa65,
+          reason: 'while the axis nobody named stays where the posture put it');
       expect(preference.disallowLegacyEncryption, isTrue,
           reason: 'and the one axis with no override stays where the posture '
               'put it, however many of its neighbours are named');
+    });
+
+    test('and the superclass\'s coherence rules see the forwarded axis', () {
+      // ⛔ This construction was pinned as supported until 2026-08-30, with the
+      // reason 'a deployment whose atServer cannot verify ML-DSA PKAM yet says
+      // so here without giving up the rest of the stage'. No such deployment
+      // has a holder. A posture is a floor.
+      //
+      // What it proves now is sharper than what it proved then: the refusal
+      // comes from AtClientPreference, so a subclass that accepted the argument
+      // and dropped it would construct happily and go unnoticed here.
+      expect(
+          () => AtOnboardingPreference(
+                posture: PqPosture.pqActive,
+                authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
+                dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048},
+              ),
+          throwsA(isA<ArgumentError>()));
     });
 
     test('the mutable fields are untouched by the new constructor', () {
