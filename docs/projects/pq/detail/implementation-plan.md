@@ -4919,11 +4919,14 @@ not a differential for commit 5, and that the e2e approvers needed no posture
 change.
 
 ⛔ **Design settled with gkc 2026-08-30. Supersedes the former rows for the mint
-barrier and for `sendEnrollRequest`'s stranded key package.** The design is in
-`untracked/pq-data-signing-key-states.md` and the sequence in
-`untracked/pq-commit-sequencing-plan.md` — ⚠️ **both gitignored — but the
-write-up is DONE**: each of the seven landed commits carried its own amendment,
-and both untracked files are now partly stale, so the tracked docs win.
+barrier and for `sendEnrollRequest`'s stranded key package.** ✅ **The design is
+now TRACKED**, in [`design.md` 9.8](../design.md#98-the-data-signing-key-an-enrollment-owns-from-birth):
+it was moved there on 2026-08-31, corrected as it went, and the gitignored
+`untracked/pq-data-signing-key-states.md` it came from was deleted — ⚠️ **it
+had said in ten places what the programme then built differently**, and it was
+a handoff no fresh clone could read. The sequence stays in
+`untracked/pq-commit-sequencing-plan.md`, gitignored and spent: every commit it
+planned has landed.
 
 ✅ **1, 2, 3, 5, 6, 7, 8 and 9 are DONE** — ⚠️ **this list omitted 7 until
 2026-08-30**, when it landed, while two sentences away the same section said so;

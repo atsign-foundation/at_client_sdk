@@ -2464,3 +2464,227 @@ PKAM) that `legacy` does not.
 What the stage also carries is the *fleet's* position — the peers' readers have
 upgraded — which no client can observe for itself, and which is the
 precondition for anyone moving to `pqActive`.
+
+### 9.8 The data signing key an enrollment owns from birth
+
+9.1–9.7 describe the split. This describes the key's life: where it comes
+from, what names it, and what breaks when the record naming it changes under a
+signature. Built 2026-08-30; the rulings behind it are
+[`decisions.md` 126](detail/decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30)
+and [127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30).
+
+**Vocabulary, used strictly.** The tree's prose has used "withdraw" in two
+contradictory senses; these five words do not overlap, and the difference
+between the last two is the whole of why an enrollment is created already
+holding a signing key.
+
+| Term | Meaning | Effect on verification |
+| ---- | ------- | ---------------------- |
+| **minted** | a keypair is generated | none yet |
+| **filed** | the private half is written to the keyfile as typed `sign:` material | `heldSigningKeys` can see it |
+| **advertised** | the public half is named in the `_apsk` record | peers can verify against it |
+| **retired** | its `_apsk` entry's status becomes `retired`; the entry **stays** | envelopes it signed **still verify** |
+| **dropped** | the key stops being named in `_apsk` at all | envelopes it signed **stop verifying, permanently** |
+
+**A data signing key is retired; the APKAM authentication key is dropped.**
+"Dropped" has no code path of its own — it is what `apskEntries` does by
+omission: it adds the authentication key only while the signing list is empty,
+and never places it in the retained list. So the first mint on an enrollment
+that held none simply stops naming that key, and everything it ever signed
+stops verifying.
+
+⚠️ **The gate is `heldSigningKeys.isEmpty`, not "holds an active signing
+key".** `heldSigningKeys` is filtered by `canSignEnvelopeWith`, true for
+rsa2048 and mldsa65 only, so an enrollment holding an active, correctly filed
+ed25519 signing key yields an empty list and advertises its **authentication**
+key as the sole active entry.
+
+Two more, because they were being conflated: **a record does not sign** — the
+private half of a key the record advertises signs; and **the signing root is
+not a data signing key** — it is a distinct atSign-wide ML-DSA-65 key with its
+own lifecycle (`PqSigningRoot`), separate from per-enrollment `sign:` material.
+
+#### 9.8.1 Every door mints, advertises and files one keypair
+
+Four request types reach an enrollment, and each carries an
+`advertisedSigningKey` whose private half is filed under the id the atServer
+assigns: the OTP request, the self-enrollment, the first enrollment, and
+activation. Advertising without filing is worse than advertising nothing — the
+next start finds the in-use algorithm missing, mints a **second** keypair and
+republishes, orphaning the key the record already named.
+
+⛔ **One keypair, not one per algorithm.** `mintAdvertisedSigningKey` refuses a
+set naming more than one — *"an enrollment is created holding one data signing
+keypair; name one algorithm"* — and `advertisedSigningKey` is a single record
+on the request types, so the plural is not expressible. `reconcileSigningKeys`
+does mint per algorithm at every start, so a set naming two is legal to
+construct and refused at creation; that asymmetry is deliberate and is the
+reason creation and the heal path read differently.
+
+**The algorithm minted is the one the enrollment keeps** — rsa2048 at
+`pqReady`, ML-DSA-65 at `pqActive` — so the first start's reconciliation finds
+`wanted` already `held`, mints nothing, and does not rewrite `_apsk`. That
+matters far beyond avoiding churn; see 9.8.3.
+
+#### 9.8.2 The form `_apsk` takes follows the algorithm, and nothing else
+
+Exactly one active `rsa2048` key is spelled **bare** — the key itself, which is
+what every deployed consumer base64-decodes. Anything else is the **array**.
+Two composers apply that rule to one record: at_auth writes it at enrolment,
+and `apskValueOf` composes it again at every client start, republishing on any
+difference.
+
+⚠️ **A second condition on either side makes them disagree about the shape of
+the same key**, and the client wins by republishing — which rewrites the record
+and discards whatever was bound to its old value. A key package used to force
+the array on the at_auth side as well, on the grounds that a bare value cannot
+state the algorithm of whatever signed the package. Where that signer is
+rsa2048 the bare value states exactly it, and where it is not, the algorithm
+had already chosen the array — so the condition fired only on the case it was
+wrong about: an APKAM-advertising rsa2048 enrollment in pq key-exchange mode,
+which a legacy posture plus `--key-exchange pq` reaches. Removed 2026-08-31.
+
+#### 9.8.3 The chain, and why a link is bound to the exact string
+
+The key package signature and the root/chain link are **two hops of one
+chain**, joined by the `_apsk` record value:
+
+1. the enrollee's `_apsk` value is a single string;
+2. the **key package** is signed by the private half of a key that string
+   advertises, and verified by parsing that exact string;
+3. the **link** signs `{v, childEnrollmentId, apkamPublicKey}`, where
+   `apkamPublicKey` is **that entire string**, read from the same record.
+
+The link does not sign the package; it signs the package's **verification
+key**, which is what a certificate chain is. They are joined operationally too:
+the link is neither signed nor delivered unless the package verifies first, and
+it is delivered by being sealed to that package.
+
+⚠️ **`apkamPublicKey` is a misleading name and a remnant.** It was accurate
+when written, when `_apsk` held only the APKAM public key; it is now whatever
+`apskValueOf` composed — the APKAM authentication key on a legacy enrollment,
+a data signing key on any other, and a multi-key JSON advertisement rather than
+a key at all once anything is retired. It is a member of the signed preimage,
+so renaming it changes what verifies.
+
+**Every verification of it is a whole-string comparison** — five of them in
+`PqSigningChain`. Any republish that changes the `_apsk` value therefore
+invalidates a link signed over the old one, and the publish does not merely
+invalidate it: `publishPublicSigningKey` writes the record value alone, so the
+link riding its `appMetadata` is not carried over and the enrollment goes from
+`chained` to `unsigned` with nothing re-conveying it. This is why the mint must
+be inert at first start, and why 9.8.2's two composers must agree.
+
+#### 9.8.4 What the approver conveys is a three-way branch
+
+Privilege alone does not decide the link flavour; possession decides with it.
+
+| Approver state | Conveys | Signed with |
+| -------------- | ------- | ----------- |
+| fully privileged, **holds** the root private | a **root** link | the atSign's ML-DSA-65 signing-root private — posture-invariant |
+| fully privileged, **no** root private, **holds a data signing key** | a **chain** link | that data signing key |
+| fully privileged, **no** root private, holding none | **nothing** | signing with the APKAM authentication key would produce a link that is *dropped* rather than retired, and so silently unverifiable |
+| **not** fully privileged | a **chain** link | its own signing keys |
+
+The second row overturns
+[`decisions.md` 67](detail/decisions.md#67-workstream-bi-the-sweep-anchors-to-the-root-2026-08-10)'s
+"root link or nothing" for that arm. 67 rested on the every-start pull healing
+possession; the pull has one production caller, a startup step, and the sweep
+that would anchor a missed enrollment is a **later** startup step — so nothing
+re-attempts the link for an enrollment approved while unpossessed, and it stays
+unsigned until some privileged root-holder next starts. A chain link cannot
+mask a root link: they stamp into distinct `_apsk` fields and a verifier reads
+the root one first.
+
+⚠️ **`isFullyPrivileged` requires `w` on both `*` and `__manage`, while
+approval takes only `__manage`** — so a `__manage`-only approver approves
+without being fully privileged, and the chain-link arm is an ordinary case
+rather than an edge. A client with no enrollment id is fully privileged by
+construction.
+
+**The approver never writes the enrollee's `_apsk`.** It conveys the link as a
+sealed secret and the enrollee stamps it at startup.
+
+#### 9.8.5 Two coherence rules on the preference
+
+Both are constructor refusals in `AtClientPreference`, and both narrow
+[`decisions.md` 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)'s
+"individual axes still win":
+
+- **An empty signing set requires an rsa2048 authentication key.** With no data
+  signing key the authentication key is advertised as the sole active entry,
+  and only an rsa2048 one can be spelled in the bare form the legacy posture
+  exists to keep readable. The rule names the **axes**, not the posture,
+  because `posture: pqReady` with an empty set reaches the identical state and
+  a custom posture would slip a posture-named check.
+- **No axis may be weaker than the posture it is named against.** A posture is
+  a floor; an override lowering an axis below it is what a floor prevents.
+  Left legal, deliberately: a `dataSigningKeyAlgorithms` weaker than the
+  posture names, which mints rsa2048 and keeps `_apsk` bare — coherent, and not
+  extended without a ruling.
+
+#### 9.8.6 A pre-enrollment atSign retrofits into a first enrollment
+
+An atSign holding no enrollment id predates enrollments, so it has never
+retrofitted. At `legacy` nothing happens — the signing set is empty. At a PQ
+posture the client gives itself a first, fully privileged enrollment and comes
+up on it, rather than minting into the shared `_apsk.primary` record and
+dropping its own authentication key.
+
+- **appName** is a constant shared with the activation path so the two cannot
+  drift. **The device name is not**: it is the constant plus a fresh UUID per
+  call, because the atServer refuses a second enrollment naming an
+  `(appName, deviceName)` an approved one already holds — a shared constant
+  would let the first clone of a copied keyfile upgrade and leave every other
+  refused at every start.
+- **Grants are stated, not derived**: `{'*': 'rw', '__manage': 'rw'}` reaches
+  the wire as the request's namespaces. A self-enrollment naming no namespace
+  is refused, so they could never have been omitted; the connection making the
+  request has proved possession of the atSign's own root credential and is
+  already unscoped, so there is nothing narrower to bound it by.
+- ⛔ **There is no guard skipping the mint when the enrollment id is null.**
+  One was proposed and dropped by
+  [`decisions.md` 127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30):
+  publishing `_apsk` directly with no enrollment id is a working, pinned
+  capability, and skipping the mint would delete it. The residual that guard
+  was aimed at is recorded there as open.
+
+#### 9.8.7 A legacy enrollment's one keypair, and how the rules compose
+
+On a legacy enrollment the authentication keypair **is** the data signing
+keypair, and it signs data in memory only — it is never filed as `sign:`
+material. `AtKeys.signingKeysFor` cannot see it, because it reads typed
+material and a legacy keyfile carries flat fields, so a naive reconcile reports
+rsa2048 missing and mints a redundant replacement. `reconcileSigningKeys`
+therefore treats rsa2048 as already held when the enrollment holds no typed
+signing material and its authentication keypair is rsa2048.
+
+⚠️ **Scoped to rsa2048, and the scope is the whole of its correctness.** An
+exclusion keyed on *whatever algorithm the authentication keypair reports*
+would fire at `pqActive`, where that is ML-DSA-65 on an enrollment holding no
+typed material: no ML-DSA signing key would ever be minted and the
+advertisement would name the authentication key as its sole active entry — the
+split collapsing on the posture that exists to create it, with nothing going
+red.
+
+The three rules are complementary, not redundant:
+
+| Rule | Covers |
+| ---- | ------ |
+| minting at creation | enrollments made from now on — born holding a data signing keypair |
+| the rsa2048 correction | pre-existing **enrolled** legacy enrollments, at any posture whose signing set wants rsa2048 |
+| the first-enrollment retrofit | a **pre-enrollment** atSign at a PQ posture, which has no enrollment to correct |
+
+#### 9.8.8 What is accepted rather than closed
+
+A mint publishes before it files, and `serialiseApskWrite` holds both writes,
+so no other **writer** composing from the keyfile can republish an
+advertisement the minted key is missing from. That does not close the window
+against a **reader**: a signer calling `ApkamSigning.signingKeys` between the
+two writes, on an enrollment holding no signing key of its own, takes the
+authentication-key fallback at the moment the advertisement stops naming that
+key, and the envelope verifies against nothing. A barrier used to make every
+such reader wait; ruling 126 deleted it, accepting the window because the state
+needs an enrollment that authenticates post-quantum and holds no data signing
+key, and nothing outside this tree carries post-quantum key material. The
+window is recorded on `signingKeys` so a reader meets it there.
