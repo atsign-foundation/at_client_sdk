@@ -4859,10 +4859,13 @@ barrier and for `sendEnrollRequest`'s stranded key package.** The design is in
 write-up is DONE**: each of the seven landed commits carried its own amendment,
 and both untracked files are now partly stale, so the tracked docs win.
 
-✅ **1, 2, 3, 5, 6, 8 and 9 are DONE** — `3308eddcb`, `56f2e5d39`, `b8e4d5291`;
+✅ **1, 2, 3, 5, 6, 7, 8 and 9 are DONE** — ⚠️ **this list omitted 7 until
+2026-08-30**, when it landed, while two sentences away the same section said so;
+a count with three homes went stale in one of them. `3308eddcb`, `56f2e5d39`,
+`b8e4d5291`;
 re-derive with `git log --oneline`. ⛔ **4 is DROPPED** ([ruling
 127](decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30)).
-✅ **Eight commits. SEVEN DONE, ONE DROPPED — the programme is complete as of
+✅ **Nine numbered, one dropped, EIGHT DONE — the programme is complete as of
 2026-08-30.** What each turned out to be, and what proves it, is
 [below](../implementation-plan.md#why-commit-7-needs-no-atserver-change). 1
 at_auth files the advertised signing key's private half on the ordinary
