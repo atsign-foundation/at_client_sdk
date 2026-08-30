@@ -76,7 +76,7 @@ void main() {
     // enrollment id of its own, so it would not — but naming the posture says
     // that is intended rather than incidental.
     final manager = await TestUtils.initAtClient(atSign, namespace,
-        posture: PqPosture.legacy);
+        posture: legacyPlusPqProviders);
     approver = manager.atClient;
     // The approver seals each enrollee's symmetric key to its own key package,
     // so it needs one registered before it can approve anything.

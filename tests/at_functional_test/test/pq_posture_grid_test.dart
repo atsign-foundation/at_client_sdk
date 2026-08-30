@@ -281,7 +281,7 @@ void main() {
         // assertion would then pass for the wrong reason, and nothing would
         // go red.
         preferenceFor(slug(atSign), atSign,
-            role: 'approver', posture: PqPosture.legacy),
+            role: 'approver', posture: legacyPlusPqProviders),
         atKeysIo: keysIo,
         atChops: loader.createAtChopsFromDemoKeys(atSign));
     await loader.setEncryptionKeys(manager.atClient, atSign);

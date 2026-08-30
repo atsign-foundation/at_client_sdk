@@ -47,7 +47,7 @@ void main() {
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final manager = await TestUtils.initAtClient(atSign, namespace,
-        posture: PqPosture.legacy);
+        posture: legacyPlusPqProviders);
     atClient = manager.atClient;
   });
 

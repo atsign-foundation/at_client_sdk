@@ -55,7 +55,7 @@ void main() {
     await keysIo.write(atSign, AtKeys());
     final manager =
         await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: PqPosture.legacy);
+            posture: legacyPlusPqProviders);
     approver = manager.atClient;
   });
 

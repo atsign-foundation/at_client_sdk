@@ -48,7 +48,7 @@ void main() {
     await keysIo.write(atSign, AtKeys());
     final manager =
         await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: PqPosture.legacy);
+            posture: legacyPlusPqProviders);
     atClient = manager.atClient;
     // The approver seals the enrollee's symmetric key to its own key package,
     // so it has to have one registered before it can approve anything.

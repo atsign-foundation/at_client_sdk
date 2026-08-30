@@ -48,7 +48,7 @@ void main() {
     final loader = AtEncryptionKeysLoader.getInstance();
     final manager = await AtClientManager(atSign).setCurrentAtSign(
         atSign, namespace, TestUtils.getPreference(atSign,
-            posture: PqPosture.legacy),
+            posture: legacyPlusPqProviders),
         atKeysIo: keysIo,
         atChops: loader.createAtChopsFromDemoKeys(atSign));
     await loader.setEncryptionKeys(manager.atClient, atSign);
