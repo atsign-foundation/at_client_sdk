@@ -474,4 +474,164 @@ void main() {
               'republishing — orphaning the key this record already named');
     });
   });
+  /// A PRE-ENROLLMENT atSign — one that holds no enrollment at all and
+  /// authenticates with the flat `at_pkam_publickey`.
+  ///
+  /// The atServer marks such a connection `pkamLegacy` and leaves its
+  /// enrollment id null, and its self-enrolment auto-approve is gated on an
+  /// APKAM-authenticated connection — so the request lands `pending` instead.
+  /// Measured against a live atServer, which then accepted an `enroll:approve`
+  /// for that id **on the same connection**, because it grants a connection
+  /// carrying no enrollment id full access.
+  ///
+  /// ⚠️ **`pending` has a second cause, and it must keep its old answer.** An
+  /// APKAM self-enrolment against an atServer too old to auto-approve it also
+  /// comes back `pending`, and that one is denied and thrown. The two arms
+  /// below differ in the session's enrollment id and in NOTHING else — same
+  /// keyfile shape, same request, same server responses.
+  group('a client holding no enrollment approves its own request', () {
+    late final AtEncryptionKeyPair encryptionKeyPair;
+    late final String selfEncryptionKey;
+
+    setUpAll(() {
+      // A real keypair: the submitter wraps the symmetric key to the public
+      // half and the approver unwraps it with the private half, so a stub
+      // would leave the round trip untested.
+      encryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+      selfEncryptionKey =
+          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    });
+
+    AtKeys keysFor({String? enrollmentId}) => AtKeys()
+      ..apkamPublicKey = AtBytes.fromString(legacyApkamPub)
+      ..apkamPrivateKey = AtBytes.fromString(legacyApkamPriv)
+      ..defaultEncryptionPublicKey =
+          AtBytes.fromString(encryptionKeyPair.atPublicKey.publicKey)
+      ..defaultEncryptionPrivateKey =
+          AtBytes.fromString(encryptionKeyPair.atPrivateKey.privateKey)
+      ..defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionKey)
+      ..enrollmentId = enrollmentId;
+
+    /// A lookup that parks every `enroll:request` as `pending` — which is what
+    /// BOTH arms meet — and approves or denies whatever is asked of it after.
+    MockAtLookUp parkingLookUp() {
+      final mock = MockAtLookUp();
+      when(() => mock.atChops).thenReturn(AtChopsImpl(
+          AtChopsKeys.create(encryptionKeyPair, null)
+            ..selfEncryptionKey = AESKey(selfEncryptionKey)));
+      when(() => mock.executeCommand(any(that: startsWith('enroll:request:')),
+              auth: any(named: 'auth')))
+          .thenAnswer((_) async =>
+              'data:{"enrollmentId":"new-123","status":"pending"}');
+      when(() => mock.executeCommand(any(that: startsWith('enroll:approve:')),
+              auth: any(named: 'auth')))
+          .thenAnswer((_) async =>
+              'data:{"enrollmentId":"new-123","status":"approved"}');
+      // executeVerb is deliberately NOT stubbed: `deny` goes through it, and
+      // the submitter's cleanup is best-effort and reports what happened, so
+      // an unstubbed deny still leaves the control arm asserting the message
+      // it cares about.
+      return mock;
+    }
+
+    Future<(MockAtLookUp, AtAuthSession)> fixture({String? enrollmentId}) async {
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write(atSign, keysFor(enrollmentId: enrollmentId));
+      return (
+        parkingLookUp(),
+        AtAuthSession(
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            atKeysIo: keysIo,
+            enrollmentId: enrollmentId)
+      );
+    }
+
+    List<String> commandsSent(MockAtLookUp mock) => verify(() =>
+            mock.executeCommand(captureAny(), auth: any(named: 'auth')))
+        .captured
+        .cast<String>();
+
+    test('it approves the enrollment it just created, over the same connection',
+        () async {
+      final (mock, session) = await fixture();
+
+      final response = await AtEnrollmentImpl().submit(
+          AtSelfEnrollmentRequest(
+              session: session,
+              appName: 'firstApp',
+              deviceName: 'firstDevice-abc',
+              namespaces: {'*': 'rw', '__manage': 'rw'}),
+          mock);
+
+      expect(response.enrollStatus, EnrollmentStatus.approved,
+          reason: 'the atServer parked it pending because the auto-approve '
+              'branch needs an APKAM connection; approving it over the same '
+              'connection is what makes the retrofit land');
+      final sent = commandsSent(mock);
+      expect(sent, hasLength(2));
+      expect(sent[0], startsWith('enroll:request:'));
+      expect(sent[1], startsWith('enroll:approve:'));
+      expect(jsonDecode(sent[1].substring('enroll:approve:'.length)),
+          containsPair('enrollmentId', 'new-123'));
+    });
+
+    test('the request carries a wrapped symmetric key, because approving needs '
+        'one', () async {
+      final (mock, session) = await fixture();
+
+      await AtEnrollmentImpl().submit(
+          AtSelfEnrollmentRequest(
+              session: session,
+              appName: 'firstApp',
+              deviceName: 'firstDevice-abc',
+              namespaces: {'*': 'rw'}),
+          mock);
+
+      final params = jsonDecode(
+              commandsSent(mock)[0].substring('enroll:request:'.length))
+          as Map<String, dynamic>;
+      final wrapped = params['encryptedAPKAMSymmetricKey'] as String?;
+      expect(wrapped, isNotNull,
+          reason: 'enroll:approve requires the encryption private key and the '
+              'self-encryption key wrapped under a symmetric key, so there '
+              'has to be one — and an APKAM retrofit, which conveys nothing, '
+              'sends none');
+      // Wrapped to the atSign's OWN encryption public key, so the record keeps
+      // a copy this atSign can still recover. The approve leg unwrapping it
+      // successfully is what proves the wrap: a wrong key throws there.
+      expect(
+          utf8.decode((RsaEncryptionAlgo()
+                ..atPrivateKey = AtPrivateKey.fromString(
+                    encryptionKeyPair.atPrivateKey.privateKey))
+              .decrypt(base64Decode(wrapped!))),
+          isNotEmpty);
+    });
+
+    /// The control, and it can go red while every assertion above stays green:
+    /// same `pending` response, same keyfile shape, only the session's
+    /// enrollment id differs.
+    test('an APKAM retrofit meeting the same pending response is still denied',
+        () async {
+      final (mock, session) = await fixture(enrollmentId: 'legacy-1');
+
+      await expectLater(
+          AtEnrollmentImpl().submit(
+              AtSelfEnrollmentRequest(
+                  session: session,
+                  appName: 'selfapp',
+                  deviceName: 'selfdevice',
+                  namespaces: {'app_1': 'rw'}),
+              mock),
+          throwsA(isA<AtEnrollmentException>().having((e) => e.message,
+              'message', contains('expected the self-enrollment to be '
+                  'auto-approved'))),
+          reason: 'a pending APKAM self-enrolment means an atServer without '
+              'the auto-approve, which is a different situation and keeps its '
+              'own answer');
+      expect(commandsSent(mock).where((c) => c.startsWith('enroll:approve:')),
+          isEmpty,
+          reason: 'approving here would silently paper over an old atServer');
+    });
+  });
 }

@@ -1,5 +1,13 @@
 ## 1.17.0-rc1
 
+- **Behaviour change, from `at_client` rather than from this package.**
+  `authenticate()` builds an `AtClient`, and a client at a post-quantum posture
+  now gives an atSign that holds no enrollment its first one — rewriting the
+  `.atKeys` file. `AtOnboardingPreference` inherits `AtClientPreference`'s
+  `PqPosture.pqReady` default, so this happens unless a caller names
+  `PqPosture.legacy`. Every `at_activate` command that authenticates is
+  affected.
+
 - fix: **an enrolment now owns a data signing key from birth.**
   `sendEnrollRequest` advertised the APKAM authentication key in `_apsk` and
   signed the key package with it, so the new client's first start minted a

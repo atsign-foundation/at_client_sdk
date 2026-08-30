@@ -1,5 +1,18 @@
 ## 4.0.0-rc1
 
+- feat: **a self-enrollment submitted by an atSign that holds no enrollment is
+  approved over the connection that requested it.** The atServer's
+  self-enrolment auto-approve needs an APKAM-authenticated connection, and an
+  atSign authenticating with its flat PKAM key has none — so its request lands
+  `pending`. It is approvable on that same connection, because a connection
+  carrying no enrollment id is granted full access, so such a request now mints
+  a symmetric key, wraps it to the atSign's own encryption public key, and
+  approves itself through the ordinary approver. The wrap is what keeps the
+  record's copy recoverable afterwards.
+  The discriminator is the **session's** enrollment id rather than the
+  connection's: `pending` also means an atServer too old to auto-approve an
+  APKAM retrofit, and that case keeps its existing deny-and-throw.
+
 A release candidate: adopt it deliberately. The headline is post-quantum
 credentials — an enrollment can authenticate with ML-DSA-65 while the fleet
 still reads what it advertises.

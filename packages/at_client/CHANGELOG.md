@@ -1,5 +1,28 @@
 ## 3.15.0-rc1
 
+- feat: **an atSign that holds no enrollment now retrofits itself too.** A
+  post-quantum posture already moved a legacy *enrollment* to an ML-DSA
+  credential at the client's first start; an atSign onboarded before enrollments
+  existed was excluded, because the retrofit returned early when there was no
+  enrollment id to move. Such a client now gives itself a first, fully
+  privileged enrollment instead, and comes up on it. The device name it asks for
+  is per device rather than a shared constant: the atServer refuses a second
+  enrollment naming an `(appName, deviceName)` an approved one already holds, so
+  a constant would leave every clone of a copied keyfile after the first refused
+  at every start.
+  **⚠️ Consumers should read this as a behaviour change, not only a feature.**
+  `AtClientPreference` defaults to `PqPosture.pqReady`, so a client built with
+  default preferences on such an atSign will self-enrol and rewrite its
+  `.atKeys` on its first start — including one built by `at_onboarding_cli`'s
+  `authenticate()`, and therefore by every `at_activate` command. Name
+  `PqPosture.legacy` to keep an atSign where it is.
+- fix: **a failed self-retrofit can no longer fail client construction.** The
+  step documents itself as never fatal and caught only `Exception`, while the
+  paths it calls can throw `Error` — `ArgumentError` from a session with no
+  `AtLookUp`, `UnimplementedError` from an `AtKeysIo` that cannot read. Both now
+  leave a usable client, the second logged at `severe` because it names a defect
+  rather than a passing condition.
+
 - fix: **an approver that is entitled to sign a root link but does not yet hold
   the root private now conveys a provisional chain link**, where it previously
   conveyed nothing. Nothing re-attempted the link for such an enrolment: the

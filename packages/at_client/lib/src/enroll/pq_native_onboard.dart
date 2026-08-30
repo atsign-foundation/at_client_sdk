@@ -145,14 +145,33 @@ Future<void> mintSigningRootAfterActivation(
 /// delay, since a start-time pull and a re-run both retry it. Failing the
 /// whole onboard over it would leave a live atSign reported as unactivated,
 /// with a CRAM secret already spent and no way to run it again.
+/// The app an atSign's FIRST enrollment names when nothing else does.
+///
+/// Two paths reach it: onboarding, which creates that enrollment; and a
+/// pre-enrollment atSign retrofitting itself, which has no record to read a
+/// name from and is creating what amounts to the same thing. Both spell it
+/// here so they cannot drift apart, and `at_auth`'s `AtOnboardingRequest`
+/// carries the same value as its own default — pinned by a test, because a
+/// field default in another package is not a constant this one can reference.
+const String firstEnrollmentAppName = 'firstApp';
+
+/// The device an atSign's FIRST enrollment names when nothing else does.
+///
+/// ⚠️ **A retrofit must not use it bare.** The atServer refuses a request
+/// naming an `(appName, deviceName)` that an approved enrollment already
+/// holds, so sibling clones of one keyfile all naming this would leave every
+/// device after the first refused at every start. Callers in that position
+/// append something per device.
+const String firstEnrollmentDeviceName = 'firstDevice';
+
 @experimental
 Future<AtClientManager> pqNativeOnboard({
   required String atSign,
   required String cramSecret,
   required AtClientPreference preference,
   required AtKeysIo atKeysIo,
-  String appName = 'firstApp',
-  String deviceName = 'firstDevice',
+  String appName = firstEnrollmentAppName,
+  String deviceName = firstEnrollmentDeviceName,
   bool? mintLegacyMaterial,
   AtClientManager? manager,
   AtAuth? atAuth,

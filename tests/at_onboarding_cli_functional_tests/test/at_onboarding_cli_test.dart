@@ -40,12 +40,24 @@ void main() {
     await atLookup.close();
   }
 
+  /// ⛔ **`PqPosture.legacy`, named rather than defaulted.** Every test in this
+  /// group and the next drives a PRE-ENROLLMENT atSign: `_createKeys` installs
+  /// the flat `at_pkam_publickey` and nothing else, and `generateAtKeysFile`
+  /// writes the keyfile a legacy onboarding left behind. The SDK default is
+  /// `pqReady`, and a client built at any post-quantum posture now gives such
+  /// an atSign its first enrollment on its first start — rewriting the keyfile
+  /// and replacing the PKAM key these tests read back. That is the intended
+  /// rollout, and it is the wrong subject for a group about legacy behaviour.
+  ///
+  /// ⚠️ Named on EVERY call in both groups, not only the two that noticed. One
+  /// atSign in one process holds one posture, so a client cached by an earlier
+  /// test at another posture is refused outright rather than reused.
   group('A group of tests to assert on authenticate functionality', () {
     test('A test to verify authentication is successful with .atKeys file',
         () async {
       String atSign = '@alice🛠';
       await _createKeys(atSign);
-      AtOnboardingPreference preference = getPreferences(atSign);
+      AtOnboardingPreference preference = getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
       AtOnboardingService atOnboardingService =
           AtOnboardingServiceImpl(atSign, preference);
@@ -58,7 +70,7 @@ void main() {
         () async {
       String atSign = '@alice🛠';
       await _createKeys(atSign);
-      AtOnboardingPreference preference = getPreferences(atSign);
+      AtOnboardingPreference preference = getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
       AtOnboardingService atOnboardingService =
           AtOnboardingServiceImpl(atSign, preference);
@@ -76,7 +88,7 @@ void main() {
         () async {
       String atSign = '@eve🛠';
       await _createKeys(atSign);
-      AtOnboardingPreference preference = getPreferences(atSign);
+      AtOnboardingPreference preference = getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
       AtOnboardingService onboardingService =
           AtOnboardingServiceImpl(atSign, preference);
@@ -93,7 +105,7 @@ void main() {
     test('A test to verify atKeysFilePath is set when null is provided',
         () async {
       String atSign = '@eve🛠';
-      AtOnboardingPreference preference = getPreferences(atSign);
+      AtOnboardingPreference preference = getPreferences(atSign, posture: PqPosture.legacy);
       preference.atKeysFilePath = null;
       AtOnboardingServiceImpl(atSign, preference);
       expect(
@@ -109,7 +121,7 @@ void main() {
       'A group of tests to assert encryption keys persist into local secondary',
       () {
     String atSign = '@eve🛠'.trim();
-    AtOnboardingPreference atOnboardingPreference = getPreferences(atSign);
+    AtOnboardingPreference atOnboardingPreference = getPreferences(atSign, posture: PqPosture.legacy);
     AtOnboardingService atOnboardingService =
         AtOnboardingServiceImpl(atSign, atOnboardingPreference);
     AtClient? atClient;
@@ -290,9 +302,15 @@ Future<void> quiesceStartupTail(AtOnboardingService service) async {
   }
 }
 
-AtOnboardingPreference getPreferences(String atSign) {
+/// [posture] is threaded because it is FINAL at construction — a test cannot
+/// set it on the returned object. Omitted, this is whatever the SDK currently
+/// defaults to, which is what the onboard and activate_cli groups want: they
+/// are about activation, and activation follows the shipped default.
+AtOnboardingPreference getPreferences(String atSign, {PqPosture? posture}) {
   atSign = AtUtils.fixAtSign(atSign);
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
+  AtOnboardingPreference atOnboardingPreference = (posture == null
+      ? AtOnboardingPreference()
+      : AtOnboardingPreference(posture: posture))
     ..rootDomain = 'vip.ve.atsign.zone'
     ..isLocalStoreRequired = true
     ..hiveStoragePath = 'storage/hive/client'
