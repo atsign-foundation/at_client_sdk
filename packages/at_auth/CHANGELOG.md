@@ -82,6 +82,13 @@ still reads what it advertises.
   `.atKeys` file is how a device is decommissioned, and a background task
   mid-update would silently put it back. `flush` is unchanged and still
   creates the file, which is its job.
+- **An OTP enrolment that advertises a signing key now files its private half.**
+  `AtEnrollmentRequest.advertisedSigningKey` reached the `_apsk` advertisement
+  but never the keyfile, so the enrolment published a key it did not hold: the
+  next start found the in-use algorithm missing, minted a second keypair and
+  republished, orphaning the advertised key and unverifying anything signed
+  against it. The self-enrolment and first-enrolment paths already filed it;
+  this was the third.
 
 ## 3.3.0
 - feat: add `AtAuthSession` (exported) — the explicit auth→client hand-off artifact: the confirmed subset of an auth request that client creation actually needs (`atSign`, `rootDomain`, `namespace`, `atKeysIo`, `enrollmentId`), promoted to its own type so "request" no longer doubles as "session". Keys cross the boundary as an `AtKeysIo` *source*, not as live crypto state: the client derives its own `AtKeys` via `atKeysIo.read(atSign)` rather than adopting auth's `AtChops`/`AtLookUp`. The session also carries auth's already-authenticated `atLookUp` so a caller can *opt in* to reusing that connection (`AtClientManager.fromAuthSession(session, reuse: true)`) and skip a second PKAM handshake; the default hand-off rebuilds a fresh connection.

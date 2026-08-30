@@ -90,6 +90,88 @@ void main() {
     });
   });
 
+  group('an OTP enrolment that owns a signing key from birth', () {
+    const atSign = '@alice🛠';
+    const enrollmentId = 'otp-enrollment-1';
+
+    // Distinct from any real key, and compared RAW: the property under test is
+    // which bytes reached the keyfile, not that something plausible did.
+    const signingPub = 'bWludGVkLXNpZ25pbmctcHVibGlj';
+    const signingPriv = 'bWludGVkLXNpZ25pbmctcHJpdmF0ZQ==';
+
+    MockAtLookUp approvingLookUp() {
+      final mock = MockAtLookUp();
+      when(() => mock.executeCommand(any(that: startsWith('enroll:')),
+              auth: any(named: 'auth')))
+          .thenAnswer((_) async =>
+              'data:{"enrollmentId":"$enrollmentId","status":"pending"}');
+      when(() => mock.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]}');
+      return mock;
+    }
+
+    Future<AtKeys> submit(
+        ({
+          SigningAlgoType algorithm,
+          String publicKey,
+          String privateKey
+        })? advertised) async {
+      final response = await AtEnrollmentImpl().submit(
+          AtEnrollmentRequest(
+              atSign: atSign,
+              appName: 'wavi',
+              deviceName: 'iphone',
+              otp: 'ABC123',
+              namespaces: {'wavi': 'rw'},
+              signingAlgo: SigningAlgoType.rsa2048,
+              advertisedSigningKey: advertised),
+          approvingLookUp());
+      return response.atAuthKeys!;
+    }
+
+    test('the signing key is FILED, not merely advertised', () async {
+      final keys = await submit((
+        algorithm: SigningAlgoType.rsa2048,
+        publicKey: signingPub,
+        privateKey: signingPriv
+      ));
+
+      final held = keys.signingKeysFor(enrollmentId);
+      expect(held, hasLength(1));
+      expect(held.single.algorithm, SigningAlgoType.rsa2048);
+      expect(held.single.publicKey, signingPub);
+      expect(held.single.privateKey, signingPriv,
+          reason: 'advertise-without-file leaves the next start finding the '
+              'in-use algorithm missing, minting a SECOND key and '
+              'republishing — orphaning the key this record already named');
+    });
+
+    test('and it is the ENROLLMENT\'s, not the atSign\'s', () async {
+      final keys = await submit((
+        algorithm: SigningAlgoType.rsa2048,
+        publicKey: signingPub,
+        privateKey: signingPriv
+      ));
+
+      // The other half of the same claim: material in the atSign's container
+      // is not returned by keysForEnrollment and is not reaped when the
+      // enrollment is retired.
+      expect(keys.keysForEnrollment(enrollmentId).map((m) => m.keyId),
+          contains('sign:rsa2048:1'));
+    });
+
+    test('without one, nothing is filed', () async {
+      // The negative control, and it is every caller in the tree today: no
+      // AtEnrollmentRequest sets advertisedSigningKey, so this path must be
+      // byte-for-byte what it was.
+      final keys = await submit(null);
+
+      expect(keys.signingKeysFor(enrollmentId), isEmpty,
+          reason: 'an enrollment that advertised no signing key holds none; '
+              'filing one anyway would publish a key nothing asked for');
+    });
+  });
+
   test(
       'A test to verify submitting enrollment to server and verify enrollment status is pending',
       () async {

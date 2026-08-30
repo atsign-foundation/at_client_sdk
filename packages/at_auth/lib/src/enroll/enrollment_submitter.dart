@@ -181,7 +181,7 @@ class EnrollmentSubmitter {
         SigningAlgoType.mldsa65 => CryptographicMaterialAlgorithm.mlDsa65,
         SigningAlgoType.rsa2048 => CryptographicMaterialAlgorithm.rsa2048,
         _ => throw AtEnrollmentException(
-            'a self-enrollment mints rsa2048 or mldsa65; '
+            'an enrollment mints rsa2048 or mldsa65; '
             '${algorithm.name} has no keyfile material spelling here'),
       };
 
@@ -375,6 +375,25 @@ class EnrollmentSubmitter {
               atEnrollmentRequest.signingAlgo.name),
           publicKey: apkam.publicKey,
           privateKey: apkam.privateKey);
+    }
+
+    // Filed, not merely advertised. An enrollment whose `_apsk` names a key
+    // its keyfile does not hold signs with something else, and the next
+    // start's SigningKeyMinting finds the in-use algorithm missing, mints a
+    // SECOND key and republishes — orphaning the key this record already
+    // published and unverifying whatever was signed against it.
+    //
+    // Into `atAuthKeys` rather than `constructionKeys`: this is the
+    // enrollment's own signing material, not something the metadataBuilder
+    // minted, and it is filed here because only now is there an id to file it
+    // under.
+    final signing = atEnrollmentRequest.advertisedSigningKey;
+    if (signing != null) {
+      atAuthKeys.fileSigningMaterial(
+          enrollmentId: enrollmentIdFromServer,
+          algorithm: _materialAlgorithmOf(signing.algorithm),
+          publicKey: signing.publicKey,
+          privateKey: signing.privateKey);
     }
 
     return AtEnrollmentResponse(enrollmentIdFromServer, enrollStatus,
