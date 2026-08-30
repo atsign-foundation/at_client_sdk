@@ -7,7 +7,10 @@ import 'package:at_auth/at_auth.dart'
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         WrittenAtKeysIo;
+import 'package:at_chops/at_chops.dart'
+    show AtChopsImpl, AtChopsKeys, AtChopsUtil;
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
+import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/preference/at_client_preference.dart'
     show AtClientPreference;
@@ -24,6 +27,15 @@ import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
+
+/// Any signer at all, over the same client the bootstrap is running for.
+class _Signer with ApkamSigning {
+  _Signer(this.atClient);
+  @override
+  final AtClient atClient;
+  @override
+  final AtSignLogger logger = AtSignLogger('_Signer');
+}
 
 // AtKeysIo itself is sealed; its abstract written flavour is the mockable
 // face.
@@ -248,68 +260,49 @@ void main() {
               'it sit unread beside every other startup line');
     });
 
-    test('mintSettled settles once the mint step has run', () async {
-      final bootstrap = build();
-      var done = false;
-      unawaited(bootstrap.mintSettled.then((_) => done = true));
-      await pumpEventQueue();
-      expect(done, isFalse,
-          reason: 'nothing may settle the barrier before startup reaches '
-              'the mint step — a signer that proceeded early would sign in '
-              'the exact window the barrier exists to close');
-      await bootstrap.startup();
-      expect(done, isTrue);
-    });
+    test('a signer answers while a startup step is still parked', () async {
+      // ⛔ **The regression guard for the deadlock this replaced.** Everything
+      // that signs used to wait on a barrier the startup settled at its mint
+      // step — and the two sweep steps BEFORE that one answer an inbound
+      // request by sealing and signing a reply, so the startup waited on a
+      // step that could not begin until it returned. `at_activate approve` did
+      // not exit within its two-minute bound in eight separate runs.
+      //
+      // The sweep is parked here, so the startup is genuinely mid-flight and
+      // has not reached the mint. A signer that consulted the startup in any
+      // way would not return.
+      when(() => client.atKeysIo).thenReturn(InMemoryAtKeysIo());
+      when(() => client.atChops).thenReturn(AtChopsImpl(
+          AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
 
-    test('mintSettled settles at the mint step, not at startup\'s end',
-        () async {
-      // Park the sweep — a step after the mint — so startup is still running
-      // when the assertion looks.
       final parked = Completer<int>();
       final bootstrap =
           build(privilege: _FakePrivilege(true), sweep: () => parked.future);
       final startup = bootstrap.startup();
-      await bootstrap.mintSettled.timeout(const Duration(seconds: 5),
-          onTimeout: () =>
-              fail('the barrier must lift when the mint step has run, not when '
-                  'the whole startup tail has — the steps after the mint sign '
-                  'envelopes, and each of those signs would wait on itself'));
+
+      final keys =
+          await _Signer(client).signingKeys.timeout(const Duration(seconds: 5),
+              onTimeout: () => fail('a signer must not wait on the startup: '
+                  'the startup signs, so waiting deadlocks both'));
+      expect(keys, isNotEmpty,
+          reason: 'and it answers with something usable — returning an empty '
+              'list would satisfy the timeout without signing anything');
+
       parked.complete(0);
       await startup;
     });
 
-    test('a startup stopped before the mint step still settles mintSettled',
-        () async {
-      final keysIo = MockAtKeysIo();
-      final readGate = Completer<Never>();
-      when(() => keysIo.read(any())).thenAnswer((_) => readGate.future);
-
-      final bootstrap = PqClientBootstrap(
-        client,
-        keysIo: keysIo,
-        privilege: _FakePrivilege(true),
-        sweepUnanchoredEnrollments: () async => 0,
-      );
-
-      final startup = bootstrap.startup();
-      bootstrap.stop();
-      readGate.completeError(Exception('the test releases the parked read'));
-      await startup;
-
-      await bootstrap.mintSettled.timeout(const Duration(seconds: 5),
-          onTimeout: () => fail(
-              'a stopped startup never reaches the mint step, and a signer '
-              'waiting on a barrier nothing settles waits forever'));
-    });
-
-    test('a gated-off mint still settles mintSettled', () async {
+    test('a gated-off mint still completes the startup', () async {
+      // The gate's own construction, kept alive here: it is the only
+      // `mintInUseSigningKeys: false` in the tree, and a startup that hung on
+      // a step it had been told to skip would be the worst kind of silence.
       final bootstrap =
           build(gates: const PqStartupGates(mintInUseSigningKeys: false));
-      await bootstrap.startup();
-      await bootstrap.mintSettled.timeout(const Duration(seconds: 5),
-          onTimeout: () =>
-              fail('gated-off must settle the barrier: whatever the keyfile '
-                  'holds after the step is what may sign'));
+
+      await bootstrap.startup().timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('a gated-off step must be skipped, not waited '
+              'on — nothing settles a step that never runs'));
+      await bootstrap.startupComplete.timeout(const Duration(seconds: 5));
     });
 
     test('gates silence the active steps', () async {

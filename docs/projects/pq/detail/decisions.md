@@ -11305,15 +11305,13 @@ Three candidates were investigated; **sign-awaits-mint won**:
    rollout 1 exists to prevent. A scoped variant (retain only where the
    value is the array anyway) can only accompany 1 or 2, never replace them.
 
-**As built:** `ApkamSigning.signingKeys` awaits a per-client barrier
-(`signing_key_mint_barrier.dart`, an `Expando` keyed on the `AtClient`
-instance — two clients of one atSign mint independently, so each waits only
-for its own). The bootstrap registers `mintSettled` at construction and
-settles it at the mint step — and on stop, failure and gated-off, so
-signing never waits for a mint that is not coming this session.
-`SigningKeyMinting` overrides the wait off: the mint cannot wait for its
-own completion. Waiting on `startupComplete` instead would deadlock — the
-steps after the mint sign envelopes themselves.
+**As built, and since removed.** `ApkamSigning.signingKeys` awaited a
+per-client barrier that the bootstrap settled at its mint step. ⚠️ **The
+barrier was deleted on 2026-08-30** — see
+[126](#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30)
+— because the wait was itself a deadlock: two startup steps *before* the mint
+sign envelopes, so the startup waited on a step that could not begin until it
+returned. `signingKeys` now reads the keyfile and answers.
 
 **Evidence:** the differential's read-counting keyfile proves the wait
 gates the READ, not just the result order, and removing the await reddens
@@ -12885,8 +12883,28 @@ Two things, and the second is why the first is safe:
 
 1. **The signing-key mint barrier is deleted** — `signing_key_mint_barrier.dart`
    entire, `ApkamSigning.awaitsSigningKeyMint` and its two overrides, the wait in
-   `signingKeys`, `PqClientBootstrap.mintSettled` and the `finally` that settles
-   it, and the 45-second bound added on 2026-08-29 with its test file.
+   `signingKeys`, `PqClientBootstrap.mintSettled` and **both** `finally` clauses
+   that settle it, and the 45-second bound added on 2026-08-29 with its test
+   file.
+
+   ⚠️ **AMENDED 2026-08-30, in the commit that did it: the safety argument below
+   is too strong, and the deletion rests on something else.** This ruling says
+   the mint *"never withdraws a key anything could have signed with"*. That is
+   false in one state neither rule 2 nor enrolment-time minting removes: an
+   enrollment that authenticates **post-quantum** and holds **no** data signing
+   key — the heal path. There the mint publishes a fresh key, the authentication
+   key stops being named, and a signer reading between the publish and the file
+   takes the authentication fallback and produces an envelope nothing can
+   verify. `serialiseApskWrite` does not close it: that lock serialises `_apsk`
+   **writers**, and this is a **reader**.
+
+   **What the deletion actually rests on** (gkc, 2026-08-30): that state has no
+   holder outside this tree. Nothing released carries post-quantum key material,
+   so the only enrollments in it are development keyfiles and test fixtures —
+   while the deadlock is real and measured. The window is recorded on
+   `ApkamSigning.signingKeys` so a reader meets it there rather than deducing it,
+   and it is **not** a reason to reinstate the barrier: the barrier's cost was a
+   process-wide wait on a step that two earlier steps blocked.
 2. **A legacy enrollment uses its authentication keypair for authentication AND
    for data signing, and never mints a data signing keypair of its own** —
    implemented by excluding **rsa2048** from the `missing` list

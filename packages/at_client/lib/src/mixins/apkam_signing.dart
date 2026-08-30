@@ -12,8 +12,6 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, apskUri, canSignEnvelopeWith;
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show signingAlgoOf;
-import 'package:at_client/src/signing/signing_key_mint_barrier.dart'
-    show awaitSigningKeyMint;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
 /// The tail of each client's `_apsk` write chain, so [serialiseApskWrite] can
@@ -171,40 +169,21 @@ mixin ApkamSigning {
   /// the authentication key stops signing here and stops being advertised
   /// there, in the same step.
   ///
-  /// **Waits for the client's signing-key mint to settle** before reading
-  /// ([signingKeyMintSettled]). The startup mints concurrently with whatever
-  /// the application does next, and publishing a minted key withdraws the
-  /// authentication fallback from the advertisement before the keyfile holds
-  /// the minted one — a read in that window would fall back to a key the
-  /// record no longer names, and the envelope would verify against nothing.
-  /// The one rule above holds only outside that window; waiting is what keeps
-  /// a caller outside it.
+  /// ⚠️ **That rule holds outside one window.** A mint publishes its new key
+  /// before it files it, so between those two writes the keyfile does not yet
+  /// hold what the advertisement names. On an enrollment already holding a
+  /// signing key this is harmless — the held key is still named — but on one
+  /// holding none, a read here takes the authentication fallback at the moment
+  /// the advertisement stops naming it, and the envelope verifies against
+  /// nothing. Reaching it needs an enrollment that authenticates
+  /// post-quantum and owns no signing key, which is the shape of a keyfile
+  /// written before an enrollment was given a signing key at creation.
   Future<List<ApkamSigningKeys>> get signingKeys async {
-    if (awaitsSigningKeyMint) {
-      final elapsed = await awaitSigningKeyMint(atClient);
-      if (elapsed != null) {
-        // The mint has neither run nor declined to run, so the startup is
-        // stuck before it. Sign with what the keyfile holds rather than wait
-        // forever: that is what the barrier settles to when the mint will not
-        // run this session, and it is an outcome a caller can act on. Waiting
-        // instead deadlocks every signer in the process, silently.
-        logger.warning(
-            'The signing-key mint did not settle within $elapsed, so this '
-            'client is signing with the keys its keyfile already holds. Its '
-            'PQ startup is stuck before the mint step, so anything that step '
-            'would have published has not been published.');
-      }
-    }
     final held = await heldSigningKeys;
     if (held.isNotEmpty) return held;
 
     return [authenticationSigningKey!];
   }
-
-  /// Whether [signingKeys] waits for this client's own signing-key mint to
-  /// settle before reading what may sign. True for every signer; the one
-  /// override is the mint itself, which cannot wait for its own completion.
-  bool get awaitsSigningKeyMint => true;
 
   /// The APKAM **authentication** keypair as a signing key, or null when this
   /// client holds no `AtChops` keypair.

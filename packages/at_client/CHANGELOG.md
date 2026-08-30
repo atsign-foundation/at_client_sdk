@@ -33,26 +33,22 @@
     `dataSigningKeyAlgorithms` and returns `Future<void>`. ML-DSA key generation
     is asynchronous, so an algorithm-aware activation cannot stay synchronous.
 
-- fix: **a signer no longer waits forever for a signing-key mint that is not
-  coming.** Everything that signs waits on a per-client barrier the PQ startup
-  settles at its mint step, and again in its `finally` as a backstop — so the
-  barrier completes on every path the startup can *return* by. What neither
-  covers is a startup that never returns: a step before the mint that blocks
-  leaves the barrier unsettled for the life of the process, and the wait was
-  unbounded.
-  - Measured: a `collectConveyedKeys` sweep (step 2 of 12) that did not return
-    held the barrier open, and an `at_activate approve` waiting to sign the
-    conveyance envelope it had just sealed never terminated — through a
-    six-minute test timeout and a seven-minute manual bound alike, with
-    nothing in the log to say why.
-  - `awaitSigningKeyMint` now bounds the wait at `signingKeyMintWait`
-    (45 seconds) and reports the elapsed bound, and the signer logs at
-    **warning** and signs with what the keyfile already holds — which is what
-    the barrier settles to when the mint will not run this session.
-  - ⚠️ **This bounds the symptom, not the cause.** A startup step before the
-    mint that blocks still blocks, and everything that step would have
-    published stays unpublished; the warning is what makes that visible
-    instead of silent.
+- fix: **nothing that signs waits on the startup any more.** Every signer used
+  to wait on a per-client barrier that the PQ startup settled at its mint step —
+  and two startup steps *before* that one answer an inbound request by sealing
+  and signing a reply, so the startup waited on a step that could not begin
+  until it returned. `at_activate approve` did not exit within its two-minute
+  bound in eight separate runs, with nothing in the log to say why. The barrier
+  is gone: `ApkamSigning.signingKeys` reads the keyfile and answers.
+  - ⚠️ **One window this leaves open, stated because it is real.** A mint
+    publishes its new key before it files it, so between those two writes the
+    keyfile does not hold what the advertisement names. On an enrolment already
+    holding a signing key that is harmless — the held key is still named. On one
+    holding none, a signature produced in that window is made with the
+    authentication key at the moment the record stops naming it. Reaching it
+    takes an enrolment that authenticates post-quantum and owns no signing key,
+    which is the shape of a keyfile written before enrolments were given a
+    signing key at creation.
 
 - fix: **a client that already exists refuses a preference naming a different
   `hiveStoragePath`, where it used to ignore it silently.** `StorageManager`
@@ -356,19 +352,6 @@ hunting for a constructor argument that never existed in a release. -->
     nothing verifiable is refused outright rather than half-read. A `retired`
     entry is still a candidate, which is the whole reason retired entries stay
     advertised.
-- fix: a signer can no longer sign with the authentication key in the window
-  where its own advertisement has already withdrawn it. The PQ startup mints
-  an enrollment's signing keys concurrently with whatever the app does next,
-  and publishing a minted key withdraws the authentication fallback from the
-  `_apsk` record before the keyfile holds the minted one — a sign in that
-  window fell back to a key the record no longer named, producing an
-  envelope nothing could verify. `ApkamSigning.signingKeys` now waits for
-  the client's mint to settle (`PqClientBootstrap.mintSettled`, handed over
-  via `registerSigningKeyMintBarrier`) before reading what may sign; the
-  mint itself is the one exempt signer, since it cannot wait for its own
-  completion. A startup that is stopped, fails, or has the mint gated off
-  still settles the barrier, so signing never waits for a mint that is not
-  coming.
 - fix: a local write racing an in-flight sync push can no longer be lost.
   The sync queue keeps one entry per atKey, so a `delete()` (or a newer
   value) landing while that key's previous op was on the wire replaced the

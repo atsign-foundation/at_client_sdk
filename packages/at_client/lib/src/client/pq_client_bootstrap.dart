@@ -21,8 +21,6 @@ import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/key_package_minting.dart'
     show KeyPackageMinting;
-import 'package:at_client/src/signing/signing_key_mint_barrier.dart'
-    show registerSigningKeyMintBarrier;
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
 import 'package:at_commons/atsign.dart' show AtsignString;
@@ -126,9 +124,9 @@ class PqStartupGates {
 ///     key material conveyed by other enrollments reaches the keyfile.
 ///  3. mint in-use signing keys — active: gives this enrollment a signing key
 ///     of its own for every algorithm the in-use set names, and retires the
-///     ones it no longer names. Before every step that signs, so that anything
-///     published later in this same startup is signed by the keys the
-///     advertisement now names, and by none it has withdrawn.
+///     ones it no longer names. Before every step that PUBLISHES, so anything
+///     published later in this same startup is signed by a key the
+///     advertisement names.
 ///  4. seed namespace keys    — active, gated by
 ///     `AtClientPreference.seedNamespaceKeys`: mints and publishes this
 ///     atSign's namespace keys and conveys each private.
@@ -220,7 +218,6 @@ class PqClientBootstrap {
     // Registered in the constructor rather than at startup so a signer that
     // runs before startup() is fired still waits: the window it closes opens
     // the moment minting becomes possible, not the moment it begins.
-    registerSigningKeyMintBarrier(_atClient, mintSettled);
   }
 
   final AtClient _atClient;
@@ -276,21 +273,6 @@ class PqClientBootstrap {
   /// it answers "has the startup finished?", not "did every step work?".
   Future<void> get startupComplete => _startupComplete.future;
 
-  final Completer<void> _mintSettled = Completer<void>();
-
-  /// Completes when the signing-key mint step has run — or will not run this
-  /// session, because the startup was stopped or failed before reaching it or
-  /// the step is gated off. Never completes with an error.
-  ///
-  /// This is what a signer waits on before reading which keys may sign
-  /// ([registerSigningKeyMintBarrier] hands it over in the constructor):
-  /// publishing a minted key withdraws the authentication fallback from the
-  /// advertisement before the keyfile holds the minted one, so a sign in that
-  /// window produces an envelope nothing can verify. Waiting on
-  /// [startupComplete] instead would deadlock — the steps after the mint sign
-  /// envelopes themselves.
-  Future<void> get mintSettled => _mintSettled.future;
-
   bool _stopped = false;
 
   /// Halts the startup at the next step boundary. A step already running
@@ -332,11 +314,6 @@ class PqClientBootstrap {
         await steps[i].run();
       }
     } finally {
-      // A startup that stopped or failed before the mint step still settles
-      // the barrier: everything that signs waits on it, and those signers
-      // should sign with what the keyfile holds today rather than wait for a
-      // mint that is not coming this session.
-      if (!_mintSettled.isCompleted) _mintSettled.complete();
       _startupComplete.complete();
     }
   }
@@ -486,13 +463,20 @@ class PqClientBootstrap {
   /// set names and this enrollment does not hold, and retires every one it
   /// holds that the set no longer names.
   ///
-  /// Runs before every step that signs — the namespace-key seeding, both link
-  /// publications and the sweep all produce signed envelopes — so a key minted
-  /// on this start is already advertised by the time anything signs with it,
-  /// and a key retired on this start signs nothing more. Running it after them
-  /// would leave one start's envelopes signed by a key the advertisement of
-  /// that moment did not name, and one start's worth signed by a key that has
-  /// left service.
+  /// Runs before every step that **publishes** — the namespace-key seeding and
+  /// both link publications — so a key minted on this start is already
+  /// advertised by the time one of those signs with it, and a key retired on
+  /// this start signs nothing more.
+  ///
+  /// ⚠️ **Not before everything that signs.** The two sweep steps above answer
+  /// an inbound request by sealing and signing a reply, and they run first, so
+  /// a reply sent on this start is signed by whatever the keyfile already
+  /// holds. That is correct rather than merely tolerated: the advertisement at
+  /// that moment names those keys too, and the mint only ever adds a key or
+  /// retires one — a retired entry stays advertised, so what it signed goes on
+  /// verifying. Moving the mint ahead of the sweeps would not improve it and
+  /// would put a publish before the step that reads what other enrollments
+  /// have conveyed.
   Future<void> _mintInUseSigningKeys() async {
     try {
       if (!_gates.mintInUseSigningKeys) return;
@@ -501,10 +485,6 @@ class PqClientBootstrap {
       _logger.warning('Minting this enrollment\'s own signing keys failed for '
           '$_atSign; it keeps signing with the key it already advertises, and '
           'the next start retries: $e, $st');
-    } finally {
-      // Success, failure and gated-off all settle the barrier: whatever the
-      // keyfile holds after this point is what may sign.
-      if (!_mintSettled.isCompleted) _mintSettled.complete();
     }
   }
 

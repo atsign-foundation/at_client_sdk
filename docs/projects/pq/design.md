@@ -2065,13 +2065,15 @@ advertised are one rule and cannot drift apart.
 It follows that **a legacy enrollment never mints a data signing keypair** — it
 already has one. `AtKeys.signingKeysFor` cannot see it, because that method reads
 typed per-enrollment material and a legacy keyfile carries flat fields, so
-`SigningKeyMinting.reconcileSigningKeys` **is to exclude** from `missing` every
-algorithm the authentication keypair satisfies **when the enrollment holds no
-typed signing material at all** — the scope matters, because on a retrofitted
-enrollment that keypair reports mldsa65 and an unscoped exclusion would stop
-`pqActive` minting its ML-DSA signing key. ⛔ **Not yet built** — the change is
-the P0 row *"Delete the signing-key mint barrier …"* in
-[`implementation-plan.md`](implementation-plan.md#todo). Without the exclusion the mint
+`SigningKeyMinting.reconcileSigningKeys` **excludes `rsa2048`** from `missing`
+when the enrollment holds no typed signing material **and its authentication
+keypair is rsa2048**. ✅ **Built 2026-08-30.** The scope is the whole of its
+correctness: excluding instead *every algorithm the authentication keypair
+satisfies* fires at `pqActive`, where that keypair reports mldsa65 on an
+enrollment holding no typed material — `missing` empties, no ML-DSA signing key
+is ever minted, and the advertisement names the authentication key as its sole
+active entry. Naming rsa2048 cannot fire there, because rsa2048 is not what that
+set wants. Without the exclusion the mint
 generates a second rsa2048 keypair of no additional strength, publishes it to
 `_apsk.<enrollmentId>` by `enroll:update`, and drops the original — leaving the
 advertisement naming a key the enrollment record has never seen, as a side effect
@@ -2211,15 +2213,21 @@ enrollment lacks, and retires the ones it no longer names — and a retired entr
 stays advertised, because `SigningKeyMinting._publish` composes `withdrawn` from
 the keys being retired *plus* everything the keyfile already records as
 withdrawn, and `verifyEnvelope` tries every advertised key for the resolved
-algorithm without filtering on status. The one case that would have withdrawn a
-key — a legacy enrollment minting a second keypair beside the one it already
-signs with — is removed by the rule in [section 9.1](#91-the-two-roles).
+algorithm without filtering on status. The case that used to withdraw one — a
+legacy enrollment minting a second keypair beside the one it already signs with
+— is removed by the rule in [section 9.1](#91-the-two-roles).
 
-**So no signer waits for a mint.** A barrier making every signer in a process
-await its own client's mint step existed between 2026-08-21 and 2026-08-30 and
-is deleted: it ordered signing *within one process's startup*, while the only
-material that can be stranded by an advertisement change was signed in an earlier
-process — at enrollment time, or on a previous run. It also deadlocked, because
+⚠️ **One case survives, and the heading above overstates it.** An enrollment
+that authenticates **post-quantum** and holds **no** data signing key does have
+a key withdrawn: the mint publishes the fresh signing key and the
+authentication key stops being named. Section 9.1's rule does not reach it,
+because that rule names rsa2048 and this enrollment's authentication key is
+ML-DSA. Only a keyfile written before enrollments were given a signing key at
+creation is in that state.
+
+**No signer waits for a mint.** A barrier making every signer in a process await
+its own client's mint step existed between 2026-08-21 and 2026-08-30 and is
+deleted. It deadlocked, because
 the startup answers inbound secret requests at steps 2 and 3 by signing a reply,
 and the step that released signers was step 4. Ruled in
 [`decisions.md` 126](detail/decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30).

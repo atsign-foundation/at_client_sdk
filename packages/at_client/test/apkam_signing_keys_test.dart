@@ -1,4 +1,4 @@
-import 'dart:async' show Completer, FutureOr;
+import 'dart:async' show FutureOr;
 import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
 
@@ -9,8 +9,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show recordResolvedSigningAlgo;
-import 'package:at_client/src/signing/signing_key_mint_barrier.dart'
-    show registerSigningKeyMintBarrier;
 import 'package:at_commons/at_commons.dart'
     show AtKey, AtKeyNotFoundException, AtValue;
 import 'package:at_commons/atsign.dart' show AtsignString;
@@ -46,8 +44,9 @@ class TestEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   TestEnvelopeSigner(this.atClient);
 }
 
-/// Counts keyfile reads, so a test can assert the mint barrier gates the READ
-/// rather than only reordering results.
+/// Counts keyfile reads, so a test can assert that a signer answered by
+/// READING the keyfile — a green with no read would mean the fallback answered
+/// without the keyfile ever being consulted.
 class CountingKeysIo extends InMemoryAtKeysIo {
   int reads = 0;
 
@@ -56,20 +55,6 @@ class CountingKeysIo extends InMemoryAtKeysIo {
     reads++;
     return super.read(atSign);
   }
-}
-
-/// The mint's own shape: it cannot wait for its own completion.
-class TestMintShapedSigner with ApkamSigning {
-  @override
-  final AtClient atClient;
-
-  @override
-  final AtSignLogger logger = AtSignLogger('TestMintShapedSigner');
-
-  @override
-  bool get awaitsSigningKeyMint => false;
-
-  TestMintShapedSigner(this.atClient);
 }
 
 /// Where a client's signing keys come from, and what answers when the keyfile
@@ -215,62 +200,50 @@ void main() {
     });
   });
 
-  group('signingKeys waits for the mint barrier', () {
-    test(
-        'does not read the keyfile until the mint settles, then signs with '
-        'the minted key', () async {
-      final io = CountingKeysIo();
-      final keyfile = AtKeys(atsign: atSign.toAtsign());
-      await io.write(atSign, keyfile);
-      when(() => atClient.atKeysIo).thenReturn(io);
-
-      final mint = Completer<void>();
-      registerSigningKeyMintBarrier(atClient, mint.future);
-
-      final pending = signer.signingKeys;
-      await pumpEventQueue();
-      expect(io.reads, 0,
-          reason: 'the wait must gate the READ: a read in the window falls '
-              'back to the authentication key at the exact moment the '
-              'advertisement withdraws it');
-
-      // The mint lands — files the signing key — and then settles.
-      keyfile.fileSigningMaterial(
-          enrollmentId: enrollmentId,
-          algorithm: CryptographicMaterialAlgorithm.rsa2048,
-          publicKey: b64('minted-pub'),
-          privateKey: b64('minted-priv'));
-      mint.complete();
-
-      final keys = await pending;
-      expect(io.reads, greaterThan(0));
-      expect(keys.single.publicKey, b64('minted-pub'),
-          reason: 'after the mint settles the keyfile holds the minted key, '
-              'so the fallback must not answer');
-    });
-
-    test('the mint itself does not wait', () async {
+  group('signingKeys reads without waiting on anything', () {
+    test('it returns while a startup step is still parked', () async {
+      // ⛔ **The regression this replaces a process-wide barrier with.**
+      // Everything that signs used to wait on the mint step, and two startup
+      // steps before it sign envelopes themselves — so the startup waited on a
+      // step that could not begin until it returned. `at_activate approve` did
+      // not exit within its two-minute bound in eight separate runs.
+      //
+      // Nothing here settles anything: the assertion is that a signer answers
+      // from the keyfile on its own.
       final io = CountingKeysIo();
       await io.write(atSign, AtKeys(atsign: atSign.toAtsign()));
       when(() => atClient.atKeysIo).thenReturn(io);
 
-      // Deliberately never settled: only the override lets this return.
-      registerSigningKeyMintBarrier(atClient, Completer<void>().future);
+      final keys = await signer.signingKeys.timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('a signer must not wait for any other work; '
+              'waiting is what deadlocked every signer in the process'));
 
-      final keys = await TestMintShapedSigner(atClient)
-          .signingKeys
-          .timeout(const Duration(seconds: 5));
-      expect(io.reads, greaterThan(0));
+      expect(io.reads, greaterThan(0),
+          reason: 'and it answers by READING the keyfile, not from a cache — '
+              'a green here with no read would mean the fallback answered '
+              'without the keyfile ever being consulted');
       expect(keys.single.publicKey, pkamPublicKey(),
-          reason: 'the mint cannot wait for its own completion; until it '
-              'settles, what may sign is still the authentication fallback');
+          reason: 'this keyfile holds no signing material, so the '
+              'authentication keypair is what may sign');
     });
 
-    test('no barrier registered: proceeds immediately', () async {
-      final keys = await signer.signingKeys.timeout(const Duration(seconds: 5));
-      expect(keys.single.publicKey, pkamPublicKey(),
-          reason: 'a client built without the PQ startup has no mint in '
-              'flight to wait for');
+    test('and it signs with the filed key once one is there', () async {
+      final keyfile = AtKeys(atsign: atSign.toAtsign())
+        ..fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
+            publicKey: b64('minted-pub'),
+            privateKey: b64('minted-priv'));
+      final io = CountingKeysIo();
+      await io.write(atSign, keyfile);
+      when(() => atClient.atKeysIo).thenReturn(io);
+
+      final keys = await signer.signingKeys;
+
+      expect(keys.single.publicKey, b64('minted-pub'),
+          reason: 'the control for the row above: the same call, the same '
+              'signer, and the only thing that changed is what the keyfile '
+              'holds — so the fallback answering there is attributable');
     });
   });
 
