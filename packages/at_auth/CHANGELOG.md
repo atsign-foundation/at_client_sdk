@@ -1,5 +1,23 @@
 ## 4.0.0-rc1
 
+- **BREAKING** fix: **the `_apsk` an enrolment advertises is spelled by its
+  algorithm alone.** Exactly one active `rsa2048` key rides `apskLegacy` as the
+  bare string; anything else rides `apsk` as the array. A key package used to
+  force the array as well, on the grounds that a bare value cannot state the
+  algorithm of whatever signed the package — but where that signer is rsa2048
+  the bare value states exactly it, and where it is not, the algorithm already
+  chose the array. So the condition only ever fired on the case it was wrong
+  about, and that case is reachable: a legacy posture names an empty data
+  signing set, so nothing is advertised, while a pq key-exchange mode still
+  carries a package.
+  **Why it mattered.** at_client composes this same record at every start and
+  republishes on any difference, and it spells that key bare. The two composers
+  of one record therefore disagreed about its shape — at_auth installed the
+  array, the enrolment's first start rewrote it bare — and that republish
+  discards the chain link the approver conveyed against the old value, leaving
+  the enrollment silently unsigned. Pinned in `enrollment_test.dart` with the
+  mldsa65 arm as its control.
+
 - feat: **a self-enrollment submitted by an atSign that holds no enrollment is
   approved over the connection that requested it.** The atServer's
   self-enrolment auto-approve needs an APKAM-authenticated connection, and an

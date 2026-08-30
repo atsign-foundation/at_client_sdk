@@ -128,22 +128,31 @@ class EnrollmentSubmitter {
   ///
   /// Everything else sends the array: an enrollment whose advertised key's
   /// algorithm is not the rsa2048 a bare value implies, since nothing could
-  /// read it otherwise; and an APKAM-key-advertising enrollment carrying a key
-  /// package, whose signer's algorithm the bare form cannot state.
+  /// read it otherwise.
   ///
   /// **[advertisedSigningKey] is preferred over [apkamPublicKey] whenever it
   /// is there.** An enrollment that owns a signing key advertises *that*,
   /// because that is what signs; the APKAM key authenticates connections and
   /// signs nothing once a signing key exists.
   ///
-  /// ⚠️ **With a signing key present, a key package no longer forces the
-  /// array.** It forced it while the package was signed by the APKAM key,
-  /// whose algorithm is whatever the enrollment authenticates with — which a
-  /// bare value, meaning `rsa2048` by convention, cannot state. A package
-  /// signed by an rsa2048 *signing* key is exactly what the bare form does
-  /// state, and rollout 1 depends on that: an un-upgraded peer has to
-  /// base64-decode this value as an RSA key, and it is also the value that
-  /// peer verifies the package against.
+  /// ⚠️ **The algorithm decides the form, and nothing else may — because the
+  /// client composes this same record and decides it that way.** `apskValueOf`
+  /// spells exactly one active rsa2048 entry bare and everything else as the
+  /// array. Any second condition here makes the two composers of one record
+  /// disagree about its shape for the same key: this side installs the array,
+  /// the enrollment's first start composes the bare string, `publishPublicSigningKey`
+  /// sees a difference and republishes — and that republish discards the chain
+  /// link the approver conveyed against the old value, leaving the enrollment
+  /// silently unsigned.
+  ///
+  /// A key package used to force the array here, on the grounds that a bare
+  /// value cannot state the algorithm of whatever signed the package. Where
+  /// that signer is rsa2048 the bare value states exactly it; where it is
+  /// anything else the algorithm test has already sent the array. So the
+  /// condition only ever fired on the case it was wrong about: an
+  /// APKAM-advertising rsa2048 enrollment in pq key-exchange mode, which is
+  /// reachable — a legacy posture names an empty signing set, so nothing is
+  /// advertised, while `--key-exchange pq` still carries a package.
   ({Map<String, dynamic>? apsk, String? apskLegacy}) _apskFor({
     required String apkamPublicKey,
     required SigningAlgoType signingAlgo,
@@ -157,8 +166,7 @@ class EnrollmentSubmitter {
     final alg = advertisedSigningKey?.algorithm ?? signingAlgo;
     final pub = advertisedSigningKey?.publicKey ?? apkamPublicKey;
 
-    if (alg == SigningAlgoType.rsa2048 &&
-        (advertisedSigningKey != null || metadata?['keyPackage'] == null)) {
+    if (alg == SigningAlgoType.rsa2048) {
       return (apsk: null, apskLegacy: pub);
     }
     // One key: at request time the enrollment holds this one and nothing else.
