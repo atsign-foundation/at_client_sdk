@@ -17,6 +17,7 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/remote_backed_client.dart';
+import 'test_utils/recorded_logs.dart';
 
 /// [envelope] with its signature replaced by one that cannot verify.
 ///
@@ -44,10 +45,19 @@ void main() {
   // the child later reads.
   late Map<String, Metadata> remoteMetadata;
 
-  setUpAll(() => registerFallbackValue(AtKey()));
+  // Installed here rather than in the group that reads it: an at_client
+  // library binds whatever handler is current when its logger first logs, and
+  // by the time a group-level setUpAll runs the chain has already logged in an
+  // earlier test — so a handler installed there would record nothing.
+  final logs = RecordedLogs();
+  setUpAll(() {
+    registerFallbackValue(AtKey());
+    logs.installOn();
+  });
   setUp(() {
     remoteData = {};
     remoteMetadata = {};
+    logs.records.clear();
   });
 
   MockAtClient client(String enrollmentId) => buildRemoteBackedMockClient(
@@ -1051,6 +1061,279 @@ void main() {
           isFalse,
           reason: 'and having healed it, the next start writes nothing — the '
               'check is whether the link holds, not whether it was rewritten');
+    });
+  });
+
+  /// Every comparison of what a link vouches for against what the record
+  /// actually publishes — the check that makes a signature mean something
+  /// about a *key* rather than merely about a payload.
+  ///
+  /// A parent signs the child's published key, conveys the link, and the child
+  /// publishes it onto its own record. That key can move between any two of
+  /// those steps, and after all of them: an `enroll:update` carrying fresh
+  /// signing material rewrites `_apsk`. With nothing comparing, the record
+  /// would advertise an anchor for a key no parent ever vouched for, and a
+  /// verifier would follow it — which is the whole attack the link exists to
+  /// stop, arriving without anybody having to forge a signature.
+  ///
+  /// Five comparisons make that impossible, and each is reached by a different
+  /// caller: two refuse a conveyed link (chain flavour, root flavour), two
+  /// report the walk broken (chain flavour, root flavour), and one decides
+  /// that an enrollment holding the root private must re-anchor itself. Every
+  /// test below carries the arm where the key did NOT move, so a refusal
+  /// cannot be explained by the fixture rather than by the mismatch.
+  group('a link vouching for a key the record no longer publishes', () {
+    late MockAtClient verifierClient;
+    late AtClientSecretSharing verifier;
+
+    setUp(() {
+      verifierClient = client('verifier-1');
+      verifier = AtClientSecretSharing.forClient(verifierClient);
+    });
+
+    Future<void> convey(
+        AtClientSecretSharing child, SignedEnvelope link) async {
+      await child.secretStore.putSecret(
+          Secret(
+              namespace: 'buzz',
+              name: PqSigningChain.linkSecretName,
+              value: PqSigningChain.encodeLink(link.toJson())),
+          allowReservedName: true);
+    }
+
+    Future<void> conveyRoot(
+        AtClientSecretSharing child, Map<String, Object?> link) async {
+      await child.secretStore.putSecret(
+          Secret(
+              namespace: 'buzz',
+              name: PqSigningChain.rootLinkSecretName,
+              value: PqSigningChain.encodeLink(link)),
+          allowReservedName: true);
+    }
+
+    Future<({Uint8List publicKey, Uint8List secretKey})> publishRoot() async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+          jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
+      ]));
+      return pair;
+    }
+
+    /// Moves the key [id] publishes, which is what an `enroll:update` carrying
+    /// fresh signing material does.
+    ///
+    /// The replacement is a genuine `_apsk` — another registered enrollment's —
+    /// rather than a manufactured string, so a refusal cannot be explained by
+    /// the record holding something no reader could parse. The donor keeps its
+    /// own record; nothing in these tests looks at it.
+    Future<void> moveKeyOf(String id, {required String donor}) async {
+      await registered(client(donor));
+      final replacement = remoteData[PqSigningChain.apskUri(atSign, donor)]!;
+      expect(replacement, isNot(remoteData[PqSigningChain.apskUri(atSign, id)]),
+          reason: 'differential guard: if the two enrollments published the '
+              'same key nothing would have moved, and every assertion below '
+              'would pass against an unchanged record');
+      remoteData[PqSigningChain.apskUri(atSign, id)] = replacement;
+    }
+
+    test('a conveyed CHAIN link is refused, naming the mismatch', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+
+      // The arm where nothing moved. It is the control twice over: it proves
+      // this fixture publishes at all, and it proves the recorder is bound —
+      // without which every message assertion below would pass by matching
+      // nothing.
+      final steadyClient = client('steady-1');
+      final steady = await registered(steadyClient);
+      final steadyLink =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'steady-1');
+      await convey(steady, steadyLink!);
+      expect(await PqSigningChain(steadyClient).publishPendingLink(), isTrue);
+      expect(
+          logs.at('INFO'),
+          contains(startsWith('Published chain link for '
+              'steady-1')),
+          reason: 'the control record: the same call says so when it does '
+              'publish, so an unbound recorder is reported as unbound rather '
+              'than satisfying the WARNING assertion below by being empty');
+
+      // The arm where the key moved between the signing and the publish.
+      final movedClient = client('moved-1');
+      final moved = await registered(movedClient);
+      final movedLink =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'moved-1');
+      await moveKeyOf('moved-1', donor: 'donor-1');
+      await convey(moved, movedLink!);
+
+      expect(await PqSigningChain(movedClient).publishPendingLink(), isFalse,
+          reason: 'publishing it would advertise an anchor over a key the '
+              'parent never saw');
+      expect(
+          logs.at('WARNING'),
+          contains('Conveyed chain link vouches for a key that is not the one '
+              'published for moved-1; not publishing it'),
+          reason: 'the refusal is silent in the return value — `false` is also '
+              'what an already-published link gives — so the message is the '
+              'only thing that says WHICH check refused, and an operator has '
+              'nothing else to read');
+      expect(await PqSigningChain(movedClient).readLink('moved-1'), isNull,
+          reason: 'and nothing was written: a server that refused after '
+              'writing would satisfy the assertion above and still have '
+              'published the link');
+    });
+
+    test('a conveyed ROOT link is refused, naming the mismatch', () async {
+      final pair = await publishRoot();
+      final holder = client('priv-1');
+
+      final steadyClient = client('steady-1');
+      final steady = await registered(steadyClient);
+      final steadyLink = await PqSigningChain(holder)
+          .signRootLinkFor('steady-1', rootPrivate: pair.secretKey);
+      await conveyRoot(steady, steadyLink!);
+      expect(await PqSigningChain(steadyClient).publishPendingLink(), isTrue);
+      expect(logs.at('INFO'),
+          contains(startsWith('Anchored steady-1 to the signing root')),
+          reason: 'the control record, from the same call in the arm where '
+              'the key did not move');
+
+      final movedClient = client('moved-1');
+      final moved = await registered(movedClient);
+      final movedLink = await PqSigningChain(holder)
+          .signRootLinkFor('moved-1', rootPrivate: pair.secretKey);
+      await moveKeyOf('moved-1', donor: 'donor-1');
+      await conveyRoot(moved, movedLink!);
+
+      expect(await PqSigningChain(movedClient).publishPendingLink(), isFalse);
+      expect(
+          logs.at('WARNING'),
+          contains('Conveyed root link vouches for a key that is not the one '
+              'published for moved-1; not publishing it'),
+          reason: 'the root flavour is a separate comparison in a separate '
+              'method — proving the chain flavour says nothing about it');
+      expect(await PqSigningChain(movedClient).readRootLink('moved-1'), isNull);
+    });
+
+    test('the walk reports a CHAIN link broken, not anchored', () async {
+      final pair = await publishRoot();
+      final parentClient = client('priv-1');
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      await PqSigningRoot(parentClient, keysIo: io)
+          .store(atSign, pair.secretKey);
+      when(() => parentClient.atKeysIo).thenReturn(io);
+      final parent = await registered(parentClient);
+      await PqSigningChain(parentClient)
+          .publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: io);
+
+      final childClient = client('child-1');
+      await registered(childClient);
+      final link =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      // Published directly, which is how a link written before the key moved
+      // comes to be sitting on the record — the write-side check above cannot
+      // see a key that moves afterwards.
+      await PqSigningChain(childClient).publishLink('child-1', link!);
+
+      expect(
+          (await PqSigningChain(verifierClient)
+                  .verifyChain(verifier, 'child-1'))
+              .verdict,
+          ChainVerdict.anchored,
+          reason: 'the control: this chain is sound until the key moves, so a '
+              'broken verdict below is the mismatch and not the fixture');
+
+      await moveKeyOf('child-1', donor: 'donor-1');
+
+      final result =
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'child-1');
+      expect(result.verdict, ChainVerdict.broken,
+          reason: 'the signature still verifies — it is over the payload, and '
+              'the parent is untouched — so a walk that checked only '
+              'signatures would report this anchored and a verifier would '
+              'trust a key nobody vouched for');
+      expect(
+          result.reason,
+          'the link on child-1 vouches for a key other than the one published '
+          'for it',
+          reason: 'broken is reported for six different causes; the reason is '
+              'what tells an operator which');
+    });
+
+    test('the walk reports a ROOT link broken, not anchored', () async {
+      final pair = await publishRoot();
+      final c = client('priv-1');
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      await PqSigningRoot(c, keysIo: io).store(atSign, pair.secretKey);
+      when(() => c.atKeysIo).thenReturn(io);
+      await registered(c);
+      await PqSigningChain(c)
+          .publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: io);
+
+      expect(
+          (await PqSigningChain(verifierClient).verifyChain(verifier, 'priv-1'))
+              .verdict,
+          ChainVerdict.anchored,
+          reason: 'the control, before anything moves');
+
+      await moveKeyOf('priv-1', donor: 'donor-1');
+
+      final result =
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'priv-1');
+      expect(result.verdict, ChainVerdict.broken);
+      expect(
+          result.reason,
+          "the root link on priv-1 does not describe that enrollment's "
+          'published key',
+          reason: 'the root flavour reports through a different method and a '
+              'different sentence from the chain flavour above');
+    });
+
+    test('an enrollment whose own key moved re-anchors itself', () async {
+      // The fifth comparison, and the only one that refuses silently: it
+      // returns a bool to its own caller rather than a reason to an operator.
+      // What it decides is whether the link already on the record still holds,
+      // and a key that has moved is one of the two ways it can stop holding.
+      final pair = await publishRoot();
+      final c = client('priv-1');
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      await PqSigningRoot(c, keysIo: io).store(atSign, pair.secretKey);
+      when(() => c.atKeysIo).thenReturn(io);
+      await registered(c);
+
+      expect(
+          await PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: io),
+          isTrue);
+      expect(
+          await PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: io),
+          isFalse,
+          reason: 'the control: with the key unmoved the link still holds, so '
+              'a second start writes nothing. Without this arm a method that '
+              're-anchored unconditionally would pass the assertion below');
+
+      await moveKeyOf('priv-1', donor: 'donor-1');
+
+      expect(
+          await PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: io),
+          isTrue,
+          reason: 'the link on the record now vouches for a key this '
+              'enrollment no longer publishes, and this client is the only '
+              'party that can put it right — leaving it would advertise this '
+              'enrollment as anchored to a verifier that will then refuse it');
+      expect(
+          (await PqSigningChain(verifierClient).verifyChain(verifier, 'priv-1'))
+              .verdict,
+          ChainVerdict.anchored,
+          reason: 'and the re-anchor is what a verifier reads, not merely a '
+              'record rewrite: the new link describes the key now published');
     });
   });
 
