@@ -432,6 +432,16 @@ process holds one posture and a client cached at another is refused outright.
   own `AtOnboardingRequest` defaults, which are field defaults no other package
   can reference. Mutation: returning the bare constant reddens exactly the two
   device-name assertions, quoting their own reasons.
+- `packages/at_client/test/pre_enrollment_retrofit_drive_test.dart` — the
+  DECISION, driven through `AtClientImpl.create` rather than through the
+  pieces, and added because nothing in at_client drove it: re-adding the
+  `enrollmentId == null` return left all 1688 unit tests green, and only a
+  Docker-dependent pack on a separate CI job noticed. It asserts the
+  `enroll:request` the client puts on the wire — the app, the device and the
+  grants it chose — because asserting that it merely *tried* would be
+  asserting the test double. Mutation: re-adding that return reddens exactly
+  the post-quantum arm, quoting *"a client with no enrollment id … sent no
+  enroll:request. Commands seen: []"*, while the legacy control stays green.
 - `packages/at_auth/test/at_self_enrollment_test.dart` — a group whose two arms
   differ in the session's enrollment id and in nothing else, meeting the same
   `pending` response. Its control is that an APKAM retrofit is still denied.
