@@ -1,5 +1,20 @@
 ## 1.17.0-rc1
 
+- fix: **an enrolment now owns a data signing key from birth.**
+  `sendEnrollRequest` advertised the APKAM authentication key in `_apsk` and
+  signed the key package with it, so the new client's first start minted a
+  signing key and republished — dropping the APKAM entry. The key package then
+  stopped verifying, and any signing link the approver had conveyed against that
+  exact advertised value stopped matching, so the enrolment was approved and
+  then sealed nothing.
+  - The keypair is minted under the algorithm the posture's
+    `dataSigningKeyAlgorithms` names and passed to the request **and** to the
+    key-package builder, so the record names the key that signed the package.
+  - A **legacy-mode** enrolment under a posture that names a signing algorithm
+    advertises one too, and still carries no key package: the mode decides
+    whether a package exists, while `_apsk` is what every peer verifies
+    signatures against whatever the mode.
+
 - fix: a client that retrofits its enrolment at startup can run authenticated
   verbs again. `at_activate list` on a keyfile that had been retrofitted printed
   "Connected" and then failed the verb, and it failed on every run — the

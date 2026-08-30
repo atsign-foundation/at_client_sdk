@@ -183,5 +183,10 @@ const Set<String> _atClientMixinsBarrelExports = {
   'package:at_client/src/mixins/envelope_signing.dart',
   'package:at_client/src/enroll/pq_native_onboard.dart',
   'package:at_client/src/enroll/self_retrofit.dart',
+  // Added 2026-08-30. `mintAdvertisedSigningKey` is the one home for minting
+  // the data signing keypair an enrollment owns from birth, and
+  // `at_onboarding_cli` mints one on the enrolment path — so it has to be
+  // reachable from outside at_client, like the two activation flows above it.
+  'package:at_client/src/enroll/signing_key_mint.dart',
   'package:at_client/src/secret_sharing/secret_sharing.dart',
 };

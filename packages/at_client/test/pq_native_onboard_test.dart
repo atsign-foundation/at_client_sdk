@@ -4,6 +4,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'package:at_client/at_client_mixins.dart' show makeActivationPqNative;
+import 'package:at_client/src/preference/pq_posture.dart' show PqPosture;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope, verifyEnvelope;
 import 'package:at_commons/at_commons.dart' show AtBytes, AtRootDomain;
@@ -34,9 +35,27 @@ void main() {
   AtOnboardingRequest request() =>
       AtOnboardingRequest(atSign, rootDomain: AtRootDomain('vip', 64));
 
+  test('at pqActive the activation carries an ML-DSA-65 signing key', () async {
+    // The algorithm the enrollment will KEEP. Minting rsa2048 here would leave
+    // the first start finding ML-DSA missing, minting a second keypair and
+    // republishing `_apsk` — orphaning the key this activation advertised and
+    // breaking any link conveyed against that exact value.
+    final r = request();
+    await makeActivationPqNative(r,
+        atSign: atSign,
+        dataSigningKeyAlgorithms: PqPosture.pqActive.dataSigningKeyAlgorithms);
+
+    expect(r.advertisedSigningKey?.algorithm, SigningAlgoType.mldsa65);
+    expect(r.signingAlgoType, SigningAlgoType.mldsa65,
+        reason: 'the authentication key is ML-DSA at both postures; what '
+            'pqActive changes is the SIGNING key beside it');
+  });
+
   test('the activation carries an rsa2048 signing key of its own', () async {
     final r = request();
-    makeActivationPqNative(r, atSign: atSign);
+    await makeActivationPqNative(r,
+        atSign: atSign,
+        dataSigningKeyAlgorithms: PqPosture.pqReady.dataSigningKeyAlgorithms);
 
     expect(r.signingAlgoType, SigningAlgoType.mldsa65,
         reason: 'the AUTHENTICATION key goes post-quantum: only the atServer '
@@ -56,7 +75,9 @@ void main() {
     // secret from anyone.
     final (io, apkamPublic) = await mlDsaKeys();
     final r = request();
-    makeActivationPqNative(r, atSign: atSign);
+    await makeActivationPqNative(r,
+        atSign: atSign,
+        dataSigningKeyAlgorithms: PqPosture.pqReady.dataSigningKeyAlgorithms);
 
     final envelope = SignedEnvelope.fromJson(
         (await r.metadataBuilder!(io))!['keyPackage'] as Map);
@@ -92,7 +113,9 @@ void main() {
     // neither, and nothing says so until a peer silently declines to seal.
     final (io, _) = await mlDsaKeys();
     final r = request();
-    makeActivationPqNative(r, atSign: atSign);
+    await makeActivationPqNative(r,
+        atSign: atSign,
+        dataSigningKeyAlgorithms: PqPosture.pqReady.dataSigningKeyAlgorithms);
 
     final envelope = SignedEnvelope.fromJson(
         (await r.metadataBuilder!(io))!['keyPackage'] as Map);

@@ -17,6 +17,7 @@ import 'package:at_client/at_client_mixins.dart'
         enrollmentApkamSymmetricKeyResolver,
         enrollmentKeyPackageBuilder,
         makeActivationPqNative,
+        mintAdvertisedSigningKey,
         mintSigningRootAfterActivation;
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
@@ -344,8 +345,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     final bool pqNative = atOnboardingPreference.authenticationKeyAlgorithm ==
         SigningAlgoType.mldsa65;
     if (pqNative) {
-      makeActivationPqNative(atOnboardingRequest,
+      await makeActivationPqNative(atOnboardingRequest,
           atSign: _atSign.toString(),
+          dataSigningKeyAlgorithms:
+              atOnboardingPreference.dataSigningKeyAlgorithms,
           keyEstablishmentAlgo:
               atOnboardingPreference.keyEstablishmentAlgorithms.first);
     }
@@ -536,6 +539,16 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     final mode =
         keyExchangeMode ?? atOnboardingPreference.posture.keyExchangeMode;
 
+    // The enrollment owns a data signing key from birth, under the algorithm
+    // the in-use set names — so `_apsk` advertises a key this enrollment holds
+    // rather than its APKAM authentication key, and the first start's
+    // reconciliation finds nothing missing and republishes nothing. Without
+    // it the record names the authentication key, the key package is signed
+    // by that key, and the first mint drops it: the package stops verifying
+    // and any link an approver conveyed against that value stops matching.
+    final advertisedSigningKey = await mintAdvertisedSigningKey(
+        atOnboardingPreference.dataSigningKeyAlgorithms);
+
     // The constructor IS the decision, which is why this is a branch and not a
     // parameter. A pq request needs both callbacks and carries no wrapped key;
     // a legacy request carries the wrapped key and needs neither. Making the
@@ -551,6 +564,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           namespaces: namespaces,
           otp: otp,
           signingAlgo: algo,
+          advertisedSigningKey: advertisedSigningKey,
           // `algo`, not a constant: the builder signs the key package with the
           // APKAM keypair this request is about to mint, so it has to be told
           // which algorithm that is. Passing anything else signs the package
@@ -560,6 +574,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           // material at all.
           metadataBuilder: enrollmentKeyPackageBuilder(_atSign,
               signingAlgo: algo,
+              // The same keypair the request advertises. A package signed by
+              // anything else is verified against a record that does not name
+              // its signer, so a peer resolves `_apsk`, fails, and seals
+              // nothing to the enrollment.
+              advertisedSigningKey: advertisedSigningKey,
               // The primary of the configured list. An enrollment is created
               // holding one encapsulation key; the rest of the list is minted
               // at the client's first startup.
@@ -574,7 +593,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           deviceName: deviceName,
           namespaces: namespaces,
           otp: otp,
-          signingAlgo: algo);
+          signingAlgo: algo,
+          // Advertised here too, and deliberately without a key package: the
+          // key-exchange mode decides whether a package exists at all, while
+          // `_apsk` is what every peer verifies signatures against whatever
+          // the mode. A legacy-mode enrolment under a posture that names a
+          // signing algorithm still owns its signing key.
+          advertisedSigningKey: advertisedSigningKey);
     }
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
         apkamKeysExpiryDuration;

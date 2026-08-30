@@ -1,5 +1,22 @@
 ## 3.15.0-rc1
 
+- feat: **an enrolment mints the data signing key its posture names**, not
+  rsa2048 unconditionally. `mintAdvertisedSigningKey` is the one home for it,
+  shared by the self-retrofit, the PQ-native activation and `at_onboarding_cli`'s
+  enrolment, so an algorithm one path mints and another does not can no longer
+  arise. rsa2048 at `pqReady` — still the one `_apsk` spelling an un-upgraded
+  peer parses — and ML-DSA-65 at `pqActive`, whose readers ship in the same
+  release line as the posture.
+  - The algorithm minted is **the one the enrollment keeps**, which is what
+    makes the first start's reconciliation a no-op. Minting rsa2048 at
+    `pqActive` left that start finding ML-DSA missing, minting a second keypair
+    and republishing `_apsk` — orphaning the advertised key and invalidating any
+    signing link conveyed against it, since a link is bound to the exact
+    advertised value it vouched for.
+  - **Breaking:** `makeActivationPqNative` takes a required
+    `dataSigningKeyAlgorithms` and returns `Future<void>`. ML-DSA key generation
+    is asynchronous, so an algorithm-aware activation cannot stay synchronous.
+
 - fix: **a signer no longer waits forever for a signing-key mint that is not
   coming.** Everything that signs waits on a per-client barrier the PQ startup
   settles at its mint step, and again in its `finally` as a backstop — so the

@@ -1,8 +1,10 @@
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart' show RsaKeyPair, SigningAlgoType;
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
     show PqSigningRoot;
+import 'package:at_client/src/enroll/signing_key_mint.dart'
+    show mintAdvertisedSigningKey;
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
@@ -17,9 +19,9 @@ import 'package:meta/meta.dart' show experimental;
 final _logger = AtSignLogger('pqNativeOnboard');
 
 /// Stamps [request] with everything that makes an activation **PQ-native**: an
-/// ML-DSA-65 APKAM authentication key, a fresh RSA-2048 signing key the
-/// enrollment owns from birth, and the first enrollment's key package — all
-/// three on the `enroll:request` that creates the record.
+/// ML-DSA-65 APKAM authentication key, a data signing key the enrollment owns
+/// from birth, and the first enrollment's key package — all three on the
+/// `enroll:request` that creates the record.
 ///
 /// Exists so that a caller with its own activation flow — `at_onboarding_cli`
 /// builds a request carrying retry options, a keyfile path and its own
@@ -38,12 +40,14 @@ final _logger = AtSignLogger('pqNativeOnboard');
 ///   sealing anything to the enrollment, so the atSign would activate
 ///   successfully and then never be sent a secret by anyone.
 ///
-/// The signing key is `rsa2048` while the authentication key is ML-DSA, and
-/// the asymmetry is the design: only the **atServer** verifies the
-/// authentication key and it is the operator's own infrastructure, while
-/// **every peer** verifies the signing key and the fleet is not the operator's
-/// to upgrade. A single active `rsa2048` entry is also the one `_apsk`
-/// spelling every deployed reader can parse.
+/// The signing key's algorithm is [dataSigningKeyAlgorithms]', and it is
+/// normally weaker than the authentication key's. The asymmetry is the
+/// design: only the **atServer** verifies the authentication key and it is the
+/// operator's own infrastructure, while **every peer** verifies the signing
+/// key and the fleet is not the operator's to upgrade. At `pqReady` that means
+/// a single active `rsa2048` entry, the one `_apsk` spelling every deployed
+/// reader can parse; at `pqActive` it is ML-DSA-65, whose readers ship in the
+/// same release line as the posture itself.
 ///
 /// [keyEstablishmentAlgo] is read from the caller's preference rather than
 /// resolved here, because the builder runs before any client exists. It is
@@ -55,26 +59,19 @@ final _logger = AtSignLogger('pqNativeOnboard');
 /// its APKAM is post-quantum, and silently resetting a caller's opt-out would
 /// be worse than making them state it.
 @experimental
-void makeActivationPqNative(
+Future<void> makeActivationPqNative(
   AtOnboardingRequest request, {
   required String atSign,
+  required Set<SigningAlgoType> dataSigningKeyAlgorithms,
   String keyEstablishmentAlgo = SecretSharingAlgos.xWing,
-}) {
+}) async {
   // Minted here, before the request, because the enrollment must own it from
   // its first byte: `_apsk` advertises this key and the key package is signed
   // with it, so a client start that minted it later would leave a window in
-  // which the record names the ML-DSA authentication key.
-  //
-  // rsa2048, not ML-DSA: a verifier's fleet is not the operator's to upgrade,
-  // and a single active rsa2048 entry is the one `_apsk` spelling every
-  // deployed reader parses. The authentication key goes post-quantum here
-  // precisely because only the atServer verifies it.
-  final pair = RsaKeyPair.generate();
-  final advertisedSigningKey = (
-    algorithm: SigningAlgoType.rsa2048,
-    publicKey: pair.atPublicKey.publicKey,
-    privateKey: pair.atPrivateKey.privateKey,
-  );
+  // which the record names the ML-DSA authentication key — and would mint a
+  // second keypair, since the first start finds the in-use algorithm missing.
+  final advertisedSigningKey =
+      await mintAdvertisedSigningKey(dataSigningKeyAlgorithms);
 
   request
     ..signingAlgoType = SigningAlgoType.mldsa65
@@ -172,8 +169,9 @@ Future<AtClientManager> pqNativeOnboard({
     ..namespace = preference.namespace
     ..mintLegacyMaterial = mintLegacyMaterial;
   // Mints the ML-DSA APKAM and advertises the first enrollment's key package.
-  makeActivationPqNative(request,
+  await makeActivationPqNative(request,
       atSign: atSign,
+      dataSigningKeyAlgorithms: preference.dataSigningKeyAlgorithms,
       keyEstablishmentAlgo: preference.keyEstablishmentAlgorithms.first);
 
   final response =

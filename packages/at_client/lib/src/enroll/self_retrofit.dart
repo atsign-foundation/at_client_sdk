@@ -1,8 +1,10 @@
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart' show RsaKeyPair, SigningAlgoType;
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
     show PqSigningRoot;
 import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/enroll/signing_key_mint.dart'
+    show mintAdvertisedSigningKey;
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
@@ -13,20 +15,6 @@ import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('selfRetrofit');
-
-/// A fresh RSA-2048 signing keypair for an enrollment being created.
-///
-/// `RsaKeyPair.generate()` rather than `AtChopsUtil.generateAtPkamKeyPair()`,
-/// which returns a type at_chops deprecates.
-({SigningAlgoType algorithm, String publicKey, String privateKey})
-    _freshRsaSigningKey() {
-  final pair = RsaKeyPair.generate();
-  return (
-    algorithm: SigningAlgoType.rsa2048,
-    publicKey: pair.atPublicKey.publicKey,
-    privateKey: pair.atPrivateKey.privateKey,
-  );
-}
 
 /// Runs the whole PQ self-retrofit and hands back a manager whose current
 /// client runs under the NEW enrollment.
@@ -196,13 +184,15 @@ Future<AtAuthSession> retrofitIdentity({
   // which the record names the authentication key — which no un-upgraded peer
   // can read once that key is ML-DSA.
   //
-  // rsa2048 regardless of [algo]: a verifier's fleet is not the operator's to
-  // upgrade, and a single active rsa2048 entry is the one `_apsk` spelling
-  // every deployed reader parses. Moving the signing key to ML-DSA is a later
-  // stage, which retires this one rather than skipping it.
-  final advertisedSigningKey = preference.dataSigningKeyAlgorithms.isNotEmpty
-      ? _freshRsaSigningKey()
-      : null;
+  // The algorithm the in-use set names, not a constant. At `pqReady` that is
+  // rsa2048 — a verifier's fleet is not the operator's to upgrade, and a
+  // single active rsa2048 entry is the one `_apsk` spelling every deployed
+  // reader parses. At `pqActive` it is ML-DSA-65, whose readers ship in the
+  // same release line as the posture. Minting rsa2048 there would leave the
+  // new enrollment's first start finding ML-DSA missing, minting a second
+  // keypair and republishing the record this request just created.
+  final advertisedSigningKey =
+      await mintAdvertisedSigningKey(preference.dataSigningKeyAlgorithms);
 
   final response = await AtEnrollment.create().submit(
       AtSelfEnrollmentRequest(

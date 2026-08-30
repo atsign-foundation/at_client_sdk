@@ -203,4 +203,62 @@ void main() {
       expect(request.apkamSymmetricKeyResolver, isNotNull);
     });
   });
+
+  /// The enrolment owns a data signing key from birth, under the algorithm the
+  /// in-use set names.
+  ///
+  /// **It used to own none.** `_apsk` then advertised the APKAM authentication
+  /// key, the key package was signed by that key, and the new client's first
+  /// start minted a signing key and republished — dropping the APKAM entry, so
+  /// the key package stopped verifying and any link the approver had conveyed
+  /// against that exact advertised value stopped matching.
+  group('the enrolment advertises a data signing key of its own', () {
+    test('pqReady advertises rsa2048, not the APKAM key', () async {
+      final request = await submittedUnder(PqPosture.pqReady);
+
+      expect(request.advertisedSigningKey?.algorithm, SigningAlgoType.rsa2048,
+          reason: 'the bare `_apsk` form takes exactly one active rsa2048 '
+              'entry, and that is the spelling an un-upgraded peer parses');
+      expect(request.advertisedSigningKey!.publicKey, isNotEmpty);
+      expect(request.advertisedSigningKey!.privateKey, isNotEmpty,
+          reason: 'the private half travels on the request so at_auth can FILE '
+              'it once the atServer names the enrollment; advertising without '
+              'filing is what makes the first start mint a second keypair');
+    });
+
+    test('pqActive advertises mldsa65 — the algorithm the enrollment keeps',
+        () async {
+      final request = await submittedUnder(PqPosture.pqActive);
+
+      expect(request.advertisedSigningKey?.algorithm, SigningAlgoType.mldsa65,
+          reason: 'minting rsa2048 here would leave the first start finding '
+              'ML-DSA missing, minting again and republishing `_apsk` — which '
+              'invalidates the link the approver conveyed, since a link is '
+              'bound to the exact advertised value it vouched for');
+    });
+
+    test('legacy advertises none', () async {
+      final request = await submittedUnder(PqPosture.legacy);
+
+      expect(request.advertisedSigningKey, isNull,
+          reason: 'PqPosture.legacy names no data signing algorithm at all: '
+              'its authentication keypair does both jobs');
+    });
+
+    test('a legacy-MODE enrolment under a pq posture still advertises one',
+        () async {
+      // The mode decides whether a key package exists; `_apsk` is what every
+      // peer verifies signatures against whatever the mode. The two are
+      // independent, and conflating them would leave this enrolment
+      // advertising its APKAM key.
+      final request = await submittedUnder(PqPosture.pqReady,
+          keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
+
+      expect(request.metadataBuilder, isNull,
+          reason: 'the control: no key package, because the mode says legacy');
+      expect(request.advertisedSigningKey?.algorithm, SigningAlgoType.rsa2048,
+          reason: 'and yet it still owns its signing key, because the posture '
+              'names one');
+    });
+  });
 }
