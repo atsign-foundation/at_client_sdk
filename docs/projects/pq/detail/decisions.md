@@ -13129,14 +13129,26 @@ spelling its own reader looks for. That is a working capability, pinned by
 third assertion is that the published key is deliberately **not** the APKAM
 public key. Skipping the mint deletes it.
 
-**The retrofit that was to replace it is refused by the atServer.** A
-pre-enrollment atSign authenticates with the flat `at_pkam_publickey`, which
-sets `authType` to `pkamLegacy`; the self-enrollment auto-approve branch is
-gated on `AuthType.apkam` and refuses a connection carrying no resolvable
-enrollment id. So the two changes were a pair in which the replacement cannot
-land, and taking only the safety net would leave a pre-enrollment atSign with
-no route to a data signing key at all — strictly worse than the state being
-repaired.
+**The retrofit that was to replace it looked like it could not land.**
+⚠️ **Amended later the same day, after measurement.** A pre-enrollment atSign
+authenticates with the flat `at_pkam_publickey`, which sets `authType` to
+`pkamLegacy`; the self-enrollment auto-approve branch is gated on
+`AuthType.apkam` and refuses a connection carrying no resolvable enrollment id.
+All of that is true, and it was read as *the atServer refuses the retrofit*. It
+does not. The same connection can send `enroll:request` and then
+`enroll:approve` for the enrollment it has just created, because `isAuthorized`
+grants a connection with no enrollment id full access — measured live against a
+running atServer: `pending`, then `approved`, with the new enrollment
+authenticating afterwards. The route, its controls and the answer to what
+becomes of the legacy credential are in
+[Why commit 7 needs no atServer change](../implementation-plan.md#why-commit-7-needs-no-atserver-change).
+
+**The ruling stands, on the reason that never depended on this.** The null-id
+publish is a pinned working capability, and a client that has not retrofitted is
+the only writer its own `_apsk` record can have — so skipping the mint deletes it
+whether or not the retrofit is reachable. What changes is the emphasis: not *the
+replacement cannot land*, but *the replacement does not make the capability
+unnecessary*.
 
 ### The residual this leaves open, stated rather than waived
 
