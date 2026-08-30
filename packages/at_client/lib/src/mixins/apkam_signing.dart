@@ -126,6 +126,9 @@ mixin ApkamSigning {
       logger.info('publishPublicSigningKey: what is published is not what this '
           'client holds - republishing');
     }
+    // Writes the value alone. A chain link rides this record's `appMetadata`,
+    // and nothing here carries it over — `PqSigningChain` re-attaches the
+    // record it read when it writes, and this call does not.
     await atClient.put(
       AtKey.fromString(publicSigningKeyUri),
       value,

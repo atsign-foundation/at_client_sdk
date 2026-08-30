@@ -66,8 +66,8 @@ class ChainResult {
       '${reason == null ? '' : ', $reason'})';
 }
 
-/// The approval chain: every enrollment's APKAM public key is signed by the
-/// enrollment that approved it, up to the atSign's signing root.
+/// The approval chain: every enrollment's published `_apsk` value is signed
+/// by the enrollment that approved it, up to the atSign's signing root.
 ///
 /// The link is a plain APKAM-signed envelope, which is what makes the chain
 /// self-describing: the envelope already names the enrollment that signed it,
@@ -181,7 +181,8 @@ class PqSigningChain {
           utf8.encode('$rootLinkDomain${signableTextOf(payload)}'));
 
   /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
-  /// APKAM public key lives, and the one record its own connection may write.
+  /// signing advertisement lives, and the one record its own connection may
+  /// write.
   static String apskUri(String atSign, String enrollmentId) =>
       envelope_signature.apskUri(atSign, enrollmentId);
 
@@ -191,6 +192,21 @@ class PqSigningChain {
   /// alone would verify equally well if replayed onto a different
   /// enrollment's record, and the whole point of the link is to say *which*
   /// enrollment this approver vouched for.
+  ///
+  /// ⚠️ **`apkamPublicKey` is a misleading name, and it is a remnant.** It
+  /// carries the child's whole `_apsk` record value. The name was accurate
+  /// when the field was written, on 2026-08-04: `_apsk` then held only the
+  /// APKAM public key, which the atServer publishes there at approval. It was
+  /// overtaken on 2026-08-13, when an enrollment gained signing keys of its
+  /// own. What the field holds today is whatever `apskValueOf` composed — the
+  /// bare public key when the enrollment advertises exactly one active
+  /// `rsa2048` entry, and the JSON advertisement naming every key and its
+  /// status otherwise. That single key is still the APKAM authentication
+  /// keypair's public half on a legacy enrollment, where authentication and
+  /// data signing are one keypair, and is a separate signing key on any other.
+  ///
+  /// **It is not corrected in place because it is a member of the signed
+  /// preimage**, so renaming it changes what verifies.
   static Map<String, Object?> linkPayload({
     required String childEnrollmentId,
     required String childApkamPublicKey,
@@ -203,10 +219,10 @@ class PqSigningChain {
 
   /// Signs a link vouching for [childEnrollmentId], for the approver to convey.
   ///
-  /// Reads the child's APKAM public key from the record the **atServer**
-  /// published at approval rather than from the enrollment request, so what is
-  /// signed is exactly what a verifier will later resolve. Signing a key taken
-  /// from anywhere else would leave the two free to disagree.
+  /// Reads the child's published `_apsk` value rather than the enrollment
+  /// request, so what is signed is exactly what a verifier will later resolve.
+  /// Signing a key taken from anywhere else would leave the two free to
+  /// disagree.
   ///
   /// Returns null when the child's `_apsk` is not readable, which is not worth
   /// failing an approval over — the chain link is additive, and an enrollment
