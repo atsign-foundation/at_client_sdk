@@ -227,9 +227,11 @@ void main() {
         await EnrollmentServiceImpl(sweeperClient, AtEnrollment.create())
             .sweepUnanchoredEnrollments(),
         0,
-        reason: 'the fully privileged class signs root links or nothing: a '
-            'chain link from the entitled class would demote the design, and '
-            'possession heals by pulling at the next start');
+        reason: 'this sweep signs root links or nothing, and it holds no '
+            'root private. It is not the approval path, which in this same '
+            'state conveys a chain link rather than leave an enrolment '
+            'unsigned: an approval happens once, while this sweep runs again '
+            'at every start of every privileged client');
     expect(remoteData.keys.where((k) => k.contains('.__ssenv.')).length,
         envelopesBefore,
         reason: 'nothing was conveyed under any name — a chain link sent '

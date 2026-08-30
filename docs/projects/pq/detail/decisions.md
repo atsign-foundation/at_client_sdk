@@ -8950,12 +8950,20 @@ is signed".
 ✅ **Built and differentially proven the same day (row B3, retrofit half).**
 Both questions this entry left open are answered:
 
-- **`_apskFor`'s "a key package forces the array" rule now yields to the bare
-  form** when an advertised signing key is present. The rule existed because
-  the package's signer was the APKAM key, whose algorithm is whatever the
-  enrollment authenticates with — and a bare value can only say `rsa2048`. A
-  package signed by an rsa2048 *signing* key is exactly what the bare form
-  states, so the two constraints stopped competing.
+- **`_apskFor`'s "a key package forces the array" rule is gone entirely.** It
+  first yielded to the bare form where an advertised signing key was present:
+  the rule existed because the package's signer was the APKAM key, whose
+  algorithm is whatever the enrollment authenticates with, and a bare value can
+  only say `rsa2048` — while a package signed by an rsa2048 *signing* key is
+  exactly what the bare form states. ⚠️ **The remaining half was removed on
+  2026-08-31**, because it was wrong rather than merely narrow: where the
+  package's signer is rsa2048 the bare value states exactly it, and where it is
+  not, the algorithm test had already chosen the array — so the condition only
+  ever fired on an APKAM-advertising rsa2048 enrollment in pq key-exchange
+  mode, and there it made at_auth install the array while the client composed
+  the bare string and rewrote the record on its first start. The form now
+  follows the algorithm alone, which is `apskValueOf`'s rule on the other side
+  of the same record.
 - **`signingAlgo` on the builder keeps naming the APKAM key's algorithm**, and
   is used only when no signing key is supplied. It did not need to change
   meaning; it needed to stop being the only answer.

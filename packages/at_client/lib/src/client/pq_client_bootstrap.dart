@@ -215,9 +215,6 @@ class PqClientBootstrap {
     chain = PqSigningChain(_atClient);
     minting = SigningKeyMinting(_atClient);
     keyPackageMinting = KeyPackageMinting(_atClient);
-    // Registered in the constructor rather than at startup so a signer that
-    // runs before startup() is fired still waits: the window it closes opens
-    // the moment minting becomes possible, not the moment it begins.
   }
 
   final AtClient _atClient;

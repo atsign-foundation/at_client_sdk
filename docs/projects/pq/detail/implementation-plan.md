@@ -4938,10 +4938,15 @@ re-derive with `git log --oneline`. ⛔ **4 is DROPPED** ([ruling
 2026-08-30.** What each turned out to be, and what proves it, is
 [below](../implementation-plan.md#why-commit-7-needs-no-atserver-change). 1
 at_auth files the advertised signing key's private half on the ordinary
-enrollment path. 2 at_onboarding_cli mints and advertises one per algorithm in
-`dataSigningKeyAlgorithms` — **the algorithm the enrollment will keep**,
-rsa2048 at pqReady and mldsa65 at pqActive, not rsa2048 unconditionally — and
-the same for `pq_native_onboard`. 3 `reconcileSigningKeys` stops miscounting a
+enrollment path. 2 at_onboarding_cli mints and advertises **the one algorithm
+the enrollment will keep** — rsa2048 at pqReady and mldsa65 at pqActive, not
+rsa2048 unconditionally — and the same for `pq_native_onboard`. ⚠️ **This said
+"one per algorithm in `dataSigningKeyAlgorithms`" and that was never
+buildable**: `mintAdvertisedSigningKey` refuses a set naming more than one, and
+`advertisedSigningKey` is a single record on the request types, so the plural
+had no way to reach the wire. `reconcileSigningKeys` does mint per algorithm at
+every start, which is why a set of two is legal to construct and refused at
+creation. 3 `reconcileSigningKeys` stops miscounting a
 legacy enrollment's rsa2048, **scoped to rsa2048** or it collapses the
 auth/signing split at pqActive. ⛔ 4 **dropped**: a null-id client publishing
 its own `_apsk.primary` is a mechanism `signing_key_minting_test.dart`

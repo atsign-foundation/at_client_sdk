@@ -38,9 +38,14 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
       {EnrollmentListRequestParam? enrollmentListParams}) _listEnrollments;
 
   /// This client's own privilege — the same injected seam the startup steps
-  /// consult. It decides which link flavour an approval conveys: the fully
-  /// privileged class signs root links, everyone else the provisional chain
-  /// link.
+  /// consult.
+  ///
+  /// ⚠️ **Privilege alone no longer decides which flavour an approval
+  /// conveys; possession decides with it.** A fully privileged approver signs
+  /// a root link when it holds the signing-root private, a chain link under
+  /// its own data signing key when it does not, and nothing at all when it
+  /// holds neither. Everyone else signs a chain link — the branch is in
+  /// [conveySecretsTo].
   final EnrollmentPrivilegeResolver _privilege;
 
   /// Seals every secret [enrollment]'s namespaces authorise to the key package
@@ -252,9 +257,19 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
   ///
   /// The sweeper's privilege is the caller's gate, and that class signs
   /// **root** links: the private is read from this client's keys, and a
-  /// fully privileged client that has not received it yet conveys nothing —
-  /// possession heals by pulling at the next start, and a chain link from
-  /// the entitled class would demote the design, not bridge it.
+  /// fully privileged client that has not received it yet conveys nothing.
+  ///
+  /// ⚠️ **That is deliberately not what an APPROVAL does in the same state,
+  /// and the difference is what each is for.** An approval is an enrolment's
+  /// only chance to be vouched for — nothing re-attempts it — so an approver
+  /// holding a data signing key but no root private conveys a chain link
+  /// rather than leaving the enrolment unsigned. This sweep exists to reach
+  /// enrolments that were missed and to upgrade provisional links to root
+  /// anchors, and it runs again at every start of every privileged client, so
+  /// a sweeper without the private has simply nothing to do this pass. The
+  /// earlier reasoning here — that a chain link from the entitled class would
+  /// demote the design rather than bridge it — is retired; it is exactly what
+  /// the approval path now does.
   @override
   Future<int> sweepUnanchoredEnrollments() async {
     final sharing = AtClientSecretSharing.forClient(_atClient);
