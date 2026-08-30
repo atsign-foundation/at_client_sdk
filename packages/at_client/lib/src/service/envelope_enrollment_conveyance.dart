@@ -111,14 +111,27 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     // enrollment's connection — this approver is the signer and the child is
     // the only permitted writer, so the child stamps it on first run.
     //
-    // The flavour is decided by THIS approver's privilege: the fully
-    // privileged class (`rw` on `*` and `__manage`) signs root links — one
-    // hop, verified against the published signing root, so the enrollment is
-    // born anchored — and only an approver outside that class leaves the
-    // provisional chain link the sweep later upgrades. A privileged approver
-    // that has not yet received the root private conveys no link at all:
-    // possession heals by pulling, and its sweep anchors this enrollment
-    // then — a chain link from the entitled class would demote the design.
+    // The flavour is a THREE-way branch on privilege and possession:
+    //
+    // - fully privileged and holding the signing-root private — a **root**
+    //   link, one hop, verified against the published signing root, so the
+    //   enrollment is born anchored;
+    // - fully privileged, no root private, but holding a data signing key of
+    //   its own — a **chain** link signed with it, which the sweep later
+    //   upgrades. Provisional beats absent: nothing re-attempts a link for an
+    //   enrollment approved while its approver was unpossessed, so without
+    //   this the enrollment stays unsigned until some privileged root-holder
+    //   next starts up, which is unbounded for a long-running approver. A
+    //   chain link cannot mask a root one — they stamp into distinct `_apsk`
+    //   fields and a verifier reads the root field first;
+    // - holding neither — **nothing**, and this is the arm that must not
+    //   guess. `signingKeys` falls back to the APKAM authentication key when
+    //   the enrollment holds no signing key, and that key is *dropped* from
+    //   the advertisement rather than retired, so a link signed with it
+    //   becomes permanently unverifiable. Silence is the honest outcome.
+    //
+    // An approver outside the fully privileged class signs a chain link with
+    // its own signing keys, as it always has.
     //
     // Best-effort by design: an enrollment whose link never lands is simply
     // unsigned, which verifiers already tolerate during the changeover, and
@@ -127,6 +140,25 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     final root = PqSigningRoot(_atClient, keysIo: _atClient.atKeysIo);
     final rootSigner = await root.signingKey(atSign);
     final rootPrivate = rootSigner?.private;
+
+    /// The provisional flavour, signed with whatever signing key this
+    /// approver holds. One definition for both arms that convey one, so the
+    /// entitled and unentitled cases cannot drift apart in what they stamp.
+    Future<void> conveyChainLink() async {
+      final link = await PqSigningChain(_atClient)
+          .signLinkFor(sharing, enrollment.enrollmentId!);
+      if (link != null) {
+        await sharing.shareSecretWith(
+            keyPackage,
+            Secret(
+              namespace: _conveyanceNamespaceFor(enrollment),
+              name: PqSigningChain.linkSecretName,
+              value: PqSigningChain.encodeLink(link.toJson()),
+            ),
+            inReplyTo: EnvelopeAddressing.unsolicited);
+      }
+    }
+
     if (await _privilege.isFullyPrivileged()) {
       if (rootPrivate != null) {
         final link = await PqSigningChain(_atClient).signRootLinkFor(
@@ -143,24 +175,17 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
               ),
               inReplyTo: EnvelopeAddressing.unsolicited);
         }
+      } else if ((await sharing.heldSigningKeys).isNotEmpty) {
+        await conveyChainLink();
       } else {
         _logger.info('Not conveying a link for ${enrollment.enrollmentId}: '
-            'this fully privileged approver holds no signing-root private '
-            'yet; the sweep anchors it once possession heals');
+            'this fully privileged approver holds neither the signing-root '
+            'private nor a data signing key of its own, and a link signed '
+            'with the APKAM authentication key would stop verifying the '
+            'moment that key leaves the advertisement');
       }
     } else {
-      final link = await PqSigningChain(_atClient)
-          .signLinkFor(sharing, enrollment.enrollmentId!);
-      if (link != null) {
-        await sharing.shareSecretWith(
-            keyPackage,
-            Secret(
-              namespace: _conveyanceNamespaceFor(enrollment),
-              name: PqSigningChain.linkSecretName,
-              value: PqSigningChain.encodeLink(link.toJson()),
-            ),
-            inReplyTo: EnvelopeAddressing.unsolicited);
-      }
+      await conveyChainLink();
     }
 
     // A fully privileged enrollment gets the signing root's private half, so

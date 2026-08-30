@@ -1,5 +1,20 @@
 ## 3.15.0-rc1
 
+- fix: **an approver that is entitled to sign a root link but does not yet hold
+  the root private now conveys a provisional chain link**, where it previously
+  conveyed nothing. Nothing re-attempted the link for such an enrolment: the
+  only production caller of the root-private pull is a startup step, and the
+  sweep that would anchor a missed enrolment is a later startup step — so the
+  enrolment stayed unsigned until some privileged root-holder next started up,
+  which is unbounded for a long-running approver. A chain link cannot mask a
+  root one, since the two stamp into distinct `_apsk` fields and a verifier
+  reads the root field first, so the sweep still upgrades it.
+  - **An approver holding neither still conveys nothing**, and that arm is the
+    one that must not guess: with no signing key of its own the signer falls
+    back to the APKAM authentication key, which is dropped from the
+    advertisement rather than retired, so the link would become permanently
+    unverifiable. Silence is the better outcome.
+
 - fix: **a client whose posture configures no post-quantum providers now
   refuses the two jobs it cannot do**, instead of taking them on and failing
   part-way.

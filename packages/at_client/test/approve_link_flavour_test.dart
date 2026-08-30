@@ -13,7 +13,7 @@ import 'package:at_auth/at_auth.dart'
         CryptographicMaterialRole,
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm;
-import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
+import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo, RsaKeyPair;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart'
@@ -104,6 +104,24 @@ void main() {
     ]));
   }
 
+  /// Gives [client] a data signing key of its own and **no** signing root —
+  /// the middle arm: entitled, unpossessed, but able to sign something.
+  ///
+  /// A real keypair, because the link is actually signed with it.
+  Future<void> giveSigningKey(MockAtClient client, String enrollmentId) async {
+    final pair = RsaKeyPair.generate();
+    final io = InMemoryAtKeysIo();
+    final keys = AtKeys()
+      ..fileSigningMaterial(
+        enrollmentId: enrollmentId,
+        algorithm: CryptographicMaterialAlgorithm.rsa2048,
+        publicKey: pair.atPublicKey.publicKey,
+        privateKey: pair.atPrivateKey.privateKey,
+      );
+    await io.write(atSign, keys);
+    when(() => client.atKeysIo).thenReturn(io);
+  }
+
   /// A registered enrollee plus the [Enrollment] record its approval reads.
   Future<(AtClientSecretSharing, Enrollment)> registeredEnrollee() async {
     final enrolleeClient = buildMockClient(enrolleeId);
@@ -173,12 +191,12 @@ void main() {
   });
 
   test(
-      'a privileged approver without the root private conveys no link, '
+      'a privileged approver holding NEITHER conveys no link, '
       'and everything else still flows', () async {
     final (enrollee, enrollment) = await registeredEnrollee();
     final approver = buildMockClient('approver-1');
     await AtClientSecretSharing.forClient(approver).register();
-    // Deliberately no giveRoot: entitled but not yet holding.
+    // Deliberately neither giveRoot nor giveSigningKey.
 
     final status = await conveyanceFor(approver, privileged: true)
         .conveySecretsTo(enrollment, mintedApkamSymmetricKey: 'MINTED');
@@ -191,10 +209,48 @@ void main() {
         reason: 'the symmetric key is what the enrollee is blocked polling '
             'for; a missing link must never cost it that');
     expect(names, isNot(contains(PqSigningChain.linkSecretName)),
-        reason: 'the entitled class signs root links or nothing — a chain '
-            'link here would be the old design surviving the ruling');
+        reason: 'this approver holds no data signing key either, so the only '
+            'thing left to sign with is the APKAM authentication key — and '
+            'that key is DROPPED from the advertisement rather than retired, '
+            'so the link would become permanently unverifiable. Silence is '
+            'the honest outcome');
     expect(names, isNot(contains(PqSigningChain.rootLinkSecretName)),
-        reason: 'nothing to sign with; the sweep anchors this enrollment '
-            'once possession heals');
+        reason: 'nothing to sign a root link with either; the sweep anchors '
+            'this enrollment once possession heals');
+  });
+
+  test(
+      'a privileged approver with a data signing key but no root conveys a '
+      'CHAIN link', () async {
+    // ⛔ The arm that changed. It conveyed nothing until 2026-08-30, on the
+    // grounds that possession heals by pulling and the sweep would anchor the
+    // enrollment then. Measured: `requestPrivateIfAbsent` has exactly one
+    // production caller, a startup step, and the sweep that would anchor a
+    // missed enrollment is a later startup step — so nothing re-attempts the
+    // link for an enrollment approved while its approver was unpossessed. It
+    // stays unsigned until some privileged root-holder next STARTS UP, which
+    // is unbounded for a long-running approver. Provisional beats absent.
+    final (enrollee, enrollment) = await registeredEnrollee();
+    final approver = buildMockClient('approver-1');
+    // Before register(), because giving the key replaces this client's
+    // AtKeysIo and a registration written to the old one would be discarded —
+    // and conveying a minted symmetric key needs the approver registered.
+    await giveSigningKey(approver, 'approver-1');
+    await AtClientSecretSharing.forClient(approver).register();
+
+    final status = await conveyanceFor(approver, privileged: true)
+        .conveySecretsTo(enrollment, mintedApkamSymmetricKey: 'MINTED');
+    expect(status, KeyPackageStatus.present);
+
+    expect(await enrollee.sweepOnce(), greaterThan(0));
+    final names =
+        enrollee.secretStore.listSecrets().map((s) => s.name).toList();
+    expect(names, contains(PqSigningChain.linkSecretName),
+        reason: 'it can sign something that keeps verifying, so it vouches '
+            'provisionally rather than leaving the enrollment unsigned');
+    expect(names, isNot(contains(PqSigningChain.rootLinkSecretName)),
+        reason: 'and it is a CHAIN link, not a root one — the two stamp into '
+            'distinct _apsk fields, so a chain link cannot mask the root link '
+            'the sweep later adds');
   });
 }

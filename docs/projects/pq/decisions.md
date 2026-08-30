@@ -123,7 +123,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [64]  | Phase 4f: one CryptoRuntime.prepareWrite()                                                  | 2026-08-10 | LIVE                      |
 | [65]  | Phase 4g: the secret-sharing seam work                                                      | 2026-08-10 | LIVE                      |
 | [66]  | The approval list's last hop tells the truth                                                | 2026-08-10 | LIVE                      |
-| [67]  | Workstream B(i): the sweep anchors to the root                                              | 2026-08-10 | LIVE                      |
+| [67]  | Workstream B(i): the sweep anchors to the root                                              | 2026-08-10 | AMENDED 2026-08-30        |
 | [68]  | The enrollment record stops being a one-way door: `enroll:updateMetadata`                   | 2026-08-10 | AMENDED 2026-08-13        |
 | [68b] | Workstream B(ii): approvals anchor to the root                                              | 2026-08-10 | LIVE                      |
 | [69]  | Workstream B(iii): the retrofit selector, and the KEM the retrofit froze wrong              | 2026-08-10 | AMENDED 2026-08-13        |

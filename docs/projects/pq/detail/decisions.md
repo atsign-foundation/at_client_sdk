@@ -6302,10 +6302,31 @@ grilling and sharpened by Gary 2026-08-10: **the class that signs root
 links is ANY fully privileged enrollment** — `rw` on `*` and `__manage`,
 the class entitled to hold the signing root — **and that class signs
 root links INSTEAD OF chain links.** Privilege decides; possession is
-the signer's responsibility: a fully privileged sweeper that has not
-yet received the root private conveys *nothing* (the every-start pull
-heals possession), because a chain link from the entitled class would
-demote the design rather than bridge it. Chain links remain what a
+the signer's responsibility.
+
+⚠️ **AMENDED 2026-08-30 — the middle arm now conveys a CHAIN link.** This
+ruling said a fully privileged approver without the root private conveys
+*nothing*, on the grounds that "the every-start pull heals possession" and a
+chain link from the entitled class "would demote the design rather than bridge
+it". The first half does not hold. Measured 2026-08-30:
+`requestPrivateIfAbsent` has exactly **one** production caller — a startup step
+— and the sweep that would anchor a missed enrollment is a **later startup
+step**. So nothing re-attempts the link for an enrollment approved while its
+approver was unpossessed: it stays unsigned until some privileged root-holder
+next *starts up*, which is unbounded for a long-running approver. Provisional
+beats absent, and a chain link cannot mask a root one — the two stamp into
+distinct `_apsk` fields and a verifier reads the root field first, so the sweep
+still upgrades it.
+
+**The branch is therefore three-way on privilege AND possession**, and the
+third arm is the one that must not guess: an approver holding neither the root
+private nor a data signing key of its own conveys **nothing**, because
+`signingKeys` falls back to the APKAM authentication key and that key is
+*dropped* from the advertisement rather than retired — a link signed with it
+becomes permanently unverifiable, which is worse than no link. Pinned by
+`approve_link_flavour_test.dart`, one test per arm.
+
+Chain links remain what a
 non-fully-privileged approver produces — a provisional fast-path — and
 the sweep now UPGRADES them: only a published *root* link skips an
 enrollment, where the old sweep skipped chain-linked ones and made
