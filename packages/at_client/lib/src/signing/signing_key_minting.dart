@@ -66,9 +66,9 @@ import 'package:at_utils/at_utils.dart' show AtSignLogger, AtUtils;
 /// nobody can open, which is a data loss no later repair undoes. A signing key
 /// advertised without its private costs nothing.
 ///
-/// **A withdrawal is filed after the addition**, for the same reason and in
-/// the same direction: at every instant between the publish and the last
-/// write, every key this client might sign with is named in the
+/// **A withdrawal from service is filed after the addition**, for the same
+/// reason and in the same direction: at every instant between the publish
+/// and the last write, every key this client might sign with is named in the
 /// advertisement. Filing the retirement first would leave a moment where the
 /// enrollment holds no active signing key at all, and [ApkamSigning.signingKeys]
 /// falls back to the APKAM authentication key there — a key the advertisement
@@ -162,7 +162,8 @@ class SigningKeyMinting with ApkamSigning {
     // What this build can sign with and the set no longer names. A held key
     // whose algorithm this build has no signing routine for is not here,
     // because heldSigningKeys does not return it: this client neither signs
-    // with it nor advertises it as active, so there is nothing to withdraw.
+    // with it nor advertises it as active, so there is nothing to withdraw
+    // from service.
     final superseded = [
       for (final key in held)
         if (!wanted.contains(key.algorithm)) key
@@ -250,21 +251,23 @@ class SigningKeyMinting with ApkamSigning {
   }
 
   /// Advertises [active] plus this enrollment's retired signing keys —
-  /// [retiring], which this call is about to withdraw, and the ones it
-  /// withdrew earlier.
+  /// [retiring], which this call is about to withdraw from service, and the
+  /// ones it withdrew earlier.
   ///
   /// The earlier ones are re-read here rather than assumed empty: this publish
-  /// rewrites the whole record, so anything it leaves out is withdrawn. An
-  /// enrollment that had retired a key and then minted a new one would
-  /// otherwise lose the retired entry at the moment it gained a replacement,
+  /// rewrites the whole record, so anything it leaves out is withdrawn from
+  /// the advertisement. An enrollment that had retired a key and then minted
+  /// a new one would otherwise lose the retired entry at the moment it
+  /// gained a replacement,
   /// which is exactly when the old key's envelopes still need verifying.
   ///
   /// [retiring] is passed in rather than read back for the same reason it must
   /// not be left out: the keyfile still holds those keys as **active** at this
   /// point, because the publish comes first, so reading the retired set would
-  /// return the record's history and miss the withdrawal this call is
-  /// announcing. The key would vanish from the advertisement entirely rather
-  /// than move to `retired`, and every envelope it signed — and the key
+  /// return the record's history and miss the withdrawal from service this
+  /// call is announcing. The key would vanish from the advertisement
+  /// entirely rather than move to `retired`, and every envelope it signed —
+  /// and the key
   /// package it signed, under rollout 1 — would stop verifying for good.
   ///
   /// Which writer depends on whether there is an enrollment record to carry it.
@@ -314,9 +317,10 @@ class SigningKeyMinting with ApkamSigning {
             (
               algorithm: key.algorithm,
               publicKey: key.publicKey,
-              // Stated, not read: this call is the one withdrawing them, and
-              // `retired` is what it is doing to them. Everything in the
-              // second list carries whatever the keyfile already says.
+              // Stated, not read: this call is the one withdrawing them from
+              // service, and `retired` is what it is doing to them.
+              // Everything in the second list carries whatever the keyfile
+              // already says.
               status: KeyEntryStatus.retired,
             ),
           ...await withdrawnSigningKeys,

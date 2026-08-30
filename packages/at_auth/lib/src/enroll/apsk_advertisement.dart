@@ -27,7 +27,8 @@ import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo, SigningAlgoType;
 /// two keys of one **algorithm**, so a reader selecting by algorithm must
 /// consider every entry naming it, not the first. The APKAM authentication
 /// key is the exception: it is advertised only while the enrollment holds no
-/// signing key of its own, and the first mint withdraws it.
+/// signing key of its own, and the first mint withdraws it from the
+/// advertisement.
 ///
 /// ```json
 /// {"v": 1, "keys": [

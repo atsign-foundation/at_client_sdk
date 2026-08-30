@@ -486,9 +486,9 @@ class AtKeys {
   /// `retired`; now that its `status` is an open token the entry can carry the
   /// keyfile's own word for it, so nothing is guessed — and skipping is not the
   /// cautious option it looks like. The advertisement is rewritten whole on
-  /// every publish, so an omitted entry is a **withdrawal**: it erases both the
-  /// key that verifies what it signed and whatever its owner last said about
-  /// it.
+  /// every publish, so an omitted entry is a **withdrawal from the
+  /// advertisement**: it erases both the key that verifies what it signed
+  /// and whatever its owner last said about it.
   ///
   /// Same keyId shape and same unknown-algorithm skip as [signingKeysFor]; an
   /// enrollment's other `privateSigning` material is not a signing key of its
@@ -548,14 +548,14 @@ class AtKeys {
   /// Retires the keypair rather than removing it, and **both halves**. The
   /// public half is what [withdrawnSigningKeysFor] reads back so the
   /// enrollment can go on advertising it as `retired`, which is what keeps
-  /// envelopes signed before the withdrawal verifiable; the private half stays
-  /// because nothing in this file is ever deleted.
+  /// envelopes signed before the withdrawal from service verifiable; the
+  /// private half stays because nothing in this file is ever deleted.
   ///
   /// Selects exactly what [signingKeysFor] would have returned for
   /// [algorithm]: the `sign:<algo>:<n>` shape, not the `privateSigning` role,
   /// which an enrollment can hold material for under more than one keyId.
-  /// Withdrawing a signing key must not withdraw anything else that happens to
-  /// sign.
+  /// Withdrawing a signing key from service must not withdraw anything else
+  /// that happens to sign.
   List<String> retireSigningKeys(
       String enrollmentId, CryptographicMaterialAlgorithm algorithm,
       {CryptographicMaterialStatus to = CryptographicMaterialStatus.retired}) {

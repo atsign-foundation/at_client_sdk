@@ -4841,6 +4841,72 @@ table" until 2026-08-30.** There is no `## DONE` table any more — a closed ite
 leaves nothing behind in the live plan, which is what makes moving the body
 here rather than deleting it the whole of the record.
 
+### "withdraw" in two senses — swept 2026-08-30, the rename rejected
+
+Moved here whole the day it closed. It was a P0, agreed with gkc that morning,
+and what it asked for turned out to be wrong in a way worth recording — the
+next reader will have the same instinct.
+
+**What was done.** Sixteen comment edits across seven library files in at_auth
+and at_client, qualifying every use of the word that left its sense to
+context. Two phrases now carry the whole distinction: **"withdrawn from
+service"** is a key taken out of use that stays advertised, and **"withdrawn
+from the advertisement"** is a key that stops being named at all. Nothing else
+moved — over the sweep no changed line is anything but a comment, and at_auth
+(363) and at_client (1695) ran identical either side of it.
+
+**⛔ The rename the row asked for was REJECTED (gkc, 2026-08-30), and that is
+the part worth reading.** The row wanted `withdrawnSigningKeys`,
+`withdrawnSigningKeysFor` and `apskEntries`' `withdrawn:` parameter renamed to
+say `retired`, on the grounds that `retired` is what they mean. They do not
+mean that.
+
+- **`retired` is one token of an open vocabulary, and these members select a
+  SET.** `KeyEntryStatus` and `CryptographicMaterialStatus` are both open
+  `String`s, deliberately, each carrying a dartdoc on why a token this build
+  has never seen must be passed through verbatim — *a retired key still
+  verifies what it signed; a revoked one must not*.
+  `withdrawnSigningKeysFor` selects on **not active and not `dead`**, which no
+  single token names.
+- **The rename would undo a fix rather than apply one.** `apskEntries`'
+  parameter *was* called `retired`, and was renamed to `withdrawn` on
+  **2026-08-22** under a **BREAKING** entry in at_client's CHANGELOG that
+  gives the reason: the composer writes each entry's token through "instead of
+  stamping every one of them `retired`".
+- **`retained` is no better**, which is the obvious second candidate: every
+  entry in the advertisement is retained, the active ones included, so it
+  names a superset of what these members return.
+
+**The row's second claim was false too.** It said *"No site now uses the
+removed sense."* Five production sites did — in `at_keys.dart`,
+`apkam_signing.dart`, `key_package_minting.dart`, `signing_key_minting.dart`
+and `apsk_advertisement.dart` — and in three of them the removed sense carries
+a real warning: the record is rewritten whole, so an omitted entry erases the
+key. They could not have been renamed away, and qualifying them is what the
+sweep did instead.
+
+**The one site the row named specifically was already sound.** It cited
+`apkam_signing.dart` for using the removed sense inside the dartdoc of
+`withdrawnSigningKeys` — true, but that sentence qualifies itself, *"would
+withdraw a key from the advertisement"*. What made it read oddly was the
+**unqualified** uses around it, which is what the sweep fixed.
+
+⚠️ **A rename here cannot reach the wire, and that was measured rather than
+assumed** — so if the question is ever reopened, it is a question about
+clarity only. The three identifiers appear in **zero** string literals in the
+repo; the `_apsk` record's field names are `v`, `keys`, `kid`, `use`, `alg`,
+`pub` and `status`, none of them `withdrawn`; and the latest published at_auth
+(3.3.0) and at_client (3.14.0) contain **zero** occurrences, against controls
+of 18 and 68 files naming `AtKeys`/`AtClient`.
+
+**What the row said, verbatim:**
+
+> ⛔ **Agreed with gkc 2026-08-30.** The word is used in two senses that contradict each other. **Retained**: `withdrawnSigningKeys`, `withdrawnSigningKeysFor`, `apskEntries`'s `withdrawn:` parameter, and ruling 126 at 12939 — an entry that STAYS advertised with status `retired`, so what it signed still verifies. ✅ **Removed — all four sites are gone as of the barrier deletion, 2026-08-30.** They were `signing_key_mint_barrier.dart` line 15, `apkam_signing.dart` line 176, `pq_client_bootstrap.dart` line 287 — and a **fourth this row missed**, `pq_client_bootstrap.dart` line 129 in the step-list dartdoc, which the "two of the three go with the deletion anyway" arithmetic left behind — *"publishing a minted key withdraws the authentication key from the advertisement"*, meaning it stops being named at all. ⚠️ `apkam_signing.dart` carries both senses **thirteen lines apart**: line 272 uses the removed sense inside the dartdoc of the getter whose name is the retained one. 
+>
+> **Why it matters beyond tidiness**: ruling 126 at 12935 rests the barrier deletion on *"It never **withdraws** a key anything could have signed with"*. In the retained sense that is trivially true; in the removed sense it is the actual, contestable claim. The word carries the argument and is ambiguous exactly there. 
+>
+> **What remains owed is the RETAINED sense only**: `withdrawnSigningKeys`, `withdrawnSigningKeysFor`, `apskEntries`'s `withdrawn:` parameter and their dartdocs still say "withdraw" where they mean **retired** — an entry that stays advertised. No site now uses the removed sense, so the ambiguity that carried ruling 126's argument is gone; what is left is a rename for clarity, not a correctness item.
+
 ### The PQ data-signing-key programme — eight commits, discharged 2026-08-30
 
 Moved here whole on 2026-08-30, the day the last commit landed. It sat in

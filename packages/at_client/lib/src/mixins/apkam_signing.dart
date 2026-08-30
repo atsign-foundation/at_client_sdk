@@ -134,8 +134,8 @@ mixin ApkamSigning {
   }
 
   /// What [publishPublicSigningKey] writes: what signs for this enrollment now
-  /// plus the signing keys it has withdrawn, composed by [apskEntries] and
-  /// spelled by [apskValueOf].
+  /// plus the signing keys it has withdrawn from service, composed by
+  /// [apskEntries] and spelled by [apskValueOf].
   ///
   /// The same rule decides the enrollment path's `apsk`-versus-`apskLegacy`,
   /// and the two must agree: they describe one record.
@@ -238,7 +238,7 @@ mixin ApkamSigning {
   /// The public half of every signing key this enrollment has taken out of
   /// service, each with the status the keyfile gives it — the non-active
   /// entries of its advertisement, which keep envelopes signed before the key
-  /// was withdrawn verifiable.
+  /// was withdrawn from service verifiable.
   ///
   /// The status travels because the keyfile's vocabulary is open and so is the
   /// advertisement's: a token a newer build wrote is what this enrollment's
@@ -253,8 +253,8 @@ mixin ApkamSigning {
   /// envelopes for every reader that could have handled them.
   ///
   /// Empty when the client has no key source, when the read fails, or when
-  /// nothing has been withdrawn — which is every enrollment until a signing
-  /// key leaves the in-use set.
+  /// nothing has been withdrawn from service — which is every enrollment
+  /// until a signing key leaves the in-use set.
   Future<
       List<
           ({

@@ -7,7 +7,7 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys;
 
 /// The `_apsk` entries an enrollment advertises: **the keys that sign for it
-/// now, plus the signing keys it has withdrawn.**
+/// now, plus the signing keys it has withdrawn from service.**
 ///
 /// One composer for both publishers. `_apsk` is one record whether the
 /// atServer writes it from an `enroll:request`/`enroll:update` or a client

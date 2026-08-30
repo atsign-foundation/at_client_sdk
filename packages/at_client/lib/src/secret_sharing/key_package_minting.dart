@@ -43,11 +43,12 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// **A key package is amended, never replaced.** The advertisement this
 /// publishes carries every key the enrollment holds — the ones it just minted,
 /// the ones it is keeping, and the ones it has retired — because the write
-/// rewrites `metadata.keyPackage` whole, so anything left out is withdrawn. A
-/// retired key stays advertised *as retired*: `KeyPackage.bestKeyFor` skips it
-/// so nothing new is sealed to it, while a peer holding an envelope still in
-/// flight can see whose key it was. Dropping the entry instead would strand
-/// that envelope with nothing to name.
+/// rewrites `metadata.keyPackage` whole, so anything left out is withdrawn
+/// from the advertisement. A retired key stays advertised *as retired*:
+/// `KeyPackage.bestKeyFor` skips it so nothing new is sealed to it, while a
+/// peer holding an envelope still in flight can see whose key it was.
+/// Dropping the entry instead would strand that envelope with nothing to
+/// name.
 ///
 /// ⚠️ **File first, then publish — the OPPOSITE order to
 /// `SigningKeyMinting`, and the asymmetry is the whole point.** Both classes
