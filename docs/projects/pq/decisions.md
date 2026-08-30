@@ -184,6 +184,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [124] | The signing root's mint lock is sized against starvation, not contention                     | 2026-08-28 | LIVE                      |
 | [125] | A Hive store's identity is its storage path, not its atSign                                  | 2026-08-28 | LIVE                      |
 | [126] | The mint barrier is deleted: legacy authentication and data signing are one keypair         | 2026-08-30 | AMENDED 2026-08-30        |
+| [127] | A client with no enrollment id still mints and publishes its own signing key                | 2026-08-30 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -312,3 +313,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [124]: detail/decisions.md#124-the-signing-roots-mint-lock-is-sized-against-starvation-not-contention-2026-08-28
 [125]: detail/decisions.md#125-a-hive-stores-identity-is-its-storage-path-not-its-atsign-2026-08-28
 [126]: detail/decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30
+[127]: detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30

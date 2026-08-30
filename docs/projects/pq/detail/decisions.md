@@ -13041,3 +13041,63 @@ reachable. Where it is false is a separate defect, recorded as its own row and
 not fixed by this ruling: an enrollment created by `sendEnrollRequest` carries
 no data signing keypair, so its key package is signed by its authentication
 keypair and the first mint strands it.
+
+## 127. A client with no enrollment id still mints and publishes its own signing key (2026-08-30)
+
+**Ruled by gkc, 2026-08-30.** The data-signing-key programme proposed skipping
+`SigningKeyMinting.reconcileSigningKeys` entirely when the client has no
+enrollment id, as a net under the pre-enrollment retrofit. **Both halves are
+dropped**, and the skip is dropped for a reason the net itself created.
+
+**A client with no enrollment id publishes its own `_apsk`.** There is no
+enrollment record for the atServer to compose one from, so the client is the
+only writer that record can have: it puts the value directly rather than
+sending `enroll:update`, and files under the id `primary`, which is the same
+spelling its own reader looks for. That is a working capability, pinned by
+`signing_key_minting_test.dart`'s *"a client with no enrollment"* group — whose
+third assertion is that the published key is deliberately **not** the APKAM
+public key. Skipping the mint deletes it.
+
+**The retrofit that was to replace it is refused by the atServer.** A
+pre-enrollment atSign authenticates with the flat `at_pkam_publickey`, which
+sets `authType` to `pkamLegacy`; the self-enrollment auto-approve branch is
+gated on `AuthType.apkam` and refuses a connection carrying no resolvable
+enrollment id. So the two changes were a pair in which the replacement cannot
+land, and taking only the safety net would leave a pre-enrollment atSign with
+no route to a data signing key at all — strictly worse than the state being
+repaired.
+
+### The residual this leaves open, stated rather than waived
+
+A pre-enrollment client at `pqActive` still mints ML-DSA-65 into
+`public:_apsk.primary` and drops its rsa2048 authentication key from that
+record, so anything that key signed stops verifying.
+
+⚠️ **It is reachable, and an earlier draft of this ruling said it was not.**
+The claim was that [113](#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)'s
+coherence refusal would prevent the combination. It does not: that rule refuses
+an **empty** signing set beside a non-rsa2048 authentication key, and this
+client's set names ML-DSA-65. Nor does
+[126](#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30)'s
+rsa2048 exclusion fire, because rsa2048 is not what that set wants.
+
+What makes it narrow rather than urgent is *what such a client has signed*.
+`signingAlgoOf` reads `AtClientPreference.signingAlgoType`, which defaults to
+rsa2048 whatever the posture and is a separate field from
+`authenticationKeyAlgorithm` — so the key being dropped is the flat rsa2048
+keypair, and the question is whether a pre-enrollment client ever produced an
+envelope that `_apsk` is used to verify. It is configured for post-quantum
+providers at this posture, so it can, which is why this is recorded as open
+rather than closed.
+
+### What was rejected, with the reason
+
+- **Skip the mint whenever the enrollment id is null.** The proposal as
+  written. Deletes a specified, tested mechanism while its replacement is
+  blocked server-side.
+- **Skip only when a retrofit was attempted and failed.** Keeps both
+  behaviours, and is the only option that does — but
+  `_settleEnrollmentIdentity` swallows the failure and comes up on the old
+  enrollment, recording nothing a later step could read. It needs a signal that
+  does not exist, so it is a larger change than the row implied, not a
+  narrowing of it.
