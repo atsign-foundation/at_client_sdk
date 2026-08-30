@@ -371,29 +371,34 @@ void main() {
             'the only thing that could have chosen ML-DSA');
 
     // The key package frozen on the enrollment record is signed by the
-    // enrollment's SIGNING key, which is rsa2048 — fetched with the fully
-    // privileged owner client, since the scoped retrofit cannot run
-    // enroll:list.
+    // enrollment's SIGNING key — fetched with the fully privileged owner
+    // client, since the scoped retrofit cannot run enroll:list.
     final record = (await atClient.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == client.enrollmentId);
     final pkg = record.metadata!['keyPackage'] as Map;
     final header = jsonDecode(utf8.decode(base64Decode(base64.normalize(
         ((pkg['signatures'] as List).single as Map)['protected']
             as String)))) as Map;
-    expect(header['alg'], 'RS256',
+    expect(header['alg'], 'ML-DSA-65',
         reason: 'a peer verifies this package against this enrollment\'s '
-            '_apsk, and _apsk names its rsa2048 SIGNING key — so the package '
-            'must be signed by that key and not by the ML-DSA authentication '
-            'key. ML-DSA-65 here would mean the record and the package '
-            'disagree, and every peer would refuse to seal a secret to this '
-            'enrollment. This assertion read ML-DSA-65 until 2026-08-14, when '
-            'the enrollment gained a signing key of its own');
+            '_apsk, so the package must be signed by the key that record '
+            'names — which is the enrollment\'s data SIGNING key, never its '
+            'authentication key. A retrofit mints the algorithm the enrollment '
+            'will KEEP, and pqActive keeps ML-DSA-65, so at this posture the '
+            'record names an ML-DSA signing key and the package is signed by '
+            'it. RS256 here would mean the record and the package disagree, '
+            'and every peer would refuse to seal a secret to this enrollment. '
+            'History, because the spelling has moved twice: ML-DSA-65 until '
+            '2026-08-14, when the enrollment gained a signing key of its own '
+            'and this became RS256; back to ML-DSA-65 on 2026-08-30, when the '
+            'mint stopped hardcoding rsa2048 and took the algorithm from the '
+            'posture. At pqReady it is still RS256');
 
     // ⚠️ The posture reaching the enrollment is proven by the AUTHENTICATION
-    // key above, not by this header. Until the enrollment owned a signing key
-    // the header was a second witness for it; now the two keys are
-    // deliberately different algorithms, which is the whole point of the
-    // split, and only the auth key tracks the posture.
+    // key above, not by this header. The two keys are separate axes — at
+    // pqReady they are deliberately different algorithms, which is the whole
+    // point of the split — and it is only at pqActive that they happen to
+    // coincide, so the header is not a witness for the posture at any stage.
     expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65);
   });
 

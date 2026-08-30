@@ -177,7 +177,10 @@ void main() {
   ///
   /// An enrollment created without a signing key of its own — every enrollment
   /// a build predating enrollment-time minting made — gets one at its next
-  /// start, and the client advertises it by `enroll:update`. The **form** of
+  /// start, and the client advertises it by `enroll:update`. ⚠️ **Only an
+  /// enrollment that authenticates post-quantum is in that state now**: one
+  /// authenticating with rsa2048 and holding no typed signing material already
+  /// holds the key the set names, because there the two are one keypair. The **form** of
   /// that advertisement is the whole question: a single active `rsa2048` key
   /// has to travel as the bare string, because every deployed `_apsk` consumer
   /// base64-decodes the value as an RSA key and fails on JSON.
@@ -196,13 +199,30 @@ void main() {
       atSign: atSign,
       namespace: namespace,
       // One active rsa2048 signing key, which is what pqReady's default set
-      // holds. Named directly rather than by adopting the whole posture: the
-      // set is an app-facing axis in its own right, and pqReady would also
-      // move this enrollment's PKAM key to ML-DSA and its key exchange to pq,
-      // neither of which this test is about.
+      // holds, beside an ML-DSA authentication key.
+      //
+      // ⚠️ **Both axes are named, and the ML-DSA one is what makes this a heal
+      // at all.** On an enrollment whose authentication keypair is rsa2048 and
+      // which holds no typed signing material, that one keypair IS its data
+      // signing keypair — so it already holds what the set names and the mint
+      // is correctly a no-op. The heal path exists for the other shape: an
+      // enrollment authenticating post-quantum that was created before
+      // enrollment-time minting, where the two keys are genuinely different
+      // and the rsa2048 one is genuinely absent.
+      //
+      // The posture stays legacy so that key exchange does not also move to
+      // pq, which this test is not about.
+      //
+      // ⚠️ **`signingAlgo` is what makes the enrollment ML-DSA, not the
+      // preference axis beside it.** `enrolAndAuthenticate` mints the APKAM
+      // keypair from its own `signingAlgo` argument and never reads
+      // `authenticationKeyAlgorithm`; the axis is set too so the client's
+      // declared and actual algorithms agree.
+      signingAlgo: SigningAlgoType.mldsa65,
       preference: TestUtils.getPreference(atSign,
+          authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
           dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048},
-              posture: PqPosture.legacy),
+          posture: PqPosture.legacy),
       rootDomain: rootDomain,
       rootPort: TestUtils.rootServerPort,
       deviceName: 'apsk-heal-$runId',
