@@ -226,6 +226,19 @@ void main() {
 
     test('UC-G2.5 · an nskey rotation mints fresh and carries nothing forward',
         () {
+      provenIn('packages/at_client/test/nskey_rotation_test.dart',
+          'a rotation drops an algorithm this client no longer mints',
+          proves: 'the removal, with the control drawn from the same rotate '
+              'call: the superseded generation is asserted to have carried the '
+              'dropped algorithm, so a ring that never minted it reddens the '
+              'control rather than passing the absence',
+          clauses: ['never added back']);
+      provenIn('packages/at_client/test/nskey_rotation_test.dart',
+          'an algorithm a rotation dropped is not added back',
+          proves: 'the other half of the same clause - a following add over '
+              'the narrowed preference returns the generation unchanged, with '
+              'no further publish in the trace',
+          clauses: ['never added back']);
       // GIVEN a generation holding keys for one or more algorithms, and a
       //       rotation due by age policy or because it predates a revocation.
       // WHEN  a client takes the mint lock and rotates.
@@ -631,6 +644,18 @@ void main() {
     });
 
     test('UC-G2.10 · the ladder across atSigns: safe through rollout 1', () {
+      provenIn('packages/at_client/test/ck_manager_test.dart',
+          'an algorithm added to the advertisement is nothing to re-seal',
+          proves: 'the absence, COUNTED: ensureCurrent either side of a '
+              'widening writes once in total and the CK keeps its kid, so the '
+              'publisher re-seals nothing and records nothing about the add',
+          clauses: ['the recipient does nothing further']);
+      provenIn('packages/at_client/test/ck_manager_test.dart',
+          'a restart after the widening resumes rather than cutting another',
+          proves: 'the durable arm, which the in-memory cache cannot see - a '
+              'cold manager over the same pointer resumes the same CK, '
+              'failing by a different route from the already-current guard',
+          clauses: ['the recipient does nothing further']);
       // GIVEN @bob upgrades and publishes a widened advertisement; @alice is
       //       still on the old build.
       // WHEN  alice1 shares toward @bob, and @bob reads it.

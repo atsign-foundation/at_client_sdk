@@ -120,6 +120,17 @@ void main() {
     });
 
     test('UC-A5.2 · per-enrollment auth revocation', () {
+      provenIn(
+          'packages/at_client/test/pairwise_secret_sharing_test.dart',
+          'a surviving child of a revoked parent is still answered, by the '
+              'holder that just refused the parent',
+          proves: 'the hazard the clause names, as a differential in ONE '
+              'holder pass: one revoke removes exactly that id from the '
+              'roster, the revoked requester is refused, and the enrollment it '
+              'self-spawned is served the successor private - roster '
+              'membership is the whole gate, and the serve path has no notion '
+              'of an ancestor',
+          clauses: ['is answered when it asks a holder']);
       // GIVEN @alice pq-native; the keyfile holding E2's APKAM keypair is lost.
       // WHEN  the operator runs enroll:revoke on E2.
       // THEN  E2's one APKAM keypair can no longer authenticate; alice1 is
@@ -226,6 +237,13 @@ void main() {
     test(
         'UC-A5.5 \u00b7 the namespace-key lever fires on a cause, and is asked '
         'at exactly two points', () {
+      provenIn('packages/at_client/test/nskey_seeding_test.dart',
+          'a sibling publishing mid-route does not become a rotation',
+          proves: 'the third ask is closed, measured rather than reasoned: a '
+              'ring answering null then an advertisement across the route '
+              'records TWO reads and ZERO asks. Before the fix it recorded '
+              'one ask, so the arm discriminates rather than restating',
+          clauses: ['askRotationPolicy: false']);
       // GIVEN an application that supplied an NskeyRotationPolicy.
       // THEN  asked before a CK is conveyed but only for this atSign's own
       //       namespace key; asked once per authorised namespace at start;

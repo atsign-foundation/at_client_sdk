@@ -105,6 +105,19 @@ void main() {
   test(
       'UC-G3.3 · the _apsk form follows the algorithm, and nothing else '
       'decides it', () {
+    provenIn('packages/at_client/test/apkam_signing_keys_test.dart',
+        'republishes when the published value is not what it holds',
+        proves: 'the republish-on-any-difference half, with its sibling '
+            'writes nothing when the published value already matches as the '
+            'control that makes it a discriminator',
+        clauses: ['discards whatever was bound to its old value']);
+    provenIn('packages/at_client/test/pq_signing_chain_test.dart',
+        'a republish silently leaves the enrollment unsigned',
+        proves: 'the DISCARD, which nothing asserted: from a record carrying a '
+            'conveyed chain link, a republish whose value differs rewrites the '
+            'record and readLink then returns null, with the matching-value '
+            'call as the control that leaves the link intact',
+        clauses: ['discards whatever was bound to its old value']);
     // GIVEN two composers writing one record — at_auth at enrolment and
     //       at_client at every start.
     // WHEN  the advertised signing key is a single active rsa2048 key.

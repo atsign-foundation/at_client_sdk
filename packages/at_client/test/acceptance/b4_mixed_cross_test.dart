@@ -88,6 +88,14 @@ void main() {
     test(
         'UC-B4.3 · mid-rollout @alice (one install active, one old) shares '
         'with @bob', () {
+      provenIn('packages/at_client/test/legacy_client_refusal_test.dart',
+          'a legacy-only install refuses a record stamped at/symmetric/AES/GCM',
+          proves: 'the arm nothing established - that a pre-capability install '
+              'FAILS to read a PQ-stamped record. Asserted on the exception '
+              'type AND its message naming the id, with the same install '
+              'reading a legacy-stamped record as the control, so a client '
+              'that refused everything could not satisfy it',
+          clauses: ['cannot read']);
       // GIVEN alice's app is mid-rollout: alice1 active, alice2 an old
       //       pre-capability build; bob's side holds the namespace key.
       // WHEN  alice1 shares/notifies @bob.

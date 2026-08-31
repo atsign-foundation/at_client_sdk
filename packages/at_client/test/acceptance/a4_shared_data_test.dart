@@ -365,6 +365,27 @@ void main() {
     });
 
     test('UC-A4.6 · the construction is negotiated from suites', () {
+      provenIn('packages/at_client/test/nskey_resolver_test.dart',
+          'a widened advertisement serves each sender the entry IT understands',
+          proves: 'the sealer CHOOSES, as a differential over one '
+              'advertisement: two senders differing only in '
+              'sealsToKeyAlgorithms each resolve the entry they understand, so '
+              'neither narrowing could be satisfied by a constant',
+          clauses: ['record that choice']);
+      provenIn('packages/at_client/test/nskey_kem_selection_test.dart',
+          'either entry seals and opens, and each stamps its OWN kid',
+          proves: 'that the choice is RECORDED and the opener simply uses it '
+              '- the stamped kid is asserted BEFORE the round trip, because a '
+              'wrong kid fetches the wrong private and would redden as a '
+              'decapsulation error, proving nothing about the stamp',
+          clauses: ['record that choice']);
+      provenIn(
+          'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+          'UC-A2.5 · a sender picks by its own order and stamps the matching ',
+          proves: 'the same choice against a live atServer, over a recipient '
+              'advertising both: two senders differing only in their own '
+              'order pick differently and stamp what they picked',
+          clauses: ['record that choice']);
       // GIVEN two recipients holding the SAME X-Wing key, differing only in
       //       what their advertised record claims: one lists
       //       x-wing-rfc9180-v1, the other's record predates the suites field.
