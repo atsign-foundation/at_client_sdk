@@ -1203,7 +1203,25 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     ⛔ **RULED AND NOT YET BUILT, so this clause is unprovable from THIS repo
     until at_server ships it** — it is closed by an at_server test asserting that
     a descendant's status is `revoked` after its predecessor is revoked, and that
-    it is absent from `enroll:listns`. Until then the **enrollment tree** leaks:
+    it is absent from `enroll:listns`.
+
+    ⛔ **AND THE CASCADE AS BUILT CANNOT REACH "arbitrary depth", so shipping the
+    at_server branch will NOT close this clause** (reported by the at_server
+    session 2026-08-31, filed as
+    [at_server#2782](https://github.com/atsign-foundation/at_server/issues/2782)).
+    The cascade climbs `parentEnrollmentId` and fetches each link **by key**,
+    which keeps a link traversable between expiring and being removed — but the
+    atServer runs a periodic `deleteExpiredKeys()` sweep
+    (`at_secondary_impl.dart`), so shortly after a link expires the record is
+    **gone** and the chain is severed exactly as a delete severs it. It is not an
+    edge case: each successor's ttl clock restarts at its own write, so under any
+    finite key-expiry posture the earlier links always expire first. Revoke the
+    root after the sweep has taken a middle link and the cascade stops at the
+    first live candidate, leaving a descendant of the revoked enrollment
+    `approved` and authenticating — with the operator having seen the revoke
+    succeed. ⚠️ **Closing this needs ancestry that OUTLIVES the enrollment
+    record**, which the branch does not have, so this clause is blocked on that
+    rather than on the branch merging. Until then the **enrollment tree** leaks:
     a descendant keeps `approved`, stays on every roster, and is answered when it
     asks a holder for the generation it can see published, so rotating while
     excluding only E2 hands what E2 spawned the new key. ⚠️ **The fix for that is
