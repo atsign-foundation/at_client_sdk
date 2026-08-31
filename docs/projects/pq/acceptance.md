@@ -3794,7 +3794,7 @@ is where its missing lever lives.
   expressible, an age-shaped SDK trigger does not.
   ⚠️ **And not "created before a revocation"** — the generation's payload
   `createdAt` is the minting client's own clock, and comparing it to a
-  server-stamped moment is the trap [130](detail/decisions.md#130-a-revocation-is-discoverable-from-the-enrollment-record-and-rotates-unconditionally-2026-08-31)
+  server-stamped moment is the trap [130](detail/decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31)
   forbids.
 - **When:** a client asks whether a rotation is due, and — if it is, and if it
   wins the mint lock — rotates.
@@ -3853,13 +3853,18 @@ is where its missing lever lives.
     was returned, it rotates.** A client that cannot read the namespace answer at
     all rotates **nothing**: it has established no cause.
 
-    ⛔ **RULED AND NOT YET BUILT on the at_client side, and partly built on the
-    atServer's.** The atServer stamps `revokedAt` on every enrollment a revoke
-    touches and clears it on the way out; what is **not** built is the derived
-    per-namespace scalar on `enroll:listns`. On this side nothing is built: the
-    `Enrollment` model drops both `status` and `revokedAt`, which the wire
-    already carries, and no client reads the advertisement's `updatedAt` or
-    keeps an add from moving it. See [`decisions.md` 130](detail/decisions.md#130-a-revocation-is-discoverable-from-the-enrollment-record-and-rotates-unconditionally-2026-08-31).
+    ⛔ **RULED AND NOT YET BUILT on the at_client side; BUILT on the atServer's,
+    on a branch that is not on the remote.** The atServer writes a durable
+    revocation event per enrollment a revoke touches, and derives from the log
+    the per-namespace moment `enroll:infons` serves. On this side nothing is
+    built: the `Enrollment` model drops `status`, which the wire already
+    carries, and no client reads the advertisement's `updatedAt` or keeps an add
+    from moving it.
+    ⚠️ **This said the atServer stamps `revokedAt` on the enrollment, and that
+    the derived scalar was unbuilt, until 2026-08-31.** The field was removed in
+    favour of the event log — an enrollment record's ttl IS the APKAM
+    key-expiry posture, so a stamp living on it is reaped with the record — and
+    the moment is served by `enroll:infons`, not `enroll:listns`, and is built. See [`decisions.md` 130](detail/decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31).
     ⚠️ **`EnrollDataStoreValue` carries no *timestamp*** — its one time-shaped
     field is `apkamKeysExpiryDuration`, a duration.
 
@@ -3886,7 +3891,7 @@ is where its missing lever lives.
 
     ⚠️ **This said a client settles it from "the durable record the revoker
     wrote" until 2026-08-31** — ruling 121's design, reversed by
-    [130](detail/decisions.md#130-a-revocation-is-discoverable-from-the-enrollment-record-and-rotates-unconditionally-2026-08-31)
+    [130](detail/decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31)
     for the reason set out beneath this row.
     ⚠️ **And it carried an *age* half until 2026-08-28**, settled from the
     advertisement's `createdAt` against an application policy; [`decisions.md`
@@ -3954,12 +3959,15 @@ is where its missing lever lives.
   client now re-derives the same comparison per namespace at every start.
   Reporting the moment per namespace narrows it; it does not remove it.
 
-  ⛔ **What is owed, and by whom.** at_server: the `revokedAt` field, stamped on
-  every enrollment a revoke touches and cleared on the way out — **built** — plus
-  the derived per-namespace moment on `enroll:listns`, which is **not**.
-  at_client: `status` and `revokedAt` on the `Enrollment` model, the discipline
-  that an `add` preserves the advertisement's `updatedAt` while a rotation does
-  not, and the check in `seed()`. None of the at_client half is built.
+  ⛔ **What is owed, and by whom.** at_server: the revocation event log, and the
+  per-namespace moment derived from it and served by `enroll:infons` — **both
+  built**. at_client: `status` on the `Enrollment` model, the discipline that an
+  `add` preserves the advertisement's `updatedAt` while a rotation does not, and
+  the check in `seed()`. None of the at_client half is built.
+  ⚠️ **This said at_server owed the `revokedAt` field, and that the derived
+  moment on `enroll:listns` was not built, until 2026-08-31.** The field is
+  gone, the moment is served by `enroll:infons`, and both server halves are
+  built.
   ⚠️ **"Built" here means on at_server's working branch, not on `origin/trunk`**,
   where none of it exists. A statement in this row that the atServer does not do
   something is a statement about `origin/trunk`.
@@ -3989,7 +3997,7 @@ is where its missing lever lives.
 
     ⛔ **That protection now guards the wrong field, and repairing it is OWED.**
     The argument above was sound while the rotation trigger compared against the
-    payload's `createdAt`. [Ruling 130](detail/decisions.md#130-a-revocation-is-discoverable-from-the-enrollment-record-and-rotates-unconditionally-2026-08-31)
+    payload's `createdAt`. [Ruling 130](detail/decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31)
     moved the trigger onto the advertisement **record's** server-stamped
     `updatedAt`, because the payload value is the minting client's own clock —
     and `updatedAt` is exactly the field an add *does* move, since an add

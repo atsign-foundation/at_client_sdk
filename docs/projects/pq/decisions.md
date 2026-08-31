@@ -187,7 +187,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [127] | A client with no enrollment id still mints and publishes its own signing key                | 2026-08-30 | AMENDED 2026-08-30        |
 | [128] | A retrofit's successor holds its predecessor's grants                                       | 2026-08-31 | LIVE               |
 | [129] | Revocation cascades to descendants, and the roster does the rest                            | 2026-08-31 | LIVE               |
-| [130] | A revocation is discoverable from the enrollment record                                     | 2026-08-31 | LIVE               |
+| [130] | A revocation is discoverable per namespace                                                  | 2026-08-31 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -319,4 +319,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [127]: detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30
 [128]: detail/decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31
 [129]: detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31
-[130]: detail/decisions.md#130-a-revocation-is-discoverable-from-the-enrollment-record-and-rotates-unconditionally-2026-08-31
+[130]: detail/decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31

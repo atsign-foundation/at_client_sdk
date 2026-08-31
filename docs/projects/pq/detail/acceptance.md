@@ -1217,9 +1217,11 @@ production paths named:
   one-element exclusion set the client passes is correct as it stands.
 - **Nothing anywhere carries a revocation timestamp**, which is why
   [decisions.md 121](decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28)
-  ruled that the revoker writes a durable record. ⛔ **SPENT — ruling 130
-  reverses that**: the atServer stamps `revokedAt` on the enrollment and no
-  client publishes anything. The clause is now **c5** (the withdrawal of the old
+  ruled that the revoker writes a durable record. ⛔ **SPENT — ruling 130 moves
+  the WRITER**: the atServer keeps a durable revocation event log and no client
+  publishes anything. ⚠️ **This said the atServer stamps `revokedAt` on the
+  enrollment, until 2026-08-31**; that field was removed in favour of the log,
+  so 121's record shape survives and only its writer changed. The clause is now **c5** (the withdrawal of the old
   c4 renumbered everything after it), whose own
   ⚠️ says the advertisement cannot answer the revocation half.
 - **A signature names its signing enrollment, not its key.** The protected
