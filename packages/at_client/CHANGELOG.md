@@ -1,5 +1,16 @@
 ## 3.15.0-rc1
 
+- **BREAKING (behaviour):** `VerbEnrollmentDirectory.listForNamespace` now
+  throws `AtValueException` when the `enroll:listns` response is not a list,
+  where it previously returned an empty roster. An empty roster decides who a
+  secret is conveyed to and who a holder will serve, so an unrecognised response
+  silently withheld key material from every member of the namespace and was
+  indistinguishable from a namespace that has none. It also logs at severe.
+  `AtValueException` rather than `AtEnrollmentException` deliberately: the latter
+  extends `AtException` rather than `AtClientException`, and an exception whose
+  supertype an application does not catch is indistinguishable from no exception
+  at all at the point that matters.
+
 - fix: **`ensureReachable` no longer asks the namespace-key rotation policy.**
   It read the published advertisement, and `seedNamespace` read it again after a
   remote round trip, so a sibling publishing in that window routed the call onto
