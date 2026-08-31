@@ -47,6 +47,9 @@ void main() {
   /// it was asked to do, and serving back whatever has been published.
   /// [lockAlreadyHeld] makes the mint lock's immutable create fail, which is
   /// how the atServer reports that another enrollment holds it.
+  /// `holdTheMintLock` and `releaseTheMintLock` move that same switch after
+  /// construction, so one test can watch a client meet the refusal and then
+  /// watch what it does once the holder is gone.
   ///
   /// The mint and rotate paths read the atServer rather than this client's
   /// caches — a sibling enrollment's publication is not in local storage until
@@ -58,6 +61,7 @@ void main() {
     Map<String, String> advertised,
     void Function(List<String>) configure,
     void Function() holdTheMintLock,
+    void Function() releaseTheMintLock,
   }) client(
       {bool lockAlreadyHeld = false,
       List<String>? keyEstablishmentAlgorithms}) {
@@ -133,6 +137,11 @@ void main() {
       configure: (List<String> algorithms) => preference =
           AtClientPreference(keyEstablishmentAlgorithms: algorithms),
       holdTheMintLock: () => lockHeld = true,
+      // The counterpart, because expiry is the only thing that releases a real
+      // one and a test cannot wait the ttl out: an enrollment that lost an
+      // election has to be able to reach the state it reaches once the
+      // cooldown is over.
+      releaseTheMintLock: () => lockHeld = false,
     );
   }
 
@@ -172,12 +181,18 @@ void main() {
   /// the ring's own memory instead would be the wrong precondition: the whole
   /// point of the mint path's read is that it does not trust this client's
   /// caches to know what a sibling has done.
+  ///
+  /// [createdAt] back-dates the generation, which is what an age-shaped
+  /// rotation policy decides on. It defaults to now, so a caller that does not
+  /// care gets a freshly minted one.
   Future<NskeyAdvertisement> publishedByAnother(
-      MockAtClient client, Map<String, String> advertised) async {
+      MockAtClient client, Map<String, String> advertised,
+      {DateTime? createdAt}) async {
     final pair = await XWingKeyPair.generate();
     final advertisement = NskeyAdvertisement.single(
       publicKey: pair.publicKeyBytes,
       alg: SecretSharingAlgos.xWing,
+      createdAt: createdAt,
       suites: SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
     );
     advertised[namespace] = await AtClientEnvelopeSigner(client)
@@ -311,6 +326,145 @@ void main() {
               'caller that meant to supersede a generation should hear there '
               'was none');
       expect(c.trace, isEmpty);
+    });
+  });
+
+  // A client that fails to take the mint lock does not queue behind the holder
+  // and does not retry blindly. It publishes nothing, and the question is put
+  // again — against a fresh read of what is published — so it either finds
+  // that another client has done what was needed or finds that it still must.
+  // That is what makes several clients converge on one generation rather than
+  // each publishing another over the top of it.
+  //
+  // ⚠️ Nothing on this path is timer-driven, and an assertion that it were
+  // would be false: nothing here sleeps, backs off, or reads the lock's ttl.
+  // The question is re-put by the next client start and by the next content
+  // key conveyed to a namespace this atSign owns, so a re-ask can land while
+  // the lock is still held and be refused again. What these arms pin is
+  // therefore the re-read and the re-decide, not any interval between them.
+  //
+  // The loser here is the one the atServer refused. `MintLock.withLock` has a
+  // second and different loser — a mint already in flight for the same key on
+  // the same instance — and that one does await it before declining, so "does
+  // not queue" is a claim about this loser rather than about the lock.
+  //
+  // What both arms discriminate against: giving `NskeySeeding` a set of
+  // namespaces whose rotation was refused and short-circuiting
+  // `rotateIfPolicyAsks` for anything already in it. The first refusal would
+  // become permanent for the session and the second pass would never re-ask,
+  // reddening both arms below while every other arm in this file — none of
+  // which asks twice — stayed green.
+  group('the lock loser re-decides rather than queueing', () {
+    test('a lock loser publishes nothing and still rotates at the next ask',
+        () async {
+      final c = client();
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      await ring.mintAndPublish(namespace);
+      c.trace.clear();
+      final s = sharing();
+      final asks = <NskeyRotationContext>[];
+      final seeding = NskeySeeding(
+        atClient: c.client,
+        ring: ring,
+        privateFiling: filer,
+        sharing: s.sharing,
+        rotationPolicy: (ns) {
+          asks.add(ns);
+          return true;
+        },
+      );
+
+      // Another enrollment takes the lock before this one gets there — the
+      // race the lock exists for.
+      c.holdTheMintLock();
+
+      expect(await seeding.rotateIfPolicyAsks(atSign, namespace), isFalse,
+          reason: 'and it returns while the lock is still held — nothing '
+              'releases it until this test does, so a client that queued '
+              'behind the holder would never reach the rest of this test');
+      expect(asks, hasLength(1),
+          reason: 'the control: the policy WAS asked, and this one always says '
+              'yes — so the false above is the rotation being refused rather '
+              'than an application declining one');
+      expect(c.trace, isEmpty, reason: 'and the loser publishes nothing');
+
+      c.releaseTheMintLock();
+
+      expect(await seeding.rotateIfPolicyAsks(atSign, namespace), isTrue);
+      expect(asks, hasLength(2),
+          reason: 'the question is put AGAIN rather than answered from the '
+              'first refusal, which is what makes the second pass a decision '
+              'instead of a replay of one already made');
+      expect(asks.last.nskeyKid, asks.first.nskeyKid,
+          reason: 'nobody rotated in the meantime, so the re-read finds the '
+              'same generation and the answer is still yes — the half of '
+              'converging where this client is the one that must act');
+      expect(asks.last.createdAt, asks.first.createdAt);
+      expect(c.trace, ['publish:$namespace'],
+          reason: 'the only publish since the setup mint, and it comes from '
+              'the pass that took the lock');
+    });
+
+    test('a lock loser that re-reads a fresher generation decides against it',
+        () async {
+      final c = client();
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      final stale = await publishedByAnother(c.client, c.advertised,
+          createdAt: DateTime.now().toUtc().subtract(const Duration(days: 30)));
+      final s = sharing();
+      final asks = <NskeyRotationContext>[];
+      // Age-shaped, which is the shape that can change its mind: one closure
+      // that answers yes about the generation this client found and no about
+      // the one that replaced it, so the difference between the two answers is
+      // the input and not the policy.
+      final seeding = NskeySeeding(
+        atClient: c.client,
+        ring: ring,
+        privateFiling: filer,
+        sharing: s.sharing,
+        rotationPolicy: (ns) {
+          asks.add(ns);
+          return ns.age >= const Duration(days: 7);
+        },
+      );
+
+      c.holdTheMintLock();
+
+      expect(await seeding.rotateIfPolicyAsks(atSign, namespace), isFalse);
+      expect(asks.single.nskeyKid, stale.nskeyKid);
+      expect(asks.single.age, greaterThanOrEqualTo(const Duration(days: 7)),
+          reason: 'the control: this policy answered YES on the first pass, so '
+              'the false above is the lock. A policy that had said no would '
+              'satisfy every assertion below with no contention anywhere');
+      expect(c.trace, isEmpty);
+
+      // What the holder was doing, done: a fresh generation at this atSign's
+      // own address, published by whichever enrollment won the election.
+      final fresh = await publishedByAnother(c.client, c.advertised);
+      c.releaseTheMintLock();
+
+      expect(await seeding.rotateIfPolicyAsks(atSign, namespace), isFalse,
+          reason: 'the work the policy asked for has happened, so the second '
+              'pass asks for nothing — the half of converging where another '
+              'client did what was needed');
+      expect(asks, hasLength(2));
+      expect(asks.last.nskeyKid, fresh.nskeyKid,
+          reason: 'the second ask is decided on a RE-READ of the atServer, so '
+              'it carries the winner\'s generation rather than the one this '
+              'client was holding when it lost');
+      expect(asks.last.createdAt.isAfter(asks.first.createdAt), isTrue,
+          reason: 'and it carries the winner\'s createdAt, which is what an '
+              'age-shaped policy answers no to');
+      expect(asks.last.age, lessThan(const Duration(days: 7)));
+      expect(c.trace, isEmpty,
+          reason: 'nothing was published on either pass: the lock loser adds '
+              'no second generation, which is the whole of converging rather '
+              'than storming');
+      expect(s.pushes, isEmpty,
+          reason: 'and nothing was conveyed, so no enrollment was handed a '
+              'private for a generation this atSign does not advertise');
     });
   });
 

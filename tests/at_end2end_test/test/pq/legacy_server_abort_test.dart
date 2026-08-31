@@ -4,6 +4,7 @@
 @Tags(['pq', 'legacy-server'])
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
@@ -12,6 +13,7 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
+import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
 import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_demo_data/at_demo_data.dart'
     show aesKeyMap, encryptionPrivateKeyMap;
@@ -38,6 +40,13 @@ import 'package:test/test.dart';
 /// enrollment request it had just created sitting `pending` on the server, and
 /// a client that retried left one per attempt. That is now denied on the way
 /// out (at_auth 3.4.0), and clause 5 is what guards it.
+///
+/// The third test is the row's parenthetical rather than one of its five
+/// clauses: the atServer's immutable write is long-standing, and is not a
+/// PQ-only verb. Every other live exercise of `Metadata.immutable` in this
+/// repository runs against the current image, and an immutable write working
+/// there says nothing about a pre-PQ atServer. "Present even here" is a claim
+/// about the old server, so this is the only pack that can make it.
 void main() {
   late String atSign;
   late AtClient owner;
@@ -220,5 +229,68 @@ void main() {
         1,
         reason: 'and the leftover is real, which is what makes the message '
             'above worth asserting rather than decorative');
+  }, timeout: Timeout(Duration(minutes: 3)));
+
+  test(
+      'UC-B0.1: the pre-PQ atServer refuses a second write to an immutable '
+      'record', () async {
+    // The parenthetical, exercised rather than asserted in prose. A refused
+    // second create is what a mint lock IS — it is how one signing root and
+    // one nskey generation per atSign are kept — so a PQ-capable client
+    // meeting an atServer nobody has upgraded needs the enforcement to be
+    // there already. If it were not, two privileged clients would each read no
+    // lock, each take one, and each mint; the second would overwrite the first
+    // with nothing visibly going wrong.
+    //
+    // What puts this in front of a pre-PQ atServer is the `legacy-server` tag
+    // on this library, which is also why it is not in the functional pack:
+    // that pack has no pinned old image to run against.
+    final record = AtKey()
+      ..key = 'b01immutable$runId'
+      ..sharedBy = atSign
+      ..metadata = (Metadata()..immutable = true);
+
+    Future<void> write(String value) =>
+        owner.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
+          ..atKey = record
+          ..value = value);
+
+    Future<String> read(String operation) async {
+      final response = await owner
+          .getRemoteSecondary()!
+          .executeCommand('llookup:$operation$record\n', auth: true);
+      return (response ?? '').replaceFirst('data:', '').trim();
+    }
+
+    await write('first');
+
+    // The control, and it comes first: a refused second write is otherwise
+    // indistinguishable from a record the atServer never stored at all.
+    expect(await read(''), 'first',
+        reason: 'the create has to be seen to have landed before a refusal of '
+            'the write after it means anything');
+    expect(
+        (jsonDecode(await read('meta:')) as Map<String, dynamic>)['immutable'],
+        isTrue,
+        reason: 'and it has to have landed AS immutable — an atServer that '
+            'parsed the flag and dropped it would refuse nothing below, and '
+            'this would go green for an ordinary record nobody wrote twice');
+
+    // Named, not a bare throwsA: a connection that failed for an unrelated
+    // reason satisfies any throw, and WHICH refusal fired is the whole point.
+    await expectLater(
+        write('second'),
+        throwsA(predicate((e) =>
+            e is IllegalStateException &&
+            '$e'.contains('Immutable records may not be updated'))),
+        reason: 'the atServer issuing its own refusal, on an image released '
+            'before any of the post-quantum work — which is what makes the '
+            'interlock a PQ client relies on something it already has against '
+            'a server that knows nothing about post-quantum anything');
+
+    expect(await read(''), 'first',
+        reason: 'and the refusal kept the record rather than merely reporting '
+            'on it: an atServer that stored the second value and answered '
+            'with an error afterwards would break every interlock built here');
   }, timeout: Timeout(Duration(minutes: 3)));
 }

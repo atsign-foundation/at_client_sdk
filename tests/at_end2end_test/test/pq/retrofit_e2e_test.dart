@@ -256,6 +256,12 @@ void main() {
     expect(clone.enrollmentId, isNot(cloneSession.enrollmentId),
         reason: 'the retrofit spawns a FRESH enrollment; it never adds a '
             'second keypair under the existing one');
+    expect(AtClientImpl.signingAlgoOf(clone), SigningAlgoType.mldsa65,
+        reason: 'the successor mints its OWN PQ APKAM keypair. Every other '
+            'assertion in this row holds just as well for a retrofit that '
+            'ignored signingAlgo: and minted RSA-2048 under a distinct '
+            'enrollment id, which is the one defect the row exists to '
+            'exclude');
 
     // The row's first half: two clones of one keyfile, two distinct
     // enrollments. Read off the atServer's own list rather than inferred.

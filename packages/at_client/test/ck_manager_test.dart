@@ -86,6 +86,13 @@ void main() {
   /// [keyRing] replaces the ring the fixture would build, for the cases that
   /// need an advertisement seeding cannot produce — one carrying more than one
   /// algorithm's entry.
+  ///
+  /// [sealsToKeyAlgorithms] narrows what this client is willing to seal to,
+  /// the way a deployment's `AtClientPreference` does, and [nskeyKeyAlgo] is
+  /// the KEM the fixture's conveyance provider seals under. The two move
+  /// together: the manager stamps a provider id chosen from the destination's
+  /// advertisement, and that id is what the runtime dispatches the conveyance
+  /// write to.
   ({
     CkManager manager,
     CryptoContext context,
@@ -104,6 +111,8 @@ void main() {
       {int failWrites = 0,
       bool failDeletes = false,
       InMemoryNskeyKeyRing? keyRing,
+      List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
+      String nskeyKeyAlgo = SecretSharingAlgos.xWing,
       CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek}) {
     var writesLeftToFail = failWrites;
     // A fixed, unmistakable date: an assertion that matched `now` would pass
@@ -111,12 +120,14 @@ void main() {
     final conveyanceCreatedAt = DateTime.utc(2026, 3, 4, 5, 6, 7);
     final cache = ContentKeyCache();
     final ring = keyRing ?? InMemoryNskeyKeyRing();
-    final nskey = NskeyProvider(keyRing: ring, cache: cache);
+    final nskey =
+        NskeyProvider(keyRing: ring, cache: cache, keyAlgo: nskeyKeyAlgo);
     final pointer = InMemoryCkPointer();
     final manager = CkManager(
         cache: cache,
         keyRing: ring,
         pointer: pointer,
+        sealsToKeyAlgorithms: sealsToKeyAlgorithms,
         ckRotationPolicy: ckRotationPolicy);
     // A restart replaces the whole config — provider and manager share one
     // cache in production, so a cold manager needs a cold provider with it.
@@ -224,11 +235,13 @@ void main() {
       conveyanceCreatedAt: conveyanceCreatedAt,
       coldManager: (ContentKeyCache c,
           {CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek}) {
-        activeNskey = NskeyProvider(keyRing: ring, cache: c);
+        activeNskey =
+            NskeyProvider(keyRing: ring, cache: c, keyAlgo: nskeyKeyAlgo);
         return CkManager(
             cache: c,
             keyRing: ring,
             pointer: pointer,
+            sealsToKeyAlgorithms: sealsToKeyAlgorithms,
             ckRotationPolicy: ckRotationPolicy);
       },
       written: written,
@@ -426,6 +439,98 @@ void main() {
       expect(cold.cache.current(owner, namespace)!.ckKid, ckKid,
           reason: 'and it is the same key, so nothing written before the '
               'widening needs a second conveyance to stay readable');
+    });
+
+    test(
+        'a narrowed writer seals to the algorithm it added to its own '
+        'advertisement', () async {
+      // Within one atSign, narrowing the sender to a newly added algorithm
+      // refuses nothing. The destination is @alice herself, so the
+      // advertisement the write consults is @alice's own — and it carries the
+      // ML-KEM entry because this atSign is what put it there. The resolver
+      // finds an entry on the narrowed list, and the refusal that sits under
+      // that lookup is never reached; what this configuration costs surfaces
+      // later and elsewhere, at a sibling install, on a record this write has
+      // already made.
+      //
+      // Break it by making NskeyResolver's walk ask
+      // `hit.usableFor(SecretSharingAlgos.keyAlgos)` rather than
+      // `hit.usableFor(sealsToKeyAlgorithms)`: x-wing leads that list, so
+      // this ML-KEM sender resolves the x-wing entry and both assertions
+      // about where the conveyance went go red — while `completes` stays
+      // green, which is why completing is not on its own worth asserting.
+      final ring = _WidenableRing();
+      final c = client(
+          keyRing: ring,
+          sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024],
+          nskeyKeyAlgo: SecretSharingAlgos.mlKem1024);
+      ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final second = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      final added = PackageKey.fromBytes(
+          use: SecretSharingAlgos.useEnc,
+          alg: SecretSharingAlgos.mlKem1024,
+          pub: second.publicKey);
+      await ring.widen(owner, namespace, added);
+      expect(
+          (await ring.currentPublic(owner, namespace))!.keys.map((k) => k.alg),
+          [SecretSharingAlgos.mlKem1024, SecretSharingAlgos.xWing],
+          reason: 'the fixture control: everything below is measured against '
+              'an advertisement that really did gain the entry, not against '
+              'one that stayed as seeding left it');
+
+      await expectLater(
+          c.manager.ensureCurrent(c.context, selfValue('treaty')), completes,
+          reason: 'the sender and the advertisement belong to the same '
+              'atSign, so there is no skew between them for a refusal to '
+              'catch');
+
+      expect(c.written, hasLength(1));
+      expect(c.providerIds.single, mlKemNskeyCryptoProviderId,
+          reason: 'and the conveyance went to the algorithm the narrowing '
+              'names — completing while sealing under x-wing would be this '
+              'same absence of a refusal with none of the behaviour');
+      expect(c.cache.currentNskeyKid(owner, namespace), added.kid,
+          reason: 'sealed to the added entry by kid, so what the write '
+              'followed is the published advertisement rather than the '
+              'client\'s own configuration');
+    });
+
+    test('the same narrowing refuses where nothing added the algorithm',
+        () async {
+      // The control for the arm above: the same manager, the same narrowed
+      // list, the same self destination — over an advertisement that was
+      // never widened, because this @alice took the rollout without
+      // publishing an entry to match it. The refusal fires, which is what
+      // says the arm above measured a real choice rather than a fixture with
+      // nothing to refuse.
+      final c =
+          client(sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024]);
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+
+      await expectLater(
+        c.manager.ensureCurrent(c.context, selfValue('treaty')),
+        throwsA(allOf(
+          isA<AtEncryptionException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('advertises x-wing'),
+                  contains('will seal to ml-kem-1024'))),
+          isNot(isA<NamespaceKeyUnavailableException>()),
+        )),
+        reason: 'both sides of the mismatch are named, and it is NOT the '
+            'cold-start exception: a client that narrowed itself must not '
+            'read its own configuration as the owner having published '
+            'nothing',
+      );
+      expect(c.written, isEmpty,
+          reason: 'refused before a content key is cut, so there is no '
+              'orphan conveyance to reconcile afterwards');
     });
 
     test('the default policy leaves a fresh content key alone', () async {
