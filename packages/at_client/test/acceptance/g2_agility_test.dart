@@ -227,6 +227,24 @@ void main() {
     test('UC-G2.5 · an nskey rotation mints fresh and carries nothing forward',
         () {
       provenIn('packages/at_client/test/nskey_rotation_test.dart',
+          'a lock loser publishes nothing and still rotates at the next ask',
+          proves: 'the loser path itself: the first ask meets a held lock, '
+              'returns false and publishes nothing; after the lock is released '
+              'the question is put a SECOND time against a fresh read and the '
+              'rotation happens. The always-yes policy is the control that '
+              'pass one refused because of the lock rather than because the '
+              'application declined',
+          clauses: ['put again at its next']);
+      provenIn('packages/at_client/test/nskey_rotation_test.dart',
+          'a lock loser that re-reads a fresher generation decides against it',
+          proves: 'the half that makes this convergence rather than retry - an '
+              'age-shaped policy whose second ask carries the WINNER\'s kid '
+              'and a later createdAt answers no, so nothing is published on '
+              'either pass. Without this arm the row would show only that a '
+              'loser eventually rotates, never that it can find the work '
+              'already done',
+          clauses: ['put again at its next']);
+      provenIn('packages/at_client/test/nskey_rotation_test.dart',
           'a rotation drops an algorithm this client no longer mints',
           proves: 'the removal, with the control drawn from the same rotate '
               'call: the superseded generation is asserted to have carried the '
@@ -448,6 +466,24 @@ void main() {
       // WHEN  a new operation runs, and separately an old record is read.
       // THEN  the retired entry is not selected for anything new, stays
       //       advertised, and what it produced still verifies or opens.
+      provenIn('packages/at_client/test/signing_key_minting_test.dart',
+          'a re-minted algorithm is advertised beside the key it replaced',
+          proves: 'the clause as written, on the shape that discriminates: a '
+              'SECOND mint, after a withdrawal. It asserts the republished '
+              'advertisement carries three entries - two active and one '
+              'retired - and that the retired one is the FIRST generation\'s '
+              'key. Its own reason names the mechanism: this is the publish '
+              'that re-reads the retired set rather than assuming it empty. A '
+              'single-mint arm cannot establish it, because there is nothing '
+              'earlier for a later mint to lose',
+          clauses: ['re-reads the withdrawn set']);
+      provenIn('packages/at_client/test/signing_key_minting_test.dart',
+          'advertises the retired key beside the new one',
+          proves: 'the because half - the advertisement and the keyfile name '
+              'one key, and its reason states what dropping the entry would '
+              'cost: it would unverify every envelope it signed, and the key '
+              'package it signed with it',
+          clauses: ['re-reads the withdrawn set']);
       provenIn(
         'packages/at_client/test/jws_envelope_test.dart',
         'an envelope signed by the retained key still verifies',
@@ -593,7 +629,11 @@ void main() {
             'signing with everything it holds. Mutation-proven: making the '
             'selector return only the strongest held key reddens the '
             'two-signature assertion by its own reason string and leaves the '
-            'control green',
+            'control green. It is ALSO c1: an advertisement naming one of the '
+            'two algorithms verifies a two-signature envelope, which is '
+            'strongestOf over the intersection with no floor applied - a '
+            'verifier declining what it implements would refuse it',
+        clauses: ['applies no floor to the result'],
         // ⛔ Clause fragments WITHDRAWN 2026-08-28. This pinned two clauses
         // about the two-signature overlap, and decisions.md 120 retired the
         // overlap: the three-step ladder replaces it, because double-signing
@@ -627,10 +667,30 @@ void main() {
           'a verifier sharing **no** algorithm with the envelope is refused',
         ],
       );
-      // ⛔ The rest of this row's clauses are UNPINNED because the lever they
-      // describe does not exist: there is no accepted-algorithms set anywhere
-      // in AtClientPreference, so a verifier cannot decline an algorithm it
-      // implements and nothing can assert that it does. See decisions.md 120.
+      // ⛔ c4 is UNPINNED because the lever it describes does not exist:
+      // there is no accepted-algorithms set anywhere in AtClientPreference, so
+      // there is no behaviour to assert. See decisions.md 120.
+      //
+      // ⚠️ That used to be said of c1 as well, and it was wrong: c1 states what
+      // the verifier DOES today - strongestOf over the intersection, no floor -
+      // which is why the two-signature citation above now pins it. The three
+      // absences that explain WHY it cannot decline moved to prose beneath the
+      // row, asserted by architecture_guard_test.dart's 'the verifier has no
+      // accept lever for signatures'. That guard is cited below WITHOUT a
+      // clauses list: it is a tripwire for the day the lever lands, not proof
+      // of a behaviour.
+      provenIn(
+          'packages/at_client/test/acceptance/architecture_guard_test.dart',
+          'the verifier has no accept lever for signatures',
+          proves: 'the absences the row rests on, read from source because the '
+              'absence of a code path is not something a run can witness: '
+              'verifyEnvelope takes no accept parameter, and the preference '
+              'class holds exactly six algorithm-typed fields, none of them an '
+              'accept side for signatures. Mutation-proven 2026-08-31 by '
+              'adding an acceptedAlgorithms parameter to verifyEnvelope, which '
+              'reddens it quoting its own reason. Deliberately NOT behavioural: '
+              'an assertion that the weaker algorithm is accepted would stay '
+              'green on the day the lever landed');
       //
       // The citations above are kept deliberately. They pin the multi-signature
       // WRITER as it stands, so they go red the day it is removed — which
@@ -644,6 +704,23 @@ void main() {
     });
 
     test('UC-G2.10 · the ladder across atSigns: safe through rollout 1', () {
+      provenIn('packages/at_client/test/ck_manager_test.dart',
+          'a narrowed writer seals to the algorithm it added to its own advertisement',
+          proves: 'the FIRST half - nothing refuses. A writer narrowed to the '
+              'algorithm it added to its own advertisement completes, writes '
+              'one conveyance and routes it to that entry, with the same '
+              'narrowing over an un-widened advertisement refused as the '
+              'control so the pass is a real choice rather than a fixture that '
+              'never refuses',
+          clauses: ['at a sibling install, on a record already written']);
+      provenIn('packages/at_client/test/nskey_ladder_refusal_test.dart',
+          'a sibling holding only the x-wing conveyance provider cannot open that record',
+          proves: 'the SECOND half - the failure really does surface later, at '
+              'a sibling install, on a record the writer already wrote. Cited '
+              'here as well as under UC-G2.11 because this clause asserts both '
+              'halves and the writer-side arm alone would leave the sibling '
+              'half claimed by nothing',
+          clauses: ['at a sibling install, on a record already written']);
       provenIn('packages/at_client/test/ck_manager_test.dart',
           'an algorithm added to the advertisement is nothing to re-seal',
           proves: 'the absence, COUNTED: ensureCurrent either side of a '
@@ -735,6 +812,30 @@ void main() {
     });
 
     test('UC-G2.11 · the ladder within one atSign: safe through rollout 1', () {
+      provenIn('packages/at_client/test/nskey_ladder_refusal_test.dart',
+          'a writer that seals only to ml-kem-1024 stamps the ml-kem conveyance provider',
+          proves: 'that an install past rollout 2 really does write under the '
+              'new algorithm alone - two writers over ONE generation and ONE '
+              'advertisement, differing only in sealsToKeyAlgorithms, stamp '
+              'different conveyance providers. Without this the refusal below '
+              'could be a record nobody sealed to the new entry at all',
+          clauses: ['is the ladder working']);
+      provenIn('packages/at_client/test/nskey_ladder_refusal_test.dart',
+          'a sibling holding only the x-wing conveyance provider cannot open that record',
+          proves: 'the refusal itself, from an install that genuinely LACKS '
+              'the capability rather than declining to use it: its CryptoConfig '
+              'registers the x-wing conveyance provider and not the ml-kem one, '
+              'and it holds every private the writer holds, so the only thing '
+              'it is short of is the build. It is refused by provider id, '
+              'naming what it lacks and what it has',
+          clauses: ['is the ladder working']);
+      provenIn('packages/at_client/test/nskey_ladder_refusal_test.dart',
+          'the control: the same sibling opens a record sealed to x-wing',
+          proves: 'that the refusal is a property of the ALGORITHM and not of '
+              'the sibling - the same install, the same get, opens a record '
+              'sealed to the entry it does hold. Without it an install that '
+              'failed at everything would satisfy the arm above',
+          clauses: ['is the ladder working']);
       // GIVEN @alice has two enrollments sharing a namespace. alice1 runs the
       //       app's ROLLOUT 1 build - mints both algorithms, seals only to the
       //       old. alice2 is still on the previous build.

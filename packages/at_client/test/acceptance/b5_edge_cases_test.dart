@@ -37,8 +37,17 @@ void main() {
             'seeker holding no root private asks, a holder answers over the '
             'envelope channel, and the private is filed into the seeker\'s '
             'keyfile byte-for-byte — with the seeker asserted to start with '
-            'nothing and the two enrollments asserted to differ',
+            'nothing and the two enrollments asserted to differ - which is '
+            'the asking half of "re-asked at every start until one does"',
+        clauses: ['is the steady-state path'],
       );
+      provenIn('packages/at_client/test/pq_signing_root_test.dart',
+          'an enrollment that already holds it asks nobody',
+          proves: 'the STOPPING half of the same arm: the every-start re-ask '
+              'is guarded only by whether this enrollment already holds the '
+              'private, so an enrollment that does asks nobody. Without it the '
+              'clause would read as an unbounded broadcast',
+          clauses: ['is the steady-state path']);
     });
 
     test('UC-B5.2 · reading legacy history after retrofit', () async {

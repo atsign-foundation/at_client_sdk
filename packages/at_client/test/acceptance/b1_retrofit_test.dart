@@ -119,7 +119,13 @@ void main() {
             'under the same (appName, deviceName); the clone mints no second '
             'root and leaves the published one byte-identical; and it acquires '
             'the private by asking the namespace, which files it into the '
-            'keyfile only after checking it corresponds to the published root',
+            'keyfile only after checking it corresponds to the published root. '
+            'It also asserts the clone\'s APKAM keypair is ML-DSA-65 - added '
+            '2026-08-31, because every other assertion here holds just as well '
+            'for a retrofit that ignored signingAlgo and minted RSA-2048 under '
+            'a distinct enrollment id, which is the one defect this row exists '
+            'to exclude',
+        clauses: ['never a second keypair under E1'],
       );
     });
 

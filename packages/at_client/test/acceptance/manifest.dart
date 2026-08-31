@@ -122,10 +122,10 @@ const liveProofExempt = <String, String>{
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 217;
+const provenClauseCount = 225;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 87;
+const serverProvenClauseCount = 90;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///
