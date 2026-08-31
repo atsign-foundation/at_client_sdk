@@ -1435,6 +1435,60 @@ void main() {
         expect(sharerA.secretStore.getSecret('myapp', successor)!.value,
             'SUCCESSOR');
       });
+
+      test(
+          'a surviving child of a revoked parent is still answered, by the '
+          'holder that just refused the parent', () async {
+        // The hazard, written as the behaviour it is rather than as a gap.
+        // A revoke names one enrollment id and reaches exactly that id.
+        // Nothing on this path knows what an enrollment spawned — there is no
+        // parent anywhere in what a holder can read — so the id below is a
+        // child only in the story, and the holder answering it could not tell
+        // the difference if it wanted to. That is the whole content: a lost
+        // keyfile is the case that can self-enroll before an operator gets to
+        // it, what it enrolls keeps `approved`, and roster membership is the
+        // only gate the serve path applies.
+        //
+        // The mutation that would redden the second half, named rather than
+        // applied: have the serve path refuse a requester whose roster entry
+        // names an excluded ancestor. The child would stop being served while
+        // the parent arm stayed green.
+        final child = buildSharer('enroll-a-child', seedC);
+        directory.authorize('myapp', 'enroll-a-child');
+        directory.seed('enroll-a-child', await child.register());
+
+        // Both ask while both are still approved, so the two arms differ in
+        // the revoke and in nothing else — and a revoked enrollment cannot
+        // authenticate, so an envelope it left behind is the realistic shape
+        // for the parent either way.
+        await sharerA.requestSecretsFromNamespace('myapp', names: [successor]);
+        await child.requestSecretsFromNamespace('myapp', names: [successor]);
+
+        directory.revoke('enroll-a');
+        final roster = await directory.listForNamespace('myapp');
+        expect(roster.map((m) => m.enrollmentId),
+            unorderedEquals(['enroll-b', 'enroll-a-child']),
+            reason: 'the premise: one revoke takes one id off the roster and '
+                'leaves what that id spawned on it');
+
+        expect(await sharerB.sweepOnce(), 2,
+            reason: 'one holder, one pass, both requests — the arms are '
+                'resolved against the same roster or they are not comparable');
+        // Both requesters sweep, so "nothing arrived" is a measurement rather
+        // than a client that never looked.
+        await sharerA.sweepOnce();
+        await child.sweepOnce();
+
+        expect(sharerA.secretStore.getSecret('myapp', successor), isNull,
+            reason: 'the refusal the arm above already holds, re-established '
+                'here so the two results come from one run');
+        expect(
+            child.secretStore.getSecret('myapp', successor)!.value, 'SUCCESSOR',
+            reason: 'and the descendant is handed the generation the '
+                'revocation was meant to cut off: excluding the parent from a '
+                'rotation buys nothing while what it spawned can pull the '
+                'successor from any holder that never heard of either');
+      });
     });
 
     test('requestSecret convenience resolves the single named secret',

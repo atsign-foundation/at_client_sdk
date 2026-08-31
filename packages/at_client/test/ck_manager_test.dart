@@ -1,5 +1,6 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -31,6 +32,35 @@ class InMemoryCkPointer extends CurrentCkPointer {
       _remembered['$owner|$ckNs'] = (ckKid: ckKid, nskeyKid: nskeyKid);
 }
 
+/// An [InMemoryNskeyKeyRing] whose advertisement for a namespace can gain a
+/// second algorithm's entry after the fact.
+///
+/// Seeding cannot produce one: it writes single-key generations, which is all a
+/// mint produces. Widening retains the entry already published and the
+/// generation's own mint time, because that is what putting another algorithm
+/// into a live generation means — replacing either would be a rotation, and
+/// every record sealed to the old entry would need conveying again.
+class _WidenableRing extends InMemoryNskeyKeyRing {
+  final Map<String, NskeyAdvertisement> _widened = {};
+
+  /// Republish `(owner, namespace)` carrying [added] beside what it already
+  /// advertises, listed **first** — where a reader walking the record's own
+  /// order rather than its own preference would find it.
+  Future<void> widen(String owner, String namespace, PackageKey added) async {
+    final published = (await super.currentPublic(owner, namespace))!;
+    _widened['$owner|$namespace'] = NskeyAdvertisement(
+        v: published.v,
+        createdAt: published.createdAt,
+        keys: [added, ...published.keys]);
+  }
+
+  @override
+  Future<NskeyAdvertisement?> currentPublic(
+          String owner, String namespace) async =>
+      _widened['$owner|$namespace'] ??
+      await super.currentPublic(owner, namespace);
+}
+
 void main() {
   const owner = '@alice';
   const bob = '@bob';
@@ -52,6 +82,10 @@ void main() {
   /// [failWrites] makes the first N conveyance writes fail *after* the record
   /// has been encrypted — the real shape of the hazard, since encryption
   /// happens in the put transformer and the write is issued after it.
+  ///
+  /// [keyRing] replaces the ring the fixture would build, for the cases that
+  /// need an advertisement seeding cannot produce — one carrying more than one
+  /// algorithm's entry.
   ({
     CkManager manager,
     CryptoContext context,
@@ -69,13 +103,14 @@ void main() {
   }) client(
       {int failWrites = 0,
       bool failDeletes = false,
+      InMemoryNskeyKeyRing? keyRing,
       CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek}) {
     var writesLeftToFail = failWrites;
     // A fixed, unmistakable date: an assertion that matched `now` would pass
     // whether the age came from the record or from this device's clock.
     final conveyanceCreatedAt = DateTime.utc(2026, 3, 4, 5, 6, 7);
     final cache = ContentKeyCache();
-    final ring = InMemoryNskeyKeyRing();
+    final ring = keyRing ?? InMemoryNskeyKeyRing();
     final nskey = NskeyProvider(keyRing: ring, cache: cache);
     final pointer = InMemoryCkPointer();
     final manager = CkManager(
@@ -274,6 +309,123 @@ void main() {
           reason: 'sealing to a superseded generation is what a revoked '
               'enrollment can still open — the re-check is the whole point');
       expect(c.cache.currentNskeyKid(owner, namespace), secondGen);
+    });
+
+    test('an algorithm added to the advertisement is nothing to re-seal',
+        () async {
+      // The publishing side of a widening, and an ABSENCE: the atSign that
+      // owns the namespace key has put a second algorithm into the generation
+      // it advertises, and from that moment it writes nothing further. No
+      // fresh content key, no second conveyance, and no change to the
+      // generation its values are sealed under. That is what lets a sender
+      // upgrade whenever it likes — the publisher never learns whether one
+      // did, because nothing about the wider record reaches its write path.
+      //
+      // Counted over THIS client alone, which is the whole claim. A sibling
+      // enrollment that missed the push does pull the added private at its
+      // next start, by design, and counting that would read correct behaviour
+      // as a violation.
+      //
+      // Break it by making NskeyAdvertisement.bestKeyFor iterate `keys` outer
+      // instead of `supportedAlgos` outer: the added entry is listed first, so
+      // it becomes the resolved one, the advertised kid moves, the
+      // already-current guard misses, and a second __ck is cut and written.
+      final ring = _WidenableRing();
+      final c = client(keyRing: ring);
+      ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      final published = (await ring.currentPublic(owner, namespace))!;
+
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final ckKid = c.cache.current(owner, namespace)!.ckKid;
+      final sealedTo = c.cache.currentNskeyKid(owner, namespace);
+
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final second = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      final added = PackageKey.fromBytes(
+          use: SecretSharingAlgos.useEnc,
+          alg: SecretSharingAlgos.mlKem1024,
+          pub: second.publicKey);
+      await ring.widen(owner, namespace, added);
+
+      // The control — the three checks here say the widening actually landed,
+      // and all three stay green under the mutation named above while the
+      // three assertions at the end of the test go red. A widen that quietly
+      // did nothing would leave every absence below true of an advertisement
+      // that never changed.
+      final republished = (await ring.currentPublic(owner, namespace))!;
+      expect(republished.keys.map((k) => k.alg),
+          [SecretSharingAlgos.mlKem1024, SecretSharingAlgos.xWing]);
+      expect(republished.keys.last.kid, sealedTo);
+      expect(republished.createdAt, published.createdAt,
+          reason: 'an ADD rather than a re-mint: the entry already published '
+              'and the generation\'s own mint time both survive it, which is '
+              'what separates widening from rotating');
+
+      await c.manager.ensureCurrent(c.context, selfValue('other'));
+
+      expect(c.written, hasLength(1),
+          reason: 'the conveyance from before the widening is still the only '
+              'one — an added algorithm gives the publisher nothing to '
+              're-seal and nobody to re-convey to');
+      expect(c.cache.current(owner, namespace)!.ckKid, ckKid,
+          reason: 'and values written after it encrypt under the content key '
+              'that was already current');
+      expect(c.cache.currentNskeyKid(owner, namespace), sealedTo,
+          reason: 'sealed to the entry it was sealed to before, so nothing in '
+              'this client\'s own state records that its advertisement grew');
+    });
+
+    test('a restart after the widening resumes rather than cutting another',
+        () async {
+      // The durable half of the same absence. What a client remembers about a
+      // destination is a generation kid, and the widened advertisement must
+      // still resolve to it: a publisher that restarted after publishing the
+      // wider record and then refused its own pointer would cut a fresh
+      // content key and convey it — exactly the something-further this does
+      // not do, and the arm above reads only an in-memory cache.
+      //
+      // The same mutation reaches it by a different route: with `keys` outer
+      // the resolved kid is the added entry's, the remembered kid is the one
+      // the conveyance was sealed to, and the resume rejects the pointer as
+      // naming a generation the destination has moved off.
+      final ring = _WidenableRing();
+      final c = client(keyRing: ring);
+      ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      final valueKey = selfValue('treaty');
+
+      await c.manager.ensureCurrent(c.context, valueKey);
+      final ckKid = c.cache.current(owner, namespace)!.ckKid;
+
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final second = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      await ring.widen(
+          owner,
+          namespace,
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.mlKem1024,
+              pub: second.publicKey));
+      expect((await ring.currentPublic(owner, namespace))!.keys, hasLength(2),
+          reason: 'the control: the record really did gain an entry, so the '
+              'absence below is measured against a widening rather than '
+              'against a ring that ignored the call');
+
+      // Same durable state, empty cache — a restart, with the wider
+      // advertisement now the one it reads.
+      final cold = c.coldManager(ContentKeyCache());
+      await cold.ensureCurrent(c.context, valueKey);
+
+      expect(c.written, hasLength(1),
+          reason: 'the pointer still names a generation the advertisement '
+              'offers, so the CK it was already writing under is recovered '
+              'from its own conveyance record rather than replaced');
+      expect(cold.cache.current(owner, namespace)!.ckKid, ckKid,
+          reason: 'and it is the same key, so nothing written before the '
+              'widening needs a second conveyance to stay readable');
     });
 
     test('the default policy leaves a fresh content key alone', () async {

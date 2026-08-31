@@ -609,6 +609,102 @@ void main() {
       expect(first.keys, isNotEmpty, reason: 'the positive control');
     });
 
+    test('a rotation drops an algorithm this client no longer mints', () async {
+      // The removal half of fresh-only. Everywhere else in this file the
+      // configured set either stays constant — the arm above rotates under
+      // two algorithms and asserts the successor names the same two — or
+      // widens, which is what the add lever does. Neither can tell a rotation
+      // that rebuilds the advertisement from the preference apart from one
+      // that rebuilds it from the generation it is superseding.
+      //
+      // Nothing decides to remove an entry: `rotate` prepares its mint with
+      // nothing retained, so the successor is exactly what this client's
+      // configured set produced, and an algorithm that set no longer names is
+      // simply not in it.
+      //
+      // ⚠️ The drop is decided by THIS client's configuration alone. A sibling
+      // still configured for ml-kem-1024 puts it straight back through the add
+      // lever, which its startup seeding reaches for any namespace already
+      // published — so what this asserts is the removal, not that the fleet
+      // has finished with the algorithm.
+      //
+      // What it discriminates against: preparing the rotation's mint with
+      // `retaining: superseded.keys.where((k) =>
+      // !wantedKeyAlgorithms().contains(k.alg)).toList()` — a plausible "do
+      // not strand a peer mid-rollout" feature — carries the dropped entry
+      // into the successor. It reddens this arm and the one below it, while
+      // every rotation arm here that holds the algorithm set constant stays
+      // green.
+      final c = client(keyEstablishmentAlgorithms: const [
+        SecretSharingAlgos.xWing,
+        SecretSharingAlgos.mlKem1024,
+      ]);
+      final ring =
+          PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+      await ring.mintAndPublish(namespace);
+
+      c.configure(const [SecretSharingAlgos.xWing]);
+      final rotation = await ring.rotate(namespace);
+
+      expect(rotation.superseded.keys.map((k) => k.alg),
+          contains(SecretSharingAlgos.mlKem1024),
+          reason: 'the control, and it can go red while the assertion below '
+              'stays green: a ring that never minted ml-kem-1024 at all would '
+              'satisfy every absence here with nothing having been dropped');
+      expect(rotation.rotated.keys.map((k) => k.alg).toList(),
+          [SecretSharingAlgos.xWing],
+          reason: 'the successor holds what this client\'s configured set '
+              'minted and nothing else, so narrowing that set is the whole of '
+              'what takes an algorithm out of the advertisement');
+      expect(rotation.rotated.suites,
+          isNot(contains(SecretSharingAlgos.mlKem1024Rfc9180)),
+          reason: 'and what the atSign says it can open narrows with the keys '
+              'it holds, since suites is derived from them — a successor still '
+              'naming the dropped construction would offer to open something '
+              'no key in the generation can');
+    });
+
+    test('an algorithm a rotation dropped is not added back', () async {
+      // The other half of the same lever. What puts an algorithm into a
+      // generation is `add`, and the set it works from is
+      // `wantedKeyAlgorithms()` — this client's own preference — so an
+      // algorithm the preference no longer names is not missing from the
+      // generation, it is gone from it.
+      //
+      // What it discriminates against: computing the missing set from the
+      // union of the preference and whatever the superseded generation named,
+      // which would re-mint ml-kem-1024 on the first add after the rotation
+      // and undo the removal with nothing having asked for it.
+      final c = client(keyEstablishmentAlgorithms: const [
+        SecretSharingAlgos.xWing,
+        SecretSharingAlgos.mlKem1024,
+      ]);
+      final ring =
+          PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+      final first = await ring.mintAndPublish(namespace);
+      expect(
+          first.keys.map((k) => k.alg), contains(SecretSharingAlgos.mlKem1024),
+          reason: 'the control: with ml-kem-1024 never minted the rotation '
+              'drops nothing and there is nothing for the add to put back');
+
+      c.configure(const [SecretSharingAlgos.xWing]);
+      final rotated = (await ring.rotate(namespace)).rotated;
+      final publishes = c.trace.where((t) => t.startsWith('publish')).length;
+
+      final again = await ring.add(namespace);
+
+      expect(again!.keys.map((k) => k.alg),
+          isNot(contains(SecretSharingAlgos.mlKem1024)));
+      expect(again.keys.map((k) => k.kid).toList(),
+          rotated.keys.map((k) => k.kid).toList(),
+          reason: 'the generation comes back unchanged — the same entries, and '
+              'no entry for the algorithm the rotation dropped');
+      expect(c.trace.where((t) => t.startsWith('publish')).length, publishes,
+          reason: 'and the record is not rewritten: an add that found '
+              'something missing would publish, and every rewrite is a chance '
+              'for a concurrent rotation to be rolled back');
+    });
+
     test('an unmintable set never reaches the mint — the preference refuses it',
         () {
       // Where the guard lives, asserted so the ring's absence of one is a

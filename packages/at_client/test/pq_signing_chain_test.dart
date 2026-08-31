@@ -133,6 +133,64 @@ void main() {
     expect(read!.signerEnrollmentId, 'parent-1');
   });
 
+  test('a republish silently leaves the enrollment unsigned', () async {
+    // The converse of the row above. There the link is written and the value
+    // is carried over untouched; here the value is written and the link is
+    // not carried, because the two live on one record and the key publisher
+    // sends the value alone. Whenever what is published differs from what
+    // the client holds it rewrites the record, and the link that vouched for
+    // this enrollment goes with it — no party withdrew it and nothing says
+    // it is gone.
+    //
+    // The mutation that reddens this: have `publishPublicSigningKeyLocked`
+    // read the existing record's `appMetadata` and carry it onto its put.
+    // The link would survive the republish. Named, not applied.
+    final parentClient = client('parent-1');
+    final parent = await registered(parentClient);
+    final childClient = client('child-1');
+    final child = await registered(childClient);
+
+    final uri = PqSigningChain.apskUri(atSign, 'child-1');
+    final published = remoteData[uri]!;
+
+    final link =
+        await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+    await PqSigningChain(childClient).publishLink('child-1', link!);
+    expect(await PqSigningChain(childClient).readLink('child-1'), isNotNull,
+        reason: 'the setup has to leave a real link on the record, or every '
+            'assertion below passes on there being nothing to discard');
+
+    // The control: the same call with the record and the client agreeing. It
+    // writes nothing, so nothing is discarded — without this arm a fixture
+    // that never carried a link at all would satisfy the assertion below.
+    await child.publishPublicSigningKey();
+    expect(await PqSigningChain(childClient).readLink('child-1'), isNotNull,
+        reason: 'a publisher that writes nothing can discard nothing');
+
+    // And the arm where they disagree, which is what an `enroll:update`
+    // carrying fresh signing material leaves behind. The replacement is
+    // another registered enrollment's genuine `_apsk` rather than a
+    // manufactured string, so the republish cannot be explained by the
+    // record holding something no reader could parse.
+    await registered(client('donor-1'));
+    final drifted = remoteData[PqSigningChain.apskUri(atSign, 'donor-1')]!;
+    expect(drifted, isNot(published),
+        reason: 'differential guard: two enrollments publishing one key '
+            'would leave nothing to republish, and both arms would be the '
+            'control');
+    remoteData[uri] = drifted;
+
+    await child.publishPublicSigningKey();
+
+    expect(remoteData[uri], published,
+        reason: 'the republish is what happened: the record carries what '
+            'this client holds again');
+    expect(await PqSigningChain(childClient).readLink('child-1'), isNull,
+        reason: 'and the link went with it. Nothing about the approval '
+            'changed, but the enrollment now reads to every verifier as one '
+            'nobody ever vouched for');
+  });
+
   test('a published link verifies against the parent it names', () async {
     final parentClient = client('parent-1');
     final parent = await registered(parentClient);
