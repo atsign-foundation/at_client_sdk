@@ -5,7 +5,8 @@ import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
-import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
+import 'package:at_commons/at_commons.dart'
+    show AtSigningVerificationException, AtValueException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
@@ -142,7 +143,21 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
         ?.executeCommand('enroll:listns:$namespace\n', auth: true);
     final decoded = _data(raw);
     if (decoded is! List) {
-      return const [];
+      // An unrecognised shape and an empty namespace are NOT the same outcome,
+      // and returning the empty list for both makes them indistinguishable to
+      // every caller. The roster decides who a secret is conveyed to and who a
+      // holder will serve, so an empty one silently withholds key material from
+      // everyone rather than failing. Logged at severe because nothing retries
+      // this and nothing else will notice.
+      _logger.severe('enroll:listns for $namespace returned a shape this build '
+          'does not understand (${decoded.runtimeType}), so no member could be '
+          'read. Treating it as an empty roster would withhold key material '
+          'from every member of the namespace');
+      // AtValueException rather than AtEnrollmentException: the latter extends
+      // AtException rather than AtClientException, so an application catching
+      // AtClientException around a read would miss it.
+      throw AtValueException('enroll:listns for $namespace returned a '
+          '${decoded.runtimeType} where a list of members was expected');
     }
     final members = <NamespaceMember>[];
     for (final e in decoded) {

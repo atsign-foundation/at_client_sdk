@@ -3815,10 +3815,14 @@ is where its missing lever lives.
     affecting this namespace**, and a rotation is owed when that is later than
     the moment this namespace's advertisement was last **rotated**. Both are
     stamped by the atServer, so no two clocks are compared.
-    ⛔ **HOW that moment is reported is REOPENED.** This said `enroll:listns`
-    would carry it as a derived scalar; gkc reported that not feasible on
-    2026-08-31 and at_server is proposing an alternative. What the clause needs
-    is unchanged — per namespace, and readable by a client without `__manage`. Such a rotation is
+    ⚠️ **The moment is reported by `enroll:infons:<namespace>`**, a read verb
+    beside `enroll:listns` taking the same authorisation and returning a map
+    whose `lastRevokedAt` is always present, null when there has been none.
+    `enroll:listns` is unchanged — its returning approved enrollments only is
+    what ruling 129's safety rests on. This clause first said listns would carry
+    the value as a field on every roster row; that was reported infeasible, and
+    the reason is that a roster is a list of members while the last revocation
+    affecting a namespace is not a fact about any member. Such a rotation is
     **unconditional** — it does not ask `NskeyRotationPolicy`. The application
     asking is the other cause, and that one is the policy's;
 

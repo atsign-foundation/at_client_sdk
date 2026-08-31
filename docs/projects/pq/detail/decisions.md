@@ -13481,14 +13481,31 @@ everybody.
    the record reads `revoked`. ⚠️ **The cost is accepted rather than absent:**
    if the revoke was a genuine compromise and the un-revoke a mistake, a
    rotation that was owed is silently dropped. Un-revoke means *false alarm*.
-3. ⛔ **HOW a client learns of it is REOPENED as of 2026-08-31.** This ruling
-   said `enroll:listns` would carry a derived scalar — the latest `revokedAt`
-   among enrollments that held the namespace being listed — and gkc has since
-   reported that **not feasible**; at_server is proposing an alternative. What is
-   settled and survives whatever replaces it: the client must be able to learn,
-   **per namespace and without `__manage`**, the latest moment a revocation
-   touched an enrollment granted that namespace. Everything else in this ruling
-   stands.
+3. **A client learns of it through a new verb, `enroll:infons:<namespace>`** —
+   "info about a namespace" — which returns a JSON **map** of facts about the
+   namespace. Its first member is `lastRevokedAt`: the latest moment a revocation
+   touched an enrollment granted that namespace, **always present, null when
+   there has been none**. Gated identically to `enroll:listns`, through one
+   shared function rather than two copies, so what a caller may learn *about* a
+   namespace and who it may learn *holds* it cannot drift apart.
+   ⛔ **`enroll:listns` is byte-identical to before**, and that is not incidental:
+   its returning approved enrollments only is what
+   [129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)'s
+   safety rests on. Widening the roster would move that property out of the
+   server's filter and into every caller.
+   ⚠️ **This first ruled a derived scalar on `enroll:listns` itself, and that was
+   reported infeasible.** The reason it was the wrong shape is worth keeping: a
+   roster is a list of *members*, and the last revocation affecting a namespace
+   is not a fact about any member — carrying it there meant repeating one value
+   on every row under a name apologising for where it lived. When the data model
+   has to be contorted and the field name has to apologise, the container is
+   wrong. A map also extends, and a client wanting only the scalar stops having
+   to pull every member's key package on every startup check.
+   ⚠️ **The verb token is at_client_sdk's to ship**, in at_commons **5.17.0** —
+   5.16.0 was already published, so it is a new heading rather than a fold. Until
+   that publishes, at_server runs a local override that inserts into the upstream
+   pattern rather than copying it, with a tripwire test that goes red the day a
+   published at_commons defines `infons`.
    ⛔ **The roster is NOT widened.** `enroll:listns` goes on returning approved
    enrollments only; the response gains one field. Widening it to all statuses
    would move [129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)'s
