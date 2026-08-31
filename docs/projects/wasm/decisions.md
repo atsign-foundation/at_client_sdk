@@ -40,6 +40,33 @@ is neither. D-3 accepts that cost deliberately.
 **Scope.** Applies to `at_client`, `at_lookup`, `at_utils`, `at_chops` and
 `at_server_status`. `at_auth` is governed by the PQ program (§5, OQ-1).
 
+**Amended 2026-08-27 — one shipped exception, and the reason it is not a precedent.**
+`at_auth` 4.0.0-rc1 ([#2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179))
+ships `lib/src/auth/probe_default.dart`, a conditional export selecting the reachability
+probe: `probe_default_web.dart`, or `probe_default_io.dart` under `dart.library.io`.
+
+It stands, because the premise of this ruling does not hold for it. D-1 rejects
+conditionals on the grounds that the non-native branch is a stub. Here **both branches are
+real implementations, and the choice is not substitutable**: an atServer answers an HTTP
+GET only when the TLS handshake negotiates `http/1.1` over ALPN, which a browser does as a
+matter of course and `package:http`'s VM client does not — the same GET on the VM lands on
+the atServer's line protocol and comes back `@error:AT0003`. A TLS handshake is what is
+available under `dart:io`, and it is sufficient there. Injection is still offered:
+a caller wanting the other probe, or any other, sets `probeSocket`.
+
+What this costs. The ban specified as [`acceptance.md`](acceptance.md) T0.3 is withdrawn —
+it would have had to allow-list the one construct it exists to forbid, on the day it was
+written. T0.3 is restated as an audit requirement instead: a conditional in a gated
+package must have **both** branches walked: the web branch by the ratchet, the native
+branch by a `control`, which resolves with io semantics. Without that second half the
+ratchet reads green just as convincingly when the conditional was skipped and neither
+branch was seen.
+
+The construct remains discouraged, and the burden stays on the conditional: two real
+implementations, a documented reason why one cannot serve both platforms, an injection
+escape hatch, and a control. Anything short of that is the stub case, and D-1 still
+refuses it.
+
 ### D-2 — No throwing stubs (2026-08-13)
 
 **A capability a platform lacks must be unreachable there, not reachable-and-explosive.**
@@ -243,9 +270,9 @@ is exactly **compiles clean, throws at runtime**.
 ### 2.3 A runtime gate is available today without a browser
 
 `dart test -p node -c dart2wasm` runs green, including an assertion that
-`dart.library.io` is false. This makes [`acceptance.md`](acceptance.md) T2 a
-zero-infrastructure CI addition, and it was the reason T2 could be specified as a gate
-rather than as an aspiration.
+`dart.library.io` is false. This was the reason T2 could be specified as a gate rather
+than as an aspiration. The "zero-infrastructure CI addition" this section originally
+claimed did not survive contact with a hosted runner — see §2.7.
 
 `dart test -p chrome -c dart2wasm` compiles the module correctly but was **not observed
 executing** — no Chrome binary in the development environment. T3 must be validated on
@@ -321,6 +348,28 @@ mocktail unit tests against `MockAtClient`; nothing in `tests/at_functional_test
 surface unstable/0.x on this basis — attributed to the gap in *this project's* boundary
 validation, not to a dispute of upstream's stability contract.
 
+### 2.7 T2 runs locally and cannot run on a hosted runner (2026-08-27)
+
+Measured while wiring Phase 0's CI jobs.
+
+**The blocker.** On GitHub's `ubuntu-latest`, every `dart test -p node -c dart2wasm`
+suite fails to load before any test body executes: the CJS bootstrap calls `instantiate`
+from the ESM `.mjs` init file and receives `undefined`. The identical command passes on
+Dart 3.12 + Node 24 locally. Neither version is pinned in
+`.github/workflows/at_libraries.yaml`, so a failure in CI would be reporting a toolchain
+mismatch rather than anything about this codebase — which is why T2 is absent from CI
+rather than present and allowed-to-fail. An allowed-to-fail job that has never once passed
+teaches a reader to ignore it.
+
+**Two mechanics for whoever pins the pair.** `dart2wasm` emits one wasm module per test
+*file*, so `--concurrency=1` is the wrong lever — it serialises the compilations that
+dominate the wall clock without reducing the module count. And `Uri.base` throws under
+dart2wasm on Node; code reachable from a suite cannot read it.
+
+**What this does not say.** Nothing about whether our code is correct under WasmGC. The
+suites that ran locally are evidence for the paths they touch; the gap between that and
+CI is a scheduling fact, not a finding.
+
 ---
 
 ## 3. Superseded positions
@@ -336,18 +385,30 @@ validation, not to a dispute of upstream's stability contract.
 | Tasks I4–I8 (the `at_auth` sweep)                                                                       | Removed — owned by the PQ program's S-5/S-6.                                                        |
 
 The predecessor `plan.md` is deleted rather than left in place, because its §1
-constraint table and its A1/A2 gates are actively misleading. It remains in git history
-at `33a062a61`; the material worth keeping — the persistence analysis, the `sqlite3`
-compile validation, the storage-backend comparison, the B-series browser gates — is
-carried into [`design.md`](design.md) and [`acceptance.md`](acceptance.md).
+constraint table and its A1/A2 gates are actively misleading. It remains in git history at
+`d3e7dcdd5`, the commit that added it. The material worth keeping — the persistence
+analysis, the `sqlite3` compile validation, the storage-backend comparison, the B-series
+browser gates — is carried into [`design.md`](design.md) and
+[`acceptance.md`](acceptance.md).
 
-**Merge-time follow-up.** Four references to `docs/projects/wasm/plan.md` live on the
-`at_client_sdk-atauth-wasm` branch and will dangle when both land —
-`packages/at_auth/lib/at_auth_web.dart:23`, `packages/at_auth/CHANGELOG.md:51`,
-`packages/at_auth/README.md:62`, and `packages/at_auth/test/wasm/dep_tree_test.dart:52`.
-Repoint them at [`roadmap.md`](roadmap.md), or at
-[`implementation-plan.md`](implementation-plan.md) for the `dep_tree_test.dart` case
-(its comment refers to the task backlog).
+The file was still present until 2026-08-27, despite this section having asserted its
+deletion since 2026-08-13, and the `33a062a61` named here as the recovery point is the
+trunk commit the plan was *written against* — it never held the file.
+
+### Positions from *this* doc set that have since been withdrawn
+
+| Position                                                                                       | Status                                                                                                                         |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| T0.2's **two-way** ratchet — a loosened baseline fails and demands an edit                     | Shipped **one-way**. A fix passes with no edit here; only tightening ever requires one. [`acceptance.md`](acceptance.md) T0.2. |
+| T0.3's ban on `if (dart.library.` in a neutral `lib/`                                          | Withdrawn — D-1's amendment above. Restated as: both branches of a conditional must be walked.                                 |
+| R5 — add the `dart test -p node -c dart2wasm` matrix dimension, allowed-to-fail                | Withdrawn. The hosted runner cannot load a suite at all; waits on a pinned Dart/Node pair. §2.7.                               |
+| R1's plan to lift `packages/at_auth/test/wasm/dep_tree_test.dart` into a shared *test* utility | Shipped as a standalone CLI, `tools/wasm_shakedown`, run as its own CI job rather than as a per-package test.                  |
+
+**Resolved.** A prior merge-time follow-up here tracked four references to
+`docs/projects/wasm/plan.md` on the `at_client_sdk-atauth-wasm` branch. None reached trunk:
+`at_auth_web.dart` and `test/wasm/` were never landed, at_auth 4.0.0-rc1 shipped
+`at_auth_io.dart` and `wasm_barrel_test.dart` instead, and no reference to the deleted
+`plan.md` survives anywhere outside this directory.
 
 ---
 
@@ -382,14 +443,17 @@ was written. Neither affects the analysis.
 
 ## 5. Open questions
 
-**OQ-1 — Does `at_auth` ship a conditional default or a removed one?**
-The `at_client_sdk-atauth-wasm` worktree prototypes a *conditional* default
-(`at_auth_impl.dart:19-20`, `src/io/defaults_stub.dart` returning null on web), while
-`../pq/design.md` §4 specifies a *removed* default requiring injection. The prototype's
-stub returns null rather than throwing, so it does not violate D-2 — but it does
-violate D-1. Since the PQ program owns `at_auth`, this project raises the
-inconsistency rather than resolving it. Resolve with S-5 before it sets a precedent the
-rest of the sweep copies.
+**OQ-1 — Does `at_auth` ship a conditional default or a removed one? RESOLVED
+2026-08-27: both, on different axes.** at_auth 4.0.0-rc1 shipped the *removed* default
+where the question was originally asked — `FileAtKeysIo` is gone from `at_auth.dart`, and
+the filesystem, raw-socket and `dart:io` HTTP code moved to `at_auth_io.dart`. It also
+shipped one *conditional* default the prototype did not have: the reachability probe in
+`probe_default.dart`. Neither the prototype's `src/io/defaults_stub.dart` nor
+`at_auth_web.dart` exists on trunk.
+
+So the inconsistency this question raised is settled, and not by either of the two answers
+it offered. The ruling is recorded against D-1 above: the conditional stands on the
+narrow ground that both of its branches are real, and it costs T0.3 its ban.
 
 **OQ-2 — Do the `_io` barrels ship in the same major as the interface change, or one
 release ahead?** Shipping the barrel first lets consumers migrate their imports before
@@ -467,3 +531,7 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-18 | `plans/wasm/api-designing.md` written: the three-layer Dart facade split (Layer A/B/C) and the Axis A/B/C reference-SDK survey. `plans/wasm/key-storage.md` written, depending on the split. |
 | 2026-08-18 | Measured the collections API's write/read asymmetry (§2.6, F1–F12) against `packages/at_client/lib/src/collections/collections.dart`. |
 | 2026-08-18 | **D-9 amended, D-10 and D-11 ruled.** Collections (`AtCollection<T>`) become the sole JS/TS data plane; the flat key/value plane from the original §5.2 is removed, not deprecated in place. The Dart gear is typed via a declared `typeTag`; app types are never compiled into `at_client_web`. Write-compatibility with typed Dart peers is left open pending an upstream `writeTypeTag` or a bounded carrier-class shim (JS-7). `js-api.md` §5–§11 rewritten to match; `plans/wasm/api-designing.md` §2.3/§2.4/§2.6 rewritten for the collections-shaped Layer B. JS-2 resolved; JS-8 (the `AtClientManager` singleton blocking multi-instance clients) recorded. |
+| 2026-08-24 | **Phase 0 landed** ([#2149](https://github.com/atsign-foundation/at_client_sdk/pull/2149)). The dependency-tree walk ships as `tools/wasm_shakedown` — a standalone CLI with its own test suite, not a per-package test as R1 specified — wired into `.github/workflows/at_libraries.yaml` as a hard gate. `at_chops` gated first. |
+| 2026-08-25 | at_auth 4.0.0-rc1 ([#2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179)), the PQ program's S-5: the `at_auth_io.dart` barrel split, `FileAtKeysIo` default dropped, registrar onto `package:http`. Ships one conditional export (`probe_default.dart`). |
+| 2026-08-27 | **Phase 0 matured** ([#2183](https://github.com/atsign-foundation/at_client_sdk/pull/2183)). Gate config extracted to `.github/wasm_gates.yaml`; `controls` made mandatory; `at_auth` gated. **T0.2's two-way ratchet withdrawn** for one-way baselines, **T0.3's no-conditionals ban withdrawn** and restated as a both-branches-walked requirement (D-1 amended, OQ-1 resolved), **R5 withdrawn** — T2 cannot run on a hosted runner (§2.7). T0.4 remains unimplemented. |
+| 2026-08-27 | Phase 1 in review as a three-PR stack: [#2162](https://github.com/atsign-foundation/at_client_sdk/pull/2162) (S4–S6) ready, [#2163](https://github.com/atsign-foundation/at_client_sdk/pull/2163) (S1, S2) and [#2164](https://github.com/atsign-foundation/at_client_sdk/pull/2164) (S3) draft. `plan.md` deleted, as §3 had asserted since 2026-08-13. |
