@@ -170,8 +170,23 @@ class EnvelopeSignature {
   /// Null when the header names none, which [verifyEnvelope] refuses.
   String? get alg => header['alg'] is String ? header['alg'] as String : null;
 
-  /// The signer's enrollment-id claim, or null when it makes none.
+  /// The signing KEY this signature was made with — JOSE's own meaning for
+  /// `kid`, and the entry to look up in the signer's `_apsk`.
+  ///
+  /// A kid is `SHA256(publicKey)` truncated, so it can be checked against the
+  /// key it names. It is not covered by the signature and does not need to be:
+  /// a tampered one narrows to the wrong key or to none, and the signature
+  /// then fails on its own.
   String? get kid => header['kid'] is String ? header['kid'] as String : null;
+
+  /// The signer's enrollment-id claim, or null when it makes none — a
+  /// connection holding no enrollment id publishes at `_apsk.primary`.
+  ///
+  /// Separate from [kid] because the two answer different questions: [enid]
+  /// says whose advertisement to fetch, [kid] says which entry of it to use.
+  /// A verifier needs the first before it can do anything with the second.
+  String? get enid =>
+      header['enid'] is String ? header['enid'] as String : null;
 
   /// What this signature was made **for** — the [EnvelopeType.typ] the signer
   /// stamped. Null when the header names none, which [verifyEnvelope] refuses:
@@ -281,7 +296,7 @@ class SignedEnvelope {
   /// The claim is under the signature, so it cannot be edited in flight. It
   /// is still a *claim*: what makes it true is the signature verifying
   /// against the named enrollment's own `_apsk`.
-  String? get signerEnrollmentId => signature.kid;
+  String? get signerEnrollmentId => signature.enid;
 
   /// The payload, decoded.
   ///
@@ -320,11 +335,14 @@ class SignedEnvelope {
     // on a signer whose signature was never the one checked. Refused here
     // rather than at verify, because an envelope claiming two signers is not
     // this shape at all.
-    final kids = {for (final s in parsed) s.kid};
-    if (kids.length > 1) {
+    // Over `enid`, NOT `kid`: an envelope signed under two algorithms carries
+    // a different KEY per entry by construction, so comparing kids here would
+    // refuse every overlap envelope. What must not differ is the signer.
+    final enids = {for (final s in parsed) s.enid};
+    if (enids.length > 1) {
       throw AtSigningVerificationException(
           'an envelope carries one signer\'s signatures, and this one names '
-          '${kids.map((k) => '"$k"').join(', ')} — refusing rather than '
+          '${enids.map((e) => '"$e"').join(', ')} — refusing rather than '
           'verifying under one of them and reporting another');
     }
     // Every entry signs one document, so every entry must say the document is
@@ -500,7 +518,12 @@ Map<String, String> _signatureOver(
   final protectedB64 = _base64UrlUnpadded(utf8.encode(jsonEncode({
     'alg': alg,
     'typ': type.typ,
-    if (enrollmentId != null) 'kid': enrollmentId,
+    // `kid` names the KEY, which is JOSE's meaning for it. It is derived from
+    // the public key rather than plumbed: `publicKeyKid` is SHA256 truncated,
+    // and an advertisement derives its entries' kids the same way, so the two
+    // agree without either side carrying the other's value.
+    'kid': publicKeyKidOfBase64(keys.publicKey),
+    if (enrollmentId != null) 'enid': enrollmentId,
     'v': envelopeVersion,
   })));
   final signingInput = utf8.encode('$protectedB64.$payloadB64');
@@ -744,12 +767,37 @@ Future<void> verifyEnvelope(
   final signingInput = utf8.encode('${entry.protected}.${envelope.payloadB64}');
   final signatureBytes = _base64UrlDecode(entry.signature, 'signature');
 
-  // Every key advertised under the resolved algorithm, in published order.
-  // The current one is first, so the ordinary envelope verifies on the first
-  // attempt and the later keys are reached only by an envelope old enough to
-  // have been signed by one of them.
+  // The signature names the key it was made with, so this is a lookup rather
+  // than a trial of every key advertised under the algorithm. Naming the key
+  // is what lets a refusal distinguish "you asked for a key I do not have"
+  // from "the signature does not verify" — a trial can only count attempts.
+  final String? namedKid = entry.kid;
+  if (namedKid == null) {
+    throw AtSigningVerificationException(
+        'the envelope\'s ${algo.name} signature names no key in its protected '
+        'header, and this build resolves the key by name — refusing rather '
+        'than trying every ${algo.name} key the published _apsk advertises, '
+        'which cannot tell a wrong key from a bad signature');
+  }
+  ApskSigningKey? named;
+  for (final k in candidates) {
+    if (k.kid == namedKid) {
+      named = k;
+      break;
+    }
+  }
+  if (named == null) {
+    throw AtSigningVerificationException(
+        'the envelope\'s ${algo.name} signature names key "$namedKid", and the '
+        'published _apsk advertises '
+        '${candidates.map((k) => '"${k.kid}"').join(', ')} under ${algo.name} '
+        '— refusing, and naming the key it asked for: a key the advertisement '
+        'does not carry is a different failure from a signature that does not '
+        'verify');
+  }
   var ok = false;
-  for (final key in candidates) {
+  {
+    final key = named;
     switch (algo) {
       case SigningAlgoType.mldsa65:
         ok = await MlDsa65PureDartAlgo().verifyBytes(
@@ -773,14 +821,13 @@ Future<void> verifyEnvelope(
             'no verify routine for ${algo.name}, which this build claims to '
             'sign envelopes with');
     }
-    if (ok) break;
   }
   if (!ok) {
     throw AtSigningVerificationException(
-        'the envelope\'s ${algo.name} signature does not verify against any of '
-        'the ${candidates.length} ${algo.name} key(s) the published _apsk '
-        'advertises. Refusing outright — a weaker signature on the same '
-        'envelope is not a second opinion, it is the algorithm being chosen by '
-        'whoever wrote it');
+        'the envelope\'s ${algo.name} signature does not verify against key '
+        '"$namedKid", which the published _apsk advertises and which the '
+        'signature itself names. Refusing outright — a weaker signature on the '
+        'same envelope is not a second opinion, it is the algorithm being '
+        'chosen by whoever wrote it');
   }
 }

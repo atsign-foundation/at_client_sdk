@@ -1,5 +1,23 @@
 ## 3.15.0-rc1
 
+- **BREAKING (wire):** a signed envelope's protected header now carries `kid`
+  and `enid` where it carried only `kid`. `kid` takes JOSE's meaning and names
+  the signing KEY; the signing enrollment moves to `enid`. `kid` is derived from
+  the key material (`SHA256(publicKey)`, hex, first 16), so a signer needs
+  nothing new to write one and a verifier can check it against the key it names.
+  `SignedEnvelope.signerEnrollmentId` is unchanged and still answers the
+  enrollment, so callers reading it need no edit.
+- **BREAKING (behaviour):** verification resolves the key by NAME rather than by
+  trying every advertised key under the resolved algorithm. A signature that
+  names no key is refused, and one naming a key the advertisement does not carry
+  is refused **naming that key** — a wrong key and a bad signature were
+  previously the same observation, and the refusal could only count attempts.
+  Algorithm resolution is unchanged: the strongest shared algorithm still picks
+  the signature entry, and `kid` picks the key within it.
+- The one-signer check now compares `enid`. An envelope signed under two
+  algorithms carries a different key per entry by construction, so comparing
+  `kid` there would refuse every overlap envelope.
+
 - **BREAKING (behaviour):** `VerbEnrollmentDirectory.listForNamespace` now
   throws `AtValueException` when the `enroll:listns` response is not a list,
   where it previously returned an empty roster. An empty roster decides who a

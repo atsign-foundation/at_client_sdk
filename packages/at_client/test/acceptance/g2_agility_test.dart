@@ -587,12 +587,30 @@ void main() {
             '2 mldsa65 key(s)". A verifier that stopped at the first key would '
             'report a bad signature here instead, so the count is what '
             'distinguishes walking from guessing',
-        // ⛔ NO `clauses:` list. This pinned the fragment "names how many were
-        // tried", which the row carried until the walk was ruled out. The
-        // clause it pinned now asserts only the naming half, which is unbuilt -
-        // and pinning a clause from a fragment covering the half being deleted
-        // is what counted this row PROVEN while the half that matters had no
-        // test at all.
+        clauses: ['a better diagnosis than a count'],
+      );
+      provenIn(
+        'packages/at_client/test/jws_envelope_test.dart',
+        'the header exposes alg, kid, enid and version',
+        proves: 'that the two identifiers are separate members answering '
+            'separate questions: `kid` is the KEY, asserted equal to a SHA-256 '
+            'of the key material recomputed in the test from package:crypto '
+            'rather than by calling the helper production uses, and `enid` is '
+            'the signing enrollment. Its sibling pins the whole protected '
+            'header as raw bytes, so the member NAMES and ORDER are frozen and '
+            'a reviewer reads the format change out of one diff',
+        clauses: ['the signature names the KEY it was made with'],
+      );
+      provenIn(
+        'packages/at_client/test/jws_envelope_test.dart',
+        'a protected header naming another version is refused',
+        proves: 'that a version this build does not know is refused outright '
+            'rather than read as a shape it may not be. Its control is in the '
+            'same group: the type is CARRIED correctly, so the refusal is '
+            'about the version and not about a document meant for something '
+            'else, and a sibling arm covers the absent-version case naming the '
+            'absence rather than matching on the same prefix',
+        clauses: ['a header claiming a version this build does not know'],
       );
       provenIn(
         'packages/at_client/test/jws_envelope_test.dart',

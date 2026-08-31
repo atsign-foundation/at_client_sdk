@@ -17,24 +17,45 @@ import 'package:at_client/src/signing/envelope_signature.dart';
 Future<void> main() async {
   const payload = {'doc': 'JWS signed-envelope vector', 'n': 1};
 
+  // REUSE the committed key material when there is any. A format change has to
+  // re-sign these vectors, and minting fresh keys as well would rewrite every
+  // byte of the file - which destroys the one thing it is for during a review:
+  // the diff of a golden file is how a reviewer sees what moved on the wire
+  // without opening a single writer. With the keys held still, that diff is
+  // exactly the header change and the signatures over it.
+  final existing = File('test/vectors/jws_envelope.json');
+  final Map<String, dynamic>? prior = existing.existsSync()
+      ? jsonDecode(existing.readAsStringSync()) as Map<String, dynamic>
+      : null;
+  final priorRs = prior?['rs256'] as Map<String, dynamic>?;
+  final priorMl = prior?['mlDsa65'] as Map<String, dynamic>?;
+
   final rsaPair = AtChopsUtil.generateAtPkamKeyPair();
+  final rsaPublic =
+      priorRs?['apskPublicKey'] as String? ?? rsaPair.atPublicKey.publicKey;
+  final rsaPrivate =
+      priorRs?['privateKey'] as String? ?? rsaPair.atPrivateKey.privateKey;
   final rsaEnvelope = signEnvelope(payload,
       keys: [
         ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
-            publicKey: rsaPair.atPublicKey.publicKey,
-            privateKey: rsaPair.atPrivateKey.privateKey)
+            publicKey: rsaPublic,
+            privateKey: rsaPrivate)
       ],
       type: EnvelopeType.app,
       enrollmentId: 'vector-1');
 
   final mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
+  final mlDsaPublic =
+      priorMl?['publicKey'] as String? ?? base64Encode(mlDsaPair.publicKey);
+  final mlDsaSecret =
+      priorMl?['secretKey'] as String? ?? base64Encode(mlDsaPair.secretKey);
   final mlDsaEnvelope = signEnvelope(payload,
       keys: [
         ApkamSigningKeys(
             algorithm: SigningAlgoType.mldsa65,
-            publicKey: base64Encode(mlDsaPair.publicKey),
-            privateKey: base64Encode(mlDsaPair.secretKey))
+            publicKey: mlDsaPublic,
+            privateKey: mlDsaSecret)
       ],
       type: EnvelopeType.app,
       enrollmentId: 'vector-1');
@@ -49,15 +70,15 @@ Future<void> main() async {
     'rs256': {
       'envelope': rsaEnvelope,
       // The _apsk form a verifier fetches: the bare base64-DER RSA string.
-      'apskPublicKey': rsaPair.atPublicKey.publicKey,
-      'privateKey': rsaPair.atPrivateKey.privateKey,
+      'apskPublicKey': rsaPublic,
+      'privateKey': rsaPrivate,
     },
     'mlDsa65': {
       'envelope': mlDsaEnvelope,
       // The raw ML-DSA-65 public key, base64 — what an _apsk entry's `pub`
       // carries.
-      'publicKey': base64Encode(mlDsaPair.publicKey),
-      'secretKey': base64Encode(mlDsaPair.secretKey),
+      'publicKey': mlDsaPublic,
+      'secretKey': mlDsaSecret,
     },
   });
 

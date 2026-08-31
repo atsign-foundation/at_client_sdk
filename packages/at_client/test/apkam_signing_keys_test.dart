@@ -268,7 +268,14 @@ void main() {
           reason: 'signing under only this build\'s strongest algorithm is '
               'unverifiable to any peer that does not implement it, which is '
               'the whole rollout problem');
-      expect(envelope.signatures.map((s) => s.kid).toSet(), {enrollmentId});
+      expect(envelope.signatures.map((s) => s.enid).toSet(), {enrollmentId},
+          reason: 'every entry names the same signing ENROLLMENT - that is '
+              'what enid is for');
+      expect(envelope.signatures.map((s) => s.kid).toSet(), hasLength(2),
+          reason: 'and a different KEY each, because kid names the key. This '
+              'assertion read kid for the enrollment until 2026-08-31, when '
+              'kid took its JOSE meaning back and the enrollment moved to '
+              'enid');
       expect(envelope.signatures.map((s) => s.alg).toList(),
           ['ML-DSA-65', 'RS256'],
           reason: 'strongest first, which is the order signingKeys returns');

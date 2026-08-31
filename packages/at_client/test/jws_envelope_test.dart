@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart'
@@ -35,6 +37,13 @@ void main() {
     rsaPair = AtChopsUtil.generateAtPkamKeyPair();
     mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   });
+
+  // The kid a header must carry, recomputed from FIRST PRINCIPLES rather than
+  // by calling production's helper: SHA-256 of the key material, hex, first 16.
+  // Comparing the wire value against the function that produced it would pin
+  // nothing.
+  String kidOf(String pubB64) =>
+      sha256.convert(base64Decode(pubB64)).toString().substring(0, 16);
 
   ApkamSigningKeys rsaKeys() => ApkamSigningKeys(
       algorithm: SigningAlgoType.rsa2048,
@@ -94,8 +103,10 @@ void main() {
     test('the protected header is exactly the pinned bytes', () {
       // Raw literal, not built from constants: the signature covers these
       // bytes, so the member ORDER is cryptographically bound.
-      expect(unb64u(rsaEnvelope().signature.protected),
-          '{"alg":"RS256","typ":"at-app+jws","kid":"enroll-1","v":1}');
+      expect(
+          unb64u(rsaEnvelope().signature.protected),
+          '{"alg":"RS256","typ":"at-app+jws","kid":'
+          '"${kidOf(rsaPair.atPublicKey.publicKey)}","enid":"enroll-1","v":1}');
     });
 
     test('a tampered payload fails', () async {
@@ -217,9 +228,14 @@ void main() {
               .toList(),
           ['RS256', 'ML-DSA-65'],
           reason: 'one entry per key, in the order the signer listed them');
-      expect(envelope.signatures.map((s) => s.kid).toSet(), {'enroll-1'},
+      expect(envelope.signatures.map((s) => s.enid).toSet(), {'enroll-1'},
           reason: 'every entry names the one signer, which is what lets an '
               'envelope carry several signatures at all');
+      expect(envelope.signatures.map((s) => s.kid).toSet(), hasLength(2),
+          reason: 'and every entry names a DIFFERENT key, because kid names '
+              'the key rather than the signer. This is why the one-signer '
+              'check reads enid: comparing kids here would refuse every '
+              'overlap envelope, which is the whole shape this row is about');
       expect(envelope.signatures[0].signature,
           isNot(envelope.signatures[1].signature));
 
@@ -386,8 +402,11 @@ void main() {
               'this arm alone can NEVER catch a missing base64 '
               'normalisation; that is what the RSA arm is for');
       expect(signature.contains('='), isFalse);
-      expect(unb64u(envelope.signature.protected),
-          '{"alg":"ML-DSA-65","typ":"at-app+jws","kid":"enroll-pq","v":1}');
+      expect(
+          unb64u(envelope.signature.protected),
+          '{"alg":"ML-DSA-65","typ":"at-app+jws","kid":'
+          '"${kidOf(base64Encode(mlDsaPair.publicKey))}","enid":"enroll-pq",'
+          '"v":1}');
 
       await verifyEnvelope(envelope,
           signerPublicKey: mlDsaApsk(), expecting: EnvelopeType.app);
@@ -413,26 +432,40 @@ void main() {
       expect(envelope.payload, payload);
     });
 
-    test('the header exposes alg, kid and version', () {
+    test('the header exposes alg, kid, enid and version', () {
       final entry = rsaEnvelope().signature;
 
       expect(entry.alg, 'RS256');
-      expect(entry.kid, 'enroll-1');
+      expect(entry.kid, kidOf(rsaPair.atPublicKey.publicKey),
+          reason: 'kid names the KEY - its JOSE meaning - and is derived from '
+              'the key material, so a verifier can check it against what it '
+              'names');
+      expect(entry.enid, 'enroll-1',
+          reason: 'and the signing enrollment is a separate member: enid says '
+              'WHOSE advertisement to fetch, kid says which entry of it');
       expect(entry.version, envelopeVersion);
     });
 
-    test('signerEnrollmentId reads the kid claim', () {
+    test('signerEnrollmentId reads the enid claim', () {
       expect(rsaEnvelope().signerEnrollmentId, 'enroll-1');
     });
 
-    test('no enrollment, no claim — and no kid member at all', () {
+    test('no enrollment, no claim — and no enid member at all', () {
       final envelope = rsaEnvelope(enrollmentId: null);
 
       expect(envelope.signerEnrollmentId, isNull);
-      expect(unb64u(envelope.signature.protected),
-          '{"alg":"RS256","typ":"at-app+jws","v":1}',
+      expect(
+          unb64u(envelope.signature.protected),
+          '{"alg":"RS256","typ":"at-app+jws","kid":'
+          '"${kidOf(rsaPair.atPublicKey.publicKey)}","v":1}',
           reason: 'a guessed or sentinel id would be frozen inside the '
-              'signature where nobody could correct it');
+              'signature where nobody could correct it. kid survives: it names '
+              'the KEY, which a signer always holds, and only enid waits on an '
+              'id the atServer has not issued');
+      expect(envelope.signature.kid, isNotNull,
+          reason: 'the key is named even when the signer has no enrollment id, '
+              'because verification is a lookup and there is no walk to fall '
+              'back to');
     });
 
     test('a String payload becomes JSON, so decoding is unconditional', () {
@@ -636,9 +669,10 @@ void main() {
     });
 
     test('a signature under neither key is still refused', () async {
-      // Trying every key of the resolved algorithm is not "keep going until
-      // something passes": a key this enrollment never published must not
-      // verify, or the loop would be an acceptance of anything.
+      // A key this enrollment never published must not verify. Since the
+      // signature NAMES its key, the refusal can say which key was asked for
+      // rather than counting attempts - which is what distinguishes "you named
+      // a key I do not advertise" from "your signature is bad".
       final stranger = await MlDsa65PureDartAlgo().generateKeyPair();
       final envelope = signEnvelope(payload,
           keys: [
@@ -656,8 +690,19 @@ void main() {
           throwsA(isA<AtSigningVerificationException>().having(
               (e) => e.message,
               'message',
-              contains(
-                  'does not verify against any of the 2 mldsa65 key(s)'))));
+              allOf(
+                contains('names key '
+                    '"${kidOf(base64Encode(stranger.publicKey))}"'),
+                contains('under mldsa65'),
+                // The discriminator is the OTHER refusal's wording, not the
+                // phrase "does not verify" - which this message legitimately
+                // uses in its own explanation of the difference.
+                isNot(contains('does not verify against key')),
+              ))),
+          reason: 'the refusal names the key the signature asked for. A count '
+              'of attempts cannot tell a wrong key from a bad signature, and '
+              'this envelope is the former: the signature over its own bytes '
+              'is perfectly good');
     });
   });
 

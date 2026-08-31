@@ -19,6 +19,8 @@
 library;
 
 import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
@@ -911,6 +913,15 @@ void main() {
       String headerOf(SignedEnvelope envelope) => utf8
           .decode(base64Decode(base64.normalize(envelope.signature.protected)));
 
+      // `kid` names the KEY and is derived from it, so it cannot be a fixed
+      // literal for a freshly generated pair. Recomputed here from FIRST
+      // PRINCIPLES - package:crypto's SHA-256, hex, first 16 - rather than by
+      // calling the helper production uses: comparing a wire value against the
+      // constant that defines it would pin nothing. Everything around it stays
+      // a raw literal, so the member NAMES and ORDER are still frozen bytes.
+      String kidOf(String pubB64) =>
+          sha256.convert(base64Decode(pubB64)).toString().substring(0, 16);
+
       final rsaPair = AtChopsUtil.generateAtPkamKeyPair();
       expect(
           headerOf(signEnvelope({
@@ -921,9 +932,13 @@ void main() {
                 publicKey: rsaPair.atPublicKey.publicKey,
                 privateKey: rsaPair.atPrivateKey.privateKey)
           ], enrollmentId: 'e1', type: EnvelopeType.app)),
-          '{"alg":"RS256","typ":"at-app+jws","kid":"e1","v":1}',
+          '{"alg":"RS256","typ":"at-app+jws","kid":'
+          '"${kidOf(rsaPair.atPublicKey.publicKey)}","enid":"e1","v":1}',
           reason: 'RS256, not rsa2048: the JOSE registered name, and SHA-256 '
-              'by definition — which is why the envelope names no hash');
+              'by definition — which is why the envelope names no hash. `kid` '
+              'names the KEY and `enid` the enrollment: `kid` carried the '
+              'enrollment until 2026-08-31, when it took its JOSE meaning '
+              'back');
 
       final mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
       expect(
@@ -935,11 +950,12 @@ void main() {
                 publicKey: base64Encode(mlDsaPair.publicKey),
                 privateKey: base64Encode(mlDsaPair.secretKey))
           ], enrollmentId: 'e1', type: EnvelopeType.app)),
-          '{"alg":"ML-DSA-65","typ":"at-app+jws","kid":"e1","v":1}',
+          '{"alg":"ML-DSA-65","typ":"at-app+jws","kid":'
+          '"${kidOf(base64Encode(mlDsaPair.publicKey))}","enid":"e1","v":1}',
           reason: 'ML-DSA-65 is the RFC 9964 registered JOSE name');
     });
 
-    test('the header omits kid entirely when no enrollment is supplied', () {
+    test('the header omits enid entirely when no enrollment is supplied', () {
       final pair = AtChopsUtil.generateAtPkamKeyPair();
       final envelope = signEnvelope({
         'hello': 'world'
@@ -952,10 +968,14 @@ void main() {
       expect(
           utf8.decode(
               base64Decode(base64.normalize(envelope.signature.protected))),
-          '{"alg":"RS256","typ":"at-app+jws","v":1}',
+          '{"alg":"RS256","typ":"at-app+jws","kid":'
+          '"${sha256.convert(base64Decode(pair.atPublicKey.publicKey)).toString().substring(0, 16)}"'
+          ',"v":1}',
           reason: 'the key-package path signs before the atServer assigns an '
               'id, and a guessed or sentinel value would be frozen inside the '
-              'signature where nobody could correct it');
+              'signature where nobody could correct it. `kid` is still there: '
+              'it names the KEY, which a signer always knows, and only `enid` '
+              'depends on an id the atServer has not issued yet');
     });
   });
 }
