@@ -13296,11 +13296,21 @@ walk one*
 
 1. **When an enrollment is revoked, all of its descendants are revoked too.**
    The cascade is the atServer's, on the revoke path.
-2. **The atServer must never allow un-revoking an enrollment whose predecessor's
-   status is not currently `approved`.** Without that guard the cascade is
+2. **The atServer must never allow un-revoking an enrollment whose predecessor
+   EXISTS and is not currently `approved`.** Without that guard the cascade is
    one-way only: un-revoking a descendant while its predecessor stays revoked
    would resurrect exactly the orphan the cascade exists to remove.
-3. **The forward secrecy is the pair, not either half.** Revoking the enrollment
+   ⚠️ **The "exists" is load-bearing.** `parentEnrollmentId` is set only in the
+   APKAM self-enrollment branch, so every enrollment created through the ordinary
+   approver path has none. A rule phrased without it is literally satisfied by
+   those — *"whose predecessor is not currently approved"* is true when there is
+   no predecessor — and would permanently bar un-revoking any of them.
+   ⚠️ **A PENDING descendant is a second route to the same orphan, and neither
+   this guard nor the cascade sees it.** The cascade acts on approved
+   enrollments; a self-enrollment left `pending` when its predecessor was revoked
+   survives untouched, and approving it afterwards produces the orphan by a path
+   with no check on it. The approve path needs the same predecessor test.
+3. **The pair, not either half, denies an attacker NEW data keys.** Revoking the enrollment
    and all of its descendants, *followed by* the rotation, is what denies an
    attacker new data keys. The revocation alone leaves material already conveyed
    readable; the rotation alone hands the new generation to whatever the
@@ -13331,8 +13341,10 @@ security property that depends on each client remembering to compute a set
 correctly is one client-side bug away from failing silently; one that depends on
 the atServer's answer fails closed.
 
-**What each side owes.** at_server: the cascade on revoke, and the un-revoke
-guard. at_client: nothing — but three clauses need rewriting to assert the
+**What each side owes.** at_server: the cascade on revoke; the un-revoke guard;
+a refusal when a revoke's cascade would remove the CALLER (see below); and the
+refusal of a self-revoke by the last fully privileged enrollment, which this
+ruling asked for and an earlier draft of this paragraph omitted. at_client: nothing — but three clauses need rewriting to assert the
 cascade rather than a walk, and they stay unprovable until the atServer work
 lands.
 
@@ -13346,39 +13358,59 @@ can itself self-enroll, so a chain can be deeper than two, and a one-level
 cascade would leave a grandchild on the roster — answered when it asks a holder
 for the new generation, which is the hole this ruling exists to close.
 **The depth costs nothing to choose.** The at_server session measured it:
-`parentEnrollmentId` has no index and exactly one production reader, so the only
+`parentEnrollmentId` has no index and, on `origin/trunk`, no production reader at
+all — it is written in the self-enrollment branch and read nowhere in any `lib/`
+— so the only
 enumeration available is a scan of every enrollment key with a decode per key.
 That scan is paid once; a single pass builds the whole predecessor→successor map
 and the transitive walk is then in-memory over a map already held. One level and
 arbitrary depth are the same scan, and only a naive implementation that re-scans
 per level would be slower — avoidable by construction.
 
-**Self-revocation is the only way to strand an atSign, and it is guarded**
-(gkc, 2026-08-31). Three rules, and together they close the case:
+**Stranding: three rules, and one of them was reasoned wrongly** (gkc,
+2026-08-31).
 
-1. **An enrollment may not revoke itself except by passing `force`.** That is a
-   deliberate act by the client, and the **client application** is the party
-   that should warn its user before making it — not the atServer, which cannot
-   know what the operator intended.
+1. **An enrollment may not revoke itself except by passing `force`.** ✅ **Built.**
+   On `origin/trunk` the revoke path throws *"Current client cannot revoke its
+   own enrollment"* when the target id equals the connection's and no `force` is
+   given. So `force` already gates permission; it *also* buys a ten-second grace
+   before the caller's own connection closes, and reading only that second use is
+   how this ruling first described the flag wrongly. The **client application** is
+   still the party that should warn its user before making that deliberate act —
+   the atServer cannot know what the operator intended.
 2. **Even with `force`, the atServer refuses a self-revocation by the last fully
-   privileged enrollment.** That is the one revoke that can leave an atSign
-   unable to administer itself.
-3. **A revoker holds a superset of the scope of what it revokes.**
+   privileged enrollment.** ⛔ **NOT built** — there is no liveness check of any
+   kind on that path.
+3. **A revoker holds a superset of the scope of what it revokes.** Enforced: the
+   revoke path requires the caller to be authorised for *every* namespace in the
+   target's enrollment, at the target's access level.
 
-⚠️ **Rule 3 is what makes the cascade safe, and it is easy to miss.** An
-enrollment is never its own descendant, so a revoker is never inside the subtree
-it revokes — it survives its own cascade by construction, and the atSign is left
-with at least one fully privileged enrollment: the one that just acted. The
-stranding case therefore does not arise from a cascade at all. It arises only
-from self-revocation, which rule 2 refuses in exactly the situation that matters.
+⛔ **Rule 3 does NOT make the cascade safe, and this ruling claimed it did.** The
+argument ran: an enrollment is never its own descendant, therefore a revoker is
+never inside the subtree it revokes, therefore it survives its own cascade. The
+first step is true and the second does not follow — *never its own descendant*
+rules out being inside **its own** subtree and says nothing about being inside
+**the target's**. A successor holds its predecessor's grants exactly
+([ruling 128](#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)),
+so it passes the rule-3 authorisation check against its predecessor — and it *is*
+a descendant of it. E3 revokes E2, the cascade takes E2's descendants, E3 is one
+of them. On a two-enrollment atSign that is stranding **by cascade**, reached
+without anyone self-revoking, so rules 1 and 2 never see it.
 
-⛔ **This corrects a paragraph written earlier the same day**, which said a
-cascade could revoke approvers and called it ~~a stranding hazard this ruling
-accepts rather than solves~~. It cannot: the reasoning behind it overlooked that
-the revoker is outside the subtree it revokes. Nothing is accepted, because
-nothing is stranded.
+**So the atServer refuses a revoke whose cascade would remove the caller** (gkc,
+2026-08-31), decided before anything is written. The descendant set is already
+being walked, so the check is a membership test on a set in hand. Deliberately
+narrow: it restores what rule 3 was meant to guarantee — a revoker survives its
+own act — and leaves the wider "would this leave the atSign with no fully
+privileged enrollment" question to rule 2 rather than merging two refusals into
+one message.
 
-⚠️ Whoever builds the cascade should still read at_server's approver-liveness
-predicate first — not because of a stranding hazard, but because that predicate
-is computed over approved enrollments only, so a cascade changes what it
-returns, and rule 2 needs the same question answered at the revoke handler.
+⚠️ **"Fully privileged" in rule 2 is not "whoever survived".** This catalogue
+defines it as `rw` on `*` **and** `__manage`. A revoker only needs authority over
+the *target's* namespaces, so revoking a narrowly-scoped enrollment can leave a
+survivor that is nothing like fully privileged. Rule 2 has to ask the privilege
+question, not the survival one.
+
+⚠️ Whoever builds the cascade should read at_server's approver-liveness predicate
+first: it is computed over approved enrollments only, so a cascade changes what
+it returns, and rule 2 needs the same question answered at the revoke handler.

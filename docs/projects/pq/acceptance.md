@@ -1180,80 +1180,112 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 ### 6.3 UC-A5.3 — Enrollment revocation
 
-- **Given:** enrollment E2 compromised (it holds exactly one APKAM keypair).
-- **When:** operator revokes E2.
+- **Given:** enrollment E2 compromised (it holds exactly one APKAM keypair), and
+  E2 has self-enrolled at least one successor, which has itself self-enrolled
+  another — the shape a lost keyfile produces, and the one this row turns on.
+- **When:** an enrollment holding `rw` on `__manage` calls
+  `revokeEnrollmentAndRotate(E2)` — revoke, then rotate every namespace E2 could
+  read.
 - **Then:**
   - E2's APKAM keypair is cut at auth; pair with `nskey`-keypair rotation
     excluding E2 (UC-A5.1(b)) to deny new-data keys;
   - ⛔ **revoking E2 revokes E2's whole subtree**, transitively and to arbitrary
     depth: every enrollment E2 self-enrolled, and every enrollment those
-    self-enrolled, leaves `approved` in the same act. `enroll:listns` returns
+    self-enrolled, **loses** `approved` in the same act. `enroll:listns` returns
     approved enrollments only, so the subtree is off every roster at once — the
     rotation's conveyance cannot reach it and no holder will serve it the
     published generation. The client's exclusion set stays the **one** enrollment
-    named. And the atServer refuses to un-revoke an enrollment whose predecessor
-    is not currently `approved`, which is what stops an orphan being restored
-    outside the cascade. See
+    named. The atServer refuses to un-revoke an enrollment whose predecessor
+    **exists and** is not currently `approved`; and it refuses a revoke whose
+    cascade would remove **the caller**. See
     [`decisions.md` 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31).
 
-    ⛔ **RULED AND NOT YET BUILT, so this clause is unprovable until at_server
-    ships it.** Until then the tree genuinely leaks and the leak is the
-    interesting fact: a descendant keeps `approved`, stays on every roster, and
-    **is answered when it asks a holder for the generation it can see
-    published** — so rotating while excluding only E2 hands what E2 spawned the
-    new key. The test that closes this clause is the one that refutes that
-    sentence.
+    ⛔ **RULED AND NOT YET BUILT, so this clause is unprovable from THIS repo
+    until at_server ships it** — it is closed by an at_server test asserting that
+    a descendant's status is `revoked` after its predecessor is revoked, and that
+    it is absent from `enroll:listns`. Until then the **enrollment tree** leaks:
+    a descendant keeps `approved`, stays on every roster, and is answered when it
+    asks a holder for the generation it can see published, so rotating while
+    excluding only E2 hands what E2 spawned the new key. ⚠️ **The fix for that is
+    not a wider exclusion set** — see below; it is the cascade.
 
-    ⚠️ **The clause said the EXCLUSION SET must be the subtree until 2026-08-31,
-    walked client-side over `parentEnrollmentId`. That was the wrong layer.** An
-    exclusion set is advisory and per-caller: it binds the client that computes
-    it and nothing else, and cannot bind a holder that has only the atServer's
-    word to go on. Approval state is authoritative and consulted by every roster
-    query on every client, which is why `revokeEnrollmentAndRotate` revokes
-    first. Put the walk in the revoke and the roster does the rest, for clients
-    that never heard of the revocation.
+    ⚠️ **This clause required the EXCLUSION SET to be the subtree until
+    2026-08-31, walked client-side over `parentEnrollmentId`. That was the wrong
+    layer.** An exclusion set is advisory and per-caller: it binds the client
+    that computes it and nothing else, and cannot bind a holder that has only the
+    atServer's word to go on. Approval state is authoritative and consulted by
+    every roster query on every client, which is why `revokeEnrollmentAndRotate`
+    revokes first. Put the walk in the revoke and the roster does the rest, for
+    every client at once — including ones that never heard of the revocation.
 
-  **Why the pair, and not either half, is the forward secrecy.** Revoking the
-  enrollment and all of its descendants, *followed by* the rotation, is what
-  denies an attacker new data keys. Neither alone does it. The revocation on its
-  own leaves everything already conveyed readable — the compromised keyfile
-  still holds the current generation's private, and nothing recalls it. The
-  rotation on its own hands the successor generation to whatever the compromised
-  enrollment spawned, because those enrollments are still approved and still on
-  the roster. Revocation removes the subtree from every future conveyance and
-  every future serve; the rotation makes everything after it unreadable to what
-  the subtree already holds. Forward secrecy is the composition.
+    ⚠️ **A PENDING descendant is a second route to the same orphan, and neither
+    the cascade nor the un-revoke guard sees it.** The cascade acts on approved
+    enrollments; a self-enrollment left `pending` when its predecessor was
+    revoked survives untouched, and approving it afterwards produces the orphan
+    through a path with no check on it. The approve path is owed the same
+    predecessor test.
 
-  ⚠️ **Self-revocation is the one case that can strand an atSign, and it is
-  guarded rather than cascaded around.** A revoker holds a superset of the scope
-  of what it revokes, and an enrollment is never its own descendant — so a
-  revoker is never inside the subtree it revokes and survives its own cascade,
-  leaving the atSign at least one fully privileged enrollment. What remains is an
-  enrollment revoking *itself*: that requires `force`, the client application is
-  the party that should warn its user before making that deliberate act, and the
-  atServer refuses it outright — `force` or not — when it is the last fully
-  privileged enrollment.
+  **Why the pair, and not either half, denies an attacker NEW data keys.**
+  Revoking the enrollment and all of its descendants, *followed by* the rotation,
+  is what does it; neither alone does. Revocation on its own leaves everything
+  already conveyed readable — the compromised keyfile still holds the current
+  generation's private, and revocation does not recall it. Rotation on its own
+  hands the next generation to whatever the compromised enrollment spawned,
+  because those enrollments are still approved and still on the roster.
 
-- **Cross-ref:** `decisions.md` (FS levers, Decision #F); `design.md`
-  (forward-secrecy / rotation levers, nskey-keypair rotation).
+  ⚠️ **This is post-compromise security, not forward secrecy, and
+  [UC-A5.1](#61-uc-a51--rotate-a-namespace-key-post-compromise) says not to
+  conflate the two.** Lever (b) — revoke plus nskey-keypair rotation — is what
+  this row composes. Forward secrecy for the namespace's **past** is the separate
+  CK lever, UC-A5.1(a): deleting the superseded content key's conveyance record,
+  which this row does not fire.
+
+  ⚠️ **The cut is bounded, not instantaneous.** A peer keeps sealing content keys
+  to the superseded generation until its next `ensureCurrent` sees the changed
+  `nskeyKid`, and the revoked holder can still open those. The exposure is the
+  advertisement's freshness window plus one content-key lifetime — UC-A5.1's
+  **Then (b)** calls that part of the case rather than an optimisation, and this
+  row used to drop it.
+
+  **Stranding, and the rule that was reasoned wrongly.** Three rules bear on it.
+  ✅ **Built:** an enrollment may not revoke itself without `force`, and a revoker
+  must be authorised for every namespace in the target's enrollment at the
+  target's access level. ⛔ **Not built:** the atServer refusing a self-revocation
+  by the last **fully privileged** enrollment — `rw` on `*` *and* `__manage`, as
+  [section 0](#0-purpose-scope--how-to-read-this-doc) defines it — and refusing a
+  revoke whose cascade would remove the caller.
+
+  ⚠️ **"A revoker is never inside the subtree it revokes" is FALSE, and this row
+  asserted it on 2026-08-31.** Never being one's own descendant rules out being
+  in *one's own* subtree and says nothing about being in *the target's*. A
+  successor holds its predecessor's grants exactly, so it is authorised to revoke
+  its predecessor — and it is a descendant of it. E3 revokes E2, the cascade
+  takes E2's descendants, E3 is among them, and on a two-enrollment atSign that
+  strands **by cascade**, without anyone self-revoking. Hence the caller refusal
+  above.
+
+- **Cross-ref:** `detail/decisions.md`
+  [129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
+  (the cascade and its guards),
+  [128](detail/decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)
+  (predecessor/successor, and why a successor may revoke its predecessor),
+  [121](detail/decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28)
+  (superseded subtree half; its durable-record half still stands);
+  `design.md` [§1.7](design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation) (CK rotation vs nskey-keypair rotation).
 - **Impl/verify (A5.x):** **B-2** — landed 2026-08-06
   ([decisions 47](detail/decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)).
   A5.1(a) is proven live by `tests/at_functional_test/test/content_key_rotation_live_test.dart`
-  (both positions of the retention knob); A5.1(b), A5.2 and A5.3 by
-  `tests/at_functional_test/test/nskey_rotation_live_test.dart`. ⚠️ **That test
-  exercises no self-enrollment, no child and no `parentEnrollmentId`, so it says
-  nothing about the subtree clauses added to A5.2 and A5.3 on 2026-08-28** —
-  those are unpinned, and this paragraph overstated until it said so.
-  **One clarification the live run forced, and it belongs in this catalogue
-  rather than only in the code:** "excluded at **both** discovery+push and the
-  `requestSecret` pull serve" (UC-A5.2) is achieved by the **revocation**, not
-  by `excludeEnrollmentIds`. A still-approved enrollment is still a member of
-  the namespace, so it asks any holder for the generation it can see published
-  and is answered — the exclusion set stops one client pushing and cannot bind
-  a holder that has only the atServer's word to go on. That is why
-  `revokeEnrollmentAndRotate` revokes first: `enroll:listns` returns approved
-  enrollments only, so the revoke is what removes it from every roster and
-  every serve at once.
+  (both positions of the retention knob); A5.1(b), A5.2 and A5.3's first clause
+  by `tests/at_functional_test/test/nskey_rotation_live_test.dart`.
+  ⚠️ **That test exercises no self-enrollment and no `parentEnrollmentId`.**
+  UC-A5.2 still carries the withdrawn 2026-08-28 subtree clause and is unpinned;
+  A5.3's replacement clause asserts an atServer cascade and is unprovable from
+  this repo at all until at_server ships it — an at_server build gap, not an
+  at_client coverage gap.
+  ⚠️ **UC-A5.2's Then still says E2 is excluded "at both discovery+push
+  (`excludeEnrollmentIds` on `enroll:listns`/serve)". `enroll:listns` takes no
+  such parameter** — checked on at_server `origin/trunk` — and the exclusion is
+  achieved by the revocation, as above. A5.2's wording is owed a fix.
 
 ---
 

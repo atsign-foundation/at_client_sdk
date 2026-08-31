@@ -154,14 +154,25 @@ void main() {
     });
 
     test('UC-A5.3 · enrollment revocation composes with keypair rotation', () {
-      // GIVEN enrollment E2 compromised (it holds exactly one APKAM keypair).
-      // WHEN  the operator revokes E2.
-      // THEN  E2's APKAM keypair is cut at auth; paired with nskey-keypair
-      //       rotation excluding E2's whole SUBTREE (UC-A5.1b) to deny
-      //       new-data keys. Revoking a parent does not revoke what it
-      //       self-spawned, so excluding only E2 conveys the new private to a
-      //       surviving child - the subtree clause is UNPINNED, and the cited
-      //       test exercises no self-enrolment at all.
+      // GIVEN enrollment E2 compromised (it holds exactly one APKAM keypair),
+      //       and E2 has self-enrolled at least one successor.
+      // WHEN  an enrollment holding rw on __manage calls
+      //       revokeEnrollmentAndRotate(E2).
+      // THEN  E2's APKAM keypair is cut at auth, paired with nskey-keypair
+      //       rotation (UC-A5.1b) to deny new-data keys. Only that first arm is
+      //       pinned here.
+      //
+      // ⛔ The row's second clause - that revoking E2 revokes E2's whole
+      //    subtree, so the subtree leaves every roster and the client's
+      //    exclusion set stays the ONE id named - is RULED AND NOT YET BUILT,
+      //    and is unprovable from this repo at all: it is closed by an
+      //    at_server test asserting a descendant is revoked and absent from
+      //    enroll:listns. The cited test below exercises no self-enrolment.
+      //
+      // ⚠️ This comment required the EXCLUSION SET to be the whole subtree,
+      //    walked client-side, until 2026-08-31. That was the wrong layer: an
+      //    exclusion set binds only the client that computes it, while approval
+      //    state is consulted by every roster query on every client.
       provenIn('tests/at_functional_test/test/nskey_rotation_live_test.dart',
           'UC-A5.3 · revokeEnrollmentAndRotate revokes first',
           proves: 'the composition run against a live atServer by a privileged '
