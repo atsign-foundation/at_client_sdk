@@ -49,7 +49,8 @@ void main() {
         ],
       };
 
-  CryptographicMaterial authMaterial(String enrollmentId, CryptographicMaterialAlgorithm algorithm) =>
+  CryptographicMaterial authMaterial(
+          String enrollmentId, CryptographicMaterialAlgorithm algorithm) =>
       CryptographicMaterial(
         keyId: 'auth:$algorithm:1',
         enrollmentId: enrollmentId,

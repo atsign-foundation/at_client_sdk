@@ -515,7 +515,9 @@ void main() {
           SigningAlgoType.ecc_secp256r1.name);
     });
 
-    test('CryptographicMaterialRole tokens and CryptographicMaterialStatus names', () {
+    test(
+        'CryptographicMaterialRole tokens and CryptographicMaterialStatus names',
+        () {
       expect(CryptographicMaterialRole.known, {
         'symmetricEncryption',
         'symmetricAuthentication',
@@ -541,10 +543,22 @@ void main() {
       // And the forward order, which stopped being declaration index when
       // status became an open String. It is a stated ranking now, so it is
       // pinned like any other contract.
-      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of('active')), 0);
-      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of('retired')), 1);
-      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of('dead')), 2);
-      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of('pending')), isNull,
+      expect(
+          CryptographicMaterialStatus.rankOf(
+              CryptographicMaterialStatus.of('active')),
+          0);
+      expect(
+          CryptographicMaterialStatus.rankOf(
+              CryptographicMaterialStatus.of('retired')),
+          1);
+      expect(
+          CryptographicMaterialStatus.rankOf(
+              CryptographicMaterialStatus.of('dead')),
+          2);
+      expect(
+          CryptographicMaterialStatus.rankOf(
+              CryptographicMaterialStatus.of('pending')),
+          isNull,
           reason: 'a token this build has never seen has no position in the '
               'forward order, and must not acquire one by accident');
     });

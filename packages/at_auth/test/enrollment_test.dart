@@ -43,7 +43,8 @@ void main() {
       return mock;
     }
 
-    test('a key package the builder mints is the ENROLLMENT\'s, not the atSign\'s',
+    test(
+        'a key package the builder mints is the ENROLLMENT\'s, not the atSign\'s',
         () async {
       // The builder runs before the request, so it files what it mints with no
       // enrollment id — the atServer has not named one yet. The two sibling
@@ -86,6 +87,88 @@ void main() {
           isNull,
           reason: 'a key package belongs to the enrollment that advertised it, '
               'not to the atSign');
+    });
+  });
+
+  group('an OTP enrolment that owns a signing key from birth', () {
+    const atSign = '@alice🛠';
+    const enrollmentId = 'otp-enrollment-1';
+
+    // Distinct from any real key, and compared RAW: the property under test is
+    // which bytes reached the keyfile, not that something plausible did.
+    const signingPub = 'bWludGVkLXNpZ25pbmctcHVibGlj';
+    const signingPriv = 'bWludGVkLXNpZ25pbmctcHJpdmF0ZQ==';
+
+    MockAtLookUp approvingLookUp() {
+      final mock = MockAtLookUp();
+      when(() => mock.executeCommand(any(that: startsWith('enroll:')),
+              auth: any(named: 'auth')))
+          .thenAnswer((_) async =>
+              'data:{"enrollmentId":"$enrollmentId","status":"pending"}');
+      when(() => mock.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]}');
+      return mock;
+    }
+
+    Future<AtKeys> submit(
+        ({
+          SigningAlgoType algorithm,
+          String publicKey,
+          String privateKey
+        })? advertised) async {
+      final response = await AtEnrollmentImpl().submit(
+          AtEnrollmentRequest(
+              atSign: atSign,
+              appName: 'wavi',
+              deviceName: 'iphone',
+              otp: 'ABC123',
+              namespaces: {'wavi': 'rw'},
+              signingAlgo: SigningAlgoType.rsa2048,
+              advertisedSigningKey: advertised),
+          approvingLookUp());
+      return response.atAuthKeys!;
+    }
+
+    test('the signing key is FILED, not merely advertised', () async {
+      final keys = await submit((
+        algorithm: SigningAlgoType.rsa2048,
+        publicKey: signingPub,
+        privateKey: signingPriv
+      ));
+
+      final held = keys.signingKeysFor(enrollmentId);
+      expect(held, hasLength(1));
+      expect(held.single.algorithm, SigningAlgoType.rsa2048);
+      expect(held.single.publicKey, signingPub);
+      expect(held.single.privateKey, signingPriv,
+          reason: 'advertise-without-file leaves the next start finding the '
+              'in-use algorithm missing, minting a SECOND key and '
+              'republishing — orphaning the key this record already named');
+    });
+
+    test('and it is the ENROLLMENT\'s, not the atSign\'s', () async {
+      final keys = await submit((
+        algorithm: SigningAlgoType.rsa2048,
+        publicKey: signingPub,
+        privateKey: signingPriv
+      ));
+
+      // The other half of the same claim: material in the atSign's container
+      // is not returned by keysForEnrollment and is not reaped when the
+      // enrollment is retired.
+      expect(keys.keysForEnrollment(enrollmentId).map((m) => m.keyId),
+          contains('sign:rsa2048:1'));
+    });
+
+    test('without one, nothing is filed', () async {
+      // The negative control, and it is every caller in the tree today: no
+      // AtEnrollmentRequest sets advertisedSigningKey, so this path must be
+      // byte-for-byte what it was.
+      final keys = await submit(null);
+
+      expect(keys.signingKeysFor(enrollmentId), isEmpty,
+          reason: 'an enrollment that advertised no signing key holds none; '
+              'filing one anyway would publish a key nothing asked for');
     });
   });
 
@@ -558,6 +641,77 @@ void main() {
           reason: 'there would be no public half for the approver to '
               'encapsulate the symmetric key to, so the enrollment could '
               'never obtain one');
+    });
+
+    /// The wire FORM of `_apsk`, which two composers decide and must decide
+    /// the same way.
+    ///
+    /// at_auth writes this record at enrolment; `apskValueOf` in at_client
+    /// composes the same record at every start and republishes on any
+    /// difference. A form the client would not have chosen is therefore
+    /// rewritten on the enrolment's first start — and that republish discards
+    /// the chain link the approver conveyed against the old value, leaving the
+    /// enrollment silently unsigned. So the rule here is the client's rule:
+    /// exactly one active rsa2048 key is spelled bare, everything else as the
+    /// array.
+    group('the form follows the algorithm alone', () {
+      Future<Map<String, dynamic>> paramsFor(
+          {required SigningAlgoType signingAlgo,
+          ({
+            SigningAlgoType algorithm,
+            String publicKey,
+            String privateKey
+          })? advertised}) async {
+        final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+        await AtEnrollmentImpl().submit(
+            AtEnrollmentRequest.pq(
+              session: freshSession(),
+              appName: 'wavi',
+              deviceName: 'pixel',
+              namespaces: {'wavi': 'rw'},
+              otp: 'A123FE',
+              signingAlgo: signingAlgo,
+              advertisedSigningKey: advertised,
+              metadataBuilder: (_) async => {
+                    'keyPackage': {'v': 1, 'keys': []}
+                  },
+              apkamSymmetricKeyResolver: _unusedResolver,
+            ),
+            mockAtLookUp);
+        return jsonDecode(sent.single.substring(sent.single.indexOf('{')))
+            as Map<String, dynamic>;
+      }
+
+      test('an rsa2048 APKAM key with a key package is spelled BARE',
+          () async {
+        // The case a key package used to force into the array. It is
+        // reachable: a legacy posture names an empty signing set, so nothing
+        // is advertised, while `--key-exchange pq` still carries a package.
+        final params = await paramsFor(signingAlgo: SigningAlgoType.rsa2048);
+
+        expect(params['apskLegacy'], params['apkamPublicKey'],
+            reason: 'the bare value IS the key, and the key here is the APKAM '
+                'one because the enrollment advertises no signing key of its '
+                'own');
+        expect(params['apsk'], isNull,
+            reason: 'never both - they would disagree about one record');
+        expect(params['apskLegacy'], isNot(startsWith('{')),
+            reason: 'stated the other way round, so this cannot pass on a '
+                'serialization that merely contains the key');
+      });
+
+      test('an mldsa65 APKAM key with a key package is spelled as the ARRAY',
+          () async {
+        // The control, and the discriminator: without it the assertion above
+        // is satisfied by a writer that can only ever emit the bare form. Only
+        // the algorithm moves between the two.
+        final params = await paramsFor(signingAlgo: SigningAlgoType.mldsa65);
+
+        expect(params['apskLegacy'], isNull);
+        expect((params['apsk']['keys'] as List).single['alg'], 'mldsa65',
+            reason: 'a bare value says rsa2048 by convention and cannot state '
+                'any other algorithm, so nothing could read this key from it');
+      });
     });
   });
 

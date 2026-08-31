@@ -244,14 +244,12 @@ class AtKeysAssurance {
     required CryptographicMaterial candidate,
   }) {
     if (candidate.status != CryptographicMaterialStatus.active ||
-        candidate.role !=
-            CryptographicMaterialRole.privateAuthentication) {
+        candidate.role != CryptographicMaterialRole.privateAuthentication) {
       return;
     }
     for (final material in existing) {
       if (material.status != CryptographicMaterialStatus.active ||
-          material.role !=
-              CryptographicMaterialRole.privateAuthentication) {
+          material.role != CryptographicMaterialRole.privateAuthentication) {
         continue;
       }
       // Whatever the owner, and whatever the algorithm. The same enrollment
