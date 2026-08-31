@@ -4,13 +4,7 @@
   alongside `enroll:listns`, taking the same authorisation, returning a JSON
   **map** of facts about the namespace rather than a list of its members. Its
   first member is `lastRevokedAt`: the latest moment a revocation touched an
-  enrollment granted that namespace, or null.
-  A map because the fact is about the NAMESPACE and not about any member: on a
-  roster of approved enrollments the same value would have had to be repeated on
-  every row under a name apologising for where it lived. `enroll:listns` is
-  unchanged, which matters — a client resolves conveyance recipients through it,
-  and its returning approved enrollments only is what keeps a revoked enrollment
-  off every roster.
+  enrollment granted that namespace, or null. `enroll:listns` is unchanged.
 
 ## 5.16.0
 
