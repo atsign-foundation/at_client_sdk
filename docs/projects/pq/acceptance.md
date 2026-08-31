@@ -1776,9 +1776,29 @@ obeyed.
 - **Given:** `alice2` (an enrollment) was offline during the retrofit wave;
   `pq_signing_root` created by `alice1`.
 - **When:** `alice2` next comes online and retrofits.
-- **Then:** `pq_signing_root` is root (no namespace), so it has **no**
-  `enroll:listns` push — its `requestSecret` for `pq_signing_root@alice⁻¹` is
-  the steady-state path, answered by any online holder (persists until one answers).
+- **Then:** `pq_signing_root` **has no namespace, therefore its `requestSecret`
+  for `pq_signing_root@alice⁻¹` is the steady-state path** — answered by any
+  online holder, and **re-asked at every start until one does**.
+
+  ⚠️ **The no-push half moved out of the clause on 2026-08-31** (gkc), and is
+  kept here because it is the *reason* the pull is the steady-state path rather
+  than a behaviour of this row. `pq_signing_root` holds no namespace, so there
+  is no namespace roster to push along: `pushSecretToNamespaceMembers` has
+  exactly two production callers, both on the nskey path, and `pq_signing_root`
+  names it nowhere. That absence is asserted by a source-shaped guard —
+  `architecture_guard_test.dart`'s *the signing root has no namespace push* —
+  which also fails if any file outside the declaration and those two callers
+  starts naming the capability, so a delegating wrapper cannot open the hole
+  quietly. It is a guard rather than a pin: a clause states what the system
+  does, and an absence of a code path is not something a run can witness.
+
+  ⚠️ **This said "(persists until one answers)" until 2026-08-31, and the
+  request itself does not.** It travels as an envelope with an `envelopeTtl` of
+  seven days, and production says unconsumed envelopes expire that way. What
+  actually makes the asking persist is the every-start re-broadcast, whose only
+  guard is that this enrollment already holds the private half — so an
+  enrollment offline for longer than the ttl is not left with a standing request,
+  it simply asks again when it next runs.
   Namespaced `nskey` privates `alice2` missed while offline arrive by **its own
   pull at next start** ([`decisions.md` 38](detail/decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)
   — an enrollment created or offline after the mint missed the push, so pulling
@@ -2118,6 +2138,7 @@ document had named.
 | `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneWeek` with its period pinned as a raw literal and its boundary inclusive, and `neverRotateNskey` at any age — plus that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. ⚠️ **Named nowhere in this doc set except a `## TODO` row until 2026-08-31**, and named here because that row has now been discharged and deleted. ⚠️ **This said *&#34;neither nameability rail reaches the file&#34;* and was false in the same commit that wrote it** — the six citations above are exactly what brings it inside the citation rail (*every test a citation names is named in the doc set*), which is why this row had to be added at all. Only the `pq_*` FILENAME rail still misses it. |
 | `packages/at_client/test/ck_manager_test.dart` | where the content-key rotation policy is ASKED — before the current key is returned, with the destination in its context — and where the namespace-key hook is asked only for this atSign&#39;s own key. Also the restart arm, where a resumed key takes its age from the conveyance record rather than this process&#39;s clock. Cited by **UC-A5.4** and **UC-A5.5**. |
 | `packages/at_client/test/legacy_client_refusal_test.dart` | that a legacy-only install — one whose posture registers no post-quantum providers at all — refuses a record stamped `at/symmetric/AES/GCM`, asserted on `CryptoProviderNotRegistered` and on its message naming the id, with the same install reading a `legacy`-stamped record as the control. Cited by **UC-B4.3**. |
+| `packages/at_client/test/nskey_ladder_refusal_test.dart` | one generation advertising both X-Wing and ML-KEM-1024, and two writers differing only in `sealsToKeyAlgorithms`: each stamps its own conveyance provider, and a sibling install holding only the X-Wing conveyance provider cannot open the ML-KEM-sealed record — refused with `CryptoProviderNotRegistered` naming the missing id and listing what it does hold, with the same sibling opening an X-Wing record as the control. Cited by **UC-G2.11** and **UC-G2.10**. |
 | `packages/at_client/test/nskey_seeding_test.dart` | the namespace-key policy&#39;s second ask point and every condition under which it is skipped or its yes declined: nothing published, the posture not seeding, no substrate to convey over, and a policy that throws. Cited by **UC-A5.5** and **UC-A5.6**. |
 | `packages/at_client/test/nskey_rotation_test.dart` | what a namespace-key yes actually does — a fresh generation published, the superseded private kept, and the successor pushed to every authorised enrollment. Cited by **UC-A5.5**. |
 
@@ -3696,9 +3717,22 @@ is where its missing lever lives.
     both halves, which it cannot: nothing anywhere carries a revocation
     timestamp;
   - **a client that fails to take the mint lock does not queue and does not retry
-    blindly.** It backs off, re-reads after the cooldown and re-decides — finding
-    either that another client has done what was needed or that it still must.
-    That is what makes several clients converge rather than storm.
+    blindly.** It publishes nothing, and the question is put again at its next
+    start or at the next content key it conveys to its own namespace — re-read
+    afresh each time, so it finds either that another client has done what was
+    needed or that it still must. That is what makes several clients converge
+    rather than storm.
+
+    ⚠️ **This said it "backs off, re-reads after the cooldown" until 2026-08-31,
+    and nothing on this path is cooldown-aware.** There is no sleep, no backoff
+    and no read of the lock's ttl anywhere in it; `mintLockTtl` is consulted only
+    when composing a lock key. The re-ask is driven by a restart or by write
+    traffic, so it can land inside the cooldown and be refused again — which is
+    still convergence, but by re-deciding rather than by waiting.
+    ⚠️ **"Does not queue" is a claim about THIS loser only** — the one the
+    atServer refused. `MintLock.withLock` has a second loser, an in-flight mint
+    for the same key on the same instance, and that one does await before
+    declining.
 
   ⚠️ **Why the revoker writes the record rather than a client deriving it.**
   Nothing server-side carries a revocation timestamp — `EnrollDataStoreValue` has
@@ -3850,11 +3884,22 @@ unknown-status clause, and the two must not be conflated.
 - **When:** a verifier checks an envelope; and separately, an attacker who has
   broken the retired algorithm presents one signed under it.
 - **Then:**
-  - a verifier **cannot decline an algorithm it implements**. `verifyEnvelope`
+  - a verifier **cannot decline an algorithm it implements**: `verifyEnvelope`
     resolves `strongestOf(shared)` over the intersection of the advertised keys
-    and the signatures the envelope carries; there is no minimum-algorithm check,
-    no signature-count check, and no accepted-algorithms field for **signatures**
-    anywhere in `AtClientPreference`.
+    and the signatures the envelope carries, and applies no floor to the result.
+
+    ⚠️ **The three absences that are the REASON moved out of the clause on
+    2026-08-31** (gkc), for the same reason UC-B5.1's did: they say why the
+    verifier cannot decline, rather than stating a behaviour of their own. There
+    is **no minimum-algorithm check, no signature-count check, and no
+    accepted-algorithms field for signatures anywhere in `AtClientPreference`** —
+    asserted by `architecture_guard_test.dart`'s *the verifier has no accept
+    lever for signatures*, which reads the source rather than the runtime,
+    because the absence of a code path is not something a run can witness. That
+    guard is deliberately **not** behavioural: an assertion that the weaker
+    algorithm is accepted would stay GREEN on the day step 3's lever landed,
+    since the lever cannot ship default-deny without refusing every stored
+    envelope in the fleet.
 
     ⚠️ **This said the encryption side "has one" — `keyEstablishmentAlgorithms`
     — until 2026-08-31, and that field is not an accept lever.** Its own dartdoc
@@ -3868,28 +3913,38 @@ unknown-status clause, and the two must not be conflated.
     old-algorithm signature. Encryption's protection is an **advertise** lever
     held by the party at risk. Signing has none, because the advertisement
     belongs to the **signer**, not to the verifier;
-  - so **a retired signing key is a standing forgery surface.** It stays
-    advertised precisely so history verifies — `vouchesForPastOperations` is
-    what a verifier narrows on, or every superseded envelope would read as
-    tampered — but **nothing records when the key was retired**, and nothing a
-    verifier can trust records when an envelope was signed. So "this was signed
-    before retirement" is not checkable, and whoever breaks that algorithm can
-    mint one that verifies indistinguishably from a genuine old one. Where the
-    envelope arrives **as an Atsign Protocol record**, the forgery is bounded by
-    needing current credentials to place that record — not by any timestamp.
-    Outside that binding a verifier has nothing, and should treat a
-    retired-key signature as suspect;
+  ⛔ **A clause was WITHDRAWN here on 2026-08-31** (gkc). It read: *"so a
+  retired signing key is a standing forgery surface"*, and its only assertable
+  behaviour — that a retired entry stays advertised so history verifies — is
+  already pinned under two other rows, so stating it again here would count one
+  behaviour three times. The analysis is kept, because it is the reason this row
+  matters and it is recorded nowhere else:
 
-    ⚠️ **This said "nothing dates an envelope" until 2026-08-31, and things
-    do** — `KeyPackage` and `NskeyAdvertisement` both put `createdAt` inside the
-    **signed payload**, and `NskeyRotationContext` turns one into an `age`. The
-    absences that matter are narrower: no date in the protected header, and no
-    freshness check at verification.
-    ⚠️ **And a record's `createdAt` is a CALLER ASSERTION the atServer honours,
-    not a server attestation.** The verb grammar carries `:cAt`/`:uAt`/`:eAt`/
-    `:aAt` and the handler calls them exactly that — asserted timestamps — so a
-    cached or relayed copy can preserve the origin's dates. Anyone designing
-    against this must not assume an unforgeable clock;
+  A retired key stays advertised precisely so history verifies —
+  `vouchesForPastOperations` is what a verifier narrows on, or every superseded
+  envelope would read as tampered. But **nothing records when the key was
+  retired**: `ApskSigningKey` is `{kid, alg, pub, status}` and carries no date.
+  And nothing a verifier can trust records when an envelope was **signed**. So
+  "this was signed before retirement" is not checkable, and whoever breaks that
+  algorithm can mint one that verifies indistinguishably from a genuine old one.
+
+  Where the envelope arrives **as an Atsign Protocol record**, the forgery is
+  bounded by needing current credentials to place that record — not by any
+  timestamp. Outside that binding a verifier has nothing, and should treat a
+  retired-key signature as suspect.
+
+  ⚠️ **The clause said "nothing dates an envelope" until 2026-08-31, and things
+  do** — `KeyPackage` and `NskeyAdvertisement` both put `createdAt` inside the
+  **signed payload**, and `NskeyRotationContext` turns one into an `age`. The
+  absences that matter are narrower: no date in the protected header, and no
+  freshness check at verification.
+  ⚠️ **And a record's `createdAt` is a CALLER ASSERTION the atServer honours,
+  not a server attestation.** The verb grammar carries `:cAt`/`:uAt`/`:eAt`/
+  `:aAt` and the handler calls them exactly that — asserted timestamps — so a
+  cached or relayed copy can preserve the origin's dates. Anyone designing
+  against this must not assume an unforgeable clock. Closing the gap therefore
+  needs an unforgeable signing time, not a field.
+
   - a verifier sharing **no** algorithm with the envelope is refused, with a
     message naming what the envelope carries and what the `_apsk` advertises —
     never a fallback to a key derived some other way;
