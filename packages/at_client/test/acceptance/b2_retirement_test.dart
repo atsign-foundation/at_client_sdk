@@ -42,13 +42,28 @@ void main() {
     });
 
     test('UC-B2.2 · grace-period variant', () {
-      // GIVEN the deployment configured a server-config grace; the cap IS the
-      //       grace window.
-      // WHEN  alice1 retrofits.
-      // THEN  legacy auth survives until min(now + grace, expiry); sibling
-      //       clones may still retrofit (each to its own fresh enrollment) until
-      //       the cap elapses; after the cap, UC-B2.1 applies. The bypass being
-      //       open during the window is an explicit trade-off.
+      // GIVEN the deployment configured a server-config grace.
+      // WHEN  alice1 retrofits, and later a sibling clone of the same pre-PQ
+      //       keyfile does.
+      // THEN  legacy auth survives until min(now + grace, its own remaining
+      //       lifetime), where now is the most recent successor's FIRST
+      //       AUTHENTICATION on a connection it opened itself. The cap re-arms
+      //       on each one, so the window is not a fixed deadline: each sibling
+      //       that upgrades and authenticates extends it by a full grace
+      //       period, and a retrofit whose successor never authenticates arms
+      //       nothing. Once legacy auth lapses, UC-B2.1 applies. The bypass
+      //       being open during the window is an explicit trade-off.
+      //
+      // ⛔ The trigger is RULED AND NOT YET BUILT. The atServer arms the cap at
+      //    submission today and exempts an atSign's first enrollment entirely,
+      //    so the citation below carries the formula and the lapse but not the
+      //    trigger or the re-arm.
+      //
+      // ⚠️ This comment said the cap IS the grace window, and that clones may
+      //    retrofit until the cap elapses - a fixed deadline set by the first
+      //    sibling. That was corrected in the catalogue on 2026-08-27 and here
+      //    on 2026-08-31: a fixed deadline would strand every laggard whose
+      //    next run fell outside it.
       provenIn(
         'tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart',
         'UC-B2.1/B2.2: the retrofit caps its parent',

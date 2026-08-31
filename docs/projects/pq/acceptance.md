@@ -1622,35 +1622,58 @@ obeyed.
 - **Then:** legacy auth survives until `min(now + grace, its own remaining lifetime)`,
   where **`now` is the most recent successor enrollment's first authentication on a
   connection it opened itself** — the cap **re-arms** on each one, and a retrofit whose
-  successor never authenticates arms nothing.
+  successor never authenticates arms nothing. Sibling clones may still retrofit (each to
+  its own fresh enrollment) for as long as legacy auth holds; once it lapses, UC-B2.1
+  applies. **So the window is not a fixed deadline: each sibling that upgrades and
+  authenticates extends it by a full grace period**, and a deployment with laggard
+  devices keeps it open as long as they keep arriving.
 
-  ⛔ **This clause specifies behaviour that is RULED AND NOT YET BUILT, and it is
-  unprovable until at_server lands it.** On at_server `trunk` the cap is armed in
-  the self-enrollment **submission** handler, immediately after the successor's
-  record is written — so a successor that never authenticates arms it anyway,
-  the opposite of this clause's last arm. `preserveFirstEnrollmentOnRetrofit`
-  (default `true`) also exempts an atSign's first enrollment entirely, so for a
-  single-keyfile owner legacy auth survives indefinitely rather than until
-  `min(now + grace, …)`.
+  ⛔ **RULED AND NOT YET BUILT: this states the ruled behaviour, not the built one, and
+  is unprovable until at_server ships it.** On at_server `origin/trunk` the cap is armed
+  in the self-enrollment **submission** handler, immediately after the successor's record
+  is written — so a successor that never authenticates arms it anyway, which is the
+  opposite of this clause's last arm. And `preserveFirstEnrollmentOnRetrofit` (default
+  `true`) exempts an atSign's first enrollment entirely, so for an owner holding one
+  keyfile it never fires at all.
   [Ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
-  ruled the trigger and the exemption's retirement on 2026-08-27 and
+  ruled the trigger and the exemption's retirement on 2026-08-27;
   [ruling 128](detail/decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)
-  made its justification sound; the at_server change is in progress. The clause
-  stays here, marked, rather than being weakened to describe the tree —
-  a specification clause can be FALSE of the tree without being wrong. Sibling clones may still retrofit (each to its own fresh
-  enrollment) for as long as legacy auth holds; once it lapses, UC-B2.1 applies. **So the
-  window is not a fixed deadline: each sibling that upgrades and authenticates extends it
-  by a full grace period**, and a deployment with laggard devices keeps it open as long as
-  they keep arriving.
+  made its justification sound, by guaranteeing the successor holds the predecessor's
+  grants. The clause stays as ruled rather than being weakened to describe the tree — a
+  specification clause can be FALSE of the tree without being wrong.
 
-  ⚠️ **The clause above states the RULED behaviour, not the built one, and is unproven
-  until the atServer changes.** On at_server `origin/trunk` the cap is written by the
-  retrofit submission itself, and the atSign's first enrollment is exempt from it
-  entirely — so for an owner holding one keyfile it never fires at all. ⚠️ **This row
-  also said the cap "is the grace window" and that clones may retrofit "until the cap
-  elapses" — a fixed deadline set by the first sibling — until 2026-08-27**, which was
-  wrong in the other direction: the re-arm is deliberate, because a deadline fixed by the
-  first sibling's upgrade would strand every laggard whose next run fell outside it.
+  ⚠️ **This row made the opposite error until 2026-08-27**: it said the cap "is the grace
+  window" and that clones may retrofit "until the cap elapses" — a fixed deadline set by
+  the first sibling. The re-arm is deliberate, because a deadline fixed by the first
+  sibling's upgrade would strand every laggard whose next run fell outside it.
+
+  **What makes this provable once the atServer lands it**, worked out 2026-08-31 so the
+  next reader does not re-derive it. Six of the seven arms are ordinary live tests; the
+  one that could have blocked the row is *"a retrofit whose successor never authenticates
+  arms nothing"*, because the product path always authenticates — `selfRetrofit` submits
+  and then authenticates, and throws if that fails. ⛔ **The enabling fact is that those
+  are two separable public calls**: `AtEnrollment.submit(EnrollmentRequest, AtLookUp)` is
+  on at_auth's public interface, and `self_retrofit.dart` calls `submit` and
+  `authenticate` at separate points. A live test can submit and stop, which produces the
+  one state that arm needs — a successor that exists on the atServer and has never
+  authenticated. ⚠️ Such a test drives a path the product never takes; that is legitimate
+  because the behaviour under test is the atServer's, but it should say so or a reader
+  will ask why the SDK would ever leave a successor unauthenticated.
+
+  The remaining arms: `now` is the successor's first authentication (submit-and-stop shows
+  no cap, then authenticating makes it appear); the cap re-arms (two siblings, comparing
+  absolute expiries); siblings may still retrofit while legacy auth holds, and `UC-B2.1`
+  applies once it lapses (both already covered). ⚠️ **Nothing here waits out a grace** —
+  every arm observes an expiry appearing or moving, never elapsing, which is why the
+  720-hour default is not an obstacle.
+
+  ⚠️ **The formula arm is already proven, under another row.**
+  `retrofit_cap_value_e2e_test.dart` runs three predecessors straddling the grace with
+  every comparison between two atServer-produced values, and it is pinned to
+  [UC-B1.1](#81-uc-b11--first-client-retrofit-alice1) c3. Citing it here as well is
+  defensible — it would carry one arm of a longer clause rather than the whole of one —
+  but it is the double-count question, and whoever pins this row should decide it
+  deliberately rather than inherit it.
 
 - **Cross-ref:** `decisions.md` (retirement ruling, and [118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27) for the trigger); `design.md` (expiry copy/cap).
 - **Impl/verify:** **RF-SRV** + **RF-2c**. **Both green 2026-08-05** —
