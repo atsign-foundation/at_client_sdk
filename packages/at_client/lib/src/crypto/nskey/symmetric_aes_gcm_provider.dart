@@ -9,7 +9,10 @@ import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show ckConveyanceKey;
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show visibleForTesting;
+
+final _logger = AtSignLogger('SymmetricAesGcmProvider');
 
 /// The value cites a CK this client cannot resolve *yet*.
 ///
@@ -287,7 +290,19 @@ class SymmetricAesGcmProvider
       } on StateError {
         // ContentKeyCache.put refuses two distinct CKs claiming one kid.
         rethrow;
-      } catch (_) {
+      } on CryptoProviderNotRegistered {
+        // The record is there and will not open: this client has no provider
+        // for the scheme the conveyance was written under. Reporting that as
+        // an absent record would send the caller away to wait for a sync that
+        // has already happened.
+        rethrow;
+      } catch (e) {
+        // Everything else is treated as "no such record", which is the common
+        // case and not an error. It is logged because an unexpected failure
+        // arrives here too, and the caller turns both into the same "content
+        // key unavailable" advice to retry later.
+        _logger.warning('Could not read the conveyance $conveyance '
+            '(remote: $remote), so its content key stays unresolved: $e');
         return false;
       }
     }

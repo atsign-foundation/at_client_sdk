@@ -18,6 +18,8 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
+    show NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
@@ -164,6 +166,14 @@ class AtClientImpl implements AtClient {
               'has no key ring to publish with'));
     }
 
+    // Answered from the argument, ahead of every round trip below: `*` and
+    // `__manage` are grants over other namespaces rather than namespaces data
+    // lives in, so no start of any client will ever publish a key for them and
+    // asking again later cannot change that.
+    if (!NskeySeeding.isSeedable(namespace)) {
+      return const AtReachabilityResult(AtReachability.notAuthorised);
+    }
+
     try {
       // Cheapest first, and it is the common case on every start after the
       // one that minted: the atServer's copy, not local storage, because a
@@ -175,19 +185,21 @@ class AtClientImpl implements AtClient {
         return const AtReachabilityResult(AtReachability.alreadyReachable);
       }
 
-      // Answered before the authorisation lookup, which costs a round trip on
-      // an APKAM client: an app that chose a posture which does not seed is
-      // not waiting for something that is coming, and telling it so promptly
-      // is more useful than telling it accurately why it also would not have
-      // been authorised.
+      // An app that chose a posture which does not seed is not waiting for
+      // something that is coming, so it hears so here rather than at the
+      // timeout.
       if (_preference?.seedNamespaceKeys != true) {
         return const AtReachabilityResult(AtReachability.postureDoesNotSeed);
       }
 
-      if (!(await bootstrap.seeding.authorisedNamespaces())
-          .contains(namespace)) {
-        return const AtReachabilityResult(AtReachability.notAuthorised);
-      }
+      // Nothing here reads what this enrollment was granted. That costs a
+      // round trip on an APKAM client and buys nothing for correctness: the
+      // atServer refuses a write into a namespace the enrollment does not
+      // hold, under the verb's own name, so an ungranted namespace arrives as
+      // that refusal — which names the write — instead of as a guess made a
+      // round trip earlier. Leaving it out also shortens the window between
+      // the read above and the one the seed makes, in which a sibling
+      // enrollment can publish.
 
       // ⚠️ Do NOT call this concurrently with the PQ startup step or with
       // itself. This comment claimed the opposite until 2026-08-27 — that both
@@ -196,7 +208,14 @@ class AtClientImpl implements AtClient {
       // the lock back, both see their own id, and both mint. `MintLock` now
       // holds an in-flight guard for the ring this client uses, which is what
       // makes the call safe HERE — not the lock, and not the re-read.
-      await bootstrap.seeding.seedNamespace(atSign, namespace);
+
+      // The rotation question is not put on this route. A sibling enrollment
+      // that published between the read above and the seed's own read routes
+      // the seed onto the branch that would put it, and what this route has to
+      // say about a namespace that already has a generation is "already
+      // reachable" — never "let us consider replacing it".
+      await bootstrap.seeding
+          .seedNamespace(atSign, namespace, askRotationPolicy: false);
       return const AtReachabilityResult(AtReachability.published);
     } catch (e) {
       _logger.warning('Could not make $atSign reachable for $namespace: $e');

@@ -1,5 +1,29 @@
 ## 3.15.0-rc1
 
+- fix: **`ensureReachable` no longer asks the namespace-key rotation policy.**
+  It read the published advertisement, and `seedNamespace` read it again after a
+  remote round trip, so a sibling publishing in that window routed the call onto
+  the published branch and put the rotation question from a route documented
+  never to ask it. `seedNamespace` now takes `askRotationPolicy`, which
+  `ensureReachable` sets false; the second read stays, because the mint lock is
+  what prevents a second generation being published over a sibling's.
+- fix: **a content-key read no longer reports a missing crypto provider as an
+  unsynced record.** The conveyance read swallowed everything but two exception
+  types, so a client with no provider for the scheme a record was written under
+  was told the record *"has not synced, or the key was rotated away"* — both
+  false, the record being present and intact. It now propagates
+  `CryptoProviderNotRegistered`, and logs whatever it does swallow, which was
+  previously silent.
+- **BREAKING (behaviour):** `AtClient.ensureReachable` no longer performs an
+  authorisation lookup, so it costs one fewer round trip on an APKAM client and
+  `AtReachability.notAuthorised` now means only *this namespace can never hold a
+  key of its own* — decided locally, with no round trip. An enrollment that was
+  not granted the namespace now surfaces as `failed`, carrying the atServer's
+  own refusal, since the atServer refuses an ungranted write under the verb's
+  own name. `seedNamespace` refuses `__manage` and `*` outright, and
+  `NskeySeeding.isSeedable` is public so a single-namespace caller can ask the
+  same question.
+
 - feat: **an atSign that holds no enrollment now retrofits itself too.** A
   post-quantum posture already moved a legacy *enrollment* to an ML-DSA
   credential at the client's first start; an atSign onboarded before enrollments

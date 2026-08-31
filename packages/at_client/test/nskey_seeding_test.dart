@@ -209,6 +209,119 @@ void main() {
             'namespace either');
   });
 
+  group('the rotation question follows the route that asked to seed', () {
+    // `AtClient.ensureReachable` reads what is published, finds nothing, and
+    // then `NskeySeeding.seedNamespace` reads again — two reads of the same
+    // record with the seed's decision between them. A sibling enrollment
+    // publishing in that window routes the second read onto the branch that
+    // puts the rotation question, from a route that never offers it.
+
+    /// The generation a sibling publishes mid-route. Dated far enough back
+    /// that any policy with an opinion about age would say replace it, so a
+    /// zero ask count is the question not being put rather than a policy
+    /// declining to answer.
+    NskeyAdvertisement sibling() => NskeyAdvertisement.single(
+          publicKey: Uint8List.fromList(List<int>.filled(1216, 7)),
+          alg: SecretSharingAlgos.xWing,
+          createdAt: DateTime.utc(2020),
+        );
+
+    ({NskeySeeding seeding, List<NskeyRotationContext> asked}) wired() {
+      final atClient = MockAtClient();
+      when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
+      final asked = <NskeyRotationContext>[];
+      return (
+        seeding: NskeySeeding(
+          atClient: atClient,
+          ring: _RingPublishingLate(atClient, sibling()),
+          rotationPolicy: (context) {
+            asked.add(context);
+            return true;
+          },
+        ),
+        asked: asked,
+      );
+    }
+
+    int readsBy(NskeySeeding seeding) =>
+        (seeding.ring as _RingPublishingLate).reads;
+
+    /// `AtClient.ensureReachable`'s branches, in its order: the namespace
+    /// check that costs nothing, its own read of what is published, and then
+    /// the seed with the argument that route passes. An `AtClientImpl` cannot
+    /// be driven from here — it builds its own key ring and nothing can
+    /// replace it — so this walks the same sequence over a ring that can be.
+    Future<void> reachabilityRoute(NskeySeeding seeding, String ns) async {
+      if (!NskeySeeding.isSeedable(ns)) return;
+      if (await seeding.ring.publishedAdvertisement(atSign, ns) != null) return;
+      await seeding.seedNamespace(atSign, ns, askRotationPolicy: false);
+    }
+
+    test('a sibling publishing mid-route does not become a rotation', () async {
+      // ⚠️ A discriminator, not a restatement of the parameter: the ring below
+      // really does take `seedNamespace` into its published branch, which is
+      // the only branch that puts the question. Before the parameter existed
+      // this recorded ONE ask, and the mutation that records one again is to
+      // have the route pass `askRotationPolicy` defaulted.
+      final w = wired();
+
+      await reachabilityRoute(w.seeding, 'app_1.my_apps');
+
+      expect(readsBy(w.seeding), 2,
+          reason: 'both reads happened — the route\'s own and '
+              'seedNamespace\'s — so the second landed on the published '
+              'branch and adopted the sibling\'s generation rather than '
+              'minting past it');
+      expect(w.asked, isEmpty,
+          reason: 'the rotation lever belongs to the startup sweep and to the '
+              'conveyance of a content key. A call whose whole question is '
+              'whether a peer can seal here must not spend an atSign\'s '
+              'namespace key because of who won a race in its window');
+    });
+
+    test('the startup route still puts it, on the parameter\'s default',
+        () async {
+      // The control, and the arm most easily left out: `seedNamespace` called
+      // exactly as `seed()` calls it, naming no argument at all. It stays
+      // green under the mutation above, and reddens if the default is turned
+      // the wrong way or the lever disabled outright.
+      final w = wired();
+      expect(
+          await w.seeding.ring.publishedAdvertisement(atSign, 'app_1.my_apps'),
+          isNull,
+          reason: 'the ring\'s cold answer, consumed so that this arm and the '
+              'one above differ ONLY in the argument passed — both reach '
+              'seedNamespace with the same generation published');
+
+      await w.seeding.seedNamespace(atSign, 'app_1.my_apps');
+
+      expect(w.asked, hasLength(1));
+      expect(w.asked.single.namespace, 'app_1.my_apps',
+          reason: 'the question really was put, about the namespace asked '
+              'for — so the zero above is this route declining to put it and '
+              'not a fixture that could never have recorded one');
+    });
+
+    test('seedNamespace refuses a namespace that can never hold a key',
+        () async {
+      // Every seeding route passes through here, so this is where a caller
+      // that arrived by some other road is stopped. `__manage` is a grant over
+      // other namespaces, not a namespace data lives in.
+      final w = wired();
+
+      await expectLater(w.seeding.seedNamespace(atSign, '__manage'),
+          throwsA(isA<ArgumentError>()));
+
+      expect(readsBy(w.seeding), 0,
+          reason: 'refused from the argument alone, which is what lets '
+              'ensureReachable answer notAuthorised without a round trip');
+      expect(NskeySeeding.isSeedable('app_1.my_apps'), isTrue,
+          reason: 'the control: an ordinary namespace is not refused, so the '
+              'throw above is `__manage` and not a predicate that says no to '
+              'everything');
+    });
+  });
+
   group('an add conveys only what it newly minted — UC-G2.6 c4', () {
     Future<NskeyAdvertisement> advertisement(List<String> algos,
         {DateTime? createdAt}) async {
@@ -318,6 +431,30 @@ class _CountingFiling extends NskeyPrivateFiling {
     readFor.add(nskeyKid);
     return null;
   }
+}
+
+/// A ring that answers nothing on its first read and an advertisement on every
+/// read after it — a sibling enrollment publishing in the window between two
+/// reads of the same namespace.
+class _RingPublishingLate extends PublishedNskeyKeyRing {
+  _RingPublishingLate(super.atClient, this._published);
+
+  final NskeyAdvertisement _published;
+
+  /// How many reads have been served, so a test can tell "the second read
+  /// landed on the published branch" from "there was no second read".
+  int reads = 0;
+
+  @override
+  Future<NskeyAdvertisement?> publishedAdvertisement(
+          String owner, String namespace,
+          {bool useCache = true}) async =>
+      reads++ == 0 ? null : _published;
+
+  /// Nothing to add, so `_addMissing` returns immediately and the only thing
+  /// these tests can observe is whether the rotation policy was asked.
+  @override
+  Future<NskeyAdvertisement?> add(String namespace) async => null;
 }
 
 /// A ring that answers [_published] for every namespace, so a test can put the

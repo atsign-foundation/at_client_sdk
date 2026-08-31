@@ -96,12 +96,17 @@ class NskeySeeding {
   /// atServer grants a first enrollment, which is not this package's to
   /// assert.
   ///
-  /// No longer test-only: `AtClient.ensureReachable` asks this to tell "this
-  /// enrollment cannot hold a key for that namespace" apart from "the mint
-  /// failed". Without the distinction a wildcard-only enrollment — which is
-  /// what a first CRAM onboard produces — reports an error for a namespace it
-  /// was never going to seed, which is the wrong thing to hand an app author
-  /// hunting a failure.
+  /// Read by the routes that have to iterate — [seed] and
+  /// [requestMissingPrivates] — which have no other way to know what to loop
+  /// over.
+  ///
+  /// A caller asking about ONE named namespace does not need it, and the round
+  /// trip would buy nothing: the atServer refuses a write into a namespace
+  /// this enrollment was not granted, under the verb's own name, so an
+  /// ungranted namespace is reported by that refusal — which names the write —
+  /// rather than guessed at beforehand. What such a caller does want cheaply is
+  /// [isSeedable], which answers "that namespace never holds a key of its own"
+  /// from the argument alone.
   Future<Set<String>> authorisedNamespaces() async {
     final enrollmentId = atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
     if (enrollmentId == null || enrollmentId.isEmpty) {
@@ -114,7 +119,7 @@ class NskeySeeding {
           .where((e) => e.enrollmentId == enrollmentId);
       return {
         for (final enrollment in mine)
-          ...?enrollment.namespace?.keys.where(_isSeedable)
+          ...?enrollment.namespace?.keys.where(isSeedable)
       };
     } catch (e) {
       _logger.info('Could not read this enrollment to find its namespaces, so '
@@ -123,7 +128,15 @@ class NskeySeeding {
     }
   }
 
-  static bool _isSeedable(String namespace) =>
+  /// Whether [namespace] can hold a namespace key of its own.
+  ///
+  /// `*` and `__manage` are grants over *other* namespaces rather than
+  /// namespaces data lives in, so nothing ever mints for them: "every
+  /// namespace" is not a list that can be minted, and `__manage` is not an app
+  /// namespace. Public because it is the cheap half of "can this atSign be
+  /// made reachable for that namespace" — answered from the argument with no
+  /// round trip, and no later start can change the answer.
+  static bool isSeedable(String namespace) =>
       namespace != '*' && namespace != '__manage' && namespace.isNotEmpty;
 
   /// Mints and publishes for every authorised namespace that has no key yet,
@@ -169,7 +182,31 @@ class NskeySeeding {
   /// different key material. What makes concurrent callers safe is the
   /// in-flight guard on the [MintLock] instance they share, so callers that do
   /// **not** share a ring are still racing.
-  Future<bool> seedNamespace(String owner, String namespace) async {
+  ///
+  /// [askRotationPolicy] governs whether an already-published generation is
+  /// put to [rotationPolicy]. A caller that read the advertisement itself a
+  /// moment ago, found none, and is only trying to make this atSign reachable
+  /// passes false: a sibling enrollment publishing in the window between that
+  /// read and the one below routes this call onto the branch that puts the
+  /// rotation question, and a route whose whole answer for an already-published
+  /// namespace is "already reachable" never offers it. The read below stays
+  /// either way — it is what makes the loser of that race adopt the winner's
+  /// generation instead of minting a second one.
+  ///
+  /// Refuses a namespace that can never hold a key of its own ([isSeedable]).
+  /// Every seeding route passes through here, so a caller that arrived by some
+  /// other road is stopped rather than publishing a key at an address nothing
+  /// will ever look at.
+  Future<bool> seedNamespace(String owner, String namespace,
+      {bool askRotationPolicy = true}) async {
+    if (!isSeedable(namespace)) {
+      throw ArgumentError.value(
+          namespace,
+          'namespace',
+          'is a grant over other namespaces rather than one data lives in, so '
+              'no key is ever minted for it');
+    }
+
     // The atServer, not local storage: a namespace another enrollment minted a
     // moment ago is absent locally until sync catches up, and reading that
     // absence as a cold start is what publishes a second key over the first.
@@ -178,9 +215,9 @@ class NskeySeeding {
       // A rotation mints every algorithm this client is configured for, so an
       // add after one would find nothing missing. Only the namespace that was
       // left alone needs the second question.
-      if (!await rotateIfPolicyAsks(owner, namespace, published: published)) {
-        await _addMissing(owner, namespace, published);
-      }
+      final rotated = askRotationPolicy &&
+          await rotateIfPolicyAsks(owner, namespace, published: published);
+      if (!rotated) await _addMissing(owner, namespace, published);
       return false;
     }
     final advertisement = await ring.mintAndPublish(namespace);
@@ -465,7 +502,7 @@ class NskeySeeding {
     if (sharing == null || filing == null) return 0;
 
     int sent = 0;
-    for (final namespace in approvedNamespaces.where(_isSeedable)) {
+    for (final namespace in approvedNamespaces.where(isSeedable)) {
       final held = await filing.readAllFor(namespace);
       for (final entry in held.entries) {
         await sharing.shareSecretWith(

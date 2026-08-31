@@ -23,12 +23,20 @@ enum AtReachability {
   /// is coming.
   postureDoesNotSeed,
 
-  /// This client is not authorised for a namespace that can hold a key.
+  /// The namespace named can never hold a key of its own, so nothing here or
+  /// in any client's startup will publish one for it.
   ///
-  /// Either the enrollment does not grant it, or the namespace is one that is
-  /// never seeded — `*` and `__manage` are grants over other namespaces rather
-  /// than namespaces data lives in, so a wildcard-only enrollment (which is
-  /// what a first CRAM onboard produces) is authorised for nothing seedable.
+  /// `*` and `__manage` are grants over other namespaces rather than
+  /// namespaces data lives in. A wildcard-only enrollment — which is what a
+  /// first CRAM onboard produces — is therefore authorised for nothing
+  /// seedable, and asking again later cannot change the answer. Decided from
+  /// the namespace alone, with no round trip.
+  ///
+  /// **Not** "this enrollment was not granted that namespace". Establishing
+  /// that costs a round trip to the enrollment record, and the atServer
+  /// answers it anyway by refusing the write under the verb's own name — so an
+  /// ungranted namespace arrives as [failed] carrying that refusal, which says
+  /// which write was refused.
   notAuthorised,
 
   /// The work did not finish inside the timeout. Nothing is known about
