@@ -189,8 +189,7 @@ Future<Uint8List> pqSeal(
   // can open. Refused here for the same reason an unsupported version is
   // refused above.
   if (enc.ciphertext.length != row.suite.nEnc) {
-    throw PqSealException(
-        'version 0x${version.toRadixString(16)} is KEM '
+    throw PqSealException('version 0x${version.toRadixString(16)} is KEM '
         '0x${row.suite.kemId.toRadixString(16)}, whose encapsulation is '
         '${row.suite.nEnc} bytes; this KEM produced ${enc.ciphertext.length}');
   }

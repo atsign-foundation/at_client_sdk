@@ -92,8 +92,9 @@ final class XWingPureDartAlgo with KemSeedMixin implements AtKemAlgorithm {
   /// through [keyPairFromSeed], because that identity does not hold for
   /// ML-KEM.
   @override
-  Future<({Uint8List publicKey, Uint8List secretKey})>
-      keyPairFromValidatedSeed(Uint8List seed) => generateKeyPair(seed);
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromValidatedSeed(
+          Uint8List seed) =>
+      generateKeyPair(seed);
 
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
@@ -166,8 +167,8 @@ final class XWingPureDartAlgo with KemSeedMixin implements AtKemAlgorithm {
   /// components.
   Future<_Expanded> _expand(Uint8List seed) async {
     final halves = XWingCore.expandSeed(seed);
-    final (publicKey: pkM, secretKey: skM) = await MlKem768PureDartAlgo.instance
-        .generateKeyPair(halves.mlKemSeed);
+    final (publicKey: pkM, secretKey: skM) =
+        await MlKem768PureDartAlgo.instance.generateKeyPair(halves.mlKemSeed);
     final Uint8List skX = halves.x25519Secret;
     final crypto.SimpleKeyPair x25519Pair =
         await _x25519.newKeyPairFromSeed(skX);

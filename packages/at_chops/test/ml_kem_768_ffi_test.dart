@@ -71,7 +71,8 @@ void main() {
           () async {
         final ffiAlgo = MlKem768FfiAlgo.fromLib(lib!);
         final ffiKp = await ffiAlgo.generateKeyPair(seed);
-        final pureKp = await MlKem768PureDartAlgo.instance.generateKeyPair(seed);
+        final pureKp =
+            await MlKem768PureDartAlgo.instance.generateKeyPair(seed);
         try {
           expect(ffiKp.publicKey, equals(pureKp.publicKey));
         } finally {
@@ -122,7 +123,8 @@ void main() {
       }
     });
 
-    test('decapsulate throws ArgumentError for a wrong-length secret-key '
+    test(
+        'decapsulate throws ArgumentError for a wrong-length secret-key '
         'handle', () async {
       final algo = MlKem768FfiAlgo.fromLib(lib!);
       final kp = await algo.generateKeyPair();
