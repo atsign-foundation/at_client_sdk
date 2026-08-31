@@ -4,6 +4,8 @@
 **Purpose:** the tiered gate ladder **T0–T6** for the implementation-neutral
 `AtClient` work, the measured evidence behind each tier, and — for every tier — an
 explicit statement of what it does *not* establish.
+**Status refreshed:** 2026-08-27, against `trunk` at `9d9e5f7d7`. The measured
+baseline in §1 is dated where it was taken and is not re-measured on a status pass.
 **Lane:** this doc owns *what must be true and how it is checked*. For the seams
 themselves see [`design.md`](design.md); for sequencing see
 [`implementation-plan.md`](implementation-plan.md); for the rulings see
@@ -162,10 +164,17 @@ build does** (`dart.library.io` false, `dart.library.js_interop` true). Fail on 
 file naming `dart:io`, `dart:ffi`, `dart:isolate`, `dart:html`, `dart:js` or
 `dart:mirrors`.
 
-Barrels covered: `package:at_client/at_client.dart`,
+Barrels in scope: `package:at_client/at_client.dart`,
 `package:at_lookup/at_lookup.dart`, `package:at_utils/at_utils.dart`,
-`package:at_chops/at_chops.dart`. (`package:at_auth/at_auth.dart` is covered by the
-PQ program's S-5 — [`roadmap.md`](roadmap.md) §5.)
+`package:at_chops/at_chops.dart`, and `package:at_auth/at_auth.dart` via the PQ
+program's S-5 — [`roadmap.md`](roadmap.md) §5.
+
+**Gated as of 2026-08-27: `at_chops` and `at_auth`. Nothing else.** The gated set is
+declared in `.github/wasm_gates.yaml` and nowhere else. `at_utils`, `at_lookup` and
+`at_client` own 3, 6 and 7 offenders respectively and are deliberately absent, so that a
+declared gate asserts a package is web-safe rather than recording how far it has to go.
+Each joins as its phase lands — at_lookup with Phase 2, at_utils and at_client with
+Phase 4.
 
 **`dart:html` and `dart:js` are policy here, not toolchain.** Under
 [`decisions.md`](decisions.md) D-7 the JS/TS artifact is built with dart2js, which
@@ -176,25 +185,67 @@ Removing them from the walk silently forecloses dart2wasm.
 **Done when:** the walk reports zero offenders in package-owned sources, and the set
 of externally-blocked packages is empty.
 
-**Implementation:** a working prototype exists at
-`packages/at_auth/test/wasm/dep_tree_test.dart` on the `at_client_sdk-atauth-wasm`
-worktree. It already implements the web-resolution walk and a two-way ratchet on the
-blocked-package set. Generalise it rather than rewriting it.
+**Implementation: shipped.** `tools/wasm_shakedown` — a standalone CLI, not a test —
+run in CI by the `wasm_shakedown` and `wasm_ratchet` jobs of
+`.github/workflows/at_libraries.yaml`, as a hard gate rather than allowed-to-fail. It
+walks the graph across package boundaries via `.dart_tool/package_config.json`,
+resolving configurable URIs the way the target platform would. A stanza carries three
+keys, and the third is the one worth knowing about:
+
+| Key        | Asserts                                                             |
+| ---------- | ------------------------------------------------------------------- |
+| `ratchets` | nothing forbidden is reachable from a barrel (T0.1, T0.2)           |
+| `probe`    | the barrel compiles — the libraries dart2wasm rejects outright (T1) |
+| `controls` | the ratchet above has not quietly stopped proving anything          |
+
+`controls` are mandatory, and the parser rejects a stanza without one. Every ratchet
+check is about what the walk did *not* find, so a walk that found nothing satisfies all
+of them; a control walks the other side of the platform seam and asserts the walk still
+*reaches* something known to be there. Without one, `at_chops_ffi.dart` could be emptied
+and the gate would still read green. `min_files_walked` guards the same failure from the
+other direction. See `tools/wasm_shakedown/README.md`.
 
 ### T0.2 — the ratchet
 
-The blocked-package expectation is a **two-way** ratchet: a new entry means someone
-introduced a browser-hostile dependency; a missing entry means a blocker was fixed and
-the expectation should shrink. Either direction fails the build and demands a
-deliberate edit. Baseline it against today's violations at phase 0 so it can be
-enabled before the sweep is finished.
+**Shipped one-way, not two-way as originally specified.** Each ratchet names the sources
+allowed to reach a forbidden library (`allowed_offenders`) plus a ceiling on how many
+packages anywhere in the graph own one (`max_blocked_packages`). A source outside the
+allow list, or a count above the ceiling, fails. Fixing a source or dropping a
+dependency **passes with no edit here** — the baseline just goes loose, and the printed
+figures say so: `6/7 offenders` means one listed file no longer reaches anything.
 
-### T0.3 — no platform conditionals in core
+Why the change. A two-way ratchet demands an edit to this repo's gate config in the same
+commit as every fix, including fixes made for unrelated reasons in other packages, and it
+fails the build for good news. One-way keeps the only mandatory edit a *tightening*, done
+when convenient. The cost is that a stale-loose baseline no longer self-reports as a
+failure, which the printed figures mitigate: every run prints them whether or not it
+fails.
 
-No file under a neutral package's `lib/` contains `if (dart.library.`. This enforces
-[`decisions.md`](decisions.md) D-1. The main tree currently satisfies this trivially —
-there are **zero** conditional imports anywhere in `packages/` — so this gate can be
-turned on immediately, before any other work.
+There is deliberately no way to write a baseline back from a run. A generator existed and
+was removed — the failure output already prints the full live walk.
+
+### T0.3 — conditionals must have both branches walked
+
+**Restated. The original ban is withdrawn.** This gate read: no file under a neutral
+package's `lib/` contains `if (dart.library.`, turnable on immediately because the tree
+had zero. `at_auth` 4.0.0-rc1 then shipped exactly one, deliberately and with a recorded
+rationale — `lib/src/auth/probe_default.dart` exports `probe_default_web.dart`, or
+`probe_default_io.dart` under `dart.library.io`. Both branches are real implementations;
+neither is a stub. A ban would have had to allow-list the one construct it exists to
+forbid on the day it was written. See [`decisions.md`](decisions.md) D-1 and OQ-1.
+
+What is enforced instead: **a conditional in a gated package must have both of its
+branches walked.** The ratchet resolves web-side, which covers one branch. A `control`
+resolves with io semantics by default, so pointing one at the same barrel covers the
+other — and `environment: web` on a control pins the web branch where that is the half
+in question. Absent the second walk, the ratchet passes just as convincingly when the
+conditional was skipped and neither branch was seen. at_auth's stanza carries exactly
+this control, on the file axis rather than the library axis, because `at_auth.dart` under
+io resolution reaches `dart:io` through half a dozen files and `reaches_library` would
+prove nothing there.
+
+The construct stays discouraged by D-1 — this makes it *auditable* where it survives, not
+approved as a default.
 
 ### T0.4 — no throwing fallbacks
 
@@ -205,6 +256,13 @@ unreachable there, not reachable-and-explosive.
 **Watch-out:** this is a grep-shaped gate and will catch legitimate uses (e.g. an
 `AtKeysIo` subtype refusing `write`). Maintain an explicit allow-list with a reason per
 entry rather than loosening the pattern.
+
+**Not implemented.** `wasm_shakedown` has no throwing-stub key; its three are `ratchets`,
+`probe` and `controls`. D-2 is therefore upheld by review, not by CI. The reachability
+gate covers the shape that actually bit us — a capability that is *absent* on web — while a
+hand-written stub is reachable-and-explosive and passes T0.1 cleanly. Worth landing before
+Phase 4, where the sweep removes the native defaults that stubs are the tempting
+substitute for.
 
 ### What T0 does not prove
 
@@ -245,7 +303,20 @@ description or a status update, T0's result must appear beside it.
 ## 4. T2 — execute under Node + dart2wasm
 
 **The gate the predecessor doc lacked entirely**, and the one that converts "compiles"
-into "runs". Available today with no browser infrastructure (§1.3).
+into "runs". Available locally with no browser infrastructure (§1.3) — but, as of
+2026-08-27, **not in CI**, deliberately.
+
+**Why it is not wired up.** On the hosted `ubuntu-latest` runner every suite fails to load
+before any test body executes: the CJS bootstrap calls `instantiate` from the ESM `.mjs`
+init file and gets `undefined`. The same command passes locally on Dart 3.12 + Node 24,
+and neither is pinned in the workflow, so a CI failure here would report a toolchain
+mismatch and not a fact about our code. It waits for a pinned pair where a failure means
+something. Recorded here rather than as a silent omission, and it is the reason
+[`implementation-plan.md`](implementation-plan.md) R5 is withdrawn rather than done.
+
+Two mechanics worth carrying into that work, measured while getting the suites to run
+locally: `dart2wasm` emits one module per test file, so `--concurrency=1` is the wrong
+knob to reach for, and `Uri.base` throws under dart2wasm on Node.
 
 | ID   | Gate                                                                                                                                                                                                               | Done when       |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
@@ -254,9 +325,10 @@ into "runs". Available today with no browser infrastructure (§1.3).
 | T2.3 | Same in `at_chops` — the pure-Dart barrel only, `--exclude-tags ffi`. Executes `cryptography`, `pqcrypto` and `better_cryptography` rather than merely building them, closing open questions C1–C3 by measurement. | All tests pass. |
 | T2.4 | Same in `at_client` for every suite not requiring local storage or a socket.                                                                                                                                       | All tests pass. |
 
-**Cost note.** T2 is close to free: the suites already exist, and the runner does the
-compilation. Adding a matrix dimension to `.github/workflows/at_libraries.yaml` is the
-whole integration.
+**Cost note.** T2 is close to free *once the toolchain pair is pinned*: the suites
+already exist and the runner does the compilation. The integration is a matrix dimension
+in `.github/workflows/at_libraries.yaml` plus pinned Dart and Node versions — the second
+half is what is missing, not the first.
 
 ### What T2 does not prove
 

@@ -254,6 +254,9 @@
     re-implementing its `main`; there is no supported library entry point for
     activation, and there was not one before.
 
+## 1.16.1-rc1
+- fix: pass passPhrase to FileAtKeysIo during onboarding so password-protected atKeys files are written correctly
+
 ## 1.16.0
 - refactor: route enrollment crypto — `sha256` hashing, AES key generation and RSA keypair generation — through at_chops (`SHA256HashingAlgo`, `AtChopsUtil.generateSymmetricKey`, `AtChopsUtil.generateAtEncryptionKeyPair`). `crypto`, `encrypt` and `crypton` are no longer imported anywhere in the package and have been dropped from `dependencies`. Byte-identical by construction.
 - feat: enrollment authorization wait can now be resumed across sessions
