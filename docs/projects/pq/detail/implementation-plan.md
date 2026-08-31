@@ -94,7 +94,7 @@ given/when/then here.
 - [12. Open decisions pointer & verification provenance](#12-open-decisions-pointer--verification-provenance)
 - [13. Phase IS — inter-server PQ authentication (IS-1)](#13-phase-is--inter-server-pq-authentication-is-1)
 - [14. Backlog — carried items with no owning project](#14-backlog--carried-items-with-no-owning-project)
-- [15. D1 burn-down — the single index of what D1 owes](#15-d1-burn-down--the-single-index-of-what-d1-owes) — *start here for "what is left"; every row carries the command that re-derives it*
+- [15. D1 burn-down — a SUPERSEDED snapshot, not the list](#15-d1-burn-down--a-superseded-snapshot-not-the-list) — ⛔ *do NOT start here. The one list is `implementation-plan.md`'s `## TODO`; this is what it replaced*
 
 ---
 
@@ -4482,7 +4482,19 @@ above assume.**
 ---
 
 
-## 15. D1 burn-down — the single index of what D1 owes
+## 15. D1 burn-down — a SUPERSEDED snapshot, not the list
+
+⛔ **This is not the index of what is owed, and its heading claimed to be until
+2026-08-31.** The one list is
+[`implementation-plan.md`](../implementation-plan.md)'s `## TODO`, bucketed
+P0–P3, every open item appearing exactly once — this section predates that
+collapse and its rows are duplicated there, so a reader working both gets two
+answers to one question and the copy nobody edits reads as current. It is kept
+for the reasoning in its body, not for its table. ⚠️ **Its `### 15.1 Open work`
+table still carries live rows** (step 20's rotation arm among them, which is a
+P1 row in the real list), so it cannot simply be deleted — reconciling it row by
+row and leaving a pointer is a `## TODO` item of its own. Found by a cold read
+2026-08-31, which followed this file's own table of contents to it.
 
 **Why this exists.** There was no one place to answer "what is left for D1".
 The work is spread across [14.18](#1418-the-remaining-d1-initial-development-sequence)'s

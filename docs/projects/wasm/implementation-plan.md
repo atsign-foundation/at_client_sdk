@@ -275,7 +275,7 @@ Now verified **by execution** under T2.3 rather than by compile.
 
 ## 8. Phase 6 — the JS/TS facade (J)
 
-Design in [`js-api.md`](js-api.md) and [`plans/wasm/api-designing.md`](../../../plans/wasm/api-designing.md)
+Design in [`js-api.md`](js-api.md) and `plans/wasm/api-designing.md` (⛔ **not in this repo** — never tracked, not gitignored, and absent from this machine; the link that used to sit here resolved three levels above the repo root)
 (the Dart-side Layer A/B/C split); rulings D-7..D-11 in [`decisions.md`](decisions.md).
 Builds on W1. Adds no Dart package — everything lands inside `at_client_web`.
 
@@ -311,7 +311,7 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
   `'unknown'` event, never drop it or throw. → T6.5
 - **J4 — The TS-supplied `KeyStore` seam.** Adapt a JS object behind the Dart storage
   interface, so Node consumers supply storage without a Dart package. Owned jointly with
-  [`plans/wasm/key-storage.md`](../../../plans/wasm/key-storage.md). → T6.6
+  `plans/wasm/key-storage.md` (⛔ **not in this repo**, as above). → T6.6
 - **J5 — Entry point.** `packages/at_client_web/web/at_client_js.dart` — the `main()`
   that installs the facade on the global scope. Compiled with `dart compile js`; keep the
   dart2wasm build green in CI to preserve the option.
