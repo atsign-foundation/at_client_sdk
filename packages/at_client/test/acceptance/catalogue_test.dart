@@ -264,6 +264,67 @@ void main() {
               'Same rule: move them together');
     });
 
+    test('every clause called unprovable is real, and still unproven', () {
+      // Objective 1 is "every PROVABLE THEN clause proven". That only means
+      // anything if the exceptions are enumerated somewhere a rail can see, and
+      // if an entry dies the moment it stops being true — a hand-kept list of
+      // exceptions is how a target quietly stops being a target.
+      final byId = {for (final u in catalogueUseCases()) u.id: u};
+      final problems = <String>[];
+
+      for (final entry in unprovableClauses.entries) {
+        final parts = entry.key.split(' c');
+        if (parts.length != 2 || int.tryParse(parts[1]) == null) {
+          problems.add('${entry.key}: not in "<use case> c<n>" form');
+          continue;
+        }
+        final useCase = byId[parts[0]];
+        if (useCase == null) {
+          problems.add('${entry.key}: names a use case the catalogue does '
+              'not define');
+          continue;
+        }
+        final index = int.parse(parts[1]);
+        final clauses = clausesOf(useCase.id);
+        if (!clauses.any((c) => c.index == index)) {
+          problems.add('${entry.key}: that row has ${clauses.length} clauses, '
+              'so there is no c$index — a withdrawal earlier in the row '
+              'renumbers everything after it');
+          continue;
+        }
+        if (clauseCoverageOf(useCase.id).proven.contains(index)) {
+          problems.add('${entry.key}: is PROVEN, so calling it unprovable is '
+              'spent and the entry must be deleted');
+        }
+        if (entry.value.trim().length < 40) {
+          problems.add('${entry.key}: the reason is too short to judge');
+        }
+      }
+
+      expect(problems, isEmpty,
+          reason: 'the unprovable list has rotted:\n${problems.join('\n')}');
+    });
+
+    test('the reachable target is what objective 1 measures', () {
+      var clauses = 0, proven = 0;
+      for (final u in catalogueUseCases().where((u) => !u.isWithdrawn)) {
+        clauses += clausesOf(u.id).length;
+        proven += clauseCoverageOf(u.id).proven.length;
+      }
+      final reachable = clauses - unprovableClauses.length;
+
+      // Printed beside the burn-down rather than folded into it: the existing
+      // line's shape is quoted in the plan, and a figure with two homes is a
+      // figure that drifts. This one says what "done" is.
+      // ignore: avoid_print
+      print('REACHABLE  provable clauses: $reachable of $clauses   '
+          'proven: $proven   still to prove: ${reachable - proven}');
+
+      expect(proven <= reachable, isTrue,
+          reason: 'more clauses are proven than are reachable, which means '
+              'something in unprovableClauses is pinned after all');
+    });
+
     test('every pin resolves to exactly one clause', () {
       // provenIn enforces this while a scenario RUNS, which covers the pins
       // on rows whose scenario executes. This says the same thing about the

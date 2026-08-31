@@ -104,6 +104,31 @@ const liveProofExempt = <String, String>{
       'every clause is a decision NOT to act, taken locally and before any I/O: the policy is not asked, or its yes is declined. A live arm would assert an absence against an atServer it never contacted, which is the shape of test that passes whether the mechanism is present or absent. The acts these skips guard are separately live-proven under UC-A5.1',
 };
 
+/// Clauses that CANNOT reach proven, whatever anyone builds, with the reason.
+///
+/// Objective 1 is "every **provable** THEN clause proven" (gkc, 2026-08-31),
+/// restated from "every THEN clause" once it emerged that at least one clause
+/// is unreachable by construction rather than by neglect.
+///
+/// The shape to watch for: a clause whose assertion is that a mechanism **does
+/// not exist**. Building the mechanism makes the clause FALSE rather than
+/// proven, and pinning the absence would count a clause proven for describing a
+/// hole — which gkc declined for UC-G2.9 c1 and c2 on 2026-08-31, ruling that
+/// such an absence gets a source-shaped guard cited WITHOUT a `clauses:` list:
+/// a tripwire, not proof. Both exits are closed, so the clause is stuck.
+///
+/// ⚠️ **This is not a waiver and must not become one.** An entry here says the
+/// clause is unprovable *as written*; it says nothing about whether the work it
+/// describes is owed, and the owed work keeps its own row. Rewriting or
+/// withdrawing such a clause is always available and is usually better — this
+/// map is for the ones deliberately kept as written.
+///
+/// Keyed `<use case> c<n>`, because the unit is a clause and not a row.
+const unprovableClauses = <String, String>{
+  'UC-G2.9 c3':
+      'it asserts that step 3\'s verifier-side accept lever DOES NOT EXIST. Building the lever falsifies the clause; pinning the absence counts it proven for describing a hole, which gkc declined for this row\'s c1 and c2 the same day. The absence IS guarded — architecture_guard_test.dart\'s "the verifier has no accept lever for signatures", cited from the row deliberately without a clauses: list — so nothing is unwatched; the clause simply has no route to proven. Kept as written (gkc, 2026-08-31) rather than withdrawn, with objective 1 restated around it',
+};
+
 /// How many THEN clauses some citation pins, and how many of those are pinned
 /// by a citation into a live pack.
 ///
