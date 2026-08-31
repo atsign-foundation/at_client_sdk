@@ -28,6 +28,27 @@ for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer sto
 
 ---
 
+> ## ⚠️ Scope change, 2026-08-30 — V1 is remote-only
+>
+> The first browser release ships with **no local store**
+> (`isLocalStoreRequired = false`): no SQLite, no VFS, no `sqlite3.wasm`, no Hive. See
+> [`decisions.md`](decisions.md) D-12.
+>
+> **What this does to the backlog below:**
+>
+> | Group | Status |
+> | --- | --- |
+> | Transport tasks | **unchanged, and now the critical path.** Also cheaper than assumed: the atServer already speaks WebSocket natively and the WSS proxy is built, so there is **no server-side transport work** |
+> | Storage / persistence / sync-queue tasks | **deferred to V2.** Correct as written; not withdrawn. `decisions.md` D-17 constrains the VFS choice for when they resume |
+> | Crypto tasks | **re-specified** — see [`design.md`](design.md) §C1. The `dart:html` claim was right about `better_cryptography`, not `cryptography`, and the Argon2id question is now settled statically |
+> | Key-storage tasks | **unchanged, and now the whole storage story** |
+> | JS packaging tasks | **re-specified by D-19** — author the facade once in TypeScript; generate both `.js` and `.d.ts` |
+>
+> A new task group is implied and not yet written up here: the **injected write-through
+> `Secondary`** that delivers remote-only (D-13). It replaces what would otherwise have been
+> a sweep through 21 null-assertion call sites.
+
+
 ## 0. How to read this plan
 
 Task ids are stable and referenced from the other docs. Each carries a goal, the

@@ -377,27 +377,66 @@ these are the algorithms it must use:
 | `pqcrypto`            | `ml_kem_768_pure_dart.dart`, `ml_dsa_65_pure_dart.dart`                                                                              |
 | `better_cryptography` | `aes.dart`, `aes_ctr_factory.dart`, `ed25519.dart`, `at_chops_util.dart`                                                             |
 
-`cryptography` 2.x's browser path uses Web Crypto via `dart:html`. `pqcrypto` is
-additionally fragile: `ml_kem_768_pure_dart.dart` reaches into
+> **Corrected 2026-08-30.** The two claims previously in this block — that `cryptography`
+> reaches Web Crypto "via `dart:html`", and that `better_cryptography` has "unknown web
+> status" — were both wrong. They are replaced below. The `dart:html` claim was inherited
+> verbatim from the predecessor `plan.md`; it is right about a package, but **the wrong
+> package**.
+
+`pqcrypto` is fragile in its own way: `ml_kem_768_pure_dart.dart` reaches into
 `package:pqcrypto/src/…` for `KyberLevel`, a private-path import that can break on any
-upstream release. `better_cryptography` is a `cryptography` fork with unknown web status.
+upstream release. That risk is unchanged.
 
-**The compile target changes what this question even asks.** Under dart2wasm,
-`dart:html` is rejected, so `cryptography` *must* fall back to pure Dart — and pure-Dart
-Argon2id is the reason `.atKeys` decryption was expected to be slow enough to need
-deferred UX work ([`acceptance.md`](acceptance.md) T4.6). Under **dart2js**, which
-[`decisions.md`](decisions.md) D-7 selects, `dart:html` compiles — so the Web Crypto path
-is reachable and may activate automatically.
+**The two crypto packages resolve their browser backends by different mechanisms and fail
+differently. They must be tracked as separate rows, never merged.**
 
-So C1 is no longer "will it compile?" but:
+| | `cryptography` 2.9.0 | `better_cryptography` 1.0.0+1 |
+| --- | --- | --- |
+| Selection mechanism | **runtime probe** — `isWebCryptoAvailable = crypto.subtle.isDefinedAndNotNull && window.isSecureContext` | **compile-time** — `if (dart.library.html)` in `lib/browser.dart:24` |
+| Web interop | `dart:js_interop` — **no `dart:html` anywhere in `lib/`** | **`dart:html` + `package:js`** (`src/browser/javascript_bindings.dart:19,24`; `src/browser/aes_ctr.dart:18`) |
+| Secure-context gate | yes — the `window.isSecureContext` probe above | **none.** `BrowserCryptography extends DartCryptography` performs no availability check |
+| Behaviour outside a secure context | falls back to pure Dart | **expected to throw on every operation** — `BrowserAesMixin` calls `crypto.subtle` unconditionally, with no try/catch and no `Dart*` delegate |
+| In a dedicated Worker | ⚠️ the gate is a literal `window` dereference, so it fails | 🔴 `dart:html` is unusable in a Worker at all |
 
-1. Which implementation does `cryptography` select under dart2js?
-2. If it is Web Crypto, how much faster are Argon2id and AES?
-3. Does that remove the deferred Argon2id work outright?
+**`better_cryptography` is on the default AES path — the hot path.** `AESEncryptionAlgo` →
+`aes.dart` → `aes_ctr_factory.dart` → `package:better_cryptography`. `BrowserCryptography`
+returns a pure-Dart `AesCtr` only for 24-byte keys; 16- and 32-byte keys get
+`BrowserAesCtr`. So every data encrypt/decrypt in a dart2js browser build goes through
+`dart:html`.
 
-**Measure before assuming either way** — and note that a dependency silently relying on
-the deprecated `dart:html` is a risk to track, not a licence for our own code to use it
-(T0.1 keeps it on the forbidden list for package-owned sources).
+**What the compile target actually decides:**
+
+| Compiler | `dart.library.html` | AES-CTR resolves to | Consequence |
+| --- | --- | --- | --- |
+| **dart2js** (D-7's shipping artifact) | true | `BrowserAesCtr` → `crypto.subtle` | accelerated, **main thread only** |
+| **dart2wasm** | false | `DartAesCtr`, pure Dart | **never accelerated**, any context |
+
+### C1 is re-specified
+
+Two of its three questions are now answerable **from source, with no browser**:
+
+1. *Which implementation does `cryptography` select under dart2js?* — `browser_cryptography.dart`,
+   always. Selection is by `dart.library.js_interop`, true under **both** web targets. Which
+   *primitive* backs it is then a **runtime** decision, so Node, Chrome-on-localhost and
+   plain-http Chrome take **three different paths** — and neither T0 nor T1 can see the
+   difference.
+2. *How much faster are Argon2id and AES?* — still needs measurement, for AES.
+3. *Does that remove the deferred Argon2id work?* — **No, and this is now settled.**
+   `cryptography` 2.9.0's `browser_cryptography.dart` has **no Argon2id override**, so
+   `argon2id.dart` always resolves to `DartArgon2id`. Argon2id is not in the WebCrypto spec
+   at all, so no browser can supply one. Re-check only on a `cryptography` major bump — and
+   state the version when doing so.
+
+**The task this block previously specified was mis-aimed:** "confirm `cryptography`
+resolves to its pure-Dart implementation" cannot be confirmed, because the branch selected
+is the browser branch either way. The real question is which primitives that branch
+accelerates at runtime, which is a T3 measurement, not a T0/T1 graph property.
+
+A dependency silently relying on the deprecated `dart:html` remains a risk to track, not a
+licence for our own code to use it (T0.1 keeps it on the forbidden list for package-owned
+sources). `better_cryptography` is additionally a **`1.0.0+1` fork on the hot path** — a
+maintenance cliff, and the strongest argument for replacing it with a WebCrypto AES-CTR
+implementation we own.
 
 All three packages are verifiable **by execution** rather than by compile — the at_chops
 suite runs under [`acceptance.md`](acceptance.md) T2.3. That is a strictly better answer
