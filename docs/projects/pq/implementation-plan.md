@@ -844,6 +844,35 @@ where a guard fails in both directions if they drift from the tree.
   [the evidence standard](acceptance.md#0-purpose-scope--how-to-read-this-doc)
   says is everywhere it is not impossible.
 
+⚠️ **The denominator counts clauses AS WRITTEN, and the clusters do not slice
+their prose the same way — so a percentage from one cluster does not compare
+with a percentage from another.** Some rows state each asserted behaviour on its
+own `*And*` line; others pack several into one `*Then*`, controls included.
+UC-G1.2's single `*Then*` carries three separate behaviours (the new material is
+active, the legacy keypair is left byte-identical, and the resolver returns the
+new id), and UC-G1.7's carries its assertion *and* its control arm; a row in
+section 18's style would state each of those separately. Neither convention is
+wrong, but they measure differently in both directions: the packed form yields
+fewer clauses that are each **harder** to pin, since a clause is pinned only
+when every arm of it is established, and the split form yields more clauses that
+are each easier. Read the total as *how finely this catalogue chose to state
+itself*, never as a count of behaviours, and re-derive per-cluster densities from
+`clausesOf()` in `manifest.dart` rather than assuming they are alike. Recorded
+2026-08-31, after a burn-down move of +30 clauses from eleven rows prompted the
+question; the eleven were not unusually dense against the catalogue as a whole,
+only against the neighbouring cluster written in the packed style.
+
+⚠️ **A jump in `proven` is not by itself a jump in evidence.** A clause written
+*after* the code and its tests is pinnable the moment it is written, so a
+catalogue catching up with work already landed raises both columns together
+while nothing new has been proven. Section 18 is the worked example: of the
+citations backing its clauses, exactly one names a test written by the same
+work — the commit that wrote the clauses added no test at all — and that one
+moved the count by nothing, because its clause was already pinned by a sibling
+citation. The rest name tests that already existed. What such a move buys is real —
+the behaviours become checkable and the tests become findable — but it is
+bookkeeping, and it should be reported as bookkeeping.
+
 ⚠️ **Pins are strict.** A clause is pinned only when the cited test
 establishes it *as written*. Clauses routinely carry several arms in one
 sentence — a value and a refusal, a shape and its control — and a test proving
