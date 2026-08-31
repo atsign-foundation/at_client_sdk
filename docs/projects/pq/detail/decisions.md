@@ -3276,7 +3276,7 @@ ruling, each with a differential test.
    against the pre-fix handler.
 
    ⚠️ **AMENDED 2026-08-27 by
-   [118](#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27):
+   [118](#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27):
    the formula and the re-arm stand, the TRIGGER moves.** The cap is armed by the
    new enrollment's first authentication on a connection it opened itself, not by
    the retrofit submission — capping at submission is a write made on the strength
@@ -3325,7 +3325,7 @@ ruling, each with a differential test.
    and the upgraded file becomes the backup. Timing: nothing to do; the grace cap
    retires it one window after the last retrofit (item 3). ⚠️ **"Nothing to do" was
    false between 2026-08-18 and
-   [118](#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27),
+   [118](#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27),
    and nothing here recorded it**: `preserveFirstEnrollmentOnRetrofit` landed
    thirteen days after this item was written and exempts the CRAM-minted root from
    the cap entirely, so for the owner holding one keyfile the credential is
@@ -11213,7 +11213,7 @@ everywhere"*. It was written for `pqReady` before `pqReady` had a name.
    green against the published image says nothing about it.
 
    ⛔ **And the exemption itself is superseded by
-   [118](#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27),
+   [118](#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27),
    which retires it.** What it protected against — an atSign left with no
    enrollment able to approve a replacement — is answered instead by arming the
    cap on the child's own authentication, and the answer covers every parent
@@ -12080,7 +12080,7 @@ it.
    records the question that run answered. Inherited from the section rather
    than re-run by me.
 
-## 118. The retrofit cap is armed by the child, not by the retrofit (2026-08-27)
+## 118. The retrofit cap is armed by the successor, not by the retrofit (2026-08-27)
 
 **In brief:** *retrofit is a per-device claim; the cap fires on proof, and the
 first-enrollment exemption goes*
@@ -12111,7 +12111,13 @@ working credential. **The cap is instead armed by the child's first PKAM
 authentication on a connection the child opened**, which is what proves the
 private half survived and is usable.
 
-The client already does this and needs no change. `selfRetrofit` calls
+The client already authenticates, so the cap's TRIGGER needs no client change.
+⚠️ **That is not the same as "at_client and at_auth need nothing", which this
+ruling claimed until 2026-08-31 and which is now false.**
+[Ruling 128](#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)
+drops the `namespaces` parameter from `selfRetrofit` and `retrofitIdentity` —
+about grants rather than about the cap, but a breaking client change all the
+same, and owed by this ruling's own programme. `selfRetrofit` calls
 `AtAuth.create().authenticate(...)` with the new enrollment id immediately after
 the submission — *"the retrofit response's session is the legacy one, and only
 `authenticate()` mints a session carrying the new id"* — and throws if it fails.
@@ -12124,10 +12130,21 @@ One rule for every parent, the CRAM-minted root included: `_isFirstEnrollment`,
 `disqualifiesAsFirst` and the config key go, with a release note for operators
 who set it. The exemption's stated reason is that capping the root can leave an
 atSign with no enrollment able to approve a replacement — and arming on the
-child's authentication answers that directly, because an authenticated child
-inheriting `*` and `__manage` verbatim IS such an enrollment. Retiring the
-exemption also removes the same stranding case for every non-root parent, which
-the exemption never covered.
+successor's authentication answers that only once the successor is guaranteed to
+hold its predecessor's grants.
+
+⚠️ **This read "because an authenticated child inheriting `*` and `__manage`
+verbatim IS such an enrollment" until 2026-08-31, and it was false the day it
+was written.** A successor does not inherit: on the explicit route its grants
+are whatever the caller passed, bounded above by `verifyNoEscalation` and not
+bounded below at all. A successor requesting only `wavi:rw` against the CRAM
+root would therefore have capped that root and left precisely the stranding this
+exemption exists to prevent — a case the exemption's own reasoning assumed shut.
+[Ruling 128](#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)
+closes it by refusing any self-enrollment whose grants differ from its
+predecessor's, which makes this paragraph's claim true by construction rather
+than by assumption. Retiring the exemption then also removes the same stranding
+case for every non-root predecessor, which the exemption never covered.
 
 **Cleanup is instructions, not tooling** (gkc, 2026-08-27). No column on
 `auth list`, no fields on `Enrollment`, no new verb. The content the guide owes:
@@ -13192,3 +13209,74 @@ rather than closed.
   enrollment, recording nothing a later step could read. It needs a signal that
   does not exist, so it is a larger change than the row implied, not a
   narrowing of it.
+
+## 128. A retrofit's successor holds its predecessor's grants, and may not choose them (2026-08-31)
+
+**In brief:** *self-enrollment IS retrofit; `namespaces` becomes optional and,
+if sent, must equal the predecessor's or the request is refused*
+
+**Vocabulary, ruled the same day.** A retrofit's two enrollments are
+**predecessor** and **successor**. Parent and child are reserved for the
+approver ↔ requester relationship, which is a different pair. gkc: *"This is
+enrollment retrofit; it's not a child, it's a replacement. A retrofit must be
+given exactly its predecessor's permissions."*
+
+**The rule, in three parts.** On the APKAM self-enrollment path: `namespaces`
+becomes **optional**; sent, it must **equal** the predecessor's grants exactly
+or the request is **refused**, loudly, with no widening and no narrowing;
+omitted, the atServer inherits the predecessor's grants verbatim. So the
+successor's grants are its predecessor's — a request may omit them and inherit,
+or state them and be refused if they differ, but it may not choose them.
+
+**Why a refusal rather than an overwrite.** Forcing verbatim inheritance while
+clients still send a narrowed map would silently widen those enrollments, which
+is the escalation direction. A refusal cannot widen anything: the narrowed
+request errors and the enrollment is never created. That is what lets the
+atServer half land alone, with the client half as cleanup on its own schedule
+rather than as a coordination gate.
+
+**What this retires.** The *"At least one namespace must be specified"* refusal
+goes with it — its stated reason, that the successor holds exactly what it
+requests, is what this reverses. So does the notion of a narrower child on this
+path: gkc was offered a wire discriminator on `EnrollParams` to keep a retrofit
+and a narrower self-enrollment distinguishable, and **declined** it. One path,
+one rule.
+
+**Key expiry is NOT folded in.** It stays bounded above by the predecessor's and
+free to state its own. Raised explicitly and left. Do not read "exactly its
+predecessor's permissions" as covering time.
+
+**Why the verdict is permanent.** `enroll:update` refuses `namespaces` outright
+— *"an enrollment amending itself must not be able to widen its own grant"*,
+with its dartdoc calling them *"permanently out of reach"*. Grants cannot change
+after creation, so a successor holding its predecessor's grants is a permanent
+property rather than a moment-in-time one.
+
+**This implements a specified row rather than falsifying one.** UC-B1.7's THEN
+already says the successor's namespace map **equals** its predecessor's, and
+UC-B1.6 already says an escalation is silent where a loss is loud. The catalogue
+specified equality before the atServer enforced it.
+
+**Provenance, so the record is honest about itself.** The three-part shape came
+from option selections rather than a sentence gkc uttered: abolish the
+distinguishable child over keeping one behind a wire discriminator;
+optional-and-must-equal over both mandatory-and-must-equal and
+refuse-the-field-entirely; and everything on one at_server PR. What he said in
+as many words was *"We need to loudly refuse a retrofit which doesn't request
+exactly the same permissions"* and *"Refuse stands. The client knows how to
+build an atServer image from a given commit, they can manage the migration."*
+
+**What each side owes.** at_server: the refusal, the cap armed on the
+successor's first authentication, and retiring
+`preserveFirstEnrollmentOnRetrofit`, `_isFirstEnrollment` and
+`disqualifiesAsFirst`. at_client: drop the `namespaces` parameter from
+`selfRetrofit` and `retrofitIdentity`, and the scoped signing-root branch with
+it. Both are breaking changes to exported functions.
+
+⚠️ **Eleven call sites were measured against their own predecessors and none
+narrows** — the one that looks scoped has a predecessor minted with exactly that
+map, so scoped retrofit is a documented capability nobody exercises. The
+measurement's own limit, stated by the session that took it: the rig was built
+to refute narrowing verdicts, so with nothing classified narrowing no EQUAL
+verdict was ever challenged. It catches a false alarm and cannot catch a missed
+one.

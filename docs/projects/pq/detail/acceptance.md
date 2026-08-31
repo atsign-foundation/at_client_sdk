@@ -1023,7 +1023,7 @@ since each sibling that retrofits extends it by a full grace period. ⚠️ **Bo
 clauses were rewritten AGAIN on 2026-08-27**, once gkc ruled the guarantee is
 per-device and the cap is armed by the child's first authentication rather than by
 the retrofit
-([decisions.md 118](decisions.md#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27)).
+([decisions.md 118](decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)).
 They now state ruled behaviour the atServer does not yet have, and cannot be
 proven until it does.
 

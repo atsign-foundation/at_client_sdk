@@ -1053,11 +1053,26 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - on parse, entries this build does not recognise are **kept**. The list is the
     holder's statement about itself, and a newer holder may name a construction we do not
     implement yet.
-- **Then (this is what moves the wire without a flag day):** the version byte a sender
-  stamps is chosen from the **intersection** at seal time rather than from the sender's
-  own build, so the wire moves to a construction the moment both sides advertise it —
-  no readers-upgrade-first migration, and no flag day. That is the whole reason the
-  field exists.
+- **Then (this is what moves the wire without a flag day):** the **sealer chooses
+  which advertised KEM entry to seal to**, ordered by its own
+  `sealsToKeyAlgorithms` and bounded by what the recipient advertised, and the
+  version byte and kid **record that choice** so the opener simply uses what
+  arrived. A construction therefore becomes usable **pairwise**, the moment one
+  recipient advertises it, with no fleet-wide flag day. That is the whole reason
+  the field exists.
+
+  ⚠️ **This said the version byte is "chosen from the intersection at seal time
+  rather than from the sender's own build" until 2026-08-31, and the tree cannot
+  exhibit that distinction.** `openableSuitesFor` returns a one-element `const`
+  list per KEM, so the suite intersection has at most one member: a recipient can
+  **veto** a construction, never **select** between two over one KEM. The choice
+  that is real, and that the tests below exercise, is the choice of KEM *key*.
+  ⚠️ **The old clause also read "no readers-upgrade-first migration"**, dropping
+  the word that carries the point: `bestSuiteBetween` requires the recipient to
+  list the suite, so a reader does upgrade before its senders can reach it. What
+  the field removes is the **fleet-wide** migration, and the tree says so in its
+  own words — *"without it a second construction could only be introduced by
+  upgrading **every** reader first"*.
 
   ⚠️ **This asserted a historical instance until 2026-08-27**, naming what two clients
   "had exchanged" under a construction since retired and removed. **A clause about what
@@ -1261,9 +1276,20 @@ ruled in [`decisions.md` 122](detail/decisions.md#122-rotation-cadence-the-nskey
   start, which is what reaches an application that only ever writes to peers and
   so never takes the first path.
 - **Then, and there is no third:** `seedNamespace` is also reached from
-  `AtClient.ensureReachable`, and that route cannot ask — it returns
-  `alreadyReachable` in exactly the branch where a generation is published,
-  which is the only branch in which the policy would be consulted.
+  `AtClient.ensureReachable`, and that route **does not ask** — it passes
+  `askRotationPolicy: false`, so the question is put at the two points above and
+  nowhere else.
+
+  ⚠️ **This said the route "cannot ask", because it returns `alreadyReachable`
+  in exactly the branch where a generation is published, until 2026-08-31 — and
+  that branch structure never held.** There are **two** reads of
+  `publishedAdvertisement`, separated by a remote round trip, on a read that
+  deliberately bypasses both caches precisely because a sibling may publish in
+  the window; a sibling doing so routed `seedNamespace` onto its `published !=
+  null` branch and put the question from a route specified never to ask. The
+  clause is true now because the caller says so explicitly, not because the
+  branch prevents it — and the second read stays, since the mint lock, not that
+  read, is what prevents a double mint.
 - **Then, what it is handed:** an `NskeyRotationContext` naming the namespace,
   the advertised generation's `nskeyKid`, the `createdAt` **the advertisement
   itself states** rather than a local record, and a `now` passed in.
@@ -1358,8 +1384,9 @@ Start state for B1: `@alice = legacy` (RSA `publickey`, RSA APKAM per enrollment
 **The retrofit model (applies to all three).** Retrofit is **not** a mutation of the
 existing enrollment. The authenticated pre-PQ client submits `enroll:request` with a
 **NEW enrollmentId** on its **already-authenticated connection** (no OTP). The server
-(RF-SRV) validates the requested namespaces are a **subset** of the authenticating
-enrollment's, **auto-approves**, **copies** the old enrollment's expiry (or `null`) to
+(RF-SRV) requires the requested namespaces to **equal** the authenticating
+enrollment's — omitted, they are inherited verbatim; sent and different, the
+request is refused — **auto-approves**, **copies** the old enrollment's expiry (or `null`) to
 the new one, and **caps** the old enrollment to `min(now + server-config grace, its
 existing expiry)` **without removing it** — armed by the new enrollment's first
 authentication on its own connection, not by the submission. There is **no per-APKAM-key delete**; legacy
@@ -1379,7 +1406,8 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
      in the keyfile).
   3. Submit `enroll:request` with a **new enrollmentId**, its single
      `apkamPublicKey` + `signingAlgo = mldsa65` + key package + `EnrollParams.metadata`,
-     on the authenticated connection. The server validates the namespace subset,
+     on the authenticated connection. The server requires the namespaces to
+     equal the predecessor's, or to be omitted and inherited,
      **auto-approves** and copies the old expiry. The old (legacy) enrollment is
      capped when the new one first authenticates, not here.
   4. **Verify** PQ APKAM auth succeeds (record-authoritative `signingAlgo`).
@@ -1505,13 +1533,18 @@ all, which is why this row asserts the boundary rather than the capability.
     because a scoped enrollment holds no `__manage`. Seeing the parent there
     would mean the retrofit acquired management rights nobody asked for.
 
-⚠️ **Verbatim carry-over is a property of the STARTUP route only.**
-`_settleEnrollmentIdentity` reads appName, deviceName and the namespace map off
-the enrollment record and passes them through unchanged. `selfRetrofit` and
-`retrofitIdentity` take `namespaces` as a required caller-supplied parameter and
-read no record at all — so on the explicit route the grants are whatever the
-caller passes, and the atServer's own `verifyNoEscalation` is the only thing
-stopping a widening.
+⚠️ **Verbatim carry-over is UNIVERSAL, ruled 2026-08-31.** This said it was
+"a property of the STARTUP route only" — true when written: `_settleEnrollmentIdentity`
+reads appName, deviceName and the namespace map off the enrollment record and
+passes them through unchanged, while `selfRetrofit` and `retrofitIdentity` took
+`namespaces` as a caller-supplied parameter and read no record at all, so on the
+explicit route the grants were whatever the caller passed and `verifyNoEscalation`
+stopped only a widening. [Ruling 128](detail/decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)
+closes that: a successor's grants are its predecessor's on every route, the
+atServer refusing any self-enrollment that states different ones. ⛔ **The client
+half is owed** — dropping the parameter from both functions — so until it lands,
+a caller can still send a narrowed map and will now be refused rather than
+obeyed.
 
 - **Cross-ref:** `design.md` (authenticated self-retrofit flow + expiry copy/cap,
   `enroll:request` metadata tail); `decisions.md` (Decision #F 1:1:1, the retrofit
@@ -1548,9 +1581,24 @@ stopping a widening.
 - **Given:** deployment configured a server-config grace.
 - **When:** `alice1` retrofits, and later a sibling clone of the same pre-PQ keyfile does.
 - **Then:** legacy auth survives until `min(now + grace, its own remaining lifetime)`,
-  where **`now` is the most recent child enrollment's first authentication on a connection
-  it opened itself** — the cap **re-arms** on each one, and a retrofit whose child never
-  authenticates arms nothing. Sibling clones may still retrofit (each to its own fresh
+  where **`now` is the most recent successor enrollment's first authentication on a
+  connection it opened itself** — the cap **re-arms** on each one, and a retrofit whose
+  successor never authenticates arms nothing.
+
+  ⛔ **This clause specifies behaviour that is RULED AND NOT YET BUILT, and it is
+  unprovable until at_server lands it.** On at_server `trunk` the cap is armed in
+  the self-enrollment **submission** handler, immediately after the successor's
+  record is written — so a successor that never authenticates arms it anyway,
+  the opposite of this clause's last arm. `preserveFirstEnrollmentOnRetrofit`
+  (default `true`) also exempts an atSign's first enrollment entirely, so for a
+  single-keyfile owner legacy auth survives indefinitely rather than until
+  `min(now + grace, …)`.
+  [Ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
+  ruled the trigger and the exemption's retirement on 2026-08-27 and
+  [ruling 128](detail/decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)
+  made its justification sound; the at_server change is in progress. The clause
+  stays here, marked, rather than being weakened to describe the tree —
+  a specification clause can be FALSE of the tree without being wrong. Sibling clones may still retrofit (each to its own fresh
   enrollment) for as long as legacy auth holds; once it lapses, UC-B2.1 applies. **So the
   window is not a fixed deadline: each sibling that upgrades and authenticates extends it
   by a full grace period**, and a deployment with laggard devices keeps it open as long as
@@ -1565,7 +1613,7 @@ stopping a widening.
   wrong in the other direction: the re-arm is deliberate, because a deadline fixed by the
   first sibling's upgrade would strand every laggard whose next run fell outside it.
 
-- **Cross-ref:** `decisions.md` (retirement ruling, and [118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27) for the trigger); `design.md` (expiry copy/cap).
+- **Cross-ref:** `decisions.md` (retirement ruling, and [118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27) for the trigger); `design.md` (expiry copy/cap).
 - **Impl/verify:** **RF-SRV** + **RF-2c**. **Both green 2026-08-05** —
   `tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart`, on the one
   atSign whose atServer `runLocal.sh` gives a zero-hour
@@ -2069,6 +2117,7 @@ document had named.
 | `packages/at_client/test/enrollment_conveyance_guard_test.dart` | what a client configuring no post-quantum providers refuses and what it still does — the approval that throws before reaching the atServer so the enrolment stays pending, the sweep refusal, and both controls (a request carrying its own wrapped key is approved; a PQ-capable posture is refused neither). Cited by **UC-G3.10**. |
 | `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneWeek` with its period pinned as a raw literal and its boundary inclusive, and `neverRotateNskey` at any age — plus that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. ⚠️ **Named nowhere in this doc set except a `## TODO` row until 2026-08-31**, and named here because that row has now been discharged and deleted. ⚠️ **This said *&#34;neither nameability rail reaches the file&#34;* and was false in the same commit that wrote it** — the six citations above are exactly what brings it inside the citation rail (*every test a citation names is named in the doc set*), which is why this row had to be added at all. Only the `pq_*` FILENAME rail still misses it. |
 | `packages/at_client/test/ck_manager_test.dart` | where the content-key rotation policy is ASKED — before the current key is returned, with the destination in its context — and where the namespace-key hook is asked only for this atSign&#39;s own key. Also the restart arm, where a resumed key takes its age from the conveyance record rather than this process&#39;s clock. Cited by **UC-A5.4** and **UC-A5.5**. |
+| `packages/at_client/test/legacy_client_refusal_test.dart` | that a legacy-only install — one whose posture registers no post-quantum providers at all — refuses a record stamped `at/symmetric/AES/GCM`, asserted on `CryptoProviderNotRegistered` and on its message naming the id, with the same install reading a `legacy`-stamped record as the control. Cited by **UC-B4.3**. |
 | `packages/at_client/test/nskey_seeding_test.dart` | the namespace-key policy&#39;s second ask point and every condition under which it is skipped or its yes declined: nothing published, the posture not seeding, no substrate to convey over, and a policy that throws. Cited by **UC-A5.5** and **UC-A5.6**. |
 | `packages/at_client/test/nskey_rotation_test.dart` | what a namespace-key yes actually does — a fresh generation published, the superseded private kept, and the successor pushed to every authorised enrollment. Cited by **UC-A5.5**. |
 
@@ -3711,9 +3760,22 @@ is where its missing lever lives.
 - **Then:**
   - the retired entry is **not selected** for anything new;
   - it stays **advertised**, and what it produced still verifies or opens;
-  - **removal is therefore a two-step, never one.** An entry withdrawn from the
-    advertisement outright would destroy the ability to read what it produced,
-    which is the failure this row exists to make impossible;
+  - **a retired SIGNING entry is never dropped from a republished
+    advertisement.** `SigningKeyMinting` re-reads the withdrawn set precisely so
+    a later mint does not lose it, because an entry withdrawn outright would
+    destroy the ability to read what it produced;
+
+    ⚠️ **This read "removal is therefore a two-step, never one" until
+    2026-08-31, and the APKAM authentication key is the counterexample the tree
+    ships deliberately.** `apskEntries` adds it only while the enrollment holds
+    no signing key of its own and never adds it to the withdrawn loop, so the
+    moment a signing key exists the authentication key leaves the advertisement
+    **outright, in one step** — and a test pins that as correct. The composer
+    states the reason: an enrollment that holds signing keys held them from
+    birth, so its authentication key signs nothing that outlives the transition,
+    and retaining it would advertise a key with nothing to verify. That rests on
+    a deployment premise — no long-lived auth-key-signed material extant — and
+    if the premise fails it is the premise that gets revisited;
   - ⚠️ **an nskey entry is never retired in place, and its retirement is
     GENERATIONAL.** A rotation simply does not mint that algorithm again, and
     what opens history is the previous generation's private, still held — not a
@@ -3792,14 +3854,42 @@ unknown-status clause, and the two must not be conflated.
     resolves `strongestOf(shared)` over the intersection of the advertised keys
     and the signatures the envelope carries; there is no minimum-algorithm check,
     no signature-count check, and no accepted-algorithms field for **signatures**
-    anywhere in `AtClientPreference`. ⚠️ The encryption side has one —
-    `keyEstablishmentAlgorithms`, *"the receiver's side of the choice"* by its own
-    dartdoc — so what signing lacks is an accept lever its counterpart already
-    has;
+    anywhere in `AtClientPreference`.
+
+    ⚠️ **This said the encryption side "has one" — `keyEstablishmentAlgorithms`
+    — until 2026-08-31, and that field is not an accept lever.** Its own dartdoc
+    says so four lines below the phrase quoted: *"This does not restrict who
+    this client can talk to. It decides what this atSign publishes"*, and it
+    goes on to concede *"the same exposure a retained retired key already
+    carries"*. Every consumer of it outside the preference file is on the mint
+    path; none is on the open path. The asymmetry that does exist is the one
+    production states: you stop being sealed to under an old algorithm **by not
+    advertising it**, and no peer can force you — whereas anyone can present an
+    old-algorithm signature. Encryption's protection is an **advertise** lever
+    held by the party at risk. Signing has none, because the advertisement
+    belongs to the **signer**, not to the verifier;
   - so **a retired signing key is a standing forgery surface.** It stays
-    advertised precisely so history verifies, and nothing dates an envelope — so
-    "it must be old" is not checkable, and whoever breaks that algorithm can mint
-    one that verifies;
+    advertised precisely so history verifies — `vouchesForPastOperations` is
+    what a verifier narrows on, or every superseded envelope would read as
+    tampered — but **nothing records when the key was retired**, and nothing a
+    verifier can trust records when an envelope was signed. So "this was signed
+    before retirement" is not checkable, and whoever breaks that algorithm can
+    mint one that verifies indistinguishably from a genuine old one. Where the
+    envelope arrives **as an Atsign Protocol record**, the forgery is bounded by
+    needing current credentials to place that record — not by any timestamp.
+    Outside that binding a verifier has nothing, and should treat a
+    retired-key signature as suspect;
+
+    ⚠️ **This said "nothing dates an envelope" until 2026-08-31, and things
+    do** — `KeyPackage` and `NskeyAdvertisement` both put `createdAt` inside the
+    **signed payload**, and `NskeyRotationContext` turns one into an `age`. The
+    absences that matter are narrower: no date in the protected header, and no
+    freshness check at verification.
+    ⚠️ **And a record's `createdAt` is a CALLER ASSERTION the atServer honours,
+    not a server attestation.** The verb grammar carries `:cAt`/`:uAt`/`:eAt`/
+    `:aAt` and the handler calls them exactly that — asserted timestamps — so a
+    cached or relayed copy can preserve the origin's dates. Anyone designing
+    against this must not assume an unforgeable clock;
   - a verifier sharing **no** algorithm with the envelope is refused, with a
     message naming what the envelope carries and what the `_apsk` advertises —
     never a fallback to a key derived some other way;
@@ -3839,22 +3929,40 @@ unknown-status clause, and the two must not be conflated.
     `@bob` that never took rollout 1 leaves no entry the two share, so `@alice`
     is refused before anything is written, with a message naming what she will
     seal to and what he advertises;
-  - ⚠️ **that is the better of the two failures, and the contrast with
-    [UC-G2.11](#1711-uc-g211--the-ladder-within-one-atsign-safe-through-rollout-1-broken-after-rollout-2)
-    is the point.** Across atSigns the sender holds the policy and reads the
-    recipient's advertisement, so a mis-sequenced rollout 2 fails **loudly, at
-    the party that got it wrong, before any record exists**. Within one atSign
-    the writer seals to its own atSign's advertisement — which contains the new
-    algorithm, because the writer put it there — so nothing refuses it, and the
-    failure surfaces later, at a sibling install, on a record already written;
-  - ⚠️ **a sender that OMITS an algorithm and a sender that cannot IMPLEMENT one
-    reach the same refusal by different routes, and only the first is exercised
-    anywhere.** Omitting is `sealsToKeyAlgorithms` policy; not implementing is
-    the build. Every arm covering this row varies a preference over algorithms
-    both builds hold, so the coverage reads stronger than it is.
+  - **within one atSign nothing refuses the write.** The writer seals to its
+    own atSign's advertisement — which contains the new algorithm, because the
+    writer put it there — so no refusal fires, and the failure surfaces later,
+    at a sibling install, on a record already written;
 
+    ⚠️ **This clause opened "that is the better of the two failures, and the
+    contrast with UC-G2.11 is the point" until 2026-08-31.** Ranking two
+    failures is not something a test can establish, and the cross-atSign half it
+    also carried is a restatement of the refusal clause above, which is already
+    pinned — so stating it here again would count one behaviour twice. The
+    comparison stays as prose: across atSigns the sender holds the policy and
+    reads the recipient's advertisement, so a mis-sequenced rollout 2 fails
+    loudly, at the party that got it wrong, before any record exists;
   The two ends move independently, and that is the whole of what "one rollout"
   means.
+
+  ⛔ **A sixth clause was WITHDRAWN here on 2026-08-31** (gkc), and is kept as
+  prose because the shape recurs. It read: *"a sender that OMITS an algorithm
+  and a sender that cannot IMPLEMENT one reach the same refusal by different
+  routes, and only the first is exercised anywhere."* It was false three ways.
+  The two routes reach **four** refusals across three exception branches —
+  `AtEncryptionException` from the resolver (*"Widen
+  AtClientPreference.sealsToKeyAlgorithms"*), `AtSigningVerificationException`
+  from the advertisement check, an `ArgumentError` at preference construction,
+  and `CryptoProviderNotRegistered` from the provider registry (*"Add it to
+  AtClientPreference.crypto.providers"*) — and the last two give **opposite
+  advice for the same symptom**. Its coverage claim was stale: an advertisement
+  of only unusable entries is already refused in `published_nskey_key_ring_test`
+  against a fictional algorithm id. And its closing sentence was a claim about
+  the **test suite**, not about a behaviour, which is not what a THEN clause
+  states. ⚠️ `AtSigningVerificationException` extends `AtException` rather than
+  `AtClientException`, so an application catching `AtClientException` around a
+  write catches three of the four and misses that one — recorded as owed work
+  rather than fixed here.
 
 ### 17.11 UC-G2.11 — The ladder within one atSign: safe through rollout 1, broken after rollout 2
 

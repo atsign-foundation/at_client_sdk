@@ -175,7 +175,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [115] | The acceptance suite is 4 arms and a ledger, not one grid                                   | 2026-08-23 | 3 ARMS AMENDED 2026-08-24 |
 | [116] | Proposals rejected on evidence                                                              | 2026-08-23 | LIVE                      |
 | [117] | Measurements that closed a question                                                         | 2026-08-23 | LIVE                      |
-| [118] | The retrofit cap is armed by the child, not by the retrofit                                  | 2026-08-27 | LIVE                      |
+| [118] | The retrofit cap is armed by the successor, not by the retrofit                             | 2026-08-27 | AMENDED 2026-08-31 |
 | [119] | Crypto agility: each advertisement adds, and the signer chooses                              | 2026-08-27 | AMENDED 2026-08-28        |
 | [120] | A signing migration is three steps, and the third has no lever                               | 2026-08-28 | LIVE                      |
 | [121] | A revocation publishes what it obliges                                                       | 2026-08-28 | LIVE                      |
@@ -185,6 +185,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [125] | A Hive store's identity is its storage path, not its atSign                                  | 2026-08-28 | LIVE                      |
 | [126] | The mint barrier is deleted: legacy authentication and data signing are one keypair         | 2026-08-30 | AMENDED 2026-08-30        |
 | [127] | A client with no enrollment id still mints and publishes its own signing key                | 2026-08-30 | AMENDED 2026-08-30        |
+| [128] | A retrofit's successor holds its predecessor's grants                                       | 2026-08-31 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -304,7 +305,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 [115]: detail/decisions.md#115-the-acceptance-suite-is-4-arms-and-a-ledger-not-one-grid-2026-08-23
 [116]: detail/decisions.md#116-proposals-rejected-on-evidence-2026-08-23
 [117]: detail/decisions.md#117-measurements-that-closed-a-question-2026-08-23
-[118]: detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27
+[118]: detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27
 [119]: detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27
 [120]: detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28
 [121]: detail/decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28
@@ -314,3 +315,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [125]: detail/decisions.md#125-a-hive-stores-identity-is-its-storage-path-not-its-atsign-2026-08-28
 [126]: detail/decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30
 [127]: detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30
+[128]: detail/decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31

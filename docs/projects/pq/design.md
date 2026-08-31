@@ -1242,7 +1242,7 @@ Constraints beyond the ruling above:
   ([`decisions.md` 42](detail/decisions.md#42-the-to-define-list-ruled-2026-08-05)
   item 3). ⚠️ **What arms it is ruled and NOT landed**: the built atServer caps at
   the retrofit submission and exempts the atSign's first enrollment;
-  [`decisions.md` 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27)
+  [`decisions.md` 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
   moves the trigger to the child's first authentication on its own connection and
   retires the exemption. This bullet read "ruled and landed" until 2026-08-27.
 - **Step 4's pull is the *normal* path, not a backstop**, whenever the approver is
