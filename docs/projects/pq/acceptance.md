@@ -1496,12 +1496,28 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   - `alice1.APKAM = pq` on the fresh auto-approved enrollment; PQ auth works.
   - `public:pq_signing_root@alice` created; `alice1.root⁻¹ = ✓`; `alice1` serves the private to other fully privileged enrollments on request.
   - The legacy enrollment is **capped** to `min(now + grace, its own remaining lifetime)`
-    and ages out — **not** deleted-by-key. The cap is armed by the new enrollment's
-    **first authentication on a connection it opened itself**, never by the retrofit
-    submission — a retrofit whose child never authenticates caps nothing — and it re-arms
-    on each sibling's first such authentication, so `now` is the latest one. **No
-    enrollment is exempt, the atSign's first included.** See
-    [UC-B2.2](#92-uc-b22--grace-period-variant), where that is what the row turns on.
+    and ages out — **not** deleted-by-key.
+  - ⛔ **The cap is armed by the successor enrollment's first authentication on a
+    connection it opened itself**, never by the retrofit submission — a retrofit whose
+    successor never authenticates caps nothing — and it re-arms on each sibling's first
+    such authentication, so `now` is the latest one. **No enrollment is exempt, the
+    atSign's first included.**
+    [UC-B2.2](#92-uc-b22--grace-period-variant) c1 states the same behaviour from the
+    grace-window side, and that is what its row turns on.
+
+    ⛔ **This states RULED behaviour the atServer does not yet have, and is unprovable
+    until it lands.** On at_server `origin/trunk` the cap is armed in the
+    self-enrollment **submission** handler, and `preserveFirstEnrollmentOnRetrofit`
+    (default `true`) exempts the atSign's first enrollment outright — the opposite of
+    both halves.
+    [Ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
+    ruled it on 2026-08-27; the at_server work is written and unmerged.
+
+    ⚠️ **Split out of the clause above on 2026-08-31.** The two travelled as one
+    clause, and its only pin — `retrofit_cap_value_e2e_test.dart`, which proves the cap
+    as a VALUE — therefore counted the arming half proven as well, so the burn-down
+    over-counted by one while [UC-B2.2](#92-uc-b22--grace-period-variant) c1, stating
+    the same unbuilt behaviour, correctly read unproven.
   - Legacy *encryption* key retained (history still readable). No re-onboarding.
 
 ### 8.2 UC-B1.2 — Second install on a copied keyfile (`alice1c`)

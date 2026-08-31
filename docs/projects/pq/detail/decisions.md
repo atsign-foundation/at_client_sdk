@@ -12181,12 +12181,22 @@ from a sibling checkout on its own branch:
   credential dies. gkc ruled 2026-08-27 that the enroll responses returning
   details should carry the expiration time; it is banded post-D1.
 
-**Status:** ruled, unimplemented. The whole change is the atServer's; at_client
-and at_auth need nothing. ⛔ **It is part of D1** (gkc, 2026-08-27), and **what
-tracks it is the catalogue, not a plan row**: `acceptance.md`'s UC-B1.1 c3 and
+**Status:** ruled, and **written but unmerged** — the atServer work sits on
+branch `gkc-retrofit-successor-grants-and-cap`, which as of 2026-08-31 is
+eight commits ahead of `trunk`, unpushed, and has no PR; re-derive rather
+than quoting that. This row said *unimplemented* until then. The whole
+change is the atServer's; at_client and at_auth need nothing. ⛔ **It is part of D1** (gkc, 2026-08-27), and **what
+tracks it is the catalogue, not a plan row**: `acceptance.md`'s UC-B1.1 **c4** and
 UC-B2.2 c1 were rewritten to this behaviour on 2026-08-27, neither can be proven
-until the atServer has it, and the catalogue is D1's burn-down target — so an
-unproven clause there IS the D1 gate.
+until the atServer has it — c4 was **part of c3 until 2026-08-31**, when the clause was
+split so that the cap's VALUE half, which IS proven live, stopped carrying the
+arming half's pin with it, and the catalogue is D1's burn-down target — so an
+unproven clause there IS the D1 gate. ⚠️ **A POINTER row was nevertheless
+added to the plan's P0 bucket on 2026-08-31** (gkc). It carries no design
+and no owed detail — only a pointer to this ruling and to the clause, plus
+where the atServer work currently sits — so the reasoning above still holds
+and nothing is duplicated. Without a row, a reader working P0 top-down never
+learns that the clause waits on another repo.
 
 Two adjacent items are **not** part of it and are plan rows instead. The upgrade
 guide, because a document can never be a THEN clause. And **carrying the record's
