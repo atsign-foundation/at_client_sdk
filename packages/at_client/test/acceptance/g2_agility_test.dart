@@ -549,21 +549,22 @@ void main() {
       );
     });
 
-    test('UC-G2.8 · a verifier resolves the algorithm, then walks the keys',
+    test('UC-G2.8 · a verifier resolves the algorithm, then the key by kid',
         () {
       // GIVEN an _apsk advertising more than one key under the algorithm an
       //       envelope is signed with - the ordinary state of any enrollment
       //       that has ever rotated its signing key.
       // WHEN  a verifier checks the envelope.
+      // THEN  it resolves the algorithm from what the two documents share, and
+      //       the key from the signature's own kid.
       //
-      // ⛔ The key-identifier clauses are UNPINNED: decisions.md 119 item 4
-      // rules that a signature names the key it was made with, and no such
-      // field exists. What IS pinned is the fallback the ruling preserves - the
-      // walk, and its counted refusal - because that is what an older verifier
-      // goes on doing once the field ships, unbumped, beside it.
-      // THEN  it resolves the algorithm from what the two documents share and
-      //       walks every key advertised under it, current first; the refusal
-      //       names how many were tried.
+      // ⛔ The key-identifier clauses are UNPINNED because the field does not
+      // exist yet: `kid` names the signing ENROLLMENT in the header this build
+      // writes, and the enrollment has not yet moved to `enid`. The walk that
+      // stands in for the field is being deleted rather than kept as a
+      // fallback - nothing outside this tree holds an envelope that names no
+      // key - so the citation below no longer pins a clause: its counted
+      // refusal is the behaviour going away, not a behaviour the row asserts.
       provenIn(
         'packages/at_client/test/signing_key_minting_test.dart',
         'an envelope signed before the withdrawal still verifies',
@@ -586,7 +587,12 @@ void main() {
             '2 mldsa65 key(s)". A verifier that stopped at the first key would '
             'report a bad signature here instead, so the count is what '
             'distinguishes walking from guessing',
-        clauses: ['names how many were tried'],
+        // ⛔ NO `clauses:` list. This pinned the fragment "names how many were
+        // tried", which the row carried until the walk was ruled out. The
+        // clause it pinned now asserts only the naming half, which is unbuilt -
+        // and pinning a clause from a fragment covering the half being deleted
+        // is what counted this row PROVEN while the half that matters had no
+        // test at all.
       );
       provenIn(
         'packages/at_client/test/jws_envelope_test.dart',

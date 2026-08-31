@@ -13659,3 +13659,89 @@ check in `seed()`. None of the at_client half is built.
 wrong: the scalar is served by `enroll:infons` — point 3 already said so, so the
 ruling contradicted itself — and it is built.
 ⚠️ **Nothing server-side reads the derived moment.** The consumer is at_client's.
+
+## 131. The protected header names the KEY, and the enrollment moves to `enid` (2026-08-31)
+
+**In brief:** *`kid` reverts to its JOSE meaning and names the signing key; the
+signing enrollment moves to a new member `enid`; `kid` is mandatory and the
+trial walk is deleted; `envelopeVersion` stays at **1***
+
+**What this is for.** A verifier resolved the *algorithm* from what the envelope
+and the advertisement share, and then tried **every** advertised key under it in
+published order until one verified. Nothing said which key signed, so a wrong
+key and a bad signature were the same observation — the refusal could only count
+the attempts. [Ruling 119](#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27)
+item 4 left this as a residual of rotating within one algorithm.
+
+**The design, ruled by gkc.**
+
+1. **`kid` names the key.** It is the advertised entry's own `kid`, which is
+   already content-derived: `publicKeyKid` is `SHA256(publicKey)` truncated to
+   16 characters, and `ApskSigningKey.forKey` derives it. ⚠️ **So the signer
+   needs no new plumbing** — it holds the public key it is signing with and
+   derives the same value — and a verifier can check a kid against the key it
+   names. A tampered one narrows to the wrong key or to none, and the signature
+   then fails on its own.
+2. **The signing enrollment moves to `enid`.** The header becomes
+   `{alg, typ, kid, enid, v}`. `enid` keeps the optionality `kid` had for it:
+   absent means the connection holds no enrollment id, whose advertisement is
+   `_apsk.primary`. `SignedEnvelope.signerEnrollmentId` goes on being the name
+   every consumer uses, so the rename reaches one producer, one getter body and
+   the raw-literal pins rather than its thirty call sites.
+3. **`kid` is mandatory and the trial walk is DELETED.** Verification becomes a
+   lookup: the entry whose kid matches, verified once. A signature naming a key
+   the advertisement does not carry is refused **naming that key**.
+4. **Selection order is unchanged**, and this is what keeps
+   [UC-G2.8](../acceptance.md#178-uc-g28--a-verifier-resolves-the-algorithm-by-name-then-the-key-by-kid)
+   c1 true: the strongest shared algorithm still picks the signature entry, and
+   `kid` then picks the key *within* it. Resolving the key first and taking its
+   algorithm would let a peer decide the outcome by offering a weak signature
+   beside a strong one — which is precisely what c1 exists to prevent.
+5. **`envelopeVersion` stays at 1.**
+
+⛔ **Why a rename is not a breaking change, which is the whole basis of this
+ruling.** Measured, not assumed: published `at_client` **3.14.0** contains
+**zero** files under `lib/src/signing/`, and its `lib/src/crypto/` holds only
+`crypto.dart`, `crypto_runtime.dart` and the legacy trio — no envelope
+signature, no nskey. Control: `lib/at_client.dart` is present in the same
+archive, so the listing was working. There is therefore no released verifier of
+this format anywhere, and "an older verifier would be stranded" is an argument
+about a population of zero. gkc ruled 2026-08-31 that a change breaking nothing
+outside this tree is not a breaking change. ⚠️ **The same reasoning retires the
+walk**: it was kept as the fallback for envelopes that name no key, and only
+this tree can produce one.
+
+⚠️ **This is NOT an argument that the format is free to change in general.**
+The standing rule is that the `@experimental` marker is the test and publication
+is not — and `lib/src/signing` carries the marker on **none** of its four files,
+where `lib/src/crypto` carries it on 11 of 24. What licenses this change is that
+no artefact outside the tree holds the old shape, which is a separate question
+from the marker and has to be re-established, by measurement, for any later one.
+
+✅ **The header now agrees with what the tree already does.**
+`PqSigningChain.rootLinkKidField` is already a `kid` that names the signing key,
+and its dartdoc already carries this ruling's security argument. ⚠️ **That one
+is deliberately OPTIONAL** — absent rather than null, so a link whose signer
+could not name its key stays byte-identical to one written before the field,
+which `_sameLink` depends on when deciding whether to republish. The envelope's
+being mandatory is a real difference between the two and is deliberate: the
+envelope has no republish comparison to preserve.
+
+**What it does to the catalogue.** c1 is untouched. **c2** said *"JOSE's `kid` is
+already spent on the signing enrollment, so this is a second field"* and states
+the opposite of this ruling. **c3** justified the unbumped version with *"an
+older verifier ignores it and walks instead … no verifier is stranded"*; the
+conclusion survives and the reasoning does not, so it is rewritten to the
+version REFUSAL the verifier already performs — a header claiming a version this
+build does not know is refused rather than read as a shape it may not be.
+**c4**'s walk-and-count half is withdrawn and its naming half becomes the
+behaviour.
+
+⚠️ **c4 was counted PROVEN on a pin covering only the withdrawn half.** Its
+citation pins the fragment *"names how many were tried"* and its own comment says
+the naming half is unpinnable because no such field exists — but the coverage
+function marks the whole clause proven from that fragment. This is the second
+clause found over-pinned this way in one day, after
+[UC-B1.1](../acceptance.md#81-uc-b11--first-client-retrofit-alice1) c3. Neither
+was found by a rail. **The burn-down therefore FALLS before it rises**: removing
+the fragment leaves c4 asserting only unbuilt behaviour.

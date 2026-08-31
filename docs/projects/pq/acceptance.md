@@ -4089,7 +4089,7 @@ withdrawn from verifying history too is
 [UC-G2.3](#173-uc-g23--an-_apsk-reader-tolerates-an-unknown-algorithm-and-distrusts-an-unknown-status)'s
 unknown-status clause, and the two must not be conflated.
 
-### 17.8 UC-G2.8 — A verifier resolves the algorithm by name and only then walks the keys under it
+### 17.8 UC-G2.8 — A verifier resolves the algorithm by name, then the key by `kid`
 
 - **Given:** an `_apsk` advertising more than one key under the algorithm an
   envelope is signed with — the ordinary state of any enrollment that has ever
@@ -4102,22 +4102,33 @@ unknown-status clause, and the two must not be conflated.
     one pass. Where an envelope carries more than one signature it takes the
     **strongest** shared, not the first match, so neither side's ordering alone
     decides;
-  - **the signature also names the key it was made with**, so a verifier that
-    understands the field selects in one step rather than trying candidates.
-    JOSE's `kid` is already spent on the signing **enrollment**, so this is a
-    second field beside `alg`;
-  - ⛔ **that field does NOT bump `envelopeVersion`, and an older verifier
-    ignores it and walks instead** — the current one first, a retired one reached
-    only by a record old enough to need it. The walk is what the field replaces,
-    not what it contradicts, so both behaviours are correct at once and no
-    verifier is stranded. A version bump would make every older verifier refuse
-    every new envelope, because the version mismatch is a refusal;
+  - **the signature names the KEY it was made with**, in `kid` — JOSE's own
+    meaning for that member — and names its signing **enrollment** separately in
+    `enid`. A verifier selects in one step rather than trying candidates, and
+    since a kid is `SHA256(publicKey)` truncated it can be checked against the
+    key it names: a tampered one narrows to the wrong key or to none, and the
+    signature then fails on its own.
+    ⚠️ **This said `kid` was already SPENT on the enrollment, so the key needed a
+    second field beside `alg`, until 2026-08-31.** [Ruling 131](detail/decisions.md#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31) moved
+    the enrollment to `enid` instead, no released verifier holding the old shape;
+  - **a header claiming a version this build does not know is refused**, rather
+    than read as a shape it may not be — the mismatch is a refusal, not a
+    tolerated difference. `envelopeVersion` stays at **1** across the
+    key-identifier change, because nothing outside this tree holds the old header:
+    there is no verifier for a bump to strand, and none for an unbumped change to
+    confuse.
+    ⚠️ **This clause asserted the compatibility argument itself until
+    2026-08-31** — that an older verifier ignores the new field and walks
+    instead, both behaviours correct at once. [Ruling 131](detail/decisions.md#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31) deleted the
+    walk and measured the population that argument protected: published
+    `at_client` 3.14.0 carries no `lib/src/signing` at all;
   - a signature naming a key the advertisement does not carry is **refused,
     naming that key** — a better diagnosis than a count, which cannot
-    distinguish a wrong key from a bad signature. Where the field is absent and
-    the walk is taken, the refusal instead **names how many were tried**, so a
-    verifier that stopped at the first goes red rather than reporting a bad
-    signature;
+    distinguish a wrong key from a bad signature.
+    ⚠️ **This also carried the walk's counted refusal — *names how many were
+    tried* — until 2026-08-31, and that was the only half anything pinned**, so
+    the clause read PROVEN while the naming half was unbuilt. [Ruling 131](detail/decisions.md#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31)
+    deletes the walk, so there is no count left to name;
   - **this is the ordinary case, not the overlap case.** An app that signs only
     once still changes *what* it signs with over time, so its `_apsk` accumulates
     advertised keys by rotation alone. A plural **advertisement** is what every
