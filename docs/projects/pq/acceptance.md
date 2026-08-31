@@ -3783,18 +3783,6 @@ is where its missing lever lives.
     the previous generation only, and no key in the new one is one it has ever
     held. This is why fresh-only needs no special revocation path — there is
     nothing to suppress;
-  - ⛔ **but the rotation must exclude the revoked enrollment's DESCENDANTS too,
-    not only the enrollment named.** Revoking a parent does not revoke what it
-    self-spawned: on at_server `origin/trunk` the child keeps `approved`, keeps
-    authenticating, and keeps its grants — so a rotation excluding only the named
-    id **conveys the new private straight to the attacker's surviving child**.
-    The exclusion set is the whole subtree, walked over `parentEnrollmentId` —
-    and it is owed by the **add** as well as the rotation. ⚠️ An add's
-    conveyance passes no exclusion set at all today (`NskeySeeding` calls
-    `pushSecretToNamespaceMembers` with none), so freshly minted material
-    reaches the same surviving child by the same route; [UC-G2.6](#176-uc-g26--a-client-adds-its-own-missing-algorithm-to-the-current-generation)
-    carried a clause refusing an add for this reason and it was dropped on
-    2026-08-28 as the wrong home for it;
   - every peer's cached content key is superseded, because every `kid` in the
     advertisement has changed. That is how a peer learns a rotation happened at
     all: a sender never sees a recipient's decapsulation fail;
@@ -3828,6 +3816,30 @@ is where its missing lever lives.
     for the same key on the same instance, and that one does await before
     declining.
 
+  ⛔ **A clause was WITHDRAWN here on 2026-08-31** (gkc), and is kept as prose
+  because the reasoning is worth having. It required the rotation to exclude the
+  revoked enrollment's whole **subtree**, walked client-side over
+  `parentEnrollmentId`, and said the same was owed by the `add`.
+  [Ruling 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
+  puts that walk in the atServer's revoke instead: once revocation cascades, a
+  descendant loses `approved`, `enroll:listns` returns approved enrollments only,
+  and the subtree is off every roster — so the one-element
+  `excludeEnrollmentIds: {enrollmentId}` this client already passes is correct as
+  it stands, and an `add` conveying with no exclusion set at all is right rather
+  than a gap. The behaviour the clause wanted is asserted by
+  [UC-A5.3](#63-uc-a53--enrollment-revocation), which is where a cascade belongs;
+  restating it here would claim one behaviour under two rows.
+
+  ⚠️ **Until the atServer ships the cascade this row's leak is real**, and the
+  withdrawn clause described it correctly: a descendant keeps `approved`, keeps
+  authenticating and keeps its grants, so a rotation excluding only the named id
+  conveys the new private to what the compromised enrollment spawned, and an
+  `add` reaches it by the same route — `NskeySeeding` calls
+  `pushSecretToNamespaceMembers` with no exclusion set. ⚠️ [UC-G2.6](#176-uc-g26--a-client-adds-its-own-missing-algorithm-to-the-current-generation)
+  carried a clause refusing an `add` for that reason and it was dropped on
+  2026-08-28 as the wrong home for it; 129 says the same of this one, one layer
+  further down.
+
   ⚠️ **Why the revoker writes the record rather than a client deriving it.**
   Nothing server-side carries a revocation timestamp — `EnrollDataStoreValue` has
   no time field, `EnrollApproval` is `{state}` alone, and `enroll:list`
@@ -3835,8 +3847,9 @@ is where its missing lever lives.
   to be *published* by the party that knows it. The revoker is the only actor that
   does: the atServer refuses `revoke` unless the caller is authorised for **every**
   namespace the target holds, so a revoker holds a superset of what it revokes and
-  can name every namespace affected. ⛔ **Both halves are unbuilt** — neither the
-  record nor the subtree walk exists.
+  can name every namespace affected. ⛔ **The record is unbuilt**, and it is the
+  only half still owed — the subtree walk is not unbuilt but **retired**, by
+  ruling 129, which moves it into the atServer's revoke.
 
 ### 17.6 UC-G2.6 — A client adds its own missing algorithm to the current generation
 
