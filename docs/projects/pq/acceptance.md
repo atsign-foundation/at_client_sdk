@@ -1981,12 +1981,19 @@ this tree cannot. ⚠️ **This read "7 … `{current,published,scenario}`" unti
 was about a different miscount. Count them with `find tests -name pubspec.yaml`,
 never `tests/*/`: a depth-2 glob returns 4 and reads as the whole answer.
 
-Exactly one `provenIn` citation reaches a CLI pack — **UC-G3.11**, which cites
-`pq_pre_enrollment_retrofit_test.dart` and its legacy-posture control. ⚠️ **This
-read "No `provenIn` citation reaches either CLI pack" until 2026-08-31**, and
-the reason it gave still stands for everything else: the CLI pack's two-arm
-posture differential — the best live evidence for UC-C1.6 and a second live
-proof of UC-A1.1 — is still invisible from this catalogue. Counted 2026-08-23,
+Three `provenIn` citations reach a CLI pack, over two rows: **UC-G3.11** cites
+`pq_pre_enrollment_retrofit_test.dart` twice, and **UC-B1.4** cites
+`pq_native_enroll_test.dart` once. None reaches the **proxy** pack.
+
+⚠️ **This sentence has been wrong twice, and the second time was the correction
+of the first.** It read *"No `provenIn` citation reaches either CLI pack"*, which
+had been false since UC-B1.4's citation landed on 2026-08-26; on 2026-08-31 it
+was corrected to *"exactly one — UC-G3.11"*, which counted the citation just
+added instead of searching for all of them. Re-derive rather than quoting:
+`git grep -c at_onboarding_cli_functional_tests -- packages/at_client/test/acceptance`.
+What both versions said next still holds — the CLI pack's two-arm posture
+differential, the best live evidence for UC-C1.6 and a second live proof of
+UC-A1.1, is still invisible from this catalogue. Counted 2026-08-23,
 the strict matcher gives **194** live `test()` declarations across all 4 and a
 multi-line-aware one **247**; the gap is entirely declarations whose name sits
 on the next line, since an any-position same-line matcher also returns 194.
