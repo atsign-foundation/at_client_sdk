@@ -1185,15 +1185,54 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:**
   - E2's APKAM keypair is cut at auth; pair with `nskey`-keypair rotation
     excluding E2 (UC-A5.1(b)) to deny new-data keys;
-  - ⛔ **and the exclusion is E2's whole SUBTREE, not E2.** Revoking a parent
-    does not revoke what it self-spawned — a lost keyfile is exactly the case
-    that can self-enroll children, and on at_server `origin/trunk`
-    `parentEnrollmentId` is written by the retrofit and read by nothing. So a
-    descendant keeps `approved`, stays on every roster `enroll:listns` returns,
-    and by this section's own clarification below **is answered when it asks a
-    holder for the generation it can see published**. Rotating while excluding
-    only E2 therefore hands the attacker's surviving child the new key. See
-    [`decisions.md` 121](detail/decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28).
+  - ⛔ **revoking E2 revokes E2's whole subtree**, transitively and to arbitrary
+    depth: every enrollment E2 self-enrolled, and every enrollment those
+    self-enrolled, leaves `approved` in the same act. `enroll:listns` returns
+    approved enrollments only, so the subtree is off every roster at once — the
+    rotation's conveyance cannot reach it and no holder will serve it the
+    published generation. The client's exclusion set stays the **one** enrollment
+    named. And the atServer refuses to un-revoke an enrollment whose predecessor
+    is not currently `approved`, which is what stops an orphan being restored
+    outside the cascade. See
+    [`decisions.md` 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31).
+
+    ⛔ **RULED AND NOT YET BUILT, so this clause is unprovable until at_server
+    ships it.** Until then the tree genuinely leaks and the leak is the
+    interesting fact: a descendant keeps `approved`, stays on every roster, and
+    **is answered when it asks a holder for the generation it can see
+    published** — so rotating while excluding only E2 hands what E2 spawned the
+    new key. The test that closes this clause is the one that refutes that
+    sentence.
+
+    ⚠️ **The clause said the EXCLUSION SET must be the subtree until 2026-08-31,
+    walked client-side over `parentEnrollmentId`. That was the wrong layer.** An
+    exclusion set is advisory and per-caller: it binds the client that computes
+    it and nothing else, and cannot bind a holder that has only the atServer's
+    word to go on. Approval state is authoritative and consulted by every roster
+    query on every client, which is why `revokeEnrollmentAndRotate` revokes
+    first. Put the walk in the revoke and the roster does the rest, for clients
+    that never heard of the revocation.
+
+  **Why the pair, and not either half, is the forward secrecy.** Revoking the
+  enrollment and all of its descendants, *followed by* the rotation, is what
+  denies an attacker new data keys. Neither alone does it. The revocation on its
+  own leaves everything already conveyed readable — the compromised keyfile
+  still holds the current generation's private, and nothing recalls it. The
+  rotation on its own hands the successor generation to whatever the compromised
+  enrollment spawned, because those enrollments are still approved and still on
+  the roster. Revocation removes the subtree from every future conveyance and
+  every future serve; the rotation makes everything after it unreadable to what
+  the subtree already holds. Forward secrecy is the composition.
+
+  ⚠️ **Self-revocation is the one case that can strand an atSign, and it is
+  guarded rather than cascaded around.** A revoker holds a superset of the scope
+  of what it revokes, and an enrollment is never its own descendant — so a
+  revoker is never inside the subtree it revokes and survives its own cascade,
+  leaving the atSign at least one fully privileged enrollment. What remains is an
+  enrollment revoking *itself*: that requires `force`, the client application is
+  the party that should warn its user before making that deliberate act, and the
+  atServer refuses it outright — `force` or not — when it is the last fully
+  privileged enrollment.
 
 - **Cross-ref:** `decisions.md` (FS levers, Decision #F); `design.md`
   (forward-secrecy / rotation levers, nskey-keypair rotation).

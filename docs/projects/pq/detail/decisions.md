@@ -12593,31 +12593,37 @@ strictly better, because it is scoped to the namespaces that matter rather than 
 global instant every client compares everything against, and it needs no atServer
 change.
 
-**The exclusion set is the whole SUBTREE, and that is not optional.** Revoking a
-parent does not revoke what it self-spawned: on at_server `origin/trunk`
-`parentEnrollmentId` is written at `enroll_verb_handler.dart:436` and read by
-nothing outside the generated serializer — the field's own dartdoc says *"the
-cascade itself is the revoke path's to implement"*. So a descendant keeps
-`approved`, keeps authenticating, and keeps its grants. ⛔ **A rotation excluding
-only the named id would convey the new private straight to the attacker's
-surviving child**, which is the exact failure the field exists to make fixable.
-The subtree is walked over `parentEnrollmentId`, which `enroll:list` returns
-because it serialises the record whole; `enroll:fetch` does not carry it.
+⛔ **SUPERSEDED on 2026-08-31 by
+[ruling 129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31),
+which puts the subtree walk in the atServer's revoke and retires the client-side
+one entirely.** This ruling said ~~the exclusion set is the whole SUBTREE, and
+that is not optional~~, walked over `parentEnrollmentId`, and ordered the work
+~~client-side subtree exclusion first, the atServer cascade after~~. Both are
+withdrawn, and the second is exactly inverted: there is no client-side subtree
+work, and the cascade is the whole instrument.
 
-**Order of work** (gkc's ruling, same day): **client-side subtree exclusion
-first, the atServer cascade after.** Neither alone suffices — the record does not
-stop a descendant authenticating, and the cascade does not tell a later client
-what to rotate. The client half is correct today and stays correct once the
-cascade lands.
+**Why the reasoning went wrong, since the shape recurs.** The observation was
+right — a descendant does keep `approved`, keeps authenticating and keeps its
+grants, so a rotation excluding only the named id conveys the new private to
+what the compromised enrollment spawned. The error was choosing the *exclusion
+set* as the instrument. An exclusion set is advisory and per-caller: it binds
+the client that computes it and nothing else, and cannot bind a holder that has
+only the atServer's word to go on. Approval state is authoritative and consulted
+by every roster query on every client. `enroll:listns` returns approved
+enrollments only, so once the revoke cascades, a descendant is off every roster
+and the one-element `excludeEnrollmentIds: {enrollmentId}` the client passes
+today is correct as it stands.
 
-⚠️ **Nothing has ever read `parentEnrollmentId` in production**, so whichever
-half lands first is also the first test of whether the recorded links are correct
-on records already in the field.
+**What survives of this ruling:** the durable record the revoker writes, naming
+the namespace, the moment and what to exclude. That half is untouched and still
+owed — see UC-G2.5 c6.
 
-**What is unbuilt:** the record, the subtree walk, and the cascade. The client
-model does not expose `parentEnrollmentId` today even though the wire carries it.
+⚠️ **Nothing has ever read `parentEnrollmentId` in production**, so the cascade
+will be the first test of whether the recorded links are correct on records
+already in the field.
 
-**Status:** ruled, unbuilt.
+**Status:** the durable record is ruled and unbuilt; the subtree half is
+SUPERSEDED by ruling 129.
 
 ## 122. Rotation cadence: the nskey lever fires on cause, the CK lever asks a policy (2026-08-28)
 
@@ -13280,3 +13286,99 @@ measurement's own limit, stated by the session that took it: the rig was built
 to refute narrowing verdicts, so with nothing classified narrowing no EQUAL
 verdict was ever challenged. It catches a false alarm and cannot catch a missed
 one.
+
+## 129. Revocation cascades to descendants, and the roster does the rest (2026-08-31)
+
+**In brief:** *the atServer revokes the whole subtree, so no client needs to
+walk one*
+
+**Ruled by gkc, in three parts.**
+
+1. **When an enrollment is revoked, all of its descendants are revoked too.**
+   The cascade is the atServer's, on the revoke path.
+2. **The atServer must never allow un-revoking an enrollment whose predecessor's
+   status is not currently `approved`.** Without that guard the cascade is
+   one-way only: un-revoking a descendant while its predecessor stays revoked
+   would resurrect exactly the orphan the cascade exists to remove.
+3. **The forward secrecy is the pair, not either half.** Revoking the enrollment
+   and all of its descendants, *followed by* the rotation, is what denies an
+   attacker new data keys. The revocation alone leaves material already conveyed
+   readable; the rotation alone hands the new generation to whatever the
+   compromised enrollment spawned.
+
+**What this means for the client: nothing to build, and one requirement
+withdrawn.** `enroll:listns` returns **approved enrollments only** — verified on
+at_server `origin/trunk`, `enrollment_manager.dart`, which skips any enrollment
+whose approval state is not `approved`. So a revoked descendant is off every
+roster the moment the cascade runs: the conveyance cannot reach it, and a holder
+asked for the generation will not serve it. `excludeEnrollmentIds:
+{enrollmentId}` — the one-element set `NskeyRotation` passes today — is therefore
+**correct as it stands**.
+
+⛔ **This retires the client-side subtree walk that three clauses asked for.**
+They required the *exclusion set* to be the whole subtree, computed over
+`parentEnrollmentId`. That is the wrong layer: the exclusion set stops one client
+pushing and cannot bind a holder that has only the atServer's word to go on,
+which is why `revokeEnrollmentAndRotate` revokes first. Put the walk in the
+revoke and the roster does the rest for every client at once, including ones that
+never heard of the revocation.
+
+**Why the roster and not the exclusion set is the right instrument.** An
+exclusion set is advisory and per-caller: it binds the client that computes it
+and nothing else. Approval state is authoritative and per-atSign: every roster
+query, every serve and every push consults it, on every client, forever. A
+security property that depends on each client remembering to compute a set
+correctly is one client-side bug away from failing silently; one that depends on
+the atServer's answer fails closed.
+
+**What each side owes.** at_server: the cascade on revoke, and the un-revoke
+guard. at_client: nothing — but three clauses need rewriting to assert the
+cascade rather than a walk, and they stay unprovable until the atServer work
+lands.
+
+⚠️ **Until it lands the tree genuinely leaks, and the clauses say so correctly
+today.** A descendant keeps `approved`, stays on every roster, and is answered
+when it asks a holder for the published generation. Statements describing that
+are true until the cascade ships, and become the thing the new tests refute.
+
+**Transitive, to arbitrary depth** (gkc, 2026-08-31). A self-enrolled enrollment
+can itself self-enroll, so a chain can be deeper than two, and a one-level
+cascade would leave a grandchild on the roster — answered when it asks a holder
+for the new generation, which is the hole this ruling exists to close.
+**The depth costs nothing to choose.** The at_server session measured it:
+`parentEnrollmentId` has no index and exactly one production reader, so the only
+enumeration available is a scan of every enrollment key with a decode per key.
+That scan is paid once; a single pass builds the whole predecessor→successor map
+and the transitive walk is then in-memory over a map already held. One level and
+arbitrary depth are the same scan, and only a naive implementation that re-scans
+per level would be slower — avoidable by construction.
+
+**Self-revocation is the only way to strand an atSign, and it is guarded**
+(gkc, 2026-08-31). Three rules, and together they close the case:
+
+1. **An enrollment may not revoke itself except by passing `force`.** That is a
+   deliberate act by the client, and the **client application** is the party
+   that should warn its user before making it — not the atServer, which cannot
+   know what the operator intended.
+2. **Even with `force`, the atServer refuses a self-revocation by the last fully
+   privileged enrollment.** That is the one revoke that can leave an atSign
+   unable to administer itself.
+3. **A revoker holds a superset of the scope of what it revokes.**
+
+⚠️ **Rule 3 is what makes the cascade safe, and it is easy to miss.** An
+enrollment is never its own descendant, so a revoker is never inside the subtree
+it revokes — it survives its own cascade by construction, and the atSign is left
+with at least one fully privileged enrollment: the one that just acted. The
+stranding case therefore does not arise from a cascade at all. It arises only
+from self-revocation, which rule 2 refuses in exactly the situation that matters.
+
+⛔ **This corrects a paragraph written earlier the same day**, which said a
+cascade could revoke approvers and called it ~~a stranding hazard this ruling
+accepts rather than solves~~. It cannot: the reasoning behind it overlooked that
+the revoker is outside the subtree it revokes. Nothing is accepted, because
+nothing is stranded.
+
+⚠️ Whoever builds the cascade should still read at_server's approver-liveness
+predicate first — not because of a stranding hazard, but because that predicate
+is computed over approved enrollments only, so a cascade changes what it
+returns, and rule 2 needs the same question answered at the revoke handler.
