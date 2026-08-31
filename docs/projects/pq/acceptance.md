@@ -34,6 +34,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 - [15. C1 · The rollout posture (capstone of `decisions.md` 56.4)](#15-c1--the-rollout-posture-capstone-of-decisionsmd-564)
 - [16. G1 · Signature agility and the rollout matrix](#16-g1--signature-agility-and-the-rollout-matrix)
 - [17. G2 · Crypto agility — add, never replace](#17-g2--crypto-agility--add-never-replace)
+- [18. G3 · The data signing key an enrollment owns from birth](#18-g3--the-data-signing-key-an-enrollment-owns-from-birth)
 
 ---
 
@@ -58,7 +59,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**83 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 84 use cases and 94 scenarios —
+**94 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 95 use cases and 105 scenarios —
 several rows carry more than one.
 
 ⚠️ **This sentence said `50 · 2 · 1` across 53 until 2026-08-18**, when a cold
@@ -179,6 +180,17 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-G2.9   | Step 3 has no lever, so a retired signing key verifies forever                     | PROVEN    | `g2_agility_test.dart` |
 | UC-G2.10  | The ladder across atSigns: safe through rollout 1, refused after rollout 2         | PROVEN    | `g2_agility_test.dart` |
 | UC-G2.11  | The ladder within one atSign: safe through rollout 1, broken after rollout 2       | PROVEN    | `g2_agility_test.dart` |
+| UC-G3.1  | Every creation door files the private half, not just the public one                | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.2  | The algorithm minted is the one kept, so the first start rewrites nothing          | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.3  | The `_apsk` form follows the algorithm, and nothing else decides it                | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.4  | A link is bound to the exact `_apsk` string, and a republish breaks it             | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.5  | What an approver conveys is decided by possession as well as privilege             | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.6  | A legacy enrollment's authentication keypair signs data in memory only             | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.7  | The reconcile treats rsa2048 as already held, and only rsa2048                     | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.8  | No signer waits on a mint                                                          | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.9  | Two coherence rules, refused at construction before any I/O                        | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.10 | A no-PQ-provider client refuses the work and leaves the enrolment repairable       | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.11 | A pre-enrollment atSign gives itself a first enrollment                            | PROVEN    | `g3_data_signing_key_test.dart` |
 
 ---
 
@@ -1944,7 +1956,8 @@ document had named.
 | `packages/at_auth/test/at_self_enrollment_test.dart` | a retrofit leaving one active auth key and touching nothing legacy (UC-G1.2). |
 | `tests/at_functional_test/test/pkam_record_authoritative_test.dart` | the cross-cutting invariant that ML-DSA APKAM auth is record-authoritative. |
 | `packages/at_client/test/pq_client_bootstrap_test.dart` | the PQ startup itself, and cited by nothing: the step order, what a `stop()` between steps halts, that an abandoned startup says so at WARNING naming what it skipped, that a gated-off step is skipped rather than waited on, and the enrollment snapshot's grant handling. |
-| `packages/at_client/test/signing_key_mint_test.dart` | the one home for minting the data signing keypair an enrollment owns from birth, shared by the self-retrofit, the PQ-native activation and the CLI enrolment: that the algorithm minted is the one the in-use set names — so the first start&#39;s reconciliation is a no-op and `_apsk` is not rewritten — and what it refuses rather than guessing. Cited by nothing yet; its clauses are owed. |
+| `packages/at_client/test/signing_key_mint_test.dart` | the one home for minting the data signing keypair an enrollment owns from birth, shared by the self-retrofit, the PQ-native activation and the CLI enrolment: that the algorithm minted is the one the in-use set names — so the first start&#39;s reconciliation is a no-op and `_apsk` is not rewritten — and what it refuses rather than guessing. Cited by **UC-G3.2** since 2026-08-31; this row read *"cited by nothing yet; its clauses are owed"* until then. |
+| `packages/at_client/test/enrollment_conveyance_guard_test.dart` | what a client configuring no post-quantum providers refuses and what it still does — the approval that throws before reaching the atServer so the enrolment stays pending, the sweep refusal, and both controls (a request carrying its own wrapped key is approved; a PQ-capable posture is refused neither). Cited by **UC-G3.10**. |
 
 ⚠️ **Being listed here is not a claim that a file is fully exercised** — it is
 the address of the evidence, so that a reader auditing a verdict can reach it
@@ -1968,9 +1981,12 @@ this tree cannot. ⚠️ **This read "7 … `{current,published,scenario}`" unti
 was about a different miscount. Count them with `find tests -name pubspec.yaml`,
 never `tests/*/`: a depth-2 glob returns 4 and reads as the whole answer.
 
-No `provenIn` citation reaches either CLI pack, which is why the CLI pack's
-two-arm posture differential — the best live evidence for UC-C1.6 and a second
-live proof of UC-A1.1 — is invisible from this catalogue. Counted 2026-08-23,
+Exactly one `provenIn` citation reaches a CLI pack — **UC-G3.11**, which cites
+`pq_pre_enrollment_retrofit_test.dart` and its legacy-posture control. ⚠️ **This
+read "No `provenIn` citation reaches either CLI pack" until 2026-08-31**, and
+the reason it gave still stands for everything else: the CLI pack's two-arm
+posture differential — the best live evidence for UC-C1.6 and a second live
+proof of UC-A1.1 — is still invisible from this catalogue. Counted 2026-08-23,
 the strict matcher gives **194** live `test()` declarations across all 4 and a
 multi-line-aware one **247**; the gap is entirely declarations whose name sits
 on the next line, since an any-position same-line matcher also returns 194.
@@ -3746,3 +3762,270 @@ unknown-status clause, and the two must not be conflated.
   and this is the row where confusing them shows.** With one atSign both belong
   to it, so a client consulting its own configuration where it should consult
   the advertisement is invisible in every other row.
+
+---
+
+## 18. G3 · The data signing key an enrollment owns from birth
+
+Acceptance for [`decisions.md` 126](detail/decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30)
+and [127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30);
+design in [`design.md` 9.8](design.md#98-the-data-signing-key-an-enrollment-owns-from-birth).
+
+Section 16 covers what an `_apsk` record *means* to a reader. This cluster
+covers the key it names: where it comes from, what has to agree about its
+spelling, and what breaks when the record changes under a signature that
+vouched for it.
+
+**The design settled 2026-08-30 and the code landed with it.** Every row below
+was written against the production path rather than the design, because a
+clause can be **false** rather than untested and both read the same way from
+outside. Three of the eleven came out narrower than the work item that asked
+for them, and each says so where it happened.
+
+⛔ **One item the work list carried is withdrawn rather than written here.** It
+asked for "no mint at all when there is no enrollment id";
+[ruling 127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30)
+dropped the commit that would have created that behaviour, because publishing
+`_apsk` under `primary` with no enrollment id is a working, pinned capability
+that the guard would have deleted. There is no mechanism to write a row about.
+
+So ten of the work item's eleven map to a row here, and the eleventh row is
+[UC-G3.3](#uc-g33--the-form-_apsk-takes-follows-the-algorithm-and-nothing-else-may-decide-it),
+which the item did not list at all: it comes from
+[`design.md` 9.8.2](design.md#982-the-form-_apsk-takes-follows-the-algorithm-and-nothing-else),
+and it is the rule the two composers were breaking. The `_apsk`-mismatch
+refusal cluster the item raised separately is not a twelfth row — it is the
+five comparisons inside
+[UC-G3.4](#uc-g34--a-link-is-bound-to-the-exact-_apsk-string-and-a-republish-breaks-it),
+which is the same mechanism stated once.
+
+### 18.1 Creation
+
+#### UC-G3.1 — every door that creates an enrollment files the private half, not just the public one
+  *Given* a client creating an enrollment through any of the three doors that
+  mint one — an app's enrolment (`AtOnboardingService.enroll`), the
+  self-retrofit, and a PQ-native activation.
+  *When* the atServer answers with an enrollment id.
+  *Then* the freshly minted signing keypair's **private** half is written to
+  the keyfile as typed `sign:` material under that id, so
+  `AtKeys.signingKeysFor` returns it — advertising without filing is worse
+  than advertising nothing, because the next start finds the in-use algorithm
+  missing, mints a **second** keypair and republishes, orphaning the key the
+  record already named.
+  *And* an enrolment carrying no `advertisedSigningKey` files nothing, so the
+  filing is attributable to the key rather than to the path.
+  *And* what is filed is the **enrollment's**, under the id the atServer
+  assigned, not the atSign's own container.
+
+  ⚠️ **Three mint sites, four request types, three filing sites — and the
+  three counts are of different things.** `mintAdvertisedSigningKey` has three
+  production callers; `advertisedSigningKey` rides four request constructors
+  (`AtEnrollmentRequest`, `AtEnrollmentRequest.pq`, `AtSelfEnrollmentRequest`,
+  `FirstEnrollmentRequest`); at_auth files it at three points. A row written to
+  any one number contradicts the other two.
+
+#### UC-G3.2 — the algorithm minted is the one the enrollment keeps, so the first start rewrites nothing
+  *Given* an enrollment created at `pqReady` (which names `{rsa2048}`) or at
+  `pqActive` (which names `{mldsa65}`), holding the keypair its own posture's
+  in-use set names.
+  *When* that client starts and `reconcileSigningKeys` runs.
+  *Then* nothing is missing and nothing is superseded, so it mints no key,
+  retires none, and **does not publish `_apsk` at all** — the record the
+  enrolment created stands byte-for-byte.
+  *And* `mintAdvertisedSigningKey` **refuses** a set naming more than one
+  algorithm rather than choosing between them, so the plural cannot be created
+  through any door.
+
+  ⚠️ **`reconcileSigningKeys` does mint per algorithm, and that asymmetry is
+  deliberate.** A two-member set is legal to hold and refused at creation, which
+  is why the creation path and the heal path read differently. Not a bug in
+  either.
+
+#### UC-G3.3 — the form `_apsk` takes follows the algorithm, and nothing else may decide it
+  *Given* two composers writing one record — at_auth's `_apskFor` at enrolment
+  and at_client's `apskValueOf` at every start.
+  *When* the enrollment's advertised signing key is a single active `rsa2048`
+  key.
+  *Then* both spell it **bare** — the key itself, which is what every deployed
+  consumer base64-decodes — and both spell anything else as the **array**.
+  *And* a second condition on either side is a defect, not a refinement: the
+  client republishes on any difference, so a disagreement rewrites the record
+  and discards whatever was bound to its old value.
+
+  ⚠️ **This row exists because the two composers disagreed until 2026-08-31.**
+  at_auth also forced the array whenever a key package was present, on the
+  grounds that a bare value cannot state the algorithm of whatever signed the
+  package. Where that signer is rsa2048 the bare value states exactly it, and
+  where it is not, the algorithm had already chosen the array — so the extra
+  condition fired only on the case it was wrong about: an rsa2048-advertising
+  enrollment in pq key-exchange mode, which `--posture legacy --key-exchange pq`
+  reaches. The client then rewrote `_apsk` at its first start and discarded the
+  chain link the approver had just conveyed.
+
+### 18.2 The chain over the record
+
+#### UC-G3.4 — a link is bound to the exact `_apsk` string, and a republish breaks it
+  *Given* an approver that has conveyed a signing link for an enrollment, the
+  link signing `{v, childEnrollmentId, apkamPublicKey}` where `apkamPublicKey`
+  is the enrollee's entire published `_apsk` value.
+  *When* that value changes — a mint republishing, or any other writer
+  composing a different spelling.
+  *Then* every one of `PqSigningChain`'s **five** whole-string comparisons
+  fails: a conveyed **chain** link is refused naming the mismatch, a conveyed
+  **root** link is refused naming the mismatch, the walk reports a chain link
+  **broken** rather than anchored, the walk reports a root link **broken**
+  rather than anchored, and an enrollment whose own key moved **re-anchors
+  itself** rather than publishing a link that vouches for a value it no longer
+  holds.
+  *And* the break is not recoverable by the record alone:
+  `publishPublicSigningKey` writes the value on its own and does not carry over
+  the `appMetadata` a link rides, so the enrollment goes from `chained` to
+  `unsigned` with nothing re-conveying it.
+
+  ⚠️ **`apkamPublicKey` is a misleading name and a remnant**, accurate only when
+  `_apsk` held the APKAM public key alone. It is a member of the signed preimage,
+  so renaming it changes what verifies. ⚠️ **The work item that asked for this
+  row said there were three refusal messages; there are four, plus a fifth
+  comparison that refuses silently.**
+
+#### UC-G3.5 — what an approver conveys is decided by possession as well as privilege
+  *Given* an approver servicing an enrolment whose key package verifies.
+  *Then* a fully privileged approver **holding the signing-root private**
+  conveys a **root** link, signed with the atSign's ML-DSA-65 root key and so
+  posture-invariant.
+  *And* a fully privileged approver with **no** root private that holds a data
+  signing key of its own conveys a **chain** link signed with that key — which
+  overturns [`decisions.md` 67](detail/decisions.md#67-workstream-bi-the-sweep-anchors-to-the-root-2026-08-10)'s
+  "root link or nothing" for that arm, because nothing re-attempts a link for an
+  enrolment approved while its approver was unpossessed.
+  *And* a fully privileged approver holding **neither** conveys **no link at
+  all**, and everything else still flows — signing with the APKAM
+  authentication key would produce a link that is *dropped* rather than
+  retired, and so silently unverifiable for ever.
+  *And* an approver that is **not** fully privileged conveys a chain link
+  signed with its own signing keys.
+
+  ⚠️ **`isFullyPrivileged` requires `w` on both `*` and `__manage` while
+  approval takes only `__manage`**, so the second arm is an ordinary case rather
+  than an edge: a `__manage`-only approver approves without being fully
+  privileged.
+
+### 18.3 The one keypair a legacy enrollment has
+
+#### UC-G3.6 — a legacy enrollment's authentication keypair signs data in memory only
+  *Given* an enrollment holding no typed `sign:` material.
+  *When* something asks `ApkamSigning.signingKeys` what may sign.
+  *Then* it answers with the APKAM **authentication** keypair, built from
+  `atChops` on the call and **never filed** as signing material — so
+  `AtKeys.signingKeysFor` still returns nothing for that enrollment, and
+  `apskEntries` advertises that same key on exactly the same condition, which
+  is what keeps what signs and what is advertised from drifting apart.
+  *And* once the enrollment does hold a signing key, the authentication key
+  stops signing and stops being advertised in the same step — it is **dropped**
+  rather than retired, so anything it signed stops verifying permanently.
+
+#### UC-G3.7 — the reconcile treats rsa2048 as already held, and only rsa2048
+  *Given* an enrollment holding no typed signing material whose APKAM
+  authentication keypair is **rsa2048** — one keypair doing both jobs, which is
+  what a legacy keyfile carries.
+  *When* the in-use set names `rsa2048` and the client starts.
+  *Then* it mints **nothing**: the algorithm is already held, a second rsa2048
+  keypair buys nothing, and publishing one would drop the original from `_apsk`
+  and leave whatever it signed unverifiable.
+  *And* the exclusion is **scoped to rsa2048**, which is the whole of its
+  correctness — the control is an enrollment authenticating with ML-DSA-65 and
+  holding no typed material, which **does** mint. An exclusion keyed on
+  whatever algorithm the authentication keypair reports would fire at
+  `pqActive`, mint no ML-DSA signing key ever, and advertise the authentication
+  key as the sole active entry: the split collapsing on the posture that exists
+  to create it, with nothing going red.
+  *And* a legacy enrollment at `pqActive` still mints ML-DSA, and a retrofitted
+  enrollment still mints rsa2048.
+
+#### UC-G3.8 — no signer waits on a mint
+  *Given* a client whose startup has not reached, or has parked at, its mint
+  step.
+  *When* anything asks for the keys that may sign.
+  *Then* it answers from the keyfile immediately, waiting on no other work.
+  *And* it answers by **reading** the keyfile rather than from a cache, and
+  returns the filed key once one is there — the control that makes the fallback
+  attributable.
+
+  ⚠️ **This replaces a process-wide barrier, and the barrier is what the row is
+  really about.** Everything that signs used to wait on the mint step, while two
+  earlier startup steps answer an inbound request by sealing and signing a reply
+  — so the startup waited on a step that could not begin until it returned.
+  `at_activate approve` did not exit within its two-minute bound in eight
+  separate runs, with nothing in the log to say why. ⛔ **The window the barrier
+  covered is accepted, not closed** — see
+  [UC-G1.9a](#uc-g19a--the-client-mints-what-the-in-use-set-names-advertising-before-filing)
+  and `design.md` 9.8.8: a reader calling `signingKeys` between a mint's publish
+  and its file, on an enrollment holding no signing key of its own, takes the
+  authentication fallback at the moment the advertisement stops naming it.
+
+### 18.4 What the preference refuses, and what a posture declines
+
+#### UC-G3.9 — two coherence rules, refused at construction before any I/O
+  *Given* an `AtClientPreference` being built.
+  *Then* an **empty `dataSigningKeyAlgorithms` beside a non-rsa2048
+  authentication key is refused**: with no data signing key the authentication
+  key is advertised as the sole active entry, and only an rsa2048 one can be
+  spelled in the bare form. The control is `PqPosture.legacy`, where an empty
+  set is exactly what the posture means and is accepted.
+  *And* an explicit **`authenticationKeyAlgorithm` weaker than the posture
+  names is refused**: a posture is a floor, and an app that must not move names
+  `PqPosture.legacy` rather than weakening an axis of a stronger posture.
+
+  ⚠️ **The floor rule reads ONE axis, and the work item that asked for this row
+  said "any axis".** A `dataSigningKeyAlgorithms` weaker than the posture names
+  is deliberately still legal — it mints rsa2048 and keeps `_apsk` bare, which
+  is coherent — and widening the rule to cover it needs a ruling, not a test.
+
+#### UC-G3.10 — a client configuring no post-quantum providers refuses the work and leaves the enrolment repairable
+  *Given* a client whose posture sets `configuresPqProviders` false, meeting a
+  pending enrolment that carries a key package and **no** wrapped symmetric key
+  — the absence being what asks this approver to mint one.
+  *When* it is asked to approve.
+  *Then* it **throws before the approval reaches the atServer**, so the record
+  stays pending and an approver that can service it still may. Approving would
+  flip the record to approved and then fail to mint, seal or convey anything,
+  leaving a device authorised and holding none of the material it was
+  authorised for, which no later approval can repair because the request is
+  spent.
+  *And* the same client **refuses the unanchored-enrollment sweep**, which
+  signs links and seals secrets it has no providers for — refused in the
+  service as well as gated in the startup, so a direct caller meets it too.
+  *And* the control: such a client still approves a request that **carries its
+  own wrapped key** normally, and a PQ-capable posture is refused neither.
+
+  ⚠️ **The guard keys on the missing wrapped key, not on "a pq request".** A
+  key package rides every mode, so keying on the package would refuse legacy
+  enrolments that need none of this.
+
+#### UC-G3.11 — a pre-enrollment atSign gives itself a first enrollment rather than minting into `_apsk.primary`
+  *Given* an atSign holding no enrollment at all, authenticating with the flat
+  `at_pkam_publickey` — which at_lookup signs with rsa2048, so it compares as
+  rsa2048.
+  *When* a client starts at a post-quantum posture.
+  *Then* it asks the atServer for a first enrollment and comes up on it, before
+  anything that derives from an enrollment id is built — so the mint step later
+  in the same startup publishes under a real enrollment id rather than under
+  `primary`.
+  *And* the request names the **first-enrollment app constant** with a device
+  name that is that constant plus a **fresh UUID per call**, because the
+  atServer refuses a second enrollment naming an `(appName, deviceName)` an
+  approved one already holds — a shared constant would let the first clone of a
+  copied keyfile upgrade and leave every other refused at every start, for ever.
+  *And* the grants are **stated** — `{'*': 'rw', '__manage': 'rw'}` — which is
+  not an escalation: the connection making the request has proved possession of
+  the atSign's own root credential and is already unscoped.
+  *And* the control: the same atSign shape at `legacy` asks for nothing and
+  leaves nothing behind, because there the posture wants what it already holds.
+  *And* the flat root credential **survives** its own retrofit, so sibling
+  clones that have not upgraded are not locked out.
+
+  ⚠️ **There is no guard skipping the mint when the enrollment id is null**, and
+  one was proposed. [Ruling 127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30)
+  dropped it: publishing `_apsk` directly with no enrollment id is a working,
+  pinned capability, and this row is about the retrofit running **first**, not
+  about the mint being skipped.

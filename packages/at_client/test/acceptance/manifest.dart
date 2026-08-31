@@ -50,6 +50,7 @@ const scenarioFiles = <String>[
   'g1_wire_test.dart',
   'g1_enroll_update_test.dart',
   'g1_rollout_matrix_test.dart',
+  'g3_data_signing_key_test.dart',
   'g2_agility_test.dart',
   'cross_cutting_test.dart',
 ];
@@ -94,7 +95,12 @@ const livePackPaths = <String>[
 /// ⛔ Not a place to park work. A row that owes a live test belongs in
 /// [liveProofOwed], which says the same thing about the tree while saying the
 /// opposite about the intent.
-const liveProofExempt = <String, String>{};
+const liveProofExempt = <String, String>{
+  'UC-G3.4':
+      'the mechanism is a client-side whole-string comparison — a record this client fetched, held against a field of a payload conveyed to it — so every party to the decision is in one process and a real atServer contributes nothing but the fetch. Who may WRITE _apsk is a different claim and IS live-proven, in tests/at_functional_test/test/apsk_server_side_test.dart. Unit by argument, not by omission',
+  'UC-G3.9':
+      'both rules are AtClientPreference constructor refusals that throw before any I/O, so there is no wire, no atServer and no second process in the mechanism. A live arm would spawn a CLI to watch an ArgumentError and would prove less than the unit test does, more slowly. Recorded as a decision (gkc, 2026-08-30) rather than an omission',
+};
 
 /// How many THEN clauses some citation pins, and how many of those are pinned
 /// by a citation into a live pack.
@@ -114,10 +120,10 @@ const liveProofExempt = <String, String>{};
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 167;
+const provenClauseCount = 196;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 81;
+const serverProvenClauseCount = 86;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///
@@ -184,6 +190,18 @@ const liveProofOwed = <String, String>{
       'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
   'UC-G1.9a':
       'a live test exists and this row names none — apsk_server_side_test.dart. Owed a citation, not a test',
+  'UC-G3.1':
+      'feasible and additive: filing is an end-to-end act whose evidence is the keyfile on disk AFTER a real enrolment, and the at_auth tests file against an in-memory AtKeys the test hands them. The CLI pack enrols for real, so a live arm would read the written .atKeys back and assert signingKeysFor(enrollmentId) is non-empty. It would also reach the ACTIVATION door, which no test in any pack currently drives — see the comment on the scenario',
+  'UC-G3.2':
+      'feasible and additive, and this is the row a live arm buys the most for: the unit arm counts publish calls against a mock, while the property that matters is that the _apsk record on a real atServer is BYTE-IDENTICAL after a first start to what the enrolment wrote. Enrol through the CLI pack, read the record, start again, read it again',
+  'UC-G3.5':
+      'feasible and additive: which link flavour an approver conveys is an act between two clients and an atServer, and the unit arm runs both sides in one process against a mock that accepts whatever it is handed. A live arm would approve from an approver in each of the four possession states and read what reached the enrollee',
+  'UC-G3.6':
+      'feasible and additive for the advertisement half: what a legacy enrollment PUBLISHES as its sole active entry is a wire fact a peer reads, and the unit arm asserts the composed string rather than the stored record. The in-memory-only half is local by construction and needs nothing live',
+  'UC-G3.8':
+      'feasible and additive, and the live arm is the one that found the defect: the unit test bounds a single signingKeys call at five seconds, while the failure was `at_activate approve` not exiting within two minutes because a startup step waited on a later one. Only a real CLI run exercises that ordering, and the CLI pack already spawns at_activate',
+  'UC-G3.10':
+      'feasible and additive: the row is about the STATE THE ATSERVER IS LEFT IN — the enrolment must still be pending and still approvable by someone else. A mock records that no approval command was sent; only a real atServer can be asked whether the record is still pending and then approved by a second client',
 };
 
 /// A use case as the catalogue defines it — by a heading, not by a mention.
