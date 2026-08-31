@@ -12614,16 +12614,21 @@ enrollments only, so once the revoke cascades, a descendant is off every roster
 and the one-element `excludeEnrollmentIds: {enrollmentId}` the client passes
 today is correct as it stands.
 
-**What survives of this ruling:** the durable record the revoker writes, naming
-the namespace, the moment and what to exclude. That half is untouched and still
-owed — see UC-G2.5 c6.
+⛔ **Nothing of this ruling survives.** An earlier correction said the durable
+record half was *"untouched and still owed"* — that was true for a few hours and
+was superseded the same day by
+[ruling 130](#130-a-revocation-is-discoverable-from-the-enrollment-record-and-rotates-unconditionally-2026-08-31),
+which has the atServer stamp `revokedAt` on the enrollment instead of having the
+revoker publish anything.
 
 ⚠️ **Nothing has ever read `parentEnrollmentId` in production**, so the cascade
 will be the first test of whether the recorded links are correct on records
 already in the field.
 
-**Status:** the durable record is ruled and unbuilt; the subtree half is
-SUPERSEDED by ruling 129.
+**Status:** SUPERSEDED in both halves — the subtree walk by ruling 129, which
+moves it into the atServer's revoke, and the durable record by ruling 130, which
+makes the atServer stamp `revokedAt` on the enrollment instead of having the
+revoker publish a record. Nothing of this ruling remains owed.
 
 ## 122. Rotation cadence: the nskey lever fires on cause, the CK lever asks a policy (2026-08-28)
 
@@ -12681,7 +12686,8 @@ policy can be per `(destination, namespace)`.
 
 ⚠️ **So [119](#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27)'s
 "an application policy such as the generation's age" was an example, not a
-requirement**, and the age half of UC-G2.5 c6 comes out of the catalogue.
+requirement**, and the age half of UC-G2.5 c6 — renumbered **c5** on 2026-08-31
+when the old c4 was withdrawn — comes out of the catalogue.
 
 **What that costs, stated rather than hidden.** Fresh-only makes rotation the
 garbage collection, so an atSign that never rotates goes on advertising its
@@ -12720,7 +12726,9 @@ retrofit and read by nothing. **Re-measured 2026-08-28 against at_server
 roster, and `NskeySeeding`'s
 conveyance calls `pushSecretToNamespaceMembers` with **no exclusion set at all**.
 An add therefore hands the attacker's surviving child freshly minted material.
-That is UC-G2.5 c4's subtree gap by another route, and c4 now names the add as
+⛔ That WAS UC-G2.5 c4's subtree gap by another route — the clause is withdrawn
+(2026-08-31, ruling 129), and an add conveying with no exclusion set is correct
+rather than a gap once the cascade takes descendants off the roster. It named the add as
 well as the rotation.
 
 ### The CK lever asks a policy
@@ -13305,11 +13313,20 @@ walk one*
    approver path has none. A rule phrased without it is literally satisfied by
    those — *"whose predecessor is not currently approved"* is true when there is
    no predecessor — and would permanently bar un-revoking any of them.
-   ⚠️ **A PENDING descendant is a second route to the same orphan, and neither
-   this guard nor the cascade sees it.** The cascade acts on approved
-   enrollments; a self-enrollment left `pending` when its predecessor was revoked
-   survives untouched, and approving it afterwards produces the orphan by a path
-   with no check on it. The approve path needs the same predecessor test.
+   ⛔ **This ruling claimed a PENDING descendant was a second route to the same
+   orphan. There is no such thing.** On `origin/trunk` the APKAM self-enrollment
+   branch sets `approved` and writes `parentEnrollmentId` in the same breath, and
+   that branch is the only writer of the field — the ordinary request branch,
+   which sets `pending`, never writes a predecessor. So no enrollment carrying a
+   predecessor is ever pending, and `enroll:approve` on one is already refused as
+   *"Only pending enrollments can be approved"*. The claim was inherited from an
+   audit and written here without being checked.
+   ⚠️ **The approve path still gets the same predecessor test, deliberately** —
+   as belt-and-braces rather than as a hole being closed. It costs one condition
+   on the helper the un-revoke guard needs anyway, and it makes the invariant
+   total: an enrollment does not become active while what it replaced is
+   inactive, at *every* transition into an active state rather than only at the
+   reachable one. It is unreachable today and its test says so.
 3. **The pair, not either half, denies an attacker NEW data keys.** Revoking the enrollment
    and all of its descendants, *followed by* the rotation, is what denies an
    attacker new data keys. The revocation alone leaves material already conveyed
@@ -13411,6 +13428,161 @@ the *target's* namespaces, so revoking a narrowly-scoped enrollment can leave a
 survivor that is nothing like fully privileged. Rule 2 has to ask the privilege
 question, not the survival one.
 
-⚠️ Whoever builds the cascade should read at_server's approver-liveness predicate
-first: it is computed over approved enrollments only, so a cascade changes what
-it returns, and rule 2 needs the same question answered at the revoke handler.
+⛔ **Rule 2's liveness predicate must take a SET, not an id, or it is
+decorative.** The predicate asks whether a fully privileged enrollment survives,
+excluding the one being revoked. Excluding only the target, it answers on
+enrollments the same revoke is about to cascade away. Root E1 has successor E2,
+also fully privileged (128). E1 self-revokes with `force`. The predicate sees E2
+alive and permits — and the same revoke then cascades E2 away, stranding the
+atSign. So the revoke handler passes `{target} ∪ descendants`, and the exclusion
+set the predicate takes is a set. Mutation-proven in at_server: reverting it to
+`{enId}` reddens exactly one test of 1140, showing the revoke succeeding with the
+only other root's id sitting in the cascaded list, and nothing else in the suite
+notices.
+
+**Ordering: the cascade writes BEFORE the target.** Target-first, failing part-way
+through the subtree, leaves a state where re-running the command is refused with
+*"Cannot revoke a revoked enrollment"* and the subtree can never be finished.
+Cascade-first fails the recoverable way and a retry completes the job. Not
+obvious, and the wrong choice is silently unrecoverable.
+
+**Two things the implementation adds beyond this ruling, both kept.** The revoke
+response carries the cascaded enrollment ids, and **only** when the cascade took
+something, so an ordinary revoke response is byte-identical to today — without it
+a client cannot tell what happened and the cascade is untestable over the wire
+without a second query. And connections held by cascaded enrollments are dropped
+along with the target's: a descendant left holding an open authenticated
+connection keeps working until it happens to reconnect, which is most of what the
+cascade is for.
+
+## 130. A revocation is discoverable from the enrollment record, and rotates unconditionally (2026-08-31)
+
+**In brief:** *the atServer stamps `revokedAt`; a client compares it to the
+advertisement record's `updatedAt`, both stamped by the same machine; and a
+revocation-driven rotation does not ask the application*
+
+**What this is for, after [ruling 129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31).**
+The cascade and the roster stop a revoked subtree receiving **new** material. They
+do nothing about what it already holds: the revoked enrollment has the **current**
+generation's private, and only a rotation cuts it off from data sealed to that
+generation. `revokeEnrollmentAndRotate` revokes then rotates — so this exists for
+the case where the rotation does **not** complete. Lock lost, process died, one
+namespace of several failed. Today that is logged at SEVERE and then forgotten by
+everybody.
+
+**The design, ruled by gkc.**
+
+1. **The atServer stamps `revokedAt` on the enrollment value**, on every
+   enrollment a revoke touches — the named target and every cascaded descendant
+   alike. One rule, no exceptions. A field present on some revoked records and
+   absent on others invites the wrong inference from the next reader.
+2. **It is cleared on the way out.** Un-revoking withdraws the revocation, and
+   the rotation obligation with it, so `revokedAt` is present **exactly when**
+   the record reads `revoked`. ⚠️ **The cost is accepted rather than absent:**
+   if the revoke was a genuine compromise and the un-revoke a mistake, a
+   rotation that was owed is silently dropped. Un-revoke means *false alarm*.
+3. ⛔ **HOW a client learns of it is REOPENED as of 2026-08-31.** This ruling
+   said `enroll:listns` would carry a derived scalar — the latest `revokedAt`
+   among enrollments that held the namespace being listed — and gkc has since
+   reported that **not feasible**; at_server is proposing an alternative. What is
+   settled and survives whatever replaces it: the client must be able to learn,
+   **per namespace and without `__manage`**, the latest moment a revocation
+   touched an enrollment granted that namespace. Everything else in this ruling
+   stands.
+   ⛔ **The roster is NOT widened.** `enroll:listns` goes on returning approved
+   enrollments only; the response gains one field. Widening it to all statuses
+   would move [129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)'s
+   safety property out of the server's filter and into every caller —
+   `pairwise_secret_sharing` resolves requesters through `listForNamespace` at
+   four sites, and each would become a place where forgetting a status check
+   hands a revoked enrollment key material, failing silently. The scalar answers
+   the client's only question without it ever seeing another enrollment.
+4. **The client model gains `status` and `revokedAt`.** Both are on the wire and
+   `Enrollment.fromJSON` drops both, the same shape as `parentEnrollmentId`.
+5. **The comparison is same-authority.** A rotation is owed for a namespace when
+   the scalar is later than the moment that namespace's advertisement was last
+   **rotated** — both stamped by the atServer. Where the advertisement's stamp
+   cannot be read but a revocation moment was returned, **rotate**. A client that
+   cannot read the enrollment answer at all rotates **nothing**: it has
+   established no cause.
+6. **"Last rotated" is the advertisement record's `updatedAt`, and an `add` must
+   preserve it.** `public:__nskey.<ns>@<owner>` is one record per namespace, and
+   `PublishedNskeyKeyRing.add` rewrites it — so `updatedAt` moves on an add as
+   well as a rotation, and a revoke-then-add sequence would disarm the trigger
+   entirely. So **an add asserts the record's existing `updatedAt` back**, read
+   from the atServer rather than from any clock, which is precisely what the
+   asserted-timestamp machinery exists for; **a rotation asserts nothing and
+   takes a fresh server stamp**. `updatedAt` then means *when this generation was
+   minted*, which is the question being asked.
+7. **A revocation-driven rotation is unconditional.** It does not consult
+   `NskeyRotationPolicy`, whose shipped default `neverRotateNskey` returns false
+   unconditionally and would leave the mechanism inert for everyone who has not
+   opted in. That lever governs *discretionary* rotation; a revocation is an
+   obligation.
+8. **The check rides the fetch `seed()` already makes.**
+   `NskeySeeding.authorisedNamespaces()` calls the namespace roster at every
+   start. ⚠️ **Two clients get no free ride:** one holding no enrollment id
+   returns before fetching anything, and one whose fetch throws discards the
+   list — for those there is nothing to ride and nothing is established.
+
+⛔ **The premise this ruling was FIRST built on was false, and the correction is
+the reason point 3 exists.** It said `enroll:list` returns every enrollment at
+every status to every client, so `revokedAt` would reach everyone for free. It
+does not: on `origin/trunk` a legacy-PKAM connection gets all, an APKAM
+connection **holding `__manage`** gets all, and **every other caller gets its own
+record alone**. An ordinary app enrollment — precisely the client `seed()` runs
+on, and the only client this backstop exists for — would have seen one
+enrollment, itself, `approved`, making the predicate vacuously false forever.
+⚠️ at_client's own `nskey_rotation.dart` says this in as many words: *"a client
+without it also cannot enumerate enrollments: `enroll:list` returns it only its
+own record."* The design was built against a premise its own tree contradicts, in
+a comment its author had read.
+
+⛔ **Why the atServer and not the revoker, reversing
+[ruling 121](#121-a-revocation-publishes-what-it-obliges-2026-08-28).** 121 had
+the revoker publish a durable record. 129's principle applies unchanged: a
+client-written record is advisory and per-caller, and is lost if the revoker dies
+between revoking and publishing — precisely the failure it existed to survive.
+Server state is authoritative and cannot be lost by the actor that caused it
+going away.
+⚠️ **121 gave TWO grounds and this ruling answers only one.** Its second was that
+a per-namespace work record is *"scoped to the namespaces that matter rather than
+a global instant every client compares everything against"*. That cost is real
+and is **accepted**, not rebutted: every client now re-derives the same comparison
+per namespace at every start. The scalar being per-namespace rather than global
+narrows it; it does not remove it.
+
+⚠️ **The clock trap this design exists to avoid, stated so nobody reintroduces
+it.** The generation's *payload* `createdAt` is written by the **minting client's**
+clock (`createdAt ?? DateTime.now().toUtc()`). Comparing that to a server-stamped
+revocation moment compares two machines, and it fails **silently in the dangerous
+direction**: a minting client whose clock runs fast produces a generation that
+looks newer than a revocation that actually came after it, so the rotation never
+fires and the revoked enrollment keeps reading. Compare values produced by the
+same authority, or do not compare.
+⚠️ **This is why `revokedAt` lives on the enrollment VALUE and not in record
+metadata** — metadata would put it back in reach of the asserted-timestamp
+machinery, where a caller can assert one, and the trap returns quietly.
+
+⚠️ **The `:uAt` rule is NOT a blanket ban, and an earlier draft of this ruling
+said it was.** It said a client publishing an advertisement must never assert
+`:uAt`. Point 6 inverts half of it: **an add MUST assert it** — the server's own
+previous value, read back, introducing no clock — **and a rotation must NOT**, so
+the server stamps afresh. Anyone re-applying the blanket ban breaks the trigger;
+anyone asserting a *locally computed* time on either path restores the trap.
+
+⚠️ **Known limitation, accepted.** A client that starts and then runs for weeks
+does not notice a revocation until it restarts. The revoker rotates immediately
+and this is the backstop for when it could not.
+
+**What each side owes.** at_server: the `revokedAt` field, stamped on every
+enrollment a revoke touches and cleared on the way out — **built**, with the
+stamping, the cascade half, the clearing and the at-rest encoding each
+mutation-pinned separately — plus the derived per-namespace scalar on
+`enroll:listns`, which is **not** built. at_client: `status` and `revokedAt` on
+the `Enrollment` model, the `:uAt` discipline of point 6, and the check in
+`seed()`. None of the at_client half is built.
+⚠️ **`revokedAt` is written and served and nothing server-side reads it.** The
+consumer is at_client's. If anything server-side ever keys on it, point 2's
+clearing becomes load-bearing for that consumer too and this ruling should be
+re-read at that point.

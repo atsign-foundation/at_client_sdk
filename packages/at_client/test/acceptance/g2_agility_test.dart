@@ -258,18 +258,25 @@ void main() {
               'no further publish in the trace',
           clauses: ['never added back']);
       // GIVEN a generation holding keys for one or more algorithms, and a
-      //       rotation due by age policy or because it predates a revocation.
-      // WHEN  a client takes the mint lock and rotates.
+      //       rotation due because the application asked, or because a
+      //       revocation touched an enrollment granted this namespace after
+      //       the advertisement was last rotated.
+      // WHEN  a client asks whether a rotation is due and, if it wins the mint
+      //       lock, rotates.
       // THEN  the new generation holds only material minted now; an algorithm
-      //       nobody still runs never returns; a revoked enrollment gains
-      //       nothing; every kid changes, which is how peers learn.
+      //       nobody still runs never returns; a revoked enrollment cannot
+      //       DERIVE the successor, while what stops it being handed one is the
+      //       roster and the exclusion set; every kid changes, which is how
+      //       peers learn, at each peer's next ensureCurrent; a client decides
+      //       without coordinating; and a lock loser re-decides rather than
+      //       queueing.
       //
-      // ⛔ WHOLLY UNPINNED, deliberately. Today's rotation mints ONE key, under
-      // keyEstablishmentAlgorithms.first, so "carries nothing forward" is
-      // trivially true of it and proves nothing about the ruled behaviour -
-      // which is about a generation that can hold several. Nothing citable here
-      // would go red if the ruling were implemented wrongly. See decisions.md
-      // 119 item 2.
+      // ⚠️ This comment said the trigger was AGE or "predates a revocation",
+      //    and that the row was WHOLLY UNPINNED because the mint produced one
+      //    key. All three are stale: age was retired as a trigger, the
+      //    revocation comparison is not against the generation's creation, the
+      //    mint went plural on 2026-08-28, and this body now carries several
+      //    clause pins.
       provenIn(
         'packages/at_client/test/nskey_minting_test.dart',
         'the published advertisement emits its exact wire shape — raw literals',

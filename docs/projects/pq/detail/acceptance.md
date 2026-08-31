@@ -1208,10 +1208,15 @@ production paths named:
   c2 are the same live shape seen from the reader's side.
 - **A rotation excludes the enrollment named and nothing else.**
   `revokeEnrollmentAndRotate` passes `excludeEnrollmentIds: {enrollmentId}`.
-  So **UC-G2.5** c4, the subtree exclusion.
+  ⛔ **SPENT.** That was **UC-G2.5** c4, the subtree exclusion — WITHDRAWN
+  2026-08-31, because ruling 129 puts the walk in the atServer's revoke and the
+  one-element exclusion set the client passes is correct as it stands.
 - **Nothing anywhere carries a revocation timestamp**, which is why
   [decisions.md 121](decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28)
-  ruled that the revoker writes a durable record. So **UC-G2.5** c6, whose own
+  ruled that the revoker writes a durable record. ⛔ **SPENT — ruling 130
+  reverses that**: the atServer stamps `revokedAt` on the enrollment and no
+  client publishes anything. The clause is now **c5** (the withdrawal of the old
+  c4 renumbered everything after it), whose own
   ⚠️ says the advertisement cannot answer the revocation half.
 - **A signature names its signing enrollment, not its key.** The protected
   header is `{alg, typ, kid, v}` and `kid` is the enrollment id
@@ -1246,7 +1251,7 @@ instrument here, and only the second is a test gap.
 | Clause | Verdict | What was read |
 |---|---|---|
 | **UC-G2.5** c2 | **test gap, and newly reachable** | the clause's content is that a rotation does not mint an algorithm the configured set has dropped. `nskey_rotation_test.dart`'s *a rotation mints the whole configured set afresh* already proves material is not carried forward, over two algorithms — but it holds the set CONSTANT (`second.keys.map(alg)` equals `first`'s), so nothing exercises a narrowing. The missing arm rotates with a narrowed set and asserts the dropped algorithm is absent |
-| **UC-G2.5** c7 | **test gap** — the mechanism exists | `mint_lock.dart` carries the loser path in production: *"the caller takes its ordinary loser path: it re-reads what … the re-read is what every caller already does"*, and it logs `is already held; re-reading rather than …`. The refusal is pinned (*a rotation inside the mint lock's cooldown is refused*, *a client that loses the mint lock adds nothing*); the back-off-and-re-decide half is not |
+| **UC-G2.5** c7 → now **c6** ✅ **CLOSED 2026-08-31** | ~~test gap — the mechanism exists~~ | `mint_lock.dart` carries the loser path in production: *"the caller takes its ordinary loser path: it re-reads what … the re-read is what every caller already does"*, and it logs `is already held; re-reading rather than …`. The refusal is pinned (*a rotation inside the mint lock's cooldown is refused*, *a client that loses the mint lock adds nothing*); the back-off-and-re-decide half is not |
 | **UC-G2.7** c4 | ✅ **CLOSED 2026-08-29**, and its justification was false | the assertion holds and is now pinned by two citations — the existing `published_nskey_key_ring_test` reader arm, which was unpinned, and a new `nskey_rotation_test` arm proving the generational half: after a rotation every entry of the successor is still offered for new work, and what opens history is the previous generation's private, still filed. Mutation-proven against production — dropping `offeredForNewOperations` from `bestKeyFor` reddens the reader arm. ⛔ **The clause named THREE writers of a retired entry and there are two.** `PqSigningRoot._publish` is the root record's only writer, emits a single-entry `keys` list with no `status`, and production says beside it that *no rotation exists to repair it with* — so nothing can add a second entry. Corrected in the catalogue in the same commit |
 | **UC-G2.7** c5 | ⛔ **not an assertion — WITHDRAWN 2026-08-29** (gkc) | it scoped the row against UC-G2.3 rather than asserting a behaviour of its own. After a retirement and after a compromise the key material is in the same state — the entry stays advertised either way — so the two differ only in the status token, and `KeyEntryStatus` has one: `active` and `retired`, with `revoked` named in its dartdoc as a hypothetical. Pinning it against an unknown token would have proven UC-G2.3's clause under this row's name, which is the conflation the sentence forbids. It is now prose beneath the row and out of the denominator |
 | **UC-G2.10** c3 | **test gap** | *the recipient does nothing further* is an absence over @bob's behaviour after publishing a widened advertisement — no re-seal, no re-conveyance, no learning whether @alice upgraded. Testable by counting what @bob writes after the publish; nothing counts it today |
@@ -1278,7 +1283,7 @@ the next reader rebuilds:
   **keys** rather than the kids (a kid is derived from its key, so the kid
   assertion was about the derivation), and *does not push to an excluded
   enrollment* shows the exclusion reaching the roster query.
-- **UC-G2.5** c5 — `ck_manager_test.dart`, *cuts a fresh CK when the
+- **UC-G2.5** c5 → now **c4** — `ck_manager_test.dart`, *cuts a fresh CK when the
   destination has rotated its nskey*, which already existed and was unpinned.
 - **UC-G2.10** c4 — `nskey_resolver_test.dart`, *a narrowed list refuses, and
   the message names both sides*, which also already existed.

@@ -1218,12 +1218,14 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     revokes first. Put the walk in the revoke and the roster does the rest, for
     every client at once — including ones that never heard of the revocation.
 
-    ⚠️ **A PENDING descendant is a second route to the same orphan, and neither
-    the cascade nor the un-revoke guard sees it.** The cascade acts on approved
-    enrollments; a self-enrollment left `pending` when its predecessor was
-    revoked survives untouched, and approving it afterwards produces the orphan
-    through a path with no check on it. The approve path is owed the same
-    predecessor test.
+    ⚠️ **This warned of a PENDING descendant as a second route to the same
+    orphan until 2026-08-31. There is no such thing.** On at_server
+    `origin/trunk` the APKAM self-enrollment branch sets `approved` and writes
+    `parentEnrollmentId` in the same breath, and that branch is the field's only
+    writer — the ordinary request branch, which sets `pending`, never records a
+    predecessor. So no enrollment carrying a predecessor is ever pending. The
+    approve path gets the same predecessor test anyway, as belt-and-braces
+    making the invariant total rather than as a hole being closed.
 
   **Why the pair, and not either half, denies an attacker NEW data keys.**
   Revoking the enrollment and all of its descendants, *followed by* the rotation,
@@ -3767,10 +3769,19 @@ is where its missing lever lives.
 ### 17.5 UC-G2.5 — An nskey rotation mints fresh material and carries nothing forward
 
 - **Given:** a namespace whose current generation holds keys for one or more
-  algorithms, and a rotation is due — by the application's own policy, such as
-  the generation's age, or because the generation was created before a
-  revocation.
-- **When:** a client takes the mint lock and rotates.
+  algorithms, and a rotation is due — because the application asked for one
+  (whatever it decides on; the SDK carries no clock and no cadence for this
+  lever), or because a revocation touched an enrollment granted this namespace
+  after the namespace's advertisement was last rotated.
+  ⚠️ **Not "the generation's age"** — [`decisions.md` 122](detail/decisions.md#122-rotation-cadence-the-nskey-lever-fires-on-cause-the-ck-lever-asks-a-policy-2026-08-28)
+  ruled age is not an nskey trigger; an age-shaped *application* policy stays
+  expressible, an age-shaped SDK trigger does not.
+  ⚠️ **And not "created before a revocation"** — the generation's payload
+  `createdAt` is the minting client's own clock, and comparing it to a
+  server-stamped moment is the trap [130](detail/decisions.md#130-a-revocation-is-discoverable-from-the-enrollment-record-and-rotates-unconditionally-2026-08-31)
+  forbids.
+- **When:** a client asks whether a rotation is due, and — if it is, and if it
+  wins the mint lock — rotates.
 - **Then:**
   - the new generation holds **only** material this client minted now. Nothing
     from the previous generation is carried into it, whatever algorithms that
@@ -3781,36 +3792,104 @@ is where its missing lever lives.
     remove one at all;
   - a revoked enrollment gains nothing from the rotation: it holds privates for
     the previous generation only, and no key in the new one is one it has ever
-    held. This is why fresh-only needs no special revocation path — there is
-    nothing to suppress;
-  - every peer's cached content key is superseded, because every `kid` in the
-    advertisement has changed. That is how a peer learns a rotation happened at
-    all: a sender never sees a recipient's decapsulation fail;
+    held — so it cannot **derive** the successor. ⚠️ **What stops it being
+    HANDED one is separate, and is not this clause's**: the roster, which
+    `enroll:listns` builds from approved enrollments only, and
+    `excludeEnrollmentIds`. Fresh-only and the exclusion are both required and
+    neither alone denies an attacker new data keys — crediting the minting
+    property with the revocation property is the conflation
+    [129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
+    part 3 exists to correct;
+  - every peer's cached content key is superseded **at that peer's next
+    `ensureCurrent`**, because every `kid` in the advertisement has changed. That
+    is how a peer learns a rotation happened at all — a sender never sees a
+    recipient's decapsulation fail — and it is also the **bound**: until each peer
+    re-resolves it goes on sealing to the superseded generation, which the
+    revoked holder can still open. The exposure is the advertisement's freshness
+    window plus one content-key lifetime, which is
+    [UC-A5.1](#61-uc-a51--rotate-a-namespace-key-post-compromise)'s **Then (b)**
+    and not an optimisation;
   - **a client decides a rotation is due without coordinating with another
-    client**, which is what lets any of them act. It settles that from **the
-    durable record the revoker wrote** — naming the namespace, the moment, and
-    the enrollments to exclude — or because the application asked for one.
-    ⚠️ **This clause carried an *age* half until 2026-08-28**, settled from the
+    client**, which is what lets any of them act. It settles that from the
+    atServer, per namespace: the atServer reports the **latest revocation moment
+    affecting this namespace**, and a rotation is owed when that is later than
+    the moment this namespace's advertisement was last **rotated**. Both are
+    stamped by the atServer, so no two clocks are compared.
+    ⛔ **HOW that moment is reported is REOPENED.** This said `enroll:listns`
+    would carry it as a derived scalar; gkc reported that not feasible on
+    2026-08-31 and at_server is proposing an alternative. What the clause needs
+    is unchanged — per namespace, and readable by a client without `__manage`. Such a rotation is
+    **unconditional** — it does not ask `NskeyRotationPolicy`. The application
+    asking is the other cause, and that one is the policy's;
+
+    ⚠️ **"Last rotated" is the advertisement record's `updatedAt`, and it only
+    means that because an `add` is required to preserve it.** `add` rewrites the
+    same record, so left alone it would move `updatedAt` without producing a new
+    generation and a revoke-then-add sequence would disarm the trigger entirely.
+    So an add asserts the record's existing `updatedAt` back — the atServer's own
+    previous value, read from it rather than computed — while a rotation asserts
+    nothing and takes a fresh stamp.
+    ⚠️ **Where the advertisement's stamp cannot be read but a revocation moment
+    was returned, it rotates.** A client that cannot read the namespace answer at
+    all rotates **nothing**: it has established no cause.
+
+    ⛔ **RULED AND NOT YET BUILT on the at_client side, and partly built on the
+    atServer's.** The atServer stamps `revokedAt` on every enrollment a revoke
+    touches and clears it on the way out; what is **not** built is the derived
+    per-namespace scalar on `enroll:listns`. On this side nothing is built: the
+    `Enrollment` model drops both `status` and `revokedAt`, which the wire
+    already carries, and no client reads the advertisement's `updatedAt` or
+    keeps an add from moving it. See [`decisions.md` 130](detail/decisions.md#130-a-revocation-is-discoverable-from-the-enrollment-record-and-rotates-unconditionally-2026-08-31).
+    ⚠️ **`EnrollDataStoreValue` carries no *timestamp*** — its one time-shaped
+    field is `apkamKeysExpiryDuration`, a duration.
+
+    ⛔ **The roster is not widened to carry this.** `enroll:listns` goes on
+    returning approved enrollments only and gains one field. Returning every
+    enrollment with its status would move [129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)'s
+    safety out of the atServer's filter and into every caller — and a caller that
+    forgot a status check would hand a revoked enrollment key material, silently.
+
+    ⚠️ **This clause was designed around `enroll:list` until 2026-08-31, and
+    could never have fired.** That verb returns other enrollments only to a
+    caller holding `__manage`; every other caller gets its own record alone. An
+    ordinary app enrollment — the client `seed()` runs on, and the only client
+    this backstop is for — would have seen one enrollment, itself, `approved`,
+    making the test vacuously false forever. at_client's own `nskey_rotation.dart`
+    says so in as many words.
+
+    ⚠️ **Why the rotation ignores the policy.** `NskeyRotationPolicy` governs
+    *discretionary* rotation, and its shipped default is `neverRotateNskey`,
+    which returns false unconditionally. A revocation-driven rotation that asked
+    it would be inert for every application that has not opted in — and the
+    rotation is the only thing that cuts a revoked enrollment off from data
+    sealed to the generation it already holds.
+
+    ⚠️ **This said a client settles it from "the durable record the revoker
+    wrote" until 2026-08-31** — ruling 121's design, reversed by
+    [130](detail/decisions.md#130-a-revocation-is-discoverable-from-the-enrollment-record-and-rotates-unconditionally-2026-08-31)
+    for the reason set out beneath this row.
+    ⚠️ **And it carried an *age* half until 2026-08-28**, settled from the
     advertisement's `createdAt` against an application policy; [`decisions.md`
     122](detail/decisions.md#122-rotation-cadence-the-nskey-lever-fires-on-cause-the-ck-lever-asks-a-policy-2026-08-28)
     ruled that **age is not an nskey trigger at all** — the SDK carries no clock
     for this lever, and an application deciding it is time is a *cause* rather
-    than a schedule. ⚠️ Before that it said the advertisement alone answered
-    both halves, which it cannot: nothing anywhere carries a revocation
-    timestamp;
+    than a schedule;
   - **a client that fails to take the mint lock does not queue and does not retry
     blindly.** It publishes nothing, and the question is put again at its next
-    start or at the next content key it conveys to its own namespace — re-read
+    start or at the next content key it conveys to a namespace key **this
+    atSign owns** — re-read
     afresh each time, so it finds either that another client has done what was
     needed or that it still must. That is what makes several clients converge
     rather than storm.
 
     ⚠️ **This said it "backs off, re-reads after the cooldown" until 2026-08-31,
-    and nothing on this path is cooldown-aware.** There is no sleep, no backoff
-    and no read of the lock's ttl anywhere in it; `mintLockTtl` is consulted only
-    when composing a lock key. The re-ask is driven by a restart or by write
-    traffic, so it can land inside the cooldown and be refused again — which is
-    still convergence, but by re-deciding rather than by waiting.
+    and nothing on this path waits out a cooldown.** There is no sleep and no
+    backoff on it. ⚠️ **`withLock` does read the lock key's ttl** — it refuses a
+    lock that has none and sizes the winner's lease from it, before the take, so
+    on the loser path too; what it never does is wait for one to expire. The
+    re-ask is driven by a restart or by write traffic, so it can land inside the
+    cooldown and be refused again — still convergence, but by re-deciding rather
+    than by waiting.
     ⚠️ **"Does not queue" is a claim about THIS loser only** — the one the
     atServer refused. `MintLock.withLock` has a second loser, an in-flight mint
     for the same key on the same instance, and that one does await before
@@ -3840,16 +3919,39 @@ is where its missing lever lives.
   2026-08-28 as the wrong home for it; 129 says the same of this one, one layer
   further down.
 
-  ⚠️ **Why the revoker writes the record rather than a client deriving it.**
-  Nothing server-side carries a revocation timestamp — `EnrollDataStoreValue` has
-  no time field, `EnrollApproval` is `{state}` alone, and `enroll:list`
-  serialises the value plus status without the record's metadata. So the fact has
-  to be *published* by the party that knows it. The revoker is the only actor that
-  does: the atServer refuses `revoke` unless the caller is authorised for **every**
-  namespace the target holds, so a revoker holds a superset of what it revokes and
-  can name every namespace affected. ⛔ **The record is unbuilt**, and it is the
-  only half still owed — the subtree walk is not unbuilt but **retired**, by
-  ruling 129, which moves it into the atServer's revoke.
+  ⚠️ **Why the atServer stamps the revocation rather than the revoker publishing
+  a record.** The fact has to outlive the actor. A record the revoker publishes is
+  lost if the revoker dies between revoking and publishing — exactly the case the
+  record exists for, since a rotation that completed needs no record at all. The
+  atServer already writes the enrollment, so a field on it costs no new record
+  and no new verb; what the client needs is then derived from that field and
+  reported per namespace.
+  ⚠️ **This paragraph argued the opposite until 2026-08-31, on TWO grounds, and
+  only one of them was answered.** The first — that nothing server-side carries a
+  revocation timestamp — was true, and an argument for adding one. The second was
+  that a per-namespace work record beats *"a global instant every client compares
+  everything against"*. That cost is **accepted rather than rebutted**: every
+  client now re-derives the same comparison per namespace at every start.
+  Reporting the moment per namespace narrows it; it does not remove it.
+
+  ⛔ **What is owed, and by whom.** at_server: the `revokedAt` field, stamped on
+  every enrollment a revoke touches and cleared on the way out — **built** — plus
+  the derived per-namespace moment on `enroll:listns`, which is **not**.
+  at_client: `status` and `revokedAt` on the `Enrollment` model, the discipline
+  that an `add` preserves the advertisement's `updatedAt` while a rotation does
+  not, and the check in `seed()`. None of the at_client half is built.
+  ⚠️ **"Built" here means on at_server's working branch, not on `origin/trunk`**,
+  where none of it exists. A statement in this row that the atServer does not do
+  something is a statement about `origin/trunk`.
+  The subtree walk this row used to ask for is neither owed nor unbuilt — it is
+  **retired**, by [ruling 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31),
+  which moves it into the atServer's revoke.
+
+  ⚠️ **A client that starts and then runs for weeks does not notice until it
+  restarts**, and two clients get no check at all: one holding no enrollment id
+  returns before fetching anything, and one whose fetch throws discards the list.
+  That is accepted rather than overlooked — the revoker rotates immediately, and
+  this path is the backstop for when it could not.
 
 ### 17.6 UC-G2.6 — A client adds its own missing algorithm to the current generation
 
@@ -3860,11 +3962,23 @@ is where its missing lever lives.
   - the material joins the **current** generation in place. No new generation is
     created, so no peer is made to re-cut a content key it has no reason to;
   - everything already in the generation is untouched — the existing `kid`s,
-    their statuses, and the generation's own identity, **`createdAt` included.**
-    That is what keeps a revocation's rotation trigger correct: an add that
-    refreshed `createdAt` would make a pre-revocation generation read as
-    post-revocation, the rotation would never fire, and the revoked enrollment
-    would go on opening everything;
+    their statuses, and the generation's own identity, **`createdAt` included**.
+    An add must not make a pre-revocation generation read as post-revocation, or
+    the revocation's rotation never fires and the revoked enrollment goes on
+    opening everything;
+
+    ⛔ **That protection now guards the wrong field, and repairing it is OWED.**
+    The argument above was sound while the rotation trigger compared against the
+    payload's `createdAt`. [Ruling 130](detail/decisions.md#130-a-revocation-is-discoverable-from-the-enrollment-record-and-rotates-unconditionally-2026-08-31)
+    moved the trigger onto the advertisement **record's** server-stamped
+    `updatedAt`, because the payload value is the minting client's own clock —
+    and `updatedAt` is exactly the field an add *does* move, since an add
+    rewrites that record. So the clause guards a field the trigger no longer
+    reads while the field it now reads is unguarded, and a revoke-then-add
+    sequence disarms the rotation entirely. **The fix is that an add asserts the
+    record's existing `updatedAt` back while a rotation does not** — deliberately
+    kept out of the clause above, which is pinned to a test that proves the
+    `createdAt` half and nothing about `updatedAt`.
   - the add takes the **same mint lock** as a rotation, because two clients
     adding at once is a read-mutate-write on shared durable state. A client that
     fails the lock backs off and re-reads rather than writing, and finds either
