@@ -183,12 +183,17 @@ that here rather than letting it erode silently.
 2. **"No `dart:html` / `dart:js`" becomes self-imposed.** Under dart2wasm it was
    compiler-enforced. Under dart2js it is a policy kept in order to leave dart2wasm open
    — so it moves into [`acceptance.md`](acceptance.md) T0.1 as an explicit rule.
-3. **`cryptography`'s Web Crypto path becomes reachable.** Open question C1 exists
-   because `cryptography` 2.x's browser path uses `dart:html`, which dart2wasm rejects.
-   Under dart2js that path *works*. The question changes from "will it compile?" to
-   "which path does it select, and is it faster?" — and a Web Crypto-backed Argon2id and
-   AES could remove the deferred performance work entirely. See
-   [§11](#11-open-questions).
+3. **The Web Crypto path becomes reachable — for `better_cryptography`, not
+   `cryptography`.** *(Corrected 2026-08-30; the original claim here misattributed the
+   dependency.)* `cryptography` uses `dart:js_interop` and a **runtime**
+   `window.isSecureContext` probe, so its branch is selected under *both* web targets and
+   the compiler does not decide it. The package that genuinely requires `dart:html` is
+   **`better_cryptography`**, which backs the **default AES path** and selects its backend
+   at compile time via `dart.library.html`. So under dart2js, AES becomes Web
+   Crypto-backed; under dart2wasm it stays pure Dart.
+   Argon2id is **not** affected either way: `cryptography` 2.9.0 has no Argon2id override
+   and Argon2id is absent from the WebCrypto spec, so the deferred Argon2id work stands.
+   See [`design.md`](design.md) §C1 and [§11](#11-open-questions).
 4. **Storage gets safer, not riskier.** `package:sqlite3`'s web support was originally
    built for dart2js — `common.dart` documents interfaces implemented by "the `dart:ffi`
    and the `dart:js` WASM version". The validated dart2wasm compile was the *less*
