@@ -53,16 +53,21 @@ void main() {
             'at_auth (inside the serialised critical section, against the '
             'EXISTING keyfile) and could regress independently of the one '
             'above');
-
-    // ⛔ The third door — a PQ-native ACTIVATION — is deliberately not cited,
-    // because nothing proves it. `at_auth_impl.dart` files the advertised
-    // signing key on the onboarding path, and no test in at_auth drives
-    // `AtOnboardingRequest.advertisedSigningKey` through it: the four at_auth
-    // tests that name the field are all enrolment or self-enrolment.
-    // `packages/at_client/test/pq_native_onboard_test.dart` asserts the
-    // activation CARRIES the key, which is a claim about the request object
-    // and not about the filing. Recorded here rather than left to a reader to
-    // notice the citation count.
+    provenIn('packages/at_auth/test/pq_native_onboard_test.dart',
+        'the PRIVATE half reaches the keyfile, under the enrollment id',
+        proves: 'the third door — a PQ-native ACTIVATION — which nothing '
+            'covered until 2026-08-31. It drives AtAuthImpl.onboard end to '
+            'end, so it is the FILING rather than the request: '
+            'packages/at_client/test/pq_native_onboard_test.dart asserts the '
+            'activation CARRIES the key, which is a claim about the request '
+            'object, and what reaches the keyfile is whatever at_auth copies '
+            'out of it after the atServer answers. The enrollment id it reads '
+            'back under appears nowhere in the request — the mock returns it — '
+            'so a non-empty answer also establishes that the ASSIGNED id was '
+            'used. Three mutations, one per assertion: dropping the filing, '
+            'swapping the private half for the public one, and taking the '
+            'algorithm from the APKAM instead of from the key',
+        clauses: ['is written to the keyfile as typed']);
   });
 
   test(
