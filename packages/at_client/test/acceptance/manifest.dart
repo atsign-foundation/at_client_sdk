@@ -100,6 +100,8 @@ const liveProofExempt = <String, String>{
       'the mechanism is a client-side whole-string comparison — a record this client fetched, held against a field of a payload conveyed to it — so every party to the decision is in one process and a real atServer contributes nothing but the fetch. Who may WRITE _apsk is a different claim and IS live-proven, in tests/at_functional_test/test/apsk_server_side_test.dart. Unit by argument, not by omission',
   'UC-G3.9':
       'both rules are AtClientPreference constructor refusals that throw before any I/O, so there is no wire, no atServer and no second process in the mechanism. A live arm would spawn a CLI to watch an ArgumentError and would prove less than the unit test does, more slowly. Recorded as a decision (gkc, 2026-08-30) rather than an omission',
+  'UC-A5.6':
+      'every clause is a decision NOT to act, taken locally and before any I/O: the policy is not asked, or its yes is declined. A live arm would assert an absence against an atServer it never contacted, which is the shape of test that passes whether the mechanism is present or absent. The acts these skips guard are separately live-proven under UC-A5.1',
 };
 
 /// How many THEN clauses some citation pins, and how many of those are pinned
@@ -120,7 +122,7 @@ const liveProofExempt = <String, String>{
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 196;
+const provenClauseCount = 210;
 
 /// See [provenClauseCount].
 const serverProvenClauseCount = 86;
@@ -202,6 +204,10 @@ const liveProofOwed = <String, String>{
       'feasible and additive, and the live arm is the one that found the defect: the unit test bounds a single signingKeys call at five seconds, while the failure was `at_activate approve` not exiting within two minutes because a startup step waited on a later one. Only a real CLI run exercises that ordering, and the CLI pack already spawns at_activate',
   'UC-G3.10':
       'feasible and additive: the row is about the STATE THE ATSERVER IS LEFT IN — the enrolment must still be pending and still approvable by someone else. A mock records that no approval command was sent; only a real atServer can be asked whether the record is still pending and then approved by a second client',
+  'UC-A5.4':
+      'feasible and additive: the unit arm counts conveyance writes against a fixture, and what a rotation actually has to leave behind is a fresh conveyance record ON THE ATSERVER beside the retained superseded one. content_key_rotation_live_test.dart already drives CK rotation live for UC-A5.1(a); an arm supplying a policy that says yes would prove the POLICY route reaches the same place',
+  'UC-A5.5':
+      'feasible and additive for the same reason, and more so: a namespace-key rotation publishes a successor advertisement and conveys to every authorised enrollment, which a single-process fixture cannot show. The live arm would set a policy that says yes, restart, and read the successor generation back off the atServer',
 };
 
 /// A use case as the catalogue defines it — by a heading, not by a mention.

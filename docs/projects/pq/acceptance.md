@@ -59,7 +59,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**94 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 95 use cases and 105 scenarios —
+**97 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 98 use cases and 108 scenarios —
 several rows carry more than one.
 
 ⚠️ **This sentence said `50 · 2 · 1` across 53 until 2026-08-18**, when a cold
@@ -118,6 +118,9 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-A5.1  | Rotate a namespace key (post-compromise)                                            | PROVEN    | `a5_rotation_test.dart`      |
 | UC-A5.2  | Per-enrollment auth revocation                                                      | PROVEN    | `a5_rotation_test.dart`      |
 | UC-A5.3  | Enrollment revocation                                                               | PROVEN    | `a5_rotation_test.dart`      |
+| UC-A5.4  | The content-key lever is a policy the application supplies                         | PROVEN    | `a5_rotation_test.dart`      |
+| UC-A5.5  | The namespace-key lever is asked at exactly two points                             | PROVEN    | `a5_rotation_test.dart`      |
+| UC-A5.6  | Where a lever is not asked, and where a yes is refused out loud                    | PROVEN    | `a5_rotation_test.dart`      |
 | UC-B0.1  | A PQ-capable client cannot PQ-upgrade against a legacy atServer                     | PROVEN    | `b0_server_prereq_test.dart` |
 | UC-B1.1  | First client retrofit (`alice1`)                                                    | PROVEN    | `b1_retrofit_test.dart`      |
 | UC-B1.2  | Second install on a copied keyfile (`alice1c`)                                      | PROVEN    | `b1_retrofit_test.dart`      |
@@ -1202,6 +1205,112 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 # Part B — Retrofit / upgrade (mixtures of pre-PQ and post-PQ)
 
+### 6.4 UC-A5.4 — The content-key lever is a policy the application supplies
+
+The two levers UC-A5.1 names are fired by *someone*, and since 2026-08-28 that
+someone is the application: `CryptoConfig` carries a `CkRotationPolicy` and an
+`NskeyRotationPolicy`, both `@experimental` but public. The SDK asks rather than
+carrying a schedule, because a namespace holding a chat history and one holding
+a device's last-seen timestamp want different answers and only the application
+knows which is which. Design in
+[`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split);
+ruled in [`decisions.md` 122](detail/decisions.md#122-rotation-cadence-the-nskey-lever-fires-on-cause-the-ck-lever-asks-a-policy-2026-08-28).
+
+- **Given:** an application that supplied a `CkRotationPolicy`, and a
+  destination and namespace for which a content key is already current under the
+  generation the destination still advertises.
+- **When:** anything is written to that destination in that namespace.
+- **Then:** the policy is asked **before the already-current key is returned**,
+  and only once a content key exists to have an opinion about — everything
+  earlier decides whether there is a CK at all.
+- **Then, what it is handed:** a `CkRotationContext` carrying the
+  **destination** as well as the namespace, because a content key is scoped to
+  the pair and the same namespace toward two atSigns is two keys; the current
+  `ckKid`; the `cutAt` the key was cut at; and a `now` **passed in rather than
+  read**, so `age` is derived from what the caller supplied and a policy is
+  testable without a clock.
+- **Then, across a restart:** a content key this process did not cut is
+  recovered from the conveyance record it was written under, and takes its
+  **age from that record's own date** rather than from this process's clock —
+  so a restart does not present every key to the policy as freshly cut, and two
+  devices reading the same record reach the same answer.
+- **Then, what a yes does:** a fresh content key is cut and conveyed, and the
+  superseded conveyance record is **retained** — which is what lets an
+  enrollment that joins later read what was written before it. Retention is the
+  per-namespace history knob of UC-A5.1's lever (a), and the SDK's own lever
+  does not delete on the application's behalf.
+- **Then, the default:** `rotateCkAfterOneWeek` — replace once the key is a
+  week old, with the boundary **inclusive** (`age >= 7 days`). A week rather
+  than a day because every replacement writes a record that is then retained,
+  so a short period accumulates records for the lifetime of the atSign; rather
+  than a month because a week is already the period this design measures an
+  envelope's life in.
+
+### 6.5 UC-A5.5 — The namespace-key lever fires on a cause, and is asked at exactly two points
+
+- **Given:** an application that supplied an `NskeyRotationPolicy`.
+- **When:** the client runs.
+- **Then, the first ask:** before a content key is conveyed, and **only where
+  the destination is this client's own atSign** — a sender cannot replace a
+  peer's namespace key. Asked at that moment because a conveyance is about to
+  happen anyway, so a yes costs **one** conveyance rather than two: the fresh
+  content key is sealed to the fresh generation. Asking on every write would put
+  the question on the hot path; asking later would seal to a generation about to
+  be superseded.
+- **Then, the second ask:** once per authorised namespace at every client
+  start, which is what reaches an application that only ever writes to peers and
+  so never takes the first path.
+- **Then, and there is no third:** `seedNamespace` is also reached from
+  `AtClient.ensureReachable`, and that route cannot ask — it returns
+  `alreadyReachable` in exactly the branch where a generation is published,
+  which is the only branch in which the policy would be consulted.
+- **Then, what it is handed:** an `NskeyRotationContext` naming the namespace,
+  the advertised generation's `nskeyKid`, the `createdAt` **the advertisement
+  itself states** rather than a local record, and a `now` passed in.
+- **Then, what a yes does:** fresh material is minted, the previous private is
+  **retained** so records sealed to it still open, and the successor is conveyed
+  to every authorised enrollment. This is UC-A5.1's lever (b) — O(n) per
+  enrollment, and not cheap.
+- **Then, the default:** `neverRotateNskey` — false at any age. A policy that
+  always says no rather than an absent one, so every call site asks
+  unconditionally and there is no null to forget.
+
+### 6.6 UC-A5.6 — Where a lever is deliberately not asked, and where a yes is refused out loud
+
+The conditions an application cannot infer from the policy signature, and the
+ones a clause written from the design alone would state wrongly. Each is a
+deliberate skip with a reason, not an oversight.
+
+⛔ **One condition was written here and removed, because it is unreachable.**
+`CkManager` returns early when the cache holds a current content key with no
+recorded `cutAt`, and its comment explains the absence as a cache entry
+predating cut-time recording. There is no such entry: `ContentKeyCache` is
+in-memory and constructed per client, `putAsCurrent` is the only writer of the
+three `current` maps and always records a cut-time (`cutAt ?? DateTime.now()`),
+`evict` removes all three together, and nothing in the workspace subclasses or
+reimplements the class or passes `cutAt: null`. So the guard cannot fire, and
+stating it as a clause would enshrine dead code as the specification. Measured
+2026-08-31; the guard itself is a `## TODO` row.
+
+- **Given:** an application that supplied both policies.
+- **Then, nothing published is a cold start:** the namespace-key policy is not
+  asked when no generation is advertised. That is a mint rather than a
+  replacement, and there is no generation to have an opinion about.
+- **Then, the start-of-client ask follows the posture:** it runs only where
+  `AtClientPreference.seedNamespaceKeys` is true, so it never runs at
+  `PqPosture.legacy`, and a client with no key source seeds nothing whatever the
+  posture asks for.
+- **Then, a yes with nowhere to convey is refused, and refused LOUDLY:** the
+  policy is consulted **before** the substrate check, deliberately. A client
+  with no secret-sharing substrate or private filing that replaced its namespace
+  key would publish a generation only it can open, which is worse than the one
+  already published — so the replacement is declined and a warning names what
+  was asked for and why it did not happen. Checking first would be cheaper and
+  would make an application's yes vanish without trace, which is exactly what an
+  application that configured a policy and sees nothing happen needs to read.
+- **Then, a policy that throws rotates nothing:** the exception is caught,
+  logged at warning, and the published generation stands.
+
 ## 7. B0 · Prerequisite — atServer upgrade
 
 ### UC-B0.1 — A PQ-capable client cannot PQ-upgrade against a legacy atServer
@@ -1958,6 +2067,10 @@ document had named.
 | `packages/at_client/test/pq_client_bootstrap_test.dart` | the PQ startup itself, and cited by nothing: the step order, what a `stop()` between steps halts, that an abandoned startup says so at WARNING naming what it skipped, that a gated-off step is skipped rather than waited on, and the enrollment snapshot's grant handling. |
 | `packages/at_client/test/signing_key_mint_test.dart` | the one home for minting the data signing keypair an enrollment owns from birth, shared by the self-retrofit, the PQ-native activation and the CLI enrolment: that the algorithm minted is the one the in-use set names — so the first start&#39;s reconciliation is a no-op and `_apsk` is not rewritten — and what it refuses rather than guessing. Cited by **UC-G3.2** since 2026-08-31; this row read *"cited by nothing yet; its clauses are owed"* until then. |
 | `packages/at_client/test/enrollment_conveyance_guard_test.dart` | what a client configuring no post-quantum providers refuses and what it still does — the approval that throws before reaching the atServer so the enrolment stays pending, the sweep refusal, and both controls (a request carrying its own wrapped key is approved; a PQ-capable posture is refused neither). Cited by **UC-G3.10**. |
+| `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneWeek` with its period pinned as a raw literal and its boundary inclusive, and `neverRotateNskey` at any age — plus that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. ⚠️ **Named nowhere in this doc set except a `## TODO` row until 2026-08-31**, and named here because that row has now been discharged and deleted; neither nameability rail reaches the file, since it is `pq_*` by neither convention nor citation. |
+| `packages/at_client/test/ck_manager_test.dart` | where the content-key rotation policy is ASKED — before the current key is returned, with the destination in its context — and where the namespace-key hook is asked only for this atSign&#39;s own key. Also the restart arm, where a resumed key takes its age from the conveyance record rather than this process&#39;s clock. Cited by **UC-A5.4** and **UC-A5.5**. |
+| `packages/at_client/test/nskey_seeding_test.dart` | the namespace-key policy&#39;s second ask point and every condition under which it is skipped or its yes declined: nothing published, the posture not seeding, no substrate to convey over, and a policy that throws. Cited by **UC-A5.5** and **UC-A5.6**. |
+| `packages/at_client/test/nskey_rotation_test.dart` | what a namespace-key yes actually does — a fresh generation published, the superseded private kept, and the successor pushed to every authorised enrollment. Cited by **UC-A5.5**. |
 
 ⚠️ **Being listed here is not a claim that a file is fully exercised** — it is
 the address of the evidence, so that a reader auditing a verdict can reach it

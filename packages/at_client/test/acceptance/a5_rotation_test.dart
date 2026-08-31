@@ -165,5 +165,154 @@ void main() {
             'E2\'s APKAM keypair is cut at auth',
           ]);
     });
+
+    test(
+        'UC-A5.4 \u00b7 the content-key lever is a policy the application '
+        'supplies', () {
+      // GIVEN an application that supplied a CkRotationPolicy.
+      // THEN  asked before the current key is returned, and only once one
+      //       exists; handed destination/namespace/ckKid/cutAt/now; a restart
+      //       takes the age from the record; a yes cuts, conveys and RETAINS
+      //       the superseded conveyance; the default is seven days inclusive.
+      provenIn('packages/at_client/test/ck_manager_test.dart',
+          'a policy that says yes cuts a fresh content key',
+          proves: 'the ask itself and what it is handed in one test: it '
+              'collects every CkRotationContext the manager builds, so the '
+              'destination, the namespace and the ckKid are read off the real '
+              'context rather than off a fixture',
+          clauses: [
+            'asked **before the already-current key is returned**',
+            'carrying the **destination** as well as the namespace',
+          ]);
+      provenIn('packages/at_client/test/ck_manager_test.dart',
+          'the default policy leaves a fresh content key alone',
+          proves: 'the control on the same fixture and the same two writes: '
+              'without it, "a yes cuts a fresh key" is satisfied by a manager '
+              'that cuts one on every write regardless of the answer');
+      provenIn('packages/at_client/test/ck_manager_test.dart',
+          'a resumed content key takes its age from the record, not this clock',
+          proves: 'the restart clause, and the fixture is built for exactly '
+              'this: the conveyance createdAt is a fixed unmistakable date, so '
+              'an assertion that matched `now` would pass whether the age came '
+              'from the record or from the device clock',
+          clauses: ['takes its **age from that record\'s own date**']);
+      provenIn('packages/at_client/test/ck_manager_test.dart',
+          'cuts a successor and leaves the superseded conveyance in place',
+          proves: 'RETENTION, which is the half a reader is most likely to '
+              'get backwards — the superseded conveyance record survives the '
+              'rotation, and that is what lets a later joiner read what was '
+              'written before it. Deleting it is UC-A5.1(a), a separate and '
+              'deliberate act',
+          clauses: ['the superseded conveyance record is **retained**']);
+      provenIn('packages/at_client/test/rotation_policy_test.dart',
+          'the period is SEVEN days, pinned as a literal',
+          proves: 'the default period as a raw-literal pin rather than a '
+              'round trip through the constant that defines it, so an '
+              'intended change edits the pin and that edit is the review',
+          clauses: ['`rotateCkAfterOneWeek`']);
+      provenIn('packages/at_client/test/rotation_policy_test.dart',
+          'a key a week old or older is replaced',
+          proves: 'the boundary is INCLUSIVE, which is the arm an off-by-one '
+              'would silently move');
+      provenIn('packages/at_client/test/rotation_policy_test.dart',
+          'a key younger than a week is left alone',
+          proves: 'the other side of the boundary');
+      provenIn('packages/at_client/test/rotation_policy_test.dart',
+          'age is measured against the now it is given, not the clock',
+          proves: 'that `now` is a parameter rather than a read, which is what '
+              'makes an application\'s policy testable without a clock');
+    });
+
+    test(
+        'UC-A5.5 \u00b7 the namespace-key lever fires on a cause, and is asked '
+        'at exactly two points', () {
+      // GIVEN an application that supplied an NskeyRotationPolicy.
+      // THEN  asked before a CK is conveyed but only for this atSign's own
+      //       namespace key; asked once per authorised namespace at start;
+      //       there is no third ask; handed the advertisement's own dates; a
+      //       yes mints, retains and conveys; the default is never.
+      provenIn('packages/at_client/test/ck_manager_test.dart',
+          'the namespace-key hook is asked only where this atSign owns the key',
+          proves: 'the first ask AND the constraint that makes it safe: a '
+              'sender cannot replace a peer\'s namespace key, so the hook is '
+              'consulted for the client\'s own atSign and not for a peer '
+              'destination. Both arms are in the one test',
+          clauses: [
+            '**only where the destination is this client\'s own atSign**'
+          ]);
+      provenIn('packages/at_client/test/nskey_seeding_test.dart',
+          'a published generation is put to the policy, with its own dates',
+          proves: 'the second ask and what it is handed. It asserts the '
+              'createdAt is the ADVERTISEMENT\'s minted-at rather than this '
+              'device\'s clock, which is what lets every enrollment of one '
+              'atSign reach the same answer from the same record',
+          clauses: [
+            'once per authorised namespace at every client start',
+            'the `createdAt` **the advertisement itself states**',
+          ]);
+      provenIn('packages/at_client/test/nskey_rotation_test.dart',
+          'publishes a fresh generation and keeps the superseded private',
+          proves: 'the mint and the RETENTION halves of what a yes does — the '
+              'superseded private survives, which is what keeps records '
+              'sealed to it readable',
+          clauses: ['fresh material is minted, the previous private is']);
+      provenIn('packages/at_client/test/nskey_rotation_test.dart',
+          'pushes the successor private to the namespace members',
+          proves: 'the conveyance half, which is what makes the rotation O(n) '
+              'per enrollment and therefore the expensive lever');
+      provenIn('packages/at_client/test/rotation_policy_test.dart',
+          'never, at any age',
+          proves: 'the default, at an age no schedule would leave alone — so '
+              'it is the POLICY being asserted and not a period',
+          clauses: ['`neverRotateNskey`']);
+      provenIn('packages/at_client/test/rotation_policy_test.dart',
+          'it is a policy rather than an absent one',
+          proves: 'that the default is a closure that says no rather than a '
+              'null, which is what lets every call site ask unconditionally');
+
+      // ⛔ "There is no third ask" is deliberately UNPINNED. It is an absence
+      // — that `AtClient.ensureReachable` cannot reach the policy, because it
+      // returns alreadyReachable in exactly the branch where a generation is
+      // published and that is the only branch `seedNamespace` consults the
+      // policy in. Read at both ends on 2026-08-31 and true, but no test
+      // asserts it and one would have to drive a whole AtClientImpl to try.
+    });
+
+    test(
+        'UC-A5.6 \u00b7 where a lever is not asked, and where a yes is refused '
+        'out loud', () {
+      // THEN  nothing published is a cold start and the policy is not asked;
+      //       the start-of-client ask follows the posture; a yes with nowhere
+      //       to convey is refused LOUDLY, the ask coming first deliberately;
+      //       a policy that throws rotates nothing.
+      provenIn('packages/at_client/test/nskey_seeding_test.dart',
+          'nothing published is a cold start, and the policy is not asked',
+          proves: 'the skip, asserted on the RECORDED ASKS rather than on the '
+              'return value: the fixture answers yes, so a false return alone '
+              'would not distinguish "not asked" from "asked and overridden"',
+          clauses: ['not asked when no generation is advertised']);
+      provenIn('packages/at_client/test/nskey_seeding_test.dart',
+          'seeding follows the posture, and the shipped default now seeds',
+          proves: 'that the start-of-client ask is gated on the posture\'s '
+              'seedNamespaceKeys, so it never runs at PqPosture.legacy',
+          clauses: ['`AtClientPreference.seedNamespaceKeys` is true']);
+      provenIn('packages/at_client/test/nskey_seeding_test.dart',
+          'a yes with no substrate to convey over rotates nothing',
+          proves: 'the refusal AND that the question was put first — it '
+              'asserts the policy was consulted as its control, so the '
+              'declined rotation is attributable to the missing substrate '
+              'rather than to a question never asked. That ordering is the '
+              'clause: checking first would be cheaper and would make an '
+              'application\'s yes vanish without trace',
+          clauses: ['the policy is consulted **before** the substrate check']);
+      provenIn('packages/at_client/test/nskey_seeding_test.dart',
+          'a policy that throws rotates nothing, and does not fail the caller',
+          proves: 'that an application\'s bug in its own closure does not '
+              'propagate into whatever write asked. Written 2026-08-31 with '
+              'this clause: nothing covered it, and the control asserts the '
+              'policy really was consulted so the false return is the catch '
+              'rather than a question never put',
+          clauses: ['the exception is caught, logged at warning']);
+    });
   });
 }

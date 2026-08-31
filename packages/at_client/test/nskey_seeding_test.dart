@@ -54,7 +54,8 @@ void main() {
   /// question the policy is asked can be observed without a live atServer.
   ({NskeySeeding seeding, List<NskeyRotationContext> asked}) withPublished(
       NskeyAdvertisement? published,
-      {bool answer = false}) {
+      {bool answer = false,
+      bool throws = false}) {
     final atClient = MockAtClient();
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     final asked = <NskeyRotationContext>[];
@@ -64,6 +65,7 @@ void main() {
         ring: _RingAnswering(atClient, published),
         rotationPolicy: (ns) {
           asked.add(ns);
+          if (throws) throw StateError('the application\'s policy blew up');
           return answer;
         },
       ),
@@ -126,6 +128,30 @@ void main() {
     expect(w.asked, hasLength(1),
         reason: 'the control — the policy WAS consulted, so the false above '
             'is the missing substrate and not a question never put');
+  });
+
+  test('a policy that throws rotates nothing, and does not fail the caller',
+      () async {
+    // What a caller is doing when the policy is consulted is reaching this
+    // atSign or writing to it, and neither is broken by a rotation that did
+    // not happen: the published generation stays published and the question is
+    // put again at the next start. Letting the exception out would turn an
+    // application's bug in its own closure into a failed write.
+    final w = withPublished(
+        NskeyAdvertisement.single(
+          publicKey: Uint8List.fromList(List<int>.filled(1216, 7)),
+          alg: SecretSharingAlgos.xWing,
+          createdAt: DateTime.utc(2020),
+        ),
+        throws: true);
+
+    expect(await w.seeding.rotateIfPolicyAsks(atSign, 'app_1.my_apps'), isFalse,
+        reason: 'the throw is swallowed and reported as "did not rotate", '
+            'rather than propagating into whatever write asked');
+    expect(w.asked, hasLength(1),
+        reason: 'the control: the policy really was consulted, so the false '
+            'above is the exception being caught and not a question never '
+            'put');
   });
 
   test('a legacy client seeds the one namespace it can name', () async {
