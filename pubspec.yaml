@@ -138,5 +138,13 @@ dependency_overrides:
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
-      ref: gkc-multiple-stores
+      # A SHA, not a branch: the branch this used to name was deleted when
+      # PR 2776 merged on 2026-08-30, and every cold checkout then failed
+      # `dart pub get` with "Could not find git ref". It survived locally
+      # only because ~/.pub-cache still held the bare mirror. A sha cannot
+      # be deleted out from under this, and cannot drift when its branch
+      # moves. Published at_persistence_secondary_server tops out at 5.2.1
+      # (2026-08-11), which predates the fix, so the override is still
+      # needed — it comes out when a release carrying 2776 ships.
+      ref: 5c0e603c02c438dcbdc0531717ebfd71f62a48ad
       path: packages/at_persistence_secondary_server
