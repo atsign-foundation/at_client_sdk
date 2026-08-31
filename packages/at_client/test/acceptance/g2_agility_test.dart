@@ -674,9 +674,11 @@ void main() {
           'a verifier sharing **no** algorithm with the envelope is refused',
         ],
       );
-      // ⛔ c4 is UNPINNED because the lever it describes does not exist:
-      // there is no accepted-algorithms set anywhere in AtClientPreference, so
-      // there is no behaviour to assert. See decisions.md 120.
+      // ⛔ The step-3 clause is UNPINNED because the lever it describes
+      // does not exist: there is no accepted-algorithms set anywhere in
+      // AtClientPreference, so there is no behaviour to assert. Naming the
+      // clause rather than its index is deliberate - a withdrawal earlier in
+      // the row renumbers everything after it. See decisions.md 120.
       //
       // ⚠️ That used to be said of c1 as well, and it was wrong: c1 states what
       // the verifier DOES today - strongestOf over the intersection, no floor -
