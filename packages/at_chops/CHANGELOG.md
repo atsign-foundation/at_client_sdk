@@ -1,5 +1,7 @@
 ## 3.6.1
 
+- chore: dart format, and a stale symbol name in one test comment
+
 - fix: an ML-DSA-65 PKAM key of the wrong length now says what is likely wrong
   with it. `PkamMlDsa65SigningAlgo.sign` reported only
   `ML-DSA-65 secret key must be 4032 bytes: N`, which names neither the
