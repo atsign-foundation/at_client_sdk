@@ -91,19 +91,55 @@ void main() {
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort;
 
+      // The enrollment id travels with the signer, or this client authenticates
+      // over LEGACY pkam - a bare `pkam:` naming no enrollment. This atSign was
+      // onboarded through enroll:request and so has no legacy credential at
+      // all, and the atServer refuses that authentication by name. Passing it
+      // is what `AtOnboardingServiceImpl._initAtClient` does on both of its
+      // paths; this site is hand-built and had to be told.
       final atClientManager = await AtClientManager(apkamAtSign)
           .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
-              atChops: atAuth.atChops);
+              atChops: atAuth.atChops,
+              enrollmentId: atAuthResponse.atAuthKeys!.enrollmentId);
       //var scanResult = await atClientManager.atClient.getKeys();
       var scanResult = await atClientManager.atClient
           .getRemoteSecondary()
           ?.executeCommand('scan\n', auth: true);
       final atClient = atClientManager.atClient;
-      // check for keys in __manage namespace
-      expect(
-          scanResult?.contains(
-              '${atOnboardingResponse.enrollmentId}.new.enrollments.__manage$apkamAtSign'),
-          true);
+
+      // The enrollment record is NOT in scan, and enroll:list is where it
+      // lives. `scan` filters by the connection's enrollment id, so a client
+      // carrying one never sees enrollment keys however broad its grants -
+      // this enrollment holds `*:rw` and `__manage:rw` and still does not.
+      // Only a connection with no enrollment id at all reaches the unfiltered
+      // owner view, which today means CRAM.
+      //
+      // This assertion used to read `contains(...), true` and passed because
+      // the client was built without its enrollment id and so authenticated
+      // as the owner by accident. Fixing that authentication is what exposed
+      // it.
+      //
+      // ⚠️ The authoritative pin for the filtering rule is server-side, in
+      // at_server's scan_verb_test.dart - including the discriminating case
+      // that a CRAM connection DOES see these keys. This pair is the
+      // CONSUMER's view of the same rule, kept here because the change is
+      // visible to clients. If the two ever disagree, at_server's is the one
+      // that decides.
+      final enrollmentKey =
+          '${atOnboardingResponse.enrollmentId}.new.enrollments.__manage$apkamAtSign';
+      expect(scanResult?.contains(enrollmentKey), false,
+          reason: 'an enrollment-scoped scan excludes enrollment keys. A true '
+              'here means the connection reached the unfiltered owner view, '
+              'which is what an untreaded enrollment id used to cause');
+
+      final ownView =
+          await atClient.enrollmentService!.fetchEnrollmentRequests();
+      expect(ownView.map((e) => e.enrollmentId),
+          contains(atOnboardingResponse.enrollmentId),
+          reason: 'enroll:list is the management path for enrollment records, '
+              'and this enrollment holds __manage:rw. Asserting it here keeps '
+              'the original intent - the record was created and this client '
+              'can see it - rather than dropping the check with the scan');
       // Check whether at client can create keys in different namespaces
       AtKey atKey =
           AtKey.self('phone', namespace: 'wavi', sharedBy: apkamAtSign).build();

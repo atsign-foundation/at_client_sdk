@@ -422,9 +422,23 @@ void main() {
             'one it reached for — so a refusal for any other reason, or one '
             'about the wrong pair, cannot satisfy it');
 
-    // Arm 2: a connection carrying no enrollment id at all — the owner's own,
-    // authenticated over legacy PKAM. It is refused rather than waved through,
-    // which is the case an "owner can do anything" reading would get wrong.
+    // Arm 2: a legacy PKAM connection. It carries the housekeeping enrollment
+    // `primary` — an atServer creates that record on the first legacy
+    // authentication — so it is refused as a NAMED enrollment rather than as
+    // an anonymous owner. That naming is what having an enrollment record
+    // buys a legacy connection, and it is only observable end to end.
+    //
+    // ⚠️ This arm used to reach a connection carrying NO enrollment id, and
+    // that state is no longer reachable over legacy PKAM. It still exists —
+    // CRAM produces it, and the self-only refusal is an explicit exception to
+    // `isAuthorized` treating an absent enrollment id as full permissions, so
+    // an id-less connection is the one that default would wave through.
+    // It is pinned in at_server rather than here, in
+    // `at_secondary_server/test/enroll_verb_test.dart`, by the test named
+    // "an ID-LESS connection is refused, not waved through" — look in that
+    // file if the name has moved. Not pinned live because CRAM authentication
+    // DELETES the atSign's stored secret on success, so reaching it costs a
+    // dedicated atSign that nothing else in this pack may ever CRAM.
     await expectLater(
         AtEnrollment.create().update(
             EnrollmentUpdateRequest(
@@ -437,12 +451,13 @@ void main() {
         throwsA(isA<AtLookUpException>().having(
             (e) => e.errorMessage,
             'errorMessage',
-            allOf(contains('self-only'), contains('the owner'),
+            allOf(contains('self-only'), contains('primary'),
                 contains(mine.enrollmentId)))),
-        reason: 'an owner connection names no enrollment, so it cannot be the '
-            'enrollment this record belongs to. The message says "the owner" '
-            'rather than an id, which is what distinguishes this refusal from '
-            'arm 1\'s — the same assertion for both would not tell them apart');
+        reason: 'a legacy connection is refused as the enrollment it actually '
+            'authenticated as. Asserting the literal `primary` pins more than '
+            '"the owner" did, because it names a record the caller can go and '
+            'read — and it pins that a legacy connection now HAS one, which '
+            'is the thing that changed');
 
     // The control: the same request on its OWN connection succeeds, so both
     // refusals are about who asked rather than about the request being
