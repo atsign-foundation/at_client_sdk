@@ -172,8 +172,9 @@ void main() {
           reason: 'owaspMinimum raises the costs, not the key length - if it '
               'ever varies hashLength this control stops being one');
 
-      final envelope = jsonDecode(
-          await codec.encode(doc, 'right', hashParams: standard)) as Map;
+      final envelope =
+          jsonDecode(await codec.encode(doc, 'right', hashParams: standard))
+              as Map;
 
       expect(
         await codec.decode(envelope.cast<String, dynamic>(),

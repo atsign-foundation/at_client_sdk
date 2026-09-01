@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
@@ -199,6 +200,52 @@ void main() {
         throwsA(isA<FileSystemException>()),
       );
     }, timeout: Timeout(Duration(seconds: 40)));
+
+    test('refuses a keyfile deleted while the update was in flight', () async {
+      final io = FileAtKeysIo(filePath: pathFor);
+      final file = File(pathFor(atSign));
+      expect(file.existsSync(), isTrue,
+          reason: 'control: setUp wrote the keyfile this update reads');
+
+      // The owner deletes the keyfile between the read and the write. That is
+      // not contrived: a client files key material from an unawaited startup
+      // tail, and deleting `.atKeys` is how a device is decommissioned, so the
+      // two land on the same isolate with awaits between them.
+      await expectLater(
+        io.update(atSign.toAtsign(), (keys) {
+          file.deleteSync();
+          expect(file.existsSync(), isFalse,
+              reason: 'control: the delete took effect inside the mutate, so '
+                  'the assertion below is about what update did next');
+          keys.addKey(keyNamed('filed-during-the-delete'));
+          return true;
+        }),
+        throwsA(isA<AtKeysSourceAbsentException>()),
+      );
+
+      expect(file.existsSync(), isFalse,
+          reason: 'update must not resurrect a keyfile its owner deleted: the '
+              'file IS the credential, so putting it back defeats the delete. '
+              'It used to be recreated here, silently');
+    });
+
+    test('flush still creates the keyfile, which is what update must not do',
+        () async {
+      // The distinguishing arm. Both go through the same writer, and only
+      // update refuses — so a change that made the writer refuse outright
+      // would break this and not the test above.
+      final io = FileAtKeysIo(filePath: pathFor);
+      final file = File(pathFor(atSign));
+      final keys = await io.read(atSign);
+      file.deleteSync();
+      expect(file.existsSync(), isFalse, reason: 'control: gone before flush');
+
+      await io.flush(atSign.toAtsign(), keys);
+
+      expect(file.existsSync(), isTrue,
+          reason: 'flush means "persist these keys" and creating the file is '
+              'its first job — a fresh keyfile has to come from somewhere');
+    });
   });
 
   group('the default update', () {

@@ -14,5 +14,4 @@
 ///
 /// A caller wanting the other one, or something else entirely, sets
 /// `probeSocket`.
-export 'probe_default_web.dart'
-    if (dart.library.io) 'probe_default_io.dart';
+export 'probe_default_web.dart' if (dart.library.io) 'probe_default_io.dart';

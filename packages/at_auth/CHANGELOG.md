@@ -1,5 +1,61 @@
 ## 4.0.0-rc1
 
+- fix: **`authenticatorForChops` requires `signingAlgo` and `hashingAlgo`.**
+  ⚠️ This tightens a signature added earlier in this same **unpublished**
+  `4.0.0-rc1`; `3.3.0`, the last published version, carries no
+  `at_authenticator.dart` at all. Both parameters defaulted, to `rsa2048` and
+  `sha256`. This is the one authenticator with no keystore behind its signer,
+  so the caller is the only party that knows what the AtChops holds — and a
+  default made a caller that forgot indistinguishable from one that meant RSA.
+  An ML-DSA key put through the RSA routine fails inside at_chops on a key
+  length, naming neither the caller nor the mismatch. The compiler now names
+  the call site instead.
+- fix: **`AtKeys.authenticationAlgorithmFor` refuses an algorithm this build
+  cannot sign with, rather than returning null.** ⚠️ Also unpublished — the
+  method does not exist in `3.3.0`. Null had two meanings — "this enrollment
+  files no typed material, so its keypair is the flat RSA pair" and "its typed
+  material names an algorithm I cannot read" — and a caller could not tell them
+  apart afterwards. The obvious reading of null, *legacy, so rsa2048*, signs a
+  different enrollment's credentials with the wrong routine on the second.
+  `authenticationFor` already refused exactly that case; the refusal moves up
+  so the algorithm-only call is held to the same terms, and a caller holding
+  its own signer stops being the one path that guesses.
+  `signingAlgorithmForEnrollment` still reports both as null and is unchanged —
+  it is the call to make where that is wanted.
+
+- fix: **the `_apsk` an enrolment advertises is spelled by its
+  algorithm alone.** ⚠️ This changes behaviour introduced earlier in this same
+  **unpublished** `4.0.0-rc1`; it is not a break against `3.3.0`, the last
+  published version. Exactly one active `rsa2048` key rides `apskLegacy` as the
+  bare string; anything else rides `apsk` as the array. A key package used to
+  force the array as well, on the grounds that a bare value cannot state the
+  algorithm of whatever signed the package — but where that signer is rsa2048
+  the bare value states exactly it, and where it is not, the algorithm already
+  chose the array. So the condition only ever fired on the case it was wrong
+  about, and that case is reachable: a legacy posture names an empty data
+  signing set, so nothing is advertised, while a pq key-exchange mode still
+  carries a package.
+  **Why it mattered.** at_client composes this same record at every start and
+  republishes on any difference, and it spells that key bare. The two composers
+  of one record therefore disagreed about its shape — at_auth installed the
+  array, the enrolment's first start rewrote it bare — and that republish
+  discards the chain link the approver conveyed against the old value, leaving
+  the enrollment silently unsigned. Pinned in `enrollment_test.dart` with the
+  mldsa65 arm as its control.
+
+- feat: **a self-enrollment submitted by an atSign that holds no enrollment is
+  approved over the connection that requested it.** The atServer's
+  self-enrolment auto-approve needs an APKAM-authenticated connection, and an
+  atSign authenticating with its flat PKAM key has none — so its request lands
+  `pending`. It is approvable on that same connection, because a connection
+  carrying no enrollment id is granted full access, so such a request now mints
+  a symmetric key, wraps it to the atSign's own encryption public key, and
+  approves itself through the ordinary approver. The wrap is what keeps the
+  record's copy recoverable afterwards.
+  The discriminator is the **session's** enrollment id rather than the
+  connection's: `pending` also means an atServer too old to auto-approve an
+  APKAM retrofit, and that case keeps its existing deny-and-throw.
+
 A release candidate: adopt it deliberately. The headline is post-quantum
 credentials — an enrollment can authenticate with ML-DSA-65 while the fleet
 still reads what it advertises.
@@ -74,6 +130,21 @@ still reads what it advertises.
   retry budget as consecutive failures, and opens key records written without
   an `iv`.
 - An aborted self-retrofit denies the pending enrollment it created.
+- **`FileAtKeysIo.update` no longer recreates a keyfile deleted while the
+  update was in flight**, and throws `AtKeysSourceAbsentException` instead.
+  `update` is a read-modify-write of material that must already be there —
+  its own read throws when the file is absent at the start — so writing a
+  file that is absent at the end contradicted the call it began. Deleting a
+  `.atKeys` file is how a device is decommissioned, and a background task
+  mid-update would silently put it back. `flush` is unchanged and still
+  creates the file, which is its job.
+- **An OTP enrolment that advertises a signing key now files its private half.**
+  `AtEnrollmentRequest.advertisedSigningKey` reached the `_apsk` advertisement
+  but never the keyfile, so the enrolment published a key it did not hold: the
+  next start found the in-use algorithm missing, minted a second keypair and
+  republished, orphaning the advertised key and unverifying anything signed
+  against it. The self-enrolment and first-enrolment paths already filed it;
+  this was the third.
 
 ## 3.3.0
 - feat: add `AtAuthSession` (exported) — the explicit auth→client hand-off artifact: the confirmed subset of an auth request that client creation actually needs (`atSign`, `rootDomain`, `namespace`, `atKeysIo`, `enrollmentId`), promoted to its own type so "request" no longer doubles as "session". Keys cross the boundary as an `AtKeysIo` *source*, not as live crypto state: the client derives its own `AtKeys` via `atKeysIo.read(atSign)` rather than adopting auth's `AtChops`/`AtLookUp`. The session also carries auth's already-authenticated `atLookUp` so a caller can *opt in* to reusing that connection (`AtClientManager.fromAuthSession(session, reuse: true)`) and skip a second PKAM handshake; the default hand-off rebuilds a fresh connection.
