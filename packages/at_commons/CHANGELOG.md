@@ -4,13 +4,18 @@
   alongside `enroll:listns`, taking the same authorisation, returning a JSON
   **map** of facts about the namespace rather than a list of its members. Its
   first member is `lastRevokedAt`: the latest moment a revocation touched an
-  enrollment granted that namespace, or null.
-  A map because the fact is about the NAMESPACE and not about any member: on a
-  roster of approved enrollments the same value would have had to be repeated on
-  every row under a name apologising for where it lived. `enroll:listns` is
-  unchanged, which matters — a client resolves conveyance recipients through it,
-  and its returning approved enrollments only is what keeps a revoked enrollment
-  off every roster.
+  enrollment granted that namespace, or null. `enroll:listns` is unchanged.
+
+- fix: `Metadata.fromJson` preserves a null `ttl`/`ttb`/`ttr` instead of
+  reading it as 0, so the `toJson`/`fromJson` round trip is lossless.
+  `toJson` always writes the three, so an unset one goes out as
+  `"ttl": null` and used to come back as `0` — leaving a reader unable to
+  tell "this request said nothing about it" from an explicit 0, which is a
+  different request: `ttl:0` clears a record's expiry and `ttr:0` means do
+  not cache. An explicit 0 still round trips as 0, and a numeric string is
+  still parsed. The atServer's `update:json` handling is the caller this
+  affects; it now agrees with the metadata-fragment form of the same
+  request, which has always left an unmentioned relative null.
 
 ## 5.16.0
 
