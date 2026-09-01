@@ -462,7 +462,7 @@ whichever project first needs one — **KF-1** (at-rest protection of the PQ
 privates), whose restore flow already needs an assurance override for the
 inverse case. Recorded here so it is a decision rather than an omission.
 
-**Still owed:** the migration test on a v(N-1) fixture, the keychain round-trip
+**Still owed:** the migration test on a v(N-1) fixture (**now a P1 row in [`implementation-plan.md`](../implementation-plan.md)'s `## TODO`, which is its one home** — this line is history), the keychain round-trip
 on a real device (at_client_flutter's tests mock the platform channel, and this
 repo has no integration_test harness), and the `LocalKeystoreAtKeysIo`
 existence/routing call — still "not needed at this time".
