@@ -1,5 +1,11 @@
 ## 5.17.0
 
+- feat: `enroll:infons:<namespace>` — "info about a namespace". A read verb
+  alongside `enroll:listns`, taking the same authorisation, returning a JSON
+  **map** of facts about the namespace rather than a list of its members. Its
+  first member is `lastRevokedAt`: the latest moment a revocation touched an
+  enrollment granted that namespace, or null. `enroll:listns` is unchanged.
+
 - fix: `Metadata.fromJson` preserves a null `ttl`/`ttb`/`ttr` instead of
   reading it as 0, so the `toJson`/`fromJson` round trip is lossless.
   `toJson` always writes the three, so an unset one goes out as
