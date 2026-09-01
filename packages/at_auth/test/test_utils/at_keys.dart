@@ -26,7 +26,8 @@ final _defaultCreatedAt = DateTime.utc(2024, 1, 1);
 CryptographicMaterial symmetricKey(
   String keyId, {
   String value = 'c2VjcmV0',
-  CryptographicMaterialAlgorithm algorithm = CryptographicMaterialAlgorithm.aes256,
+  CryptographicMaterialAlgorithm algorithm =
+      CryptographicMaterialAlgorithm.aes256,
   List<String> operations = const [],
   String? enrollmentId,
   DateTime? createdAt,

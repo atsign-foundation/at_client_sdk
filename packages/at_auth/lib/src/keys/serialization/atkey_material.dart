@@ -32,25 +32,34 @@ extension type const CryptographicMaterialAlgorithm._(String value)
   /// String vocabularies beside it; it is not a membership check, and
   /// making it one would break the round-trip promise above.
   const CryptographicMaterialAlgorithm.of(String value) : this._(value);
-  static const CryptographicMaterialAlgorithm aes256 = CryptographicMaterialAlgorithm._('aes256');
-  static const CryptographicMaterialAlgorithm rsa2048 = CryptographicMaterialAlgorithm._('rsa2048');
-  static const CryptographicMaterialAlgorithm eccSecp256r1 = CryptographicMaterialAlgorithm._('ecc_secp256r1');
-  static const CryptographicMaterialAlgorithm ed25519 = CryptographicMaterialAlgorithm._('ed25519');
-  static const CryptographicMaterialAlgorithm x25519 = CryptographicMaterialAlgorithm._('x25519');
-  static const CryptographicMaterialAlgorithm mlKem768 = CryptographicMaterialAlgorithm._('mlkem768');
-  static const CryptographicMaterialAlgorithm mlDsa65 = CryptographicMaterialAlgorithm._('mldsa65');
+  static const CryptographicMaterialAlgorithm aes256 =
+      CryptographicMaterialAlgorithm._('aes256');
+  static const CryptographicMaterialAlgorithm rsa2048 =
+      CryptographicMaterialAlgorithm._('rsa2048');
+  static const CryptographicMaterialAlgorithm eccSecp256r1 =
+      CryptographicMaterialAlgorithm._('ecc_secp256r1');
+  static const CryptographicMaterialAlgorithm ed25519 =
+      CryptographicMaterialAlgorithm._('ed25519');
+  static const CryptographicMaterialAlgorithm x25519 =
+      CryptographicMaterialAlgorithm._('x25519');
+  static const CryptographicMaterialAlgorithm mlKem768 =
+      CryptographicMaterialAlgorithm._('mlkem768');
+  static const CryptographicMaterialAlgorithm mlDsa65 =
+      CryptographicMaterialAlgorithm._('mldsa65');
 
   /// X-Wing hybrid KEM (ML-KEM-768 + X25519) — one of the two KEMs an APKAM
   /// key package or nskey keypair may use. The atSign-level `pq_signing_root`
   /// is not on this list: it is ML-DSA-65, a signing key with nothing to
   /// encapsulate to.
-  static const CryptographicMaterialAlgorithm xWing = CryptographicMaterialAlgorithm._('xwing');
+  static const CryptographicMaterialAlgorithm xWing =
+      CryptographicMaterialAlgorithm._('xwing');
 
   /// Pure ML-KEM-1024 (FIPS 203) — the other, for deployments that need key
   /// establishment with no non-FIPS component and no hybrid combiner. Which of
   /// the two an atSign uses is its own configuration; a holder's key package
   /// and nskey advertisement say which they hold.
-  static const CryptographicMaterialAlgorithm mlKem1024 = CryptographicMaterialAlgorithm._('mlkem1024');
+  static const CryptographicMaterialAlgorithm mlKem1024 =
+      CryptographicMaterialAlgorithm._('mlkem1024');
 
   /// The tokens this version knows about. For warn-level tooling only —
   /// never reject a value for not being in this set.
@@ -88,16 +97,26 @@ extension type const CryptographicMaterialRole._(String value)
   /// Takes any token, for the same reason as
   /// [CryptographicMaterialAlgorithm.of].
   const CryptographicMaterialRole.of(String value) : this._(value);
-  static const CryptographicMaterialRole symmetricEncryption = CryptographicMaterialRole._('symmetricEncryption');
-  static const CryptographicMaterialRole symmetricAuthentication = CryptographicMaterialRole._('symmetricAuthentication');
-  static const CryptographicMaterialRole publicEncryption = CryptographicMaterialRole._('publicEncryption');
-  static const CryptographicMaterialRole privateDecryption = CryptographicMaterialRole._('privateDecryption');
-  static const CryptographicMaterialRole publicVerification = CryptographicMaterialRole._('publicVerification');
-  static const CryptographicMaterialRole privateSigning = CryptographicMaterialRole._('privateSigning');
-  static const CryptographicMaterialRole publicEncapsulation = CryptographicMaterialRole._('publicEncapsulation');
-  static const CryptographicMaterialRole privateDecapsulation = CryptographicMaterialRole._('privateDecapsulation');
-  static const CryptographicMaterialRole publicKeyAgreement = CryptographicMaterialRole._('publicKeyAgreement');
-  static const CryptographicMaterialRole privateKeyAgreement = CryptographicMaterialRole._('privateKeyAgreement');
+  static const CryptographicMaterialRole symmetricEncryption =
+      CryptographicMaterialRole._('symmetricEncryption');
+  static const CryptographicMaterialRole symmetricAuthentication =
+      CryptographicMaterialRole._('symmetricAuthentication');
+  static const CryptographicMaterialRole publicEncryption =
+      CryptographicMaterialRole._('publicEncryption');
+  static const CryptographicMaterialRole privateDecryption =
+      CryptographicMaterialRole._('privateDecryption');
+  static const CryptographicMaterialRole publicVerification =
+      CryptographicMaterialRole._('publicVerification');
+  static const CryptographicMaterialRole privateSigning =
+      CryptographicMaterialRole._('privateSigning');
+  static const CryptographicMaterialRole publicEncapsulation =
+      CryptographicMaterialRole._('publicEncapsulation');
+  static const CryptographicMaterialRole privateDecapsulation =
+      CryptographicMaterialRole._('privateDecapsulation');
+  static const CryptographicMaterialRole publicKeyAgreement =
+      CryptographicMaterialRole._('publicKeyAgreement');
+  static const CryptographicMaterialRole privateKeyAgreement =
+      CryptographicMaterialRole._('privateKeyAgreement');
 
   /// The APKAM keypair an enrollment **authenticates** with, and nothing
   /// else — the key PKAM proves possession of.
@@ -111,8 +130,10 @@ extension type const CryptographicMaterialRole._(String value)
   /// An enrollment holds at most one ACTIVE pair of these; several active
   /// signing keys are normal, because signature agility means holding one per
   /// algorithm.
-  static const CryptographicMaterialRole privateAuthentication = CryptographicMaterialRole._('privateAuthentication');
-  static const CryptographicMaterialRole publicAuthentication = CryptographicMaterialRole._('publicAuthentication');
+  static const CryptographicMaterialRole privateAuthentication =
+      CryptographicMaterialRole._('privateAuthentication');
+  static const CryptographicMaterialRole publicAuthentication =
+      CryptographicMaterialRole._('publicAuthentication');
 
   /// The tokens this version knows about. For warn-level tooling only —
   /// never reject a value for not being in this set.
@@ -174,11 +195,7 @@ extension type const CryptographicMaterialStatus._(String value)
 
   /// The tokens this version knows about. For warn-level tooling only —
   /// never reject a value for not being in this set.
-  static const Set<CryptographicMaterialStatus> known = {
-    active,
-    retired,
-    dead
-  };
+  static const Set<CryptographicMaterialStatus> known = {active, retired, dead};
 
   /// Where [status] sits in the forward order, or null when this build has
   /// never heard of it.
@@ -194,8 +211,7 @@ extension type const CryptographicMaterialStatus._(String value)
   /// after `retired`, so callers refuse a transition involving one rather
   /// than guessing a direction. Guessing "newest is furthest forward" would
   /// let a future value silently reactivate a key its owner withdrew.
-  static int? rankOf(CryptographicMaterialStatus status) =>
-      switch (status) {
+  static int? rankOf(CryptographicMaterialStatus status) => switch (status) {
         active => 0,
         retired => 1,
         dead => 2,
@@ -406,8 +422,7 @@ List<Map<String, dynamic>> encodeAtKeysDocument(
         throw AtKeysValidationException(
             'Material for keyId "${material.keyId}" does not match the enrollmentId of its group');
       }
-      if (group
-          .any((existing) => existing.role == material.role)) {
+      if (group.any((existing) => existing.role == material.role)) {
         throw AtKeysValidationException(
             'Duplicate role "${material.role}" for keyId "${material.keyId}"');
       }

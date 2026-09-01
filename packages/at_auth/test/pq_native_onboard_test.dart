@@ -95,12 +95,19 @@ void main() {
   tearDown(() => tempDir.deleteSync(recursive: true));
 
   AtOnboardingRequest requestFor(
-          {SigningAlgoType? signingAlgo, bool? mintLegacyMaterial}) =>
+          {SigningAlgoType? signingAlgo,
+          bool? mintLegacyMaterial,
+          ({
+            SigningAlgoType algorithm,
+            String publicKey,
+            String privateKey
+          })? advertisedSigningKey}) =>
       AtOnboardingRequest(atSign)
         ..atKeysIo = keysIo
         ..appName = 'wavi'
         ..deviceName = 'iphone'
         ..mintLegacyMaterial = mintLegacyMaterial
+        ..advertisedSigningKey = advertisedSigningKey
         ..signingAlgoType = signingAlgo ?? SigningAlgoType.rsa2048;
 
   /// The request the onboard actually submitted.
@@ -181,6 +188,67 @@ void main() {
               'out of the box — decisions 37');
       expect(published.single.value.toString(),
           keys.defaultEncryptionPublicKey!.toString());
+    });
+  });
+
+  /// UC-G3.1's third door.
+  ///
+  /// Three paths create an enrollment holding a data signing keypair, and
+  /// at_auth files the private half at three separate points. Two were pinned
+  /// — `enrollment_test.dart` and `at_self_enrollment_test.dart` each carry
+  /// "the signing key is FILED, not merely advertised". This one, the
+  /// activation, was driven by no test in any pack until 2026-08-31.
+  ///
+  /// ⚠️ **`packages/at_client/test/pq_native_onboard_test.dart` looks like
+  /// coverage and is not**: it asserts the activation REQUEST carries the key,
+  /// which is a claim about the request object. What reaches the keyfile is
+  /// whatever at_auth copies out of it after the atServer answers, and that is
+  /// a different statement — an enrollment whose `_apsk` names a key its
+  /// keyfile does not hold signs with something else entirely, and the next
+  /// start finds the in-use algorithm missing, mints a SECOND keypair and
+  /// republishes, orphaning the key the record already named.
+  group('the activation files the signing key it advertises', () {
+    ({SigningAlgoType algorithm, String publicKey, String privateKey})
+        advertised(SigningAlgoType algorithm) => (
+              algorithm: algorithm,
+              publicKey: base64Encode(utf8.encode('advertised-public')),
+              privateKey: base64Encode(utf8.encode('advertised-private')),
+            );
+
+    test('the PRIVATE half reaches the keyfile, under the enrollment id',
+        () async {
+      final key = advertised(SigningAlgoType.rsa2048);
+      await atAuth.onboard(
+          requestFor(
+              signingAlgo: SigningAlgoType.mldsa65, advertisedSigningKey: key),
+          cramSecret);
+
+      final held = (await keysIo.read(atSign)).signingKeysFor(enrollmentId);
+      expect(held, hasLength(1),
+          reason: 'filed, and filed where the reader looks. `enrollmentId` is '
+              'the id the mocked atServer RETURNED and appears nowhere in the '
+              'request, so a non-empty answer here is also what proves the '
+              'filing used the assigned id rather than anything the caller '
+              'supplied — and that it went into the enrollment\'s container '
+              'rather than the atSign\'s, which `signingKeysFor` never reads');
+      expect(held.single.privateKey, key.privateKey,
+          reason: 'the PRIVATE half is the whole point — a public half alone '
+              'is an advertisement of a key this atSign cannot sign with');
+      expect(held.single.publicKey, key.publicKey);
+      expect(held.single.algorithm, SigningAlgoType.rsa2048,
+          reason: 'the algorithm travels with the key rather than following '
+              'the APKAM\'s, which is mldsa65 here — an activation at pqReady '
+              'authenticates post-quantum and signs data with rsa2048, and '
+              'the two are read back separately');
+    });
+
+    test('without one, nothing is filed', () async {
+      await atAuth.onboard(requestFor(), cramSecret);
+
+      expect((await keysIo.read(atSign)).signingKeysFor(enrollmentId), isEmpty,
+          reason: 'the control. Without it the two rows above are satisfied '
+              'by a path that files something unconditionally, and nothing '
+              'would attribute the filing to the advertised key');
     });
   });
 
