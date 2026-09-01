@@ -1,5 +1,24 @@
 ## 4.0.0-rc1
 
+- **BREAKING** fix: **`authenticatorForChops` requires `signingAlgo` and
+  `hashingAlgo`.** Both defaulted, to `rsa2048` and `sha256`. This is the one
+  authenticator with no keystore behind its signer, so the caller is the only
+  party that knows what the AtChops holds — and a default made a caller that
+  forgot indistinguishable from one that meant RSA. An ML-DSA key put through
+  the RSA routine fails inside at_chops on a key length, naming neither the
+  caller nor the mismatch. The compiler now names the call site instead.
+- **BREAKING** fix: **`AtKeys.authenticationAlgorithmFor` refuses an algorithm
+  this build cannot sign with, rather than returning null.** Null had two
+  meanings — "this enrollment files no typed material, so its keypair is the
+  flat RSA pair" and "its typed material names an algorithm I cannot read" —
+  and a caller could not tell them apart afterwards. The obvious reading of
+  null, *legacy, so rsa2048*, signs a different enrollment's credentials with
+  the wrong routine on the second. `authenticationFor` already refused exactly
+  that case; the refusal moves up so the algorithm-only call is held to the
+  same terms, and a caller holding its own signer stops being the one path
+  that guesses. `signingAlgorithmForEnrollment` still reports both as null and
+  is unchanged — it is the call to make where that is wanted.
+
 - **BREAKING** fix: **the `_apsk` an enrolment advertises is spelled by its
   algorithm alone.** Exactly one active `rsa2048` key rides `apskLegacy` as the
   bare string; anything else rides `apsk` as the array. A key package used to

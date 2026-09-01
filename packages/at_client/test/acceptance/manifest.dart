@@ -62,6 +62,7 @@ const guardFiles = <String>[
   'architecture_guard_test.dart',
   'catalogue_test.dart',
   'docs_structure_test.dart',
+  'knowledge_test.dart',
 ];
 
 /// The packages whose tests drive a real atServer.

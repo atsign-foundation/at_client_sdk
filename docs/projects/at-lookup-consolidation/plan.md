@@ -476,11 +476,17 @@ assumed:
   keyfile and which exists precisely so a caller can tell that apart from a
   keyfile it cannot read.
 - **`authenticationAlgorithmFor` returns null whenever `enrollmentId` is
-  null** — it is `enrollmentId == null ? null : …`. A legacy, non-APKAM
-  authentication therefore resolves to nothing and needs the same
-  `?? SigningAlgoType.rsa2048` default, and for the same reason,
+  null.** A legacy, non-APKAM authentication therefore resolves to nothing and
+  needs the same `?? SigningAlgoType.rsa2048` default, and for the same reason,
   that `at_client_impl.dart` already documents at its own call site: at_lookup
   signs with rsa2048 by default, so a legacy enrollment compares as rsa2048.
+  ⚠️ **This bullet said the method *is* `enrollmentId == null ? null : …`,
+  which was true when it was written and stopped being so.** Null had a second
+  meaning it could not distinguish — an enrollment whose typed material names
+  an algorithm this build cannot sign with — and on that one `?? rsa2048` signs
+  a different enrollment's credentials with the wrong routine. That case is now
+  **refused** rather than reported as null, so the default above is a statement
+  about a keyfile holding no typed material and nothing else.
 - ⚠️ **PKAM validates the challenge and CRAM does not.**
   `pkamAuthenticate` passes the `from:` response through
   `validatedFromChallenge`; `cramAuthenticate` digests it raw. Port both

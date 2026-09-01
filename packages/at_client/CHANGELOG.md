@@ -1,5 +1,13 @@
 ## 3.15.0-rc1
 
+- fix: `RemoteSecondary` names the hashing algorithm when it installs an
+  authenticator. It set `atLookUp.hashingAlgoType` from the preference and then
+  built the authenticator that replaces that path without passing one, so the
+  two read one preference field differently — agreeing only for as long as
+  nothing set it to anything but `sha256`. Its `signingAlgo` also carried a
+  `?? rsa2048` fallback that could not fire, the field being assigned four
+  lines before the only call; that is gone with the field now `late final`.
+
 - **BREAKING (wire):** a signed envelope's protected header now carries `kid`
   and `enid` where it carried only `kid`. `kid` takes JOSE's meaning and names
   the signing KEY; the signing enrollment moves to `enid`. `kid` is derived from

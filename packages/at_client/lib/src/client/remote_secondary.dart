@@ -50,7 +50,11 @@ class RemoteSecondary implements Secondary {
 
   /// The algorithm the constructor resolved, so an authenticator built from a
   /// bare signer names the same one the lookup was told to use.
-  SigningAlgoType? _signingAlgoType;
+  ///
+  /// `late final` rather than nullable: the constructor assigns it before
+  /// either path that can reach the read, so a null-guard here would be a
+  /// second written home for `rsa2048` that nothing can ever reach.
+  late final SigningAlgoType _signingAlgoType;
 
   /// Hands the lookup an authenticator, so authentication is decided from the
   /// keystore rather than from credentials parked on at_lookup.
@@ -95,7 +99,12 @@ class RemoteSecondary implements Secondary {
         _atSign,
         chops,
         enrollmentId: lookUp.enrollmentId,
-        signingAlgo: _signingAlgoType ?? SigningAlgoType.rsa2048,
+        signingAlgo: _signingAlgoType,
+        // The same preference field the constructor stamps on the lookup.
+        // Omitting it took this function's sha256 default, so the
+        // authenticator and the ladder it replaces read one preference field
+        // differently - agreeing for exactly as long as nothing sets it.
+        hashingAlgo: _preference.hashingAlgoType,
       );
       return;
     }
