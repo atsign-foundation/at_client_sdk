@@ -102,3 +102,56 @@ succeeds. `buildee.sh:87-90` for the label set it does apply.
 **Checked:** at_client_sdk `b566b6759`, `at_server origin/trunk @ 45846a7b`,
 2026-09-01. The image read was the one present on this machine that day; its
 labels move when at_server rebuilds.
+
+### Most of what ships into the VE image is invisible to git, so a git-based provenance label cannot describe it
+
+**Is:** `tools/build_virtual_environment/ve/Dockerfile:14` is `COPY ./contents /`
+— the whole directory, into the image root. The runner that fills it
+(`tests/at_functional_test/runLocal.sh:62-70`) only `mkdir -p` and `cp`; there is
+no `rm -rf` anywhere in it, so `contents/` is an **accumulator** and whatever has
+ever been placed there ships.
+
+Measured on this machine 2026-09-01 — 7 files, of which **6 are gitignored**:
+
+```
+IGNORED  2026-03-05  contents/.DS_Store
+IGNORED  2026-04-27  contents/atsign/.DS_Store
+TRACKED  2026-07-07  contents/atsign/entrypoint.sh
+IGNORED  2026-08-31  contents/atsign/root/{root,pubspec.yaml}
+IGNORED  2026-08-31  contents/atsign/secondary/{secondary,pubspec.yaml}
+```
+
+The two `.DS_Store`s are months old and are copied into `/` and `/atsign/` on
+every build anyone has ever run. The compiled `secondary` and `root` are build
+outputs, not sources.
+
+⛔ **Consequence for any provenance scheme keyed on git state.** A digest over
+`git diff HEAD` plus `git ls-files --others --exclude-standard` sees **one** of
+those seven files. So a VE built without recompiling ships the previous run's
+binary while a tree-derived label truthfully names a clean checkout — precisely,
+checkably wrong, and invisible to the digest and to any post-build recompute of
+it, because both key on git-visible state.
+
+So a correct tree label means *"the tree the build ran against was this"*, never
+*"the binaries in this image were compiled from it"*.
+
+⚠️ **This is a limit of the build as it stands, not a permanent one.** Hashing
+each artefact and reading it back **from inside the built image** closes it —
+which is what `buildee.sh` already does for the EE, verifying ELF magic by
+`docker run` against the built image rather than reasoning about what was copied
+in. at_server intends to clean `contents/` and add artefact hashes; when that
+lands, re-check this nugget before quoting it, or it will go on warning about a
+label that has become trustworthy.
+
+**Matters because:** it is the reason to distrust a *correct-looking* label, and
+it survives every fix to the labels themselves. It is also the local instance of
+a trap this tree has hit before — git-based tooling silently skipping ignored
+files, so two git-based instruments agreeing is not corroboration.
+
+**Evidence:** `at_server` `tools/build_virtual_environment/ve/Dockerfile:14`;
+`tests/at_functional_test/runLocal.sh:62-70` and `grep -c 'rm -rf'` = 0 over that
+file. The table is `find tools/build_virtual_environment/ve/contents -type f`
+classified with `git ls-files --error-unmatch` and `git check-ignore -q` — a
+working-tree observation on this machine, not a property of any commit.
+**Checked:** at_client_sdk `b0ff55744`, `at_server origin/trunk @ 45846a7b`,
+2026-09-01

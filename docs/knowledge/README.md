@@ -1,8 +1,9 @@
 # knowledge/ — reusable facts about the Atsign platform
 
-**Status: started 2026-09-01.** [`sdk.md`](sdk.md) carries the first three
-nuggets, on the virtual-environment test harness; `protocol.md`, `at_client.md`
-and `at_server.md` do not exist yet. This file is the agreed plan, written
+**Status: started 2026-09-01.** [`sdk.md`](sdk.md) is the only file with content,
+on the virtual-environment test harness; `protocol.md`, `at_client.md` and
+`at_server.md` do not exist yet. (No count here on purpose — it would have two
+homes and rot in this one: `grep -c '^### ' docs/knowledge/*.md`.) This file is the agreed plan, written
 before the work so it survives a context compaction. Ruled with gkc 2026-08-20.
 
 ⚠️ **The rail described at the foot of this file is still unwritten**, so
