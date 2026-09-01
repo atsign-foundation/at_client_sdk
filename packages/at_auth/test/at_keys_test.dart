@@ -344,6 +344,32 @@ void main() {
       expect(
           retrofitted().authenticationAlgorithmFor(flatEnrollmentId), isNull);
     });
+
+    test(
+        'authenticationAlgorithmFor refuses what it cannot sign with, rather '
+        'than reporting null', () {
+      // The two answers this used to collapse into one null. A caller holding
+      // its own signer reads null as "legacy, so rsa2048" — right for an
+      // enrollment the keyfile holds nothing for, and a guess about somebody
+      // else's key for one whose typed material this build cannot read.
+      final futureAlgo = createKeys()
+        ..fileApkamMaterial(
+            enrollmentId: 'future-algorithm',
+            algorithm: CryptographicMaterialAlgorithm.of('sphincs-plus-256s'),
+            publicKey: typedApkamPublicKey,
+            privateKey: 'dHlwZWQtcHJpdmF0ZQ==');
+
+      expect(() => futureAlgo.authenticationAlgorithmFor('future-algorithm'),
+          throwsA(isA<AtKeyNotFoundException>()));
+      expect(futureAlgo.authenticationAlgorithmFor('never-held-here'), isNull,
+          reason: 'absent material still answers null - the refusal is keyed '
+              'on material this build cannot read, not on the keyfile');
+      expect(
+          futureAlgo.signingAlgorithmForEnrollment('future-algorithm'), isNull,
+          reason: 'signingAlgorithmForEnrollment is the call that still '
+              'reports both cases as null, and its many callers depend on '
+              'that; the refusal belongs to the authentication resolution');
+    });
   });
 
   group('AtKeys typed key lookup', () {

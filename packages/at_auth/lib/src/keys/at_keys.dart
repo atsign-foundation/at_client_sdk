@@ -1199,21 +1199,13 @@ class AtKeys {
   /// Falling back to the flat fields there would authenticate as whoever owns
   /// them, and at_lookup's default is `rsa2048`, so the wrong key would be
   /// signed by the wrong routine. A keyfile written by a newer client is the
-  /// way this happens.
+  /// way this happens. [authenticationAlgorithmFor] raises it, so a caller
+  /// wanting only the algorithm is refused on the same terms as one wanting
+  /// the signer.
   ({AtChops chops, SigningAlgoType? algorithm}) authenticationFor(
       String? enrollmentId) {
     final algorithm = authenticationAlgorithmFor(enrollmentId);
     if (algorithm == null) {
-      final material = enrollmentId == null
-          ? null
-          : _activeAuthenticationMaterial(enrollmentId);
-      if (material != null) {
-        throw AtKeyNotFoundException(
-            'Enrollment $enrollmentId authenticates with '
-            '"${material.algorithm}", which this build cannot sign '
-            'with. Its keypair is in this keyfile; the flat fields are a '
-            'different enrollment\'s and are not a substitute for it.');
-      }
       return (chops: toAtChops(), algorithm: null);
     }
     return (chops: toAtChopsForEnrollment(enrollmentId!), algorithm: algorithm);
@@ -1225,8 +1217,32 @@ class AtKeys {
   /// building one it will discard is not free — [toAtChops] throws on a
   /// keyfile that is missing any of the material it needs, so resolving
   /// eagerly would fail a caller that never needed the keypair at all.
-  SigningAlgoType? authenticationAlgorithmFor(String? enrollmentId) =>
-      enrollmentId == null ? null : signingAlgorithmForEnrollment(enrollmentId);
+  ///
+  /// Null means the flat fields and nothing else: this enrollment files no
+  /// typed authentication material, so its keypair is the flat RSA pair and
+  /// `rsa2048` is what signs it. An enrollment whose typed material names an
+  /// algorithm this build cannot sign with is **refused** rather than reported
+  /// as null, because the two are indistinguishable afterwards and the obvious
+  /// reading of null — legacy, so `rsa2048` — would sign a different
+  /// enrollment's credentials with the wrong routine. Where both really are
+  /// wanted as null, [signingAlgorithmForEnrollment] is the call that says so.
+  ///
+  /// Throws [AtKeyNotFoundException] for that case. A keyfile written by a
+  /// newer client is the way it happens.
+  SigningAlgoType? authenticationAlgorithmFor(String? enrollmentId) {
+    if (enrollmentId == null) return null;
+    final algorithm = signingAlgorithmForEnrollment(enrollmentId);
+    if (algorithm != null) return algorithm;
+    final material = _activeAuthenticationMaterial(enrollmentId);
+    if (material != null) {
+      throw AtKeyNotFoundException(
+          'Enrollment $enrollmentId authenticates with '
+          '"${material.algorithm}", which this build cannot sign '
+          'with. Its keypair is in this keyfile; the flat fields are a '
+          'different enrollment\'s and are not a substitute for it.');
+    }
+    return null;
+  }
 
   @Deprecated('legacy, please use addKey to add additional keys.')
   AtKeys copyWith(AtKeys other) {
