@@ -27,7 +27,7 @@ void main() {
   late String aliceApkamSymmetricKey;
   late String aliceDefaultEncryptionPrivateKey;
   late String aliceSelfEncryptionKey;
-  late String alicePkamPublicKey;
+  late String aliceApkamPublicKey;
   String encryptedAPKAMSymmetricKey = '';
 
   setUp(() async {
@@ -37,7 +37,15 @@ void main() {
     aliceApkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
     aliceDefaultEncryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
     aliceSelfEncryptionKey = aesKeyMap[atSign]!;
-    alicePkamPublicKey = pkamPublicKeyMap[atSign]!;
+    // The APKAM keypair, NOT the atSign's own PKAM keypair. An enrollment
+    // record whose apkamPublicKey equals the value at
+    // `privatekey:at_pkam_publickey` makes an app credential and the owner
+    // credential indistinguishable by value, and the atServer treats such a
+    // match as proof that the flat key is a vestige of this enrollment and
+    // deletes it on the enrollment's first APKAM authentication. That would
+    // strip this atSign of the legacy credential the rest of the pack
+    // authenticates with.
+    aliceApkamPublicKey = apkamPublicKeyMap[atSign]!;
     encryptedAPKAMSymmetricKey = EncryptionUtil.encryptKey(
         aliceApkamSymmetricKey, encryptionPublicKeyMap[atSign]!);
   });
@@ -135,7 +143,7 @@ void main() {
       var encryptedSelfEncKey = EncryptionUtil.encryptValue(
           aliceSelfEncryptionKey, aliceApkamSymmetricKey);
       var enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$aliceApkamPublicKey"}\n';
       var enrollResponseFromServer = await atClientManager.atClient
           .getRemoteSecondary()!
           .executeCommand(enrollRequest);
@@ -157,7 +165,7 @@ void main() {
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.close();
       // 5. Send enrollment request
       enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$aliceApkamPublicKey", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
       String? serverResponse = await atClientManager.atClient
           .getRemoteSecondary()
           ?.executeCommand(enrollRequest, auth: false);
