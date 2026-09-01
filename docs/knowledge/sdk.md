@@ -28,9 +28,12 @@ presence or absence distinguishes the live packs' runners.
 EE produces an image the packs never load, and no error says so — the packs go on
 using whatever `at_virtual_env:local` already held.
 
-**Evidence:** `at_server` `tools/build_ephemeral_environment/buildee.sh:3` and its
-`-t` default; `tools/build_virtual_environment/ve/Dockerfile`;
-`at_server` `tests/at_functional_test/runLocal.sh:75`.
+**Evidence:**
+- `at_server@45846a7b` -> `tools/build_ephemeral_environment/buildee.sh` -> `build an ephemeral environment (EE) image`
+- `at_server@45846a7b` -> `tools/build_ephemeral_environment/buildee.sh` -> `at_ephemeral:local`
+- `at_server@45846a7b` -> `tests/at_functional_test/runLocal.sh` -> `cd ${repoDir}/tools/build_virtual_environment/ve`
+- `at_server@45846a7b` -> `tests/at_functional_test/runLocal.sh` -> `docker build -f ./Dockerfile -t at_virtual_env:local .`
+
 **Checked:** `at_server origin/trunk @ 45846a7b`, 2026-09-01
 
 ### Nothing in at_client_sdk builds the VE image; three at_server runners rebuild it unconditionally
@@ -55,9 +58,16 @@ single writer that is not us. Whoever ran at_server's tests last decides which
 server our live packs are talking to, and nothing we run changes it. A pack that
 went green may have been measuring a server nobody intended.
 
-**Evidence:** `tests/at_functional_test/runLocal.sh:47,52-55` in this repo
-(`VIRTUALENV_IMAGE` default and the skipped pull); the three at_server lines
-above.
+**Evidence:**
+- `.` -> `tests/at_functional_test/runLocal.sh` -> `VIRTUALENV_IMAGE:-at_virtual_env:local`
+- `.` -> `tests/at_functional_test/runLocal.sh` -> `docker compose pull SKIPPED`
+- `.` -> `tests/at_functional_test/runLocal.sh` -> `docker build` x0
+- `.` -> `tests/at_end2end_test/runLocal.sh` -> `docker build` x0
+- `.` -> `tests/at_onboarding_cli_functional_tests/runLocal.sh` -> `docker build` x0
+- `at_server@45846a7b` -> `tests/at_functional_test/runLocal.sh` -> `docker build -f ./Dockerfile -t at_virtual_env:local .`
+- `at_server@45846a7b` -> `tests/at_end2end_test/runLocal.sh` -> `docker build -f ./Dockerfile -t at_virtual_env:local .`
+- `at_server@45846a7b` -> `tests/at_functional_test/runDualCompare.sh` -> `docker build -f ./Dockerfile -t at_virtual_env:local .`
+
 **Checked:** at_client_sdk `b566b6759` and `at_server origin/trunk @ 45846a7b`,
 2026-09-01
 
@@ -95,10 +105,16 @@ confidently, plausibly, and wrongly — a genuine, current, on-trunk sha — so 
 provenance check written the obvious way concludes "known-good trunk build" about
 an image that is neither trunk nor any committed branch.
 
-**Evidence:** `docker image inspect at_virtual_env:local --format '{{json .Config.Labels}}'`
-and `--format '{{.Created}}'`; `git -C ../at_server rev-list --parents -n1 69407646`
-returns three words (a merge) and `git merge-base --is-ancestor 69407646 origin/trunk`
-succeeds. `buildee.sh:87-90` for the label set it does apply.
+**Evidence:**
+- `at_server@45846a7b` -> `tools/build_ephemeral_environment/buildee.sh` -> `--label "com.atsign.ee.branch=`
+- `at_server@45846a7b` -> `tools/build_virtual_environment/ve/Dockerfile` -> `--label` x0
+
+**Evidence (not rail-checkable — live daemon and repo state, stated so the rail's
+silence is not mistaken for coverage):**
+`docker image inspect at_virtual_env:local --format '{{json .Config.Labels}}'` and
+`--format '{{.Created}}'`; `git -C ../at_server rev-list --parents -n1 69407646`
+returns three words (a merge), and `git merge-base --is-ancestor 69407646 origin/trunk`
+succeeds.
 **Checked:** at_client_sdk `b566b6759`, `at_server origin/trunk @ 45846a7b`,
 2026-09-01. The image read was the one present on this machine that day; its
 labels move when at_server rebuilds.
@@ -148,10 +164,14 @@ it survives every fix to the labels themselves. It is also the local instance of
 a trap this tree has hit before — git-based tooling silently skipping ignored
 files, so two git-based instruments agreeing is not corroboration.
 
-**Evidence:** `at_server` `tools/build_virtual_environment/ve/Dockerfile:14`;
-`tests/at_functional_test/runLocal.sh:62-70` and `grep -c 'rm -rf'` = 0 over that
-file. The table is `find tools/build_virtual_environment/ve/contents -type f`
-classified with `git ls-files --error-unmatch` and `git check-ignore -q` — a
-working-tree observation on this machine, not a property of any commit.
+**Evidence:**
+- `at_server@45846a7b` -> `tools/build_virtual_environment/ve/Dockerfile` -> `COPY ./contents /`
+- `at_server@45846a7b` -> `tests/at_functional_test/runLocal.sh` -> `mkdir -p tools/build_virtual_environment/ve/contents/atsign/root`
+- `at_server@45846a7b` -> `tests/at_functional_test/runLocal.sh` -> `rm -rf` x0
+
+**Evidence (not rail-checkable — a working-tree observation on this machine,
+not a property of any commit):** the table is
+`find tools/build_virtual_environment/ve/contents -type f` classified with
+`git ls-files --error-unmatch` and `git check-ignore -q`.
 **Checked:** at_client_sdk `b0ff55744`, `at_server origin/trunk @ 45846a7b`,
 2026-09-01

@@ -62,21 +62,62 @@ and the resulting miss reads as "the code never logged that".
 - **Is** — the fact, in one or two sentences.
 - **Matters because** — the mistake it prevents. A nugget that cannot name one
   is an architecture note, and belongs elsewhere.
-- **Evidence** — `path:line`, or a command and its output. Never "I recall".
+- **Evidence** — one bullet per citation, in the form below. Never "I recall".
 - **Checked** — the commit it was verified at, and the date. For another repo:
   `at_server origin/trunk @ <sha>`.
 
+### Evidence cites a PATTERN, not a line number
+
+```markdown
+**Evidence:**
+- `.` -> `tests/at_functional_test/runLocal.sh` -> `VIRTUALENV_IMAGE:-at_virtual_env:local`
+- `at_server@45846a7b` -> `tools/build_virtual_environment/ve/Dockerfile` -> `COPY ./contents /`
+- `.` -> `tests/at_end2end_test/runLocal.sh` -> `docker build` x0
+```
+
+`repo -> path -> pattern`, each backtick-quoted. Repo is `.` for this one, or
+`<name>@<ref>` for a sibling, read at that ref rather than from its working tree.
+The pattern is a **literal substring**, not a regex. A trailing `xN` asserts an
+exact count — `x0` makes an **absence** checkable, which is the claim this
+project gets wrong most often.
+
+⛔ **Line numbers were the original rule and they are the wrong instrument**
+(changed 2026-09-01, gkc). Not because they rot — a path rots too — but because
+of *how* they fail. A path that rots stops resolving and says so. A line number
+that rots usually keeps resolving and now points at something unrelated, so it
+reads as verified while being wrong, and no check can tell the difference. Two
+citations written by this project had already rotted that way: issue #2161 cites
+`at_onboarding_service_impl.dart:139`, which is `:120` on trunk and absent on the
+spike; issue #2154 cites a file that does not exist. Only the second announced
+itself.
+
+A pattern cannot drift, because it has nothing to drift to: it re-derives the
+location on every read and goes visibly empty when the code changes.
+
+**Evidence that no rail can check** — a live daemon, a network call, a
+working-tree observation — goes under a separate heading saying so, so the rail's
+silence is not mistaken for coverage:
+
+```markdown
+**Evidence (not rail-checkable — live daemon):** `docker image inspect ...`
+```
+
 ## The rail
 
-`packages/at_client/test/acceptance/knowledge_test.dart` (to be written) asserts
-that every nugget's citation **still resolves** — the file exists, the line
-range is in range, the named symbol is still present. It does **not** assert the
-claim is true; nothing can. What it catches is the common case: code moved and
-the nugget now points at nothing.
+`packages/at_client/test/acceptance/knowledge_test.dart` asserts that every
+citation's **pattern still matches** its file — at the stated count where one is
+given. It does **not** assert the claim is true; nothing can. What it catches is
+code moving out from under a nugget.
 
-Cross-repo nuggets are skipped by the rail (CI cannot see a sibling checkout),
-which is exactly why the format forces the ref to be named — that is the only
-thing standing in for a check.
+⛔ **It also asserts its own corpus is non-empty** — nuggets found, citations
+found, local citations checked. An empty enumeration reports "0 broken" and reads
+exactly like a clean pass, and that is how this project has been fooled before.
+
+Cross-repo citations are read with `git -C <sibling> show <ref>:<path>`, so they
+are checked **at the ref the nugget names** rather than against whatever branch
+the sibling happens to be on. Where the sibling is absent — CI, a fresh clone —
+those citations are skipped, and the rail **prints how many it skipped** rather
+than passing quietly. A skip is a gap in coverage, not a pass.
 
 The existing `docs_structure_test.dart` is scoped to `docs/projects/pq` and is
 the proven pattern to copy.
