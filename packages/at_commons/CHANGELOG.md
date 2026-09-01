@@ -6,6 +6,17 @@
   first member is `lastRevokedAt`: the latest moment a revocation touched an
   enrollment granted that namespace, or null. `enroll:listns` is unchanged.
 
+- fix: `Metadata.fromJson` preserves a null `ttl`/`ttb`/`ttr` instead of
+  reading it as 0, so the `toJson`/`fromJson` round trip is lossless.
+  `toJson` always writes the three, so an unset one goes out as
+  `"ttl": null` and used to come back as `0` — leaving a reader unable to
+  tell "this request said nothing about it" from an explicit 0, which is a
+  different request: `ttl:0` clears a record's expiry and `ttr:0` means do
+  not cache. An explicit 0 still round trips as 0, and a numeric string is
+  still parsed. The atServer's `update:json` handling is the caller this
+  affects; it now agrees with the metadata-fragment form of the same
+  request, which has always left an unmentioned relative null.
+
 ## 5.16.0
 
 - feat: add `AtNetworkTimeouts.defaultResponseBudget` (90s) — the overall budget
