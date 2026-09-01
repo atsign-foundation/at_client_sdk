@@ -230,7 +230,7 @@ what that column is for.
 | **a retrofit leaves the enrolment record memo stale** | `LocalSecondary.getEnrollmentDetails()` memoises into a field for the object's lifetime (`enrollment ??=`), and `_settleEnrollmentIdentity` is what populates it — with the OLD record, because it reads appName/deviceName/grants off it in order to carry them over. `_rederiveFromEnrollment` rebuilds the signer, the lookup and the id and does **not** clear it, so afterwards the client runs as the new enrolment while the record describing what it may do is the old one's. ⚠️ **Benign today and only by luck**: the retrofit copies the grants verbatim, so both records answer `isEnrollmentAuthorizedForOperation` identically. Two live readers — that gate on every non-`local:` local write, and `PqClientBootstrap._reconcileEnrollmentSnapshot`, which writes the stale record's appName/deviceName/namespaces into the keyfile under the NEW id. Found by a sweep after the [retrofitted-enrolment fix](#a-retrofitted-enrolment-cannot-run-an-authenticated-verb) and verified here | Nothing |
 | **at_lookup `OutboundMessageListener.read`** | `AT0014 "Unexpected response found"` pops one entry off `_queue` and clears `_buffer` **without draining the queue or closing the connection**, unlike both timeout paths beside it. A stale queued response is then handed to the next command, offsetting every read after it. It fired in none of the relayed-lookup runs that found it; it is a hazard on its own merits | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | Why `enrollment_setup.dart` takes ~4 minutes. gkc asked for the cause, 2026-08-20 — not a D1 gate, but owed to him rather than plan-generated hygiene | ⛔ **@ce2e-only — it does not reproduce locally** |
-| [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | Scope the e2e teardown to the run that created the enrollments | Nothing. Needs no permission and no publish. ⚠️ **It cost a red on this branch 2026-08-27**: an `at_client_sdk` run on **trunk** overlapped a run on this branch (12:37–12:47 against 12:24–12:49) and the enrollment was denied mid-run at 12:44:42 — *"Cannot approve a denied enrollment"*. The next run, with no concurrent one, passed. **N=2 bounds no rate**; what it does show is that the collision is between runs rather than within one. ⚠️ **A THIRD occurrence 2026-08-27 18:08–18:25**, same signature — `AT0027 … revoked` **19 times** across six unrelated e2e files (`bypasscache`, `concurrent_notify`, `deletion_key`, `encryption`, `key_stream`, `notify`), all `@ce2e1`/`@ce2e4`. The overlapping run was found rather than assumed: `ek/fix-onboard-passphrase` ran 18:09–18:21, **entirely inside** that window. So it is now three observations, all cross-run, and the branch is not the variable — the *concurrency* is. ⛔ **This costs somebody a red roughly every time two branches build at once, and it is nobody's code that is wrong** |
+| [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | Scope the e2e teardown to the run that created the enrollments | Nothing. Needs no permission and no publish. ⚠️ **It cost a red on this branch 2026-08-27**: an `at_client_sdk` run on **trunk** overlapped a run on this branch (12:37–12:47 against 12:24–12:49) and the enrollment was denied mid-run at 12:44:42 — *"Cannot approve a denied enrollment"*. The next run, with no concurrent one, passed. **N=2 bounds no rate**; what it does show is that the collision is between runs rather than within one. ⚠️ **A THIRD occurrence 2026-08-27 18:08–18:25**, same signature — `AT0027 … revoked` **19 times** across six unrelated e2e files (`bypasscache`, `concurrent_notify`, `deletion_key`, `encryption`, `key_stream`, `notify`), all `@ce2e1`/`@ce2e4`. The overlapping run was found rather than assumed: `ek/fix-onboard-passphrase` ran 18:09–18:21, **entirely inside** that window. So it is now three observations, all cross-run, and the branch is not the variable — the *concurrency* is. ⛔ **This costs somebody a red roughly every time two branches build at once, and it is nobody's code that is wrong** ⚠️ **A FOURTH and FIFTH on 2026-08-31**, both `end2end_test_14`, both the *"Cannot approve a denied enrollment"* signature: runs at 19:35 and 20:01, carrying **4** and **3** concurrent `at_client_sdk` runs. ✅ **And the control that had been missing** — a run dispatched at 21:03 with **zero** others in flight went **11 of 11 green**, on newer code than either red. Five observations and one clean-room control. Filed with the timestamps as [#2197](https://github.com/atsign-foundation/at_client_sdk/issues/2197) |
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | A unit-tree isolation flake in `local_secondary_sync_queue_test.dart`. Green alone and green in the full suite; red only in one hand-constructed ordering nothing runs | Reproduce at rate first |
 | [14.44](#1444-residuals-from-the-at_chops-pr-review) | Two remain, both ⛔ **POST-D1** (gkc, 2026-08-23): at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence (amend that section in place), and `XWingCore.combine` sizes its buffer from its inputs' actual lengths while writing at literal offsets 0/32/64/96/128 | Nothing. Both ride the next at_chops touch |
 | **third-party dependency floors** | at_client alone declares **seven** below what it resolves — `path`, `crypto`, `uuid`, `archive`, `http`, `async`, `meta` — all minor or patch gaps, none checked against first use. The sibling floors were swept 2026-08-25; these were not.<br><br>⚠️ **And the gap runs the OTHER way too, which nothing here was watching.** at_client declares `at_persistence_secondary_server: ^5.1.0` and this workspace resolves **5.1.0**, so every pack exercises that version and only that version — while any consumer resolving fresh today takes **5.2.1**, which we have never run against. Found 2026-08-26 by the at_talk demo session, whose external resolution took 5.2.1 while mine took 5.1.0 and neither side would have noticed. That layer owns local storage, the commit log and the keystore. ⚠️ The same version pair already cost time once, when the local keystore's expired-record handling was characterised from 5.2.1's source while the workspace resolved 5.1.0 — the claims held in 5.1.0 by luck. "Readable as interchangeable" is what makes this expensive | Nothing. Two questions, not one: are the seven floors too low, and is at_client actually correct against the top of the range it already admits |
@@ -2213,17 +2213,29 @@ run.
 and revokes each with `force: true`, and fetches every
 `EnrollmentStatus.pending` one and denies it — neither loop filters to what
 its own run created, so two overlapping CI runs tear each other down. A
-run-unique marker already exists: `enrollment_setup.dart:109` submits with
-`appName: 'wavi-$random'` (`random = Uuid().v4().hashCode`, line 100) and
+run-unique marker already exists: `enrollment_setup.dart:110` submits with
+`appName: 'wavi-$random'` (`random = Uuid().v4().hashCode`, line 101) and
 `Enrollment` exposes `appName`
 (`packages/at_client/lib/src/response/enrollment.dart`). What is missing is
-agreement between the two steps — setup and teardown are separate `dart test`
-invocations (`.github/workflows/at_client_sdk.yaml:324` and `:340`) sharing no
-state — so derive the marker from something both can read (`GITHUB_RUN_ID` is
+agreement between the two steps — setup, suite and teardown are **three**
+separate `dart test` invocations
+(`.github/workflows/at_client_sdk.yaml:324`, `:331` and `:340`) sharing no
+in-process state — so derive the marker from something both can read (`GITHUB_RUN_ID` is
 the obvious candidate) and filter both loops on it. ⚠️ Green CI runs are not
 evidence this is fixed: every green window since the diagnosis had no other
 run in flight, so the mechanism had no opportunity to fire — it is a rate, not
-a kind.
+a kind. ✅ **That sentence was CORROBORATED rather than falsified on
+2026-08-31**, when the concurrency was counted for the first time: the two red
+windows carried 4 and 3 concurrent `at_client_sdk` runs, both green windows
+carried the same single long-running one and nothing else, and a run dispatched
+with **zero** in flight went 11 of 11 green. The constant present in every
+window cannot be the discriminator, which is what makes it a differential
+rather than a tally.
+
+⛔ **The mechanism, the evidence and the proposed fix now live in
+[at_client_sdk#2197](https://github.com/atsign-foundation/at_client_sdk/issues/2197).**
+What stays here is the WORK, which is still owed; the captured instances and
+their timestamps belong in the issue. Do not let the two drift.
 
 ⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** A "looks like a
 second defect and is not" ruling. If it goes, the next reader who sees
