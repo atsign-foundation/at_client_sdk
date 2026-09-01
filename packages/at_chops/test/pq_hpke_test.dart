@@ -21,8 +21,9 @@ final class _FixedKem implements AtKemAlgorithm {
   final Uint8List _ct;
   _FixedKem(this._ss, this._ct);
   @override
-  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async =>
-      throw UnsupportedError('not used in this test');
+  Future<({Uint8List publicKey, Uint8List secretKey})>
+      generateKeyPair() async =>
+          throw UnsupportedError('not used in this test');
   @override
   Uint8List newSeed() => throw UnsupportedError('not used in this test');
   @override
@@ -41,8 +42,8 @@ final class _FixedKem implements AtKemAlgorithm {
 
 Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));
 
-Matcher _opensWith(PqOpenFailure reason) => throwsA(isA<PqOpenException>()
-    .having((e) => e.reason, 'reason', reason));
+Matcher _opensWith(PqOpenFailure reason) =>
+    throwsA(isA<PqOpenException>().having((e) => e.reason, 'reason', reason));
 
 void main() {
   final xwing = XWingPureDartAlgo.instance;
@@ -130,7 +131,9 @@ void main() {
       final kp = await xwing.generateKeyPair();
       final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'),
           info: _utf8('context-seal'));
-      expect(() => pqOpen(xwing, kp.secretKey, envelope, info: _utf8('context-open')),
+      expect(
+          () => pqOpen(xwing, kp.secretKey, envelope,
+              info: _utf8('context-open')),
           _opensWith(PqOpenFailure.authFailure));
     });
 
@@ -138,7 +141,8 @@ void main() {
       final kp = await xwing.generateKeyPair();
       final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'),
           info: _noInfo, aad: _utf8('aad-seal'));
-      expect(() => pqOpen(xwing, kp.secretKey, envelope,
+      expect(
+          () => pqOpen(xwing, kp.secretKey, envelope,
               info: _noInfo, aad: _utf8('aad-open')),
           _opensWith(PqOpenFailure.authFailure));
     });
@@ -147,8 +151,8 @@ void main() {
   group('pqOpen rejects malformed envelopes', () {
     test('unsupported version → versionMismatch', () async {
       final kp = await xwing.generateKeyPair();
-      final envelope = await pqSeal(
-          xwing, kp.publicKey, _utf8('payload'), info: _noInfo);
+      final envelope =
+          await pqSeal(xwing, kp.publicKey, _utf8('payload'), info: _noInfo);
       // 0xff rather than 0x02: 0x02 is RFC 9180 and is now supported, so using
       // it here would test the AEAD rather than the version check.
       final bad = Uint8List.fromList(envelope)..[0] = 0xff;
@@ -185,8 +189,8 @@ void main() {
 
     test('a secret key of the wrong length → malformedEnvelope', () async {
       final kp = await xwing.generateKeyPair();
-      final envelope = await pqSeal(
-          xwing, kp.publicKey, _utf8('payload'), info: _noInfo);
+      final envelope =
+          await pqSeal(xwing, kp.publicKey, _utf8('payload'), info: _noInfo);
       expect(() => pqOpen(xwing, Uint8List(7), envelope, info: _noInfo),
           _opensWith(PqOpenFailure.malformedEnvelope));
     });
@@ -226,8 +230,7 @@ void main() {
       final envelope = await pqSeal(kem, kp.publicKey, _utf8('payload'),
           info: _noInfo, version: 0x03);
       expect(envelope[0], equals(0x03));
-      expect(
-          await pqOpen(kem, kp.secretKey, envelope, info: _noInfo),
+      expect(await pqOpen(kem, kp.secretKey, envelope, info: _noInfo),
           equals(_utf8('payload')));
     });
 
@@ -254,7 +257,8 @@ void main() {
     // _FixedKem double (see below) and print the envelope hex.
 
     test('fixed-KEM construction KAT: seal is deterministic + opens', () async {
-      final ss = Uint8List.fromList(List<int>.generate(32, (i) => i)); // [0x00..0x1f]
+      final ss =
+          Uint8List.fromList(List<int>.generate(32, (i) => i)); // [0x00..0x1f]
       // 1120 bytes, the 0x02 suite's Nenc: pqSeal refuses a ciphertext that is
       // not the version's own encapsulation length, so the double has to
       // produce a realistic one. Deterministic, so the envelope still is.

@@ -63,7 +63,7 @@ class HpkeSuite {
     required this.nn,
     required this.nh,
     required this.nEnc,
-  })  :
+  }) :
         // The envelope declares the encapsulation length in two bytes, so a
         // suite whose KEM exceeds that cannot be carried in it at all. Checked
         // here rather than at seal time because every row is a const, so a new

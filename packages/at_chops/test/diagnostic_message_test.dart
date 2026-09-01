@@ -17,10 +17,8 @@ void main() {
   final sharedSecret = Uint8List(32);
 
   Matcher throwsArgumentErrorNaming(String value) =>
-      throwsA(isA<ArgumentError>().having(
-          (e) => e.message.toString(),
-          'message',
-          allOf(contains(value), isNot(contains(r'${')))));
+      throwsA(isA<ArgumentError>().having((e) => e.message.toString(),
+          'message', allOf(contains(value), isNot(contains(r'${')))));
 
   test('an unknown pqSeal version is named in hex in the diagnostic', () {
     expect(() => pqSealDeriveKeyAndNonce(sharedSecret, version: 0x7f),
@@ -37,8 +35,8 @@ void main() {
         nh: 32,
         nEnc: 1120);
     expect(
-        () => labeledExtract(
-            bogusKdf, Uint8List(0), 'psk_id_hash', Uint8List(0)),
+        () =>
+            labeledExtract(bogusKdf, Uint8List(0), 'psk_id_hash', Uint8List(0)),
         throwsArgumentErrorNaming('0x9999'));
   });
 
@@ -52,8 +50,7 @@ void main() {
         nh: 32,
         nEnc: 1120);
     expect(
-        () => labeledExpand(
-            bogusKdf, Uint8List(32), 'key', Uint8List(0), 32),
+        () => labeledExpand(bogusKdf, Uint8List(32), 'key', Uint8List(0), 32),
         throwsArgumentErrorNaming('0x9999'));
   });
 }

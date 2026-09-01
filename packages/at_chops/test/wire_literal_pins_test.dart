@@ -26,7 +26,7 @@ void main() {
     test('SigningAlgoType member names, values and order', () {
       // The member NAME is the wire literal: `pkam:signingAlgo:<name>:...`,
       // the enroll-request JSON's "signingAlgo", the signed envelope's
-      // claim, and the keyfile's keyAlgorithmType all emit `.name`. No other
+      // claim, and the keyfile's algorithm all emit `.name`. No other
       // at_chops test asserts the string form, so an enum rename would pass
       // the entire suite while changing the PKAM verb.
       expect(SigningAlgoType.values.map((a) => a.name).toList(),
@@ -91,8 +91,7 @@ void main() {
   });
 
   group('KEM sizes that frame the envelope', () {
-    test('X-Wing: 1120-byte ciphertext (the 0x0460 in every v1/v2 header)',
-        () {
+    test('X-Wing: 1120-byte ciphertext (the 0x0460 in every v1/v2 header)', () {
       expect(XWingPureDartAlgo.ciphertextLength, 1120);
       expect(XWingPureDartAlgo.publicKeyLength, 1216);
       expect(XWingPureDartAlgo.seedLength, 32);
