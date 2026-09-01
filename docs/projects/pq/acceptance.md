@@ -1523,13 +1523,15 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
     [UC-B2.2](#92-uc-b22--grace-period-variant) c1 states the same behaviour from the
     grace-window side, and that is what its row turns on.
 
-    ⛔ **This states RULED behaviour the atServer does not yet have, and is unprovable
-    until it lands.** On at_server `origin/trunk` the cap is armed in the
-    self-enrollment **submission** handler, and `preserveFirstEnrollmentOnRetrofit`
-    (default `true`) exempts the atSign's first enrollment outright — the opposite of
-    both halves.
+    ✅ **BUILT on at_server `origin/trunk` as of 2026-09-01** — `45846a7b`, via
+    [PR #2781](https://github.com/atsign-foundation/at_server/pull/2781). The cap is
+    armed by the successor, and `preserveFirstEnrollmentOnRetrofit` is **removed**: gone
+    from the server's `lib` entirely, surviving only as a CHANGELOG line recording the
+    removal as BREAKING for operators. ⚠️ **This paragraph said the atServer did not have
+    the behaviour and named the exemption as live, until 2026-09-01.** What the clause
+    waits on now is not the server but a **VE image built from one carrying it**.
     [Ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
-    ruled it on 2026-08-27; the at_server work is written and unmerged.
+    ruled it on 2026-08-27.
 
     ⚠️ **Split out of the clause above on 2026-08-31.** The two travelled as one
     clause, and its only pin — `retrofit_cap_value_e2e_test.dart`, which proves the cap
@@ -1696,13 +1698,14 @@ obeyed.
   authenticates extends it by a full grace period**, and a deployment with laggard
   devices keeps it open as long as they keep arriving.
 
-  ⛔ **RULED AND NOT YET BUILT: this states the ruled behaviour, not the built one, and
-  is unprovable until at_server ships it.** On at_server `origin/trunk` the cap is armed
-  in the self-enrollment **submission** handler, immediately after the successor's record
-  is written — so a successor that never authenticates arms it anyway, which is the
-  opposite of this clause's last arm. And `preserveFirstEnrollmentOnRetrofit` (default
-  `true`) exempts an atSign's first enrollment entirely, so for an owner holding one
-  keyfile it never fires at all.
+  ✅ **BUILT on at_server `origin/trunk` as of 2026-09-01** — `45846a7b`, via
+  [PR #2781](https://github.com/atsign-foundation/at_server/pull/2781). The cap is armed
+  by the successor rather than by the retrofit's submission, and
+  `preserveFirstEnrollmentOnRetrofit` is **removed** from the server's `lib`. ⚠️ **This
+  paragraph said the behaviour was RULED AND NOT YET BUILT, and named the exemption as
+  live, until 2026-09-01** — both halves were true of `origin/trunk` before #2781 merged
+  and are false of it now. What the clause waits on is a **VE image built from a server
+  carrying it**; nothing in this repo builds `at_virtual_env:local`.
   [Ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
   ruled the trigger and the exemption's retirement on 2026-08-27;
   [ruling 128](detail/decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)

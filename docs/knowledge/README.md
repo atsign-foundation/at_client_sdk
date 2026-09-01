@@ -6,9 +6,10 @@ on the virtual-environment test harness; `protocol.md`, `at_client.md` and
 homes and rot in this one: `grep -c '^### ' docs/knowledge/*.md`.) This file is the agreed plan, written
 before the work so it survives a context compaction. Ruled with gkc 2026-08-20.
 
-⚠️ **The rail described at the foot of this file is still unwritten**, so
-nothing yet checks that a nugget's citation resolves. Until it exists, a nugget's
-`Evidence` line is only as good as the session that wrote it.
+✅ **The rail exists** — `packages/at_client/test/acceptance/knowledge_test.dart`,
+added 2026-09-01. ⚠️ **This line said it was still unwritten until then, and the commit
+that BUILT the rail left the sentence standing** — the same rot this file's own format
+rule was changed to prevent, committed by the session that wrote the rule.
 
 ## What this is for
 
