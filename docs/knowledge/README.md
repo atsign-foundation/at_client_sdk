@@ -1,8 +1,13 @@
 # knowledge/ — reusable facts about the Atsign platform
 
-**Status: scaffold only. No nuggets written yet.** This file is the agreed plan,
-written before the work so it survives a context compaction. Ruled with gkc
-2026-08-20.
+**Status: started 2026-09-01.** [`sdk.md`](sdk.md) carries the first three
+nuggets, on the virtual-environment test harness; `protocol.md`, `at_client.md`
+and `at_server.md` do not exist yet. This file is the agreed plan, written
+before the work so it survives a context compaction. Ruled with gkc 2026-08-20.
+
+⚠️ **The rail described at the foot of this file is still unwritten**, so
+nothing yet checks that a nugget's citation resolves. Until it exists, a nugget's
+`Evidence` line is only as good as the session that wrote it.
 
 ## What this is for
 
