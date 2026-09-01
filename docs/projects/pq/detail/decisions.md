@@ -12181,10 +12181,11 @@ from a sibling checkout on its own branch:
   credential dies. gkc ruled 2026-08-27 that the enroll responses returning
   details should carry the expiration time; it is banded post-D1.
 
-**Status:** ruled, and **written but unmerged** — the atServer work sits on
-branch `gkc-retrofit-successor-grants-and-cap`, which as of 2026-08-31 is
-eight commits ahead of `trunk`, unpushed, and has no PR; re-derive rather
-than quoting that. This row said *unimplemented* until then. The whole
+**Status:** ruled, and ✅ **MERGED** — the atServer work landed on `trunk` at
+`45846a7b` on 2026-09-01 via [PR #2781](https://github.com/atsign-foundation/at_server/pull/2781),
+and `gkc-retrofit-successor-grants-and-cap` is deleted. This paragraph said
+*unimplemented*, then *written but unmerged, unpushed, no PR*; re-derive the
+state rather than quoting any of it. The whole
 change is the atServer's; at_client and at_auth need nothing. ⛔ **It is part of D1** (gkc, 2026-08-27), and **what
 tracks it is the catalogue, not a plan row**: `acceptance.md`'s UC-B1.1 **c4** and
 UC-B2.2 c1 were rewritten to this behaviour on 2026-08-27, neither can be proven
