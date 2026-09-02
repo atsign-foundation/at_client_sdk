@@ -213,6 +213,63 @@ enrollment fetch, a revoke or deny helper, a CRAM atSign allocator, a stop-all
 teardown (`HiveInstances.closeAll` has 0 callers), a run-id and unique-namespace
 factory, and a two-process driver.
 
+#### The packs are built to run side by side, and that bears on how a migration is sequenced
+
+Two of the three take a base port, and the design is deliberate rather than
+incidental. `tests/at_functional_test/runLocal.sh` accepts one as its first argument
+(`./runLocal.sh 27000` puts the root at 27000, secondaries at 27001-27080 and Redis
+at 27099), and its `docker-compose.yaml` header states the purpose: the shift exists
+"so it can run alongside another virtualenv (e.g. the e2e suite) on a different base
+port". `tests/at_end2end_test/runLocal.sh` takes the same argument, defaulting to
+26000, and its compose carries a top-level `name: at_end2end_test` and
+`container_name: e2e_virtualenv` so the two projects cannot collide. Both composes
+override the entrypoint to `/atsign/entrypoint.sh`, because the published image's own
+CMD runs supervisord directly and would ignore the variable. CI already relies on it:
+`pqe2e_tests` and `legacy_server_tests` run at 26000. On the Dart side
+`TestUtils.rootServerPort`, `check_docker_readiness.dart`, `check_test_env.dart`,
+`check_local_env.dart` and `local_setup.dart` all read `VIRTUALENV_BASE_PORT` and
+apply the same shift, `(base + 1) - 25000`, to a secondary's port.
+
+So the functional pack, the e2e pack and the in-process suites in `at_client` and
+`at_auth` (which need no container at all) are three lanes that can advance at once,
+each still `--concurrency=1` inside itself.
+
+Two things stand between that and more lanes, and both are small. The functional
+compose templates every port except `"443:443"` and `"127.0.0.1:9001:9001"`, and it
+has no top-level `name:` key, so a second functional-shaped virtualenv in the same
+directory would collide on those two ports and share a compose project. And the CLI
+pack is not base-port aware at all: its compose hardcodes 6379, 64, 443, 9001 and
+25000-25999 with no entrypoint override and no `VIRTUALENV_BASE_PORT`, which is why
+its own `runLocal.sh:36` says it binds the same ports as the functional pack. Giving
+it the same treatment the other two already have is straightforward and is worth doing
+(gkc, 2026-09-02); the CLI pack hosts the retrofit rows and is otherwise a lane that
+blocks the biggest one.
+
+There is also a second environment. The **ephemeral environment** is built from the
+at_server tree by `tools/build_ephemeral_environment/buildee.sh` as
+`at_ephemeral:local`, distinct from the VE that every live pack loads
+([`docs/knowledge/sdk.md`](../../knowledge/sdk.md) is the authority on the two being
+different things built by different tools). Three of its properties matter to this
+project: `runee.sh <name> <base-port>` runs several EEs side by side, each claiming a
+100-port range bound to 127.0.0.1; an EE built at a ref *is* an atServer at that ref,
+because its Dockerfile compiles the tree it was given; and its atSign list is a
+mounted file defaulting to 26 phonetic-alphabet atSigns, so a lane gets atSigns named
+for their role and freshly CRAM-activatable rather than drawing on a shared one-shot
+pool. It serves the same `vip.ve.atsign.zone` certificates as the VE, so the root
+domain literal in the packs does not change, and its `EPHEMERAL_BASE_PORT` contract is
+the one `TestUtils.rootServerPort` already implements. It has been used to good effect
+in practice: the at_talk demo session drove a live EE, and two findings the PQ plan
+records as measured on 2026-08-26 (a first CRAM enrolment being wildcard-only, and a
+retrofitted enrolment failing an authenticated verb) came from it. The standing caution
+is to build every EE from a named ref and never pull `ephemeral:latest`, which is
+rebuilt monthly while the VE publishes per commit.
+
+Why this belongs in an analysis of a BDD migration: the slowest column of the work is
+getting bindings green against a real atServer, and the harness already supports more
+than one lane doing that. The EE's fresh-atSign property also bears directly on the
+one-shot CRAM constraint that otherwise forces the retirement rule in
+[`design.md` section 3.3](design.md#33-fixtures-that-do-not-exist-yet).
+
 ### 1.7 Two orphan feature files
 
 The repo already contains two Gherkin files, and nothing has ever read them:

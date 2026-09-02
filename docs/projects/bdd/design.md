@@ -243,6 +243,17 @@ one-shot resource is retired even if only partly bound, with its unbound asserti
 promoted to steps first.** The migration therefore touches the 46 live cited files,
 not only the 19 acceptance files.
 
+There is a second route to the same problem, and it is worth weighing before the
+allocator is built: a lane running against an ephemeral environment gets its own
+atSign list, a mounted file defaulting to 26 freshly CRAM-activatable atSigns, rather
+than drawing on the VE's shared one-shot pool
+([`analysis.md` section 1.6](analysis.md#the-packs-are-built-to-run-side-by-side-and-that-bears-on-how-a-migration-is-sequenced)).
+That would let a migrated scenario and the cited live test it replaces coexist for a
+while instead of forcing retirement in the same PR. The retirement rule stays the
+default here because it is what the VE requires and because retiring a superseded test
+is the right end state regardless; the EE is what buys room if the rule turns out to
+be the thing slowing a cluster down.
+
 ## 4. Where the features live, and who runs which scenario
 
 ### 4.1 Layout
