@@ -698,6 +698,12 @@ abstract class AtClient {
   /// **NOT** appended automatically — the caller must pass the complete
   /// namespace. Throws [ArgumentError] if [namespace] contains no dot.
   ///
+  /// [defaultExpiration] is the ttl (time-to-live) for items in an
+  /// AtCollection. In `draft()` and `create()`, if you do not set an
+  /// `expiresAt`, the default ttl will be `now + defaultExpiration`.
+  /// Once the time elapses and the item expires, the atServer hard
+  /// deletes it, just like how AtKey ttls function.
+  ///
   /// If [fromJson] is supplied it is registered as the factory for items
   /// of type [T] under [typeTag] (the wire-format identifier), via
   /// [AtCollection.registerFactory]. [fromJson] and [typeTag] travel
