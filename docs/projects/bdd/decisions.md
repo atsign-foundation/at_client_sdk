@@ -55,7 +55,13 @@ D1 is respected rather than excepted; under the PQ plan's own bucket definitions
 whole migration is a P3 item by definition, which is a statement about sequence and
 not about importance; and the mechanism being replaced will by then have reached
 trunk with D1's carves, so the migration runs against trunk, not against the spike.
-The question that stays open is where the owed row lives (Q3 below).
+### R2. The backlog lives here: this is a separate project (gkc, 2026-09-02)
+
+In Gary's words: *"It's a separate project."* So the migration is not folded into the
+PQ plan's `## TODO`, which gets no row for it, and this project keeps its own backlog
+in [`roadmap.md`](roadmap.md#what-is-owed), the way `docs/projects/wasm/` keeps its
+own. The PQ plan's open row on an index of projects is not settled by this ruling; it
+now has three projects to name rather than two.
 
 ## 3. Choices this proposal makes, with the alternative
 
@@ -77,8 +83,8 @@ The question that stays open is where the owed row lives (Q3 below).
 ## 4. Questions for Gary
 
 Each changes what gets built or when. Where one option is what the proposal assumed,
-it is listed first, and the proposal changes if another is chosen. Q1 (timing) is
-ruled: see R1.
+it is listed first, and the proposal changes if another is chosen. Q1 (timing) and Q3
+(where the backlog lives) are ruled: see R1 and R2.
 
 ### Q2. Scope of "core test packs"
 
@@ -86,16 +92,6 @@ ruled: see R1.
 - (b) PQ now; the 21 non-PQ functional files, 10 allowlisted e2e files, 6 CLI files
   and the proxy pack as a later project with its own characterisation.
 - (c) No migration of the non-PQ packs; new tests are Gherkin-first from a date.
-
-### Q3. Where the backlog lives
-
-The PQ plan's own open row on the index of projects names the two ways out.
-
-- (a) Rows in the PQ `## TODO`, the way the at_lookup consolidation's remaining items
-  were folded in, each linking to a section of [`roadmap.md`](roadmap.md).
-- (b) A table in this project plus a `docs/projects/README.md` index naming every
-  live project, which also settles the open row.
-- (c) A table in this project and the open row re-ruled to allow one per project.
 
 ### Q4. Hosts: five or four?
 

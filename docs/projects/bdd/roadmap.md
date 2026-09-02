@@ -2,10 +2,10 @@
 
 **Status:** feasibility study, 2026-09-02. Nothing is built. **Ruled the same day:
 the work starts after D1 closes, then as soon as possible** ([`decisions.md` R1](decisions.md#r1-timing-relative-to-d1-after-d1-then-as-soon-as-possible-gkc-2026-09-02)).
-No backlog row exists anywhere yet; where one should live is still an open question.
-This file records the goal as Gary stated it, the document map, the phasing the study
-proposes for the near-term goal, and the longer trajectory the near-term goal is the
-first step of.
+It is a separate project with its own backlog, [below](#what-is-owed). This file
+records the goal as Gary stated it, the document map, the phasing the study proposes
+for the near-term goal, and the longer trajectory the near-term goal is the first step
+of.
 
 ## The brief
 
@@ -161,15 +161,15 @@ re-measured after phase 2. Two independent re-summations of the three panel desi
 disagreed with each other and with the designs' own totals, which is the reason the
 arithmetic is written out here rather than the result alone.
 
-## What is owed, and where the list should live
+## What is owed
 
-One thing is owed: the migration, after D1 closes (ruled 2026-09-02). It has no row
-anywhere yet, because where the row lives is Q3 in [`decisions.md`](decisions.md).
-The PQ plan already records that the ONE-list rule has a second project beside it
-(`docs/projects/wasm/`) and names two ways out: fold open items into the PQ `## TODO`
-bands, or a `docs/projects/` index naming every live project. Under the PQ plan's own
-bucket definitions an after-D1 item is P3 by definition, so the fold option is a single
-P3 row pointing here. This project does not add a table of its own until Q3 is ruled.
+This project's own list, ruled so on 2026-09-02 (`decisions.md` R2): the PQ plan's
+`## TODO` carries no row for it. One row per open item; a row leaves when it is done.
+Buckets arrive when there is more than one row to rank.
+
+| What is owed | Blocked on |
+|---|---|
+| The migration of the PQ catalogue to executable Gherkin, as phased above, starting with the 6 probes in [`design.md` section 9](design.md#9-probes-to-run-before-anything-is-built) | D1 closing (`decisions.md` R1) |
 
 ## The longer trajectory
 
