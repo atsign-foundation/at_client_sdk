@@ -1,10 +1,11 @@
 # Decisions: what the facts settle, what the proposal chooses, and what is Gary's to rule
 
-**Status:** 2026-09-02, no rulings yet. Three kinds of entry, kept apart because they
-carry different weight: conclusions the measured facts force, choices this proposal
-makes among live alternatives (recorded with the alternative, so a rejected design is
-not re-proposed from scratch), and questions only Gary can answer, each with options.
-A ruling gets a date and moves its question into the second list.
+**Status:** 2026-09-02, one ruling (the timing). Four kinds of entry, kept apart
+because they carry different weight: conclusions the measured facts force, rulings
+Gary has made, choices this proposal makes among live alternatives (recorded with the
+alternative, so a rejected design is not re-proposed from scratch), and questions only
+Gary can answer, each with options. A ruling gets a date and moves its question out of
+the last list and into the second.
 
 ## 1. Settled by the facts
 
@@ -41,7 +42,22 @@ Each of these was checked by an independent verifier against the primary source
   `pq` tag without matching its symbol regex is red; the first functional driver has to
   carry a marker or widen the regex, and say which.
 
-## 2. Choices this proposal makes, with the alternative
+## 2. Rulings
+
+### R1. Timing relative to D1: after D1, then as soon as possible (gkc, 2026-09-02)
+
+In Gary's words: *"complete D1 then do this as soon as possible afterwards while it's
+still fresh."* Of the four options that were put (runner and first cluster during D1;
+runner during D1 and rows after; everything after; the migration as the new definition
+of D1 done), this is the third. Consequences: no phase starts while D1 is open, the
+runner included; the PQ plan's ruling that doc-set surgery on `acceptance.md` waits for
+D1 is respected rather than excepted; under the PQ plan's own bucket definitions the
+whole migration is a P3 item by definition, which is a statement about sequence and
+not about importance; and the mechanism being replaced will by then have reached
+trunk with D1's carves, so the migration runs against trunk, not against the spike.
+The question that stays open is where the owed row lives (Q3 below).
+
+## 3. Choices this proposal makes, with the alternative
 
 | Choice | Alternative not taken, and why |
 |---|---|
@@ -58,24 +74,11 @@ Each of these was checked by an independent verifier against the primary source
 | First cluster A1 and A2 | B5.6 first (the evidence-standard row): one row proves less about reuse and the CRAM allocator than seven do |
 | `acceptance.md` traceability comments as `# acceptance.md section 2 UC-A1.1` | `§`: against the standing house rule on section references |
 
-## 3. Questions for Gary
+## 4. Questions for Gary
 
 Each changes what gets built or when. Where one option is what the proposal assumed,
-it is listed first, and the proposal changes if another is chosen.
-
-### Q1. When, relative to D1?
-
-The PQ plan rules doc-set surgery on `acceptance.md` for after D1, and the migration
-edits it row by row; the plan's P0 to P3 buckets are defined against D1's critical
-path; and "D1 ends when every acceptance test passes and every rail is green" would
-be redefined by a migration that changes what an acceptance test is.
-
-- (a) Runner and the first cluster during D1, the rest after; the first cluster
-  edits seven rows of `acceptance.md` under an explicit exception to the after-D1
-  ruling.
-- (b) Runner during D1 (phases 0 and 1 touch no row), every row after D1.
-- (c) Everything after D1.
-- (d) The migration is the new definition of D1 done.
+it is listed first, and the proposal changes if another is chosen. Q1 (timing) is
+ruled: see R1.
 
 ### Q2. Scope of "core test packs"
 

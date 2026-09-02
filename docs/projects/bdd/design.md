@@ -457,10 +457,10 @@ material translation rule 8 keeps out of the features. The Then bullets go, beca
 their content is now the scenario. The status table and headline sentence stay until
 the last row moves and are then deleted with their rails.
 
-⚠️ The PQ plan rules doc-set surgery on `acceptance.md` for **after D1**; this design
-edits it row by row. Whether that ruling covers this, and when the migration may start
-relative to D1, is Gary's call and is the first question in
-[`decisions.md`](decisions.md).
+The PQ plan rules doc-set surgery on `acceptance.md` for after D1, and this design
+edits it row by row. Ruled 2026-09-02 that the migration starts after D1 closes
+([`decisions.md` R1](decisions.md#r1-timing-relative-to-d1-after-d1-then-as-soon-as-possible-gkc-2026-09-02)),
+so it falls inside that ruling rather than needing an exception to it.
 
 The rails, phase by phase (the phases are in [`roadmap.md`](roadmap.md)):
 

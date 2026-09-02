@@ -1,10 +1,11 @@
 # Roadmap: BDD for the acceptance catalogue, then the core packs, then the other SDKs
 
-**Status:** feasibility study, 2026-09-02. Nothing is built, nothing is scheduled, and
-no backlog row exists anywhere yet; where one should live is itself an open question
-([`decisions.md`](decisions.md)). This file records the goal as Gary stated it, the
-document map, the phasing the study proposes for the near-term goal, and the longer
-trajectory the near-term goal is the first step of.
+**Status:** feasibility study, 2026-09-02. Nothing is built. **Ruled the same day:
+the work starts after D1 closes, then as soon as possible** ([`decisions.md` R1](decisions.md#r1-timing-relative-to-d1-after-d1-then-as-soon-as-possible-gkc-2026-09-02)).
+No backlog row exists anywhere yet; where one should live is still an open question.
+This file records the goal as Gary stated it, the document map, the phasing the study
+proposes for the near-term goal, and the longer trajectory the near-term goal is the
+first step of.
 
 ## The brief
 
@@ -51,10 +52,10 @@ in [`decisions.md`](decisions.md)).
 
 Every phase has a done-condition a rail can check. Effort figures are engineer-weeks
 and are **hypotheses with their arithmetic shown**, not measurements; the first
-cluster is where the rates get measured and the rest re-estimated. The work touches
-`gkc-pq-d1-spike` unless the timing decision in [`decisions.md`](decisions.md) says
-otherwise; the whole acceptance mechanism being replaced lives on that branch and is
-not yet on `origin/trunk`.
+cluster is where the rates get measured and the rest re-estimated. The work starts
+after D1 closes (ruled 2026-09-02); the acceptance mechanism being replaced lives on
+`gkc-pq-d1-spike` today and reaches trunk with D1's carves, so the migration runs
+against trunk.
 
 ### Phase 0: the runner, and nothing else
 
@@ -162,13 +163,13 @@ arithmetic is written out here rather than the result alone.
 
 ## What is owed, and where the list should live
 
-Nothing is owed yet, because nothing is ruled. Once Gary rules on the questions in
-[`decisions.md`](decisions.md), the phases above become rows in exactly one place.
+One thing is owed: the migration, after D1 closes (ruled 2026-09-02). It has no row
+anywhere yet, because where the row lives is Q3 in [`decisions.md`](decisions.md).
 The PQ plan already records that the ONE-list rule has a second project beside it
 (`docs/projects/wasm/`) and names two ways out: fold open items into the PQ `## TODO`
-bands, or a `docs/projects/` index naming every live project. This project does not
-add a third table of its own until that is ruled, and its P0 to P3 vocabulary is not
-borrowed here, because those buckets are defined relative to D1's critical path.
+bands, or a `docs/projects/` index naming every live project. Under the PQ plan's own
+bucket definitions an after-D1 item is P3 by definition, so the fold option is a single
+P3 row pointing here. This project does not add a table of its own until Q3 is ruled.
 
 ## The longer trajectory
 
