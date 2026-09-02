@@ -5,8 +5,9 @@ seam designs, the build sequence, the acceptance gates, and the decision log.
 **Scope:** making `AtClient` — and every package beneath it — free of platform
 implementations, so that a browser WasmGC build runs without runtime failures. The
 `at_client_web` platform package is the first consumer of the result.
-**Written against:** `trunk` at `20f7f4da5`, 2026-08-13. Supersedes the single-file
-`plan.md` (removed; recoverable from git history at `33a062a61`).
+**Written against:** `trunk` at `20f7f4da5`, 2026-08-13. Status refreshed against
+`9d9e5f7d7`, 2026-08-27. Supersedes the single-file `plan.md` (deleted; recoverable at
+`d3e7dcdd5`, the commit that added it).
 
 > This doc is the **high-level WHY + WHAT** only: the neutrality thesis, the tier
 > model, goals/non-goals, the ownership boundary against the PQ program, and the
@@ -34,8 +35,8 @@ canonical home rather than duplicating it.
 | **roadmap.md** (this doc)                          | The WHY + WHAT — the neutrality thesis, the compiler-blindness finding, the three-tier model, goals/non-goals, the PQ ownership boundary, the phase trajectory.                                                                                                                                            |
 | [`design.md`](design.md)                           | The per-capability seam designs — transport, storage bootstrap, sync queue, keys, HTTP, connectivity, logging, filesystem, process/env. Current call sites with `file:line`, the proposed interface, and who implements it on each platform. Plus the dead-end seams and the `AtClientPreference` reframe. |
 | [`implementation-plan.md`](implementation-plan.md) | The build sequence — phases, the task backlog (P/T/I/C/G/D groups), dependency order, and the publish ladder.                                                                                                                                                                                              |
-| [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T5, with the measured evidence for each and an explicit statement of what each tier does *not* prove.                                                                                                                                                                                 |
-| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-9), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                         |
+| [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T6, with the measured evidence for each and an explicit statement of what each tier does *not* prove.                                                                                                                                                                                 |
+| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-11), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
 | [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, and npm packaging.                                                                                                               |
 
 ---
@@ -48,6 +49,13 @@ No `dart:io`. No `dart:ffi`. And — the part that distinguishes this plan from 
 predecessor — **no platform conditionals either**. A core package must not know that
 platforms differ. Platform-specific behaviour is supplied from outside, by a platform
 implementer package, through an injected interface.
+
+**One exception is now shipped, deliberately.** `at_auth` 4.0.0-rc1 resolves its
+reachability probe through a conditional export, because the two implementations are not
+interchangeable — a browser negotiates the ALPN protocol that makes an HTTPS probe
+meaningful and `dart:io`'s HTTP client does not. It is PQ-owned code and the ruling is
+recorded against D-1 in [`decisions.md`](decisions.md), which also explains why the
+structural gate walks *both* branches instead of banning the construct.
 
 The tiers:
 
@@ -62,9 +70,10 @@ at_client_web           *_io barrels         at_client_flutter
 
 **Why not conditional imports.** A conditional import is a compile-time answer to a
 runtime question. It leaves platform knowledge inside the neutral layer, it makes the
-core's dependency graph platform-dependent, and its non-native branch is a stub —
+core's dependency graph platform-dependent, and its non-native branch is usually a stub —
 which is the exact failure this project exists to eliminate. See
-[`decisions.md`](decisions.md) D-1 and D-2.
+[`decisions.md`](decisions.md) D-1 and D-2. The at_auth probe above is the bounded
+exception: both of its branches are real implementations, and neither is a stub.
 
 **The goal is no runtime failures, not a clean compile.** A build that compiles and
 then throws the first time a call stack reaches storage is a failed port that reports
@@ -225,16 +234,30 @@ ruling that a removed default is preferable to a conditional default.
 
 ## 6. The phase trajectory at a glance
 
-| Phase                   | What lands                                                                                                                         | Gate it turns on |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| **0 — Ratchet**         | The structural dependency-tree walk, per core package, in CI. Baselined against today's violations so it can only shrink.          | T0               |
-| **1 — Cheap seams**     | Plumb the four seams that already exist and are never passed through; delete `sync_isolate_manager.dart`; fix `at_server_status`.  | T0 shrinks       |
-| **2 — Transport**       | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0.                                               | T0 for at_lookup |
-| **3 — Storage**         | Web SQLite open path in `at_persistence_secondary_server`; selectable backend; backend-neutral `AtSyncQueue`.                      | T2 for storage   |
-| **4 — Sweep**           | `at_utils` barrel split, connectivity, file transfer off the reachable surface; `at_client` 4.0.0.                                 | T0 green, T1, T2 |
-| **5 — `at_client_web`** | The platform package; first live browser session.                                                                                  | T3, T4           |
-| **6 — JS/TS facade**    | The `@JSExport` facade and its entry point inside `at_client_web`; the npm package. See [`js-api.md`](js-api.md).                  | T6               |
-| **7 — Deferred**        | File transfer on web, browser onboarding UX, Argon2id performance, the `at_client_cli` / `at_client_flutter` implementer packages. | —                |
+| Phase                   | What lands                                                                                                                         | Gate it turns on | Status as of 2026-08-27                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
+| **0 — Ratchet**         | The structural dependency-tree walk, per core package, in CI. Baselined against today's violations so it can only shrink.          | T0               | **Landed** — `tools/wasm_shakedown`, gating at_chops and at_auth only ([#2149], [#2183]) |
+| **1 — Cheap seams**     | Plumb the four seams that already exist and are never passed through; delete `sync_isolate_manager.dart`; fix `at_server_status`.  | T0 shrinks       | **In review** — [#2162] ready, [#2163] and [#2164] draft ([#2158])                       |
+| **2 — Transport**       | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0.                                               | T0 for at_lookup | Not started ([#2159])                                                                    |
+| **3 — Storage**         | Web SQLite open path in `at_persistence_secondary_server`; selectable backend; backend-neutral `AtSyncQueue`.                      | T2 for storage   | Not started — belongs in `at_server`, unfiled                                            |
+| **4 — Sweep**           | `at_utils` barrel split, connectivity, file transfer off the reachable surface; `at_client` 4.0.0.                                 | T0 green, T1, T2 | Not started                                                                              |
+| **5 — `at_client_web`** | The platform package; first live browser session.                                                                                  | T3, T4           | Not started                                                                              |
+| **6 — JS/TS facade**    | The `@JSExport` facade and its entry point inside `at_client_web`; the npm package. See [`js-api.md`](js-api.md).                  | T6               | Not started                                                                              |
+| **7 — Deferred**        | File transfer on web, browser onboarding UX, Argon2id performance, the `at_client_cli` / `at_client_flutter` implementer packages. | —                | —                                                                                        |
+
+[#2149]: https://github.com/atsign-foundation/at_client_sdk/pull/2149
+[#2158]: https://github.com/atsign-foundation/at_client_sdk/issues/2158
+[#2159]: https://github.com/atsign-foundation/at_client_sdk/issues/2159
+[#2162]: https://github.com/atsign-foundation/at_client_sdk/pull/2162
+[#2163]: https://github.com/atsign-foundation/at_client_sdk/pull/2163
+[#2164]: https://github.com/atsign-foundation/at_client_sdk/pull/2164
+[#2183]: https://github.com/atsign-foundation/at_client_sdk/pull/2183
 
 Phases 2 and 3 are independent and can run in parallel. Phase 0 gates everything,
 because without it each phase's gains decay behind the next one.
+
+**What Phase 0 did *not* turn on.** T0 is green for the two packages named above and for
+nothing else: `at_utils`, `at_lookup` and `at_client` own 3, 6 and 7 offenders and are
+absent from `.github/wasm_gates.yaml` on purpose, so a gate holds a line rather than
+recording a backlog. They join as their phases land. The runtime tier (T2) is not in CI
+at all — see [`acceptance.md`](acceptance.md) §4.

@@ -725,19 +725,13 @@ class Metadata {
         : DateTime.parse(json[AtConstants.updatedAt]);
     metaData.ttl = (json[AtConstants.ttl] is String)
         ? int.parse(json[AtConstants.ttl])
-        : (json[AtConstants.ttl] == null)
-            ? 0
-            : json[AtConstants.ttl];
+        : json[AtConstants.ttl];
     metaData.ttb = (json[AtConstants.ttb] is String)
         ? int.parse(json[AtConstants.ttb])
-        : (json[AtConstants.ttb] == null)
-            ? 0
-            : json[AtConstants.ttb];
+        : json[AtConstants.ttb];
     metaData.ttr = (json[AtConstants.ttr] is String)
         ? int.parse(json[AtConstants.ttr])
-        : (json[AtConstants.ttr] == null)
-            ? 0
-            : json[AtConstants.ttr];
+        : json[AtConstants.ttr];
     metaData.ccd = json[AtConstants.ccd];
     metaData.isBinary = json[AtConstants.isBinary];
     metaData.isEncrypted = json[AtConstants.isEncrypted];

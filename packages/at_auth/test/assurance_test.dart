@@ -216,7 +216,9 @@ void main() {
     test('accepts map update when a key status moves forward', () {
       final existing = _documentMap(keys: [_symmetricMaterial()]);
       final candidate = _documentMap(
-        keys: [_symmetricMaterial().withStatus(CryptographicMaterialStatus.retired)],
+        keys: [
+          _symmetricMaterial().withStatus(CryptographicMaterialStatus.retired)
+        ],
       );
 
       assurance.validateMapUpdate(existing: existing, candidate: candidate);
@@ -224,10 +226,14 @@ void main() {
 
     test('rejects map update when a key status moves backward', () {
       final existing = _documentMap(
-        keys: [_symmetricMaterial().withStatus(CryptographicMaterialStatus.dead)],
+        keys: [
+          _symmetricMaterial().withStatus(CryptographicMaterialStatus.dead)
+        ],
       );
       final candidate = _documentMap(
-        keys: [_symmetricMaterial().withStatus(CryptographicMaterialStatus.retired)],
+        keys: [
+          _symmetricMaterial().withStatus(CryptographicMaterialStatus.retired)
+        ],
       );
 
       expect(

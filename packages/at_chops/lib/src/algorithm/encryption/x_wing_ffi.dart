@@ -61,8 +61,8 @@ final class XWingFfiAlgo with KemSeedMixin implements AtKemAlgorithm {
     seed ??= newSeed();
     final _Expanded e = await _expand(seed);
     try {
-      final Uint8List publicKey = XWingCore.concatPublicKey(
-          e.mlKemKeyPair.publicKey, e.x25519Public);
+      final Uint8List publicKey =
+          XWingCore.concatPublicKey(e.mlKemKeyPair.publicKey, e.x25519Public);
       return (publicKey: publicKey, secretKey: Uint8List.fromList(seed));
     } finally {
       _mlKem.releaseKeyPair(e.mlKemKeyPair);
@@ -73,8 +73,9 @@ final class XWingFfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   /// rather than an OpenSSL handle, so a key recovered through
   /// [keyPairFromSeed] does survive a restart.
   @override
-  Future<({Uint8List publicKey, Uint8List secretKey})>
-      keyPairFromValidatedSeed(Uint8List seed) => generateKeyPair(seed);
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromValidatedSeed(
+          Uint8List seed) =>
+      generateKeyPair(seed);
 
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(

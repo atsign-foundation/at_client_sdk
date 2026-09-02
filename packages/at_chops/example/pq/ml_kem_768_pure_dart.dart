@@ -11,8 +11,10 @@ Future<void> main() async {
   final ({Uint8List publicKey, Uint8List secretKey}) kp =
       await algo.generateKeyPair();
 
-  print('Public key (${kp.publicKey.length} bytes): ${base64Encode(kp.publicKey)}');
-  print('Secret key (${kp.secretKey.length} bytes): ${base64Encode(kp.secretKey)}');
+  print(
+      'Public key (${kp.publicKey.length} bytes): ${base64Encode(kp.publicKey)}');
+  print(
+      'Secret key (${kp.secretKey.length} bytes): ${base64Encode(kp.secretKey)}');
 
   // Bob encapsulates using Alice's public key.
   final ({Uint8List ciphertext, Uint8List sharedSecret}) bobResult =

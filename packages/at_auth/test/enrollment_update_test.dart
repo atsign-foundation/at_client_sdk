@@ -215,6 +215,55 @@ void main() {
           isTrue);
     });
 
+    test('nothing this API can compose names namespaces or an approval state',
+        () async {
+      final l = lookUp();
+
+      // Every field EnrollmentUpdateRequest has, set at once — not the
+      // one-field request each arm above sends. A namespaces entry can only
+      // reach the wire if some field puts it there, so the request that names
+      // everything is the one that would show it.
+      //
+      // Asserted over the emitted command rather than by reading the class,
+      // and over the PRODUCTION composer rather than a hand-built
+      // EnrollVerbBuilder: that builder does carry a `namespaces` field — it
+      // is what enroll:request uses — so building one here and observing it
+      // empty says only that this test did not set it.
+      await AtEnrollmentImpl().update(
+          EnrollmentUpdateRequest(
+            enrollmentId: enrollmentId,
+            apkamPublicKey: pkamPublicKeyMap[atSign]!,
+            apkamPrivateKey: pkamPrivateKeyMap[atSign]!,
+            signingAlgo: SigningAlgoType.rsa2048,
+            signingKeys: [
+              ApskSigningKey.forPublicKey(
+                  alg: SigningAlgoType.mldsa65, pub: 'AAEC'),
+            ],
+            metadata: {'keyPackage': 'kp'},
+          ),
+          l.lookUp);
+
+      // The set, not two named absences. `namespaces` has a spelling to look
+      // for; an approval state does not — `EnrollParams` carries none, so a
+      // check for 'status' or 'approval' is a tautology that no change to
+      // this package could ever redden. Equality goes red for any key that
+      // appears, whatever it ends up called, and its being a closed set is
+      // simultaneously the positive control: a request that emitted nothing
+      // fails it too.
+      expect(paramsOf(l.commands.single).keys.toSet(), {
+        'enrollmentId',
+        'apkamPublicKey',
+        'signingAlgo',
+        'apkamPublicKeySignature',
+        'apsk',
+        'metadata',
+      },
+          reason: 'an enrollment cannot widen its own grant or approve '
+              'itself, and the atServer refusing it is the second line rather '
+              'than the first: there is no field here to carry either. The '
+              'six above are everything this API can put on the wire');
+    });
+
     test('the private half never reaches the wire', () async {
       final l = lookUp();
       final privateKey = pkamPrivateKeyMap[atSign]!;

@@ -192,6 +192,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       filePath: atOnboardingPreference.atKeysFilePath != null
           ? (_) => atOnboardingPreference.atKeysFilePath!
           : null,
+      passPhrase: atOnboardingPreference.passPhrase,
     );
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(

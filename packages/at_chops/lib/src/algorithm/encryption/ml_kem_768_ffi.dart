@@ -157,9 +157,9 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   /// persistable. A caller holding this key across restarts stores the seed
   /// and calls [keyPairFromSeed] again on the next start.
   @override
-  Future<({Uint8List publicKey, Uint8List secretKey})>
-      keyPairFromValidatedSeed(Uint8List seed) =>
-          _generateKeyPairFromSeed(seed);
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromValidatedSeed(
+          Uint8List seed) =>
+      _generateKeyPairFromSeed(seed);
 
   Future<({Uint8List publicKey, Uint8List secretKey})> _generateKeyPairFromSeed(
       Uint8List seed) async {

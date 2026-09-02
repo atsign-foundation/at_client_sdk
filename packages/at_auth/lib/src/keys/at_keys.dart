@@ -175,7 +175,8 @@ class AtKeys {
       _enrollments[enrollmentId]?.materialsByKeyId[keyId]?[type];
 
   /// Looks up one of the atSign's own materials by `(keyId, role)`.
-  CryptographicMaterial? getAtSignKey(String keyId, CryptographicMaterialRole type) =>
+  CryptographicMaterial? getAtSignKey(
+          String keyId, CryptographicMaterialRole type) =>
       _atSignMaterialsByKeyId[keyId]?[type];
 
   /// Every material of [enrollmentId] sharing [keyId] — e.g. the
@@ -287,7 +288,8 @@ class AtKeys {
   /// cannot drift from what the file actually holds. An id whose suffix is
   /// not a number is ignored rather than rejected: a keyfile written by a
   /// build that spells generations differently must still be readable.
-  int nextAuthenticationGeneration(String enrollmentId, CryptographicMaterialAlgorithm algorithm) =>
+  int nextAuthenticationGeneration(
+          String enrollmentId, CryptographicMaterialAlgorithm algorithm) =>
       _nextGeneration(
           _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
           keyIdPrefix('auth', algorithm));
@@ -326,7 +328,8 @@ class AtKeys {
 
   /// The generation [fileSigningMaterial] will use next for [enrollmentId]'s
   /// [algorithm] — one past the highest already filed, or 1.
-  int nextSigningGeneration(String enrollmentId, CryptographicMaterialAlgorithm algorithm) =>
+  int nextSigningGeneration(
+          String enrollmentId, CryptographicMaterialAlgorithm algorithm) =>
       _nextGeneration(
           _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
           keyIdPrefix('sign', algorithm));
@@ -338,9 +341,10 @@ class AtKeys {
   /// place and keeps its generation forever, so the next mint lands beside it
   /// rather than over it; `addKey` refuses a duplicate keyId, which is what
   /// makes that safe rather than merely tidy.
-  int nextAtSignGeneration(String role, CryptographicMaterialAlgorithm algorithm) =>
+  int nextAtSignGeneration(
+          String role, CryptographicMaterialAlgorithm algorithm) =>
       _nextGeneration(
-      _atSignMaterialsByKeyId.keys, keyIdPrefix(role, algorithm));
+          _atSignMaterialsByKeyId.keys, keyIdPrefix(role, algorithm));
 
   /// The keyId prefix a [role]/[algorithm] pair is filed under —
   /// `<role>:<algorithm>:`, completed by a generation number.
@@ -482,17 +486,24 @@ class AtKeys {
   /// `retired`; now that its `status` is an open token the entry can carry the
   /// keyfile's own word for it, so nothing is guessed — and skipping is not the
   /// cautious option it looks like. The advertisement is rewritten whole on
-  /// every publish, so an omitted entry is a **withdrawal**: it erases both the
-  /// key that verifies what it signed and whatever its owner last said about
-  /// it.
+  /// every publish, so an omitted entry is a **withdrawal from the
+  /// advertisement**: it erases both the key that verifies what it signed
+  /// and whatever its owner last said about it.
   ///
   /// Same keyId shape and same unknown-algorithm skip as [signingKeysFor]; an
   /// enrollment's other `privateSigning` material is not a signing key of its
   /// own and is not advertised as one.
-  List<({SigningAlgoType algorithm, String publicKey, CryptographicMaterialStatus status})>
-      withdrawnSigningKeysFor(String enrollmentId) {
-    final withdrawn =
-        <({SigningAlgoType algorithm, String publicKey, CryptographicMaterialStatus status})>[];
+  List<
+      ({
+        SigningAlgoType algorithm,
+        String publicKey,
+        CryptographicMaterialStatus status
+      })> withdrawnSigningKeysFor(String enrollmentId) {
+    final withdrawn = <({
+      SigningAlgoType algorithm,
+      String publicKey,
+      CryptographicMaterialStatus status
+    })>[];
     for (final keyId in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
         const <String>[]) {
       if (!isRoleKeyId(keyId, 'sign')) continue;
@@ -537,15 +548,16 @@ class AtKeys {
   /// Retires the keypair rather than removing it, and **both halves**. The
   /// public half is what [withdrawnSigningKeysFor] reads back so the
   /// enrollment can go on advertising it as `retired`, which is what keeps
-  /// envelopes signed before the withdrawal verifiable; the private half stays
-  /// because nothing in this file is ever deleted.
+  /// envelopes signed before the withdrawal from service verifiable; the
+  /// private half stays because nothing in this file is ever deleted.
   ///
   /// Selects exactly what [signingKeysFor] would have returned for
   /// [algorithm]: the `sign:<algo>:<n>` shape, not the `privateSigning` role,
   /// which an enrollment can hold material for under more than one keyId.
-  /// Withdrawing a signing key must not withdraw anything else that happens to
-  /// sign.
-  List<String> retireSigningKeys(String enrollmentId, CryptographicMaterialAlgorithm algorithm,
+  /// Withdrawing a signing key from service must not withdraw anything else
+  /// that happens to sign.
+  List<String> retireSigningKeys(
+      String enrollmentId, CryptographicMaterialAlgorithm algorithm,
       {CryptographicMaterialStatus to = CryptographicMaterialStatus.retired}) {
     final Map<String, Map<String, CryptographicMaterial>> byKeyId =
         _enrollments[enrollmentId]?.materialsByKeyId ?? const {};
@@ -597,13 +609,16 @@ class AtKeys {
   /// retired → dead): a same-status call is a no-op and a backward transition
   /// throws, as does an unknown [keyId] or `to: CryptographicMaterialStatus.active`.
   void retireKey(String enrollmentId, String keyId,
-          {CryptographicMaterialStatus to = CryptographicMaterialStatus.retired}) =>
+          {CryptographicMaterialStatus to =
+              CryptographicMaterialStatus.retired}) =>
       _retire(_enrollments[enrollmentId]?.materialsByKeyId, keyId, to,
           'enrollment "$enrollmentId"');
 
   /// [retireKey] for the atSign's own material — the signing root, an nskey
   /// private.
-  void retireAtSignKey(String keyId, {CryptographicMaterialStatus to = CryptographicMaterialStatus.retired}) =>
+  void retireAtSignKey(String keyId,
+          {CryptographicMaterialStatus to =
+              CryptographicMaterialStatus.retired}) =>
       _retire(_atSignMaterialsByKeyId, keyId, to, 'the atSign');
 
   void _retire(Map<String, Map<String, CryptographicMaterial>>? container,
@@ -966,8 +981,7 @@ class AtKeys {
     return materials.every((material) {
       final counterpart = material.enrollmentId == null
           ? other.getAtSignKey(material.keyId, material.role)
-          : other.getKey(
-              material.enrollmentId!, material.keyId, material.role);
+          : other.getKey(material.enrollmentId!, material.keyId, material.role);
       return counterpart == material;
     });
   }
@@ -1151,8 +1165,7 @@ class AtKeys {
   CryptographicMaterial? _activeAuthenticationMaterial(String enrollmentId) =>
       keysForEnrollment(enrollmentId)
           .where((m) =>
-              m.role ==
-                  CryptographicMaterialRole.privateAuthentication &&
+              m.role == CryptographicMaterialRole.privateAuthentication &&
               m.status == CryptographicMaterialStatus.active)
           .firstOrNull;
 
@@ -1186,21 +1199,13 @@ class AtKeys {
   /// Falling back to the flat fields there would authenticate as whoever owns
   /// them, and at_lookup's default is `rsa2048`, so the wrong key would be
   /// signed by the wrong routine. A keyfile written by a newer client is the
-  /// way this happens.
+  /// way this happens. [authenticationAlgorithmFor] raises it, so a caller
+  /// wanting only the algorithm is refused on the same terms as one wanting
+  /// the signer.
   ({AtChops chops, SigningAlgoType? algorithm}) authenticationFor(
       String? enrollmentId) {
     final algorithm = authenticationAlgorithmFor(enrollmentId);
     if (algorithm == null) {
-      final material = enrollmentId == null
-          ? null
-          : _activeAuthenticationMaterial(enrollmentId);
-      if (material != null) {
-        throw AtKeyNotFoundException(
-            'Enrollment $enrollmentId authenticates with '
-            '"${material.algorithm}", which this build cannot sign '
-            'with. Its keypair is in this keyfile; the flat fields are a '
-            'different enrollment\'s and are not a substitute for it.');
-      }
       return (chops: toAtChops(), algorithm: null);
     }
     return (chops: toAtChopsForEnrollment(enrollmentId!), algorithm: algorithm);
@@ -1212,8 +1217,32 @@ class AtKeys {
   /// building one it will discard is not free — [toAtChops] throws on a
   /// keyfile that is missing any of the material it needs, so resolving
   /// eagerly would fail a caller that never needed the keypair at all.
-  SigningAlgoType? authenticationAlgorithmFor(String? enrollmentId) =>
-      enrollmentId == null ? null : signingAlgorithmForEnrollment(enrollmentId);
+  ///
+  /// Null means the flat fields and nothing else: this enrollment files no
+  /// typed authentication material, so its keypair is the flat RSA pair and
+  /// `rsa2048` is what signs it. An enrollment whose typed material names an
+  /// algorithm this build cannot sign with is **refused** rather than reported
+  /// as null, because the two are indistinguishable afterwards and the obvious
+  /// reading of null — legacy, so `rsa2048` — would sign a different
+  /// enrollment's credentials with the wrong routine. Where both really are
+  /// wanted as null, [signingAlgorithmForEnrollment] is the call that says so.
+  ///
+  /// Throws [AtKeyNotFoundException] for that case. A keyfile written by a
+  /// newer client is the way it happens.
+  SigningAlgoType? authenticationAlgorithmFor(String? enrollmentId) {
+    if (enrollmentId == null) return null;
+    final algorithm = signingAlgorithmForEnrollment(enrollmentId);
+    if (algorithm != null) return algorithm;
+    final material = _activeAuthenticationMaterial(enrollmentId);
+    if (material != null) {
+      throw AtKeyNotFoundException(
+          'Enrollment $enrollmentId authenticates with '
+          '"${material.algorithm}", which this build cannot sign '
+          'with. Its keypair is in this keyfile; the flat fields are a '
+          'different enrollment\'s and are not a substitute for it.');
+    }
+    return null;
+  }
 
   @Deprecated('legacy, please use addKey to add additional keys.')
   AtKeys copyWith(AtKeys other) {
