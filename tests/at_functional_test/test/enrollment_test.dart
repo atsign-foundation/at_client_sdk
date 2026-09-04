@@ -27,6 +27,22 @@ void main() {
   late String alicePkamPublicKey;
   String encryptedAPKAMSymmetricKey = '';
 
+  /// A brand-new RSA-2048 keypair, for a request that must carry a key no
+  /// enrollment on this atSign already holds.
+  ///
+  /// Every enrollment needs a keypair of its own: the atServer refuses a
+  /// request installing key material that any stored enrollment already
+  /// carries, in any status. Two requests sharing one key therefore make the
+  /// second fail, and the failure is durable server state that outlives the
+  /// run that created it.
+  ({String publicKey, String privateKey}) freshApkamPair() {
+    final pair = RsaKeyPair.generate();
+    return (
+      publicKey: pair.atPublicKey.publicKey.toString(),
+      privateKey: pair.atPrivateKey.privateKey.toString()
+    );
+  }
+
   setUp(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     atClientManager = await TestUtils.initAtClient(atSign, namespace);
@@ -78,19 +94,38 @@ void main() {
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort;
 
+      // The enrollment id travels with the signer, or this client
+      // authenticates over LEGACY pkam — a bare `pkam:` naming no enrollment.
+      // This atSign was onboarded through enroll:request and so has no legacy
+      // credential at all, which the atServer refuses by name. Passing the id
+      // is what `AtOnboardingServiceImpl._initAtClient` does on both of its
+      // paths; this site is hand-built and has to be told.
       final atClientManager = await AtClientManager(apkamAtSign)
           .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
-              atChops: atAuth.atChops);
+              atChops: atAuth.atChops,
+              enrollmentId: atOnboardingResponse.enrollmentId);
       //var scanResult = await atClientManager.atClient.getKeys();
       var scanResult = await atClientManager.atClient
           .getRemoteSecondary()
           ?.executeCommand('scan\n', auth: true);
       final atClient = atClientManager.atClient;
-      // check for keys in __manage namespace
+      // The enrollment record is NOT in scan, and enroll:list is where it
+      // lives. `scan` filters by the connection's enrollment id, so a client
+      // carrying one never sees enrollment keys however broad its grants —
+      // this enrollment holds `*:rw` and `__manage:rw` and still does not.
+      // Only a connection with no enrollment id at all reaches the unfiltered
+      // owner view, which today means CRAM.
+      //
+      // This assertion used to read `true`, and passed because the client was
+      // built without its enrollment id and so authenticated as the owner by
+      // accident. Threading that id is what exposed it.
       expect(
           scanResult?.contains(
               '${atOnboardingResponse.enrollmentId}.new.enrollments.__manage$apkamAtSign'),
-          true);
+          false,
+          reason: 'an enrollment-scoped scan excludes enrollment keys. A true '
+              'here means the connection reached the unfiltered owner view, '
+              'which is what an unthreaded enrollment id used to cause');
       // Check whether at client can create keys in different namespaces
       AtKey atKey =
           AtKey.self('phone', namespace: 'wavi', sharedBy: apkamAtSign).build();
@@ -129,8 +164,13 @@ void main() {
           aliceDefaultEncryptionPrivateKey, aliceApkamSymmetricKey);
       var encryptedSelfEncKey = EncryptionUtil.encryptValue(
           aliceSelfEncryptionKey, aliceApkamSymmetricKey);
+      // A key of its own, NOT this atSign's flat PKAM key. An enrollment
+      // carrying the value at `privatekey:at_pkam_publickey` makes the app
+      // credential and the owner credential one keypair, which an atServer
+      // enforcing one-keypair-per-enrollment refuses outright.
+      final cramEnrolmentKey = freshApkamPair();
       var enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${cramEnrolmentKey.publicKey}"}\n';
       var enrollResponseFromServer = await atClientManager.atClient
           .getRemoteSecondary()!
           .executeCommand(enrollRequest);
@@ -140,11 +180,39 @@ void main() {
       var enrollResponseJson = jsonDecode(enrollResponseFromServer!);
       expect(enrollResponseJson['enrollmentId'], isNotEmpty);
       expect(enrollResponseJson['status'], 'approved');
+
+      // 2a. Put this atSign's own PKAM credential back, on the same CRAM
+      // connection. An atServer whose CRAM auto-approve copies the enrolling
+      // key over `privatekey:at_pkam_publickey` has just replaced the owner
+      // credential with the key minted above, and every later legacy login in
+      // this file — including other tests sharing this atSign — would fail. On
+      // an atServer that keeps the credential in an enrollment of its own the
+      // same write is a no-op: it already holds this value.
+      expect(
+          await atClientManager.atClient
+              .getRemoteSecondary()!
+              .executeCommand(
+                  'update:privatekey:at_pkam_publickey $alicePkamPublicKey\n'),
+          'data:-1',
+          reason: 'the owner credential must be the demo keypair again before '
+              'anything else authenticates as this atSign');
+
       // 3. Set the enrollment Id to the atClient and atLookup instance.
       atClientManager.atClient.enrollmentId =
           enrollResponseJson['enrollmentId'];
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.enrollmentId =
           enrollResponseJson['enrollmentId'];
+      // 3a. And the keypair that enrollment actually holds. The id alone is
+      // not enough: the connection now authenticates as this enrollment, and
+      // it signs with whatever keypair the lookup carries. That used to be
+      // this atSign's own, which worked only because the request enrolled the
+      // atSign's own key — the very thing an atServer enforcing
+      // one-keypair-per-enrollment refuses.
+      atClientManager.atClient.getRemoteSecondary()?.atLookUp.atChops =
+          AtChopsImpl(AtChopsKeys.create(
+              null,
+              AtPkamKeyPair.create(
+                  cramEnrolmentKey.publicKey, cramEnrolmentKey.privateKey)));
       // 4. Assert that SPP is set successfully.
       var otp = (await atClientManager.atClient.getOTP()).response;
 
@@ -152,7 +220,7 @@ void main() {
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.close();
       // 5. Send enrollment request
       enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$alicePkamPublicKey", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${freshApkamPair().publicKey}", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
       String? serverResponse = await atClientManager.atClient
           .getRemoteSecondary()
           ?.executeCommand(enrollRequest, auth: false);
@@ -235,11 +303,14 @@ void main() {
     // create first enrollment request
     RemoteSecondary? secondRemoteSecondary =
         RemoteSecondary(atSign, getClient2Preferences());
-    var apkamPublicKey =
-        pkamPublicKeyMap['@eve🛠']; // can be any random public key
+    // Fresh per request, and the two below must differ from each other: the
+    // atServer refuses a request whose key any stored enrollment already
+    // holds, so two requests sharing one key make the second fail.
+    final firstRequestKey = freshApkamPair();
+    final secondRequestKey = freshApkamPair();
     String random = Uuid().v4().hashCode.toString();
     var newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel-6-$random","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","enrollmentStatusFilter":["pending"],"encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel-6-$random","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"${firstRequestKey.publicKey}","enrollmentStatusFilter":["pending"],"encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
     var enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
@@ -253,7 +324,7 @@ void main() {
     expect(otp, isNotNull);
     // create second enrollment request
     newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel-7-$random","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel-7-$random","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"${secondRequestKey.publicKey}","encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
     enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
