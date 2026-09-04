@@ -20,6 +20,12 @@ class AtKeysStore extends KeychainStore {
     String packageName = await getPackageName();
     return '$_atKeysStoreName:$packageName';
   }
+
+  // Pre-1.1.6 store name (used `_` instead of `:`).
+  static Future<String> getImproperName() async {
+    String packageName = await getPackageName();
+    return '${_atKeysStoreName}_$packageName';
+  }
 }
 
 class EnrollmentStore extends KeychainStore {

@@ -42,12 +42,57 @@ class KeychainStorage {
   /// Returns [AtKeysData] containing all persisted [AtKeys] entries, or `null`
   /// if no key data has been stored yet
   Future<AtKeysData?> readAtKeysData() async {
-    final data = await _read(keychainStoreName: (await AtKeysStore.getName()));
+    final data = await _readAtKeysDataRaw();
     if (data != null) {
       final json = jsonDecode(data);
       return AtKeysData.fromJson(json);
     }
     return null;
+  }
+
+  // Falls back to the pre-1.1.6 `_`-delimited store name and migrates it
+  // forward, so upgrading doesn't orphan already-stored Atsign keys.
+  Future<String?> _readAtKeysDataRaw() async {
+    // 1. read `:` delimiter, if found, return that.
+    final currentName = await AtKeysStore.getName();
+    final data = await _read(keychainStoreName: currentName);
+    if (data != null) {
+      return data;
+    }
+
+    // -----------------------------
+    // MIGRATION FLOW
+    // people on < 1.1.6 used the `_` delimiter, when apps have historically always used `:`
+    // this was a mistake, so >= 1.1.6 introduced the fix and migration path
+    // >= 1.1.6 means `:` delimiter is now used for all future keys saved in keychain
+    // apps who have no keys in `:` will look inside `_`, and if something there is found,
+    // it will be duplicated and saved to `:`.
+    // for the time being as of 1.1.6, we are not deleting keys in `_` just in case.
+    // -----------------------------
+
+    // 2. since nothing under `:` was found, let's use `_` delimiter
+    // it's called "improper" because it used the wrong delimiter `_`
+    final keychainStorageImproperName = await AtKeysStore.getImproperName();
+    String? improperDataString;
+    try {
+      improperDataString = await _read(keychainStoreName: keychainStorageImproperName);
+    } catch (e, s) {
+      _logger.info('No legacy atKeysData found in keychain.', e, s);
+      return null;
+    }
+    if (improperDataString == null) {
+      return null;
+    }
+
+    _logger.info(
+      'Migrating AtKeysData from legacy keychain store "$improperDataString" to '
+      '"$currentName"',
+    );
+    await _write(
+      biometricStoreName: currentName,
+      keychainData: AtKeysData.fromJson(jsonDecode(improperDataString)),
+    );
+    return improperDataString;
   }
 
   /// Get the stored keys for a specific Atsign
@@ -103,9 +148,7 @@ class KeychainStorage {
   Future<void> appendAtKeysToKeychain({required AtKeys keys}) async {
     String? existingData;
     try {
-      existingData = await _read(
-        keychainStoreName: (await AtKeysStore.getName()),
-      );
+      existingData = await _readAtKeysDataRaw();
     } catch (e) {
       _logger.info(
         'No existing atKeysData found in keychain. A new one will be created.',
@@ -132,9 +175,7 @@ class KeychainStorage {
   ///   [atSign] - Atsign whose persisted keys should be removed
   Future<void> removeAtsignFromKeychain(String atSign) async {
     try {
-      final data = await _read(
-        keychainStoreName: (await AtKeysStore.getName()),
-      );
+      final data = await _readAtKeysDataRaw();
       if (data != null) {
         final atKeysData = AtKeysData.fromJson(jsonDecode(data));
         atKeysData.keys.removeWhere(
