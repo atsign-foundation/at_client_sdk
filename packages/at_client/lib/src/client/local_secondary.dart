@@ -935,8 +935,8 @@ class LocalSecondary implements Secondary {
 
   /// The enrollment record for the enrollment this client authenticates as,
   /// memoised for the life of this object. Null when the client holds no
-  /// enrollment id — it is authenticating with the atSign's own keys, and
-  /// there is no enrollment record to read.
+  /// enrollment id — it is authenticating with the atSign's own keys and has
+  /// no id to fetch a record by.
   ///
   /// Public because the PQ startup reconciles the keyfile's own snapshot of
   /// `namespaces`/`appName`/`deviceName` against this record. Two readers of

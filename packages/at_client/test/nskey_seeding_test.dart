@@ -15,8 +15,9 @@ class MockAtClient extends Mock implements AtClient {}
 ///
 /// This decides how much of the fleet ends up with keys before the PQ flag
 /// flips anywhere, so the two populations that matter are the ones with the
-/// least to go on: a legacy client, which has no enrollment record at all, and
-/// a wildcard enrollment, whose authorisation cannot be enumerated.
+/// least to go on: a legacy client, which can name no enrollment and so has
+/// no record it can read its grants from, and a wildcard enrollment, whose
+/// authorisation cannot be enumerated.
 void main() {
   const atSign = '@alice';
 
@@ -158,9 +159,10 @@ void main() {
     final s = seeding(preferenceNamespace: 'wavi');
 
     expect(await s.authorisedNamespaces(), {'wavi'},
-        reason: 'legacy clients hold no enrollment record, and they are most '
-            'of the fleet during the rollout — so this is where seeding '
-            'coverage actually comes from');
+        reason: 'a legacy client can name no enrollment, so its preference '
+            'namespace is the only list it has — and such clients are most of '
+            'the fleet during the rollout, so this is where seeding coverage '
+            'actually comes from');
   });
 
   test('a legacy client with no namespace seeds nothing', () async {

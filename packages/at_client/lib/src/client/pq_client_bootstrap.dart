@@ -666,8 +666,8 @@ class PqClientBootstrap {
     if (keysIo is! WrittenAtKeysIo) return;
 
     // No enrollment id means this client authenticates with the atSign's own
-    // keys. There is no enrollment record to read, and `enroll:fetch` would
-    // be answered for whatever id it was handed rather than refused.
+    // keys and has no id to fetch a record by — and `enroll:fetch` would be
+    // answered for whatever id it was handed rather than refused.
     final enrollmentId = _atClient.enrollmentId;
     if (enrollmentId == null) return;
 

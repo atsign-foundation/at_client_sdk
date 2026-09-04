@@ -37,8 +37,8 @@ Future<Map<String, Object?>> readPeerApskAsReleasedReader(
   final reader = _ReleasedApskReader(client);
   String value;
   try {
-    // The sender's own enrollment id — `primary` when it has no enrollment
-    // record. A released reader can read any enrollment's record given the
+    // The sender's own enrollment id — `primary` when its keyfile names
+    // none. A released reader can read any enrollment's record given the
     // id; what it cannot do is guess one, which is why the caller threads it.
     value = await reader.getApkamPublicKey(peerAtSign, peerEnrollmentId);
   } on Object catch (e) {

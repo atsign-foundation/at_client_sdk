@@ -218,8 +218,9 @@ void main() {
       expect(executor.sent.first, startsWith('from:$atSign'));
       expect(executor.sent.last, startsWith('pkam:'));
       expect(executor.sent.last, contains('signingAlgo:rsa2048'),
-          reason: 'a keyless caller has no enrollment record to name an '
-              'algorithm, and rsa2048 is what at_lookup signed with');
+          reason: 'a keyless caller names no enrollment, so it has no record '
+              'to read an algorithm from, and rsa2048 is what at_lookup '
+              'signed with');
     });
 
     test('still refuses a challenge naming another atSign', () async {

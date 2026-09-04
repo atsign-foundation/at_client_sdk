@@ -78,9 +78,11 @@ mixin ApkamSigning {
   /// Publishes this client's signing keys at [publicSigningKeyUri], if what is
   /// there is not already what it holds.
   ///
-  /// This is the only writer for an `_apsk` that no `enroll:request` can carry
-  /// — a client with no enrollment publishes under `primary`, which has no
-  /// enrollment record for the atServer to compose one from.
+  /// This is the only writer for an `_apsk` that no `enroll:request` can
+  /// carry. A client whose keyfile names no enrollment publishes under
+  /// `primary` — the name the atServer answers a bare `pkam:` with — and it
+  /// has no id of its own to send an `enroll:update` for, so the atServer is
+  /// never asked to compose the record and the client writes it directly.
   ///
   /// Republishes on a change rather than only when the record is absent. It
   /// used to read the record and log "have already published", so a key that

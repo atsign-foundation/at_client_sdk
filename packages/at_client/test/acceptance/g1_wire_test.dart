@@ -198,8 +198,8 @@ void main() {
             'the row leads with rested on no citation at all');
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'publishes the record itself rather than sending enroll:update',
-        proves: 'the second branch — a client with no enrollment record '
-            'writes _apsk directly');
+        proves: 'the second branch — a client that can name no enrollment '
+            'writes _apsk directly, having no id to send enroll:update with');
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'a second run mints nothing',
         proves: 'idempotence');

@@ -270,11 +270,12 @@ class SigningKeyMinting with ApkamSigning {
   /// and the key
   /// package it signed, under rollout 1 — would stop verifying for good.
   ///
-  /// Which writer depends on whether there is an enrollment record to carry it.
-  /// An enrolled client sends `enroll:update`, so that the atServer writes the
-  /// record from the enrollment it already holds. A client with no enrollment
-  /// publishes the record itself, under `primary`, which has no enrollment
-  /// record for the atServer to compose one from.
+  /// Which writer depends on whether the client can NAME the enrollment the
+  /// record belongs to. An enrolled client sends `enroll:update`, so that the
+  /// atServer writes the record from the enrollment it already holds. A client
+  /// whose keyfile names none publishes the record itself, under `primary` —
+  /// the name the atServer answers a bare `pkam:` with, and the one this
+  /// client cannot cite in an `enroll:update` because nothing told it.
   ///
   /// ⚠️ **This used to say the atServer is the *only* writer of an enrolled
   /// enrollment's `_apsk`, "one writer for the record's whole life, which is

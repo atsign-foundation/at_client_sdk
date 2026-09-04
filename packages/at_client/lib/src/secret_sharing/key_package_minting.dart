@@ -118,16 +118,16 @@ class KeyPackageMinting with ApkamSigning {
       return nothing;
     }
 
-    // enroll:update is self-only, so there has to BE an enrollment for the
-    // atServer to accept the write against. A client running as `primary`
-    // holds no enrollment record and its key package lives nowhere this can
-    // amend.
+    // enroll:update is self-only, so the client has to be able to NAME the
+    // enrollment the write lands on. A client running as `primary` cannot: the
+    // atServer knows it by that name, but nothing in its keyfile says so, and
+    // the id is what the verb keys on.
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
     final enrolment = atLookUp?.enrollmentId;
     if (enrolment == null) {
       logger.info('Not reconciling the key package for $atSign: this client '
-          'is not enrolled, so there is no enrollment record whose '
-          'metadata.keyPackage it could amend');
+          'names no enrollment, so it cannot say which record\'s '
+          'metadata.keyPackage to amend');
       return nothing;
     }
 

@@ -163,9 +163,9 @@ AtAuthenticator authenticatorForCramSecret(
 /// only, and at_auth already builds a signer of that shape in
 /// `enrollment_handshake` for an enrollment whose keys are incomplete.
 ///
-/// Always rsa2048: a keyless caller has no enrollment record to name an
-/// algorithm, and rsa2048 is what at_lookup signed with by default, so this
-/// preserves what such a caller already got.
+/// Always rsa2048: a keyless caller names no enrollment, so it has no record
+/// to read an algorithm from, and rsa2048 is what at_lookup signed with by
+/// default — so this preserves what such a caller already got.
 AtAuthenticator authenticatorForPrivateKey(
   String atSign,
   String privateKey, {

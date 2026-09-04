@@ -50,8 +50,9 @@ void main() {
     final ring = PublishedNskeyKeyRing(atClient);
     final seeding = NskeySeeding(atClient: atClient, ring: ring);
 
-    // A legacy PKAM client has no enrollment record, so it can name exactly
-    // one namespace — its preference namespace. Checked rather than assumed:
+    // A legacy PKAM client can name no enrollment, so it has no record to
+    // read grants from and can name exactly one namespace — its preference
+    // namespace. Checked rather than assumed:
     // if this came back empty, seed() would be a no-op and everything below
     // would pass for the absence of work rather than for the work.
     final authorised = await seeding.authorisedNamespaces();

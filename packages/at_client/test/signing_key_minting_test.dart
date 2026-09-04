@@ -290,8 +290,9 @@ void main() {
 
     test('publishes the record itself rather than sending enroll:update',
         () async {
-      // There is no enrollment record for the atServer to compose an _apsk
-      // from, so the client is the only writer this record can have.
+      // The client can name no enrollment, so it can send no enroll:update
+      // for the atServer to compose an _apsk from — which makes the client the
+      // only writer this record can have.
       expect(await mint(), [SigningAlgoType.mldsa65]);
 
       expect(updates, isEmpty);

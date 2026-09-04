@@ -36,8 +36,8 @@ class ClientSpec {
   /// without the atServer being involved at all.
   final String storagePath;
 
-  /// The enrollment this client authenticates as, or null for a client with
-  /// no enrollment record (which signs and advertises under `primary`).
+  /// The enrollment this client authenticates as, or null for a client whose
+  /// keyfile names none (which signs and advertises under `primary`).
   ///
   /// A String rather than anything richer because this type compiles against
   /// both at_clients, and the id is all either needs: the current arm hands

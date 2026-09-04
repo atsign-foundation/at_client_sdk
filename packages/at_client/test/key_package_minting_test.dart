@@ -206,8 +206,8 @@ void main() {
     });
 
     test('an unenrolled client mints nothing', () async {
-      // enroll:update is self-only, so a `primary` connection has no
-      // enrollment record whose metadata it could amend.
+      // enroll:update is self-only, so a client running as `primary` cannot
+      // say which record's metadata to amend: it can name no enrollment.
       when(() => atLookUp.enrollmentId).thenReturn(null);
       configure(const [SecretSharingAlgos.mlKem1024]);
 

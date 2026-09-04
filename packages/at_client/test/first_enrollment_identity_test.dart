@@ -7,9 +7,9 @@ import 'package:test/test.dart';
 
 /// What a client holding NO enrollment asks its first one to be.
 ///
-/// A pre-enrollment atSign has no enrollment record, so nothing can be carried
-/// over the way a retrofit of an existing enrollment carries its predecessor's
-/// app, device and grants. These are the values it invents instead, and each
+/// Such a client can name no enrollment, so it has no record to read, and
+/// nothing can be carried over the way a retrofit of a named enrollment
+/// carries its predecessor's app, device and grants. These are the values it invents instead, and each
 /// one is a decision with a consequence on the atServer.
 void main() {
   group('the identity a client with no enrollment asks for', () {

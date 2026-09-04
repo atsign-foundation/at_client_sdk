@@ -1906,8 +1906,8 @@ class AtClientImpl implements AtClient {
 
   /// What a client holding NO enrollment asks its first one to be.
   ///
-  /// Nothing can be carried over: there is no enrollment record to read an
-  /// app, a device or a grant from. So the first-enrollment constants name it,
+  /// Nothing can be carried over: the client names no enrollment, so it has no
+  /// record to read an app, a device or a grant from. So the constants name it,
   /// and it asks for everything — which is not an escalation, because the
   /// connection making the request has proved possession of the atSign's own
   /// root credential and is already unscoped, so there is nothing narrower to
