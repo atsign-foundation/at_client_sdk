@@ -50,7 +50,7 @@ import 'package:test/test.dart';
 /// machines, which fails rarely and gets diagnosed as a flake.
 ///
 /// The cap is **per parent**, not per atSign: retrofitting one of these leaves
-/// the other two at record version 1, untouched. That is what makes it safe to
+/// the other two unarmed and unexpired, untouched. That is what makes it safe to
 /// run on an atSign other tests share — nothing here caps a credential it did
 /// not mint.
 void main() {
@@ -101,18 +101,34 @@ void main() {
     return response.enrollmentId;
   }
 
-  /// The enrollment record's metadata, straight off the atServer.
+  /// What the atServer reports for enrollment [id], including the record's own
+  /// effective expiry as `expiresAt` — which is the cap, where the cap set it.
   ///
-  /// The record stays at `<id>.new.enrollments.__manage@<atSign>` after
-  /// approval — there is no `.approved.` address — so this is where the cap is
-  /// visible.
+  /// ⛔ **Through `enroll:fetch`, and it cannot go back to reading the record
+  /// key directly.** The cap lives on the record at
+  /// `<id>.new.enrollments.__manage@<atSign>`, and a data verb on that key is
+  /// refused to every enrollment but its owner — including the atSign's own
+  /// legacy client, which authenticates with no id and is therefore answered
+  /// as the enrollment named `primary`. `llookup:meta` on another
+  /// enrollment's record returns `UnAuthorized client in request`, so the
+  /// expiry is reachable only through the enrollment verbs.
   Future<Map<String, dynamic>> enrollmentMeta(String id) async {
-    final response = await owner.getRemoteSecondary()!.executeCommand(
-        'llookup:meta:$id.new.enrollments.__manage$atSign\n',
-        auth: true);
+    final response = await owner
+        .getRemoteSecondary()!
+        .executeCommand('enroll:list\n', auth: true);
     expect(response, isNotNull);
-    return jsonDecode(response!.replaceFirst('data:', '').trim())
+    final roster = jsonDecode(response!.replaceFirst('data:', '').trim())
         as Map<String, dynamic>;
+    final key = roster.keys.singleWhere((k) => k.startsWith(id),
+        orElse: () => fail('enroll:list names no record for $id; it holds '
+            '${roster.keys}'));
+    final record = roster[key] as Map<String, dynamic>;
+    expect(record.containsKey('expiresAt'), isTrue,
+        reason: 'every enroll:list entry carries expiresAt, null or not — a '
+            'missing key means this atServer predates the field, and every '
+            'expiry assertion below would read null and pass for the wrong '
+            'reason');
+    return record;
   }
 
   DateTime? expiryOf(Map<String, dynamic> meta) =>
@@ -120,7 +136,12 @@ void main() {
 
   /// Retrofits [label] and gives the child one authentication of its own,
   /// which is what arms the cap. The submission alone does not.
-  Future<void> retrofit(String label) async {
+  ///
+  /// Returns the SUCCESSOR's enrollment id, because that is the record the
+  /// atServer stamps: the cap writes `predecessorCapArmedAt` on the successor
+  /// in the same critical section that rewrites the predecessor's expiry, so
+  /// the successor's stamp is the witness that the cap ran over its parent.
+  Future<String> retrofit(String label) async {
     final session = (await AtAuth.create().authenticate(AtAuthRequest(atSign,
             atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)))
           ..namespace = namespace
@@ -156,6 +177,11 @@ void main() {
         reason: 'the child must authenticate on its own connection, because '
             'that is what arms the cap; a retrofit whose child never '
             'authenticates caps nothing');
+    final successor = manager.atClient.enrollmentId;
+    expect(successor, isNotNull,
+        reason: 'the retrofitted client must know the enrollment it came up '
+            'on, or the stamp below cannot be looked for anywhere');
+    return successor!;
   }
 
   setUpAll(() async {
@@ -195,7 +221,7 @@ void main() {
         reason: 'the two dated parents must be far enough apart to sit either '
             'side of the grace, or both arms take the same branch of the min');
 
-    await retrofit('short');
+    final shortSuccessor = await retrofit('short');
 
     // The un-retrofitted parents are untouched: the cap lands on the
     // enrollment its own child came from and nowhere else. This is the
@@ -210,10 +236,20 @@ void main() {
     // recomputes the ttl against the moment it caps), so this is not "nothing
     // happened": what survives is the absolute expiry.
     final shortAfter = await enrollmentMeta(shortId);
-    expect(shortAfter['version'], greaterThan(shortBefore['version'] as int),
-        reason: 'the cap did run over this record — otherwise the unchanged '
+    expect((await enrollmentMeta(shortSuccessor))['predecessorCapArmedAt'],
+        isNotNull,
+        reason: 'the cap did run over this parent — otherwise the unchanged '
             'expiry below is an enrollment the retrofit never reached, which '
-            'is the same green for the opposite reason');
+            'is the same green for the opposite reason. The stamp sits on the '
+            'SUCCESSOR, written in the same act that rewrites the '
+            'parent expiry. This replaced a read of the parent record '
+            'version, which '
+            'said only that SOMETHING rewrote it and which no enrollment verb '
+            'reports any more');
+    expect(shortAfter['predecessorCapArmedAt'], isNull,
+        reason: 'and the parent carries no stamp of its own: reading it there '
+            'is the mistake this assertion replaced, and it would have made '
+            'the check above unfalsifiable');
     expect(
         expiryOf(shortAfter)!.difference(expiryOf(shortBefore)!).abs(),
         lessThan(Duration(seconds: 30)),
