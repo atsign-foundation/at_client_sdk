@@ -408,6 +408,33 @@ void main() {
     );
 
     test(
+      'readAtKeysData does not inspect legacy `_` data when `:` data exists',
+      () async {
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => mockBiometricStorageFile);
+        when(
+          () => mockBiometricStorageFile.read(),
+        ).thenAnswer((_) async => dummyAtKeysData);
+
+        final result = await keyChainStorage.readAtKeysData();
+
+        expect(result, isNotNull);
+        expect(result?.defaultAtsign, '@alice');
+        verifyNever(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test',
+            options: any(named: 'options'),
+          ),
+        );
+        verifyNever(() => mockBiometricStorageFile.write(any()));
+      },
+    );
+
+    test(
       'appendAtKeysToKeychain migrates legacy data before appending',
       () async {
         MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
