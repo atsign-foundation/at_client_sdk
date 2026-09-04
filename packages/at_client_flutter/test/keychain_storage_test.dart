@@ -607,8 +607,8 @@ void main() {
       },
     );
 
-    test('deleteAllAtKeysData only clears the `:` store; legacy `_` data '
-        'survives and is picked back up on the next read', () async {
+    test('deleteAllAtKeysData clears both the `:` store and the legacy `_` '
+        'store', () async {
       MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
 
       when(
@@ -625,27 +625,20 @@ void main() {
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => legacyStorageFile);
+      when(() => legacyStorageFile.delete()).thenAnswer((_) async {});
 
       await keyChainStorage.deleteAllAtKeysData();
 
-      verifyNever(() => legacyStorageFile.read());
-      verifyNever(() => legacyStorageFile.write(any()));
-      verifyNever(() => legacyStorageFile.delete());
+      verify(() => mockBiometricStorageFile.delete()).called(1);
+      verify(() => legacyStorageFile.delete()).called(1);
 
-      // Legacy data is untouched, so it's still there for the next read,
-      // and gets migrated forward again.
+      // Both stores are gone, so nothing is left to migrate forward.
       when(() => mockBiometricStorageFile.read()).thenAnswer((_) async => null);
-      when(
-        () => mockBiometricStorageFile.write(any()),
-      ).thenAnswer((_) async {});
-      when(
-        () => legacyStorageFile.read(),
-      ).thenAnswer((_) async => dummyAtKeysData);
+      when(() => legacyStorageFile.read()).thenAnswer((_) async => null);
 
       final result = await keyChainStorage.readAtKeysData();
 
-      expect(result, isNotNull);
-      expect(result?.defaultAtsign, '@alice');
+      expect(result, isNull);
     });
 
     test('EnrollmentData schema equivalence check', () async {
