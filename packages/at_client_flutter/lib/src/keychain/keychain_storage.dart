@@ -11,9 +11,11 @@ import 'package:biometric_storage/biometric_storage.dart'
         StorageFileInitOptions,
         Win32BiometricStoragePlugin;
 import 'package:flutter/cupertino.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'keychain_data.dart';
-import 'keychain_store.dart';
+
+part 'keychain_store.dart';
 
 final _maxEnrollmentAuthenticationRetryInHours = 48;
 const int _kWindowSegmentDataLength =
