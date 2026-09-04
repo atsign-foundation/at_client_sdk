@@ -196,12 +196,21 @@ class KeychainStorage {
     }
   }
 
-  /// Delete all persisted Atsign key data from the keychain
+  /// Delete all persisted Atsign key data from the keychain, including any
+  /// data still held under the legacy pre-1.1.6 `_` delimited store name.
   Future<void> deleteAllAtKeysData() async {
     try {
       final BiometricStorageFile biometricStore =
           await _getBiometricStorageFile(await AtKeysStore.getName());
       await biometricStore.delete();
+    } catch (e, s) {
+      _logger.info('_getAtClientData', e, s);
+      print(s);
+    }
+    try {
+      final BiometricStorageFile legacyBiometricStore =
+          await _getBiometricStorageFile(await AtKeysStore.getImproperName());
+      await legacyBiometricStore.delete();
     } catch (e, s) {
       _logger.info('_getAtClientData', e, s);
       print(s);
