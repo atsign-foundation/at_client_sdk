@@ -78,6 +78,7 @@ class KeychainStorage {
     try {
       improperDataString = await _read(
         keychainStoreName: keychainStorageImproperName,
+        resetOnError: false,
       );
     } catch (e, s) {
       _logger.info('No legacy atKeysData found in keychain.', e, s);
@@ -201,17 +202,13 @@ class KeychainStorage {
   /// data still held under the legacy pre-1.1.6 `_` delimited store name.
   Future<void> deleteAllAtKeysData() async {
     try {
-      final BiometricStorageFile biometricStore =
-          await _getBiometricStorageFile(await AtKeysStore.getName());
-      await biometricStore.delete();
+      await _delete(keychainStoreName: await AtKeysStore.getName());
     } catch (e, s) {
       _logger.info('_getAtClientData', e, s);
       print(s);
     }
     try {
-      final BiometricStorageFile legacyBiometricStore =
-          await _getBiometricStorageFile(await _getImproperAtKeysStoreName());
-      await legacyBiometricStore.delete();
+      await _delete(keychainStoreName: await _getImproperAtKeysStoreName());
     } catch (e, s) {
       _logger.info('_getAtClientData', e, s);
       print(s);
@@ -394,7 +391,10 @@ class KeychainStorage {
     }
   }
 
-  Future<String?> _read({required String keychainStoreName}) async {
+  Future<String?> _read({
+    required String keychainStoreName,
+    bool resetOnError = true,
+  }) async {
     try {
       final BiometricStorageFile store = await _getBiometricStorageFile(
         keychainStoreName,
@@ -454,13 +454,64 @@ class KeychainStorage {
     } catch (e, s) {
       _logger.severe('_read failed with $e', e, s);
       print(s);
-      _logger.severe('Removing data');
-      await _write(
-        biometricStoreName: keychainStoreName,
-        keychainData: EmptyKeychainData(),
-      );
+      if (resetOnError) {
+        _logger.severe('Removing data');
+        await _write(
+          biometricStoreName: keychainStoreName,
+          keychainData: EmptyKeychainData(),
+        );
+      }
       rethrow;
     }
+  }
+
+  Future<void> _delete({required String keychainStoreName}) async {
+    final store = await _getBiometricStorageFile(keychainStoreName);
+    if (!isWindows) {
+      await store.delete();
+      return;
+    }
+
+    final segmentNames = <String>[];
+    try {
+      final storedData = await store.read();
+      if (storedData != null && storedData.isNotEmpty) {
+        final int segmentCount;
+        final String segmentPrefix;
+        if (storedData.startsWith('{')) {
+          final Map metadata = jsonDecode(storedData);
+          segmentCount = metadata['segmentCount'];
+          segmentPrefix = '${keychainStoreName}_segment';
+        } else {
+          segmentCount = int.tryParse(storedData) ?? 0;
+          segmentPrefix = '${await getPackageName()}_data';
+        }
+        for (int i = 0; i < segmentCount; i++) {
+          segmentNames.add('${segmentPrefix}_$i');
+        }
+      }
+    } catch (e, s) {
+      _logger.warning(
+        'Failed to read Windows keychain segment metadata for deletion',
+        e,
+        s,
+      );
+    }
+
+    for (final segmentName in segmentNames) {
+      try {
+        final segmentStore = await _getBiometricStorageFile(segmentName);
+        await segmentStore.delete();
+      } catch (e, s) {
+        _logger.warning(
+          'Failed to delete Windows keychain segment "$segmentName"',
+          e,
+          s,
+        );
+      }
+    }
+
+    await store.delete();
   }
 
   Future<void> _write({
