@@ -1,5 +1,16 @@
 ## 5.17.0
 
+- fix: `EnrollmentConstants.regexForPerEnrollmentNamespaces` anchors the
+  enrollment id at the start of a key or after a colon as well as after a dot.
+  Anchoring on a dot alone let a key whose name IS the reserved namespace slip
+  past — `abc.a.__e@alice`, the shared `@bob:abc.a.__e@alice` and the cached
+  `cached:@bob:x.r.__e@alice` all escaped it. The atServer matches on this
+  constant to refuse a write into another enrollment's reserved namespace, so
+  those spellings were unguarded. The named group `EnId` is unchanged, and
+  every key that matched before matches now with the same id.
+- docs: the four `__manage` constants say what they are. They describe records
+  that live only on the atServer and never reach a client, which is worth
+  saying because they read like a sync filter waiting to be wired.
 - feat: `enroll:infons:<namespace>` — "info about a namespace". A read verb
   alongside `enroll:listns`, taking the same authorisation, returning a JSON
   **map** of facts about the namespace rather than a list of its members. Its
