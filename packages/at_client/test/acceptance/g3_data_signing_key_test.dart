@@ -416,12 +416,12 @@ void main() {
         'a pre-enrollment atSign at a post-quantum posture gives itself its '
             'first enrollment',
         proves: 'the whole row against a real atServer, and it reads the '
-            'ROSTER rather than the client: the atServer parks such a request '
-            'pending, so "approved" there means the client approved its own '
-            'request over the same connection. It also establishes the '
-            'precondition — the virtualenv pre-provisions demo atSigns, so '
-            '"this atSign holds no enrollment" is measured rather than '
-            'assumed',
+            'ROSTER rather than the client: an enroll:request on a legacy '
+            'connection is a retrofit of primary, which the atServer approves '
+            'outright and records as the successor\'s predecessor. It also '
+            'establishes the precondition — the virtualenv pre-provisions demo '
+            'atSigns, so what this atSign\'s roster already holds is measured '
+            'rather than assumed',
         clauses: [
           'asks the atServer for a first enrollment',
           'the grants are',

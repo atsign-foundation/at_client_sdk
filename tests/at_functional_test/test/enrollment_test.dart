@@ -27,8 +27,23 @@ void main() {
   late String aliceApkamSymmetricKey;
   late String aliceDefaultEncryptionPrivateKey;
   late String aliceSelfEncryptionKey;
-  late String aliceApkamPublicKey;
   String encryptedAPKAMSymmetricKey = '';
+
+  /// A brand-new RSA-2048 keypair, for a request that must carry a key no
+  /// enrollment on this atSign already holds.
+  ///
+  /// Every enrollment needs a keypair of its own: the atServer refuses a
+  /// request installing key material that any stored record already carries,
+  /// in any status. A shared demo key therefore makes the SECOND request
+  /// carrying it fail, and the failure is durable server state that outlives
+  /// the run that created it.
+  ({String publicKey, String privateKey}) freshApkamPair() {
+    final pair = RsaKeyPair.generate();
+    return (
+      publicKey: pair.atPublicKey.publicKey.toString(),
+      privateKey: pair.atPrivateKey.privateKey.toString()
+    );
+  }
 
   setUp(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -37,15 +52,6 @@ void main() {
     aliceApkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
     aliceDefaultEncryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
     aliceSelfEncryptionKey = aesKeyMap[atSign]!;
-    // The APKAM keypair, NOT the atSign's own PKAM keypair. An enrollment
-    // record whose apkamPublicKey equals the value at
-    // `privatekey:at_pkam_publickey` makes an app credential and the owner
-    // credential indistinguishable by value, and the atServer treats such a
-    // match as proof that the flat key is a vestige of this enrollment and
-    // deletes it on the enrollment's first APKAM authentication. That would
-    // strip this atSign of the legacy credential the rest of the pack
-    // authenticates with.
-    aliceApkamPublicKey = apkamPublicKeyMap[atSign]!;
     encryptedAPKAMSymmetricKey = EncryptionUtil.encryptKey(
         aliceApkamSymmetricKey, encryptionPublicKeyMap[atSign]!);
   });
@@ -179,7 +185,7 @@ void main() {
       var encryptedSelfEncKey = EncryptionUtil.encryptValue(
           aliceSelfEncryptionKey, aliceApkamSymmetricKey);
       var enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$aliceApkamPublicKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${freshApkamPair().publicKey}"}\n';
       var enrollResponseFromServer = await atClientManager.atClient
           .getRemoteSecondary()!
           .executeCommand(enrollRequest);
@@ -201,7 +207,7 @@ void main() {
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.close();
       // 5. Send enrollment request
       enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"$aliceApkamPublicKey", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${freshApkamPair().publicKey}", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
       String? serverResponse = await atClientManager.atClient
           .getRemoteSecondary()
           ?.executeCommand(enrollRequest, auth: false);
@@ -285,11 +291,12 @@ void main() {
     // create first enrollment request
     RemoteSecondary? secondRemoteSecondary =
         RemoteSecondary(atSign, getClient2Preferences());
-    var apkamPublicKey =
-        pkamPublicKeyMap['@eve🛠']; // can be any random public key
+    // Fresh per request, and the two below must differ: the atServer refuses a
+    // request whose key any stored enrollment already holds, so two requests
+    // sharing one key make the second fail.
     String random = Uuid().v4().hashCode.toString();
     var newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel-6-$random","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","enrollmentStatusFilter":["pending"],"encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel-6-$random","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"${freshApkamPair().publicKey}","enrollmentStatusFilter":["pending"],"encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
     var enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
@@ -303,7 +310,7 @@ void main() {
     expect(otp, isNotNull);
     // create second enrollment request
     newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel-7-$random","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"$apkamPublicKey","encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel-7-$random","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"${freshApkamPair().publicKey}","encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
     enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
