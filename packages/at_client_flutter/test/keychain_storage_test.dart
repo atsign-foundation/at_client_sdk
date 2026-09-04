@@ -363,6 +363,44 @@ void main() {
       expect(checkSchemaEquality(result!), isTrue);
     });
 
+    test(
+      'readAtKeysData migrates data from legacy `_` delimited store name',
+      () async {
+        MockBiometricStorageFile legacyStorageFile =
+            MockBiometricStorageFile();
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => mockBiometricStorageFile);
+        when(
+          () => mockBiometricStorageFile.read(),
+        ).thenAnswer((_) async => null);
+        when(
+          () => mockBiometricStorageFile.write(any()),
+        ).thenAnswer((_) async {});
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => legacyStorageFile);
+        when(
+          () => legacyStorageFile.read(),
+        ).thenAnswer((_) async => dummyAtKeysData);
+
+        final result = await keyChainStorage.readAtKeysData();
+
+        expect(result, isNotNull);
+        expect(result?.defaultAtsign, '@alice');
+        verify(() => mockBiometricStorageFile.write(dummyAtKeysData)).called(1);
+        verifyNever(() => legacyStorageFile.delete());
+      },
+    );
+
     test('EnrollmentData schema equivalence check', () async {
       when(
         () => mockBiometricStorageFile.read(),
