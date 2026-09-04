@@ -1915,7 +1915,7 @@ Three findings, all checked against the code rather than the docs:
 | 1 | **An nskey private lives in `AtKeys`, filed on arrival.** "Conveyed as a Secret" says how it travels, not where it lives — the APKAM key package already arrives one way and is filed another. Losing an nskey private makes every conveyance record sealed to it unopenable, so it belongs under `AtKeysIo`'s never-lose contract, alongside durable at-rest-protected implementations that already exist |
 | 2 | **The sender persists the current `ckKid`, never the key.** On a cold write it re-fetches that CK from its own conveyance record, exactly as the read path already does. A `ckKid` is not secret, so this needs no at-rest protection at all and sidesteps durable key storage entirely |
 | 3 | **The crypto layer subscribes to `receivedSecrets` and files its own material; `SecretStore` stays in-memory.** The substrate keeps moving opaque secrets and `putIfNewer` stays the convergence point. No app-supplied backend then ever holds this atSign's namespace private keys — which it silently would have, with whatever at-rest properties that app happened to have |
-| 4 | **The APKAM path reads the record's `signingAlgo`; legacy PKAM keeps the wire value; `mldsa65` gets its branch.** Legacy PKAM has no enrollment record to be authoritative about, and may legitimately present `ecc_secp256r1` |
+| 4 | **The APKAM path reads the record's `signingAlgo`; legacy PKAM keeps the wire value; `mldsa65` gets its branch.** Legacy PKAM has no record it can NAME to be authoritative about, and may legitimately present `ecc_secp256r1`. ⚠️ **Corrected 2026-09-04:** this said `legacy PKAM has no enrollment record` at all. It has one — the atServer answers a bare `pkam:` with the enrollment it calls `primary` — but nothing in such a client's keyfile names it, so the client cannot fetch it and the ruling stands on the corrected reason |
 | 5 | **Jitter, then suppress on any observed answer** ([21.4](#214-what-the-anti-storm-cap-actually-protects)) |
 | 6 | **The current-`ckKid` pointer is an ordinary synced self key**, so an atSign's devices converge on one CK per `(recipient, namespace)` — which is what a CK is scoped to — instead of one per device. Concurrent mints are benign: both CKs are valid and readers open either |
 
@@ -1988,7 +1988,7 @@ most of what made the project XL.
 | 3 | **The signing chain is built; only the APKAM keypair's *algorithm* is deferred.** The root and the chain are in scope; APKAM keypairs stay **RSA** for now, because migrating `_apsk` has complications that need thinking through first. See [22.2](#222-the-signing-root-chain-follows-the-approval-graph) |
 | 4 | **Conveyance reads the filed privates from `AtKeys`, not the `SecretStore`.** Otherwise a real hole: `shareAllSecretsWith` iterates `secretStore.listSecrets()`, and [decisions.md 21](#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03) ruling 3 keeps that store in-memory — so after a restart an approver would convey **nothing** to a newly approved enrollment, including the nskey private without which it can read nothing at all. One durable home, and the sender reads from it |
 | 5 | **Mint at client init, for every namespace the client is authorised for.** Not on first write: the 3.x rebuild-and-rollout mints and publishes *while still writing legacy*, so the fleet seeds before the PQ flag flips anywhere. It is also what makes the sender-side rule honest — if a recipient has ever run a PQ-capable client for a namespace, the key is there |
-| 6 | **Legacy PKAM mints for `preference.namespace`; a `*` enrollment mints nothing at init.** Legacy clients hold no enrollment record and can name exactly one namespace — and they are most of the fleet during the rollout, so that is where seeding coverage actually comes from. `*` is not enumerable, so a wildcard enrollment mints on demand when it writes into a specific namespace instead; conveyance discovery already skips `*` for the same reason |
+| 6 | **Legacy PKAM mints for `preference.namespace`; a `*` enrollment mints nothing at init.** Legacy clients can name exactly one namespace — ⚠️ **corrected 2026-09-04:** this said they `hold no enrollment record`, and they do hold `primary`, which grants `*`; what they lack is any way to name it, so the preference remains the only list such a client has — and they are most of the fleet during the rollout, so that is where seeding coverage actually comes from. `*` is not enumerable, so a wildcard enrollment mints on demand when it writes into a specific namespace instead; conveyance discovery already skips `*` for the same reason |
 
 ### 22.2 The signing root: chain follows the approval graph
 
@@ -11885,9 +11885,11 @@ from plan item 14.19.1 earlier the same day.
    also `mint_lock.dart:134`) is deliberate, not a placeholder. A legacy
    PKAM client holding an `AtKeysIo` therefore publishes
    `public:_apsk.primary.a.__e@<atSign>` and signs approval-chain links as
-   `"primary"` — a name no enrollment record carries — because
-   `publishPublicSigningKey` is the only writer for an `_apsk` that no
-   `enroll:request` can carry. ⚠️ Do not guard on `sharing.enrollmentId ==
+   `"primary"` — because `publishPublicSigningKey` is the only writer for an
+   `_apsk` that no `enroll:request` can carry. ⚠️ **Corrected 2026-09-04:**
+   this called `primary` `a name no enrollment record carries`. It names a real
+   record, and a client that cannot cite an id is still the one writing the
+   `_apsk`, so the mechanism is unchanged. ⚠️ Do not guard on `sharing.enrollmentId ==
    null`: the sentinel makes it never null and the guard dead
    (`pq_signing_root.dart:910` records exactly that).
 
