@@ -12,6 +12,7 @@ import 'package:test/test.dart';
 
 import 'utils/enrollment_operations.dart';
 import 'utils/test_keys_dir.dart';
+import 'utils/virtualenv_ports.dart';
 
 var pkamPublicKey;
 var pkamPrivateKey;
@@ -210,6 +211,7 @@ void main() {
       // preference without appName and deviceName
       AtOnboardingPreference preference_1 = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort
         ..isLocalStoreRequired = true
         ..hiveStoragePath = 'storage/hive/client'
         ..commitLogPath = 'storage/hive/client/commit'
@@ -219,7 +221,8 @@ void main() {
         // Omitting this would put the keyfile onboard() generates in the home
         // directory's real keys dir.
         ..atKeysFilePath = testKeysFile(atSign4)
-        ..rootDomain = 'vip.ve.atsign.zone';
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort;
 
       AtOnboardingService? onboardingService_1 =
           AtOnboardingServiceImpl(atSign4, preference_1);
@@ -331,12 +334,14 @@ void main() {
 
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort
         ..isLocalStoreRequired = true
         ..hiveStoragePath = '$storageDir/hive/client'
         ..commitLogPath = '$storageDir/hive/client/commit'
         ..namespace =
             'wavi' // Unique identifier that can be used to identify data from your app
-        ..rootDomain = 'vip.ve.atsign.zone';
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort;
 
       // Init an OnboardingService instance and onboard. Creates a master
       // atKeys file at the location provided in variable 'masterKeysFilePath'
@@ -454,12 +459,14 @@ void main() {
 
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort
         ..isLocalStoreRequired = true
         ..hiveStoragePath = '$storageDir/hive/client'
         ..commitLogPath = '$storageDir/hive/client/commit'
         ..namespace =
             'wavi' // Unique identifier that can be used to identify data from your app
-        ..rootDomain = 'vip.ve.atsign.zone';
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort;
 
       // Init an OnboardingService instance and onboard. Creates a master
       // atKeys file at the location provided in variable 'masterKeysFilePath'
@@ -639,6 +646,7 @@ AtOnboardingPreference getPreferenceForAuth(String atSign) {
   atSign = AtUtils.fixAtSign(atSign);
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = virtualenvRootPort
     ..isLocalStoreRequired = true
     ..hiveStoragePath = 'storage/hive/client'
     ..commitLogPath = 'storage/hive/client/commit'
@@ -648,7 +656,8 @@ AtOnboardingPreference getPreferenceForAuth(String atSign) {
     ..atKeysFilePath = testKeysFile(atSign)
     ..appName = 'wavi'
     ..deviceName = 'pixel'
-    ..rootDomain = 'vip.ve.atsign.zone';
+    ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = virtualenvRootPort;
 
   return atOnboardingPreference;
 }
@@ -661,7 +670,8 @@ AtOnboardingPreference getPreferenceForEnroll(String atSign) {
     ..atKeysFilePath = testKeysFile(atSign, suffix: 'buzzkey')
     ..appName = 'buzz'
     ..deviceName = 'iphone'
-    ..rootDomain = 'vip.ve.atsign.zone';
+    ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = virtualenvRootPort;
   return atOnboardingPreference;
 }
 

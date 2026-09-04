@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'virtualenv_ports.dart';
 
 /// The `at_activate` entrypoint, named relative to this package's root.
 ///
@@ -82,8 +83,10 @@ void evictCachedAtClients() {
 /// and stopped. Add `--debug` to [args] before concluding anything about where
 /// a CLI command got to.
 Future<int> runCliCommand(List<String> args) async {
+  // NOTE: the at_activate child builds its own client and defaults to port 64.
+  final rooted = _withRootPort(args);
   final proc = await Process.start(
-      Platform.resolvedExecutable, ['run', _activateCli, ...args]);
+      Platform.resolvedExecutable, ['run', _activateCli, ...rooted]);
 
   final out = proc.stdout.transform(utf8.decoder).listen(stdout.write);
   final err = proc.stderr.transform(utf8.decoder).listen(stderr.write);
@@ -103,4 +106,14 @@ Future<int> runCliCommand(List<String> args) async {
     await out.cancel();
     await err.cancel();
   }
+}
+
+/// [args] with the root server's port supplied where the caller gave none.
+List<String> _withRootPort(List<String> args) {
+  final out = [...args];
+  final i = out.indexWhere((a) => a == '-r' || a == '--rootServer');
+  if (i < 0) return [...out, '-r', 'vip.ve.atsign.zone:$virtualenvRootPort'];
+  if (i + 1 >= out.length || out[i + 1].contains(':')) return out;
+  out[i + 1] = '${out[i + 1]}:$virtualenvRootPort';
+  return out;
 }

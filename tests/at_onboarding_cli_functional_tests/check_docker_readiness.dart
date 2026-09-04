@@ -3,10 +3,11 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 import 'check_test_env.dart';
+import 'test/utils/virtualenv_ports.dart';
 
 void main() {
   String atsign = '@sitaram🛠';
-  int atsignPort = 25017;
+  int atsignPort = virtualenvSecondaryPort(25017);
   String rootServer = 'vip.ve.atsign.zone';
 
   SecureSocket _secureSocket;

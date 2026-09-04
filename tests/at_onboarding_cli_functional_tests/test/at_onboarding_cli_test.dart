@@ -11,6 +11,7 @@ import 'package:test/test.dart';
 import 'utils/at_client_cache.dart';
 import 'utils/onboarding_service_impl_override.dart';
 import 'utils/test_keys_dir.dart';
+import 'utils/virtualenv_ports.dart';
 
 /// Where at_onboarding_cli falls back to when `atKeysFilePath` is null. Only
 /// ever compared against — nothing in this package writes there, see
@@ -27,7 +28,7 @@ void main() {
     if (keysCreatedMap.containsKey(atSign)) {
       return;
     }
-    var atLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+    var atLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', virtualenvRootPort);
     await atLookup.cramAuthenticate(at_demos.cramKeyMap[atSign]!);
     var command =
         'update:privatekey:at_pkam_publickey ${at_demos.pkamPublicKeyMap[atSign]}\n';
@@ -312,6 +313,7 @@ AtOnboardingPreference getPreferences(String atSign, {PqPosture? posture}) {
       ? AtOnboardingPreference()
       : AtOnboardingPreference(posture: posture))
     ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = virtualenvRootPort
     ..isLocalStoreRequired = true
     ..hiveStoragePath = 'storage/hive/client'
     ..commitLogPath = 'storage/hive/client/commit'

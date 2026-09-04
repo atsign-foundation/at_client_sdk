@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 
 import 'utils/at_client_cache.dart';
 import 'utils/test_keys_dir.dart';
+import 'utils/virtualenv_ports.dart';
 
 /// An [AtOnboardingService] binds to the enrollment it last authenticated as:
 /// it holds an [AtLookUp] whose connection the atServer has bound to that
@@ -282,7 +283,8 @@ AtOnboardingPreference getOnboardingPreference(
     ..atKeysFilePath = atKeysFilePath
     ..appName = 'buzz'
     ..deviceName = 'iphone'
-    ..rootDomain = 'vip.ve.atsign.zone';
+    ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = virtualenvRootPort;
 
   return atOnboardingPreference;
 }

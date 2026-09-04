@@ -12,6 +12,7 @@ import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'utils/test_keys_dir.dart';
+import 'utils/virtualenv_ports.dart';
 
 /// ON-1's consumer half: `at_onboarding_cli` can activate an atSign
 /// **PQ-native**, so the capability is one an end user can actually reach.
@@ -56,6 +57,7 @@ void main() {
   AtOnboardingPreference preference() =>
       AtOnboardingPreference(posture: PqPosture.pqReady)
         ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort
         ..hiveStoragePath = 'test/storage/hive/$atSign'
         ..commitLogPath = 'test/storage/hive/$atSign/commit'
         ..namespace = 'wavi'
@@ -122,6 +124,7 @@ void main() {
         // discriminating.
         AtOnboardingPreference(posture: PqPosture.legacy)
           ..rootDomain = 'vip.ve.atsign.zone'
+          ..rootPort = virtualenvRootPort
           ..hiveStoragePath = 'test/storage/hive/$atSign-reader'
           ..commitLogPath = 'test/storage/hive/$atSign-reader/commit'
           ..namespace = 'wavi'
@@ -212,6 +215,7 @@ void main() {
     // from the key material the activation minted.
     final activation = AtOnboardingPreference(posture: PqPosture.legacy)
       ..rootDomain = 'vip.ve.atsign.zone'
+      ..rootPort = virtualenvRootPort
       ..hiveStoragePath = 'test/storage/hive/$legacyAtSign'
       ..commitLogPath = 'test/storage/hive/$legacyAtSign/commit'
       ..namespace = 'wavi'
@@ -241,6 +245,7 @@ void main() {
         // discriminating.
         AtOnboardingPreference(posture: PqPosture.legacy)
           ..rootDomain = 'vip.ve.atsign.zone'
+          ..rootPort = virtualenvRootPort
           ..hiveStoragePath = 'test/storage/hive/$legacyAtSign-reader'
           ..commitLogPath = 'test/storage/hive/$legacyAtSign-reader/commit'
           ..namespace = 'wavi'

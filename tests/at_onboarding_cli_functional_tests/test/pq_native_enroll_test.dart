@@ -12,6 +12,7 @@ import 'package:test/test.dart';
 
 import 'utils/at_client_cache.dart';
 import 'utils/test_keys_dir.dart';
+import 'utils/virtualenv_ports.dart';
 
 /// An app enrolling through `at_onboarding_cli` can be post-quantum from
 /// birth — asserted against a real atServer, not against the client's own
@@ -281,4 +282,5 @@ AtOnboardingPreference _preference(String atSign, String atKeysFilePath) =>
       ..atKeysFilePath = atKeysFilePath
       ..appName = 'buzz'
       ..deviceName = 'iphone'
-      ..rootDomain = 'vip.ve.atsign.zone';
+      ..rootDomain = 'vip.ve.atsign.zone'
+      ..rootPort = virtualenvRootPort;

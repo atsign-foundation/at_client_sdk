@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 
 import 'utils/at_client_cache.dart';
 import 'utils/test_keys_dir.dart';
+import 'utils/virtualenv_ports.dart';
 
 /// A **legacy** atSign — one whose keyfile names no enrollment — gives itself
 /// an enrollment of its own when its app names a post-quantum posture.
@@ -61,7 +62,7 @@ void main() {
   /// keyfile that names none, and using onboard would make this file assert
   /// the ordinary APKAM retrofit instead.
   Future<void> makeLegacyAtSign(String atSign) async {
-    final atLookup = AtLookupImpl(atSign, rootDomain, 64);
+    final atLookup = AtLookupImpl(atSign, rootDomain, virtualenvRootPort);
     await atLookup.cramAuthenticate(at_demos.cramKeyMap[atSign]!);
     expect(
         await atLookup.executeCommand(
@@ -88,7 +89,7 @@ void main() {
   /// test: the client's `enrollmentId` is its belief, and this is what the
   /// atServer holds.
   Future<Map<String, dynamic>> enrollmentsOf(String atSign) async {
-    final atLookup = AtLookupImpl(atSign, rootDomain, 64);
+    final atLookup = AtLookupImpl(atSign, rootDomain, virtualenvRootPort);
     expect(await atLookup.authenticate(at_demos.pkamPrivateKeyMap[atSign]),
         true,
         reason: 'the flat credential must authenticate, or this reader is '
@@ -102,6 +103,7 @@ void main() {
   AtOnboardingPreference preferenceFor(String atSign, PqPosture posture) =>
       AtOnboardingPreference(posture: posture)
         ..rootDomain = rootDomain
+        ..rootPort = virtualenvRootPort
         ..isLocalStoreRequired = true
         ..hiveStoragePath = 'storage/hive/$atSign'
         ..commitLogPath = 'storage/hive/$atSign/commit'
@@ -208,7 +210,7 @@ void main() {
     // The legacy credential SURVIVES its own retrofit. A retrofit caps its
     // predecessor only when the predecessor is not a root, and primary is one,
     // so nothing expires it. Retiring it stays the owner's explicit act.
-    final legacy = AtLookupImpl(retrofits, rootDomain, 64);
+    final legacy = AtLookupImpl(retrofits, rootDomain, virtualenvRootPort);
     expect(
         await legacy.authenticate(at_demos.pkamPrivateKeyMap[retrofits]), true,
         reason: 'a retrofit that silently invalidated the legacy credential '

@@ -3,7 +3,14 @@ set -euo pipefail
 
 # Run the onboarding-CLI functional suite locally.
 #
-#   ./runLocal.sh
+#   ./runLocal.sh            # legacy fixed ports (64 / 25000-25999 / 6379)
+#   ./runLocal.sh 47000      # base port: atDirectory 47000, atServers 47001-47098
+#
+# A BASE_PORT shifts the virtualenv into a [BASE, BASE+99] range so it can run
+# alongside another virtualenv on a different base port. docker-compose.yaml
+# reads VIRTUALENV_BASE_PORT and maps that whole range; the tests read the same
+# variable through `test/utils/virtualenv_ports.dart`, because every site that
+# names vip.ve.atsign.zone must also name the port.
 #
 # Deliberately NOT a copy of tests/at_functional_test/runLocal.sh. Two
 # differences matter, and both are documented in this package's README and
@@ -33,14 +40,27 @@ set -euo pipefail
 #         VIRTUALENV_IMAGE=atsigncompany/virtualenv:dev_env ./runLocal.sh
 #         VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip     ./runLocal.sh
 #
-# This suite binds the same ports as tests/at_functional_test (64, 443,
-# 25000-25999, 6379), so the two cannot run at the same time.
+# With no BASE_PORT this suite binds the same ports as tests/at_functional_test
+# (64, 25000-25999, 6379), so the two cannot run at the same time. Give them
+# different base ports and they can.
 #
 # CRAM secrets are one-shot: a second run against a virtualenv that already
 # onboarded these atSigns fails. The compose down below is what makes a re-run
 # work, so do not skip it.
 
 cd "$(dirname "$0")"
+
+if [[ -n "${1:-}" ]]; then
+  BASE_PORT="$1"
+  export VIRTUALENV_BASE_PORT="$BASE_PORT"
+  export VE_ROOT_PORT="$BASE_PORT"
+  export VE_REDIS_PORT=$((BASE_PORT + 99))
+  export VE_SECONDARY_LOW=$((BASE_PORT + 1))
+  export VE_SECONDARY_HIGH=$((BASE_PORT + 98))
+  echo "*** Using base port ${BASE_PORT} (range ${BASE_PORT}-$((BASE_PORT + 99)))"
+else
+  echo "*** Using legacy fixed ports (64 / 25000-25999 / 6379)"
+fi
 
 echo "*** Getting dependencies" && dart pub get
 

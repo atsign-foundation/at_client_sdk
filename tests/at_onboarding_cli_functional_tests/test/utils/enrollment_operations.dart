@@ -8,6 +8,7 @@ import 'package:at_client/src/service/enrollment_service_impl.dart';
 
 import 'at_client_cache.dart';
 import 'test_keys_dir.dart';
+import 'virtualenv_ports.dart';
 
 /// Contains methods that perform common enrollment operations like getOtp, approve, etc.
 ///
@@ -150,6 +151,7 @@ class EnrollmentOperations {
       ..commitLogPath = '$storageDir/commitLog/$atsign/1'
       ..hiveStoragePath = '$storageDir/hive/$atsign/1'
       ..rootDomain = 'vip.ve.atsign.zone'
+      ..rootPort = virtualenvRootPort
       ..cramSecret = cramKey
       // A null here would fall through to the home directory's real keys dir.
       ..atKeysFilePath = atKeysFilePath ?? testKeysFile(atsign);

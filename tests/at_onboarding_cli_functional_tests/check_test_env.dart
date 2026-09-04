@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'test/utils/virtualenv_ports.dart';
 
 Queue<String> _queue = Queue<String>();
 int maxRetryCount = 10;
@@ -10,7 +11,7 @@ int retryCount = 1;
 
 void main() {
   String atsign = '@sitaram🛠';
-  int atsignPort = 25017;
+  int atsignPort = virtualenvSecondaryPort(25017);
   String rootServer = 'vip.ve.atsign.zone';
 
   SecureSocket _secureSocket;
