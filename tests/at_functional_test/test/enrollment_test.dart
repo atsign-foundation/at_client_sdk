@@ -136,7 +136,7 @@ void main() {
       expect(scanResult?.contains(enrollmentKey), false,
           reason: 'an enrollment-scoped scan excludes enrollment keys. A true '
               'here means the connection reached the unfiltered owner view, '
-              'which is what an untreaded enrollment id used to cause');
+              'which is what an unthreaded enrollment id used to cause');
 
       final ownView =
           await atClient.enrollmentService!.fetchEnrollmentRequests();
@@ -184,8 +184,9 @@ void main() {
           aliceDefaultEncryptionPrivateKey, aliceApkamSymmetricKey);
       var encryptedSelfEncKey = EncryptionUtil.encryptValue(
           aliceSelfEncryptionKey, aliceApkamSymmetricKey);
+      final cramEnrolmentKey = freshApkamPair();
       var enrollRequest =
-          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${freshApkamPair().publicKey}"}\n';
+          'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${cramEnrolmentKey.publicKey}"}\n';
       var enrollResponseFromServer = await atClientManager.atClient
           .getRemoteSecondary()!
           .executeCommand(enrollRequest);
@@ -195,11 +196,36 @@ void main() {
       var enrollResponseJson = jsonDecode(enrollResponseFromServer!);
       expect(enrollResponseJson['enrollmentId'], isNotEmpty);
       expect(enrollResponseJson['status'], 'approved');
+
+      // 2a. Put this atSign's own PKAM credential back, on the same CRAM
+      // connection. An atServer whose CRAM auto-approve copies the enrolling
+      // key over `privatekey:at_pkam_publickey` has just replaced the owner
+      // credential with the key minted above, and every later legacy login in
+      // this file would fail. Where the credential lives in an enrollment of
+      // its own the same write is a no-op: it already holds this value.
+      expect(
+          await atClientManager.atClient
+              .getRemoteSecondary()!
+              .executeCommand(
+                  'update:privatekey:at_pkam_publickey '
+                  '${pkamPublicKeyMap[atSign]}\n'),
+          'data:-1',
+          reason: 'the owner credential must be the demo keypair again before '
+              'anything else authenticates as this atSign');
+
       // 3. Set the enrollment Id to the atClient and atLookup instance.
       atClientManager.atClient.enrollmentId =
           enrollResponseJson['enrollmentId'];
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.enrollmentId =
           enrollResponseJson['enrollmentId'];
+      // 3a. And the keypair that enrollment actually holds. The id alone is
+      // not enough: the connection now authenticates as this enrollment, and
+      // it signs with whatever keypair the lookup carries.
+      atClientManager.atClient.getRemoteSecondary()?.atLookUp.atChops =
+          AtChopsImpl(AtChopsKeys.create(
+              null,
+              AtPkamKeyPair.create(
+                  cramEnrolmentKey.publicKey, cramEnrolmentKey.privateKey)));
       // 4. Assert that SPP is set successfully.
       var otp = (await atClientManager.atClient.getOTP()).response;
 
