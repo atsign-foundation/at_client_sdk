@@ -170,7 +170,7 @@ void main() {
       ).thenAnswer((_) async => '{"segmentCount": 2}'); // Simulate 2 segments
       when(
         () => mockBiometricStorage.getStorage(
-          '@atsigns_test',
+          '@atsigns:test',
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => mockBiometricStorageFile);
@@ -179,13 +179,13 @@ void main() {
 
       when(
         () => mockBiometricStorage.getStorage(
-          '@atsigns_test_segment_0',
+          '@atsigns:test_segment_0',
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => segment1Storage);
       when(
         () => mockBiometricStorage.getStorage(
-          '@atsigns_test_segment_1',
+          '@atsigns:test_segment_1',
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => segment2Storage);
@@ -311,7 +311,7 @@ void main() {
       ).thenAnswer((_) async => '2'); // Simulate 2 segments
       when(
         () => mockBiometricStorage.getStorage(
-          '@atsigns_test',
+          '@atsigns:test',
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => mockBiometricStorageFile);

@@ -18,7 +18,7 @@ class AtKeysStore extends KeychainStore {
   const AtKeysStore();
   static Future<String> getName() async {
     String packageName = await getPackageName();
-    return '${_atKeysStoreName}_$packageName';
+    return '$_atKeysStoreName:$packageName';
   }
 }
 
