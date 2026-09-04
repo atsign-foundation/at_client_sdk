@@ -40,6 +40,10 @@ set -euo pipefail
 #         VIRTUALENV_IMAGE=atsigncompany/virtualenv:dev_env ./runLocal.sh
 #         VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip     ./runLocal.sh
 #
+# NOTE: tests that spawn at_activate must pass the root port to the child. It
+# builds its own client and defaults to 64, so a base-port run hangs to timeout
+# with nothing red. runCliCommand supplies it.
+#
 # With no BASE_PORT this suite binds the same ports as tests/at_functional_test
 # (64, 25000-25999, 6379), so the two cannot run at the same time. Give them
 # different base ports and they can.
