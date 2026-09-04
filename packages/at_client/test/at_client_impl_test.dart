@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -562,6 +563,53 @@ void main() {
       expect(identical(ac2.atKeysIo, firstKeysIo), true);
     });
   });
+  group('transport seam through AtClientImpl.create', () {
+    final String seamAtSign = '@alice';
+    setUp(() async {
+      AtClientImpl.atClientInstanceMap.remove(seamAtSign);
+      AtClientManager.getInstance().removeAllChangeListeners();
+    });
+    tearDown(() async {
+      AtClientImpl.atClientInstanceMap.remove(seamAtSign);
+      AtClientManager.getInstance().removeAllChangeListeners();
+    });
+
+    test('an injected transport reaches the RemoteSecondary create builds',
+        () async {
+      final socketFactory = _StubSecureSocketFactory();
+      final listenerFactory = _StubSocketListenerFactory();
+      final connectionFactory = _StubOutboundConnectionFactory();
+      final preference = AtClientPreference()..isLocalStoreRequired = false;
+
+      final atClient = await AtClientImpl.create(
+        seamAtSign,
+        'wavi',
+        preference,
+        transport: AtLookupTransport(
+          secureSocketConfig: SecureSocketConfig(),
+          socketFactory: socketFactory,
+          listenerFactory: listenerFactory,
+          connectionFactory: connectionFactory,
+        ),
+      );
+
+      final atLookUp = atClient.getRemoteSecondary()!.atLookUp as AtLookupImpl;
+      expect(atLookUp.socketFactory, same(socketFactory));
+      expect(atLookUp.socketListenerFactory, same(listenerFactory));
+      expect(atLookUp.outboundConnectionFactory, same(connectionFactory));
+    });
+
+    test('omitting it leaves the native transport in place', () async {
+      final preference = AtClientPreference()..isLocalStoreRequired = false;
+
+      final atClient =
+          await AtClientImpl.create(seamAtSign, 'wavi', preference);
+
+      final atLookUp = atClient.getRemoteSecondary()!.atLookUp as AtLookupImpl;
+      expect(atLookUp.socketFactory, isNotNull);
+      expect(atLookUp.socketFactory, isNot(isA<_StubSecureSocketFactory>()));
+    });
+  });
 }
 
 class _RecordingCryptoProvider extends CryptoProvider {
@@ -584,3 +632,12 @@ class _RecordingCryptoProvider extends CryptoProvider {
     return value;
   }
 }
+
+/// Identity-compared only — the seam under test is construction-time wiring,
+/// so none of their members are ever called.
+class _StubSecureSocketFactory extends AtLookupSecureSocketFactory {}
+
+class _StubSocketListenerFactory extends AtLookupSecureSocketListenerFactory {}
+
+class _StubOutboundConnectionFactory
+    extends AtLookupOutboundConnectionFactory {}

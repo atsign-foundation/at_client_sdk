@@ -35,14 +35,12 @@ void main() {
   late TestEnvelopeSigner signerA;
   late TestEnvelopeSigner verifierB;
 
-  /// Wires [atClient] to a remote secondary whose atLookUp carries
-  /// [enrollmentId], which is where [ApkamSigning.enrollmentId] reads from.
+  /// Gives [atClient] the [enrollmentId] that [ApkamSigning.enrollmentId]
+  /// reads from.
   void stubEnrollment(MockAtClient atClient, String enrollmentId) {
     final remoteSecondary = MockRemoteSecondary();
-    final atLookUp = MockAtLookupImpl();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
-    when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
   }
 
   /// Stubs [atClient]'s get of A's `_apsk` key to return [publicKey].

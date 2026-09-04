@@ -311,6 +311,7 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
+    AtLookupTransport? transport,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -327,6 +328,11 @@ class AtClientImpl implements AtClient {
       // atKeysIo (like atChops) is only honored on first construction — the
       // extended AtKeys is meant to be born at construction and immutable
       // after, so a re-used cached client keeps its original key source.
+      // The same is true of every injected collaborator below, the transport
+      // included: they are read by _init, which this branch skips, so a cached
+      // client keeps whatever it was built with. Callers that need different
+      // collaborators need a different atSign or a cleared
+      // atClientInstanceMap.
     } else {
       atClientImpl = AtClientImpl._(
         currentAtSign,
@@ -339,6 +345,7 @@ class AtClientImpl implements AtClient {
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         enrollmentId: enrollmentId,
+        transport: transport,
       );
 
       await atClientImpl._init(atLookUp: atLookUp);
@@ -359,7 +366,8 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     this.enrollmentId,
-  }) {
+    AtLookupTransport? transport,
+  }) : _transport = transport {
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -385,6 +393,11 @@ class AtClientImpl implements AtClient {
     _atChops = atChops;
     _atKeysIo = atKeysIo;
   }
+
+  /// How every [RemoteSecondary] this client builds reaches the atServer.
+  /// Null means "build the native transport from the preference", which is
+  /// what every caller that does not inject gets.
+  final AtLookupTransport? _transport;
 
   Future<void> _init({AtLookUp? atLookUp}) async {
     if (_preference!.isLocalStoreRequired) {
@@ -438,6 +451,7 @@ class AtClientImpl implements AtClient {
       atLookUp: atLookUp,
       privateKey: _preference!.privateKey,
       enrollmentId: enrollmentId,
+      transport: _transport,
     );
 
     // Using ??= because we may be injecting an EncryptionService
@@ -1226,6 +1240,7 @@ class AtClientImpl implements AtClient {
       _atSign,
       _preference!,
       atChops: atChops,
+      transport: _transport,
     );
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');

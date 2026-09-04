@@ -14,8 +14,11 @@ mixin ApkamSigning {
   AtSignLogger get logger;
 
   String get enrollmentId {
-    String id =
-        atClient.getRemoteSecondary()?.atLookUp.enrollmentId ?? 'primary';
+    // The client's own enrollment, not the connection's. at_lookup's
+    // AtLookUp.enrollmentId is deprecated precisely because "which enrollment
+    // am I" is client state; AtClientImpl is handed this value and passes the
+    // same one to the RemoteSecondary it builds, so the two cannot diverge.
+    String id = atClient.enrollmentId ?? 'primary';
     if (id == 'primary') {
       logger.warning('No enrollmentID ... using "primary"');
     }

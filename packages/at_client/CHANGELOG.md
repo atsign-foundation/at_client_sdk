@@ -1,4 +1,35 @@
 ## 3.15.0
+- feat: `RemoteSecondary` and `AtClientImpl.create` accept an
+  `AtLookupTransport` — at_lookup's three socket factories plus the
+  `SecureSocketConfig` they use, as one value — and forward it to the lookup
+  they build. Omitting it builds the TLS-over-TCP transport from the
+  `AtClientPreference` as before, so nothing changes for existing callers.
+  Supplying it replaces that configuration wholesale, the preference's
+  `decryptPackets` / `pathToCerts` / `tlsKeysSavePath` included: a transport
+  carries its own settings, because TLS certificates and a keylog path mean
+  nothing to a transport that is not TLS over TCP. The second, previously
+  non-injectable `RemoteSecondary` construction on the deprecated `stream()`
+  path receives it too.
+- feat: `RemoteSecondary` builds its lookup with `AtLookUp.withSecureSocket`
+  rather than the `AtLookupImpl` constructor at_lookup 3.7.0 deprecated, and
+  authenticates through an injected `AtAuthenticator` instead of at_lookup's
+  credential ladder. `AtLookUp.atChops`, `signingAlgoType`, `hashingAlgoType`
+  and `enrollmentId` — all deprecated for the same reason — are no longer set
+  on the lookup at all, so at_lookup holds no key material on at_client's
+  behalf. The ladder's order is unchanged: `atChops`, then a bare
+  `privateKey`, then `cramSecret`, then the same `UnAuthenticatedException`.
+  It is re-read on every connect, so setting `AtClient.atChops` after
+  construction still reaches the next authentication.
+- fix: `EnrollmentServiceImpl.approve` passes `approverChops` explicitly.
+  at_auth fell back to `atLookUp.atChops` for the approving client's crypto,
+  which the change above stops populating — approval would otherwise have
+  regressed with no compile error.
+- fix: `ApkamSigning.enrollmentId` reads `AtClient.enrollmentId` rather than
+  the deprecated `AtLookUp.enrollmentId`. The same value reaches both, so
+  behaviour is unchanged; "which enrollment am I" is client state, not the
+  connection's.
+- fix(deps): raised the `at_lookup` constraint to `^3.7.0-rc1`, which is where
+  `AtLookupTransport` and `AtLookUp.withSecureSocket` live.
 - chore: delete `lib/src/manager/sync_isolate_manager.dart`. Deprecated, not
   exported from any barrel, and with no references anywhere in the repo — it
   was also the only `dart:isolate` import in any package's `lib/`.
