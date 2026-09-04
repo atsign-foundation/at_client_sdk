@@ -37,12 +37,17 @@ at_auth:
   # the stores' interfaces and the auth flows; anything needing a filesystem, a
   # raw socket or the dart:io HTTP stack moved to at_auth_io.dart.
   #
-  # All four blocked packages are inherited: at_lookup (sockets), at_utils and
-  # chalkdart (the logger), at_server_status. They come off as each is ported.
+  # All three blocked packages are inherited: at_lookup (sockets), at_utils and
+  # chalkdart (the logger). They come off as each is ported, and at_server_status
+  # just did, having dropped the dart:io import it held for five HttpStatus
+  # constants. It is not gated in its own right: at_server_status.dart exports
+  # at_status_impl.dart, which names at_lookup_io.dart's socket transport
+  # directly, so the package sits wholly on the native side of that seam and has
+  # no line to hold. It joins when at_lookup's transport becomes injectable.
   ratchets:
     - barrel: package:at_auth/at_auth.dart
       allowed_offenders: []
-      max_blocked_packages: 4
+      max_blocked_packages: 3
       min_files_walked: 850
   probe:
     - package:at_auth/at_auth.dart

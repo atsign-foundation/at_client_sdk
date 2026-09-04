@@ -1,3 +1,8 @@
+## 3.15.0
+- chore: delete `lib/src/manager/sync_isolate_manager.dart`. Deprecated, not
+  exported from any barrel, and with no references anywhere in the repo — it
+  was also the only `dart:isolate` import in any package's `lib/`.
+
 ## 3.14.1
 - fix: `AtCollection` — resolve received (shared-in) items in the id-scoped
   read path. `Query.watch()` (delta path), `getOrNull` / `get(id, owner)` and
