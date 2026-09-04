@@ -74,7 +74,7 @@ class KeychainStorage {
 
     // 2. since nothing under `:` was found, let's use `_` delimiter
     // it's called "improper" because it used the wrong delimiter `_`
-    final keychainStorageImproperName = await AtKeysStore.getImproperName();
+    final keychainStorageImproperName = await _getImproperAtKeysStoreName();
     String? improperDataString;
     try {
       improperDataString = await _read(
@@ -211,7 +211,7 @@ class KeychainStorage {
     }
     try {
       final BiometricStorageFile legacyBiometricStore =
-          await _getBiometricStorageFile(await AtKeysStore.getImproperName());
+          await _getBiometricStorageFile(await _getImproperAtKeysStoreName());
       await legacyBiometricStore.delete();
     } catch (e, s) {
       _logger.info('_getAtClientData', e, s);
