@@ -75,7 +75,9 @@ class KeychainStorage {
     final keychainStorageImproperName = await AtKeysStore.getImproperName();
     String? improperDataString;
     try {
-      improperDataString = await _read(keychainStoreName: keychainStorageImproperName);
+      improperDataString = await _read(
+        keychainStoreName: keychainStorageImproperName,
+      );
     } catch (e, s) {
       _logger.info('No legacy atKeysData found in keychain.', e, s);
       return null;
@@ -85,8 +87,8 @@ class KeychainStorage {
     }
 
     _logger.info(
-      'Migrating AtKeysData from legacy keychain store "$improperDataString" to '
-      '"$currentName"',
+      'Migrating AtKeysData from legacy keychain store '
+      '"$keychainStorageImproperName" to "$currentName"',
     );
     await _write(
       biometricStoreName: currentName,
