@@ -197,12 +197,8 @@ void main() {
       expect(enrollResponseJson['enrollmentId'], isNotEmpty);
       expect(enrollResponseJson['status'], 'approved');
 
-      // 2a. Put this atSign's own PKAM credential back, on the same CRAM
-      // connection. An atServer whose CRAM auto-approve copies the enrolling
-      // key over `privatekey:at_pkam_publickey` has just replaced the owner
-      // credential with the key minted above, and every later legacy login in
-      // this file would fail. Where the credential lives in an enrollment of
-      // its own the same write is a no-op: it already holds this value.
+      // NOTE: a CRAM auto-approve that copies the enrolling key over
+      // privatekey:at_pkam_publickey has just replaced the owner credential.
       expect(
           await atClientManager.atClient
               .getRemoteSecondary()!
@@ -218,9 +214,8 @@ void main() {
           enrollResponseJson['enrollmentId'];
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.enrollmentId =
           enrollResponseJson['enrollmentId'];
-      // 3a. And the keypair that enrollment actually holds. The id alone is
-      // not enough: the connection now authenticates as this enrollment, and
-      // it signs with whatever keypair the lookup carries.
+      // NOTE: the connection signs as this enrollment, so it needs that
+      // enrollment's keypair, not the atSign's.
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.atChops =
           AtChopsImpl(AtChopsKeys.create(
               null,
