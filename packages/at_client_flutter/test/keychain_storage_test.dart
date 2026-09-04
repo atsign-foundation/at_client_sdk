@@ -170,7 +170,7 @@ void main() {
       ).thenAnswer((_) async => '{"segmentCount": 2}'); // Simulate 2 segments
       when(
         () => mockBiometricStorage.getStorage(
-          '@atsigns_test',
+          '@atsigns:test',
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => mockBiometricStorageFile);
@@ -179,13 +179,13 @@ void main() {
 
       when(
         () => mockBiometricStorage.getStorage(
-          '@atsigns_test_segment_0',
+          '@atsigns:test_segment_0',
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => segment1Storage);
       when(
         () => mockBiometricStorage.getStorage(
-          '@atsigns_test_segment_1',
+          '@atsigns:test_segment_1',
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => segment2Storage);
@@ -277,6 +277,13 @@ void main() {
       keyChainStorage = KeychainStorage();
       keyChainStorage.biometricStorage = mockBiometricStorage;
     });
+
+    tearDown(() {
+      // Reset unconditionally so a failing Windows test can't leak
+      // isWindows = true into whichever test runs next.
+      KeychainStorage.isWindows = false;
+    });
+
     test('AtClientData to AtKeysData: legacy name field', () async {
       when(
         () => mockBiometricStorage.getStorage(
@@ -311,7 +318,7 @@ void main() {
       ).thenAnswer((_) async => '2'); // Simulate 2 segments
       when(
         () => mockBiometricStorage.getStorage(
-          '@atsigns_test',
+          '@atsigns:test',
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => mockBiometricStorageFile);
@@ -362,6 +369,346 @@ void main() {
       expect(result, isNotNull);
       expect(checkSchemaEquality(result!), isTrue);
     });
+
+    test(
+      'readAtKeysData migrates data from legacy `_` delimited store name',
+      () async {
+        MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => mockBiometricStorageFile);
+        when(
+          () => mockBiometricStorageFile.read(),
+        ).thenAnswer((_) async => null);
+        when(
+          () => mockBiometricStorageFile.write(any()),
+        ).thenAnswer((_) async {});
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => legacyStorageFile);
+        when(
+          () => legacyStorageFile.read(),
+        ).thenAnswer((_) async => dummyAtKeysData);
+
+        final result = await keyChainStorage.readAtKeysData();
+
+        expect(result, isNotNull);
+        expect(result?.defaultAtsign, '@alice');
+        verify(() => mockBiometricStorageFile.write(dummyAtKeysData)).called(1);
+        verifyNever(() => legacyStorageFile.delete());
+      },
+    );
+
+    test(
+      'readAtKeysData does not inspect legacy `_` data when `:` data exists',
+      () async {
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => mockBiometricStorageFile);
+        when(
+          () => mockBiometricStorageFile.read(),
+        ).thenAnswer((_) async => dummyAtKeysData);
+
+        final result = await keyChainStorage.readAtKeysData();
+
+        expect(result, isNotNull);
+        expect(result?.defaultAtsign, '@alice');
+        verifyNever(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test',
+            options: any(named: 'options'),
+          ),
+        );
+        verifyNever(() => mockBiometricStorageFile.write(any()));
+      },
+    );
+
+    test(
+      'appendAtKeysToKeychain migrates legacy data before appending',
+      () async {
+        MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => mockBiometricStorageFile);
+        when(
+          () => mockBiometricStorageFile.read(),
+        ).thenAnswer((_) async => null);
+        when(
+          () => mockBiometricStorageFile.write(any()),
+        ).thenAnswer((_) async {});
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => legacyStorageFile);
+        when(
+          () => legacyStorageFile.read(),
+        ).thenAnswer((_) async => dummyAtKeysData);
+
+        await keyChainStorage.appendAtKeysToKeychain(keys: dummyAtKeys);
+
+        final captured = verify(
+          () => mockBiometricStorageFile.write(captureAny()),
+        ).captured;
+        // One write to migrate the legacy data as-is, one to persist the
+        // appended key.
+        expect(captured.length, 2);
+        final finalData = AtKeysData.fromJson(
+          jsonDecode(captured.last as String),
+        );
+        expect(finalData.keys.length, 2);
+        expect(finalData.defaultAtsign, '@alice');
+        verifyNever(() => legacyStorageFile.delete());
+      },
+    );
+
+    test(
+      'removeAtsignFromKeychain migrates legacy data before removing',
+      () async {
+        MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => mockBiometricStorageFile);
+        when(
+          () => mockBiometricStorageFile.read(),
+        ).thenAnswer((_) async => null);
+        when(
+          () => mockBiometricStorageFile.write(any()),
+        ).thenAnswer((_) async {});
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => legacyStorageFile);
+        when(
+          () => legacyStorageFile.read(),
+        ).thenAnswer((_) async => dummyAtKeysData);
+
+        await keyChainStorage.removeAtsignFromKeychain('@alice');
+
+        verify(() => mockBiometricStorageFile.write(any())).called(2);
+        verifyNever(() => legacyStorageFile.delete());
+      },
+    );
+
+    test(
+      'readAtKeysData returns null when the legacy store read throws',
+      () async {
+        MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => mockBiometricStorageFile);
+        when(
+          () => mockBiometricStorageFile.read(),
+        ).thenAnswer((_) async => null);
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => legacyStorageFile);
+        when(() => legacyStorageFile.read()).thenThrow(Exception('boom'));
+        when(() => legacyStorageFile.write(any())).thenAnswer((_) async {});
+
+        final result = await keyChainStorage.readAtKeysData();
+
+        expect(result, isNull);
+        verifyNever(() => mockBiometricStorageFile.write(any()));
+        verifyNever(() => legacyStorageFile.write(any()));
+      },
+    );
+
+    test(
+      'readAtKeysData migrates legacy `_` delimited store data on Windows platform',
+      () async {
+        KeychainStorage.isWindows = true;
+
+        MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
+        MockBiometricStorageFile legacySegment0 = MockBiometricStorageFile();
+        MockBiometricStorageFile legacySegment1 = MockBiometricStorageFile();
+        MockBiometricStorageFile newSegment0 = MockBiometricStorageFile();
+        MockBiometricStorageFile newSegment1 = MockBiometricStorageFile();
+
+        // No data yet under the `:` store.
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => mockBiometricStorageFile);
+        when(
+          () => mockBiometricStorageFile.read(),
+        ).thenAnswer((_) async => null);
+        when(
+          () => mockBiometricStorageFile.write(any()),
+        ).thenAnswer((_) async {});
+
+        // Legacy `_` store holds segmented data.
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => legacyStorageFile);
+        when(
+          () => legacyStorageFile.read(),
+        ).thenAnswer((_) async => '{"segmentCount": 2}');
+
+        String split1 = dummyAtKeysData.substring(
+          0,
+          (dummyAtKeysData.length / 2).ceil(),
+        );
+        String split2 = dummyAtKeysData.substring(
+          (dummyAtKeysData.length / 2).ceil(),
+        );
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test_segment_0',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => legacySegment0);
+        when(() => legacySegment0.read()).thenAnswer((_) async => split1);
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test_segment_1',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => legacySegment1);
+        when(() => legacySegment1.read()).thenAnswer((_) async => split2);
+
+        // Migration writes the combined data back out under `:`. The
+        // combined data here is well under the 2560-byte segment
+        // threshold, so it re-splits into a single output segment even
+        // though it was read back from 2 legacy segments.
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test_segment_0',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => newSegment0);
+        when(() => newSegment0.write(any())).thenAnswer((_) async {});
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test_segment_1',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => newSegment1);
+        when(() => newSegment1.write(any())).thenAnswer((_) async {});
+
+        final result = await keyChainStorage.readAtKeysData();
+
+        expect(result, isNotNull);
+        expect(result?.defaultAtsign, '@alice');
+        verify(() => mockBiometricStorageFile.write(any())).called(1);
+        verify(() => newSegment0.write(any())).called(1);
+        verifyNever(() => newSegment1.write(any()));
+        verifyNever(() => legacyStorageFile.delete());
+      },
+    );
+
+    test(
+      'deleteAllAtKeysData clears both Windows stores and their segments',
+      () async {
+        KeychainStorage.isWindows = true;
+
+        MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
+        MockBiometricStorageFile currentSegment0 = MockBiometricStorageFile();
+        MockBiometricStorageFile currentSegment1 = MockBiometricStorageFile();
+        MockBiometricStorageFile legacySegment0 = MockBiometricStorageFile();
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => mockBiometricStorageFile);
+        when(
+          () => mockBiometricStorageFile.read(),
+        ).thenAnswer((_) async => '{"segmentCount": 2}');
+        when(() => mockBiometricStorageFile.delete()).thenAnswer((_) async {});
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test_segment_0',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => currentSegment0);
+        when(() => currentSegment0.delete()).thenAnswer((_) async {});
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns:test_segment_1',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => currentSegment1);
+        when(() => currentSegment1.delete()).thenAnswer((_) async {});
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => legacyStorageFile);
+        when(
+          () => legacyStorageFile.read(),
+        ).thenAnswer((_) async => '{"segmentCount": 1}');
+        when(() => legacyStorageFile.delete()).thenAnswer((_) async {});
+
+        when(
+          () => mockBiometricStorage.getStorage(
+            '@atsigns_test_segment_0',
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((_) async => legacySegment0);
+        when(() => legacySegment0.delete()).thenAnswer((_) async {});
+
+        await keyChainStorage.deleteAllAtKeysData();
+
+        verify(() => mockBiometricStorageFile.delete()).called(1);
+        verify(() => legacyStorageFile.delete()).called(1);
+        verify(() => currentSegment0.delete()).called(1);
+        verify(() => currentSegment1.delete()).called(1);
+        verify(() => legacySegment0.delete()).called(1);
+
+        // Both stores are gone, so nothing is left to migrate forward.
+        when(
+          () => mockBiometricStorageFile.read(),
+        ).thenAnswer((_) async => null);
+        when(() => legacyStorageFile.read()).thenAnswer((_) async => null);
+
+        final result = await keyChainStorage.readAtKeysData();
+
+        expect(result, isNull);
+      },
+    );
 
     test('EnrollmentData schema equivalence check', () async {
       when(

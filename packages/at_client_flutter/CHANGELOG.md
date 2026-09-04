@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.1.6
+
+- fix: changed keychain storage name delimiter from `_` to `:`
+- feat: upgrade path to move keys from `_` to `:` -- there is
+  no deleting of keys under the `_` name yet, just duplication.
+
 ## 1.1.5
 - feat: `CramDialog` and `PkamDialog` take an optional `authService`, and
   `ApkamActivationDialog` an optional `enrollmentService`. Both default to the

@@ -11,9 +11,11 @@ import 'package:biometric_storage/biometric_storage.dart'
         StorageFileInitOptions,
         Win32BiometricStoragePlugin;
 import 'package:flutter/cupertino.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'keychain_data.dart';
-import 'keychain_store.dart';
+
+part 'keychain_store.dart';
 
 final _maxEnrollmentAuthenticationRetryInHours = 48;
 const int _kWindowSegmentDataLength =
@@ -42,12 +44,59 @@ class KeychainStorage {
   /// Returns [AtKeysData] containing all persisted [AtKeys] entries, or `null`
   /// if no key data has been stored yet
   Future<AtKeysData?> readAtKeysData() async {
-    final data = await _read(keychainStoreName: (await AtKeysStore.getName()));
+    final data = await _readAtKeysDataRaw();
     if (data != null) {
       final json = jsonDecode(data);
       return AtKeysData.fromJson(json);
     }
     return null;
+  }
+
+  // Falls back to the pre-1.1.6 `_`-delimited store name and migrates it
+  // forward, so upgrading doesn't orphan already-stored Atsign keys.
+  Future<String?> _readAtKeysDataRaw() async {
+    // 1. Read the current `:`-delimited store. If it exists, it is the
+    // authoritative store and no migration is needed.
+    final currentName = await AtKeysStore.getName();
+    final data = await _read(keychainStoreName: currentName);
+    if (data != null) {
+      return data;
+    }
+
+    // -----------------------------
+    // MIGRATION FLOW
+    // people on < 1.1.6 used the `_` delimiter, when apps have historically always used `:`
+    // this was a mistake, so >= 1.1.6 introduced the fix and migration path.
+    // >= 1.1.6 means `:` delimiter is now used for all future keys saved in keychain.
+    // Only when `:` is absent, look for `_` and copy its contents to `:`.
+    // for the time being as of 1.1.6, we are not deleting keys in `_` just in case.
+    // -----------------------------
+
+    // it's called "improper" because it used the wrong delimiter `_`
+    final keychainStorageImproperName = await _getImproperAtKeysStoreName();
+    String? improperDataString;
+    try {
+      improperDataString = await _read(
+        keychainStoreName: keychainStorageImproperName,
+        resetOnError: false,
+      );
+    } catch (e, s) {
+      _logger.info('No legacy atKeysData found in keychain.', e, s);
+      return null;
+    }
+    if (improperDataString == null) {
+      return null;
+    }
+
+    _logger.info(
+      'Migrating AtKeysData from legacy keychain store '
+      '"$keychainStorageImproperName" to "$currentName"',
+    );
+    await _write(
+      biometricStoreName: currentName,
+      keychainData: AtKeysData.fromJson(jsonDecode(improperDataString)),
+    );
+    return improperDataString;
   }
 
   /// Get the stored keys for a specific Atsign
@@ -103,9 +152,7 @@ class KeychainStorage {
   Future<void> appendAtKeysToKeychain({required AtKeys keys}) async {
     String? existingData;
     try {
-      existingData = await _read(
-        keychainStoreName: (await AtKeysStore.getName()),
-      );
+      existingData = await _readAtKeysDataRaw();
     } catch (e) {
       _logger.info(
         'No existing atKeysData found in keychain. A new one will be created.',
@@ -132,9 +179,7 @@ class KeychainStorage {
   ///   [atSign] - Atsign whose persisted keys should be removed
   Future<void> removeAtsignFromKeychain(String atSign) async {
     try {
-      final data = await _read(
-        keychainStoreName: (await AtKeysStore.getName()),
-      );
+      final data = await _readAtKeysDataRaw();
       if (data != null) {
         final atKeysData = AtKeysData.fromJson(jsonDecode(data));
         atKeysData.keys.removeWhere(
@@ -153,12 +198,17 @@ class KeychainStorage {
     }
   }
 
-  /// Delete all persisted Atsign key data from the keychain
+  /// Delete all persisted Atsign key data from the keychain, including any
+  /// data still held under the legacy pre-1.1.6 `_` delimited store name.
   Future<void> deleteAllAtKeysData() async {
     try {
-      final BiometricStorageFile biometricStore =
-          await _getBiometricStorageFile(await AtKeysStore.getName());
-      await biometricStore.delete();
+      await _delete(keychainStoreName: await AtKeysStore.getName());
+    } catch (e, s) {
+      _logger.info('_getAtClientData', e, s);
+      print(s);
+    }
+    try {
+      await _delete(keychainStoreName: await _getImproperAtKeysStoreName());
     } catch (e, s) {
       _logger.info('_getAtClientData', e, s);
       print(s);
@@ -341,7 +391,10 @@ class KeychainStorage {
     }
   }
 
-  Future<String?> _read({required String keychainStoreName}) async {
+  Future<String?> _read({
+    required String keychainStoreName,
+    bool resetOnError = true,
+  }) async {
     try {
       final BiometricStorageFile store = await _getBiometricStorageFile(
         keychainStoreName,
@@ -401,13 +454,64 @@ class KeychainStorage {
     } catch (e, s) {
       _logger.severe('_read failed with $e', e, s);
       print(s);
-      _logger.severe('Removing data');
-      await _write(
-        biometricStoreName: keychainStoreName,
-        keychainData: EmptyKeychainData(),
-      );
+      if (resetOnError) {
+        _logger.severe('Removing data');
+        await _write(
+          biometricStoreName: keychainStoreName,
+          keychainData: EmptyKeychainData(),
+        );
+      }
       rethrow;
     }
+  }
+
+  Future<void> _delete({required String keychainStoreName}) async {
+    final store = await _getBiometricStorageFile(keychainStoreName);
+    if (!isWindows) {
+      await store.delete();
+      return;
+    }
+
+    final segmentNames = <String>[];
+    try {
+      final storedData = await store.read();
+      if (storedData != null && storedData.isNotEmpty) {
+        final int segmentCount;
+        final String segmentPrefix;
+        if (storedData.startsWith('{')) {
+          final Map metadata = jsonDecode(storedData);
+          segmentCount = metadata['segmentCount'];
+          segmentPrefix = '${keychainStoreName}_segment';
+        } else {
+          segmentCount = int.tryParse(storedData) ?? 0;
+          segmentPrefix = '${await getPackageName()}_data';
+        }
+        for (int i = 0; i < segmentCount; i++) {
+          segmentNames.add('${segmentPrefix}_$i');
+        }
+      }
+    } catch (e, s) {
+      _logger.warning(
+        'Failed to read Windows keychain segment metadata for deletion',
+        e,
+        s,
+      );
+    }
+
+    for (final segmentName in segmentNames) {
+      try {
+        final segmentStore = await _getBiometricStorageFile(segmentName);
+        await segmentStore.delete();
+      } catch (e, s) {
+        _logger.warning(
+          'Failed to delete Windows keychain segment "$segmentName"',
+          e,
+          s,
+        );
+      }
+    }
+
+    await store.delete();
   }
 
   Future<void> _write({
