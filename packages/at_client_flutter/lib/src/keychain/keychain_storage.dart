@@ -55,19 +55,20 @@ class KeychainStorage {
   // Falls back to the pre-1.1.6 `_`-delimited store name and migrates it
   // forward, so upgrading doesn't orphan already-stored Atsign keys.
   Future<String?> _readAtKeysDataRaw() async {
-    // 1. read `:` delimiter.
+    // 1. Read the current `:`-delimited store. If it exists, it is the
+    // authoritative store and no migration is needed.
     final currentName = await AtKeysStore.getName();
     final data = await _read(keychainStoreName: currentName);
+    if (data != null) {
+      return data;
+    }
 
     // -----------------------------
     // MIGRATION FLOW
     // people on < 1.1.6 used the `_` delimiter, when apps have historically always used `:`
     // this was a mistake, so >= 1.1.6 introduced the fix and migration path.
     // >= 1.1.6 means `:` delimiter is now used for all future keys saved in keychain.
-    // Merging happens per-atsign, not per-store: even if `:` already holds
-    // some atsigns (e.g. one added fresh post-upgrade), any atsign still
-    // sitting only under the legacy `_` store is still picked up and copied
-    // over to `:`.
+    // Only when `:` is absent, look for `_` and copy its contents to `:`.
     // for the time being as of 1.1.6, we are not deleting keys in `_` just in case.
     // -----------------------------
 
@@ -80,58 +81,21 @@ class KeychainStorage {
       );
     } catch (e, s) {
       _logger.info('No legacy atKeysData found in keychain.', e, s);
-      return data;
+      return null;
     }
     if (improperDataString == null) {
-      return data;
-    }
-
-    if (data == null) {
-      // Nothing under `:` yet, migrate the legacy store wholesale.
-      _logger.info(
-        'Migrating AtKeysData from legacy keychain store '
-        '"$keychainStorageImproperName" to "$currentName"',
-      );
-      await _write(
-        biometricStoreName: currentName,
-        keychainData: AtKeysData.fromJson(jsonDecode(improperDataString)),
-      );
-      return improperDataString;
-    }
-
-    // `:` already has data. Merge in any atsigns present under `_` but
-    // missing from `:`.
-    final currentData = AtKeysData.fromJson(jsonDecode(data));
-    final legacyData = AtKeysData.fromJson(jsonDecode(improperDataString));
-    final existingAtsigns = currentData.keys
-        .map(_atsignOf)
-        .whereType<String>()
-        .toSet();
-    final missingKeys = legacyData.keys
-        .where((k) => !existingAtsigns.contains(_atsignOf(k)))
-        .toList();
-
-    if (missingKeys.isEmpty) {
-      return data;
+      return null;
     }
 
     _logger.info(
-      'Migrating ${missingKeys.length} legacy atsign(s) from '
-      '"$keychainStorageImproperName" into "$currentName"',
+      'Migrating AtKeysData from legacy keychain store '
+      '"$keychainStorageImproperName" to "$currentName"',
     );
-    currentData.keys.addAll(missingKeys);
-    currentData.defaultAtsign ??= legacyData.defaultAtsign;
-    await _write(biometricStoreName: currentName, keychainData: currentData);
-    return jsonEncode(currentData.toJson());
-  }
-
-  // Mirrors the atsign lookup used by getAtsign()/getAllAtsigns(): prefer
-  // the 'atsign' metadata key, fall back to the legacy 'name' key.
-  String? _atsignOf(AtKeys keys) {
-    if (keys.metadata.containsKey('atsign')) {
-      return keys.metadata['atsign'] as String?;
-    }
-    return keys.metadata['name'] as String?;
+    await _write(
+      biometricStoreName: currentName,
+      keychainData: AtKeysData.fromJson(jsonDecode(improperDataString)),
+    );
+    return improperDataString;
   }
 
   /// Get the stored keys for a specific Atsign
