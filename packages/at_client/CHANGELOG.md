@@ -6,6 +6,15 @@
   pending writes on the atServer first awaits `waitUntilCaughtUp`.
   `LocalSecondary.syncQueueSyncSnapshot` is null for a closed queue, as for one
   never opened.
+- **BREAKING (behaviour):** `AtClient.stop()` releases the client's storage
+  and removes the client from the instance cache. A stopped client keeps nothing
+  open and cannot be restarted; `start()` on one throws, and the next `create()`
+  or `setCurrentAtSign` builds a fresh client on freshly opened storage. Before,
+  a stopped client stayed cached with its store open and was handed back on the
+  next request. Switching atSigns therefore reopens storage cold on the way
+  back. With release in place, `HiveAtClientStorage` refuses a second instance
+  for an atSign whose boxes another instance holds. A client whose
+  construction fails releases the storage it had claimed before rethrowing.
 - feat: `AtClientStorage` — a client's local keystore and its sync queue as one
   object, with `HiveAtClientStorage` as the default. A client claims its storage
   when it is created and a second client is refused it; after the claim is

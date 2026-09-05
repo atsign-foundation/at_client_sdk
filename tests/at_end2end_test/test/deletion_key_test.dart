@@ -183,7 +183,7 @@ void main() {
         .atClient;
     // notifying a key with ttr to shared with atSign
     await currentAtClient.put(atKey, value);
-    await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);
+    await E2ESyncService.getInstance().syncData(currentAtClient.syncService);
 
     var sharedWithAtClient = (await AtClientManager.getInstance()
             .setCurrentAtSign(sharedWithAtSign, namespace,

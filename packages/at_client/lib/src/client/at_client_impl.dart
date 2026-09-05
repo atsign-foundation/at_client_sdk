@@ -44,8 +44,13 @@ class AtClientImpl implements AtClient {
   AtKeyValueStore<String, AtData, AtMetaData?>? _localSecondaryKeyStore;
 
   /// The keystore and sync queue this client holds; null when an external
-  /// keystore was injected or storage is not required.
+  /// keystore was injected, storage is not required, or [stop] has released it.
   AtClientStorage? _storage;
+
+  /// Whether this client built [_storage] itself and so closes it on [stop];
+  /// injected storage is only detached.
+  bool _ownsStorage = false;
+  bool _storageReleased = false;
 
   @visibleForTesting
   AtClientStorage? get storage => _storage;
@@ -344,7 +349,17 @@ class AtClientImpl implements AtClient {
         enrollmentId: enrollmentId,
       );
 
-      await atClientImpl._init(atLookUp: atLookUp);
+      try {
+        await atClientImpl._init(atLookUp: atLookUp);
+      } catch (_) {
+        // A client that failed to build holds nothing: its claim on the storage
+
+        // would otherwise outlive it and refuse every later client.
+
+        await atClientImpl._releaseStorage();
+
+        rethrow;
+      }
     }
 
     atClientInstanceMap[currentAtSign] = atClientImpl;
@@ -401,6 +416,7 @@ class AtClientImpl implements AtClient {
             HiveAtClientStorage(atSign: _atSign, storagePath: storagePath);
         await storage.attach(this);
         _storage = storage;
+        _ownsStorage = true;
         syncQueue = storage.syncQueue;
       }
 
@@ -570,6 +586,10 @@ class AtClientImpl implements AtClient {
       _logger.finer('start() called, but atClient is not stopped. Ignoring');
       return;
     }
+    if (_storageReleased) {
+      throw StateError('this client released its storage when it stopped; '
+          'build a new client rather than restarting this one');
+    }
     _isStopped = false;
   }
 
@@ -584,6 +604,25 @@ class AtClientImpl implements AtClient {
     _logger.info('stop() called: stopping at_client for $_atSign');
 
     await _stopBackgroundProcesses();
+    await _releaseStorage();
+    if (identical(atClientInstanceMap[_atSign], this)) {
+      atClientInstanceMap.remove(_atSign);
+    }
+  }
+
+  /// Drops this client's claim on its storage, closing it if this client built
+  /// it. A stopped client keeps nothing open and cannot be restarted.
+  Future<void> _releaseStorage() async {
+    final storage = _storage;
+    if (storage == null) return;
+    _storageReleased = true;
+    try {
+      await storage.detach(this);
+      if (_ownsStorage) await storage.close();
+    } catch (e) {
+      _logger.warning('Error while releasing storage: $e');
+    }
+    _storage = null;
   }
 
   Future<void> _stopBackgroundProcesses() async {
