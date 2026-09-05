@@ -1,3 +1,8 @@
+## 3.15.0
+- chore: delete `lib/src/manager/sync_isolate_manager.dart`. Deprecated, not
+  exported from any barrel, and with no references anywhere in the repo — it
+  was also the only `dart:isolate` import in any package's `lib/`.
+
 ## 3.14.1
 - fix: `stop()` no longer races an in-flight sync round. The round ends at its
   next step once the service is stopped, its request is reported as stopped

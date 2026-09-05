@@ -108,7 +108,7 @@ generator existed once and was removed, because the failure output already carri
 what it would have printed.
 
 Both gated packages have an empty allow list. at_chops' ceiling of 2 is `at_utils` and
-`chalkdart` via the logger; at_auth's 4 adds `at_lookup` and `at_server_status`.
+`chalkdart` via the logger; at_auth's 3 adds `at_lookup`.
 
 Every run prints its figures whether or not it fails:
 
