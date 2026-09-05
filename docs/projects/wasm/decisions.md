@@ -399,9 +399,9 @@ forgotten cleanup cannot leave a location registered and trip the next test's gu
 (`forPath`) is already present on the spike for both keystore and queue, so X4a adds the
 per-location guard, the `storage:` injection, the impl `location` report, and the fixture
 rewrite behind the helper — and corrects the stale `hive_at_client_storage.dart` NOTE
-(distinct paths *do* isolate; only same-location collides). #2208 keeps its release code, e2e
-keystore initializer and fixture fixes; its per-atSign guard is replaced by the per-location
-one.
+(distinct paths *do* isolate; only same-location collides). X4a lands on #2208's branch, so
+X4 and X4a ship as one PR: #2208 keeps its release code, e2e keystore initializer and fixture
+fixes, and its per-atSign guard is replaced in place by the per-location one.
 
 ---
 

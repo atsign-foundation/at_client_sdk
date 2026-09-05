@@ -296,11 +296,14 @@ D-12. Independent of the P series, which is `at_server`-side.
   `refuseChangedStoragePath` short-circuit removed; (3) rewrite the multi-enrollment fixtures
   onto direct `create` with a shared lifecycle-owning test helper (builds located storage +
   client, closes both in `tearDown`); (4) correct the stale `hive_at_client_storage.dart` NOTE
-  (distinct paths isolate; only same-location collides). Then X4 unpauses.
-- **X4 — Inject it, and release it.** ⏸ **Paused behind X4a** — its release code (`stop()`
-  releases storage, PR #2208) is sound, but the per-atSign guard it carries is superseded
+  (distinct paths isolate; only same-location collides). **This lands on #2208's branch**
+  (`gkc-at-client-storage-release`), combining with X4's release code into one PR rather than a
+  separate prerequisite — X4a is what turns #2208's per-atSign-guard reds green.
+- **X4 — Inject it, and release it.** ⏸ **X4a lands on this branch (#2208), so X4 and X4a
+  ship as one PR.** Its release code (`stop()` releases storage, PR #2208) is sound, but the
+  per-atSign guard it carries is superseded
   by [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05)'s per-location guard
-  and must be reworked before it merges. A new static
+  and is reworked in place on this branch as part of X4a. A new static
   factory on `AtClient` that builds *and*
   wires the services, taking a bundle; `stop()` releases the claim and closes what the
   bundle opened. Deprecate `AtClientPreference.hiveStoragePath` with a migration note.
