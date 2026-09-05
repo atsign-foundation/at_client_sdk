@@ -28,6 +28,13 @@
   directory plus the atSign, since two atSigns under one directory are two boxes
   and share nothing. `AtSyncQueue` takes the storage path it should open under,
   and `AtClientStorage` implementations report the store they point at.
+- fix: a delete that supersedes a queued update is no longer lost on push. Queue
+  entries carry a monotonic `seq`, and the drain removes only the version it
+  actually pushed, so a write that replaced the entry mid-flight stays queued for
+  the next round. Before, an unconditional removal discarded it: the server kept
+  the superseded update, the queue read empty, and the client reported itself in
+  sync. `ts` cannot serve as that identity — an update and a delete of one key
+  land well inside the same millisecond.
 - feat: `AtClientStorage` — a client's local keystore and its sync queue as one
   object, with `HiveAtClientStorage` as the default. A client claims its storage
   when it is created and a second client is refused it; after the claim is
