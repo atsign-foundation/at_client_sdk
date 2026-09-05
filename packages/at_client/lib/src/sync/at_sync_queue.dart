@@ -2,9 +2,9 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/src/sync/sync_queue_store.dart';
+import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:hive/hive.dart';
-import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:meta/meta.dart';
 
 /// On-the-wire op carried in the sync queue's persisted record. The
@@ -87,9 +87,9 @@ class SyncQueueEntry {
 /// order across restarts.
 ///
 /// Lifecycle: construct → [open] → use → [close]. [open] is idempotent.
-/// The box is opened on the Hive instance owning the storage path this queue
-/// is constructed with, so two clients of one atSign in one process keep
-/// separate queues when they are given separate paths.
+/// The box opens on the Hive instance owning this queue's `storagePath`, so
+/// two clients of one atSign in one process keep separate queues when given
+/// separate paths.
 class AtSyncQueue {
   static const String _boxNamePrefix = 'syncqueue_';
 
@@ -97,35 +97,23 @@ class AtSyncQueue {
   final AtSignLogger _logger;
 
   /// Test seam. Production callers should use the default constructor —
-  /// the box is opened against the global Hive instance via [open].
-  /// Tests can pass an already-opened `Box<String>` to bypass the
-  /// production `Hive.openBox` call (useful for in-memory test boxes
-  /// or to share a box across test fixtures).
+  /// [open] resolves the box on the instance owning this queue's
+  /// `storagePath`. Tests can pass an already-opened `Box<String>` to bypass
+  /// that (useful for in-memory test boxes or to share one across fixtures).
   SyncQueueStore? _store;
 
   final LinkedHashSet<String> _inMemoryQueue = LinkedHashSet<String>();
 
   bool _opened = false;
 
-  /// The directory this queue's box lives in, or null for the package-global
-  /// Hive instance.
-  ///
-  /// **Required but nullable**, and both halves are deliberate. Required so
-  /// the compiler names every call site: a default would be silently wrong for
-  /// the caller that most needs it — a second client of one atSign — and
-  /// nothing would go red, because a box resolved from the wrong place still
-  /// opens and still works.
-  ///
-  /// Nullable because a caller may legitimately have no directory to name. A
-  /// `LocalSecondary` built around an injected keystore has no
-  /// `hiveStoragePath` and never needed one; refusing it would withdraw a
-  /// capability those callers already have. Null keeps exactly the behaviour
-  /// they have today — the global instance — and with it the collision:
-  /// a caller that names no directory cannot be separated from another that
-  /// names none either.
-  final String? _storagePath;
-
   bool get isOpen => _opened;
+
+  /// The directory this queue's box lives in, or null for the package-global
+  /// Hive instance. Required so the compiler names every call site — a second
+  /// client of one atSign needs its own path and a default would be silently
+  /// wrong. Null keeps the legacy global-instance behaviour for a caller
+  /// (e.g. an injected keystore) that has no directory to name.
+  final String? _storagePath;
 
   AtSyncQueue({required String atSign, String? storagePath})
       : _atSign = atSign,
@@ -144,12 +132,12 @@ class AtSyncQueue {
   /// in `ts`-ascending order. Idempotent — calling [open] twice is a
   /// no-op after the first.
   ///
-  /// The box is opened on the instance owning this queue's storage path, not
-  /// on the package-global `Hive`. The box name derives from the atSign alone,
-  /// and Hive resolves open boxes by name within an instance — so opening on
-  /// the global meant two clients of one atSign in one process shared one sync
-  /// queue however different the paths they were given. A [store] supplied by
-  /// a storage bundle is used as is; an [injectedBox] (test seam) is wrapped.
+  /// The box opens on the instance owning this queue's `storagePath`, not on
+  /// the package-global `Hive`: the box name derives from the atSign alone and
+  /// Hive resolves open boxes by name within an instance, so opening on the
+  /// global meant two clients of one atSign shared one queue however different
+  /// their paths. A [store] from a storage bundle is used as is; an
+  /// [injectedBox] (test seam) is wrapped.
   Future<void> open({Box<String>? injectedBox, SyncQueueStore? store}) async {
     if (_opened) return;
     if (store != null) {
