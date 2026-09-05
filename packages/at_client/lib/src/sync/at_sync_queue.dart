@@ -205,6 +205,13 @@ class AtSyncQueue {
     await _box!.delete(atKey);
   }
 
+  /// Drops every entry, keeping the box open.
+  Future<void> clear() async {
+    _ensureOpen();
+    _inMemoryQueue.clear();
+    await _box!.clear();
+  }
+
   /// Returns up to [limit] atKey strings from the front of the
   /// in-memory queue, in FIFO order. Does NOT remove them — the
   /// caller is expected to call [remove] per atKey after a successful

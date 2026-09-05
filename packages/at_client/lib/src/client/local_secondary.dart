@@ -99,8 +99,10 @@ class LocalSecondary implements Secondary {
   LocalSecondary(
     this._atClient, {
     this.keyStore,
+    AtSyncQueue? syncQueue,
     void Function(DataEvent)? onEvent,
-  }) : _onEvent = onEvent {
+  })  : _syncQueue = syncQueue,
+        _onEvent = onEvent {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
     keyStore ??= _atClient.persistenceBundle?.keyValueStore;
   }

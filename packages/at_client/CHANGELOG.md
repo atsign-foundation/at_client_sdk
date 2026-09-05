@@ -1,4 +1,10 @@
 ## 3.14.1
+- feat: `AtClientStorage` — a client's local keystore and its sync queue as one
+  object, with `HiveAtClientStorage` as the default. A client claims its storage
+  when it is created and a second client is refused it; after the claim is
+  dropped the same principal may take it again, a different one only after
+  `forgetPrincipal()` or `clear()`. `AtSyncQueue` gains `clear()`. Groundwork
+  for injecting storage and for in-memory and SQLite backends.
 - fix: `AtCollection` — resolve received (shared-in) items in the id-scoped
   read path. `Query.watch()` (delta path), `getOrNull` / `get(id, owner)` and
   `exists(id, owner)` missed items stored locally as
