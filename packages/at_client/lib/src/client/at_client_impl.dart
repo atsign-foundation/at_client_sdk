@@ -33,7 +33,9 @@ import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
-import 'package:at_client/src/manager/storage_manager.dart';
+import 'package:at_client/src/sync/at_sync_queue.dart';
+import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_client/src/storage/hive_at_client_storage.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
@@ -71,9 +73,12 @@ class AtClientImpl implements AtClient {
   Atsign get atSign => _atSign;
   AtKeyValueStore<String, AtData, AtMetaData?>? _localSecondaryKeyStore;
 
-  /// Owns the local persistence bundle's lifecycle (commit-log-free); null
-  /// when an external keystore was injected or storage is not required.
-  StorageManager? _storageManager;
+  /// The keystore and sync queue this client holds; null when an external
+  /// keystore was injected or storage is not required.
+  AtClientStorage? _storage;
+
+  @visibleForTesting
+  AtClientStorage? get storage => _storage;
   @visibleForTesting
   LocalSecondary? localSecondary;
   RemoteSecondary? _remoteSecondary;
@@ -832,14 +837,23 @@ class AtClientImpl implements AtClient {
     // sign the preference's rsa2048 default under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();
     if (_preference!.isLocalStoreRequired) {
+      AtSyncQueue? syncQueue;
       if (_localSecondaryKeyStore == null) {
-        _storageManager = StorageManager(preference);
-        await _storageManager!.init(_atSign, preference!.keyStoreSecret);
+        final storagePath = preference!.hiveStoragePath;
+        if (storagePath == null) {
+          throw Exception('Please set local storage path');
+        }
+        final storage =
+            HiveAtClientStorage(atSign: _atSign, storagePath: storagePath);
+        await storage.attach(this);
+        _storage = storage;
+        syncQueue = storage.syncQueue;
       }
 
       localSecondary = LocalSecondary(
         this,
-        keyStore: _localSecondaryKeyStore ?? _storageManager?.keyValueStore,
+        keyStore: _localSecondaryKeyStore ?? _storage?.keyStore,
+        syncQueue: syncQueue,
         onEvent: emitDataEvent,
       );
       _atChops ??= await _createAtChops(_atSign);
@@ -1253,7 +1267,10 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  AtPersistenceBundle? get persistenceBundle => _storageManager?.bundleOrNull;
+  AtPersistenceBundle? get persistenceBundle {
+    final storage = _storage;
+    return storage is HiveAtClientStorage ? storage.bundle : null;
+  }
 
   @override
   RemoteSecondary? getRemoteSecondary() {

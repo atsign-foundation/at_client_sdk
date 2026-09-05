@@ -1,5 +1,12 @@
 ## 3.15.0-rc1
 
+- feat: `AtClientStorage` — a client's local keystore and its sync queue as one
+  object, with `HiveAtClientStorage` as the default. A client claims its storage
+  when it is created and a second client is refused it; after the claim is
+  dropped the same principal may take it again, a different one only after
+  `forgetPrincipal()` or `clear()`. `AtSyncQueue` gains `clear()`. Groundwork
+  for injecting storage and for in-memory and SQLite backends.
+
 - fix: `RemoteSecondary` names the hashing algorithm when it installs an
   authenticator. It set `atLookUp.hashingAlgoType` from the preference and then
   built the authenticator that replaces that path without passing one, so the

@@ -7,6 +7,8 @@ export 'package:at_client/src/client/data_event.dart';
 export 'package:at_client/src/client/local_secondary.dart';
 export 'package:at_client/src/client/remote_secondary.dart';
 export 'package:at_client/src/client/request_options.dart';
+export 'package:at_client/src/storage/at_client_storage.dart';
+export 'package:at_client/src/storage/hive_at_client_storage.dart';
 export 'package:at_client/src/crypto/crypto.dart';
 // CryptoRuntime carries the pre-flight readiness query, which an app needs
 // before it lets a user compose something the write cannot send.
