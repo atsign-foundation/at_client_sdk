@@ -1,6 +1,7 @@
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_client/src/sync/sync_queue_store.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:hive/hive.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
@@ -100,7 +101,7 @@ class AtSyncQueue {
   /// Tests can pass an already-opened `Box<String>` to bypass the
   /// production `Hive.openBox` call (useful for in-memory test boxes
   /// or to share a box across test fixtures).
-  Box<String>? _box;
+  SyncQueueStore? _store;
 
   final LinkedHashSet<String> _inMemoryQueue = LinkedHashSet<String>();
 
@@ -124,7 +125,7 @@ class AtSyncQueue {
   /// names none either.
   final String? _storagePath;
 
-  AtSyncQueue({required String atSign, required String? storagePath})
+  AtSyncQueue({required String atSign, String? storagePath})
       : _atSign = atSign,
         _storagePath = storagePath,
         _logger = AtSignLogger('AtSyncQueue ($atSign)');
@@ -145,16 +146,19 @@ class AtSyncQueue {
   /// on the package-global `Hive`. The box name derives from the atSign alone,
   /// and Hive resolves open boxes by name within an instance — so opening on
   /// the global meant two clients of one atSign in one process shared one sync
-  /// queue however different the paths they were given. If [injectedBox] is
-  /// supplied (test seam) it is used instead, and no instance is touched.
-  Future<void> open({Box<String>? injectedBox}) async {
+  /// queue however different the paths they were given. A [store] supplied by
+  /// a storage bundle is used as is; an [injectedBox] (test seam) is wrapped.
+  Future<void> open({Box<String>? injectedBox, SyncQueueStore? store}) async {
     if (_opened) return;
-    if (injectedBox != null) {
-      _box = injectedBox;
+    if (store != null) {
+      _store = store;
+    } else if (injectedBox != null) {
+      _store = HiveBoxSyncQueueStore(injectedBox);
     } else {
       final path = _storagePath;
       final hive = path == null ? Hive : HiveInstances.forPath(path);
-      _box = await hive.openBox<String>(boxNameForAtSign(_atSign));
+      _store = HiveBoxSyncQueueStore(
+          await hive.openBox<String>(boxNameForAtSign(_atSign)));
     }
     _replayIntoMemory();
     _opened = true;
@@ -168,9 +172,9 @@ class AtSyncQueue {
   /// `ts`-ascending order — the order they were originally written.
   void _replayIntoMemory() {
     final entries = <SyncQueueEntry>[];
-    final box = _box!;
-    for (final atKey in box.keys.cast<String>()) {
-      final raw = box.get(atKey);
+    final store = _store!;
+    for (final atKey in store.keys.toList()) {
+      final raw = store.get(atKey);
       if (raw == null) continue;
       try {
         entries.add(SyncQueueEntry._deserialise(atKey, raw));
@@ -194,8 +198,8 @@ class AtSyncQueue {
   /// the box open for the AtClient's lifetime.
   Future<void> close() async {
     if (!_opened) return;
-    await _box?.close();
-    _box = null;
+    await _store?.close();
+    _store = null;
     _inMemoryQueue.clear();
     _opened = false;
   }
@@ -226,7 +230,7 @@ class AtSyncQueue {
       ts: ts ?? DateTime.now().millisecondsSinceEpoch,
       seq: _nextSeq++,
     );
-    await _box!.put(atKey, entry._serialise());
+    await _store!.put(atKey, entry._serialise());
     _inMemoryQueue.add(atKey);
   }
 
@@ -235,7 +239,7 @@ class AtSyncQueue {
   /// (op, ts) before building the wire command.
   SyncQueueEntry? readEntry(String atKey) {
     _ensureOpen();
-    final raw = _box!.get(atKey);
+    final raw = _store!.get(atKey);
     if (raw == null) return null;
     return SyncQueueEntry._deserialise(atKey, raw);
   }
@@ -248,7 +252,7 @@ class AtSyncQueue {
   Future<void> remove(String atKey) async {
     _ensureOpen();
     _inMemoryQueue.remove(atKey);
-    await _box!.delete(atKey);
+    await _store!.delete(atKey);
   }
 
   /// Removes [atKey] only while its entry is still the one stamped [seq];
@@ -263,11 +267,11 @@ class AtSyncQueue {
   /// the pushed version leaves a superseded entry queued for the next round.
   Future<bool> removeIfUnchanged(String atKey, int seq) async {
     _ensureOpen();
-    final raw = _box!.get(atKey);
+    final raw = _store!.get(atKey);
     if (raw == null) return false;
     if (SyncQueueEntry._deserialise(atKey, raw).seq != seq) return false;
     _inMemoryQueue.remove(atKey);
-    await _box!.delete(atKey);
+    await _store!.delete(atKey);
     return true;
   }
 
@@ -275,7 +279,7 @@ class AtSyncQueue {
   Future<void> clear() async {
     _ensureOpen();
     _inMemoryQueue.clear();
-    await _box!.clear();
+    await _store!.clear();
   }
 
   /// Returns up to [limit] atKey strings from the front of the
@@ -308,7 +312,7 @@ class AtSyncQueue {
   @visibleForTesting
   Iterable<String> get persistedKeys {
     _ensureOpen();
-    return _box!.keys.cast<String>();
+    return _store!.keys;
   }
 
   void _ensureOpen() {

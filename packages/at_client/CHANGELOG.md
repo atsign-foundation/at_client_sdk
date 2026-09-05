@@ -5,7 +5,14 @@
   when it is created and a second client is refused it; after the claim is
   dropped the same principal may take it again, a different one only after
   `forgetPrincipal()` or `clear()`. `AtSyncQueue` gains `clear()`. Groundwork
-  for injecting storage and for in-memory and SQLite backends.
+  for injecting storage.
+- feat: `SqliteAtClientStorage` and `InMemoryAtClientStorage`, behind
+  `package:at_client/sqlite.dart` so the main import carries no SQLite
+  dependency. The in-memory one is a SQLite database that never touches disk.
+  `AtSyncQueue` keeps its records through `SyncQueueStore`, with Hive and
+  SQLite implementations, and the SQLite backends keep the queue in the
+  keystore's own database.
+
 
 - fix: `RemoteSecondary` names the hashing algorithm when it installs an
   authenticator. It set `atLookUp.hashingAlgoType` from the preference and then
