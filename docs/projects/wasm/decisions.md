@@ -277,13 +277,26 @@ client came back with its service getters throwing. Deprecating `AtClientManager
 direction of travel; where its `AtSignChangeListener` capability goes is deferred, because
 that capability exists only to announce that a global current atSign changed.
 
+**Surface (ruled 2026-09-05).** The owner of a claim is the client object, compared by
+identity — not the instance key, which for a legacy client is the bare atSign and so cannot
+tell two legacy clients of one atSign apart. Owned storage is closed on release; injected
+storage is only detached, the client knowing which it has. After detach, only the same
+principal may re-attach until `clear()` runs — the bundle remembers who held it last, so a
+different enrollment cannot inherit records it cannot decrypt and pushes it cannot make.
+A deliberate hand-over is `forgetPrincipal()`, which drops that guard and keeps the data;
+`clear()` empties keystore and queue together and forgets the principal too, so a
+half-cleared store is unrepresentable and getting past the guard never costs the records. The surface is in
+[`design.md`](design.md#22-storage-bootstrap) §2.2.
+
 **Cost, stated honestly.** `stop()` is the atSign-switch-away path, so releasing storage
 there means switching back reopens a cold store and pulls again. That is accepted. It is
 not free: a cold store is precisely the condition under which a local-first write followed
-by a read routed to the atServer loses the race, which is how this was found. The
-resurrection holes are fixed first — `start()` does not rebuild what `stop()` nulls, and
-two paths hand back a stopped client — so that a released client cannot be handed to a
-caller at all.
+by a read routed to the atServer loses the race, which is how this was found. `start()`
+does not rebuild what `stop()` nulls, so a stopped client must never be handed back. The
+manager's same-atSign short-circuit already refuses one, and nothing else in production
+reaches a cached client; X1 pins that guard before X4 changes `stop()`, since the guard is
+what a released client's safety then rests on. (Amended 2026-09-05: first written as "two
+paths hand back a stopped client" — one was already guarded, the other has no caller.)
 
 ---
 

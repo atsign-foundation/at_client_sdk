@@ -234,24 +234,62 @@ Hive directory across every file through `test_utils.dart`'s
 pending sync queue. That is not hypothetical — it is how a scoped enrollment's client came
 to push another test's namespace keys and be refused `AT0009` by the atServer.
 
-A first cut at the surface, to argue with rather than to build from:
+The surface, as ruled on 2026-09-05 (four points, each in
+[D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)):
 
 ```dart
 /// The local storage one AtClient owns: its keystore and its sync queue.
 abstract class AtClientStorage {
-  /// Claims this storage for [owner]. Throws if another client holds it.
-  Future<void> open(String owner);
+  /// Claims this storage for [owner]. Throws if a different client holds it,
+  /// or if a different principal held it last and [clear] has not run since;
+  /// the same client claiming again is a no-op.
+  Future<void> attach(AtClient owner);
+
+  /// Drops [owner]'s claim. Whether the backend is then closed is the
+  /// client's decision, not this object's — see below.
+  Future<void> detach(AtClient owner);
 
   AtKeyValueStore<String, AtData, AtMetaData?> get keyStore;
   AtSyncQueue get syncQueue;
 
-  /// Releases the claim and closes what this bundle opened.
+  /// Forgets which principal last held this storage, keeping the data. The
+  /// next [attach] may be a different principal. Throws while attached.
+  Future<void> forgetPrincipal();
+
+  /// Empties both halves, keeping the backend open. Idempotent.
+  Future<void> clear();
+
+  /// Closes the backend. Idempotent.
   Future<void> close();
 }
 ```
 
-Open: whether `owner` is the instance key (`atSign|enrollmentId`) or an opaque token, and
-whether `close()` on an injected bundle closes the backend or only releases the claim.
+- **The owner is the client object, compared by identity.** Not the instance key: for a
+  legacy client that key is the bare atSign, so two legacy clients of one atSign would
+  present the same owner and an idempotent re-attach rule would wave the second through —
+  the silent sharing this exists to refuse. Identity tells two instances apart; the refusal
+  message still describes the holder by atSign and enrollment for a human.
+- **Owned storage is closed on release; injected storage is only detached.** The client
+  knows which it has — it either built the bundle or was handed it — so the flag lives on
+  the client and this interface stays neutral. An in-memory fixture therefore survives
+  `stop()` and can be inspected afterwards; an app can hand one bundle to a later client.
+- **After detach, only the same principal may re-attach.** The bundle remembers the
+  `(atSign, enrollmentId)` that last held it and refuses a different one until `clear()`
+  has run. A new instance of the same principal — a restart within the process, a client
+  stopped and rebuilt — attaches freely. The contents are principal-specific twice over:
+  records encrypted under that principal's keys, and queued pushes that need that
+  principal's authorisation. A different principal inheriting them is the `AT0009` shape
+  from the functional pack, and this makes it unrepresentable rather than a fixture's job
+  to avoid.
+- **`forgetPrincipal()` is the deliberate hand-over.** It drops the guard and keeps the
+  data, so a caller that *means* to give one principal's storage to another — the same
+  atSign moving from a legacy client to an enrolled one — says so in one call, rather than
+  reaching for `clear()` and losing the records to get past the refusal. It throws while
+  a client is attached: hand-over happens between holders, never under one.
+- **`clear()` empties keystore and queue together**, and forgets the last principal. The upstream bundle already offers it
+  for the keystore; the queue is the half that matters, because a queue carrying another
+  test's entries is exactly what poisoned the functional pack. A half-cleared store —
+  data without its pending writes, or writes without their data — is not representable.
 
 ### 2.3 The sync queue
 

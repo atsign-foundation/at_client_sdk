@@ -252,12 +252,17 @@ browser outcome.
 [`decisions.md`](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)
 D-12. Independent of the P series, which is `at_server`-side.
 
-- **X1 — Close the resurrection holes.** Prerequisite for X4, and worth landing alone.
+- **X1 — Pin the stopped-client guard.** Prerequisite for X4, and worth landing alone.
   `stop()` nulls `_syncService`, `_notificationService` and `_enrollmentService`; `start()`
-  only clears `_isStopped`, and the getters throw `StateError` rather than rebuilding. Two
-  paths hand back a stopped client: `AtClientImpl.create` on a cached stopped instance, and
-  `AtClientManager.setCurrentAtSign`'s same-atSign short-circuit. Make a stopped client
-  either rebuild or refuse.
+  only clears `_isStopped`, and the getters throw `StateError` rather than rebuilding — so
+  a stopped client must never be handed back. It already is not: the same-atSign
+  short-circuit in `AtClientManager.setCurrentAtSign` carries `isStopped == false`, and
+  nothing outside the manager calls `AtClientImpl.create` in production. What was missing
+  is the test. `crypto_provider_reconcile_test.dart` pins the short-circuit's crypto
+  adoption and never stops the client, so the clause could be deleted with nothing going
+  red. `at_client_manager_stopped_client_test.dart` pins it; deleting the clause reddens
+  it, quoting its reason. (First written as two open holes; one was already guarded and the
+  other has no caller.)
 - **X2 — Define `AtClientStorage`.** The neutral interface owning the keystore and the
   sync queue, with the claim/release semantics D-12 requires: the bundle refuses a second
   opener itself rather than `at_client` keeping a registry.
@@ -275,6 +280,17 @@ D-12. Independent of the P series, which is `at_server`-side.
 - **X6 — Consumers.** `at_client_flutter` and `at_onboarding_cli` move onto the factory, so
   both are WASM-ready ahead of the next major. Whether they move in this major or the next
   is open.
+
+**Sequencing.** Each X item lands as its own PR on **trunk** and is merged back into
+`gkc-pq-d1-spike` before the next starts, so the drift never accumulates into one large
+reconciliation. The one reconciliation worth writing down rather than discovering at
+merge time is X4's: `create()` differs between trunk and the spike in three hunks — the
+principal cache key (`_resolveCacheKey`), the two `refuse*` guards before `start()`, and
+filing under the identity `_init` settled. Keep the key and the filing; **delete
+`refuseChangedStoragePath`**, which a bundle holding its own claim makes redundant; keep
+`refuseChangedRolloutAxes`. `stop()` is identical on both branches, and
+`_stopBackgroundProcesses()` differs only by the spike's `_pqBootstrap?.stop()`. Measured
+2026-09-05 against trunk `ba281fda3`.
 
 **Deferred to the major:** deprecating `AtClientManager`. Its `AtSignChangeListener`
 capability exists only because there is a global current atSign, and where that goes is
