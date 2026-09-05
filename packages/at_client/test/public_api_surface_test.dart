@@ -136,6 +136,8 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/client/local_secondary.dart',
   'package:at_client/src/client/remote_secondary.dart',
   'package:at_client/src/client/request_options.dart',
+  'package:at_client/src/storage/at_client_storage.dart',
+  'package:at_client/src/storage/hive_at_client_storage.dart',
   'package:at_client/src/crypto/crypto.dart',
   'package:at_client/src/crypto/crypto_runtime.dart',
   'package:at_client/src/key_stream/key_stream.dart',
