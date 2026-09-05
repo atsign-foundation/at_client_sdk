@@ -277,7 +277,21 @@ D-12. Independent of the P series, which is `at_server`-side.
 - **X4 — Inject it, and release it.** A new static factory on `AtClient` that builds *and*
   wires the services, taking a bundle; `stop()` releases the claim and closes what the
   bundle opened. Deprecate `AtClientPreference.hiveStoragePath` with a migration note.
-  Depends on X1.
+  Depends on X1. **Measured 2026-09-05 on trunk `d13516d95`, release semantics built and
+  run against the packs before landing anything:** 69 tests red across three causes —
+  (a) 38 fixtures that rebuild a client for one atSign without stopping the previous one,
+  which the per-atSign Hive guard now refuses; (b) a sync round outliving `stop()` and
+  touching closed storage (`processSyncRequests → syncQueueSyncSnapshot → size`), fixed
+  first and separately as *a stopped sync service abandons its round*; (c) **the e2e pack
+  depends on cached-client resurrection for key material** — `getAtClient()` calls
+  `setCurrentAtSign` with no `atKeysIo`/`atChops`, and its own comment says so; a fresh
+  client on switch-back rebuilt `AtChops` from its keystore and 14 tests died with
+  `PKAM Keypair required for signing`. Why the reopened keystore lacked the keys is NOT
+  established. And trunk's `AtClient.stop()` dartdoc *promises* resurrection: "Local
+  storage is NOT closed. The instance remains in the internal cache and reuses its
+  still-open local keystore when resumed". X4's release therefore changes a documented
+  contract, and the packs (X5) and that dartdoc move with it. The release work is parked
+  as a stash on the `gkc-at-client-storage-factory` branch until then.
 - **X5 — Move the functional pack onto an in-memory bundle per file.** The named consumer:
   `test_utils.dart` shares `test/hive/client/$atsign` across every file, so one file
   inherits the next's pending sync queue and the next client's scoped enrollment is refused
