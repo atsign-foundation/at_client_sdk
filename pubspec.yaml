@@ -120,3 +120,19 @@ dev_dependencies:
   plugin_platform_interface: ^2.1.6
   test: ^1.25.0
   test_process: ^2.1.0
+
+# TEMPORARY — comes out when at_persistence_secondary_server publishes a
+# release carrying PR #2776. Pins the merged at_server commit carrying
+# "a store honours the storagePath it is given": HiveInstances.forPath opens
+# each storage path on its own Hive instance. Without it, two clients of one
+# atSign share the keystore box (named sha(atSign) on the global instance)
+# whatever their paths, and the per-location storage guard is meaningless.
+# Published at_persistence_secondary_server tops out at 5.2.1 (2026-08-11),
+# which predates the fix. A SHA, not a branch: the branch was deleted when
+# #2776 merged, and a SHA cannot be deleted or drift.
+dependency_overrides:
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      ref: 5c0e603c02c438dcbdc0531717ebfd71f62a48ad
+      path: packages/at_persistence_secondary_server

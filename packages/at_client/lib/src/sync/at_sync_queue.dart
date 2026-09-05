@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/src/sync/sync_queue_store.dart';
+import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:hive/hive.dart';
 import 'package:meta/meta.dart';
@@ -74,9 +75,9 @@ class SyncQueueEntry {
 /// order across restarts.
 ///
 /// Lifecycle: construct → [open] → use → [close]. [open] is idempotent.
-/// Hive must already have been initialised (via the keystore's
-/// `HiveAtPersistenceFactory.initialize(...)`); this class never calls
-/// `Hive.init` itself.
+/// The box opens on the Hive instance owning this queue's `storagePath`, so
+/// two clients of one atSign in one process keep separate queues when given
+/// separate paths.
 class AtSyncQueue {
   static const String _boxNamePrefix = 'syncqueue_';
 
@@ -84,10 +85,9 @@ class AtSyncQueue {
   final AtSignLogger _logger;
 
   /// Test seam. Production callers should use the default constructor —
-  /// the box is opened against the global Hive instance via [open].
-  /// Tests can pass an already-opened `Box<String>` to bypass the
-  /// production `Hive.openBox` call (useful for in-memory test boxes
-  /// or to share a box across test fixtures).
+  /// [open] resolves the box on the instance owning this queue's
+  /// `storagePath`. Tests can pass an already-opened `Box<String>` to bypass
+  /// that (useful for in-memory test boxes or to share one across fixtures).
   SyncQueueStore? _store;
 
   final LinkedHashSet<String> _inMemoryQueue = LinkedHashSet<String>();
@@ -96,8 +96,16 @@ class AtSyncQueue {
 
   bool get isOpen => _opened;
 
-  AtSyncQueue({required String atSign})
+  /// The directory this queue's box lives in, or null for the package-global
+  /// Hive instance. Required so the compiler names every call site — a second
+  /// client of one atSign needs its own path and a default would be silently
+  /// wrong. Null keeps the legacy global-instance behaviour for a caller
+  /// (e.g. an injected keystore) that has no directory to name.
+  final String? _storagePath;
+
+  AtSyncQueue({required String atSign, String? storagePath})
       : _atSign = atSign,
+        _storagePath = storagePath,
         _logger = AtSignLogger('AtSyncQueue ($atSign)');
 
   /// Returns the Hive box name this queue uses, derived
@@ -112,10 +120,12 @@ class AtSyncQueue {
   /// in `ts`-ascending order. Idempotent — calling [open] twice is a
   /// no-op after the first.
   ///
-  /// Hive.init must already have been called by the surrounding
-  /// keystore initialisation. If [injectedBox] is supplied (test
-  /// seam), it is used instead of opening one via Hive — letting
-  /// tests provide an in-memory box without calling Hive.init at all.
+  /// The box opens on the instance owning this queue's `storagePath`, not on
+  /// the package-global `Hive`: the box name derives from the atSign alone and
+  /// Hive resolves open boxes by name within an instance, so opening on the
+  /// global meant two clients of one atSign shared one queue however different
+  /// their paths. A [store] from a storage bundle is used as is; an
+  /// [injectedBox] (test seam) is wrapped.
   Future<void> open({Box<String>? injectedBox, SyncQueueStore? store}) async {
     if (_opened) return;
     if (store != null) {
@@ -123,8 +133,10 @@ class AtSyncQueue {
     } else if (injectedBox != null) {
       _store = HiveBoxSyncQueueStore(injectedBox);
     } else {
+      final path = _storagePath;
+      final hive = path == null ? Hive : HiveInstances.forPath(path);
       _store = HiveBoxSyncQueueStore(
-          await Hive.openBox<String>(boxNameForAtSign(_atSign)));
+          await hive.openBox<String>(boxNameForAtSign(_atSign)));
     }
     _replayIntoMemory();
     _opened = true;

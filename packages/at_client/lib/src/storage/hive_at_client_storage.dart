@@ -53,7 +53,7 @@ class HiveAtClientStorage extends AtClientStorageBase {
     final manager =
         StorageManager(AtClientPreference()..hiveStoragePath = storagePath);
     await manager.init(atSign, null);
-    final queue = AtSyncQueue(atSign: atSign);
+    final queue = AtSyncQueue(atSign: atSign, storagePath: storagePath);
     await queue.open();
     _manager = manager;
     _queue = queue;
