@@ -53,8 +53,8 @@ void main() {
       await s.attach(_FakeClient('@hivestore2', 'e1'));
       expect(
           () => s.attach(_FakeClient('@hivestore2', 'e2')),
-          throwsA(isA<StateError>().having(
-              (e) => e.message, 'message', contains('is held by @hivestore2|e1'))),
+          throwsA(isA<StateError>().having((e) => e.message, 'message',
+              contains('is held by @hivestore2|e1'))),
           reason: 'two clients on one store is the silent sharing this '
               'exists to refuse');
     });
