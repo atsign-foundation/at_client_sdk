@@ -88,13 +88,19 @@ void main() {
       ..sharedBy = atSign
       ..sharedWith = atSign;
     const selfValue = 'alice reads her own data from a scoped device';
-    expect(await approver.put(selfKey, selfValue), true);
+    // NOTE: remote-first. The scoped client below reads this from the atServer,
+    // and a local-first write only gets there when sync next runs.
+    expect(
+        await approver.put(selfKey, selfValue,
+            putRequestOptions: PutRequestOptions()..useRemoteAtServer = true),
+        true);
 
     // Verified rather than assumed: this really is the nskey data path. A
     // legacy write is readable by every enrollment of the atSign for an
     // entirely different reason — the self encryption key is atSign-wide — and
     // the read below would then say nothing about namespace scoping.
-    final asWritten = await approver.get(selfKey);
+    final asWritten = await approver.get(selfKey,
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
     expect(asWritten.metadata?.appMetadata?.providerId,
         symmetricAesGcmCryptoProviderId,
         reason: 'the self record must be on the nskey data path, or the read '
