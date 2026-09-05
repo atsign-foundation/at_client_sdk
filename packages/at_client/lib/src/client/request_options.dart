@@ -9,7 +9,12 @@ class GetRequestOptions extends RequestOptions {
   /// by another atSign
   bool bypassCache = false;
 
-  /// Whether to send this get request directly to the remote atServer
+  /// Whether to send this get request directly to the remote atServer.
+  ///
+  /// A record this client wrote with the default routing sits in local storage
+  /// until sync pushes it, so a remote read can fail to find what a local read
+  /// would return. An uncached key owned by another atSign ignores this: that
+  /// read is a lookup, which always goes to the atServer.
   bool useRemoteAtServer = false;
 }
 
@@ -21,7 +26,14 @@ class PutRequestOptions extends RequestOptions {
   @Deprecated('Ignored. Always true.')
   bool storeSharedKeyEncryptedMetadata = true;
 
-  /// Whether to send this update request directly to the remote atServer
+  /// Whether to send this update request directly to the remote atServer.
+  ///
+  /// The default writes to local storage and the record reaches the atServer
+  /// only when sync next pushes it, so a reader that is not this client's own
+  /// store — another client of this atSign, or a peer looking the key up — can
+  /// miss a record this call has already reported written. Set this when
+  /// something else must be able to read the record as soon as the call
+  /// returns, or await `waitUntilCaughtUp` before telling it to look.
   bool useRemoteAtServer = false;
 
   /// Except public keys, shared keys and self keys are encrypted by default.
@@ -67,7 +79,11 @@ class PutRequestOptions extends RequestOptions {
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.delete`
 class DeleteRequestOptions extends RequestOptions {
-  /// Whether to send this delete request directly to the remote atServer
+  /// Whether to send this delete request directly to the remote atServer.
+  ///
+  /// The default deletes from local storage and the removal reaches the
+  /// atServer only when sync next pushes it, so another client or a peer can
+  /// still read the record after this call returns.
   bool useRemoteAtServer = false;
 
   /// Whether the atServer should carry out this operation **without recording
