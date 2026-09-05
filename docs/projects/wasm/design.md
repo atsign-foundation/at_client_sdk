@@ -304,22 +304,28 @@ abstract class AtClientStorage {
 **The canonical runtime landmine, and the one to lead with when explaining this
 project.**
 
+On trunk (after X3, `at_sync_queue.dart` — `AtSyncQueue.open()`):
+
 ```dart
-// at_client/lib/src/sync/at_sync_queue.dart — AtSyncQueue.open()
-final path = _storagePath;
-final hive = path == null ? Hive : HiveInstances.forPath(path);
-_box = await hive.openBox<String>(boxNameForAtSign(_atSign));
+if (store != null) {
+  _store = store;
+} else if (injectedBox != null) {
+  _store = HiveBoxSyncQueueStore(injectedBox);
+} else {
+  _store = HiveBoxSyncQueueStore(
+      await Hive.openBox<String>(boxNameForAtSign(_atSign)));
+}
 ```
 
-The global singleton is now the **fallback** rather than the rule: a queue given a path
-opens on that path's Hive instance. The fallback is what an injected keystore takes, since
-injection supplies no path — so injection isolates the keystore and shares the queue. The
-box name derives from the atSign alone, so two enrollments of one atSign share a queue
-even when the instance is right.
+The default still opens on the **global** Hive instance, under a box named from the atSign
+alone — so two enrollments of one atSign share a queue whatever their paths, and an
+injected keystore, which supplies no store, shares it too. The `SyncQueueStore` indirection
+is what lets a storage bundle hand the queue its own store instead. (`gkc-pq-d1-spike`
+carries a variant that opens on `HiveInstances.forPath(path)` when the preference names a
+path, falling back to the global instance; the X3 merge-back has to keep both.)
 
-Opened lazily from `LocalSecondary._ensureSyncQueueOpen()`
-(`local_secondary.dart:110-134`), against the **global Hive singleton**, assuming
-someone already called `Hive.init`. `local_secondary.dart:118-121` documents that
+Opened lazily from `LocalSecondary._ensureSyncQueueOpen()` when no storage bundle
+supplied a queue, assuming someone already called `Hive.init`. `local_secondary.dart:118-121` documents that
 ordering dependency in a comment — it is an implicit global contract, not an enforced
 one.
 

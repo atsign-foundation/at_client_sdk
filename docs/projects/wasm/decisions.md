@@ -283,7 +283,8 @@ tell two legacy clients of one atSign apart. Owned storage is closed on release;
 storage is only detached, the client knowing which it has. After detach, only the same
 principal may re-attach until `clear()` runs — the bundle remembers who held it last, so a
 different enrollment cannot inherit records it cannot decrypt and pushes it cannot make.
-A deliberate hand-over is `forgetPrincipal()`, which drops that guard and keeps the data;
+A deliberate hand-over is `forgetPrincipal()`, which lifts the last-holder guard while keeping
+every record;
 `clear()` empties keystore and queue together and forgets the principal too, so a
 half-cleared store is unrepresentable and getting past the guard never costs the records. The surface is in
 [`design.md`](design.md#22-storage-bootstrap) §2.2.

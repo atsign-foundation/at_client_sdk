@@ -254,7 +254,7 @@ browser outcome.
 [`decisions.md`](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)
 D-12. Independent of the P series, which is `at_server`-side.
 
-- **X1 — Pin the stopped-client guard.** Prerequisite for X4, and worth landing alone.
+- **X1 — Pin the stopped-client guard.** ✅ Merged, #2203. Prerequisite for X4, and worth landing alone.
   `stop()` nulls `_syncService`, `_notificationService` and `_enrollmentService`; `start()`
   only clears `_isStopped`, and the getters throw `StateError` rather than rebuilding — so
   a stopped client must never be handed back. It already is not: the same-atSign
@@ -265,33 +265,38 @@ D-12. Independent of the P series, which is `at_server`-side.
   red. `at_client_manager_stopped_client_test.dart` pins it; deleting the clause reddens
   it, quoting its reason. (First written as two open holes; one was already guarded and the
   other has no caller.)
-- **X2 — Define `AtClientStorage`.** The neutral interface owning the keystore and the
+- **X2 — Define `AtClientStorage`.** ✅ Merged, #2204. The neutral interface owning the keystore and the
   sync queue, with the claim/release semantics D-12 requires: the bundle refuses a second
   opener itself rather than `at_client` keeping a registry. Ships with the Hive-backed
   implementation wired in as the default, so it is exercised rather than declared. The
   per-object claim only: the Hive backend's per-atSign guard waits for X4, because nothing
   releases storage before then and the guard would refuse every same-atSign rebuild.
-- **X3 — Three implementations.** Hive-backed (today's behaviour), SQLite-backed, and
-  in-memory covering keystore *and* queue so nothing touches disk. → X5, and the SQLite one
+- **X3 — Three implementations.** ✅ Merged, #2205 — **on trunk only; the spike merge-back is
+  owed** (see the Sequencing note). Hive-backed (today's behaviour), SQLite-backed, and
+  in-memory covering keystore *and* queue so nothing touches disk. The in-memory one **is**
+  `SqliteAtClientStorage` on `:memory:`, and both SQLite-backed classes are exported only from
+  `package:at_client/sqlite.dart`, so X5's pack imports that barrel. → X5, and the SQLite one
   pairs with P5.
 - **X4 — Inject it, and release it.** A new static factory on `AtClient` that builds *and*
   wires the services, taking a bundle; `stop()` releases the claim and closes what the
   bundle opened. Deprecate `AtClientPreference.hiveStoragePath` with a migration note.
-  Depends on X1. **Measured 2026-09-05 on trunk `d13516d95`, release semantics built and
-  run against the packs before landing anything:** 69 tests red across three causes —
+  Depends on X1. **Measured 2026-09-05 on trunk `d13516d95` (the X3 merge), storage-release
+  semantics built and run against the packs before landing anything:** 69 tests red across three causes —
   (a) 38 fixtures that rebuild a client for one atSign without stopping the previous one,
   which the per-atSign Hive guard now refuses; (b) a sync round outliving `stop()` and
   touching closed storage (`processSyncRequests → syncQueueSyncSnapshot → size`), fixed
-  first and separately as *a stopped sync service abandons its round*; (c) **the e2e pack
+  first and separately as *a stopped sync service abandons its round* (#2206); (c) **the e2e pack
   depends on cached-client resurrection for key material** — `getAtClient()` calls
   `setCurrentAtSign` with no `atKeysIo`/`atChops`, and its own comment says so; a fresh
   client on switch-back rebuilt `AtChops` from its keystore and 14 tests died with
   `PKAM Keypair required for signing`. Why the reopened keystore lacked the keys is NOT
   established. And trunk's `AtClient.stop()` dartdoc *promises* resurrection: "Local
   storage is NOT closed. The instance remains in the internal cache and reuses its
-  still-open local keystore when resumed". X4's release therefore changes a documented
-  contract, and the packs (X5) and that dartdoc move with it. The release work is parked
-  as a stash on the `gkc-at-client-storage-factory` branch until then.
+  still-open local keystore when resumed". X4's storage release therefore changes a
+  documented contract, and the packs (X5) and that dartdoc move with it. The storage-release
+  work is parked as a git stash named `x4-release-wip`, made on the
+  `gkc-at-client-storage-factory` branch (the stash stack is shared across worktrees), until
+  then.
 - **X5 — Move the functional pack onto an in-memory bundle per file.** The named consumer:
   `test_utils.dart` shares `test/hive/client/$atsign` across every file, so one file
   inherits the next's pending sync queue and the next client's scoped enrollment is refused
@@ -304,12 +309,22 @@ D-12. Independent of the P series, which is `at_server`-side.
 `gkc-pq-d1-spike` before the next starts, so the drift never accumulates into one large
 reconciliation. The one reconciliation worth writing down rather than discovering at
 merge time is X4's: `create()` differs between trunk and the spike in three hunks — the
-principal cache key (`_resolveCacheKey`), the two `refuse*` guards before `start()`, and
+`(atSign, enrollmentId)` cache key (`_resolveCacheKey`), the two `refuse*` guards before `start()`, and
 filing under the identity `_init` settled. Keep the key and the filing; **delete
 `refuseChangedStoragePath`**, which a bundle holding its own claim makes redundant; keep
 `refuseChangedRolloutAxes`. `stop()` is identical on both branches, and
-`_stopBackgroundProcesses()` differs only by the spike's `_pqBootstrap?.stop()`. Measured
-2026-09-05 against trunk `ba281fda3`.
+`_stopBackgroundProcesses()` differs only by the spike's `_pqBootstrap?.stop()`. That diff was
+measured 2026-09-05 against trunk `ba281fda3`, before X2 and X3 landed; the X4 row's
+measurement is against `d13516d95`, after them.
+
+**Owed under this note (found 2026-09-05 by the wrap-up's cold read):** the X3 merge-back.
+X2 was merged into the spike at `38c7f5ad4`; X3 (`d13516d95`) has not been, so
+`gkc-pq-d1-spike..origin/trunk` is exactly that commit and the spike lacks `lib/sqlite.dart`,
+`src/storage/sqlite/*` and `src/sync/sync_queue_store.dart`. The merge conflicts in
+`at_sync_queue.dart`: the spike's `_box` plus `HiveInstances.forPath(path)` default and its
+`removeIfUnchanged` against trunk's `_store`/`SyncQueueStore` — keep the store abstraction
+and make the Hive default path-aware. Also owed: nine dangling links to a `plans/wasm/`
+directory that does not exist (`implementation-plan.md`, `js-api.md`, `decisions.md`).
 
 **Deferred to the major:** deprecating `AtClientManager`. Its `AtSignChangeListener`
 capability exists only because there is a global current atSign, and where that goes is
@@ -318,6 +333,16 @@ undecided, and the migration is large:
 ```bash
 grep -rl 'AtClientManager' --include='*.dart' packages tests | wc -l
 ```
+
+**Also deferred to the major (ruled 2026-09-05):** `NotificationParams.forUpdate` with no
+value is an anti-pattern — the peer is told about a record it must then look up, and a
+local-first `put` may not have reached the atServer when it does — and should be refused;
+refusing is breaking, so it waits for the major. Until then the hazard is documented on
+`useRemoteAtServer` in `request_options.dart`.
+
+**Considered and rejected (2026-09-05):** renaming or re-homing `waitUntilCaughtUp`. It
+does wait for pending pushes (`pendingPushCount == 0`), the null-as-zero treatment of that
+count is sound for at_client's own sync service, and the extension seam is fine as it is.
 
 ---
 
