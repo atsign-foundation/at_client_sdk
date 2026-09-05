@@ -12,9 +12,22 @@
   or `setCurrentAtSign` builds a fresh client on freshly opened storage. Before,
   a stopped client stayed cached with its store open and was handed back on the
   next request. Switching atSigns therefore reopens storage cold on the way
-  back. With release in place, `HiveAtClientStorage` refuses a second instance
-  for an atSign whose boxes another instance holds. A client whose
-  construction fails releases the storage it had claimed before rethrowing.
+  back. With release in place, a storage refuses to open a store another
+  storage already has open. A client whose construction fails releases the
+  storage it had claimed before rethrowing.
+- fix: a client's local storage is isolated by where it was told to put it.
+  Its sync queue now opens on the Hive instance owning its `hiveStoragePath`,
+  the same one its keystore uses; before, the queue opened on the package-global
+  instance under a box named from the atSign alone, so two clients of one atSign
+  shared a queue however different the paths they were given, and a client's
+  keystore and queue could land on different instances. Two clients of one
+  atSign given separate directories are therefore separate stores, which is what
+  lets two enrollments of one atSign — whose namespace scopes differ — run side
+  by side without seeing each other's records or pending writes. The guard that
+  refuses a second opener is keyed by the store rather than by the atSign: the
+  directory plus the atSign, since two atSigns under one directory are two boxes
+  and share nothing. `AtSyncQueue` takes the storage path it should open under,
+  and `AtClientStorage` implementations report the store they point at.
 - feat: `AtClientStorage` — a client's local keystore and its sync queue as one
   object, with `HiveAtClientStorage` as the default. A client claims its storage
   when it is created and a second client is refused it; after the claim is

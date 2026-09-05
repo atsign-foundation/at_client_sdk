@@ -21,26 +21,54 @@ void main() {
     ..commitLogPath = '${dir.path}/commit';
 
   test(
-      'while a client holds an atSign\'s Hive storage, a second storage for '
-      'that atSign is refused; after stop() it is allowed', () async {
+      'a second storage for one atSign at the same location is refused; '
+      'stop() releases it', () async {
     final first = await AtClientImpl.create('@releaseguard', 'wavi', pref())
         as AtClientImpl;
-    final other = Directory.systemTemp.createTempSync('at_client_release_b_');
-    final second =
-        HiveAtClientStorage(atSign: '@releaseguard', storagePath: other.path);
+    final sameStore =
+        HiveAtClientStorage(atSign: '@releaseguard', storagePath: dir.path);
     await expectLater(
-        () => second.attach(FakeClient('@releaseguard', 'e2')),
-        throwsA(isA<StateError>().having((e) => e.message, 'message',
-            contains('already holds @releaseguard'))),
-        reason: 'every box is on the global Hive instance and named by atSign, '
-            'so a second path is not a second store');
+        () => sameStore.attach(FakeClient('@releaseguard', 'e2')),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('already open at'))),
+        reason: 'one directory and one atSign resolve to one Hive box, so '
+            'these are one store however many objects point at it');
 
     await first.stop();
-    await second.attach(FakeClient('@releaseguard', 'e2'));
-    expect(second.isAttached, isTrue,
-        reason: 'stop() closed the first storage, so the atSign is free');
-    await second.close();
+    await sameStore.attach(FakeClient('@releaseguard', 'e2'));
+    expect(sameStore.isAttached, isTrue,
+        reason: 'stop() closed the first storage, releasing the store');
+    await sameStore.close();
+  });
+
+  test('two storages for one atSign at different locations both open',
+      () async {
+    final other = Directory.systemTemp.createTempSync('at_client_release_b_');
+    final here =
+        HiveAtClientStorage(atSign: '@twoplaces', storagePath: dir.path);
+    final there =
+        HiveAtClientStorage(atSign: '@twoplaces', storagePath: other.path);
+    await here.attach(FakeClient('@twoplaces', 'e1'));
+    await there.attach(FakeClient('@twoplaces', 'e2'));
+    expect(here.isAttached && there.isAttached, isTrue,
+        reason: 'different directories are different Hive instances, so two '
+            'enrollments of one atSign keep separate stores');
+    expect(here.location, isNot(equals(there.location)));
+    await here.close();
+    await there.close();
     other.deleteSync(recursive: true);
+  });
+
+  test('two atSigns sharing one directory both open', () async {
+    final a = HiveAtClientStorage(atSign: '@shareda', storagePath: dir.path);
+    final b = HiveAtClientStorage(atSign: '@sharedb', storagePath: dir.path);
+    await a.attach(FakeClient('@shareda', 'e1'));
+    await b.attach(FakeClient('@sharedb', 'e1'));
+    expect(a.isAttached && b.isAttached, isTrue,
+        reason: 'the box name derives from the atSign, so two atSigns under '
+            'one directory are two boxes and share nothing');
+    await a.close();
+    await b.close();
   });
 
   test(

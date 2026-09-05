@@ -34,10 +34,20 @@ abstract class AtClientStorage {
 }
 
 /// The claim rules every [AtClientStorage] shares; a backend supplies
-/// [openBackend] and [clearData].
+/// [location], [openBackend], [closeBackend] and [clearData].
 abstract class AtClientStorageBase implements AtClientStorage {
   AtClient? _owner;
   String? _lastPrincipal;
+  bool _closed = false;
+
+  /// The storages whose backend is open, keyed by [location].
+  ///
+  /// Two storages over one location are one store on disk, so the second is
+  /// refused rather than left to share silently. Keyed by location and not by
+  /// atSign: several clients of one atSign are legitimate so long as each was
+  /// given its own location, which is how two enrollments stay isolated.
+  static final Map<String, AtClientStorageBase> _openByLocation =
+      <String, AtClientStorageBase>{};
 
   /// The `(atSign, enrollmentId)` a client acts as.
   static String principalOf(AtClient client) =>
@@ -45,9 +55,19 @@ abstract class AtClientStorageBase implements AtClientStorage {
 
   bool get isAttached => _owner != null;
 
+  /// The store this points at, in a form two storages over the same records
+  /// report identically — everything that decides which records they resolve
+  /// to, not only where the files sit: a backend keyed by atSign within a
+  /// directory includes the atSign, since two atSigns there share nothing. An
+  /// instance whose data is private to itself reports a token unique to it.
+  String get location;
+
   @override
   Future<void> attach(AtClient owner) async {
     if (identical(_owner, owner)) return;
+    if (_closed) {
+      throw StateError('this storage has been closed and cannot be reopened');
+    }
     final holder = _owner;
     if (holder != null) {
       throw StateError('this storage is held by ${principalOf(holder)}; a '
@@ -60,7 +80,16 @@ abstract class AtClientStorageBase implements AtClientStorage {
           'now asks for it; call forgetPrincipal() to hand it over '
           'deliberately, or clear() to empty it first');
     }
+    final here = location;
+    final occupant = _openByLocation[here];
+    if (occupant != null && !identical(occupant, this)) {
+      final held = occupant._lastPrincipal;
+      throw StateError('another storage is already open at $here'
+          '${held == null ? '' : ', last held by $held'}; close it before '
+          'opening a second there, or give this one its own location');
+    }
     await openBackend();
+    _openByLocation[here] = this;
     _owner = owner;
     _lastPrincipal = principal;
   }
@@ -87,14 +116,25 @@ abstract class AtClientStorageBase implements AtClientStorage {
     _lastPrincipal = null;
   }
 
+  @override
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    _owner = null;
+    final here = location;
+    if (identical(_openByLocation[here], this)) _openByLocation.remove(here);
+    await closeBackend();
+  }
+
   /// Opens the backend. Idempotent.
   @protected
   Future<void> openBackend();
 
+  /// Closes the backend. Called at most once, by [close].
+  @protected
+  Future<void> closeBackend();
+
   /// Empties keystore and queue.
   @protected
   Future<void> clearData();
-
-  @protected
-  void dropClaim() => _owner = null;
 }

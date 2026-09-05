@@ -111,12 +111,12 @@ class LocalSecondary implements Secondary {
   /// the open; concurrent callers await the same in-flight future so
   /// we never call `Hive.openBox` twice for the same atSign.
   ///
-  /// Must run AFTER the at_persistence_secondary_server's
-  /// `HiveAtPersistenceFactory.initialize(...)` has called
-  /// `Hive.init(...)`, which is guaranteed by the
-  /// [StorageManager] init ordering during AtClient init. We
-  /// intentionally do not call `Hive.init` here — rerunning it with a
-  /// different path would silently misroute the box.
+  /// The queue opens on the instance owning the client's
+  /// `hiveStoragePath` — the same one the keystore uses — so a client's two
+  /// halves cannot land in different places. A client configuring no path
+  /// falls back to the package-global instance, which is why this must still
+  /// run after the keystore's initialisation has called `Hive.init(...)`; we
+  /// never call it here ourselves.
   Future<AtSyncQueue> _ensureSyncQueueOpen() {
     final existing = _syncQueue;
     if (existing != null) return Future.value(existing);
@@ -128,7 +128,9 @@ class LocalSecondary implements Secondary {
           'set; AtClientManager.setCurrentAtSign must run first',
         );
       }
-      final q = AtSyncQueue(atSign: atSign);
+      final q = AtSyncQueue(
+          atSign: atSign,
+          storagePath: _atClient.getPreferences()?.hiveStoragePath);
       await q.open();
       _syncQueue = q;
       return q;
