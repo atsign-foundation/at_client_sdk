@@ -294,9 +294,9 @@ D-12. Independent of the P series, which is `at_server`-side.
   storage is NOT closed. The instance remains in the internal cache and reuses its
   still-open local keystore when resumed". X4's storage release therefore changes a
   documented contract, and the packs (X5) and that dartdoc move with it. The storage-release
-  work is parked as a git stash named `x4-release-wip`, made on the
-  `gkc-at-client-storage-factory` branch (the stash stack is shared across worktrees), until
-  then.
+  work is parked as a git stash named `x4-release-wip` on the repository's stash stack
+  (its label names a branch since deleted; resume by branching from trunk and popping it)
+  until then.
 - **X5 — Move the functional pack onto an in-memory bundle per file.** The named consumer:
   `test_utils.dart` shares `test/hive/client/$atsign` across every file, so one file
   inherits the next's pending sync queue and the next client's scoped enrollment is refused
