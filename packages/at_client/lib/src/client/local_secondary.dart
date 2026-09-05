@@ -144,14 +144,18 @@ class LocalSecondary implements Secondary {
   }
 
   /// Synchronous, side-effect-free snapshot of the current queue
-  /// size. Returns `null` when the queue hasn't been opened yet
+  /// size. Returns `null` when the queue hasn't been opened yet, or has
+  /// been closed
   /// (the caller hasn't done any sync-eligible writes). Used by
   /// `SyncServiceImpl._informSyncProgress` to attach
   /// `pendingPushCount` to events without awaiting (which would
   /// change the relative ordering of progress emission and the
   /// sync round it describes). Production callers that don't mind
   /// the lazy-open should use [syncQueueSize] instead.
-  int? get syncQueueSyncSnapshot => _syncQueue?.size;
+  int? get syncQueueSyncSnapshot {
+    final q = _syncQueue;
+    return q != null && q.isOpen ? q.size : null;
+  }
 
   /// Returns up to [limit] atKey strings from the front of the
   /// pending-write queue in FIFO order. Does NOT remove them; the

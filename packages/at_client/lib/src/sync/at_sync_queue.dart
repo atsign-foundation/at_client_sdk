@@ -94,6 +94,8 @@ class AtSyncQueue {
 
   bool _opened = false;
 
+  bool get isOpen => _opened;
+
   AtSyncQueue({required String atSign})
       : _atSign = atSign,
         _logger = AtSignLogger('AtSyncQueue ($atSign)');
