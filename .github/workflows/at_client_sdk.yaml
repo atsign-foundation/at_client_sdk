@@ -174,6 +174,20 @@ jobs:
         working-directory: tests/at_functional_test
         run: dart test --concurrency=1 --coverage="coverage" --file-reporter json:acceptance-report.json
 
+      # The atServer's own log is the only record of why it refused a request,
+      # and the container does not outlive the job.
+      - name: Capture atServer logs
+        if: ${{ failure() }}
+        run: docker cp test-virtualenv-1:/apps/logs ve-logs
+
+      - name: Upload atServer logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ve-atserver-logs-${{ matrix.dart-channel }}
+          path: ve-logs
+          if-no-files-found: warn
+
       # Feeds `packages/at_client/tool/acceptance_ledger.dart`, which joins these
       # against the catalogue's citations to say which acceptance rows a run
       # actually exercised. `if: always()` on purpose: a suite that FAILED is
