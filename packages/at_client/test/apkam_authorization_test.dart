@@ -278,7 +278,7 @@ void main() {
           .executeVerb(verbBuilder, sync: false);
       expect(reservedKeyUpdateResult, isNotNull);
       expect(reservedKeyUpdateResult!.startsWith('data:'), true);
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
@@ -505,7 +505,7 @@ void main() {
           await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(updateReservedKeyResult, isNotNull);
       expect(updateReservedKeyResult!.startsWith('data:'), true);
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
@@ -645,7 +645,7 @@ void main() {
       expect(scanJson.contains('@alice:location@alice'), true);
       expect(scanJson.contains('@alice:phone.wavi@alice'), true);
       expect(scanJson.contains('@bob:shared_key@alice'), true);
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
@@ -689,6 +689,10 @@ Future<void> setupLocalStorage(String storageDir, String atSign) async {
 
 Future<void> tearDownLocalStorage(String storageDir) async {
   try {
+    for (final c
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await c.stop();
+    }
     await Hive.close();
     AtClientImpl.atClientInstanceMap.clear();
     var isExists = await Directory(storageDir).exists();

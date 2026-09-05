@@ -16,8 +16,9 @@ class HiveAtClientStorage extends AtClientStorageBase {
   bool _closed = false;
 
   // NOTE: the persistence layer opens every box on the global Hive instance,
-  // named by atSign, so two of these for one atSign share boxes whatever their
-  // paths.
+  // named by atSign, so two of these for one atSign would share boxes whatever
+  // their paths. One open per atSign per isolate.
+  static final Map<String, HiveAtClientStorage> _openByAtSign = {};
 
   /// The persistence bundle, or `null` before the first [attach].
   AtPersistenceBundle? get bundle => _manager?.bundleOrNull;
@@ -43,6 +44,12 @@ class HiveAtClientStorage extends AtClientStorageBase {
   Future<void> openBackend() async {
     if (_closed) throw StateError('storage for $atSign has been closed');
     if (_manager != null) return;
+    final other = _openByAtSign[atSign];
+    if (other != null && !identical(other, this)) {
+      throw StateError('another HiveAtClientStorage already holds $atSign\'s '
+          'boxes in this isolate (at ${other.storagePath}); stop the client '
+          'holding it before opening one at $storagePath');
+    }
     final manager =
         StorageManager(AtClientPreference()..hiveStoragePath = storagePath);
     await manager.init(atSign, null);
@@ -50,6 +57,7 @@ class HiveAtClientStorage extends AtClientStorageBase {
     await queue.open();
     _manager = manager;
     _queue = queue;
+    _openByAtSign[atSign] = this;
   }
 
   @override
@@ -65,5 +73,6 @@ class HiveAtClientStorage extends AtClientStorageBase {
     dropClaim();
     await _queue?.close();
     await _manager?.bundleOrNull?.close();
+    if (identical(_openByAtSign[atSign], this)) _openByAtSign.remove(atSign);
   }
 }
