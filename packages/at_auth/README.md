@@ -196,7 +196,10 @@ Persistence has three verbs:
   throws if the file already exists.
 - `update(atsign, mutate)` — **the one to reach for when adding key
   material.** It reads, applies your mutation and persists as a single
-  operation, holding the keyfile lock across all three steps. The callback
+  operation, holding the keyfile lock across all three steps. It never
+  creates the file: it throws `AtKeysSourceAbsentException` if the keyfile is
+  absent when it starts, and also if it is deleted while the update is in
+  flight. The callback
   returns whether anything changed, so finding the material already there
   costs no write:
 

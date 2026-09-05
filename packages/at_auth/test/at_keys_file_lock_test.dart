@@ -155,12 +155,13 @@ void main() {
     final started = DateTime.now();
     await expectLater(
         lock.synchronized(() async => 1).timeout(const Duration(seconds: 4)),
-        throwsA(isA<FileSystemException>().having((e) => e.message, 'message',
-            contains('The last failure was'))),
+        throwsA(isA<FileSystemException>().having(
+            (e) => e.message, 'message', contains('The last failure was'))),
         reason: 'the wait must be bounded even when the failure is not '
             'contention, and the timeout must name the real cause rather '
             'than blaming a process that holds nothing');
-    expect(DateTime.now().difference(started), lessThan(const Duration(seconds: 3)),
+    expect(DateTime.now().difference(started),
+        lessThan(const Duration(seconds: 3)),
         reason: 'it must give up at its own deadline, not spin');
   });
 

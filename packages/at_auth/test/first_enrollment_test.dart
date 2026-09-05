@@ -179,9 +179,9 @@ void main() {
               mock),
           throwsA(isA<StateError>()));
 
-      verifyNever(
-          () => mock.executeCommand(any(that: startsWith('enroll:request')),
-              auth: any(named: 'auth')));
+      verifyNever(() => mock.executeCommand(
+          any(that: startsWith('enroll:request')),
+          auth: any(named: 'auth')));
     });
 
     test('a builder that throws on a LATER enrollment still degrades',
@@ -193,8 +193,8 @@ void main() {
       final mock = approvingLookUp();
       // The later-enrollment path also reads the atSign's encryption public
       // key, which the first-enrollment path does not.
-      when(() => mock.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((_) async => 'data:${demo.encryptionPublicKeyMap['@alice🛠']}');
+      when(() => mock.executeVerb(any(), sync: any(named: 'sync'))).thenAnswer(
+          (_) async => 'data:${demo.encryptionPublicKeyMap['@alice🛠']}');
 
       final response = await AtEnrollmentImpl().submit(
           AtEnrollmentRequest(

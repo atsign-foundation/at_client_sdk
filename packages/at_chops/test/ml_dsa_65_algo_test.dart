@@ -18,8 +18,12 @@ void main() {
       expect(kp.secretKey.length, equals(4032));
 
       final Uint8List message = Uint8List.fromList('instance keygen'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: kp.secretKey);
-      expect(await algo.verifyBytes(message, signature: sig, publicKey: kp.publicKey), isTrue);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
+      expect(
+          await algo.verifyBytes(message,
+              signature: sig, publicKey: kp.publicKey),
+          isTrue);
     });
 
     test('sign/verify round-trip yields true', () async {
@@ -30,7 +34,8 @@ void main() {
       final algo = MlDsa65PureDartAlgo();
       final Uint8List message = Uint8List.fromList('Hello ML-DSA-65'.codeUnits);
       final Uint8List sig = await algo.signBytes(message, secretKey: sk);
-      final bool ok = await algo.verifyBytes(message, signature: sig, publicKey: pub);
+      final bool ok =
+          await algo.verifyBytes(message, signature: sig, publicKey: pub);
 
       expect(ok, isTrue);
     });
@@ -45,9 +50,8 @@ void main() {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
 
-      final Uint8List sig = await MlDsa65PureDartAlgo().signBytes(
-          Uint8List.fromList('test'.codeUnits),
-          secretKey: sk);
+      final Uint8List sig = await MlDsa65PureDartAlgo()
+          .signBytes(Uint8List.fromList('test'.codeUnits), secretKey: sk);
 
       expect(sig.length, equals(3309));
     });
@@ -61,7 +65,8 @@ void main() {
       final algo = MlDsa65PureDartAlgo();
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
       final Uint8List sig = await algo.signBytes(message, secretKey: sk);
-      final bool ok = await algo.verifyBytes(message, signature: sig, publicKey: wrongPub);
+      final bool ok =
+          await algo.verifyBytes(message, signature: sig, publicKey: wrongPub);
 
       expect(ok, isFalse);
     });
@@ -76,7 +81,8 @@ void main() {
       final Uint8List sig = await algo.signBytes(message, secretKey: sk);
 
       final Uint8List tampered = Uint8List.fromList('tampered'.codeUnits);
-      final bool ok = await algo.verifyBytes(tampered, signature: sig, publicKey: pub);
+      final bool ok =
+          await algo.verifyBytes(tampered, signature: sig, publicKey: pub);
 
       expect(ok, isFalse);
     });
@@ -134,7 +140,8 @@ void main() {
           throwsA(isA<ArgumentError>()));
     });
 
-    test('verifyBytes returns false (never throws) for a wrong-length public key',
+    test(
+        'verifyBytes returns false (never throws) for a wrong-length public key',
         () async {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
@@ -149,7 +156,8 @@ void main() {
       expect(ok, isFalse);
     });
 
-    test('verifyBytes returns false (never throws) for a wrong-length signature',
+    test(
+        'verifyBytes returns false (never throws) for a wrong-length signature',
         () async {
       final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
       final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
@@ -162,35 +170,43 @@ void main() {
       expect(ok, isFalse);
     });
 
-    test('MlDsa65KeyPair.create throws AtSigningException for a wrong-length public key',
+    test(
+        'MlDsa65KeyPair.create throws AtSigningException for a wrong-length public key',
         () {
-      final String badPub = base64Encode(Uint8List(MlDsa65Sizes.publicKeyBytes - 1));
+      final String badPub =
+          base64Encode(Uint8List(MlDsa65Sizes.publicKeyBytes - 1));
       final String sk = base64Encode(Uint8List(MlDsa65Sizes.secretKeyBytes));
 
       expect(() => MlDsa65KeyPair.create(badPub, sk),
           throwsA(isA<AtSigningException>()));
     });
 
-    test('MlDsa65KeyPair.create throws AtSigningException for a wrong-length secret key',
+    test(
+        'MlDsa65KeyPair.create throws AtSigningException for a wrong-length secret key',
         () {
       final String pub = base64Encode(Uint8List(MlDsa65Sizes.publicKeyBytes));
-      final String badSk = base64Encode(Uint8List(MlDsa65Sizes.secretKeyBytes + 1));
+      final String badSk =
+          base64Encode(Uint8List(MlDsa65Sizes.secretKeyBytes + 1));
 
       expect(() => MlDsa65KeyPair.create(pub, badSk),
           throwsA(isA<AtSigningException>()));
     });
 
-    test('MlDsa65KeyPair.create throws AtSigningException for invalid base64 public key',
+    test(
+        'MlDsa65KeyPair.create throws AtSigningException for invalid base64 public key',
         () {
-      final String validSk = base64Encode(Uint8List(MlDsa65Sizes.secretKeyBytes));
+      final String validSk =
+          base64Encode(Uint8List(MlDsa65Sizes.secretKeyBytes));
 
       expect(() => MlDsa65KeyPair.create('!!!invalid-base64!!!', validSk),
           throwsA(isA<AtSigningException>()));
     });
 
-    test('MlDsa65KeyPair.create throws AtSigningException for invalid base64 secret key',
+    test(
+        'MlDsa65KeyPair.create throws AtSigningException for invalid base64 secret key',
         () {
-      final String validPub = base64Encode(Uint8List(MlDsa65Sizes.publicKeyBytes));
+      final String validPub =
+          base64Encode(Uint8List(MlDsa65Sizes.publicKeyBytes));
 
       expect(() => MlDsa65KeyPair.create(validPub, '!!!invalid-base64!!!'),
           throwsA(isA<AtSigningException>()));

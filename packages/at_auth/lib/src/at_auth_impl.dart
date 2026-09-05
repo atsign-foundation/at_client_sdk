@@ -578,7 +578,8 @@ class AtAuthImpl implements AtAuth {
     if (advertisedSigningKey != null) {
       atAuthKeys.fileSigningMaterial(
           enrollmentId: enrollmentIdFromServer,
-          algorithm: CryptographicMaterialAlgorithm.of(advertisedSigningKey.algorithm.name),
+          algorithm: CryptographicMaterialAlgorithm.of(
+              advertisedSigningKey.algorithm.name),
           publicKey: advertisedSigningKey.publicKey,
           privateKey: advertisedSigningKey.privateKey);
     }

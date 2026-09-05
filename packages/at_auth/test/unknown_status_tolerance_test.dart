@@ -29,8 +29,7 @@ void main() {
                 'keyId': 'k1',
                 'material': [
                   {
-                    'role':
-                        CryptographicMaterialRole.privateAuthentication,
+                    'role': CryptographicMaterialRole.privateAuthentication,
                     'algorithm': CryptographicMaterialAlgorithm.rsa2048,
                     'createdAt': '2026-08-14T00:00:00.000Z',
                     'status': status,
@@ -112,13 +111,15 @@ void main() {
 
       // The contrast arm: a known status moves, so the refusal above is about
       // the unknown token rather than retireKey being broken outright.
-      final known = AtKeys.fromJson(documentWith(CryptographicMaterialStatus.active));
+      final known =
+          AtKeys.fromJson(documentWith(CryptographicMaterialStatus.active));
       known.retireKey('e1', 'k1');
       expect(known.keys.single.status, CryptographicMaterialStatus.retired);
     });
 
     test('may not be retired TO, either', () {
-      final keys = AtKeys.fromJson(documentWith(CryptographicMaterialStatus.active));
+      final keys =
+          AtKeys.fromJson(documentWith(CryptographicMaterialStatus.active));
       expect(
           () => keys.retireKey('e1', 'k1',
               to: CryptographicMaterialStatus.of(unknown)),
@@ -133,25 +134,45 @@ void main() {
       // Declaration index used to supply this for free, which also meant
       // reordering the enum silently redefined every transition check in the
       // package. It is a contract now, so it is pinned as one.
-      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.active), 0);
-      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.retired), 1);
-      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.dead), 2);
-      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of(unknown)), isNull);
-      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of('')), isNull);
+      expect(
+          CryptographicMaterialStatus.rankOf(
+              CryptographicMaterialStatus.active),
+          0);
+      expect(
+          CryptographicMaterialStatus.rankOf(
+              CryptographicMaterialStatus.retired),
+          1);
+      expect(
+          CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.dead),
+          2);
+      expect(
+          CryptographicMaterialStatus.rankOf(
+              CryptographicMaterialStatus.of(unknown)),
+          isNull);
+      expect(
+          CryptographicMaterialStatus.rankOf(
+              CryptographicMaterialStatus.of('')),
+          isNull);
     });
 
     test('still refuses a backward move between known tokens', () {
       // The invariant the enum's index used to carry. If this passes while
       // the rank function is broken, the tolerance above was bought by
       // dropping the rule it was meant to preserve.
-      final keys = AtKeys.fromJson(documentWith(CryptographicMaterialStatus.dead));
-      expect(() => keys.retireKey('e1', 'k1', to: CryptographicMaterialStatus.retired),
+      final keys =
+          AtKeys.fromJson(documentWith(CryptographicMaterialStatus.dead));
+      expect(
+          () => keys.retireKey('e1', 'k1',
+              to: CryptographicMaterialStatus.retired),
           throwsA(isA<ArgumentError>()));
     });
 
     test('refuses to reactivate, as before', () {
-      final keys = AtKeys.fromJson(documentWith(CryptographicMaterialStatus.retired));
-      expect(() => keys.retireKey('e1', 'k1', to: CryptographicMaterialStatus.active),
+      final keys =
+          AtKeys.fromJson(documentWith(CryptographicMaterialStatus.retired));
+      expect(
+          () => keys.retireKey('e1', 'k1',
+              to: CryptographicMaterialStatus.active),
           throwsA(isA<ArgumentError>()));
     });
   });

@@ -401,6 +401,51 @@ void main() {
       expect(verbParams['operation'], 'listns');
     });
 
+    test('A test to verify enroll:infons parses the listNamespace', () {
+      String command = 'enroll:infons:wavi\n';
+      var verbParams =
+          VerbUtil.getVerbParam(VerbSyntax.enroll, command.trim())!;
+      expect(verbParams['operation'], 'infons');
+      expect(verbParams['listNamespace'], 'wavi');
+    });
+
+    test('A test to verify enroll:infons leaves enroll:listns alone', () {
+      // The two are siblings and neither is a prefix of the other, so adding
+      // `infons` must not change how `listns` parses. Asserted rather than
+      // assumed, because an alternation is exactly where a new token changes
+      // what an old one matches.
+      String command = 'enroll:listns:wavi\n';
+      var verbParams =
+          VerbUtil.getVerbParam(VerbSyntax.enroll, command.trim())!;
+      expect(verbParams['operation'], 'listns');
+      expect(verbParams['listNamespace'], 'wavi');
+    });
+
+    test('a trailing suffix is absorbed into enrollParams, for every operation',
+        () {
+      // Known and PRE-EXISTING: `enroll:listnsX:wavi` parses as
+      // operation=listns with enrollParams=X:wavi, and always has. `infons` is
+      // neither more nor less permissive than its siblings, which is the
+      // property worth pinning — if this is ever tightened it must be tightened
+      // for all of them together, or two verbs start disagreeing about what a
+      // malformed command means.
+      for (final op in ['infons', 'listns', 'list']) {
+        final params =
+            VerbUtil.getVerbParam(VerbSyntax.enroll, 'enroll:${op}X:wavi')!;
+        expect(params['operation'], op,
+            reason: 'the operation is matched and the suffix falls through');
+        expect(params['enrollParams'], 'X:wavi');
+      }
+    });
+
+    test('A test to verify an unknown enroll operation is still refused', () {
+      // The negative control on the alternation: it must have widened by
+      // exactly one token. Without this, a pattern that had been loosened to
+      // accept anything would satisfy every assertion above.
+      String command = 'enroll:bogusop:wavi\n';
+      expect(VerbUtil.getVerbParam(VerbSyntax.enroll, command.trim()), isNull);
+    });
+
     test('EnrollParams round-trips metadata and signingAlgo', () {
       final params = EnrollParams()
         ..signingAlgo = 'mldsa65'

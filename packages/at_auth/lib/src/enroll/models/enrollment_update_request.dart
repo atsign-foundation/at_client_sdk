@@ -76,8 +76,8 @@ class EnrollmentUpdateRequest {
   /// A key that has stopped signing is listed with
   /// `KeyEntryStatus.retired` rather than dropped: envelopes are stored durably
   /// and verified later, so the keys an enrollment has retired are exactly the
-  /// ones that signed its older ones, and withdrawing one retroactively
-  /// unverifies everything it signed.
+  /// ones that signed its older ones, and withdrawing one from the
+  /// advertisement retroactively unverifies everything it signed.
   final List<ApskSigningKey>? signingKeys;
 
   /// The **bare** RSA `_apsk` string to publish verbatim, for an enrollment

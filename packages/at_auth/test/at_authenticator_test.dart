@@ -1,6 +1,7 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
@@ -155,6 +156,52 @@ void main() {
       await expectLater(
           () => authenticatorFor(io, atSign)(executor), throwsA(anything));
     });
+
+    test(
+        'is refused when the keyfile names an algorithm this build cannot '
+        'sign with', () async {
+      // The keyfile holds THIS enrollment's key, under an algorithm from a
+      // newer client. The algorithm used to resolve to null and rsa2048 was
+      // the fallback, so the injected signer signed the challenge under a
+      // guess about a key nothing here can read - while a caller WITHOUT an
+      // injected signer was refused for the same keyfile.
+      final io = InMemoryAtKeysIo();
+      await io.write(
+          atSign,
+          AtKeys()
+            ..defaultEncryptionPublicKey =
+                AtBytes.fromString(demo.encryptionPublicKeyMap[atSign]!)
+            ..fileApkamMaterial(
+                enrollmentId: 'future-algorithm',
+                algorithm:
+                    CryptographicMaterialAlgorithm.of('sphincs-plus-256s'),
+                publicKey: 'dHlwZWQtcHVibGlj',
+                privateKey: 'dHlwZWQtcHJpdmF0ZQ=='));
+      final injected = AtChopsImpl(AtChopsKeys.create(
+          null,
+          AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
+              demo.pkamPrivateKeyMap[atSign]!)));
+
+      final refused = RecordingExecutor(['data:$challenge', 'data:success']);
+      await expectLater(
+          () => authenticatorFor(io, atSign,
+              enrollmentId: 'future-algorithm', chops: injected)(refused),
+          throwsA(isA<AtKeyNotFoundException>()));
+      expect(refused.sent, isEmpty,
+          reason: 'the refusal lands before anything is sent, not after a '
+              'challenge has been signed under a guessed algorithm');
+
+      // The control, and the discriminator: the same keyfile and the same
+      // injected signer, for an enrollment it holds no material for. Absent
+      // material is still rsa2048, so the refusal is keyed on unreadable
+      // material rather than on the keyfile being unusual.
+      final accepted = RecordingExecutor(['data:$challenge', 'data:success']);
+      expect(
+          await authenticatorFor(io, atSign,
+              enrollmentId: 'never-held-here', chops: injected)(accepted),
+          isTrue);
+      expect(accepted.sent.last, contains('signingAlgo:rsa2048'));
+    });
   });
 
   group('the legacy credential', () {
@@ -202,7 +249,9 @@ void main() {
           AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
               demo.pkamPrivateKeyMap[atSign]!)));
 
-      final ok = await authenticatorForChops(atSign, chops)(executor);
+      final ok = await authenticatorForChops(atSign, chops,
+          signingAlgo: SigningAlgoType.rsa2048,
+          hashingAlgo: HashingAlgoType.sha256)(executor);
 
       expect(ok, isTrue);
       expect(executor.sent.last, startsWith('pkam:'));
@@ -219,7 +268,10 @@ void main() {
           AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
               demo.pkamPrivateKeyMap[atSign]!)));
 
-      await expectLater(() => authenticatorForChops(atSign, chops)(executor),
+      await expectLater(
+          () => authenticatorForChops(atSign, chops,
+              signingAlgo: SigningAlgoType.rsa2048,
+              hashingAlgo: HashingAlgoType.sha256)(executor),
           throwsA(isA<UnAuthenticatedException>()));
       expect(executor.sent, hasLength(1));
     });

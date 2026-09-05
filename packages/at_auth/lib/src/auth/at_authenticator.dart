@@ -86,14 +86,19 @@ AtAuthenticator authenticatorFor(
 /// keystore to read, nor [authenticatorForPrivateKey] because it holds no
 /// private key of its own - the key material is inside the AtChops.
 ///
-/// [signingAlgo] defaults to rsa2048, which is what at_lookup signed with when
-/// nothing named an algorithm.
+/// [signingAlgo] and [hashingAlgo] are required, because this is the one
+/// authenticator that cannot work them out for itself: there is no keystore
+/// behind the signer, so the caller is the only party that knows what the
+/// AtChops holds. Defaulting either made a caller that forgot indistinguishable
+/// from one that meant `rsa2048`/`sha256`, and an ML-DSA key put through the
+/// RSA routine fails inside at_chops on a key length, naming neither the
+/// caller nor the mismatch.
 AtAuthenticator authenticatorForChops(
   String atSign,
   AtChops chops, {
+  required SigningAlgoType signingAlgo,
+  required HashingAlgoType hashingAlgo,
   String? enrollmentId,
-  SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
-  HashingAlgoType hashingAlgo = HashingAlgoType.sha256,
   Map<String, dynamic> clientConfig = const {},
 }) =>
     (executor) async {
@@ -226,6 +231,14 @@ Future<bool> _pkam(
     // only the ALGORITHM from the keyfile: `authenticationFor` would build an
     // AtChops this call is about to discard, and it throws on a keyfile
     // missing material a caller with its own signer never needed.
+    //
+    // Null below means the enrollment files no typed material, so the flat
+    // fields' RSA pair is what it authenticates with. It cannot also mean
+    // "typed material this build cannot read": authenticationAlgorithmFor
+    // refuses that rather than reporting null, so the fallback is a statement
+    // about the keyfile and not a guess about the injected signer. Those two
+    // were one null once, and rsa2048 was then a guess about somebody else's
+    // credentials.
     signer = injectedChops;
     signingAlgo = keys.authenticationAlgorithmFor(enrollmentId) ??
         SigningAlgoType.rsa2048;

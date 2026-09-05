@@ -66,12 +66,12 @@ void main() {
     final mlKemSeed = mlKem.newSeed();
     final mlKemPair = await mlKem.keyPairFromSeed(mlKemSeed);
     expect(mlKemPair.secretKey, isNot(mlKemSeed));
-    expect(mlKemPair.secretKey,
-        hasLength(MlKem1024PureDartAlgo.secretKeyLength),
+    expect(
+        mlKemPair.secretKey, hasLength(MlKem1024PureDartAlgo.secretKeyLength),
         reason: 'it is the expanded decapsulation key, 3168 bytes to the '
             'seed\'s 64');
-    expect(() => mlKem.keyPairFromSeed(mlKemPair.secretKey),
-        throwsArgumentError,
+    expect(
+        () => mlKem.keyPairFromSeed(mlKemPair.secretKey), throwsArgumentError,
         reason: 'so code that persisted `secretKey` — correct for X-Wing — '
             'cannot recover an ML-KEM key at all');
   });

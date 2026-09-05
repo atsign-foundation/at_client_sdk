@@ -13,7 +13,7 @@ sequencing see [`implementation-plan.md`](implementation-plan.md); for the gates
 (D-10) and `AtCollection<T>` (`packages/at_client/lib/src/collections/collections.dart`)
 is the sole JS/TS data plane (D-9 amended, D-11 added). §6, §8, §9, §10 and §11 updated to
 match; see `decisions.md` §2.6 for the measured findings this rewrite is based on and
-`plans/wasm/api-designing.md` §2.3–§2.4 for the Dart-side (Layer B/C) shape.
+the Layer A/B/C design note §2.3–§2.4 for the Dart-side (Layer B/C) shape.
 
 ## Table of contents
 
@@ -213,7 +213,7 @@ product; the compiler is a packaging decision.*
 
 1. **The npm package is not a Dart package.** It is a build artifact — the compiled Dart
    `.js` engine plus a wrapper **authored once in TypeScript**, from which both the
-   shipped `.js` and the `.d.ts` are generated (§8, D-19). Publishing to npm implies no
+   shipped `.js` and the `.d.ts` are generated (§8, D-20). Publishing to npm implies no
    pub package.
 2. **The facade is an entry point, not a library.** `dart compile js` compiles a
    *program*. The facade only exists because a `main()` calls `createJSInteropWrapper`
@@ -263,8 +263,8 @@ const value = await client.get('key.atsign');
 ```
 
 **Why this is a rule and not a style preference.** The first browser release is remote-only
-with an in-memory cache ([`decisions.md`](decisions.md) D-12), and Dart runs on the main
-thread (D-14). Some operations *could* therefore return synchronously today. If any of them
+with an in-memory cache ([`decisions.md`](decisions.md) D-13), and Dart runs on the main
+thread (D-15). Some operations *could* therefore return synchronously today. If any of them
 does, the V2 storage upgrade — SQLite, possibly in a Worker, both asynchronous — becomes a
 **breaking change to a published npm surface** for every consumer that adopted the
 synchronous form.
@@ -272,7 +272,7 @@ synchronous form.
 Holding the surface async from day one makes V2 a purely internal refactor that the host
 page never observes. It costs nothing now and cannot be retrofitted later.
 
-Recorded as D-15.
+Recorded as D-16.
 
 ---
 
@@ -490,7 +490,7 @@ bare `await`.
 
 ## 8. npm packaging
 
-> **Corrected 2026-08-30 (D-19).** An earlier version of this section specified a
+> **Corrected 2026-08-30 (D-20).** An earlier version of this section specified a
 > hand-written `index.js` *and* a hand-written `index.d.ts`. That is two hand-maintained
 > descriptions of one surface, and they will drift. **Author the wrapper once, in
 > TypeScript; generate both outputs from it.**
@@ -593,11 +593,11 @@ Notes:
 
   This is where a `@JSExport`-produced object becomes a real, `instanceof`-checkable,
   autocomplete-friendly class — the compiled facade cannot do this on its own, and no
-  amount of Layer B design (`plans/wasm/api-designing.md`) fixes it, because the
+  amount of Layer B design (see the Layer A/B/C design note) fixes it, because the
   limitation is in `@JSExport` itself.
 - **The `.d.ts` stays hand-written.** Sass keeps its `.d.ts` in a *separate repo*
   (`sass/sass` → `js-api-doc/index.d.ts`), framed explicitly as user-facing documentation
-  rather than generated types. `plans/wasm/api-designing.md` §2.6 (re-costed 2026-08-18
+  rather than generated types. The Layer A/B/C design note §2.6 (re-costed 2026-08-18
   for Layer B's generics) recommends **drift detection** — a CI diff of generated-vs-committed
   — over full generation, for the same reason: a hand-authored `.d.ts` carries
   documentation value generated output loses. See [§11](#11-open-questions) JS-5.
@@ -637,7 +637,9 @@ runtime, ~1 MB+, **regardless of which Dart compiler produced the bundle**. The 
 requirement is therefore **compiler-independent** — which is precisely what the dart2js
 framing hid.
 
-Under D-12 there is no such asset in V1, which is a real payload win. It returns in V2.
+Under D-13 the default V1 payload carries no such asset, which is a real payload win. It
+becomes the default in V2 — and a consumer who injects a SQLite bundle before then takes on
+the serving requirement with it.
 **Whoever owns the deployment contract must own that asset: its origin, its MIME type, and
 whether the npm package ships it.**
 
@@ -645,7 +647,7 @@ whether the npm package ships it.**
 
 | Header | Status |
 | --- | --- |
-| `COOP: same-origin` / `COEP: require-corp` | **Not required, and deliberately avoided.** Only a `SharedArrayBuffer`-based VFS would need them, and D-17 rejects that option. Cross-origin isolation severs `window.opener`, which would break popup OIDC flows |
+| `COOP: same-origin` / `COEP: require-corp` | **Not required, and deliberately avoided.** Only a `SharedArrayBuffer`-based VFS would need them, and D-18 rejects that option. Cross-origin isolation severs `window.opener`, which would break popup OIDC flows |
 
 ### 8a.4 Keep asset locations configurable
 
@@ -711,7 +713,7 @@ Serving is not only headers — it is a release pipeline. This blocks any non-`0
   project's own T6/T4 gates exercise it against a live atServer — the marker reflects a
   gap in *our* boundary validation, not upstream's contract.
 - **No `dispose()` on `AtCollection`, at all.** Every reference SDK in Axis C
-  (§1 of `plans/wasm/api-designing.md`) has an explicit cleanup call
+  (§1 of the Layer A/B/C design note) has an explicit cleanup call
   (`removeChannel`, `stopClient`). Upstream's own comments (`collections.dart:439`/`:447`)
   acknowledge the gap ("Held so a future `dispose()` can cancel cleanly"), and
   `availableEvents`' scheduler runs for the collection's lifetime regardless
@@ -778,7 +780,7 @@ change; document the gap and ship read-compatibility in the meantime.**
 `static final AtClientManager _singleton` driven by `setCurrentAtSign(...)`. A JS
 consumer calling `AtClient.create({atSign: '@alice'})` then `AtClient.create({atSign:
 '@bob'})` expects two independent clients — every reference SDK in Axis C
-(`plans/wasm/api-designing.md` §1) is multi-instance by construction — but today the
+(Layer A/B/C design note §1) is multi-instance by construction — but today the
 second call mutates global state under the first. **Interim: ship documented as one
 atSign per page/process, plus a facade-level `AtFailure.alreadyInitialised` thrown on a
 second *distinct* atSign** (converts silent corruption into a clear error, ~10 lines in

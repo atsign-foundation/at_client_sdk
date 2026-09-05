@@ -80,17 +80,33 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     await AtKeysFileLock(file.path).synchronized(() async {
       final keys = await read(atsign.toString());
       if (await mutate(keys) == false) return;
-      await _writeValidated(file, atsign, keys);
+      await _writeValidated(file, atsign, keys, requireExisting: true);
     });
   }
 
   /// The flush body, without the lock — so [update] can hold the lock across
   /// its own read as well. `AtKeysFileLock` is not reentrant: calling [flush]
   /// from inside [update] would wait on a lock this call already holds.
-  Future<void> _writeValidated(File file, Atsign atsign, AtKeys atKeys) async {
+  /// [requireExisting] refuses instead of creating when the keyfile is gone.
+  /// [update] passes it and [flush] does not: `flush` means "persist these
+  /// keys", and creating the file is its first job, while `update` is a
+  /// read-modify-write of material that must already be there — its own
+  /// [read] throws when the file is absent at the start, so completing by
+  /// writing a file that is absent at the end contradicts the call it began.
+  ///
+  /// What that silently undid: the keyfile is the credential, and deleting it
+  /// is how a device is decommissioned. An update in flight when the owner
+  /// deletes it would put it back, and nothing said so.
+  Future<void> _writeValidated(File file, Atsign atsign, AtKeys atKeys,
+      {bool requireExisting = false}) async {
     final document = await _encodeAtRest(atKeys, atsign);
 
     if (!file.existsSync()) {
+      if (requireExisting) {
+        throw AtKeysSourceAbsentException(
+            'Tried updating ${file.path}, but it was deleted while the update '
+            'was in flight; nothing was written');
+      }
       await _writeAtRestDocument(file, document);
       return;
     }

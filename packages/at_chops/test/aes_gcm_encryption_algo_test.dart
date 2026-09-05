@@ -86,7 +86,8 @@ void main() {
 
       final encrypted =
           await algo.encrypt(plain, iv: iv, aad: utf8.encode('header-A'));
-      expect(() => algo.decrypt(encrypted, iv: iv, aad: utf8.encode('header-B')),
+      expect(
+          () => algo.decrypt(encrypted, iv: iv, aad: utf8.encode('header-B')),
           throwsA(isA<AtDecryptionException>()));
     });
 

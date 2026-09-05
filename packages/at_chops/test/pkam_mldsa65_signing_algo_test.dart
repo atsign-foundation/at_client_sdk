@@ -55,14 +55,13 @@ void main() async {
       final bad = AtPkamKeyPair.create('pub', '-----BEGIN RSA PRIVATE KEY');
       expect(
           () => PkamMlDsa65SigningAlgo(bad).sign(dataInBytes),
-          throwsA(predicate((e) =>
-              e is AtException && e.toString().contains('base64'))));
+          throwsA(predicate(
+              (e) => e is AtException && e.toString().contains('base64'))));
     });
   });
 
   group('The AtChopsImpl pkam dispatch', () {
-    final atChops =
-        AtChopsImpl(AtChopsKeys.create(null, pkamKeyPair));
+    final atChops = AtChopsImpl(AtChopsKeys.create(null, pkamKeyPair));
 
     test('signingAlgoType mldsa65 produces a genuine ML-DSA signature',
         () async {
@@ -77,8 +76,7 @@ void main() async {
       // proves the dispatch signed ML-DSA rather than RSA-with-a-claim.
       expect(
           await MlDsa65PureDartAlgo().verifyBytes(dataInBytes,
-              signature: signature,
-              publicKey: mlDsaKeyPair.publicKeyBytes),
+              signature: signature, publicKey: mlDsaKeyPair.publicKeyBytes),
           true);
     });
 

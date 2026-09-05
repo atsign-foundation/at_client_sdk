@@ -238,6 +238,12 @@ class SyncServiceImpl implements SyncService {
     _syncProgressListeners.remove(listener);
   }
 
+  /// Ends an in-flight round at its next resumption point once [stop] has
+  /// been called, so a stopped service touches storage no further.
+  void _bailIfStopped() {
+    if (isStopped) throw const _SyncAbandoned();
+  }
+
   @visibleForTesting
   Future<void> processSyncRequests() async {
     _logger.finest('in _processSyncRequests');
@@ -317,6 +323,12 @@ class SyncServiceImpl implements SyncService {
         ..startedAt = DateTime.now().toUtc()
         ..message = 'Exception: $e'
         ..atClientException = wrapped);
+    } on _SyncAbandoned {
+      _logger.info('sync ${syncRequest.id} abandoned: the service was stopped');
+      syncRequest.result!.atClientException = AtClientException(
+          error_codes['AtClientException'], 'SyncService has been stopped');
+      _syncError(syncRequest);
+      _syncInProgress = false;
     } catch (e) {
       // Catch-all: with on-demand triggering, an unhandled exception
       // from the sync path would become an unhandled async error and
@@ -546,7 +558,9 @@ class SyncServiceImpl implements SyncService {
     // pending local write for it).
     final pendingPushAtKeys =
         Set<String>.from(await localSecondary.peekSyncQueue());
+    _bailIfStopped();
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
+    _bailIfStopped();
     if (serverCommitId > lastReceivedServerCommitId) {
       _logger.finer('Pulling changes into local secondary'
           ' | lastReceivedServerCommitId $lastReceivedServerCommitId'
@@ -555,14 +569,17 @@ class SyncServiceImpl implements SyncService {
       final keyInfoList = await _syncFromServer(
           serverCommitId, lastReceivedServerCommitId, pendingPushAtKeys,
           localCommitIdBeforeSync: localCommitIdBeforeSync);
+      _bailIfStopped();
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     final pushQueueSize = await localSecondary.syncQueueSize;
+    _bailIfStopped();
     if (pushQueueSize > 0) {
       _logger.finer(
           'Found $pushQueueSize pending atKeys in the sync queue; pushing.');
       // Hint to casual reader: This is where we sync new changes from this client to the server
       final keyInfoList = await _pushFromSyncQueue();
+      _bailIfStopped();
       syncResult.keyInfoList.addAll(keyInfoList);
     }
     syncResult.lastSyncedOn = DateTime.now().toUtc();
@@ -601,12 +618,14 @@ class SyncServiceImpl implements SyncService {
     var batchesDone = 0;
     while (true) {
       final atKeys = await localSecondary.peekSyncQueue(limit: batchSize);
+      _bailIfStopped();
       if (atKeys.isEmpty) break;
       // Snapshot the queue size BEFORE this batch so the
       // no-progress guard at the bottom can detect "the entries
       // we just tried didn't get removed" without conflating it
       // with "the queue is large because more writes arrived".
       final queueSizeBefore = await localSecondary.syncQueueSize;
+      _bailIfStopped();
       // Build the batch. Order in `batchRequests` mirrors the order
       // we got from `peekSyncQueue` — and the response comes back
       // 1-indexed by batch id, so index N-1 in our list is the entry
@@ -616,6 +635,7 @@ class SyncServiceImpl implements SyncService {
       final batchSources = <_BatchSource>[];
       for (final atKey in atKeys) {
         final entry = await localSecondary.readSyncQueueEntry(atKey);
+        _bailIfStopped();
         if (entry == null) {
           // The queue says we should push this atKey but the
           // persisted record is gone (rare race — concurrent remove,
@@ -623,11 +643,13 @@ class SyncServiceImpl implements SyncService {
           _logger.warning(
               'sync queue race: $atKey missing persisted record; removing');
           await localSecondary.removeFromSyncQueue(atKey);
+          _bailIfStopped();
           continue;
         }
         final String command;
         try {
           command = await _buildCommandFromQueueEntry(atKey, entry.op);
+          _bailIfStopped();
         } on KeyNotFoundException {
           // The keystore doesn't have a value for this atKey
           // (UPDATE / UPDATE_ALL / UPDATE_META). The race-tolerated
@@ -638,6 +660,7 @@ class SyncServiceImpl implements SyncService {
           _logger
               .info('keystore miss for $atKey on push; dropping queue entry');
           await localSecondary.removeFromSyncQueue(atKey);
+          _bailIfStopped();
           continue;
         }
         _logger.info('Will push ${entry.op} for $atKey');
@@ -657,6 +680,7 @@ class SyncServiceImpl implements SyncService {
       List<dynamic> batchResponse;
       try {
         batchResponse = await sendBatch(batchRequests);
+        _bailIfStopped();
       } on Exception catch (e) {
         // Network or auth failure for the whole batch. Leave queue
         // entries in place — next round retries.
@@ -695,6 +719,7 @@ class SyncServiceImpl implements SyncService {
             _highestPushedCommitId = commitId;
           }
           await localSecondary.removeFromSyncQueue(source.atKey);
+          _bailIfStopped();
           keyInfoList.add(KeyInfo(
             source.atKey,
             SyncDirection.localToRemote,
@@ -725,6 +750,7 @@ class SyncServiceImpl implements SyncService {
         localCommitId: _latestKnownServerCommitId,
         serverCommitId: _latestKnownServerCommitId,
       );
+      _bailIfStopped();
       // Defensive: if every entry in this batch failed (e.g. a
       // server-side per-key authorization issue), the entries we
       // tried weren't removed from the queue. Compare against the
@@ -737,7 +763,9 @@ class SyncServiceImpl implements SyncService {
       // here is whether the in-batch entries themselves got
       // removed.
       final pendingNow = await localSecondary.syncQueueSize;
+      _bailIfStopped();
       final pendingFront = await localSecondary.peekSyncQueue(limit: 1);
+      _bailIfStopped();
       final atKeysSet = atKeys.toSet();
       final allBatchKeysStillPresent =
           pendingFront.isNotEmpty && atKeysSet.contains(pendingFront.first);
@@ -819,6 +847,7 @@ class SyncServiceImpl implements SyncService {
     try {
       int? skipDeletesUntil = await setAndGetSkipDeletesUntil(
           localCommitIdBeforeSync, serverCommitId);
+      _bailIfStopped();
 
       while (serverCommitId > lastReceivedServerCommitId) {
         _sendTelemetry('_syncFromServer.whileLoop', {
@@ -830,6 +859,7 @@ class SyncServiceImpl implements SyncService {
                 lastReceivedServerCommitId, serverCommitId,
                 localCommitIdBeforeSync: localCommitIdBeforeSync,
                 skipDeletesUntil: skipDeletesUntil);
+        _bailIfStopped();
         // Refresh the pending-push snapshot AFTER the network
         // round-trip but BEFORE applying any server entries. The
         // original snapshot was taken at sync-round start; a user
@@ -842,6 +872,7 @@ class SyncServiceImpl implements SyncService {
         // pre-sync entries.
         pendingPushAtKeys = pendingPushAtKeys
             .union(Set<String>.from(await localSecondary.peekSyncQueue()));
+        _bailIfStopped();
         if (listOfCommitEntriesFromServer.isEmpty) {
           // Server walked the full (lastReceivedServerCommitId,
           // serverCommitId] range and returned no entries for this
@@ -890,6 +921,7 @@ class SyncServiceImpl implements SyncService {
                 'updating the lastReceivedServerCommitId to $lastReceivedServerCommitId');
             ConflictInfo? conflictInfo =
                 await _setConflictInfo(serverCommitEntry);
+            _bailIfStopped();
             final keyInfo = KeyInfo(
                 serverCommitEntry['atKey'],
                 SyncDirection.remoteToLocal,
@@ -909,6 +941,7 @@ class SyncServiceImpl implements SyncService {
               _parseToInteger(serverCommitEntry['commitId']);
           _promoteServerCommitId(lastReceivedServerCommitId);
           await _processServerCommitEntry(serverCommitEntry, keyInfoList);
+          _bailIfStopped();
           _logger.finest(
               'Updating lastReceivedServerCommitId to $lastReceivedServerCommitId');
         }
@@ -933,6 +966,7 @@ class SyncServiceImpl implements SyncService {
       // is persisted even if there occurs any exception during sync to local.
       await _atClient.put(_lastReceivedServerCommitIdAtKey,
           lastReceivedServerCommitId.toString());
+      _bailIfStopped();
     }
     return keyInfoList;
   }
@@ -1432,6 +1466,9 @@ class SyncServiceImpl implements SyncService {
   /// causes future [sync] calls to become no-ops until [restart] is
   /// invoked. Idempotent — calling [stop] when already stopped is a
   /// no-op.
+  /// Stops without draining. A round in flight ends at its next step; what it
+  /// had not pushed stays queued for the next sync. Callers wanting the queue
+  /// empty first await `waitUntilCaughtUp`.
   Future<void> stop() async {
     if (isStopped) {
       _logger.info('stop() called, but service is already stopped. Ignoring.');
@@ -1560,4 +1597,9 @@ class _BatchSource {
     required this.atKey,
     required this.op,
   });
+}
+
+/// Thrown inside a sync round once [SyncServiceImpl.stop] has been called.
+class _SyncAbandoned implements Exception {
+  const _SyncAbandoned();
 }

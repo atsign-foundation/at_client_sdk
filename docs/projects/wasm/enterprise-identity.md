@@ -38,7 +38,7 @@ what `at_auth` and the atServer actually expose:
 
 1. **The enrollment lifecycle is storage-free.** Every `AtEnrollment` method takes only an
    `AtLookUp` — no `AtClient`, no keystore (`at_enrollment.dart:73,107,126,145,152,159,166,189`).
-   It works in a browser under D-12 with no local store.
+   It works in a browser under D-13 with no local store.
 2. **The handoff already exists.** An approved enrollment yields an `AtAuthSession`, and
    `AtClientManager.fromAuthSession` (`at_client_manager.dart:193-211`) already consumes it.
 
@@ -114,12 +114,13 @@ These are *don't-close-this-door* rules. None requires the IdP integration to be
 
 | # | Constraint | Why |
 | --- | --- | --- |
-| **E1** | **Onboard the web app as an APKAM enrollment, never as a new atSign.** | Enrollment is machine-drivable today; atSign creation is not (§3). It also makes browser-storage eviction **non-fatal** — the atSign's keys still live on the user's other device, so losing the browser key store means *re-enroll*, not lockout |
+| **E1** | **Onboard the web app as an APKAM enrollment, never as a new atSign.** | Enrollment is machine-drivable today; atSign creation is not (§3). It also makes browser-storage eviction **non-fatal** — the atSign's keys still live on the user's other device, so losing the browser key store means *re-enroll*, not lockout. **This holds only while the browser never mints keys of its own** — a web app that *creates* an atSign becomes the sole custodian of that master key, and eviction is then unrecoverable. Creation, if it ever lands in the browser, ships with a mandatory escrow or export step **in the same change** |
 | **E2** | Build the sealed key envelope as a **reusable, pure-Dart component**, not welded inside the IndexedDB implementation | An IdP directory attribute (Entra schema extensions, Okta Universal Directory) is a plausible host-supplied key store. If sealing is reusable, that store inherits it. If not, writing plaintext atKeys into a directory attribute would be a serious regression — note that a host-supplied store receives **plaintext** across the port, and owns its own at-rest protection |
-| **E3** | **Redirect-based OIDC only** (D-16) | Popups work today but break the moment any V2 storage option requires COOP `same-origin` |
-| **E4** | **No new process-global state**; one client per atSign, explicitly (D-18) | An IdP integration is inherently multi-identity: one service holding many users' atSigns. Under D-12 this can be *demonstrated* now, not merely promised |
+| **E3** | **Redirect-based OIDC only** (D-17) | Popups work today but break the moment any V2 storage option requires COOP `same-origin` |
+| **E4** | **No new process-global state**; one client per atSign, explicitly (D-19) | An IdP integration is inherently multi-identity: one service holding many users' atSigns. Under D-13 this can be *demonstrated* now, not merely promised |
 | **E5** | Export the enrollment lifecycle that already exists — `unrevoke`, `delete`, single `fetch`, and the `autoApprove` daemon | Cheap, non-breaking, additive. These are **library-API gaps, not server gaps**: all of them exist on the wire and in the atServer's enroll handler. The webhook-driven approval daemon is already written |
 | **E6** | Make HTTP-client injection mandatory on the onboarding path | Needed for the browser anyway; it is also what lets §4's two defects be fixed independently |
+| **E7** | **Zero vendor-specific IdP code in the core SDK.** Expose generic SCIM/OIDC lifecycle hooks and build IdP integrations as pluggable adapters. | Hardcoding Microsoft Entra or Okta APIs creates massive technical debt. The SDK must remain provider-agnostic, relying on standard protocols so any IdP (Ping, Auth0, custom) can be plugged in without touching `at_client` or `at_auth`. |
 
 ---
 

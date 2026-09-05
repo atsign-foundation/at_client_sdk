@@ -72,6 +72,13 @@ abstract class WrittenAtKeysIo extends AtKeysIo with KeyIOMixin {
   /// how a caller that finds the material already there — re-delivery is the
   /// substrate's normal mode — avoids rewriting the store to say nothing.
   /// Throwing from it abandons the write too.
+  ///
+  /// **This never creates.** It is a read-modify-write of material that must
+  /// already be there, and [read] throws when it is not — so an implementation
+  /// that can observe its backing going away between the read and the write
+  /// must refuse rather than write it back. For a keyfile that matters beyond
+  /// tidiness: the file is the credential, deleting it is how a device is
+  /// decommissioned, and putting it back defeats the delete.
   Future<void> update(
       Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
     final keys = await read(atsign.toString());

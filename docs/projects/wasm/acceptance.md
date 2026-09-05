@@ -421,7 +421,7 @@ what crosses is what the TypeScript signature promised.
 
 ## 9a. Gates added 2026-08-30
 
-These follow from D-12..D-18. Three of them close holes where the existing ladder measured
+These follow from D-13..D-19. Three of them close holes where the existing ladder measured
 **speed** on a concern named for **correctness** or **confidentiality**.
 
 ### 9a.1 Confidentiality — key material *(new; the existing key gates measure only time)*
@@ -436,15 +436,15 @@ wall-clock. Nothing tests the property the concern is named for.
 | X-K3 | "Ciphertext present, wrapping key missing" raises a **distinct documented error code**, not a generic decrypt failure | the eviction case is handled, not merely survived |
 | X-K4 | Generate → store → reload → retrieve → decrypt round-trips in **Chrome *and* Safari** | Safari's storage policy is the risk; this gate blocks the key-storage design from being treated as approved |
 
-### 9a.2 Remote-only correctness *(new — D-12, D-13)*
+### 9a.2 Remote-only correctness *(new — D-13, D-14)*
 
 | # | Gate | Proves |
 | --- | --- | --- |
-| X-R1 | A remote-only client constructs with **no Hive box and no SQLite** in the process — including on the **write** path | the injected secondary never reaches the lazily-opened sync queue. This is the D-13 regression |
+| X-R1 | A client built on the **remote-only bundle** constructs with **no Hive box and no SQLite** in the process — including on the **write** path | the bundle supplies a no-op sync queue, so `LocalSecondary`'s lazily-opened Hive path is never entered. This is the D-14 regression. The gate is on *this bundle*, not on the process: a consumer who injects a SQLite bundle is expected to open one |
 | X-R2 | A remote-only client **reads data written by a local-storage client** | unstamped keys route to the legacy provider on read; without this the client writes fine and fails on pre-existing data |
 | X-R3 | A write is not acknowledged until the atServer accepts it | write-through, not write-back — no reintroduced durability question |
-| X-R4 | Notification resume across two sequential clients does not replay | under D-13 the checkpoint read **silently succeeds and returns nothing**, so this is a correctness bug rather than a crash. If in-memory is chosen instead, the gate is an explicit test *documenting* the replay |
-| X-R5 | Two clients for two different atSigns coexist in one process with independent caches | D-18 multi-tenancy, demonstrated rather than promised |
+| X-R4 | Notification resume across two sequential clients does not replay | under D-14 the checkpoint read **silently succeeds and returns nothing**, so this is a correctness bug rather than a crash. If in-memory is chosen instead, the gate is an explicit test *documenting* the replay |
+| X-R5 | Two clients for two different atSigns coexist in one process with independent caches | D-19 multi-tenancy, demonstrated rather than promised |
 
 ### 9a.3 Deployment contract *(new — the environment the other gates assume)*
 
@@ -452,14 +452,14 @@ wall-clock. Nothing tests the property the concern is named for.
 | --- | --- | --- |
 | X-D1 | The host page is served over **HTTPS or localhost** | `crypto.subtle` exists. Every crypto and key-storage measurement is invalid without it — on plain http they would report the design as broken and every primitive as pure Dart |
 | X-D2 | Response headers include `script-src 'wasm-unsafe-eval'` and `application/wasm`, verified against the deployed artifact | the contract is executable, not aspirational |
-| X-D3 | `COOP`/`COEP` are **absent** | D-17 — cross-origin isolation would break popup OIDC, and nothing in V1 needs it |
+| X-D3 | `COOP`/`COEP` are **absent** | D-18 — cross-origin isolation would break popup OIDC, and nothing in V1 needs it |
 
-### 9a.4 Surface stability *(new — D-15)*
+### 9a.4 Surface stability *(new — D-16)*
 
 | # | Gate | Proves |
 | --- | --- | --- |
-| X-S1 | Every method on the JS/TS surface returns a `Promise` — a **surface** test, not a behaviour test | the V2 storage upgrade cannot become a breaking npm change (D-15) |
-| X-S2 | `dist/index.js` and `dist/index.d.ts` are **generated**, and a clean rebuild produces no diff | D-19 — the shipped behaviour and the published types cannot drift, because neither is hand-maintained |
+| X-S1 | Every method on the JS/TS surface returns a `Promise` — a **surface** test, not a behaviour test | the V2 storage upgrade cannot become a breaking npm change (D-16) |
+| X-S2 | `dist/index.js` and `dist/index.d.ts` are **generated**, and a clean rebuild produces no diff | D-20 — the shipped behaviour and the published types cannot drift, because neither is hand-maintained |
 | X-S3 | A **timeout-bounded** Node smoke test resolves a real call | the shim ordering trap is a silent hang, not an error; a bare `await` cannot tell a hang from slowness |
 
 ### 9a.5 A standing rule for every tier

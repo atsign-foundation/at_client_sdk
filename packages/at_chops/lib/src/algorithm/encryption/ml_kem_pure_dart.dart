@@ -16,9 +16,7 @@ import 'package:pqcrypto/pqcrypto.dart';
 /// parameter set a caller gets. The two levels are the same algorithm at
 /// different sizes, and as separate copies they had already begun to drift;
 /// this base holds the one implementation.
-abstract base class MlKemPureDart
-    with KemSeedMixin
-    implements AtKemAlgorithm {
+abstract base class MlKemPureDart with KemSeedMixin implements AtKemAlgorithm {
   final KyberLevel _level;
 
   const MlKemPureDart(this._level);
@@ -71,8 +69,9 @@ abstract base class MlKemPureDart
   }
 
   @override
-  Future<({Uint8List publicKey, Uint8List secretKey})>
-      keyPairFromValidatedSeed(Uint8List seed) => generateKeyPair(seed);
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromValidatedSeed(
+          Uint8List seed) =>
+      generateKeyPair(seed);
 
   /// Generate a fresh key pair, raw public and secret key bytes.
   ///
