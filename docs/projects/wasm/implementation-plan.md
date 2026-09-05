@@ -269,7 +269,9 @@ D-12. Independent of the P series, which is `at_server`-side.
   sync queue, with the claim/release semantics D-12 requires: the bundle refuses a second
   opener itself rather than `at_client` keeping a registry. Ships with the Hive-backed
   implementation wired in as the default, so it is exercised rather than declared. The
-  per-object claim only: the Hive backend's per-atSign guard waits for X4, because nothing
+  per-object claim only. (That per-atSign guard is since **superseded by D-13** — storage
+  is isolated per enrollment, so there is no second client of one atSign to refuse. This
+  row describes what X2 shipped, not the live plan.) It waited for X4 because nothing
   releases storage before then and the guard would refuse every same-atSign rebuild.
 - **X3 — Three implementations.** ✅ Merged, #2205, and merged back into the spike at
   `51bdb6230`. Hive-backed (today's behaviour), SQLite-backed, and
@@ -313,9 +315,10 @@ D-12. Independent of the P series, which is `at_server`-side.
   storage is NOT closed. The instance remains in the internal cache and reuses its
   still-open local keystore when resumed". X4's storage release therefore changes a
   documented contract, and the packs (X5) and that dartdoc move with it. The storage-release
-  work is parked as a git stash named `x4-release-wip` on the repository's stash stack
-  (its label names a branch since deleted; resume by branching from trunk and popping it)
-  until then.
+  work is **PR #2208** (`feat(at_client): stop() releases the client's storage`) on the
+  remote branch `gkc-at-client-storage-release`, a **draft paused behind X4a** — its
+  release code is sound, its per-atSign guard superseded. Resume by checking that branch
+  out, not from a stash.
 
   **PR #2208's two CI failures, both ours (classified 2026-09-05):**
   `functional_tests_at_onboarding_cli` is the Hive-box sharing this ruling fixes (X4a);

@@ -309,8 +309,11 @@ enrollment and a differently-scoped one on the same atSign hold different secret
 different records. Sharing a store between them would hand one enrollment records and
 pending writes belonging to another's scope — the very boundary
 [D-12](#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)'s
-claim exists to keep. Storage granularity must match the principal, and the principal is
-`(atSign, enrollmentId)` — the key the instance cache already uses — not the atSign.
+claim exists to keep. Storage granularity must match the enrolled principal — the
+`(atSign, enrollmentId)` pair the instance cache keys on — not the atSign. (This is a
+different sense of "principal" from D-12's, which names the *claim holder* as the client
+OBJECT by identity; here it is the *storage-identity* granularity. Two senses, one word —
+qualify at each use.)
 
 **The defect this names.** Today storage is keyed by the atSign alone, a survival of the
 one-client-per-atSign era: the keystore box is `sha256(atSign)`, the sync-queue box is
