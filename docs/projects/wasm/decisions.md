@@ -299,6 +299,44 @@ reaches a cached client; X1 pins that guard before X4 changes `stop()`, since th
 what a released client's safety then rests on. (Amended 2026-09-05: first written as "two
 paths hand back a stopped client" — one was already guarded, the other has no caller.)
 
+### D-13 — Local storage is isolated per (atSign, enrollmentId), not per atSign (2026-09-05)
+
+A client's local keystore and sync queue are keyed by the **enrollment**, not by the
+atSign alone. Two enrollments of one atSign on one device get **separate** stores.
+
+**Why.** An enrollment holds key material only for its granted namespaces; a scoped
+enrollment and a differently-scoped one on the same atSign hold different secrets and see
+different records. Sharing a store between them would hand one enrollment records and
+pending writes belonging to another's scope — the very boundary
+[D-12](#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)'s
+claim exists to keep. Storage granularity must match the principal, and the principal is
+`(atSign, enrollmentId)` — the key the instance cache already uses — not the atSign.
+
+**The defect this names.** Today storage is keyed by the atSign alone, a survival of the
+one-client-per-atSign era: the keystore box is `sha256(atSign)`, the sync-queue box is
+`syncqueue_<sha256(atSign)>`, and `AtClientImpl` takes `preference.hiveStoragePath`
+verbatim — nothing derives a per-enrollment location. Two enrollments handed the same
+path therefore share one box; on the global Hive instance they are literally one store.
+`HiveInstances.forPath(path)` isolates by *path*, but nothing makes two enrollments *use*
+different paths, and the per-atSign "refuse the second client" guard built during X4
+merely hid the collision rather than isolating the data.
+
+**Open — the isolation key.** Two routes, undecided:
+- **Per-enrollment location:** `at_client` derives `<hiveStoragePath>/<enrollmentId>` (its
+  own Hive instance per enrollment). No upstream change; box names stay `sha(atSign)`;
+  isolation is by directory.
+- **Enrollment in the box name:** `sha(atSign|enrollmentId)`. Cleaner identity, but the
+  keystore box name lives in `at_persistence_secondary_server` (at_server) — a cross-repo
+  change and a migration for existing atSign-named boxes.
+A legacy client (no enrollmentId, or the `primary` enrollment) should keep today's
+atSign-only location either way, so existing single-enrollment installs are not migrated.
+
+**Consequences for X4.** The release semantics (`stop()` releases storage) are sound and
+become *safe* once storage is per-enrollment: no sibling shares a client's box, so closing
+on release cannot pull the store out from under another enrollment or an in-flight sync
+round. The per-atSign guard comes out — it is the wrong shape. PR #2208 (the release half)
+is paused behind this ruling; its release code is kept, its guard reworked.
+
 ---
 
 ## 2. Measured findings
@@ -588,6 +626,7 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-13 | **D-7..D-9 ruled.** dart2js is the JS/TS compile target; the facade lives in `at_client_web` with D-4 unamended; keys cross as strings and events as callbacks. `js-api.md` added as the sixth doc. |
 | 2026-08-18 | Added JS-6 (throw vs. return-tuple, supabase-js precedent) to `js-api.md` §11. |
 | 2026-09-05 | **D-12 ruled.** Client storage becomes one injected bundle owning the keystore and the sync queue; S3 and §2.3's separate queue interface are superseded. `hiveStoragePath` deprecated; `stop()` releases storage. OQ-3 resolved for storage. |
+| 2026-09-05 | **D-13 ruled.** Local storage is isolated per (atSign, enrollmentId), not per atSign — a scoped enrollment's data must not share a store with another scope. Names the atSign-only box-key defect; the isolation key (per-enrollment path vs box name) is open. PR #2208 paused. |
 | 2026-08-18 | `plans/wasm/api-designing.md` written: the three-layer Dart facade split (Layer A/B/C) and the Axis A/B/C reference-SDK survey. `plans/wasm/key-storage.md` written, depending on the split. |
 | 2026-08-18 | Measured the collections API's write/read asymmetry (§2.6, F1–F12) against `packages/at_client/lib/src/collections/collections.dart`. |
 | 2026-08-18 | **D-9 amended, D-10 and D-11 ruled.** Collections (`AtCollection<T>`) become the sole JS/TS data plane; the flat key/value plane from the original §5.2 is removed, not deprecated in place. The Dart gear is typed via a declared `typeTag`; app types are never compiled into `at_client_web`. Write-compatibility with typed Dart peers is left open pending an upstream `writeTypeTag` or a bounded carrier-class shim (JS-7). `js-api.md` §5–§11 rewritten to match; `plans/wasm/api-designing.md` §2.3/§2.4/§2.6 rewritten for the collections-shaped Layer B. JS-2 resolved; JS-8 (the `AtClientManager` singleton blocking multi-instance clients) recorded. |

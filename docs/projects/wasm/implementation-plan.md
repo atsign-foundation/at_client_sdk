@@ -277,7 +277,18 @@ D-12. Independent of the P series, which is `at_server`-side.
   `SqliteAtClientStorage` on `:memory:`, and both SQLite-backed classes are exported only from
   `package:at_client/sqlite.dart`, so X5's pack imports that barrel. → X5, and the SQLite one
   pairs with P5.
-- **X4 — Inject it, and release it.** A new static factory on `AtClient` that builds *and*
+- **X4a — Isolate storage per `(atSign, enrollmentId)`.** Prerequisite for X4, ruled by
+  [D-13](decisions.md#d-13--local-storage-is-isolated-per-atsign-enrollmentid-not-per-atsign-2026-09-05).
+  Today the keystore and sync-queue boxes are named by the atSign alone and
+  `AtClientImpl` takes `hiveStoragePath` verbatim, so two enrollments of one atSign share a
+  store — wrong, because their namespace scopes differ. Decide the isolation key (a
+  per-enrollment subdirectory in `at_client`, or the enrollment in the box name upstream),
+  keeping a legacy/`primary` client on the atSign-only location. Once this lands, the
+  per-atSign guard comes out and release-close is safe.
+- **X4 — Inject it, and release it.** ⏸ **Paused behind X4a** — its release code (`stop()`
+  releases storage, PR #2208) is sound, but the per-atSign guard it carries is superseded
+  by D-13's per-enrollment isolation and must be reworked before it merges. A new static
+  factory on `AtClient` that builds *and*
   wires the services, taking a bundle; `stop()` releases the claim and closes what the
   bundle opened. Deprecate `AtClientPreference.hiveStoragePath` with a migration note.
   Depends on X1. **Measured 2026-09-05 on trunk `d13516d95` (the X3 merge), storage-release
