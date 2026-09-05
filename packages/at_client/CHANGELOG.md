@@ -4,7 +4,13 @@
   when it is created and a second client is refused it; after the claim is
   dropped the same principal may take it again, a different one only after
   `forgetPrincipal()` or `clear()`. `AtSyncQueue` gains `clear()`. Groundwork
-  for injecting storage and for in-memory and SQLite backends.
+  for injecting storage.
+- feat: `SqliteAtClientStorage` and `InMemoryAtClientStorage`, behind
+  `package:at_client/sqlite.dart` so the main import carries no SQLite
+  dependency. The in-memory one is a SQLite database that never touches disk.
+  `AtSyncQueue` keeps its records through `SyncQueueStore`, with Hive and
+  SQLite implementations, and the SQLite backends keep the queue in the
+  keystore's own database.
 - fix: `AtCollection` — resolve received (shared-in) items in the id-scoped
   read path. `Query.watch()` (delta path), `getOrNull` / `get(id, owner)` and
   `exists(id, owner)` missed items stored locally as

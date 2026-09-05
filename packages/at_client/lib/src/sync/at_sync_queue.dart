@@ -1,6 +1,7 @@
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_client/src/sync/sync_queue_store.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:hive/hive.dart';
 import 'package:meta/meta.dart';
@@ -87,7 +88,7 @@ class AtSyncQueue {
   /// Tests can pass an already-opened `Box<String>` to bypass the
   /// production `Hive.openBox` call (useful for in-memory test boxes
   /// or to share a box across test fixtures).
-  Box<String>? _box;
+  SyncQueueStore? _store;
 
   final LinkedHashSet<String> _inMemoryQueue = LinkedHashSet<String>();
 
@@ -113,12 +114,15 @@ class AtSyncQueue {
   /// keystore initialisation. If [injectedBox] is supplied (test
   /// seam), it is used instead of opening one via Hive — letting
   /// tests provide an in-memory box without calling Hive.init at all.
-  Future<void> open({Box<String>? injectedBox}) async {
+  Future<void> open({Box<String>? injectedBox, SyncQueueStore? store}) async {
     if (_opened) return;
-    if (injectedBox != null) {
-      _box = injectedBox;
+    if (store != null) {
+      _store = store;
+    } else if (injectedBox != null) {
+      _store = HiveBoxSyncQueueStore(injectedBox);
     } else {
-      _box = await Hive.openBox<String>(boxNameForAtSign(_atSign));
+      _store = HiveBoxSyncQueueStore(
+          await Hive.openBox<String>(boxNameForAtSign(_atSign)));
     }
     _replayIntoMemory();
     _opened = true;
@@ -132,9 +136,9 @@ class AtSyncQueue {
   /// `ts`-ascending order — the order they were originally written.
   void _replayIntoMemory() {
     final entries = <SyncQueueEntry>[];
-    final box = _box!;
-    for (final atKey in box.keys.cast<String>()) {
-      final raw = box.get(atKey);
+    final store = _store!;
+    for (final atKey in store.keys.toList()) {
+      final raw = store.get(atKey);
       if (raw == null) continue;
       try {
         entries.add(SyncQueueEntry._deserialise(atKey, raw));
@@ -153,8 +157,8 @@ class AtSyncQueue {
   /// the box open for the AtClient's lifetime.
   Future<void> close() async {
     if (!_opened) return;
-    await _box?.close();
-    _box = null;
+    await _store?.close();
+    _store = null;
     _inMemoryQueue.clear();
     _opened = false;
   }
@@ -180,7 +184,7 @@ class AtSyncQueue {
       op: op,
       ts: ts ?? DateTime.now().millisecondsSinceEpoch,
     );
-    await _box!.put(atKey, entry._serialise());
+    await _store!.put(atKey, entry._serialise());
     _inMemoryQueue.add(atKey);
   }
 
@@ -189,7 +193,7 @@ class AtSyncQueue {
   /// (op, ts) before building the wire command.
   SyncQueueEntry? readEntry(String atKey) {
     _ensureOpen();
-    final raw = _box!.get(atKey);
+    final raw = _store!.get(atKey);
     if (raw == null) return null;
     return SyncQueueEntry._deserialise(atKey, raw);
   }
@@ -202,14 +206,14 @@ class AtSyncQueue {
   Future<void> remove(String atKey) async {
     _ensureOpen();
     _inMemoryQueue.remove(atKey);
-    await _box!.delete(atKey);
+    await _store!.delete(atKey);
   }
 
   /// Drops every entry, keeping the box open.
   Future<void> clear() async {
     _ensureOpen();
     _inMemoryQueue.clear();
-    await _box!.clear();
+    await _store!.clear();
   }
 
   /// Returns up to [limit] atKey strings from the front of the
@@ -242,7 +246,7 @@ class AtSyncQueue {
   @visibleForTesting
   Iterable<String> get persistedKeys {
     _ensureOpen();
-    return _box!.keys.cast<String>();
+    return _store!.keys;
   }
 
   void _ensureOpen() {
