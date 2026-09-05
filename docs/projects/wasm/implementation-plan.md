@@ -316,6 +316,14 @@ D-12. Independent of the P series, which is `at_server`-side.
   work is parked as a git stash named `x4-release-wip` on the repository's stash stack
   (its label names a branch since deleted; resume by branching from trunk and popping it)
   until then.
+
+  **PR #2208's two CI failures, both ours (classified 2026-09-05):**
+  `functional_tests_at_onboarding_cli` is the Hive-box sharing this ruling fixes (X4a);
+  `end2end_test_14` is a fixture issue — the `.atKeys` carry an enrollmentId but the test
+  authenticates without supplying it, so a #2787 server refuses bare `pkam:` (AT0401).
+  Both are addressed by the X4a rework and the enrollment-fixture sweep, not by the
+  release code itself.
+
 - **X5 — Move the functional pack onto an in-memory bundle per file.** The named consumer:
   `test_utils.dart` shares `test/hive/client/$atsign` across every file, so one file
   inherits the next's pending sync queue and the next client's scoped enrollment is refused
