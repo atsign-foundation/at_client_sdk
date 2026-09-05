@@ -271,8 +271,8 @@ D-12. Independent of the P series, which is `at_server`-side.
   implementation wired in as the default, so it is exercised rather than declared. The
   per-object claim only: the Hive backend's per-atSign guard waits for X4, because nothing
   releases storage before then and the guard would refuse every same-atSign rebuild.
-- **X3 — Three implementations.** ✅ Merged, #2205 — **on trunk only; the spike merge-back is
-  owed** (see the Sequencing note). Hive-backed (today's behaviour), SQLite-backed, and
+- **X3 — Three implementations.** ✅ Merged, #2205, and merged back into the spike at
+  `51bdb6230`. Hive-backed (today's behaviour), SQLite-backed, and
   in-memory covering keystore *and* queue so nothing touches disk. The in-memory one **is**
   `SqliteAtClientStorage` on `:memory:`, and both SQLite-backed classes are exported only from
   `package:at_client/sqlite.dart`, so X5's pack imports that barrel. → X5, and the SQLite one
@@ -317,13 +317,10 @@ filing under the identity `_init` settled. Keep the key and the filing; **delete
 measured 2026-09-05 against trunk `ba281fda3`, before X2 and X3 landed; the X4 row's
 measurement is against `d13516d95`, after them.
 
-**Owed under this note (found 2026-09-05 by the wrap-up's cold read):** the X3 merge-back.
-X2 was merged into the spike at `38c7f5ad4`; X3 (`d13516d95`) has not been, so
-`gkc-pq-d1-spike..origin/trunk` is exactly that commit and the spike lacks `lib/sqlite.dart`,
-`src/storage/sqlite/*` and `src/sync/sync_queue_store.dart`. The merge conflicts in
-`at_sync_queue.dart`: the spike's `_box` plus `HiveInstances.forPath(path)` default and its
-`removeIfUnchanged` against trunk's `_store`/`SyncQueueStore` — keep the store abstraction
-and make the Hive default path-aware. Also owed: nine dangling links to a `plans/wasm/`
+**Found 2026-09-05 by the wrap-up's cold read and done the same day:** the X3 merge-back
+had been skipped. It landed as `51bdb6230`; `at_sync_queue.dart` kept trunk's `SyncQueueStore`
+abstraction and the spike's `HiveInstances.forPath(path)` default together, and the queue's
+`storagePath` became optional so trunk's SQLite storage compiles on the spike. Also owed: nine dangling links to a `plans/wasm/`
 directory that does not exist (`implementation-plan.md`, `js-api.md`, `decisions.md`).
 
 **Deferred to the major:** deprecating `AtClientManager`. Its `AtSignChangeListener`
