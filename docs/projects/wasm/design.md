@@ -289,14 +289,17 @@ abstract class AtClientStorage {
 - **`clear()` empties keystore and queue together**, and forgets the last principal.
   `detach()` stamps the departing holder as the last principal, so a holder that clears
   and then keeps writing is still guarded; the fixture sequence is detach, clear, next.
-- **The Hive backend cannot yet refuse a second *instance* for one atSign.** Every box is
-  on the global Hive instance and named by atSign, so two `HiveAtClientStorage` objects for
-  one atSign share boxes whatever their paths — and nothing releases storage until X4, so a
-  per-atSign guard would refuse every test that rebuilds a client for the same atSign
-  (`local_secondary_test.dart` does it fifteen times). X2 ships the per-object claim; the
-  per-atSign guard lands with X4, once `stop()` releases. The upstream bundle already offers it
-  for the keystore; the queue is the half that matters, because a queue carrying another
-  test's entries is exactly what poisoned the functional pack. A half-cleared store —
+- **Isolation is per *location*, and distinct locations already separate two clients of one
+  atSign.** The keystore opens on `HiveInstances.forPath(storagePath)` (pinned upstream,
+  #2776) and the spike's queue does the same, so two `HiveAtClientStorage` objects for one
+  atSign at **different** paths get separate stores today; only the **same** path shares.
+  The guard is therefore per-location, not per-atSign: each impl reports a canonical
+  `location` and `AtClientStorageBase` refuses a second open at one already open — allowing
+  N distinct-location clients of one atSign (the multi-enrollment fixture) while catching an
+  accidental shared path. X4's per-atSign guard was the wrong shape. The full design —
+  test-supplied locations, `storage:` injected on `create` and the manager, and the
+  injected-vs-owned close lifecycle — is
+  [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05). A half-cleared store —
   data without its pending writes, or writes without their data — is not representable.
 
 ### 2.3 The sync queue
@@ -343,6 +346,11 @@ plumbed `open({Box<String>? injectedBox})` (`at_sync_queue.dart`, documented as 
 seam) through to `AtClientImpl.create` as an intermediate step. The seam stays useful for
 tests; it stops being the route to backend selection. Drop the direct `hive` dependency
 once this and §2.2 land.
+
+The global-instance landmine above is the trunk state; the spike already opens the queue on
+`HiveInstances.forPath(path)`, so distinct locations isolate the queue as well as the
+keystore. Isolation is resolved per location, not per enrollment — see
+[D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05).
 
 ### 2.4 Key material — the exemplar
 

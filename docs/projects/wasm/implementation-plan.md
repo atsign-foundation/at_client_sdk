@@ -269,9 +269,10 @@ D-12. Independent of the P series, which is `at_server`-side.
   sync queue, with the claim/release semantics D-12 requires: the bundle refuses a second
   opener itself rather than `at_client` keeping a registry. Ships with the Hive-backed
   implementation wired in as the default, so it is exercised rather than declared. The
-  per-object claim only. (That per-atSign guard is since **superseded by D-13** — storage
-  is isolated per enrollment, so there is no second client of one atSign to refuse. This
-  row describes what X2 shipped, not the live plan.) It waited for X4 because nothing
+  per-object claim only. (That per-atSign guard is since **superseded by
+  [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05)** — the guard is per
+  *location*, so N clients of one atSign at distinct locations are allowed and only a shared
+  location is refused. This row describes what X2 shipped, not the live plan.) It waited for X4 because nothing
   releases storage before then and the guard would refuse every same-atSign rebuild.
 - **X3 — Three implementations.** ✅ Merged, #2205, and merged back into the spike at
   `51bdb6230`. Hive-backed (today's behaviour), SQLite-backed, and
@@ -279,25 +280,27 @@ D-12. Independent of the P series, which is `at_server`-side.
   `SqliteAtClientStorage` on `:memory:`, and both SQLite-backed classes are exported only from
   `package:at_client/sqlite.dart`, so X5's pack imports that barrel. → X5, and the SQLite one
   pairs with P5.
-- **X4a — Isolate storage per `(atSign, enrollmentId)`.** Prerequisite for X4, ruled by
-  [D-13](decisions.md#d-13--local-storage-is-isolated-per-atsign-enrollmentid-not-per-atsign-2026-09-05).
-  Today the keystore and sync-queue boxes are named by the atSign alone and
-  `AtClientImpl` takes `hiveStoragePath` verbatim, so two enrollments of one atSign share a
-  store — wrong, because their namespace scopes differ. Decide the isolation key (a
-  per-enrollment subdirectory in `at_client`, or the enrollment in the box name upstream),
-  keeping a legacy/`primary` client on the atSign-only location. Once this lands, the
-  per-atSign guard comes out and release-close is safe.
-  ⚠️ **Found 2026-09-05, not yet designed:** the KEYSTORE box name is `sha256(atSign)`
-  derived inside `at_persistence_secondary_server` (`getShaForAtSign`), and it opens on the
-  **global** `Hive` singleton; `HiveInstances` is an upstream class too. So isolating the
-  *keystore* per enrollment reaches at_server either way — a per-enrollment box name, or
-  making the keystore open on a per-path/instance `Hive`. Only the SYNC-QUEUE box name is
-  at_client's (`AtSyncQueue.boxNameForAtSign`). X4a is therefore likely a cross-repo change,
-  not at_client-only; confirm against the spike's pinned `at_persistence_secondary_server`
-  before scoping.
+- **X4a — Isolate storage per location.** Prerequisite for X4, design ruled by
+  [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05) (resolving
+  [D-13](decisions.md#d-13--local-storage-is-isolated-per-atsign-enrollmentid-not-per-atsign-2026-09-05)).
+  **at_client-only, not cross-repo** — corrects the earlier "likely cross-repo" scoping. The
+  isolating mechanism is already present on the spike: the keystore opens on
+  `HiveInstances.forPath(storagePath)` (pinned upstream #2776, SHA `5c0e603c`) and the spike's
+  `AtSyncQueue` on `forPath` too, so two clients of one atSign at **different** locations
+  already get separate stores; only the **same** location shares. Production is unchanged —
+  one location per atSign, as today; the enrollment discriminator is test-supplied. The work:
+  (1) each `AtClientStorage` reports a canonical `location`, and `AtClientStorageBase` refuses
+  a second open at an already-open location — the per-location guard replacing X4's per-atSign
+  one, so N distinct-location clients of one atSign pass; (2) an optional `storage:` on the
+  `create` factory, threaded through `setCurrentAtSign`, with the manager's
+  `refuseChangedStoragePath` short-circuit removed; (3) rewrite the multi-enrollment fixtures
+  onto direct `create` with a shared lifecycle-owning test helper (builds located storage +
+  client, closes both in `tearDown`); (4) correct the stale `hive_at_client_storage.dart` NOTE
+  (distinct paths isolate; only same-location collides). Then X4 unpauses.
 - **X4 — Inject it, and release it.** ⏸ **Paused behind X4a** — its release code (`stop()`
   releases storage, PR #2208) is sound, but the per-atSign guard it carries is superseded
-  by D-13's per-enrollment isolation and must be reworked before it merges. A new static
+  by [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05)'s per-location guard
+  and must be reworked before it merges. A new static
   factory on `AtClient` that builds *and*
   wires the services, taking a bundle; `stop()` releases the claim and closes what the
   bundle opened. Deprecate `AtClientPreference.hiveStoragePath` with a migration note.
@@ -317,7 +320,7 @@ D-12. Independent of the P series, which is `at_server`-side.
   documented contract, and the packs (X5) and that dartdoc move with it. The storage-release
   work is **PR #2208** (`feat(at_client): stop() releases the client's storage`) on the
   remote branch `gkc-at-client-storage-release`, a **draft paused behind X4a** — its
-  release code is sound, its per-atSign guard superseded. Resume by checking that branch
+  release code is sound, its per-atSign guard superseded by D-14's per-location one. Resume by checking that branch
   out, not from a stash.
 
   **PR #2208's two CI failures, both ours (classified 2026-09-05):**
