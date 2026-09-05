@@ -286,7 +286,15 @@ abstract class AtClientStorage {
   atSign moving from a legacy client to an enrolled one — says so in one call, rather than
   reaching for `clear()` and losing the records to get past the refusal. It throws while
   a client is attached: hand-over happens between holders, never under one.
-- **`clear()` empties keystore and queue together**, and forgets the last principal. The upstream bundle already offers it
+- **`clear()` empties keystore and queue together**, and forgets the last principal.
+  `detach()` stamps the departing holder as the last principal, so a holder that clears
+  and then keeps writing is still guarded; the fixture sequence is detach, clear, next.
+- **The Hive backend cannot yet refuse a second *instance* for one atSign.** Every box is
+  on the global Hive instance and named by atSign, so two `HiveAtClientStorage` objects for
+  one atSign share boxes whatever their paths — and nothing releases storage until X4, so a
+  per-atSign guard would refuse every test that rebuilds a client for the same atSign
+  (`local_secondary_test.dart` does it fifteen times). X2 ships the per-object claim; the
+  per-atSign guard lands with X4, once `stop()` releases. The upstream bundle already offers it
   for the keystore; the queue is the half that matters, because a queue carrying another
   test's entries is exactly what poisoned the functional pack. A half-cleared store —
   data without its pending writes, or writes without their data — is not representable.

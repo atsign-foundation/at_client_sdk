@@ -236,8 +236,10 @@ parallel. Design in [`design.md`](design.md) §0.2 and §5.
   not instantiate — confirm that, then gate rather than port.
 - **P4 — Extend `SqlitePersistenceConfig`** with the web open parameters (database
   name, VFS choice) alongside the native `storagePath`.
-- **P5 — Add `SqlitePersistenceConfig.clientDefaults(...)`** for the commit-log-free
-  client bundle shape, mirroring `HivePersistenceConfig.clientDefaults`. → X1
+- **P5 — ~~Add~~ `SqlitePersistenceConfig.clientDefaults(...)`** — **already published**:
+  `at_persistence_secondary_server` 5.2.1 carries it (`sqlite_persistence_config.dart`),
+  mirroring `HivePersistenceConfig.clientDefaults`. Nothing to add; X3's SQLite bundle
+  consumes it. → X3
 
 **Note:** this phase is native-side `at_server` work that stands on its own merits. The
 SQLite backend improvements benefit native and server deployments regardless of the
@@ -265,7 +267,10 @@ D-12. Independent of the P series, which is `at_server`-side.
   other has no caller.)
 - **X2 — Define `AtClientStorage`.** The neutral interface owning the keystore and the
   sync queue, with the claim/release semantics D-12 requires: the bundle refuses a second
-  opener itself rather than `at_client` keeping a registry.
+  opener itself rather than `at_client` keeping a registry. Ships with the Hive-backed
+  implementation wired in as the default, so it is exercised rather than declared. The
+  per-object claim only: the Hive backend's per-atSign guard waits for X4, because nothing
+  releases storage before then and the guard would refuse every same-atSign rebuild.
 - **X3 — Three implementations.** Hive-backed (today's behaviour), SQLite-backed, and
   in-memory covering keystore *and* queue so nothing touches disk. → X5, and the SQLite one
   pairs with P5.
