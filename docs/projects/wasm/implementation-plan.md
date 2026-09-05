@@ -285,6 +285,14 @@ D-12. Independent of the P series, which is `at_server`-side.
   per-enrollment subdirectory in `at_client`, or the enrollment in the box name upstream),
   keeping a legacy/`primary` client on the atSign-only location. Once this lands, the
   per-atSign guard comes out and release-close is safe.
+  ⚠️ **Found 2026-09-05, not yet designed:** the KEYSTORE box name is `sha256(atSign)`
+  derived inside `at_persistence_secondary_server` (`getShaForAtSign`), and it opens on the
+  **global** `Hive` singleton; `HiveInstances` is an upstream class too. So isolating the
+  *keystore* per enrollment reaches at_server either way — a per-enrollment box name, or
+  making the keystore open on a per-path/instance `Hive`. Only the SYNC-QUEUE box name is
+  at_client's (`AtSyncQueue.boxNameForAtSign`). X4a is therefore likely a cross-repo change,
+  not at_client-only; confirm against the spike's pinned `at_persistence_secondary_server`
+  before scoping.
 - **X4 — Inject it, and release it.** ⏸ **Paused behind X4a** — its release code (`stop()`
   releases storage, PR #2208) is sound, but the per-atSign guard it carries is superseded
   by D-13's per-enrollment isolation and must be reworked before it merges. A new static
