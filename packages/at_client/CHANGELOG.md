@@ -1,5 +1,13 @@
 ## 3.15.0-rc1
 
+- fix: `stop()` no longer races an in-flight sync round. The round ends at its
+  next step once the service is stopped, its request is reported as stopped
+  rather than as an unexpected exception, and what it had not pushed stays
+  queued for the next sync. `stop()` does not drain: an app that wants its
+  pending writes on the atServer first awaits `waitUntilCaughtUp`.
+  `LocalSecondary.syncQueueSyncSnapshot` is null for a closed queue, as for one
+  never opened.
+
 - feat: `AtClientStorage` — a client's local keystore and its sync queue as one
   object, with `HiveAtClientStorage` as the default. A client claims its storage
   when it is created and a second client is refused it; after the claim is

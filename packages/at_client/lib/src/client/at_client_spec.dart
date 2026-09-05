@@ -174,6 +174,10 @@ abstract class AtClient {
   /// keystore-event timers, closes the data-event stream, and stops the sync
   /// and notification services and the remote secondary connection.
   ///
+  /// Does not drain: a sync round in flight is abandoned at its next step and
+  /// its work retries on the next sync. An app that wants its pending writes
+  /// on the atServer first awaits `SyncService.waitUntilCaughtUp`.
+  ///
   /// Local storage is NOT closed. The instance remains in the internal cache
   /// and reuses its still-open local keystore when resumed by calling
   /// `AtClientManager.setCurrentAtSign` for the same atSign, which wires up

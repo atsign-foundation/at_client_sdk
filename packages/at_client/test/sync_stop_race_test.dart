@@ -93,9 +93,10 @@ void main() {
     // exact shape. The resumed run sees five pending entries.
     park.complete('data:[{"value":"7"}]');
     await stopFuture;
-
-    // The resumed run bailed before syncInternal: it never even took the
-    // pending-push snapshot, let alone pushed.
+    // stop() does not wait for the parked run; give it a tick to resume and
+    // bail. The resumed run bailed before syncInternal: it never even took
+    // the pending-push snapshot, let alone pushed.
+    await Future.delayed(Duration(milliseconds: 20));
     verifyNever(() => local.peekSyncQueue(limit: any(named: 'limit')));
     expect(errorResult, isNotNull,
         reason: 'the stranded request must be answered, not left dangling');
@@ -124,7 +125,7 @@ void main() {
         .called(greaterThanOrEqualTo(1));
   });
 
-  test('stop() does not return while a run is in flight', () async {
+  test('stop() returns without waiting for the in-flight run', () async {
     final park = Completer<String>();
     when(() => remote.executeVerb(any())).thenAnswer((_) => park.future);
 
@@ -134,11 +135,11 @@ void main() {
     var stopped = false;
     final stopFuture = service.stop().then((_) => stopped = true);
     await Future.delayed(Duration(milliseconds: 20));
-    expect(stopped, false,
-        reason: 'stop() must wait for the in-flight run to unwind');
-
+    expect(stopped, true,
+        reason: 'stop() does not drain or wait; the parked run is abandoned '
+            'and ends at its next step once the network answers');
     park.complete('data:[{"value":"7"}]');
     await stopFuture;
-    expect(stopped, true);
+    await Future.delayed(Duration(milliseconds: 20));
   });
 }

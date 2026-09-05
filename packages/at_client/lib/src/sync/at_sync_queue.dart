@@ -125,6 +125,8 @@ class AtSyncQueue {
   /// names none either.
   final String? _storagePath;
 
+  bool get isOpen => _opened;
+
   AtSyncQueue({required String atSign, String? storagePath})
       : _atSign = atSign,
         _storagePath = storagePath,
