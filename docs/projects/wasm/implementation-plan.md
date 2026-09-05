@@ -28,6 +28,27 @@ for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer sto
 
 ---
 
+> ## ⚠️ Scope change, 2026-08-30 — V1 is remote-only
+>
+> The first browser release ships with **no local store**
+> (`isLocalStoreRequired = false`): no SQLite, no VFS, no `sqlite3.wasm`, no Hive. See
+> [`decisions.md`](decisions.md) D-12.
+>
+> **What this does to the backlog below:**
+>
+> | Group | Status |
+> | --- | --- |
+> | Transport tasks | **unchanged, and now the critical path.** Also cheaper than assumed: the atServer already speaks WebSocket natively and the WSS proxy is built, so there is **no server-side transport work** |
+> | Storage / persistence / sync-queue tasks | **deferred to V2.** Correct as written; not withdrawn. `decisions.md` D-17 constrains the VFS choice for when they resume |
+> | Crypto tasks | **re-specified** — see [`design.md`](design.md) §C1. The `dart:html` claim was right about `better_cryptography`, not `cryptography`, and the Argon2id question is now settled statically |
+> | Key-storage tasks | **unchanged, and now the whole storage story** |
+> | JS packaging tasks | **re-specified by D-19** — author the facade once in TypeScript; generate both `.js` and `.d.ts` |
+>
+> A new task group is implied and not yet written up here: the **injected write-through
+> `Secondary`** that delivers remote-only (D-13). It replaces what would otherwise have been
+> a sweep through 21 null-assertion call sites.
+
+
 ## 0. How to read this plan
 
 Task ids are stable and referenced from the other docs. Each carries a goal, the
@@ -283,15 +304,30 @@ browser outcome.
 
 Now verified **by execution** under T2.3 rather than by compile.
 
-- **C1 — `cryptography`** must resolve to its pure-Dart implementation; its 2.x browser
-  path uses Web Crypto via `dart:html`, which dart2wasm rejects. Critical path — it
-  backs X-Wing, X25519, AES-GCM, the X25519 key pair, Argon2id and `at_chops_util`.
+- **C1 — `cryptography`** — ⚠️ **re-specified 2026-08-30; see [`design.md`](design.md)
+  §C1.** The former wording ("must resolve to its pure-Dart implementation; its browser
+  path uses Web Crypto via `dart:html`") was wrong on both halves. The package has **no
+  `dart:html` anywhere in `lib/`** — it uses `dart:js_interop` with a **runtime**
+  `window.isSecureContext` probe — so the browser branch is selected under *both* web
+  targets and "resolves to pure Dart" is not a checkable property. The real question is
+  which primitives that branch accelerates at runtime, which is a T3 measurement, not a
+  T0/T1 graph property. Still critical path: it backs X-Wing, X25519, AES-GCM, the X25519
+  key pair, Argon2id and `at_chops_util`.
+  **Argon2id is already settled** — no override in 2.9.0, and Argon2id is absent from the
+  WebCrypto spec, so it always resolves to `DartArgon2id`. The deferred Argon2id UX work
+  stands.
 - **C2 — `pqcrypto: ^0.3.0`.** Backs `ml_kem_768_pure_dart.dart` and
   `ml_dsa_65_pure_dart.dart` — the algorithms a WASM build must use. Note
   `ml_kem_768_pure_dart.dart` imports `package:pqcrypto/src/…` for `KyberLevel`, a
   private-path import that can break on any upstream release.
 - **C3 — `better_cryptography`.** Backs `aes.dart`, `aes_ctr_factory.dart`,
-  `ed25519.dart`, `at_chops_util.dart`. A `cryptography` fork with unknown WASM status.
+  `ed25519.dart`, `at_chops_util.dart`. ⚠️ **Status is no longer unknown, and this is the
+  higher-risk row of the two.** It is a `1.0.0+1` fork whose browser backend imports
+  **`dart:html` + `package:js`**, selected at compile time by `dart.library.html`, with
+  **no secure-context gate at all** — so outside a secure context the expected outcome is
+  a throw on every encrypt, not a fallback. It sits on the **default AES path**, i.e. the
+  hot path. Tracked separately from C1: the two packages resolve by different mechanisms
+  and fail differently, and must not be merged into one row.
 - **C4 — Measure Argon2id in pure Dart under WASM.** The number is the deferred UX
   input for `.atKeys` passphrase decryption. → X3
 

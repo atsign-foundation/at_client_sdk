@@ -1,7 +1,7 @@
 # decisions.md — Rulings, measured findings & open questions
 
 **Status:** decision record (binding).
-**Scope:** the rulings D-1..D-9 that govern the implementation-neutral `AtClient`
+**Scope:** the rulings D-1..D-19 that govern the implementation-neutral `AtClient`
 work, the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
@@ -17,6 +17,9 @@ non-Dart consumer story in [`js-api.md`](js-api.md).
 - [4. Corrections to the predecessor doc](#4-corrections-to-the-predecessor-doc)
 - [5. Open questions](#5-open-questions)
 - [6. Decision log](#6-decision-log)
+
+Companion: [`enterprise-identity.md`](enterprise-identity.md) — IdP integration, enrollment
+lifecycle, and the registrar asks (D-16 and OQ-14 live there).
 
 ---
 
@@ -241,6 +244,173 @@ surface is read-compatible with typed Dart peers but not write-compatible.** See
 **Bound.** Compiling app types into `at_client_web` — even as an opt-in — is rejected
 outright: it would force every JS app into a Dart build step, destroying the
 `npm install` story this entire project exists to deliver.
+
+---
+
+### D-12 — V1 is **remote-only**; there is no local store in the browser (2026-08-30)
+
+The first browser release ships with `AtClientPreference.isLocalStoreRequired = false`.
+No SQLite, no VFS, no `sqlite3.wasm`, no Hive. Local storage returns in V2 as a speed
+optimisation.
+
+**Why.** The browser lane had two independently hard problems — a durable local database
+and a secure key store. Remote-only deletes the first outright, and the survivor is
+already designed. It also removes `Hive`'s global and `sqlite3`'s open-override global,
+i.e. the two pieces of process-global state we do not own.
+
+**Bound.** The mode is not new or speculative: it is already exercised in
+`at_contact/test/test_util.dart:7`, `at_client/test/samples/test_util.dart:11`, and
+`put_request_test.dart:150`.
+
+**Cost, stated plainly:** every `get` is a network round-trip. `AtCollection` and bulk
+reads become N round-trips. This must appear in published consumer docs, or it will be met
+as a surprise.
+
+---
+
+### D-13 — Remote-only is delivered by an **injected write-through `Secondary`**, not by making `localSecondary` nullable (2026-08-30)
+
+`at_client` does not learn about a "no local store" mode. It receives a `LocalSecondary`
+whose keystore is in-memory and whose misses and writes go to the atServer.
+
+**Why.** The alternative — nullable `localSecondary` — would mean patching 12
+`localSecondary!` sites in `EncryptionService` and 9 `getLocalSecondary()!` sites in
+`LegacyCryptoProvider`, then keeping every future call site aware of the mode. The Null
+Object costs one class.
+
+It also avoids a trap that the patch-the-call-sites approach walks straight into:
+`CryptoRuntime._provider` (`crypto_runtime.dart:84-95`) routes every **unstamped** key to
+`LegacyCryptoProvider`, and `defaultProviderId` is consulted on the **write** path only. A
+client that merely registered a new remote-capable provider would write new data correctly
+and **crash reading any pre-existing data**.
+
+**Bound by four source facts.** `Secondary` is a one-method interface
+(`client/secondary.dart`); both secondaries implement it as peers; `LocalSecondary`'s
+keystore is an injectable constructor parameter typed to an interface
+(`local_secondary.dart:99-107`); and `AtClientImpl.create` **already accepts**
+`localSecondaryKeyStore` (`at_client_impl.dart:375`).
+
+**Two consequences that must be built, not assumed:**
+
+1. `LocalSecondary` lazily opens a Hive-backed `AtSyncQueue` (`:64`, `:118`). The
+   implementation must never reach it. The API already contains the skip —
+   `Secondary.executeVerb`'s `cameFromServer` flag exists to bypass sync enqueuing.
+2. `at_client_impl.dart:377-381` currently **throws** when a keystore is injected with
+   `isLocalStoreRequired: false`. That guard is exactly backwards for this design and must
+   invert: injection becomes mandatory in remote-only.
+
+*(Note: `executeVerb`'s `sync:` parameter is already documented as ignored, so
+`_saveSharedKey`'s `sync: true` is not a problem.)*
+
+---
+
+### D-14 — Dart runs on the **main thread** in V1 (2026-08-30)
+
+Not a default — a decision, taken because it resolves four problems at once and costs
+nothing while there is no VFS.
+
+| Trap | Resolved because |
+| --- | --- |
+| `package:cryptography`'s WebCrypto gate is a literal `window` dereference | `window` exists on the main thread |
+| `SimpleOpfsFileSystem` is dedicated-worker-only | no VFS in V1 |
+| Cross-origin isolation (COOP/COEP) | no `SharedArrayBuffer` |
+| `postMessage` marshalling to the JS facade | the facade calls Dart directly |
+
+⚠️ **This does not make crypto acceleration free.** It holds under **dart2js** only; under
+dart2wasm the default AES path resolves to pure Dart regardless of thread. See
+[`design.md`](design.md) §C1.
+
+---
+
+### D-15 — The JS/TS surface is **`Promise`-returning for every protocol operation**; no synchronous escape hatch (2026-08-30)
+
+Even where remote-only plus an in-memory cache would permit a synchronous return.
+
+**Why.** This is the single highest-value forward-compatibility rule in the programme. V2
+moves storage into SQLite, and possibly into a Worker — both asynchronous. If any V1
+operation is synchronous, V2 becomes a **breaking change to a published npm surface** for
+every consumer. Async from day one makes V2 a purely internal refactor the host page never
+observes.
+
+**Bound.** No `getSync`-style API may ship, at any version, for any operation that could
+later touch storage or the network.
+
+---
+
+### D-16 — **Redirect-based OIDC only.** Popup flows are not shipped (2026-08-30)
+
+**Why.** Popups work today, because V1 requires no cross-origin isolation — so this costs
+nothing now. But if V2 ever needs COOP `same-origin` (for `SharedArrayBuffer`-based OPFS
+or Dart isolates), it severs `window.opener` and **every popup integration breaks
+simultaneously**. Redirect flows survive COOP natively.
+
+This is deliberate insurance on a decision we have chosen to defer (D-17). Cheap now,
+expensive to retrofit.
+
+---
+
+### D-17 — Do not adopt a VFS requiring cross-origin isolation; and do not settle the VFS choice on a benchmark (2026-08-30)
+
+Supersedes the conditional phrasing in earlier drafts. The VFS choice is **pick-two**:
+
+| | crash consistency | multi-atSign | no cross-origin isolation |
+| --- | --- | --- | --- |
+| `IndexedDbFileSystem` | ❌ (`xSync` is a documented no-op, `vfs/indexed_db.dart:646-649`) | ✅ | ✅ |
+| `SimpleOpfsFileSystem` | ✅ | ❌ — exactly two files, `/database` and `/database-journal` | ✅ |
+| `WasmVfs` (async_opfs) | ✅ | ✅ | ❌ — SAB + `Atomics` ⇒ COOP+COEP |
+
+**Bound.** `WasmVfs` is rejected: it is the only option that forces COOP `same-origin`.
+Choosing it on latency would mean **a storage benchmark silently deciding the enterprise
+identity integration** — the same failure shape OQ-5 was written to prevent, in a new form.
+
+Escalate the remaining trade as a **product** decision before V2 needs it.
+
+---
+
+### D-18 — No new process-global state; one client per atSign, created explicitly (2026-08-30)
+
+New code — the entire browser lane included — constructs its own `AtClientManager` and
+never calls `getInstance()`.
+
+**Why.** `AtClientManager.getInstance()` appears 22× in `at_client/lib` and across 34
+files in 14 downstream packages, so the singleton must be **demoted over a major**, not
+deleted. But the browser lane can simply not use it, which costs nothing and satisfies the
+constraint immediately.
+
+**Bound.** Storage and crypto take the atSign **explicitly**; nothing infers it from
+ambient state. Under D-12 the per-atSign state is an in-memory map rather than a database,
+so multi-tenancy can be *demonstrated* in V1 rather than promised — which is what the
+enterprise concern actually requires. This resolves OQ-11 in the instance-based direction.
+
+---
+
+### D-19 — The JS facade is authored **once, in TypeScript**; the `.js` and `.d.ts` are both generated (2026-08-30)
+
+`src/index.ts` is the single source of truth for the npm surface. `tsc` (or `tsup`/`rollup`)
+emits `dist/index.js` for vanilla-JS consumers and `dist/index.d.ts` for TypeScript
+consumers. **Neither output is hand-edited or hand-reviewed.**
+
+**Why.** The previous specification in [`js-api.md`](js-api.md) §4/§8 called for a
+hand-written `index.js` *and* a hand-written `index.d.ts`, with the `.d.ts` justified as
+having "documentation value, not generated." That is two hand-maintained descriptions of
+one surface: double the maintenance, and drift between the shipped behaviour and the
+published types is a matter of when, not whether. Generating both from one file makes
+misalignment structurally impossible rather than merely discouraged.
+
+A vanilla-JavaScript consumer is unaffected — they execute `dist/index.js` and their editor
+reads the `.d.ts` regardless of the authoring language.
+
+**Bound.** The Dart-generated `at_client.js` is **strictly internal**: not a documented
+entry point, and not exposed through `package.json`'s `exports`.
+
+**One implementation trap, and it is this package's own.** The Node shim
+(`globalThis.self = globalThis`) must execute **before** the compiled Dart bundle loads, and
+ES module imports are hoisted above the importing module's body. A naive TypeScript port
+therefore reintroduces the silent-hang failure the shim exists to prevent. Put the
+assignment in a side-effect module imported first, and cover it with a **timeout-bounded**
+test — a bare `await` cannot distinguish a hang from slowness.
+
+This pairs with D-15: the async-only surface is what the generated `.d.ts` must express.
 
 ---
 
@@ -514,6 +684,41 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 
 ---
 
+### Status changes, 2026-08-30
+
+| Question | Now |
+| --- | --- |
+| **OQ-5** — which VFS | **Deferred by D-12** (no VFS in V1) and **constrained by D-17** (`WasmVfs` rejected; the remaining trade is a product decision, not a benchmark) |
+| **OQ-11** — instance-based `AtClientManager` | **Resolved by D-18** in the instance-based direction. The browser lane constructs its own manager; `getInstance()` is demoted over a major rather than deleted |
+| **OQ-12** — process-global factory registry | **Resolved by D-18** — instance-per-client |
+| **Argon2id / WebCrypto** | **Settled statically** — `cryptography` 2.9.0 has no Argon2id override and Argon2id is absent from the WebCrypto spec, so it always resolves to `DartArgon2id`. The deferred Argon2id UX work stands. See [`design.md`](design.md) §C1 |
+
+### OQ-13 — Where does the monitor resume checkpoint live in remote-only?
+
+`notification_service_impl.dart:130` reads `lastReceivedNotificationAtKey` from
+`getLocalSecondary()!.keyStore!`. Under D-13 that call **silently succeeds and returns
+nothing** after every reload, replaying all notifications with no error — a correctness bug
+rather than a crash, which is worse.
+
+Options: accept the replay (in-memory), or give it a small IndexedDB record beside the key
+envelope. **Recommend the latter**; it reuses the browser-storage layer the key store
+already builds. Must be decided before the browser lane ships notifications.
+
+### OQ-14 — Do the registrar asks land?
+
+Unattended enterprise provisioning needs a machine-to-machine credential and a
+deprovisioning endpoint from the **registrar**, which is another team. Interactive web
+activation is unaffected and works today. Tracked in
+[`enterprise-identity.md`](enterprise-identity.md); lead time is the risk.
+
+### OQ-15 — What is the payload budget, and who owns it?
+
+Open in every lineage; owner assigned in none. D-12 removes `sqlite3.wasm` (~1 MB+) from
+V1, which relieves the pressure but does not answer the question. Escalate rather than
+invent a number.
+
+---
+
 ## 6. Decision log
 
 | Date       | Entry                                                                                                                                                                                               |
@@ -535,3 +740,5 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-25 | at_auth 4.0.0-rc1 ([#2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179)), the PQ program's S-5: the `at_auth_io.dart` barrel split, `FileAtKeysIo` default dropped, registrar onto `package:http`. Ships one conditional export (`probe_default.dart`). |
 | 2026-08-27 | **Phase 0 matured** ([#2183](https://github.com/atsign-foundation/at_client_sdk/pull/2183)). Gate config extracted to `.github/wasm_gates.yaml`; `controls` made mandatory; `at_auth` gated. **T0.2's two-way ratchet withdrawn** for one-way baselines, **T0.3's no-conditionals ban withdrawn** and restated as a both-branches-walked requirement (D-1 amended, OQ-1 resolved), **R5 withdrawn** — T2 cannot run on a hosted runner (§2.7). T0.4 remains unimplemented. |
 | 2026-08-27 | Phase 1 in review as a three-PR stack: [#2162](https://github.com/atsign-foundation/at_client_sdk/pull/2162) (S4–S6) ready, [#2163](https://github.com/atsign-foundation/at_client_sdk/pull/2163) (S1, S2) and [#2164](https://github.com/atsign-foundation/at_client_sdk/pull/2164) (S3) draft. `plan.md` deleted, as §3 had asserted since 2026-08-13. |
+| 2026-08-30 | D-19 ruled: the JS facade is authored once in TypeScript; `.js` and `.d.ts` are both generated. Corrects `js-api.md` §4/§8, which specified hand-writing both. |
+| 2026-08-30 | D-12..D-18 ruled: remote-only V1; injected write-through `Secondary`; Dart on the main thread; async-only JS surface; redirect-only OIDC; no cross-origin-isolated VFS; no new process globals. `design.md`'s `cryptography`/`better_cryptography` claims corrected. OQ-5/11/12 closed or constrained; OQ-13..15 opened. |
