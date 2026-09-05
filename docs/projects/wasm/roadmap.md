@@ -18,6 +18,7 @@ implementations, so that a browser WasmGC build runs without runtime failures. T
 ## Table of contents
 
 - [Document map](#document-map)
+- [Scope note: V1 is remote-only](#scope-note-v1-is-remote-only)
 - [1. The thesis](#1-the-thesis)
 - [2. Why the compiler cannot be the gate](#2-why-the-compiler-cannot-be-the-gate)
 - [3. The tier model](#3-the-tier-model)
@@ -25,9 +26,31 @@ implementations, so that a browser WasmGC build runs without runtime failures. T
 - [5. Ownership boundary against the PQ program](#5-ownership-boundary-against-the-pq-program)
 - [6. The phase trajectory at a glance](#6-the-phase-trajectory-at-a-glance)
 
+## Scope note: V1 is remote-only
+
+**Added 2026-08-30, amended 2026-09-06.** The first browser release **ships** a
+remote-only storage bundle as its default: no SQLite, no VFS, no `sqlite3.wasm`, no Hive
+in the shipped payload. A local store becomes the default in V2, as a speed optimisation.
+See `decisions.md` D-13.
+
+**This is a default, not a prohibition.** Under `decisions.md` D-12 client storage is an
+injected bundle, so remote-only is one implementation of that interface and the SQLite,
+`:memory:` and Hive bundles stay injectable — in the browser too, for a consumer willing to
+pay for one. What V1 fixes is what we ship by default.
+
+That takes an entire hard problem off V1's critical path: the browser lane had two
+independently difficult pieces — a durable local database and a secure key store — and only
+the second is on the path to first release. The default bundle also touches neither of the
+two process globals we do not own.
+
+Everything in the storage lane below remains correct; it is **deferred, not withdrawn**, and
+`decisions.md` D-18 constrains the VFS choice for when it resumes.
+
+---
+
 ## Document map
 
-This is one of **six** docs. Each keeps to its lane; cross-references point at the
+This is one of **seven** docs. Each keeps to its lane; cross-references point at the
 canonical home rather than duplicating it.
 
 | Doc                                                | What lives there                                                                                                                                                                                                                                                                                           |
@@ -35,9 +58,10 @@ canonical home rather than duplicating it.
 | **roadmap.md** (this doc)                          | The WHY + WHAT — the neutrality thesis, the compiler-blindness finding, the three-tier model, goals/non-goals, the PQ ownership boundary, the phase trajectory.                                                                                                                                            |
 | [`design.md`](design.md)                           | The per-capability seam designs — transport, storage bootstrap, sync queue, keys, HTTP, connectivity, logging, filesystem, process/env. Current call sites with `file:line`, the proposed interface, and who implements it on each platform. Plus the dead-end seams and the `AtClientPreference` reframe. |
 | [`implementation-plan.md`](implementation-plan.md) | The build sequence — phases, the task backlog (P/T/I/C/G/D groups), dependency order, and the publish ladder.                                                                                                                                                                                              |
-| [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T6, with the measured evidence for each and an explicit statement of what each tier does *not* prove.                                                                                                                                                                                 |
-| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-11), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
-| [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, and npm packaging.                                                                                                               |
+| [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T6, with the measured evidence for each and an explicit statement of what each tier does *not* prove. Plus §9a: confidentiality, remote-only, deployment and surface-stability gates.                                                                                                  |
+| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-20), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
+| [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, npm packaging, and **the deployment contract** (§8a).                                                                              |
+| [`enterprise-identity.md`](enterprise-identity.md) | **New 2026-08-30.** atSigns behind a customer's IdP (Entra/Okta) — the SCIM lifecycle mapping, the atSign-level disable gap, the registrar asks, and the constraints the browser lane must not violate. An *adoption* blocker, not a program blocker.                                                       |
 
 ---
 
@@ -64,9 +88,15 @@ at_client / at_lookup / at_utils / at_auth / at_chops     ← interfaces only
         ▲                    ▲                    ▲
 at_client_web           *_io barrels         at_client_flutter
 (WebSocket,            (SecureSocket,        (keychain, app dirs)
- SQLite-wasm,           file keystore,       — a consumer today,
- IndexedDB keys)        file logging)          an implementer later
+ IndexedDB keys)        file keystore,       — a consumer today,
+                        file logging)          an implementer later
 ```
+
+`SQLite-wasm` was listed in `at_client_web` until 2026-09-02. **D-13 took it out of the
+default**, and did not remove the capability: V1 ships a remote-only bundle, so nothing in
+the default payload needs a local store to back. A consumer may still inject a SQLite
+bundle (`package:at_client/sqlite.dart`, D-12); it becomes the browser default in V2, as a
+*speed* optimisation rather than a correctness one.
 
 **Why not conditional imports.** A conditional import is a compile-time answer to a
 runtime question. It leaves platform knowledge inside the neutral layer, it makes the
@@ -134,9 +164,14 @@ neutral barrel's import graph. Consumers add one import.
 
 ### Tier 3 — platform implementers
 
-- **`at_client_web`** — new, built by this project. WebSocket transport, SQLite-wasm
-  storage, IndexedDB-backed key store, `navigator.onLine` connectivity, console
-  logging.
+- **`at_client_web`** — new, built by this project. WebSocket transport,
+  IndexedDB-backed key store, `navigator.onLine` connectivity, console logging.
+  *(SQLite-wasm storage left this list 2026-09-02 as the **default**: **D-13** ships V1
+  remote-only. It is not withdrawn. The **backend** ruling in [`design.md`](design.md) §5 —
+  SQLite-wasm over IndexedDB — stands, and under **D-12** a SQLite bundle stays injectable
+  today for anyone who wants one; it becomes the default in V2. Its **VFS** half is a
+  separate and still-open question: **D-18** makes it pick-two, so nothing in §5 settles
+  which VFS V2 gets.)*
 - **`at_client_flutter`** — exists, but is **not** a platform implementer today. It
   implements exactly one abstraction (`KeychainAtKeysIo extends WrittenAtKeysIo`,
   `packages/at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10`); all path
