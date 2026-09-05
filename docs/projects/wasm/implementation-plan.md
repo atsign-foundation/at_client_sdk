@@ -19,6 +19,7 @@ for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer sto
 - [3. Phase 1 — cheap seams (S)](#3-phase-1--cheap-seams-s)
 - [4. Phase 2 — transport (T)](#4-phase-2--transport-t)
 - [5. Phase 3 — persistence (P)](#5-phase-3--persistence-p)
+- [5a. Client storage bundle (X)](#5a-client-storage-bundle-x)
 - [6. Phase 4 — the sweep (I) and crypto (C)](#6-phase-4--the-sweep-i-and-crypto-c)
 - [7. Phase 5 — `at_client_web` (W)](#7-phase-5--at_client_web-w)
 - [8. Phase 6 — the JS/TS facade (J)](#8-phase-6--the-jsts-facade-j)
@@ -159,9 +160,13 @@ Preparation. Changes no public interface, breaks nothing, and shrinks every late
 - **S2 — Plumb `MonitorOutboundConnectionFactory`.** ✅ Written, #2163 (draft).
   `Monitor` accepts it at `monitor.dart:93`; `NotificationServiceImpl._` (`notification_service_impl.dart:76-84`)
   never passes it, and `create` does not expose it. Expose and pass.
-- **S3 — Plumb the `AtSyncQueue` box seam.** ✅ Written, #2164 (draft, conflicting).
-  `open({Box<String>? injectedBox})` at `at_sync_queue.dart:116` is not reachable from `AtClientImpl.create`. Make it so —
-  this is the intermediate step toward S-token-free storage in P5.
+- **S3 — Plumb the `AtSyncQueue` box seam.** ⛔ **Superseded by
+  [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)**;
+  written as #2164 (draft, conflicting) before the ruling. It plumbed
+  `open({Box<String>? injectedBox})` through to `AtClientImpl.create` as the intermediate
+  step toward backend-selectable storage. The queue no longer gets a route of its own: it
+  belongs to the storage bundle (X-series below), which owns the keystore beside it. The
+  injected-box seam stays as a test seam. **#2164 needs rework, not rebasing.**
 - **S4 — Delete `sync_isolate_manager.dart`.** ✅ Written, #2162.
   `@Deprecated`, `// coverage:ignore-file`, zero references anywhere in `packages/`
   outside itself, and the only `dart:isolate`
@@ -237,6 +242,47 @@ parallel. Design in [`design.md`](design.md) §0.2 and §5.
 **Note:** this phase is native-side `at_server` work that stands on its own merits. The
 SQLite backend improvements benefit native and server deployments regardless of the
 browser outcome.
+
+---
+
+## 5a. Client storage bundle (X)
+
+`at_client`-side, and the successor to S3. Design in
+[`design.md`](design.md#22-storage-bootstrap) §2.2 and §2.3; ruled in
+[`decisions.md`](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)
+D-12. Independent of the P series, which is `at_server`-side.
+
+- **X1 — Close the resurrection holes.** Prerequisite for X4, and worth landing alone.
+  `stop()` nulls `_syncService`, `_notificationService` and `_enrollmentService`; `start()`
+  only clears `_isStopped`, and the getters throw `StateError` rather than rebuilding. Two
+  paths hand back a stopped client: `AtClientImpl.create` on a cached stopped instance, and
+  `AtClientManager.setCurrentAtSign`'s same-atSign short-circuit. Make a stopped client
+  either rebuild or refuse.
+- **X2 — Define `AtClientStorage`.** The neutral interface owning the keystore and the
+  sync queue, with the claim/release semantics D-12 requires: the bundle refuses a second
+  opener itself rather than `at_client` keeping a registry.
+- **X3 — Three implementations.** Hive-backed (today's behaviour), SQLite-backed, and
+  in-memory covering keystore *and* queue so nothing touches disk. → X5, and the SQLite one
+  pairs with P5.
+- **X4 — Inject it, and release it.** A new static factory on `AtClient` that builds *and*
+  wires the services, taking a bundle; `stop()` releases the claim and closes what the
+  bundle opened. Deprecate `AtClientPreference.hiveStoragePath` with a migration note.
+  Depends on X1.
+- **X5 — Move the functional pack onto an in-memory bundle per file.** The named consumer:
+  `test_utils.dart` shares `test/hive/client/$atsign` across every file, so one file
+  inherits the next's pending sync queue and the next client's scoped enrollment is refused
+  `AT0009` pushing keys it did not write. Depends on X3.
+- **X6 — Consumers.** `at_client_flutter` and `at_onboarding_cli` move onto the factory, so
+  both are WASM-ready ahead of the next major. Whether they move in this major or the next
+  is open.
+
+**Deferred to the major:** deprecating `AtClientManager`. Its `AtSignChangeListener`
+capability exists only because there is a global current atSign, and where that goes is
+undecided, and the migration is large:
+
+```bash
+grep -rl 'AtClientManager' --include='*.dart' packages tests | wc -l
+```
 
 ---
 

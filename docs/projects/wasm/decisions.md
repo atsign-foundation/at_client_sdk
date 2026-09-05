@@ -242,6 +242,49 @@ surface is read-compatible with typed Dart peers but not write-compatible.** See
 outright: it would force every JS app into a Dart build step, destroying the
 `npm install` story this entire project exists to deliver.
 
+### D-12 — Client storage is one injected bundle, and it owns the sync queue (2026-09-05)
+
+`at_client` gains a storage abstraction of its own: a single object owning **both** the
+local keystore and the sync queue. This supersedes [§2.3](design.md#23-the-sync-queue)'s
+design of a separate spec interface for the queue, and S3 with it. Three implementations
+are in scope — the Hive-backed default, a SQLite-backed one, and an in-memory one that
+touches no disk at all.
+
+The abstraction is `at_client`'s, not an extension of `at_persistence_secondary_server`'s
+`AtPersistenceBundle`. That package is owned by `at_server` and reaches this tree through
+a `dependency_overrides` git ref, so extending it would mean a coordinated cross-repo
+change and a publish before `at_client` could depend on the result.
+
+**Why one bundle rather than two interfaces.** The keystore and the queue choose their
+storage independently today, under two different keys, and neither key is the principal.
+The keystore goes through `StorageManager` to `_factory.initialize(atSign, path)`; the
+queue reads `preference.hiveStoragePath` and, when it is null, opens on the **global**
+Hive instance under a box named from the atSign alone. The null case is exactly the
+injected-keystore case, so a caller that injects a store today gets an isolated keystore
+and a silently *shared* queue — and an "in-memory" store that still writes a Hive box to
+disk. One owner makes both unrepresentable rather than guarded against.
+
+**Ownership and lifetime.** The bundle refuses a second opener: ownership is enforced
+inside the bundle rather than by a registry `at_client` keeps, so a backend cannot forget
+the check and bundles `at_client` never sees are covered too. The claim is released when
+the client closes, and `stop()` is what releases it.
+
+**What this resolves.** [OQ-3](#5-open-questions), for storage: the capability hangs off a
+factory rather than `AtClientPreference`. `AtClientPreference.hiveStoragePath` is
+deprecated in this major, its successor being a bundle injected through a new static
+factory on `AtClient` — which builds *and* wires, closing by construction the hole where a
+client came back with its service getters throwing. Deprecating `AtClientManager` is the
+direction of travel; where its `AtSignChangeListener` capability goes is deferred, because
+that capability exists only to announce that a global current atSign changed.
+
+**Cost, stated honestly.** `stop()` is the atSign-switch-away path, so releasing storage
+there means switching back reopens a cold store and pulls again. That is accepted. It is
+not free: a cold store is precisely the condition under which a local-first write followed
+by a read routed to the atServer loses the race, which is how this was found. The
+resurrection holes are fixed first — `start()` does not rebuild what `stop()` nulls, and
+two paths hand back a stopped client — so that a released client cannot be handed to a
+caller at all.
+
 ---
 
 ## 2. Measured findings
@@ -464,7 +507,9 @@ is one release instead of two. Decide per package at execution time.
 `AtServiceFactory`?** `AtServiceFactory` (`at_client_manager.dart:265`) is the closer
 analogue and already has real overrides; `AtClientPreference` is what callers already
 touch and already carries `CryptoConfig` as precedent. See
-[`design.md`](design.md) §4.
+[`design.md`](design.md) §4. **Resolved for storage by D-12** — a bundle injected through
+a static factory on `AtClient`, not a preference field. Open for the remaining
+capabilities.
 
 **OQ-4 — File transfer: change the API, or extract the component?** Either
 `uploadFile`/`downloadFile`/`reuploadFiles` move to `(bytes, name)` or a stream
@@ -528,6 +573,7 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-13 | Measured the JS/TS language boundary (§2.5) and the dart2js library matrix (§2.4); confirmed no Dart web compiler gates `dart:io`.                                                                  |
 | 2026-08-13 | **D-7..D-9 ruled.** dart2js is the JS/TS compile target; the facade lives in `at_client_web` with D-4 unamended; keys cross as strings and events as callbacks. `js-api.md` added as the sixth doc. |
 | 2026-08-18 | Added JS-6 (throw vs. return-tuple, supabase-js precedent) to `js-api.md` §11. |
+| 2026-09-05 | **D-12 ruled.** Client storage becomes one injected bundle owning the keystore and the sync queue; S3 and §2.3's separate queue interface are superseded. `hiveStoragePath` deprecated; `stop()` releases storage. OQ-3 resolved for storage. |
 | 2026-08-18 | `plans/wasm/api-designing.md` written: the three-layer Dart facade split (Layer A/B/C) and the Axis A/B/C reference-SDK survey. `plans/wasm/key-storage.md` written, depending on the split. |
 | 2026-08-18 | Measured the collections API's write/read asymmetry (§2.6, F1–F12) against `packages/at_client/lib/src/collections/collections.dart`. |
 | 2026-08-18 | **D-9 amended, D-10 and D-11 ruled.** Collections (`AtCollection<T>`) become the sole JS/TS data plane; the flat key/value plane from the original §5.2 is removed, not deprecated in place. The Dart gear is typed via a declared `typeTag`; app types are never compiled into `at_client_web`. Write-compatibility with typed Dart peers is left open pending an upstream `writeTypeTag` or a bounded carrier-class shim (JS-7). `js-api.md` §5–§11 rewritten to match; `plans/wasm/api-designing.md` §2.3/§2.4/§2.6 rewritten for the collections-shaped Layer B. JS-2 resolved; JS-8 (the `AtClientManager` singleton blocking multi-instance clients) recorded. |

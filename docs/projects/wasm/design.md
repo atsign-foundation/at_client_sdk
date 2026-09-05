@@ -216,21 +216,60 @@ When non-null, `StorageManager` is skipped entirely and `LocalSecondary` takes t
 injected store. Good, but it means a web caller must construct the whole store itself
 rather than choosing a backend.
 
-**Design.** Make the factory selectable from `AtClientPreference` —
-`AtPersistenceBackendId` already carries `hive` and `sqlite`. Replace `hiveStoragePath`
-with an opaque storage location that means a filesystem path on native and a database
-name on web (§4). Add a `SqlitePersistenceConfig.clientDefaults(...)` mirroring
-`HivePersistenceConfig.clientDefaults` for the commit-log-free client bundle shape.
+**Design** (ruled by [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)).
+`at_client` owns a storage abstraction covering the keystore **and** the sync queue
+(§2.3), and a bundle is injected rather than located: `hiveStoragePath` is deprecated in
+this major, and its successor is a constructed bundle passed to a new static factory on
+`AtClient`. A location *string* was considered and rejected — it leaves `at_client`
+constructing the backend, which is what forces a backend import or a conditional barrel
+into the package. `AtKeysIo` (§2.4) is the shape: a neutral interface here, real
+implementations supplied by whoever knows the platform.
+
+Three implementations are in scope — the Hive-backed default, a SQLite-backed one (needing
+`SqlitePersistenceConfig.clientDefaults(...)` mirroring `HivePersistenceConfig.clientDefaults`
+for the commit-log-free client bundle shape), and an in-memory one that touches no disk.
+The in-memory implementation has a named consumer: `tests/at_functional_test` shares one
+Hive directory across every file through `test_utils.dart`'s
+`preference.hiveStoragePath = 'test/hive/client/$atsign'`, so one file inherits the next's
+pending sync queue. That is not hypothetical — it is how a scoped enrollment's client came
+to push another test's namespace keys and be refused `AT0009` by the atServer.
+
+A first cut at the surface, to argue with rather than to build from:
+
+```dart
+/// The local storage one AtClient owns: its keystore and its sync queue.
+abstract class AtClientStorage {
+  /// Claims this storage for [owner]. Throws if another client holds it.
+  Future<void> open(String owner);
+
+  AtKeyValueStore<String, AtData, AtMetaData?> get keyStore;
+  AtSyncQueue get syncQueue;
+
+  /// Releases the claim and closes what this bundle opened.
+  Future<void> close();
+}
+```
+
+Open: whether `owner` is the instance key (`atSign|enrollmentId`) or an opaque token, and
+whether `close()` on an injected bundle closes the backend or only releases the claim.
 
 ### 2.3 The sync queue
 
 **The canonical runtime landmine, and the one to lead with when explaining this
 project.**
 
-```text
-// at_client/lib/src/sync/at_sync_queue.dart:121
-_box = await Hive.openBox<String>(boxNameForAtSign(_atSign));
+```dart
+// at_client/lib/src/sync/at_sync_queue.dart — AtSyncQueue.open()
+final path = _storagePath;
+final hive = path == null ? Hive : HiveInstances.forPath(path);
+_box = await hive.openBox<String>(boxNameForAtSign(_atSign));
 ```
+
+The global singleton is now the **fallback** rather than the rule: a queue given a path
+opens on that path's Hive instance. The fallback is what an injected keystore takes, since
+injection supplies no path — so injection isolates the keystore and shares the queue. The
+box name derives from the atSign alone, so two enrollments of one atSign share a queue
+even when the instance is right.
 
 Opened lazily from `LocalSecondary._ensureSyncQueueOpen()`
 (`local_secondary.dart:110-134`), against the **global Hive singleton**, assuming
@@ -243,11 +282,15 @@ compiles everywhere; and injecting a keystore to bypass `StorageManager` makes i
 rather than fixing it. `at_client`'s pubspec carries a direct `hive: ^2.2.3` dependency
 solely for this file.
 
-**Design.** A small spec interface with Hive and SQLite implementations, matching how
-the keystore is factored. A test seam already exists — `open({Box<String>? injectedBox})`
-at `at_sync_queue.dart:116`, documented as a test seam at `:85-89` — but it is not
-reachable from `AtClientImpl.create`, so plumbing it is a cheap intermediate step (§3).
-Drop the direct `hive` dependency once this and §2.2 land.
+**Design** (ruled by [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)).
+The queue does **not** get a spec interface of its own. It belongs to the storage bundle
+of §2.2, which owns the keystore beside it, so the queue can no longer be located
+separately from the store whose writes it tracks. This supersedes the earlier design here
+— a small parallel interface matching how the keystore is factored — and S3 with it, which
+plumbed `open({Box<String>? injectedBox})` (`at_sync_queue.dart`, documented as a test
+seam) through to `AtClientImpl.create` as an intermediate step. The seam stays useful for
+tests; it stops being the route to backend selection. Drop the direct `hive` dependency
+once this and §2.2 land.
 
 ### 2.4 Key material — the exemplar
 
