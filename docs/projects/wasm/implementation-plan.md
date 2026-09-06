@@ -385,6 +385,54 @@ D-12. Independent of the P series, which is `at_server`-side.
   three live packs are owed before its PR is ready.**
   Depends on X4.
 
+  **Adversarial review of [#2211](https://github.com/atsign-foundation/at_client_sdk/pull/2211),
+  2026-09-06** (13 agents, six dimensions, every finding attacked by a skeptic). Five
+  high-severity defects were confirmed in source and **fixed on the branch** at `100e73b9d`:
+  a permanently deaf notification listener after one failed first connect; two documented
+  preferences (`monitorHeartbeatInterval`, `monitorHeartbeatResponseTimeout`) gone dead with
+  the effective interval halved 59s → 30s; `at_onboarding_cli`'s and `at_cli_commons`' floors
+  unable to supply what their `lib/` now calls; and `AtClient.create`'s dartdoc asserting the
+  opposite of what the code does.
+  ⚠️ **The retry for the first defect belongs in at_client, NOT at_lookup.**
+  `startNotifications` deliberately *surfaces* a failed start — three at_lookup tests pin
+  that, one reasoning "failing loudly beats a connection that silently never receives
+  anything". Fixing it in at_lookup reddened all three; `Monitor` retries instead.
+  ⚠️ **One of the six author claims was FALSE: "deleting monitor_test.dart's 13 tests is
+  safe".** Eleven are covered by at_lookup's 26 muxable tests; **two are not** — the heartbeat
+  *cadence* tests, which set the preference and asserted the resulting interval, where
+  at_lookup's replacements set `AtLookupImpl.heartbeatInterval` directly and cannot see an
+  `AtClientPreference` at all. They were unportable while the wiring was missing; **the fix at
+  `100e73b9d` restores that wiring, so porting them is now possible and owed.**
+  **Still owed on this branch, none of them fixed:**
+  - **A half-built client is filed and handed out.** `AtClient.create` writes to
+    `atClientInstanceMap` before its service wiring can throw, so a failure leaves a poisoned
+    entry with storage attached and no caller reference; a later `setCurrentAtSign` adopts it
+    and stops it, closing a `closedByClient` bundle the app still believes it owns. Fix is
+    `try { … } catch (_) { await client.stop(); rethrow; }` around the wiring.
+  - **Four dartdocs still say storage is "borrowed" unconditionally**, which `closedByClient:
+    true` falsifies. One search-and-replace.
+  - **Notification handling is no longer serialised** and the back-pressure seam is
+    unreachable; and the socket-alive-but-silent watchdog was deleted with nothing equivalent.
+    With the two fixed defects these are four independent weakenings of notification liveness
+    in one PR, against a public contract (`notification_service.dart:47-51`) that still
+    promises the old behaviour.
+  - **The Flutter app-owned path is a trap end to end.** `EnrollmentRequestList` reaches
+    `AtClientManager.getInstance().atClient` at five sites, which throws for a create-only
+    app — so an app following the new CHANGELOG advice *and* using the enrollment UI this
+    package ships must call `setCurrentAtSign`, which then adopts and later stops its client.
+  - **`at_onboarding_cli` semver**: three `feat:` entries shipped under a patch bump
+    (1.16.1-rc1 → rc2); semver wants 1.17.0. Gary's call.
+  - **`dart analyze --fatal-infos` is not clean**: ~145 lines in at_client still touch the two
+    newly-`@Deprecated` fields with no `// ignore:`. Not a CI gate today.
+  ⚠️ **Merge-back note for the spike:** three sites now read `preference.signingAlgoType`
+  directly (`sync_service_impl.dart`, `notification_service_impl.dart`, `remote_secondary.dart`)
+  where the spike calls `signingAlgoOf(atClient)`. They must go back to `signingAlgoOf` when PQ
+  algorithm resolution lands, or a per-enrollment ML-DSA enrollment signs with the preference's
+  algorithm instead of its own.
+  ⚠️ **This row previously said "at_cli_commons needed no change".** A later commit on the same
+  branch changed it, and its floors were not re-derived afterwards — which is how two of the
+  five defects arrived.
+
 **Sequencing.** Each X item lands as its own PR on **trunk** and is merged back into
 `gkc-pq-d1-spike` before the next starts, so the drift never accumulates into one large
 reconciliation. The one reconciliation worth writing down rather than discovering at
