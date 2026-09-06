@@ -323,10 +323,19 @@ D-12. Independent of the P series, which is `at_server`-side.
     run failed for atSigns the recycled virtualenv had never onboarded. The pack now has a
     runner that points `HOME` at a throwaway directory for the test invocation alone.
   **Three packs green locally on this branch:** functional +82, e2e +32, onboarding-CLI +15.
-  ⚠️ **CI's onboarding-CLI red is NOT explained by that local work** — CI starts from a clean
-  `$HOME`, so its cause is something else. Every local failure was the stale-keyfile
-  precondition; the `HiveError: Box not found` lines appear 11–14 times in *every* arm including
-  the pre-X4a baseline and fail no test locally. That red is still open.
+  **CI settled it (run against `e1dfba219`, 2026-09-06): 46 pass / 3 fail.**
+  `functional_tests_at_onboarding_cli` went **fail → pass** on both variants, so X4a is what
+  fixes that red; `unit_at_client` passes on both channels. The local chase could never have
+  explained it — CI starts from a clean `$HOME`, while every local failure was the stale-keyfile
+  precondition. (The `HiveError: Box not found` lines are noise either way: 11–14 times in
+  *every* local arm including the pre-X4a baseline, failing no test.)
+  ⚠️ **The three remaining CI reds are one environmental cause, not this branch.**
+  `end2end_test_14`, `end2end_tests` and `build_and_test (at_lookup)` all trace to the
+  atDirectory `root.atsign.wtf:64` being unreachable during that window — 30 and 23 occurrences
+  of `AtLookup.findAtServer timed out` in the two complete e2e logs, with the missing
+  `atKeys/@ce2e*_key.atKeys` a downstream effect rather than a separate fault. So **X4a
+  introduced no CI regression**. The `at_lookup` one is the same cause reaching the *unit* pack
+  through a hardcoded FQDN — see the separate defect row for it.
 - **X4 — Inject it, and release it.** ⏸ **X4a lands on this branch (#2208), so X4 and X4a
   ship as one PR.** Its release code (`stop()` releases storage, PR #2208) is sound, but the
   per-atSign guard it carries is superseded
