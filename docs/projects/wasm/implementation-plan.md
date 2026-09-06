@@ -280,7 +280,12 @@ D-12. Independent of the P series, which is `at_server`-side.
 - **X4 — Inject it, and release it.** A new static factory on `AtClient` that builds *and*
   wires the services, taking a bundle; `stop()` releases the claim and closes what the
   bundle opened. Deprecate `AtClientPreference.hiveStoragePath` with a migration note.
-  Depends on X1. **Measured 2026-09-05 on trunk `d13516d95` (the X3 merge), storage-release
+  Depends on X1.
+  ⚠️ **What #2208 actually shipped is narrower than this sentence.** It added `storage:` to
+  the doors that already existed (`AtClientImpl.create`, `setCurrentAtSign`, and via X5
+  `fromAuthSession`) and the release semantics, and left the static factory and the
+  deprecation unbuilt. Both landed in X6 instead, the deprecation only once
+  `AtClientStorage.closedByClient` made a bundle able to be closed by the client. **Measured 2026-09-05 on trunk `d13516d95` (the X3 merge), storage-release
   semantics built and run against the packs before landing anything:** 69 tests red across three causes —
   (a) 38 fixtures that rebuild a client for one atSign without stopping the previous one,
   which the per-atSign Hive guard now refuses; (b) a sync round outliving `stop()` and
@@ -341,9 +346,44 @@ D-12. Independent of the P series, which is `at_server`-side.
   in-memory storages whose hashes collided would be refused as one store. Negligible at the
   handful per test process this pack opens; wrong in principle.
   Depends on X3.
-- **X6 — Consumers.** `at_client_flutter` and `at_onboarding_cli` move onto the factory, so
-  both are WASM-ready ahead of the next major. Whether they move in this major or the next
-  is open.
+- **X6 — Consumers.** ✅ **Built 2026-09-06** on `gkc-x6-consumers`, stacked on
+  [#2210](https://github.com/atsign-foundation/at_client_sdk/pull/2210). **Ruled: they move
+  in THIS major** (gkc, 2026-09-06), and `AtClient.create` has nothing to do with
+  `AtClientManager` — future apps, once the manager is gone, manage their clients'
+  lifecycles explicitly, so the job now is to make that *possible* while apps using the
+  manager see no change.
+  ⚠️ **The row's premise was wrong in both directions.** `at_client_flutter`'s `lib/` had
+  nothing to move: zero references to `AtClientPreference`, `AtClientImpl` or
+  `AtClientStorage`; it wraps `AtAuth` and reads `AtClientManager.getInstance().atClient`,
+  and only its example apps set storage paths. Meanwhile `at_cli_commons`, which the row
+  never named, was one of only three production `lib/` sites setting `hiveStoragePath` —
+  though it reaches the client through `AtOnboardingServiceImpl`, so there is one seam, not
+  two.
+  **What landed.** `AtClient.create` — X4's promised static factory, never built by #2208,
+  which added `storage:` to the existing doors instead. It builds a client and wires its
+  three services, taking `storage` alongside `atKeysIo`, registers nothing, and refuses an
+  atSign whose client is already live rather than handing back one the caller does not own.
+  `AtOnboardingPreference.storage` carries a bundle through to `setCurrentAtSign`;
+  `at_cli_commons` needed no change, because `CLIBase` already passes the caller's own
+  preference object through untouched. `AuthService.createClient` turns a completed
+  authentication into a client the app owns, and `FlutterEnrollmentService` takes an
+  optional client so it can work against one.
+  **`AtClientStorage.closedByClient`** (gkc's idea, 2026-09-06) moves lifetime ownership onto
+  the bundle instead of inferring it from how the storage arrived. That removed the last
+  argument for `hiveStoragePath`, which is now deprecated along with `commitLogPath` — the
+  latter read by nothing anywhere, so every caller setting it was setting a value with no
+  effect.
+  ⚠️ **`AtServiceFactory` cannot go manager-free in 3.x**: every method takes an
+  `AtClientManager` positionally and non-nullably, and relaxing that makes the three
+  existing `ServiceFactoryWithNoOpSyncService` overrides illegal. `AtClient.create` takes
+  per-service builder callbacks instead, which covers the only override anyone uses.
+  ⚠️ **Owed.** `at_onboarding_cli` and `at_cli_commons` still set `hiveStoragePath` as their
+  default (eleven analyzer infos); moving them onto client-closed bundles changes when the
+  client's store closes, so it wants all three live packs rather than riding in on unit
+  green. Eleven example apps in the other widget packages still set `commitLogPath`, each
+  needing its own version decision. **X6 itself changes storage ownership semantics, so the
+  three live packs are owed before its PR is ready.**
+  Depends on X4.
 
 **Sequencing.** Each X item lands as its own PR on **trunk** and is merged back into
 `gkc-pq-d1-spike` before the next starts, so the drift never accumulates into one large
