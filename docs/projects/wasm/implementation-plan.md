@@ -329,9 +329,11 @@ D-12. Independent of the P series, which is `at_server`-side.
     ✅ **The override is now removable: `at_persistence_secondary_server` 5.3.0 was published
     2026-09-06 (gkc) and carries `HiveInstances.forPath`** — verified by unpacking the pub.dev
     archive: `lib/src/impl/hive/hive_instances.dart` is present with `forPath`, and `hive.dart`
-    exports it. **Owed on #2208:** drop the `dependency_overrides` block, take the constraint to
-    `^5.3.0`, and re-run the packs. Until that lands the branch pins a git ref to an unpublished
-    commit, which is what made it awkward to merge to trunk.
+    exports it. ✅ **Done** (`ff6014420`): the
+    `dependency_overrides` block is gone and the constraint is `^5.3.0`, so resolution is hosted
+    rather than a git ref to an unpublished commit — which is what had made the branch awkward
+    to merge to trunk. Verified behaviourally identical: unit 692, and all three packs matching
+    their git-pinned runs exactly (functional +82, e2e +32, onboarding-CLI +15).
   - **The location key needed the atSign**, not just the directory — see
     [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05).
   - **Moving the queue onto a per-path instance exposed a latent lost-delete.** A delete
