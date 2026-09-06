@@ -6,10 +6,20 @@ import 'package:version/version.dart';
 /// Class to hold attributes for client preferences.
 /// Set the preferences for your application and pass it to [AtClientManager.setCurrentAtSign].
 class AtClientPreference {
-  /// Local device path of hive storage
+  /// Local device path of hive storage, used when no [AtClientStorage] is
+  /// supplied to [AtClient.create] or [AtClientManager.setCurrentAtSign].
+  ///
+  /// Setting this leaves the client owning its store: it opens the store and
+  /// closes it again when it stops. Supplying a bundle instead chooses the
+  /// backend as well as the location, and hands the caller the lifetime.
   String? hiveStoragePath;
 
-  /// Local device path of commit log
+  /// Local device path of commit log.
+  ///
+  /// Read by nothing: the client keeps no commit log of its own, so whatever
+  /// is set here has no effect.
+  @Deprecated('Nothing reads this; the client is commit-log-free. Will be '
+      'removed in the next major release.')
   String? commitLogPath;
 
   /// Syncing strategy of the client [SyncStrategy]

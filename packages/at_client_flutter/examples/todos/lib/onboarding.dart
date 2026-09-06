@@ -100,7 +100,6 @@ Future<void> _setupAtClient(AuthResponse response) async {
   final dir = await getApplicationSupportDirectory();
   final acp = AtClientPreference()
     ..namespace = _namespace
-    ..commitLogPath = dir.path
     ..hiveStoragePath = dir.path;
 
   final session = response.session;

@@ -106,7 +106,6 @@ class _SmokeBootstrapState extends State<_SmokeBootstrap> {
       final dir = await getApplicationSupportDirectory();
       final acp = AtClientPreference()
         ..namespace = applicationNamespace
-        ..commitLogPath = dir.path
         ..hiveStoragePath = dir.path;
       // Hand the client the session; it rebuilds its own authenticated
       // connection from the session's key source rather than adopting auth's.

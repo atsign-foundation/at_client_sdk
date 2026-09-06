@@ -1,4 +1,7 @@
 ## 3.14.1
+- **DEPRECATED:** `AtClientPreference.commitLogPath`. Nothing reads it — the
+  client is commit-log-free — so whatever is set there has no effect. It will
+  be removed in the next major release.
 - feat: `AtClient.create` builds a client and wires its notification, sync and
   enrollment services, taking `storage` as a named parameter alongside
   `atKeysIo`. It registers nothing: the client is unknown to `AtClientManager`

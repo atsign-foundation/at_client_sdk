@@ -42,11 +42,6 @@ class HomeDirectoryUtil {
         homeDir!, '.atsign', 'at_onboarding_cli', 'storage', atsign);
   }
 
-  static String getCommitLogPath(String atsign, {String? enrollmentId}) {
-    return path.join(
-        getStorageDirectory(atsign, enrollmentId: enrollmentId), 'commitLog');
-  }
-
   static String getHiveStoragePath(String atsign, {String? enrollmentId}) {
     return path.join(
         HomeDirectoryUtil.getStorageDirectory(atsign,

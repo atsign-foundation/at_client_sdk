@@ -55,8 +55,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     enrollCheckpoint = EnrollmentCheckpoint(_atSign);
 
     // set default LocalStorage paths for this instance
-    atOnboardingPreference.commitLogPath ??=
-        HomeDirectoryUtil.getCommitLogPath(_atSign, enrollmentId: enrollmentId);
     atOnboardingPreference.hiveStoragePath ??=
         HomeDirectoryUtil.getHiveStoragePath(_atSign,
             enrollmentId: enrollmentId);

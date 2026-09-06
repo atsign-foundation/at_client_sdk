@@ -79,7 +79,6 @@ Future<void> onboard(BuildContext context) async {
 
     var acp = AtClientPreference()
       ..namespace = namespace
-      ..commitLogPath = dir.path
       ..hiveStoragePath = dir.path;
 
     _logger.info('Setting current atSign: ${response.atSign}');
@@ -330,7 +329,6 @@ Future<void> _setupAtClient(BuildContext context, AuthResponse response) async {
 
   var acp = AtClientPreference()
     ..namespace = namespace
-    ..commitLogPath = dir.path
     ..hiveStoragePath = dir.path;
 
   if (response.enrollmentId == null) {

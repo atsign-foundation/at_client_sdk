@@ -7,8 +7,6 @@ class AtSignPreference {
     var preference = AtClientPreference();
     preference.hiveStoragePath = HomeDirectoryUtil.getHiveStoragePath(atSign,
         enrollmentId: enrollmentId);
-    preference.commitLogPath =
-        HomeDirectoryUtil.getCommitLogPath(atSign, enrollmentId: enrollmentId);
     preference.isLocalStoreRequired = true;
     preference.rootDomain = 'vip.ve.atsign.zone';
     return preference;

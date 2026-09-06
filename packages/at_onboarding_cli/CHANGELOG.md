@@ -1,4 +1,7 @@
 ## 1.16.1-rc2
+- chore: stop setting `AtClientPreference.commitLogPath`, which at_client reads
+  nowhere, and drop `HomeDirectoryUtil.getCommitLogPath` with its last caller.
+  No behaviour changes: the value was never read.
 - feat: `AtOnboardingPreference.storage` supplies the client's local storage,
   which decides the backend and the location and so leaves `hiveStoragePath`
   unread. Borrowed rather than owned: the client detaches from it when it
