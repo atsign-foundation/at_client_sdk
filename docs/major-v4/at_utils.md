@@ -87,12 +87,34 @@ required before any of those packages can publish against a real `at_utils` rele
 
 ## Open items
 
-- Owner: whoever lands I2 confirms the five-package re-export fix lands in the *same*
-  commit as the split — a staged split breaks `at_auth`/`at_client`/etc. on trunk
-  between the two commits.
+- ~~Owner: whoever lands I2 confirms the five-package re-export fix lands in the
+  *same* commit as the split~~ — **landed, and narrower than scoped.** Verified against
+  actual call sites rather than the estimate: `at_auth` and `at_contact` only reach
+  `AtSignLogger`/`AtUtils.fixAtSign` through `at_utils.dart`, both untouched by this
+  split, so neither needed a change. The real compensating fix was
+  `AtSignLogger.stdErrLoggingHandler` — a static field on the neutral `AtSignLogger`
+  class holding a concrete `StdErrLoggingHandler()`, not caught by the original
+  blast-radius citation. Left in place, it would have kept `dart:io` reachable from
+  `at_utils.dart` through `AtSignLogger` itself, silently defeating I2. Removed the
+  field; the three real call sites (`at_cli_commons/cli_base.dart`,
+  `at_onboarding_cli/auth_cli.dart`, `tests/at_functional_test`, plus
+  `at_client_flutter`'s dockerstats example — none of them the five originally named)
+  now construct `StdErrLoggingHandler()` directly against `at_utils_io.dart`.
+  `at_client/src/rpc/at_rpc.dart` had the same field wired into `AtRpcClient`'s
+  default logger, but `at_rpc.dart` is exported from `at_client.dart`'s own barrel —
+  porting the io import there would have piped `dart:io` into at_client's future
+  barrel for no reason. Dropped the override instead; `AtRpcClient` now uses
+  `AtSignLogger`'s ordinary default (`ConsoleLoggingHandler`), same as everything else
+  that doesn't ask for stderr.
 - No open question on chalkdart's own fix — it is upstream's package, not ours; getting
   it "off the neutral path" here means changing which of *our* files import it, not
   patching chalkdart itself.
+- `at_client_flutter/examples/dockerstats/lib/main_smoke.dart` isn't in the pub
+  workspace (`at_utils: ^3.4.0` from pub.dev, no `resolution: workspace`) — its new
+  `at_utils_io.dart` import won't resolve locally until 4.0.0 actually publishes and
+  its pubspec bumps. Source is correct for that state; not fixable before I4. (The
+  file also has a pre-existing, unrelated `FileAtKeysIo` undefined-method error,
+  confirmed present before this change — not introduced here.)
 
 ## Changelog
 
@@ -103,5 +125,21 @@ required before any of those packages can publish against a real `at_utils` rele
   `at_utils_io.dart` barrel.
 - BREAKING: `FileLoggingHandler`, `StdErrLoggingHandler`, and `CLILoggingHandler` moved
   to `at_utils_io.dart`; `ConsoleLoggingHandler` is unchanged and stays in `at_utils.dart`.
+- BREAKING: `AtSignLogger.stdErrLoggingHandler` (a static convenience field) removed —
+  construct `StdErrLoggingHandler()` from `at_utils_io.dart` instead.
 - Removed: `AtUtils.formatAtSign` (deprecated since 3.x) — use `AtUtils.fixAtSign`.
 ```
+
+## Verification
+
+Ran, this release, against `st/at_utils-v4`:
+
+- `dart run wasm_shakedown --package at_utils` — red before this change (config
+  named `at_utils_io.dart`, which didn't exist yet), green after: `98 files walked,
+  0/0 offenders, 0/0 blocked`.
+- `dart run wasm_shakedown --package at_chops` — `0/2 blocked` (ceiling tightened to
+  0 in the same commit, per Exit above).
+- `dart analyze` clean in `at_utils`; `dart test` — 26/26 passing.
+- `dart analyze` clean (0 errors; pre-existing unrelated deprecation infos only) in
+  `at_cli_commons`, `at_onboarding_cli`, and the touched files in `at_client` and
+  `tests/at_functional_test`.
