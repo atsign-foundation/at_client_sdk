@@ -1,4 +1,23 @@
 ## 3.14.1
+- feat: at_client builds its connections through `AtLookUp.withSecureSocket`,
+  which returns the muxable that owns reconnect, reauth and heartbeat. Requires
+  `at_lookup` ^3.7.0-rc1. Credentials travel as an `AtAuthenticator` built from
+  whichever of four shapes the client holds - a keystore, chops, a private key,
+  a cram secret - rather than being parked on the lookup, so every connection a
+  client opens is configured alike instead of assembled independently at each
+  site. `AtClientImpl.buildRemoteSecondary` is the single place that builds one;
+  the file-stream path used to build its own with neither enrollment nor
+  credentials. The sync service's own connection now gets the client's key
+  material.
+- refactor: `Monitor` no longer opens, authenticates, frames, heartbeats or
+  reconnects its own socket - all of it moved into `AtLookupMuxable`, where
+  at_lookup's own 26 notification tests cover it, including reconnect inside
+  the backoff window and asking the caller for its CURRENT watermark. The class
+  is 213 lines where it was 543. `Monitor`'s constructor now takes a required
+  `lookUp` and no longer takes `atChops`, `enrollmentId`,
+  `secondaryAddressFinder`, `connectDelays` or
+  `monitorOutboundConnectionFactory`; `onSocketDataReceipt` is gone, the
+  framing it did being at_lookup's now.
 - feat: `AtClientStorage.closedByClient` lets a bundle say that the client
   closes it on `stop()`, instead of ownership being inferred from how the
   storage reached the client. False by default, which is the borrowed

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:at_auth/at_auth.dart' show authenticatorForChops;
 import 'package:at_client/at_client.dart' hide StringBuffer;
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/manager/monitor.dart';
@@ -14,6 +15,7 @@ import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
@@ -72,15 +74,44 @@ class NotificationServiceImpl extends NotificationService {
         CacheableSecondaryAddressFinder(atClient.getPreferences()!.rootDomain,
             atClient.getPreferences()!.rootPort);
 
+    final preference = atClient.getPreferences()!;
+    final chops = atClient.atChops;
     this.monitor = monitor ??
         Monitor(
           atSign: atSign,
-          atClientPreference: atClient.getPreferences()!,
-          atChops: atClient.atChops,
-          enrollmentId: atClient.enrollmentId,
+          atClientPreference: preference,
+          // A FRESH lookup, so the connection count is unchanged. Passing
+          // `atClient.getRemoteSecondary()!.atLookUp` here instead would
+          // collapse the two sockets into one - a one-line change, and NOT
+          // safe yet: no atServer implements `monitor:multiplexed`, so
+          // nothing holds a notification back while a verb response is in
+          // flight.
+          lookUp: AtLookUp.withSecureSocket(
+            atSign: atSign,
+            rootDomain:
+                AtRootDomain(preference.rootDomain, preference.rootPort),
+            transport: secureSocketTransport(SecureSocketConfig()
+              ..decryptPackets = preference.decryptPackets
+              ..pathToCerts = preference.pathToCerts
+              ..tlsKeysSavePath = preference.tlsKeysSavePath),
+            // Reproduces exactly what Monitor's own PKAM did: the same
+            // AtChops, the same signing and hashing algorithms, the same
+            // enrollment id. `null` when there is no signer, which fails the
+            // same way the old code did - it threw at connect time rather
+            // than authenticating with nothing.
+            authenticator: chops == null
+                ? null
+                : authenticatorForChops(
+                    atSign,
+                    chops,
+                    enrollmentId: atClient.enrollmentId,
+                    signingAlgo: preference.signingAlgoType,
+                    hashingAlgo: preference.hashingAlgoType,
+                  ),
+            secondaryAddressFinder: this.secondaryAddressFinder,
+          ),
           handleNotification: handleNotificationReceipt,
           getLastNotificationTime: getLastNotificationTime,
-          secondaryAddressFinder: this.secondaryAddressFinder,
         );
 
     lastReceivedNotificationAtKey = AtKey.local(
