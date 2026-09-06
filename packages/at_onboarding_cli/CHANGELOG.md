@@ -1,3 +1,12 @@
+## 1.16.1-rc2
+- feat: `AtOnboardingPreference.storage` supplies the client's local storage,
+  which decides the backend and the location and so leaves `hiveStoragePath`
+  unread. Borrowed rather than owned: the client detaches from it when it
+  stops, and closing it is the caller's job. Leave it unset and the client
+  goes on opening a Hive store under `hiveStoragePath` and closing it itself.
+  `CLIBase` carries it through, so an at_cli_commons caller supplying its own
+  preference can inject storage without any change there.
+
 ## 1.16.1-rc1
 - fix: pass passPhrase to FileAtKeysIo during onboarding so password-protected atKeys files are written correctly
 

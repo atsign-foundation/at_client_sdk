@@ -33,4 +33,12 @@ class AtOnboardingPreference extends AtClientPreference {
 
   /// The password (or pass-phrase) with which the atKeys file is encrypted/decrypted.
   String? passPhrase;
+
+  /// The local storage the client should use, which decides the backend and
+  /// the location and so leaves [hiveStoragePath] unread.
+  ///
+  /// Borrowed rather than owned: the client detaches from it when it stops,
+  /// and closing it is the caller's job. Leave it null and the client opens a
+  /// Hive store under [hiveStoragePath] and closes that itself.
+  AtClientStorage? storage;
 }

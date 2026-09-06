@@ -112,7 +112,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         atChops: atChops,
         atLookUp: atLookUp,
         serviceFactory: atServiceFactory,
-        enrollmentId: enrollmentId);
+        enrollmentId: enrollmentId,
+        storage: atOnboardingPreference.storage);
 
     // ??= to support mocking
     _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
