@@ -1,4 +1,6 @@
 ## 3.14.1
+- feat: `AtClientStorage.isHeldBy` says whether a given client is the one
+  currently holding the storage.
 - fix: `setCurrentAtSign` no longer rebuilds the client when it is handed the
   storage that client already holds. Offering the same bundle is not a
   change, and the rebuild it used to force stopped a working client and its

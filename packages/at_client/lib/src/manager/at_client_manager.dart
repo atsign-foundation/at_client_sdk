@@ -192,7 +192,7 @@ class AtClientManager {
   bool _storageIsUnchanged(AtClientStorage? storage) {
     if (storage == null) return true;
     final current = _currentAtClient;
-    return current is AtClientImpl && identical(current.storage, storage);
+    return current != null && storage.isHeldBy(current);
   }
 
   /// Explicit, typed hand-off from auth to client.
