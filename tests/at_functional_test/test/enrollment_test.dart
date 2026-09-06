@@ -18,6 +18,7 @@ import 'sync_multiple_client_test.dart';
 import 'test_utils.dart';
 
 void main() {
+  TestUtils.isolateStorage('enrollment_test');
   late AtClientManager atClientManager;
   late String atSign;
   String namespace = 'wavi';
@@ -65,6 +66,9 @@ void main() {
     }
     AtClientManager.getInstance().reset();
     AtClientImpl.atClientInstanceMap.clear();
+    // Every client is stopped, and what comes next authenticates as a
+    // different enrollment of the same atSign on the same store.
+    await TestUtils.storage.allowPrincipalChange();
   });
 
   group('A group of tests for APKAM scenarios using at_auth', () {
@@ -99,8 +103,6 @@ void main() {
 
       // create atclient instance
       var atClientPreference = AtClientPreference()
-        ..commitLogPath = 'test/hive/commit/'
-        ..hiveStoragePath = 'test/hive/client'
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort;
 
@@ -113,7 +115,8 @@ void main() {
       final atClientManager = await AtClientManager(apkamAtSign)
           .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
               atChops: atAuth.atChops,
-              enrollmentId: atOnboardingResponse.enrollmentId);
+              enrollmentId: atOnboardingResponse.enrollmentId,
+              storage: TestUtils.storageFor(apkamAtSign));
       //var scanResult = await atClientManager.atClient.getKeys();
       var scanResult = await atClientManager.atClient
           .getRemoteSecondary()
@@ -431,6 +434,9 @@ void main() {
       }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
       // Get AtChops from the AtAuthKeys
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
@@ -466,6 +472,7 @@ void main() {
       // to perform put operation.
       await AtClientManager.getInstance().setCurrentAtSign(
           atSign, namespace, TestUtils.getPreference(atSign),
+          storage: TestUtils.storageFor(atSign),
           atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
 
       // Insert key which has access to namespace authorized by enrollment.
@@ -535,6 +542,9 @@ void main() {
       }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
       // Get AtChops from the AtAuthKeys
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
@@ -640,6 +650,9 @@ void main() {
       }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
       // Get AtChops from the AtAuthKeys
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
@@ -672,6 +685,7 @@ void main() {
       // to perform put operation.
       await AtClientManager.getInstance().setCurrentAtSign(
           atSign, namespace, TestUtils.getPreference(atSign),
+          storage: TestUtils.storageFor(atSign),
           atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
 
       // Insert key which has access to namespace authorized by enrollment.
@@ -817,6 +831,7 @@ void main() {
 
       final ownerManager = await AtClientManager.getInstance().setCurrentAtSign(
           cramAtSign, namespace, TestUtils.getPreference(cramAtSign),
+          storage: TestUtils.storageFor(cramAtSign),
           atChops: ownerAuth.atChops,
           enrollmentId: onboardResponse.enrollmentId);
       final ownerClient = ownerManager.atClient;
@@ -884,6 +899,9 @@ void main() {
       }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
       final enrolleeChopsKeys = AtChopsKeys.create(
           AtEncryptionKeyPair.create(encryptionKeyPair.atPublicKey.publicKey,
@@ -910,6 +928,7 @@ void main() {
 
       await AtClientManager.getInstance().setCurrentAtSign(
           cramAtSign, 'buzz', TestUtils.getPreference(cramAtSign),
+          storage: TestUtils.storageFor(cramAtSign),
           atChops: enrolleeChops, enrollmentId: enrollResponse.enrollmentId);
       final enrolleeClient = AtClientManager.getInstance().atClient;
 
@@ -933,10 +952,10 @@ void main() {
   });
 }
 
+/// Only ever handed to a [RemoteSecondary], which opens no local store, so
+/// this carries no storage path.
 AtClientPreference getClient2Preferences() {
   return AtClientPreference()
-    ..commitLogPath = 'test/hive/client_2/commit'
-    ..hiveStoragePath = 'test/hive/client_2'
     ..rootDomain = 'vip.ve.atsign.zone'
     ..rootPort = TestUtils.rootServerPort;
 }
