@@ -1,4 +1,8 @@
 ## 3.14.1
+- build: require `at_persistence_secondary_server` ^5.3.0. This package's
+  keystore and sync queue open on `HiveInstances`, which 5.3.0 is the first
+  release to carry; the floor still said ^5.1.0, so a consumer could resolve
+  a version without it and fail to compile.
 - fix: `stop()` no longer races an in-flight sync round. The round ends at its
   next step once the service is stopped, its request is reported as stopped
   rather than as an unexpected exception, and what it had not pushed stays
