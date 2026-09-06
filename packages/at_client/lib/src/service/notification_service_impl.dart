@@ -14,7 +14,6 @@ import 'package:at_client/src/transformer/response_transformer/notification_resp
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;

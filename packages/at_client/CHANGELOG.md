@@ -9,11 +9,27 @@
   the file-stream path used to build its own with neither enrollment nor
   credentials. The sync service's own connection now gets the client's key
   material.
+- feat: `AtClientPreference.monitorSilenceTimeout` (default 60s) rebuilds a
+  notification connection that answers heartbeats while delivering nothing. A
+  heartbeat proves the socket is alive, not that notifications still arrive on
+  it, so without this a client can report `listening` while permanently deaf.
+  `Duration.zero` turns it off, which an atServer configured to send no stats
+  notifications needs.
+- fix: the notification monitor handles one notification at a time again,
+  pausing the connection while it does. The pause reaches the socket, so a
+  backlog after a reconnect arrives at the rate the client can absorb, and the
+  last-notification watermark is written in arrival order rather than
+  whichever `put` happens to land last.
+- fix: `AtClient.create` no longer leaves a part-built client behind when
+  wiring its services throws. The client is filed before the services are
+  wired, so a failure used to strand an entry no caller held a reference to,
+  still claiming its storage; it is now stopped, which unfiles it and releases
+  that claim.
 - refactor: `Monitor` no longer opens, authenticates, frames, heartbeats or
   reconnects its own socket - all of it moved into `AtLookupMuxable`, where
   at_lookup's own 26 notification tests cover it, including reconnect inside
   the backoff window and asking the caller for its CURRENT watermark. The class
-  is 213 lines where it was 543. `Monitor`'s constructor now takes a required
+  is 327 lines where it was 543. `Monitor`'s constructor now takes a required
   `lookUp` and no longer takes `atChops`, `enrollmentId`,
   `secondaryAddressFinder`, `connectDelays` or
   `monitorOutboundConnectionFactory`; `onSocketDataReceipt` is gone, the
@@ -33,10 +49,13 @@
   be removed in the next major release.
 - feat: `AtClient.create` builds a client and wires its notification, sync and
   enrollment services, taking `storage` as a named parameter alongside
-  `atKeysIo`. It registers nothing: the client is unknown to `AtClientManager`
-  and the caller owns its lifetime, which is what an app managing its own
-  clients needs. `AtClientManager` is unchanged, so code using it sees no
-  difference. A service builder replaces any of the three services. The
+  `atKeysIo`. The caller owns its lifetime, which is what an app managing its
+  own clients needs. `AtClientManager` is unchanged, so code using it sees no
+  difference. ⚠️ The client is not invisible to `AtClientManager`: it is filed
+  in the instance map like any other, so a later `setCurrentAtSign` for the
+  same atSign adopts it, replaces its services and stops it on the next
+  switch. Do not mix the two for one atSign in one process.
+  A service builder replaces any of the three services. The
   factory refuses an atSign whose client is already live rather than handing
   back one the caller does not own, and refuses a `storage` that
   `isLocalStoreRequired: false` would never open.
@@ -49,7 +68,8 @@
 - feat: `AtClientManager.fromAuthSession` accepts a `storage` bundle and
   passes it to the client it builds, as `setCurrentAtSign` already did. A
   caller handing storage in no longer has to avoid the auth hand-off to do
-  it. The bundle is borrowed, not owned: `stop()` detaches without closing.
+  it. The bundle is borrowed unless built with `closedByClient: true`, in
+  which case the client closes it on `stop()`.
 - build: require `at_persistence_secondary_server` ^5.3.0. This package's
   keystore and sync queue open on `HiveInstances`, which 5.3.0 is the first
   release to carry; the floor still said ^5.1.0, so a consumer could resolve
@@ -88,9 +108,10 @@
   caller that supplies storage picks both the backend and where it lives, so
   `AtClientPreference.hiveStoragePath` no longer has to name a location; omit it
   and the client builds the Hive store under that path exactly as before. The
-  client only borrows storage it was given: `stop()` detaches without closing,
-  so one store can be handed to a later client, while storage the client built
-  itself is still closed on release.
+  client borrows storage it was given by default: `stop()` detaches without
+  closing, so one store can be handed to a later client. A bundle built with
+  `closedByClient: true` is closed by the client instead, and storage the
+  client built itself is always closed on release.
 - fix: a delete that supersedes a queued update is no longer lost on push. Queue
   entries carry a monotonic `seq`, and the drain removes only the version it
   actually pushed, so a write that replaced the entry mid-flight stays queued for

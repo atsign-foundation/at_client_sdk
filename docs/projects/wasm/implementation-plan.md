@@ -403,27 +403,51 @@ D-12. Independent of the P series, which is `at_server`-side.
   at_lookup's replacements set `AtLookupImpl.heartbeatInterval` directly and cannot see an
   `AtClientPreference` at all. They were unportable while the wiring was missing; **the fix at
   `100e73b9d` restores that wiring, so porting them is now possible and owed.**
-  **Still owed on this branch, none of them fixed:**
-  - **A half-built client is filed and handed out.** `AtClient.create` writes to
-    `atClientInstanceMap` before its service wiring can throw, so a failure leaves a poisoned
-    entry with storage attached and no caller reference; a later `setCurrentAtSign` adopts it
-    and stops it, closing a `closedByClient` bundle the app still believes it owns. Fix is
-    `try { … } catch (_) { await client.stop(); rethrow; }` around the wiring.
-  - **Four dartdocs still say storage is "borrowed" unconditionally**, which `closedByClient:
-    true` falsifies. One search-and-replace.
-  - **Notification handling is no longer serialised** and the back-pressure seam is
-    unreachable; and the socket-alive-but-silent watchdog was deleted with nothing equivalent.
-    With the two fixed defects these are four independent weakenings of notification liveness
-    in one PR, against a public contract (`notification_service.dart:47-51`) that still
-    promises the old behaviour.
-  - **The Flutter app-owned path is a trap end to end.** `EnrollmentRequestList` reaches
-    `AtClientManager.getInstance().atClient` at five sites, which throws for a create-only
-    app — so an app following the new CHANGELOG advice *and* using the enrollment UI this
-    package ships must call `setCurrentAtSign`, which then adopts and later stops its client.
-  - **`at_onboarding_cli` semver**: three `feat:` entries shipped under a patch bump
-    (1.16.1-rc1 → rc2); semver wants 1.17.0. Gary's call.
-  - **`dart analyze --fatal-infos` is not clean**: ~145 lines in at_client still touch the two
-    newly-`@Deprecated` fields with no `// ignore:`. Not a CI gate today.
+  **The rest of that list was worked 2026-09-06 and is now DONE**, each fix pinned by a test
+  whose break-it mutation reddens the assertion and quotes its own reason string:
+  - **A half-built client is no longer filed and handed out.** `AtClient.create` wraps its
+    service wiring in `try { … } catch (_) { await client.stop(); rethrow; }`, which unfiles
+    the client and releases its claim on the storage location.
+  - **The four unconditional "borrowed" dartdocs** are corrected, plus two in the functional
+    pack that stated the rule as a general claim about clients and four more in the
+    CHANGELOGs.
+  - **Notification handling is serialised again.** `Monitor._onNotification` pauses the
+    subscription for the duration of the handler, exactly as the socket-owning Monitor did.
+    ⚠️ **The "back-pressure seam is unreachable" half of this row was WRONG.** The seam is
+    explicit on `AtLookupMuxable.notifications`, wired to `pauseDelivery()` and pinned by
+    at_lookup's own tests — at_client simply never reached it. One pause fixes both halves.
+  - **The socket-alive-but-silent watchdog is back**, as `AtClientPreference.
+    monitorSilenceTimeout` (default 60s, `Duration.zero` off) driving a timer in `Monitor`
+    that rebuilds through `stopNotifications`/`startNotifications`.
+    ⚠️ **Ruled: at_client, not at_lookup** (gkc, 2026-09-06). The argument for putting it in
+    at_lookup mis-cited `at_lookup_impl.dart:914-922`, which argues against Monitor owning
+    the reconnect BACKOFF and is conditioned on "a connection that also carries verb
+    traffic" — Monitor's is dedicated. This PR changes at_lookup by zero lines and at_lookup
+    is ahead of at_client on the release train.
+    **It has a live test as well as three unit tests**, and it needed no test hook: the
+    atServer writes a stats notification to every monitor connection every 15s by default
+    (`at_secondary_config.dart:63` on at_server `origin/trunk`), which is a real clock to
+    bracket the budget around. `tests/at_functional_test/test/monitor_silence_test.dart`
+    runs two 45-second arms differing only in the budget — 3s must rebuild, 40s must not —
+    observed through the public `currentListenerStateStream`, with the stats-arrive premise
+    asserted first so a server that stopped sending them fails as itself. ⚠️ What no test
+    here does is wedge a real atServer into answering heartbeats while delivering nothing;
+    the arms reproduce the condition the watchdog keys on, not the fault that causes it.
+  - **The Flutter app-owned path works end to end.** `EnrollmentRequestList` takes an
+    optional `enrollmentService` and every client read goes through it.
+    ⚠️ **It was six reaches, not five, and the sixth fires first**: the service's constructor
+    wires `onListen` to a method whose first statement touches `atClient`, which runs
+    synchronously inside the widget's own `.listen`. Swapping only the five named sites would
+    not have fixed it. The widget now disposes only a service it built itself.
+  - **`at_onboarding_cli` is 1.17.0-rc1** (gkc, 2026-09-06), and `at_cli_commons` floors it
+    there — it had pinned `^1.16.1-rc2`, which resolves a version without `storagePath`.
+  - **`dart analyze --fatal-infos`**: ⚠️ **that row's diagnosis was WRONG.** None of the 143
+    same-package uses of the two deprecated fields produces a diagnostic, because
+    `deprecated_member_use_from_same_package` is not in `package:lints/recommended.yaml`,
+    which is all this package includes. The 289 infos were 286 pre-existing
+    `deprecated_member_use` from at_chops/at_auth plus 3 `unnecessary_import` this PR did
+    add; those three are removed. `--fatal-infos` is not a CI gate — CI runs bare
+    `dart analyze` and `flutter analyze --no-fatal-infos`.
   ⚠️ **Merge-back note for the spike:** three sites now read `preference.signingAlgoType`
   directly (`sync_service_impl.dart`, `notification_service_impl.dart`, `remote_secondary.dart`)
   where the spike calls `signingAlgoOf(atClient)`. They must go back to `signingAlgoOf` when PQ

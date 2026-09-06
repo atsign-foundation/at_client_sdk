@@ -44,8 +44,9 @@ class AtOnboardingPreference extends AtClientPreference {
   /// The local storage the client should use, which decides the backend and
   /// the location and so leaves [storagePath] unread.
   ///
-  /// Borrowed rather than owned: the client detaches from it when it stops,
-  /// and closing it is the caller's job. Leave it null and a Hive bundle is
-  /// built under [storagePath], which the client closes itself.
+  /// Borrowed unless it was built with `closedByClient: true`: by default the
+  /// client detaches from it when it stops and closing it is the caller's job.
+  /// Leave it null and a Hive bundle is built under [storagePath], which the
+  /// client closes itself.
   AtClientStorage? storage;
 }

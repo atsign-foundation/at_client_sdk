@@ -1,4 +1,4 @@
-## 1.16.1-rc2
+## 1.17.0-rc1
 - feat: `AtOnboardingPreference.storagePath` says where the client's local
   storage goes, replacing this package's use of the now-deprecated
   `AtClientPreference.hiveStoragePath`. A caller that still sets the old field
@@ -6,14 +6,16 @@
 - feat: the onboarding service now builds the client's storage itself — a Hive
   bundle marked `closedByClient`, so the client closes it on stop exactly as it
   closed the store it used to open. Supply `storage` to choose the backend or
-  the location yourself, in which case it is borrowed and you close it.
+  the location yourself; the client closes that too if you built it with
+  `closedByClient: true`, and otherwise you close it.
 - chore: stop setting `AtClientPreference.commitLogPath`, which at_client reads
   nowhere, and drop `HomeDirectoryUtil.getCommitLogPath` with its last caller.
   No behaviour changes: the value was never read.
 - feat: `AtOnboardingPreference.storage` supplies the client's local storage,
   which decides the backend and the location and so leaves `hiveStoragePath`
-  unread. Borrowed rather than owned: the client detaches from it when it
-  stops, and closing it is the caller's job. Leave it unset and the client
+  unread. Borrowed unless built with `closedByClient: true`: by default the
+  client detaches from it when it stops and closing it is the caller's job.
+  Leave it unset and the client
   goes on opening a Hive store under `hiveStoragePath` and closing it itself.
   `CLIBase` carries it through, so an at_cli_commons caller supplying its own
   preference can inject storage without any change there.

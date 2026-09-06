@@ -105,6 +105,20 @@ class AtClientPreference {
   /// See also [monitorHeartbeatInterval]
   Duration monitorHeartbeatResponseTimeout = Duration(seconds: 10);
 
+  /// How long the notifications monitor tolerates a connection that answers
+  /// heartbeats while delivering nothing, before rebuilding it.
+  ///
+  /// A heartbeat proves the socket is alive, not that notifications are still
+  /// arriving on it; without this a client can sit reporting
+  /// [NotificationListenerState.listening] while permanently deaf. The
+  /// atServer writes a stats notification to every monitor connection on its
+  /// own timer, so a healthy connection is never silent for long.
+  ///
+  /// [Duration.zero] turns the check off, which is what an atServer
+  /// configured to send no stats notifications needs - against one of those,
+  /// silence is normal and this would rebuild a healthy connection.
+  Duration monitorSilenceTimeout = Duration(seconds: 60);
+
   /// - when true, then the notifications monitor will be started either the
   /// first time that [NotificationService.subscribe] is called by the
   /// application code, or 30 seconds after creation of the

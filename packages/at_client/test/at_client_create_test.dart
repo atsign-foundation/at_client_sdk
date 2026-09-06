@@ -152,4 +152,51 @@ void main() {
 
     await storage.close();
   });
+
+  test('a client that fails to build is not left behind', () async {
+    final first = HiveAtClientStorage(
+        atSign: '@factoryhalfbuilt',
+        storagePath: dir.path,
+        closedByClient: true);
+
+    await expectLater(
+        () => AtClient.create(
+            atSign: '@factoryhalfbuilt',
+            namespace: 'wavi',
+            preference: pref(),
+            storage: first,
+            syncServiceBuilder: (_) => throw StateError('builder exploded')),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('builder exploded'))));
+
+    // The client is filed before its services are wired, so a throw here can
+    // strand an entry nothing holds a reference to. Asserted directly, before
+    // the second create below - which would otherwise trip over the stranded
+    // entry and fail on a bare StateError instead of on this reason.
+    expect(AtClientImpl.atClientInstanceMap.containsKey('@factoryhalfbuilt'),
+        isFalse,
+        reason: 'a client whose build threw is unfiled, rather than sitting in '
+            'the instance map where the next setCurrentAtSign adopts and later '
+            'stops it - while the caller that asked for it holds no reference '
+            'and cannot stop it itself');
+
+    final second = HiveAtClientStorage(
+        atSign: '@factoryhalfbuilt',
+        storagePath: dir.path,
+        closedByClient: true);
+    final client = await AtClient.create(
+        atSign: '@factoryhalfbuilt',
+        namespace: 'wavi',
+        preference: pref(),
+        storage: second);
+
+    expect(second.isHeldBy(client), isTrue,
+        reason: 'the same stop() that unfiled it also released its claim on '
+            'the location, so a later client can open a store there - '
+            'otherwise one failed build makes that directory unusable for the '
+            'life of the process');
+
+    await client.stop();
+    expect(first.isHeldBy(client), isFalse);
+  });
 }

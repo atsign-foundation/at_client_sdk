@@ -442,10 +442,9 @@ class AtClientImpl implements AtClient {
     if (_preference!.isLocalStoreRequired) {
       AtSyncQueue? syncQueue;
       if (_localSecondaryKeyStore == null) {
-        // A caller that supplied storage picked the backend and the location;
-        // this client only borrows it, so `stop()` detaches without closing.
-        // Otherwise build the default Hive store under the preference's path
-        // and own it.
+        // A caller that supplied storage picked the backend and the location,
+        // and the bundle itself says whether `stop()` closes it. Otherwise
+        // build the default Hive store under the preference's path and own it.
         final injected = _injectedStorage;
         final AtClientStorage storage;
         if (injected != null) {

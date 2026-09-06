@@ -43,6 +43,9 @@ abstract class AtClient {
   ///
   /// Throws a [StateError] when a client for [atSign] is already live, rather
   /// than handing back one this caller does not own. [stop] releases it.
+  ///
+  /// A failure while building leaves nothing behind: the part-built client is
+  /// stopped, which unfiles it and releases its claim on [storage].
   static Future<AtClient> create({
     required String atSign,
     required AtClientPreference preference,
@@ -79,16 +82,25 @@ abstract class AtClient {
       enrollmentId: enrollmentId,
       storage: storage,
     );
-    client.notificationService = notificationServiceBuilder == null
-        ? await NotificationServiceImpl.create(client,
-            secondaryAddressFinder: secondaryAddressFinder)
-        : await notificationServiceBuilder(client);
-    client.syncService = syncServiceBuilder == null
-        ? await SyncServiceImpl.create(client)
-        : await syncServiceBuilder(client);
-    client.enrollmentService = enrollmentServiceBuilder == null
-        ? EnrollmentServiceImpl(client, AtEnrollment.create())
-        : await enrollmentServiceBuilder(client);
+    // The client is already filed in `AtClientImpl.atClientInstanceMap` by the
+    // time the services are wired, so a throw here would leave an entry no
+    // caller holds a reference to, still claiming its storage. `stop()`
+    // unfiles it and releases that claim.
+    try {
+      client.notificationService = notificationServiceBuilder == null
+          ? await NotificationServiceImpl.create(client,
+              secondaryAddressFinder: secondaryAddressFinder)
+          : await notificationServiceBuilder(client);
+      client.syncService = syncServiceBuilder == null
+          ? await SyncServiceImpl.create(client)
+          : await syncServiceBuilder(client);
+      client.enrollmentService = enrollmentServiceBuilder == null
+          ? EnrollmentServiceImpl(client, AtEnrollment.create())
+          : await enrollmentServiceBuilder(client);
+    } catch (_) {
+      await client.stop();
+      rethrow;
+    }
     return client;
   }
 

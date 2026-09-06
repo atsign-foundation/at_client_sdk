@@ -97,19 +97,29 @@ class AuthService {
 
   /// Builds a client from a completed authentication, which the caller owns.
   ///
-  /// Nothing registers the client: it is unknown to [AtClientManager], and
-  /// stopping it is the caller's job. An app that wants the shared
+  /// Stopping it is the caller's job. An app that wants the shared
   /// current-atSign client calls [AtClientManager.fromAuthSession] instead,
   /// which is unchanged.
+  ///
+  /// ⚠️ The client is NOT invisible to [AtClientManager]. It is filed in
+  /// `AtClientImpl.atClientInstanceMap` like any other, so a later
+  /// [AtClientManager.setCurrentAtSign] for the same atSign adopts THIS
+  /// client, replaces its services without stopping the ones it had, and
+  /// stops it on the next atSign switch.
+  ///
+  /// To use this package's enrollment widgets against this client, hand it to
+  /// a [FlutterEnrollmentService] and give that to [EnrollmentRequestList];
+  /// with no service they read [AtClientManager]'s current client instead.
   ///
   ///   [session] - the [AtAuthSession] an [onboard] or [authenticate] produced.
   ///   Its root domain is destructured onto [preference].
   ///
   ///   [storage] - the client's local storage, which decides the backend and
   ///   the location and so leaves `preference.hiveStoragePath` unread.
-  ///   Borrowed rather than owned: the client detaches from it when it stops,
-  ///   and closing it is the caller's job. Leave it null and the client opens
-  ///   a Hive store under `hiveStoragePath` and closes that itself.
+  ///   Borrowed unless it was built with `closedByClient: true`: by default
+  ///   the client detaches from it when it stops and closing it is the
+  ///   caller's job. Leave it null and the client opens a Hive store under
+  ///   `hiveStoragePath` and closes that itself.
   ///
   ///   [reuse] - adopt the session's already-authenticated connection and skip
   ///   a second PKAM handshake. By default the client opens its own.

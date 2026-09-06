@@ -57,7 +57,8 @@ void main() {
     atKeysIo: mockAtKeysIo,
   );
 
-  test('the client holds the storage, and nothing registers it', () async {
+  test('the client holds the storage, and is filed but not made current',
+      () async {
     final storage = InMemoryAtClientStorage(atSign: atSign);
     final client = await AuthService(
       atAuth: MockAtAuth(),
@@ -78,6 +79,17 @@ void main() {
           'quietly opening a Hive store of its own',
     );
     expect(client.getCurrentAtSign(), atSign);
+    expect(
+      AtClientImpl.atClientInstanceMap[atSign],
+      same(client),
+      reason:
+          'AtClientImpl.create files every client it builds, this one '
+          'included - so a later setCurrentAtSign for this atSign adopts '
+          'THIS client rather than building its own. Asserting only that '
+          'the manager has no current client passes before createClient is '
+          'ever called, which is what made the previous version of this '
+          'test vacuous',
+    );
     expect(
       () => AtClientManager.getInstance().atClient,
       throwsStateError,
