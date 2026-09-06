@@ -34,11 +34,24 @@ abstract class AtClientStorage {
 
   /// Closes the backend. Idempotent.
   Future<void> close();
+
+  /// Whether the client that attaches to this storage closes it on [AtClient.stop].
+  ///
+  /// False by default: the storage is borrowed, the client only detaches, and
+  /// closing it is the caller's job. True hands the lifetime to the client,
+  /// which is what an app with no teardown of its own wants — it still chooses
+  /// the backend and the location, without having to close anything.
+  bool get closedByClient;
 }
 
 /// The claim rules every [AtClientStorage] shares; a backend supplies
 /// [location], [openBackend], [closeBackend] and [clearData].
 abstract class AtClientStorageBase implements AtClientStorage {
+  AtClientStorageBase({this.closedByClient = false});
+
+  @override
+  final bool closedByClient;
+
   AtClient? _owner;
   String? _lastPrincipal;
   bool _closed = false;

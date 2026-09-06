@@ -1,4 +1,10 @@
 ## 3.14.1
+- feat: `AtClientStorage.closedByClient` lets a bundle say that the client
+  closes it on `stop()`, instead of ownership being inferred from how the
+  storage reached the client. False by default, which is the borrowed
+  behaviour every existing caller already gets. Passing true lets an app with
+  no teardown of its own still choose the backend and the location without
+  having to close anything.
 - **DEPRECATED:** `AtClientPreference.commitLogPath`. Nothing reads it — the
   client is commit-log-free — so whatever is set there has no effect. It will
   be removed in the next major release.

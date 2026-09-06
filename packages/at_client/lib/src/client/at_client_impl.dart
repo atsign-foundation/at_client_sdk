@@ -432,7 +432,7 @@ class AtClientImpl implements AtClient {
         final AtClientStorage storage;
         if (injected != null) {
           storage = injected;
-          _ownsStorage = false;
+          _ownsStorage = injected.closedByClient;
         } else {
           final storagePath = preference!.hiveStoragePath;
           if (storagePath == null) {

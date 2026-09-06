@@ -7,7 +7,8 @@ import 'package:at_persistence_secondary_server/hive.dart';
 
 /// The default storage: a Hive keystore and sync queue under [storagePath].
 class HiveAtClientStorage extends AtClientStorageBase {
-  HiveAtClientStorage({required this.atSign, required this.storagePath});
+  HiveAtClientStorage(
+      {required this.atSign, required this.storagePath, super.closedByClient});
 
   final String atSign;
   final String storagePath;
