@@ -312,7 +312,11 @@ D-12. Independent of the P series, which is `at_server`-side.
   only; the existing job's matrix is untouched, so nothing is renamed.
   **Measured against `at_virtual_env:local`, 82 tests each: hive 82, sqlite 82, memory 82,
   all passing.** That is the first time either SQLite-backed bundle has carried a live put,
-  get, sync drain or notification rather than only the unit contract tests.
+  get, sync drain or notification rather than only the unit contract tests. ✅ **CI agrees:
+  on [#2210](https://github.com/atsign-foundation/at_client_sdk/pull/2210) both new jobs
+  passed first time, and the run is 11 of 11 green** — `end2end_test_14` needed one re-run
+  for `bypasscache_test`, the intermittent that has its own row and fails pre-X4a. Re-derive
+  rather than quoting: `gh run list --branch gkc-x5-functional-storage`.
   ⚠️ **"A bundle per file" was not buildable as written.** A bundle is bound to one atSign
   at construction and several files drive two, so the unit is per *(file, atSign)*. Three
   things the build found, none of them visible by reading:
