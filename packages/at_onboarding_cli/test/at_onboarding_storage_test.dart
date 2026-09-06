@@ -97,7 +97,7 @@ void main() {
         AtOnboardingPreference()
           ..atKeysFilePath = 'test/data/${atSign}_key.atKeys'
           ..namespace = 'unit_test'
-          ..hiveStoragePath = '${dir.path}/never_opened'
+          ..storagePath = '${dir.path}/never_opened'
           ..storage = storage,
         factory);
 
@@ -108,27 +108,49 @@ void main() {
         reason: 'and the client opened THAT bundle, rather than a Hive store '
             'under hiveStoragePath');
     expect(Directory('${dir.path}/never_opened').existsSync(), isFalse,
-        reason: 'hiveStoragePath goes unread when a bundle is supplied');
+        reason: 'storagePath goes unread when a bundle is supplied');
 
     await service.atClient!.stop();
     await storage.close();
   });
 
-  test('no storage on the preference leaves today behaviour alone', () async {
+  test('no bundle on the preference gets a client-closed one at storagePath',
+      () async {
     final factory = RecordingServiceFactory();
     final service = await authenticated(
         AtOnboardingPreference()
           ..atKeysFilePath = 'test/data/${atSign}_key.atKeys'
           ..namespace = 'unit_test'
-          ..hiveStoragePath = '${dir.path}/opened_by_at_client',
+          ..storagePath = '${dir.path}/built_for_the_cli',
         factory);
 
-    expect(factory.called, isTrue);
-    expect(factory.seen, isNull,
-        reason: 'a caller that supplies no bundle passes none on, so the '
-            'client goes on opening one under hiveStoragePath');
-    expect(Directory('${dir.path}/opened_by_at_client').existsSync(), isTrue,
-        reason: 'which it did');
+    expect(factory.seen, isA<HiveAtClientStorage>(),
+        reason: 'the CLI supplies a bundle of its own rather than leaving '
+            'at_client to open one from a preference path');
+    expect(factory.seen!.closedByClient, isTrue,
+        reason: 'and the client is what closes it, so a CLI still has nothing '
+            'to tear down');
+    expect(Directory('${dir.path}/built_for_the_cli').existsSync(), isTrue,
+        reason: 'the store landed where storagePath said');
+
+    await service.atClient!.stop();
+  });
+
+  test('the deprecated hiveStoragePath still decides where the store goes',
+      () async {
+    final factory = RecordingServiceFactory();
+    final service = await authenticated(
+        AtOnboardingPreference()
+          ..atKeysFilePath = 'test/data/${atSign}_key.atKeys'
+          ..namespace = 'unit_test'
+          // ignore: deprecated_member_use
+          ..hiveStoragePath = '${dir.path}/legacy_path',
+        factory);
+
+    expect(Directory('${dir.path}/legacy_path').existsSync(), isTrue,
+        reason: 'a caller that set the deprecated field before this change '
+            'keeps the location it had');
+    expect(factory.seen!.closedByClient, isTrue);
 
     await service.atClient!.stop();
   });

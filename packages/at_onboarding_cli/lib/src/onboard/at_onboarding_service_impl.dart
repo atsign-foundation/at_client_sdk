@@ -55,9 +55,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     enrollCheckpoint = EnrollmentCheckpoint(_atSign);
 
     // set default LocalStorage paths for this instance
-    atOnboardingPreference.hiveStoragePath ??=
-        HomeDirectoryUtil.getHiveStoragePath(_atSign,
-            enrollmentId: enrollmentId);
+    atOnboardingPreference.storagePath ??=
+        // ignore: deprecated_member_use
+        atOnboardingPreference.hiveStoragePath ??
+            HomeDirectoryUtil.getHiveStoragePath(_atSign,
+                enrollmentId: enrollmentId);
     atOnboardingPreference.atKeysFilePath ??=
         HomeDirectoryUtil.getAtKeysPath(_atSign);
   }
@@ -100,6 +102,18 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
+  /// The bundle this client opens: the caller's if it supplied one, otherwise
+  /// a fresh Hive bundle the client closes when it stops.
+  ///
+  /// Fresh each time, because every call here stops the previous client first —
+  /// which closes the bundle it was given — and a closed bundle cannot reopen.
+  AtClientStorage _storageForClient() =>
+      atOnboardingPreference.storage ??
+      HiveAtClientStorage(
+          atSign: _atSign,
+          storagePath: atOnboardingPreference.storagePath!,
+          closedByClient: true);
+
   Future<void> _initAtClient(AtChops atChops, {String? enrollmentId}) async {
     AtClientManager atClientManager = AtClientManager.getInstance();
     if (atOnboardingPreference.skipSync) {
@@ -111,7 +125,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         atLookUp: atLookUp,
         serviceFactory: atServiceFactory,
         enrollmentId: enrollmentId,
-        storage: atOnboardingPreference.storage);
+        storage: _storageForClient());
 
     // ??= to support mocking
     _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;

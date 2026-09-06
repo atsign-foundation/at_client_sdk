@@ -319,7 +319,7 @@ class CLIBase {
     final AtOnboardingPreference atOnboardingConfig =
         preference ?? AtOnboardingPreference();
     atOnboardingConfig
-      ..hiveStoragePath = localStoragePathToUse
+      ..storagePath = localStoragePathToUse
       ..namespace = nameSpace
       ..downloadPath = downloadPathToUse
       ..rootDomain = atRootDomain.rootDomain

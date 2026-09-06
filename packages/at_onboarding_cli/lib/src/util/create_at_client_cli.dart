@@ -47,7 +47,7 @@ Future<AtClient> createAtClient(
     ..rootDomain = parsedRootDomain.rootDomain
     ..rootPort = parsedRootDomain.rootPort
     ..passPhrase = passPhrase
-    ..hiveStoragePath = localStoragePathToUse
+    ..storagePath = localStoragePathToUse
     ..downloadPath = downloadPathToUse;
 
   AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(

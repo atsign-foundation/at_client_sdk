@@ -25,10 +25,11 @@ abstract class AtClient {
   /// [stop]. Code that wants the shared current-atSign client goes on calling
   /// [AtClientManager.setCurrentAtSign], whose behaviour is unchanged.
   ///
-  /// [storage] is borrowed rather than owned, so [stop] detaches from it
-  /// without closing it and the caller closes it when done. Supply none and
-  /// the client opens a Hive store under `preference.hiveStoragePath` and
-  /// closes that itself.
+  /// [storage] is borrowed by default, so [stop] detaches from it without
+  /// closing it and the caller closes it when done; a bundle built with
+  /// `closedByClient: true` is closed by the client instead, which is what an
+  /// app with no teardown of its own wants. Supplying none falls back to a Hive
+  /// store under the deprecated `preference.hiveStoragePath`.
   ///
   /// Each builder replaces one service with the caller's own; by default each
   /// service is the real one.
