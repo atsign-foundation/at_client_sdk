@@ -193,9 +193,13 @@ class AtClientManager {
   /// Set [reuse] to adopt auth's already-authenticated connection
   /// ([session.atLookUp]) and skip the second handshake — the perf escape hatch.
   /// When false (default) the client opens its own fresh socket.
+  ///
+  /// [storage] is borrowed rather than owned, exactly as on [setCurrentAtSign].
   Future<AtClientManager> fromAuthSession(
       AtAuthSession session, AtClientPreference preference,
-      {AtServiceFactory? serviceFactory, bool reuse = false}) async {
+      {AtServiceFactory? serviceFactory,
+      bool reuse = false,
+      AtClientStorage? storage}) async {
     // Destructure rootDomain onto the preference for now. A follow-up will add
     // an AtRootDomain-typed accessor to AtClientPreference so this can stop.
     preference.rootDomain = session.rootDomain.rootDomain;
@@ -210,7 +214,8 @@ class AtClientManager {
         serviceFactory: serviceFactory,
         atKeysIo: session.atKeysIo,
         atLookUp: reuse ? session.atLookUp : null,
-        enrollmentId: session.enrollmentId);
+        enrollmentId: session.enrollmentId,
+        storage: storage);
   }
 
   void listenToAtSignChange(AtSignChangeListener listener) {

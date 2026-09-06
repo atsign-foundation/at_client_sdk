@@ -1,4 +1,8 @@
 ## 3.14.1
+- feat: `AtClientManager.fromAuthSession` accepts a `storage` bundle and
+  passes it to the client it builds, as `setCurrentAtSign` already did. A
+  caller handing storage in no longer has to avoid the auth hand-off to do
+  it. The bundle is borrowed, not owned: `stop()` detaches without closing.
 - build: require `at_persistence_secondary_server` ^5.3.0. This package's
   keystore and sync queue open on `HiveInstances`, which 5.3.0 is the first
   release to carry; the floor still said ^5.1.0, so a consumer could resolve
