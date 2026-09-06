@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/no_op_services.dart';
@@ -100,6 +101,30 @@ void main() {
             'client rather than the atSign having been used once');
 
     await second.stop();
+  });
+
+  test('buildRemoteSecondary carries the client identity a preference cannot',
+      () async {
+    final client = await AtClient.create(
+        atSign: '@buildsecondary',
+        namespace: 'wavi',
+        preference: pref()..privateKey = 'dummy_private_key',
+        enrollmentId: 'enrollment-under-test') as AtClientImpl;
+
+    final built = client.buildRemoteSecondary();
+
+    // enrollmentId, not the credential: RemoteSecondary recovers privateKey
+    // from the preference on its own (`privateKey ??= preference.privateKey`),
+    // so asserting on the authenticator passes whether or not the factory
+    // threaded anything. The enrollment id is held by the client alone.
+    expect(built.atLookUp.enrollmentId, 'enrollment-under-test',
+        reason: 'every RemoteSecondary this client opens is configured FROM '
+            'the client, so a second connection acts as the same enrollment '
+            'rather than being assembled independently');
+    expect((built.atLookUp as AtLookupMuxable).authenticator, isNotNull,
+        reason: 'and it authenticates through the seam, not the ladder');
+
+    await client.stop();
   });
 
   test('storage the preference would never open is refused', () async {

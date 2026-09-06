@@ -102,6 +102,24 @@ class AtClientImpl implements AtClient {
   @override
   AtKeysIo? get atKeysIo => _atKeysIo;
 
+  /// Builds a [RemoteSecondary] carrying this client's identity and
+  /// credentials, so every one this client opens is configured alike rather
+  /// than assembled independently at each site.
+  ///
+  /// [atLookUp] injects an already-built lookup; passing none lets
+  /// [RemoteSecondary] open its own connection, which is what a site wanting a
+  /// connection separate from the client's shared one does.
+  @visibleForTesting
+  RemoteSecondary buildRemoteSecondary({AtLookUp? atLookUp}) => RemoteSecondary(
+        _atSign,
+        _preference!,
+        atChops: atChops,
+        atLookUp: atLookUp,
+        privateKey: _preference!.privateKey,
+        enrollmentId: enrollmentId,
+        atKeysIo: _atKeysIo,
+      );
+
   /// Keeps track of CryptoProviders registered with this AtClient
   // ---------------------------------------------------------------------------
   // DataEvent stream — fires on every successful keystore mutation that
@@ -486,14 +504,7 @@ class AtClientImpl implements AtClient {
     }
 
     // Using ??= because we may be injecting a RemoteSecondary
-    _remoteSecondary ??= RemoteSecondary(
-      _atSign,
-      _preference!,
-      atChops: atChops,
-      atLookUp: atLookUp,
-      privateKey: _preference!.privateKey,
-      enrollmentId: enrollmentId,
-    );
+    _remoteSecondary ??= buildRemoteSecondary(atLookUp: atLookUp);
 
     // Using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
@@ -1303,11 +1314,7 @@ class AtClientImpl implements AtClient {
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
-    var remoteSecondary = RemoteSecondary(
-      _atSign,
-      _preference!,
-      atChops: atChops,
-    );
+    var remoteSecondary = buildRemoteSecondary();
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
