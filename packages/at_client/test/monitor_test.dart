@@ -213,6 +213,46 @@ void main() {
               'every notification');
     });
 
+    test('a start that fails is retried, not abandoned', () async {
+      // at_lookup SURFACES a failed start rather than retrying it - three of
+      // its own tests pin that - so the retry has to live here. Before this,
+      // one failed start left the client deaf for the life of the process:
+      // start() short-circuits on a targetState that is already listening, so
+      // nothing could ask again.
+      muxable.startError = AtConnectException('mock - connection failed');
+
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(muxable.startCalls, 1);
+      expect(monitor.currentState, NotificationListenerState.notConnected);
+
+      // The first backoff step is 1s; clear the fault and let it come round.
+      muxable.startError = null;
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(muxable.startCalls, greaterThan(1),
+          reason: 'the monitor asked again on its own, which is what the '
+              'public contract promises: reconnect until successful or until '
+              'stopListening');
+      expect(monitor.currentState, NotificationListenerState.listening,
+          reason: 'and once the fault cleared it actually got there');
+    }, timeout: Timeout(Duration(seconds: 15)));
+
+    test('a retry stops when stop() arrives', () async {
+      muxable.startError = AtConnectException('mock - connection failed');
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      monitor.stop();
+      muxable.startError = null;
+      final callsAtStop = muxable.startCalls;
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(muxable.startCalls, callsAtStop,
+          reason: 'a pending retry must not resurrect a monitor the caller '
+              'has stopped');
+    }, timeout: Timeout(Duration(seconds: 15)));
+
     test('a start that fails leaves it notConnected', () async {
       // Ported in spirit from "secondary not available" and "secondary
       // reachable but rejecting commands", both of which now fail inside the

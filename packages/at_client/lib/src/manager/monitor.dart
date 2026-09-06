@@ -83,6 +83,32 @@ class Monitor {
   /// an atServer with nothing to say.
   Future<void> _lifecycle = Future<void>.value();
 
+  /// Retry of the FIRST connect only.
+  ///
+  /// Once [lookUp] is notifying it owns reconnection, but until then it does
+  /// not: `startNotifications` deliberately SURFACES a failure rather than
+  /// retrying it - three of at_lookup's own tests pin that, on the grounds that
+  /// failing loudly beats a connection that silently never receives anything.
+  /// So the caller has to retry, and this is the caller. Without it one failed
+  /// start - offline at `subscribe()`, or an atServer briefly unreachable -
+  /// left the client deaf for the life of the process, because `start()`
+  /// short-circuits on a `targetState` that is already `listening`.
+  Timer? _startRetry;
+  int _startRetryIx = 0;
+
+  /// The same backoff at_lookup uses for a lost connection, so a failed first
+  /// connect and a dropped one recover on one schedule rather than two.
+  static const List<Duration> _startRetryDelays = [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 8),
+    Duration(seconds: 13),
+    Duration(seconds: 21),
+    Duration(seconds: 34),
+  ];
+
   void _enqueue(Future<void> Function() step) {
     _lifecycle =
         _lifecycle.then((_) => step()).catchError((Object e, StackTrace st) {
@@ -158,13 +184,27 @@ class Monitor {
         await lookUp.stopNotifications();
         return;
       }
+      _startRetryIx = 0;
       logger.info('monitor started');
     } catch (e) {
-      // Not fatal, and deliberately not retried here: the muxable reconnects
-      // on its own backoff, and a second retry loop on top of it would
-      // compound the delays rather than shorten them.
       logger.warning('Failed to start notifications: $e');
+      _scheduleStartRetry();
     }
+  }
+
+  /// Tries the first connect again, while the caller still wants to listen.
+  void _scheduleStartRetry() {
+    _startRetry?.cancel();
+    if (_targetState != NotificationListenerState.listening) return;
+    final delay =
+        _startRetryDelays[_startRetryIx.clamp(0, _startRetryDelays.length - 1)];
+    _startRetryIx++;
+    logger.info('retrying the notification start in ${delay.inSeconds}s');
+    _startRetry = Timer(delay, () {
+      if (_targetState == NotificationListenerState.listening) {
+        _enqueue(_start);
+      }
+    });
   }
 
   void _onConnectionState(bool up) {
@@ -195,6 +235,9 @@ class Monitor {
   void stop() {
     logger.info('stop() called. Setting targetState to notConnected');
     _targetState = NotificationListenerState.notConnected;
+    _startRetry?.cancel();
+    _startRetry = null;
+    _startRetryIx = 0;
     _enqueue(_stop);
   }
 

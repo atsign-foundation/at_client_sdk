@@ -20,10 +20,17 @@ abstract class AtClient {
   /// Builds a client for [atSign] and wires its notification, sync and
   /// enrollment services.
   ///
-  /// Nothing registers the client this returns. It is unknown to
-  /// [AtClientManager], and the caller owns its lifetime, ending it with
-  /// [stop]. Code that wants the shared current-atSign client goes on calling
+  /// The caller owns the client's lifetime and ends it with [stop]. Code that
+  /// wants the shared current-atSign client goes on calling
   /// [AtClientManager.setCurrentAtSign], whose behaviour is unchanged.
+  ///
+  /// ⚠️ The client is NOT invisible to [AtClientManager]. It is filed in
+  /// `AtClientImpl.atClientInstanceMap` like any other, so a later
+  /// [AtClientManager.setCurrentAtSign] for the same atSign adopts THIS client
+  /// rather than building its own — and adopting it replaces its notification,
+  /// sync and enrollment services without stopping the ones it had, then stops
+  /// it on the next atSign switch. Until that is separated, do not mix this
+  /// factory and the manager for one atSign in one process.
   ///
   /// [storage] is borrowed by default, so [stop] detaches from it without
   /// closing it and the caller closes it when done; a bundle built with

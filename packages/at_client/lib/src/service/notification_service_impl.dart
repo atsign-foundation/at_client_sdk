@@ -109,7 +109,14 @@ class NotificationServiceImpl extends NotificationService {
                     hashingAlgo: preference.hashingAlgoType,
                   ),
             secondaryAddressFinder: this.secondaryAddressFinder,
-          ),
+          )
+            // The muxable heartbeats now, so the preference has to reach it or
+            // it is silently ignored - and at_lookup's own default is 30s
+            // against this preference's documented 59s, so leaving it unset
+            // would halve the interval for every caller that never touched it.
+            ..heartbeatInterval = preference.monitorHeartbeatInterval
+            ..heartbeatResponseTimeout =
+                preference.monitorHeartbeatResponseTimeout,
           handleNotification: handleNotificationReceipt,
           getLastNotificationTime: getLastNotificationTime,
         );

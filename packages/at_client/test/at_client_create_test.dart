@@ -42,14 +42,22 @@ void main() {
     await storage.close();
   });
 
-  test('nothing is registered with AtClientManager', () async {
+  test('the client is filed in the instance map, though not as the current one',
+      () async {
     final client = await AtClient.create(
         atSign: '@factorysolo', namespace: 'wavi', preference: pref());
 
     expect(client.getCurrentAtSign(), '@factorysolo');
+    expect(AtClientImpl.atClientInstanceMap['@factorysolo'], same(client),
+        reason: 'AtClientImpl.create files every client it builds, this one '
+            'included - so a later setCurrentAtSign for this atSign adopts '
+            'THIS client rather than building its own. Asserting only that the '
+            'manager has no current client passes before create() is ever '
+            'called, which is what made the previous version of this test '
+            'vacuous');
     expect(() => AtClientManager.getInstance().atClient, throwsStateError,
-        reason: 'the factory builds a client the caller owns; only '
-            'setCurrentAtSign fills in the shared current-atSign client');
+        reason: 'the manager\'s current client is still unset: create() does '
+            'not make this the process-wide current atSign');
 
     await client.stop();
   });
