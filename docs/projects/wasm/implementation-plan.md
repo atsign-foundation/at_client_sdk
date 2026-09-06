@@ -329,13 +329,26 @@ D-12. Independent of the P series, which is `at_server`-side.
   explained it — CI starts from a clean `$HOME`, while every local failure was the stale-keyfile
   precondition. (The `HiveError: Box not found` lines are noise either way: 11–14 times in
   *every* local arm including the pre-X4a baseline, failing no test.)
-  ⚠️ **The three remaining CI reds are one environmental cause, not this branch.**
-  `end2end_test_14`, `end2end_tests` and `build_and_test (at_lookup)` all trace to the
-  atDirectory `root.atsign.wtf:64` being unreachable during that window — 30 and 23 occurrences
-  of `AtLookup.findAtServer timed out` in the two complete e2e logs, with the missing
-  `atKeys/@ce2e*_key.atKeys` a downstream effect rather than a separate fault. So **X4a
-  introduced no CI regression**. The `at_lookup` one is the same cause reaching the *unit* pack
-  through a hardcoded FQDN — see the separate defect row for it.
+  **The three remaining reds were not this branch either, but they were not one cause.**
+  In that run all three — `end2end_test_14`, `end2end_tests`, `build_and_test (at_lookup)` —
+  showed the atDirectory `root.atsign.wtf:64` unreachable: 30 and 23 occurrences of
+  `AtLookup.findAtServer timed out` in the two complete e2e logs, the missing
+  `atKeys/@ce2e*_key.atKeys` a downstream effect. ⚠️ **First recorded here as "one
+  environmental cause"; re-running them on 2026-09-06 disproved half of it.** `at_lookup` and
+  `end2end_tests` went green, confirming the outage for those two — but `end2end_test_14`
+  failed again at `11 passed, 18 failed` with **zero** atDirectory timeouts and 67
+  `AT0401 pkam authentication failed`. The outage had masked a *second, pre-existing* defect,
+  and one run showing a single cause is not evidence that every red shares it.
+  **That second defect is now fixed** (`6f1c7770f`, not X4a work): the e2e pack's 36
+  `setCurrentAtSign` call sites passed only a preference, so every switch to another atSign
+  rebuilt the client with no `AtChops` and a null `enrollmentId`; under `authType: apkam` the
+  atKeys carry a real enrollment id the atServer expects PKAM to name. `TestSuiteInitializer`
+  now caches each atSign's credentials and `switchToAtSign` re-supplies them — **on a real
+  switch only**, since the idempotency short-circuit needs both null and a stopped client
+  releases its storage. Result: **31 passed, 1 failed, 0 AT0401** — 17 tests fixed, none
+  broken. So **X4a introduced no CI regression**, and #2208 stands at 48 pass / 1 fail against
+  the 2 pre-existing reds it inherited. The survivor is a stale-cache assertion that also
+  fails pre-X4a — see its own defect row.
 - **X4 — Inject it, and release it.** ⏸ **X4a lands on this branch (#2208), so X4 and X4a
   ship as one PR.** Its release code (`stop()` releases storage, PR #2208) is sound, but the
   per-atSign guard it carries is superseded
