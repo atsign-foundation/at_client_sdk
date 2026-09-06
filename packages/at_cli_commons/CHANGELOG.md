@@ -1,3 +1,8 @@
+## 3.1.2
+
+- chore: stop setting `AtClientPreference.commitLogPath`, which at_client reads
+  nowhere, so the value had no effect. No behaviour changes.
+
 ## 3.1.1
 
 - fix: `getUserName` now resolves via `USER` → `LOGNAME` → `USERNAME` → `whoami`

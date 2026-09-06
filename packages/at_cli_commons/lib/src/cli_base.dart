@@ -322,8 +322,6 @@ class CLIBase {
       ..hiveStoragePath = localStoragePathToUse
       ..namespace = nameSpace
       ..downloadPath = downloadPathToUse
-      ..commitLogPath = '$localStoragePathToUse/commitLog'
-          .replaceAll('/', Platform.pathSeparator)
       ..rootDomain = atRootDomain.rootDomain
       ..rootPort = atRootDomain.rootPort
       ..fetchOfflineNotifications = true
