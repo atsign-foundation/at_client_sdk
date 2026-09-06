@@ -1,4 +1,8 @@
 ## 3.14.1
+- build: require `at_persistence_secondary_server` ^5.3.0. This package's
+  keystore and sync queue open on `HiveInstances`, which 5.3.0 is the first
+  release to carry; the floor still said ^5.1.0, so a consumer could resolve
+  a version without it and fail to compile.
 - fix: `stop()` no longer races an in-flight sync round. The round ends at its
   next step once the service is stopped, its request is reported as stopped
   rather than as an unexpected exception, and what it had not pushed stays
@@ -6,6 +10,43 @@
   pending writes on the atServer first awaits `waitUntilCaughtUp`.
   `LocalSecondary.syncQueueSyncSnapshot` is null for a closed queue, as for one
   never opened.
+- **BREAKING (behaviour):** `AtClient.stop()` releases the client's storage
+  and removes the client from the instance cache. A stopped client keeps nothing
+  open and cannot be restarted; `start()` on one throws, and the next `create()`
+  or `setCurrentAtSign` builds a fresh client on freshly opened storage. Before,
+  a stopped client stayed cached with its store open and was handed back on the
+  next request. Switching atSigns therefore reopens storage cold on the way
+  back. With release in place, a storage refuses to open a store another
+  storage already has open. A client whose construction fails releases the
+  storage it had claimed before rethrowing.
+- fix: a client's local storage is isolated by where it was told to put it.
+  Its sync queue now opens on the Hive instance owning its `hiveStoragePath`,
+  the same one its keystore uses; before, the queue opened on the package-global
+  instance under a box named from the atSign alone, so two clients of one atSign
+  shared a queue however different the paths they were given, and a client's
+  keystore and queue could land on different instances. Two clients of one
+  atSign given separate directories are therefore separate stores, which is what
+  lets two enrollments of one atSign — whose namespace scopes differ — run side
+  by side without seeing each other's records or pending writes. The guard that
+  refuses a second opener is keyed by the store rather than by the atSign: the
+  directory plus the atSign, since two atSigns under one directory are two boxes
+  and share nothing. `AtSyncQueue` takes the storage path it should open under,
+  and `AtClientStorage` implementations report the store they point at.
+- feat: `AtClient.create` and `AtClientManager.setCurrentAtSign` accept a
+  `storage:` argument, and `AtServiceFactory.atClient` passes one through. A
+  caller that supplies storage picks both the backend and where it lives, so
+  `AtClientPreference.hiveStoragePath` no longer has to name a location; omit it
+  and the client builds the Hive store under that path exactly as before. The
+  client only borrows storage it was given: `stop()` detaches without closing,
+  so one store can be handed to a later client, while storage the client built
+  itself is still closed on release.
+- fix: a delete that supersedes a queued update is no longer lost on push. Queue
+  entries carry a monotonic `seq`, and the drain removes only the version it
+  actually pushed, so a write that replaced the entry mid-flight stays queued for
+  the next round. Before, an unconditional removal discarded it: the server kept
+  the superseded update, the queue read empty, and the client reported itself in
+  sync. `ts` cannot serve as that identity — an update and a delete of one key
+  land well inside the same millisecond.
 - feat: `AtClientStorage` — a client's local keystore and its sync queue as one
   object, with `HiveAtClientStorage` as the default. A client claims its storage
   when it is created and a second client is refused it; after the claim is

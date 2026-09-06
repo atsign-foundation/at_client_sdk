@@ -16,14 +16,24 @@ import 'test_utils/test_utils.dart';
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 void main() {
+  tearDown(() async {
+    for (final c
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await c.stop();
+    }
+  });
   group('A group of at client impl create tests', () {
     final String atSign = '@alice';
     setUp(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
       AtClientManager.getInstance().removeAllChangeListeners();
     });
     tearDown(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
@@ -65,12 +75,16 @@ void main() {
       ..commitLogPath = 'test/hive/path';
 
     setUp(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
     tearDown(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
@@ -352,7 +366,7 @@ void main() {
       expect(atResponse.response, 'ok');
     });
     tearDown(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
     });
   });
   group('A group of test to validate max length of a key', () {
@@ -381,8 +395,9 @@ void main() {
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     MockLocalSecondary mockLocalSecondary = MockLocalSecondary();
     MockAtChopsKeys mockAtChopsKeys = MockAtChopsKeys();
-    setUp(() {
-      AtClientImpl.atClientInstanceMap.remove('@alice');
+    setUp(() async {
+      await (AtClientImpl.atClientInstanceMap['@alice'] as AtClientImpl?)
+          ?.stop();
       var key = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
       registerFallbackValue(FakeLookupVerbBuilder());
       when(() => mockLocalSecondary.executeVerb(any()))

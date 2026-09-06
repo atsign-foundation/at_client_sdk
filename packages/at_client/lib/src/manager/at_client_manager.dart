@@ -80,7 +80,8 @@ class AtClientManager {
       AtChops? atChops,
       AtKeysIo? atKeysIo,
       AtLookUp? atLookUp,
-      String? enrollmentId}) async {
+      String? enrollmentId,
+      AtClientStorage? storage}) async {
     serviceFactory ??= DefaultAtServiceFactory();
 
     _logger.info("setCurrentAtSign called with atSign $atSign");
@@ -111,6 +112,7 @@ class AtClientManager {
         atKeysIo == null &&
         atLookUp == null &&
         enrollmentId == null &&
+        storage == null &&
         _currentAtClient!.isStopped == false) {
       // The full stop/recreate path below recreates via AtClientImpl.create(),
       // which adopts the supplied preference's crypto config onto a re-used
@@ -141,7 +143,8 @@ class AtClientManager {
         atChops: atChops,
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
-        enrollmentId: enrollmentId);
+        enrollmentId: enrollmentId,
+        storage: storage);
 
     var notificationService = await serviceFactory.notificationService(
         _currentAtClient!, this,
@@ -272,6 +275,7 @@ abstract class AtServiceFactory {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
+    AtClientStorage? storage,
   });
 
   Future<NotificationService> notificationService(
@@ -299,6 +303,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
+    AtClientStorage? storage,
   }) async {
     return await AtClientImpl.create(
       atSign,
@@ -309,6 +314,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       atKeysIo: atKeysIo,
       atLookUp: atLookUp,
       enrollmentId: enrollmentId,
+      storage: storage,
     );
   }
 
