@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -92,5 +93,42 @@ class AuthService {
       rethrow;
     }
     return atAuthResponse;
+  }
+
+  /// Builds a client from a completed authentication, which the caller owns.
+  ///
+  /// Nothing registers the client: it is unknown to [AtClientManager], and
+  /// stopping it is the caller's job. An app that wants the shared
+  /// current-atSign client calls [AtClientManager.fromAuthSession] instead,
+  /// which is unchanged.
+  ///
+  ///   [session] - the [AtAuthSession] an [onboard] or [authenticate] produced.
+  ///   Its root domain is destructured onto [preference].
+  ///
+  ///   [storage] - the client's local storage, which decides the backend and
+  ///   the location and so leaves `preference.hiveStoragePath` unread.
+  ///   Borrowed rather than owned: the client detaches from it when it stops,
+  ///   and closing it is the caller's job. Leave it null and the client opens
+  ///   a Hive store under `hiveStoragePath` and closes that itself.
+  ///
+  ///   [reuse] - adopt the session's already-authenticated connection and skip
+  ///   a second PKAM handshake. By default the client opens its own.
+  Future<AtClient> createClient(
+    AtAuthSession session,
+    AtClientPreference preference, {
+    AtClientStorage? storage,
+    bool reuse = false,
+  }) async {
+    preference.rootDomain = session.rootDomain.rootDomain;
+    preference.rootPort = session.rootDomain.rootPort;
+    return AtClient.create(
+      atSign: session.atSign,
+      namespace: session.namespace,
+      preference: preference,
+      atKeysIo: session.atKeysIo,
+      atLookUp: reuse ? session.atLookUp : null,
+      enrollmentId: session.enrollmentId,
+      storage: storage,
+    );
   }
 }

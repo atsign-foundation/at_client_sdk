@@ -1,6 +1,18 @@
 # CHANGELOG
 
 ## 1.1.5
+- feat: `AuthService.createClient` turns a completed authentication into a
+  client the app owns, taking `storage` to decide the backend and the location.
+  Nothing registers it, so an app that manages its own client lifetimes no
+  longer has to go through `AtClientManager`; one that wants the shared
+  current-atSign client goes on calling `AtClientManager.fromAuthSession`.
+  The bundle is borrowed, not owned: the client detaches from it on stop and
+  closing it is the app's job.
+- feat: `FlutterEnrollmentService` takes an optional `atClient`, so it can work
+  against a client the app owns. With none it uses `AtClientManager`'s current
+  client, as it always has.
+- build: require `at_client` ^3.14.1, the first version carrying
+  `AtClient.create`; the floor still said ^3.11.0.
 - feat: `CramDialog` and `PkamDialog` take an optional `authService`, and
   `ApkamActivationDialog` an optional `enrollmentService`. Both default to the
   real service, so existing call sites are unaffected; passing one lets the
