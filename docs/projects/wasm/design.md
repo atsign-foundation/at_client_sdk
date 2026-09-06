@@ -220,7 +220,7 @@ rather than choosing a backend.
 `at_client` owns a storage abstraction covering the keystore **and** the sync queue
 (§2.3), and a bundle is injected rather than located: `hiveStoragePath` is deprecated in
 this major, and its successor is a constructed bundle passed to a new static factory on
-`AtClient`. A location *string* was considered and rejected — it leaves `at_client`
+`AtClient`. A path *string* was considered and rejected — it leaves `at_client`
 constructing the backend, which is what forces a backend import or a conditional barrel
 into the package. `AtKeysIo` (§2.4) is the shape: a neutral interface here, real
 implementations supplied by whoever knows the platform.
@@ -348,7 +348,7 @@ tests; it stops being the route to backend selection. Drop the direct `hive` dep
 once this and §2.2 land.
 
 The global-instance landmine above is the trunk state; the spike already opens the queue on
-`HiveInstances.forPath(path)`, so distinct locations isolate the queue as well as the
+`HiveInstances.forPath(path)`, so distinct paths isolate the queue as well as the
 keystore. Isolation is resolved per location, not per enrollment — see
 [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05).
 
@@ -566,7 +566,7 @@ runtime.** A path is a string everywhere; it only stops meaning anything when so
 tries to open it. The type system never objects.
 
 **Design.** `AtClientPreference` should carry *capabilities* alongside its tuning
-knobs, and the filesystem paths should become an opaque storage location whose
+knobs, and the filesystem paths should become an opaque storage handle whose
 interpretation belongs to the backend — a directory on native, a database name on web.
 
 Two precedents in the same class and its neighbour show the shape:

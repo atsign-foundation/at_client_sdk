@@ -445,8 +445,21 @@ measurement is against `d13516d95`, after them.
 **Found 2026-09-05 by the wrap-up's cold read and done the same day:** the X3 merge-back
 had been skipped. It landed as `51bdb6230`; `at_sync_queue.dart` kept trunk's `SyncQueueStore`
 abstraction and the spike's `HiveInstances.forPath(path)` default together, and the queue's
-`storagePath` became optional so trunk's SQLite storage compiles on the spike. Also owed: nine dangling links to a `plans/wasm/`
-directory that does not exist (`implementation-plan.md`, `js-api.md`, `decisions.md`).
+`storagePath` became optional so trunk's SQLite storage compiles on the spike.
+
+**Also owed: this doc set points at a `plans/wasm/` directory that does not exist**, and
+neither `api-designing.md` nor `key-storage.md` is anywhere on this machine — they were
+working notes that never landed. ⚠️ **Recorded as "nine dangling links" until 2026-09-06,
+and both halves of that were wrong**: the count is ten lines (one of which names both
+files), and only **two** of the ten are markdown links (`implementation-plan.md`, in the
+T-series rows). The other eight are prose references, which no link checker sees —
+`decisions.md` ×3, `js-api.md` ×5. What is owed is
+a decision before an edit: recover the two files, or rewrite every reference to stand
+without them. Re-derive rather than quoting:
+
+```bash
+grep -rn --no-ignore-files 'plans/wasm' docs/projects/wasm/ | grep -v 'a `plans/wasm/`'
+```
 
 **Deferred to the major:** deprecating `AtClientManager`. Its `AtSignChangeListener`
 capability exists only because there is a global current atSign, and where that goes is
@@ -498,7 +511,7 @@ count is sound for at_client's own sync service, and the extension seam is fine 
 - **I8 — Storage backend selectable from `AtClientPreference`.**
   `storage_manager.dart:16` hardcodes `HiveAtPersistenceFactory()` and requires
   `hiveStoragePath`. Introduce the backend choice (`AtPersistenceBackendId` already has
-  `hive` and `sqlite`) and an opaque storage location. Remove the unused
+  `hive` and `sqlite`) and an opaque storage handle. Remove the unused
   `keyStoreSecret` parameter while in the file. Resolve OQ-3 here.
 - **I9 — Backend-neutral `AtSyncQueue`.** Replace the direct `Hive.openBox` at
   `at_sync_queue.dart:121` with a small spec interface plus Hive and SQLite

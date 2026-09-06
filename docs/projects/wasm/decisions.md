@@ -345,26 +345,36 @@ release half) is paused behind this ruling; its release code is kept, its guard 
 Resolves [D-13](#d-13--local-storage-is-isolated-per-atsign-enrollmentid-not-per-atsign-2026-09-05)'s
 open isolation key. Two facts ground it: `HiveInstances.forPath` (pinned upstream, #2776)
 opens the keystore on a distinct instance per canonical path, and the spike's `AtSyncQueue`
-opens the queue on `forPath` too — so two clients of one atSign at **different** locations
-already get separate stores today. What D-13 named as the defect is only that nothing makes
-two enrollments *use* different locations, and nothing catches it when they don't.
+opens the queue on `forPath` too — so two clients of one atSign at **different storage
+paths** already get separate stores today. What D-13 named as the defect is only that
+nothing makes two enrollments *use* different paths, and nothing catches it when they don't.
+
+⚠️ **Two words, kept distinct throughout, because they are not the same thing.** A
+**storage path** is where an impl's files sit — the value it is constructed with. A
+**location** is the identity of the store those files hold: the path *plus* everything else
+that decides which records resolve there, defined by the per-location guard below. One
+path can hold two locations, which is why a directory-only key was wrong.
 
 **1 — Production unchanged; the discriminator is test-supplied.** `at_client` never derives
-a per-enrollment location. A production client hands one location per atSign, exactly as
+a per-enrollment path. A production client hands one storage path per atSign, exactly as
 today — no migration, no cross-repo change, no reliance on `enrollmentId` (which is null when
-storage opens: `_init` builds the store before the id settles). Isolation-per-principal holds
-in production because two enrollments of one atSign are two OS processes with two storage
-directories, and [D-12](#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)'s
-claim already refuses a different principal inheriting a store. `enrollmentId` is a
-*test-fixture* discriminator only — one test process standing in for several. This is a third
-route, chosen over D-13's declined two (per-enrollment subdirectory; enrollment in the box
-name), both of which changed production layout for a case that does not occur in production.
+storage opens: `_init` builds the store before the id settles). Isolation per **enrolled
+principal** (D-13's sense) holds in production because two enrollments of one atSign are two
+OS processes with two storage directories, and
+[D-12](#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)'s
+claim already refuses a different **claim holder** (D-12's sense) inheriting a store.
+`enrollmentId` is a *test-fixture* discriminator only — one test process standing in for
+several. This is a third route, chosen over D-13's declined two (per-enrollment
+subdirectory; enrollment in the box name), both of which changed production layout for a
+case that does not occur in production.
 
-**2 — The location lives on the storage impls.** Each `AtClientStorage` carries its own —
-`HiveAtClientStorage(storagePath)`, `SqliteAtClientStorage(dbPath)`, `InMemoryAtClientStorage`
-(`:memory:`). Not derived from `enrollmentId`, and not a neutral location *string* on
-`AtClient` — D-12 rejected that, since it leaves `at_client` constructing the backend. To
-isolate, construct impls with distinct locations.
+**2 — Each impl decides its own location.** What an `AtClientStorage` is constructed with is
+a storage path — `HiveAtClientStorage(storagePath)`, `SqliteAtClientStorage(dbPath)`,
+`InMemoryAtClientStorage` (`:memory:`) — and the impl derives its location from that path
+together with whatever else decides which records it resolves to (the per-location guard
+below). Not derived from
+`enrollmentId`, and not a neutral path *string* on `AtClient` — D-12 rejected that, since it
+leaves `at_client` constructing the backend. To isolate, construct impls with distinct paths.
 
 **3 — A per-location guard, enforced by the base.** Each impl reports a canonical `location`
 identity; `AtClientStorageBase` keeps a static registry and refuses to open a second storage
@@ -383,7 +393,8 @@ last principal.
 
 **4 — `storage:` is injected on both doors.** An optional `storage:` parameter on the direct
 `create` factory, threaded through `AtClientManager.setCurrentAtSign`; omitting it builds the
-default Hive impl from the location (`preference.hiveStoragePath`, deprecated per D-12).
+default Hive impl from the preference's storage path (`preference.hiveStoragePath`,
+deprecated per D-12).
 Production omits it. The manager's `refuseChangedStoragePath` short-circuit check comes out —
 the per-location guard subsumes it.
 
