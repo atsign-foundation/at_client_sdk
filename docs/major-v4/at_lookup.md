@@ -32,12 +32,27 @@ T4 — flip the return types and delete `getSocket()`** — not "build a split."
 - **T2 — `AtTransport` is already defined as `AtLookupTransport`** (see Context). No new
   interface to write; this task is "confirm the existing bundle is the interface," not
   "design one."
-- **T3 — Remove `Socket getSocket()`.** Declared at
-  `connection/at_connection.dart:10` (with `import 'dart:io'` at `:1`, the only import in
-  that file). Follow through `base_connection.dart` — `late final Socket _socket`
-  (`:10`), the constructor taking `Socket?` (`:14`), `socket.destroy()` (`:39`),
-  `socket.remoteAddress` (`:34`), and the `getSocket()` override itself (`:50-51`) —
-  plus `outbound_connection.dart` and `outbound_connection_impl.dart`.
+- **T3 — Remove `Socket getSocket()` from the abstract `AtConnection` interface
+  only.** Declared at `connection/at_connection.dart:10` (with `import 'dart:io'` at
+  `:1`, the only import in that file) — delete the interface member and that file's
+  `dart:io` import. `base_connection.dart` keeps `late final Socket _socket` and the
+  method body (`:50-51`), just drops `@override`: it's a concrete, native-only method
+  on `BaseConnection` now, not part of the public contract a non-native `AtConnection`
+  implementation would have to satisfy. `outbound_connection.dart` and
+  `outbound_connection_impl.dart` are untouched — `OutboundConnection extends
+  BaseConnection` inherits the concrete method unchanged.
+  **Why not delete it outright:** `monitor.dart:58` in `at_client` holds its connection
+  as `OutboundConnection?` (the concrete type, not `AtConnection`) and calls
+  `.getSocket()` at `:233` — verified at `124982684`. That call site is explicitly
+  out of scope this release (T6, native raw-socket routing, stays open — see Exit), so
+  it must keep compiling. `remote_secondary.dart:149` is the only other in-repo
+  caller, and it's inside `addStreamData`, which `at_client.md`'s own scope deletes in
+  this same release — that removes the one call site that *was* typed through the
+  abstract interface. Net effect: the public `AtConnection` surface loses
+  `getSocket()` (the actual WASM-facing break), while the native-only concrete class
+  keeps it, and `at_client/test/monitor_test.dart`'s stub on `OutboundConnection`
+  passes unchanged — confirmed against `124982684`'s actual class hierarchy, not
+  assumed.
 - **T4 — Retype the three factories at `at_lookup_impl.dart:1312-1338`** off
   `SecureSocket`: `AtLookupSecureSocketFactory.createSocket` (`:1315`, returns
   `Future<SecureSocket>`), `AtLookupSecureSocketListenerFactory.createListener`
@@ -92,18 +107,24 @@ removal at this major and gated by the same file this release already touches
 
 ## Open items
 
-1. **Does `AtTransport`'s shape fit the WebSocket work?** `origin/websocket_test`'s
-   `monitor.dart` calls `connection.underlying.listen(...)`, so `websocket_uptake` adds
-   an `underlying` accessor to whatever this release ships as the transport type. Adding
-   an abstract member later is itself a breaking change — get the owner's exact name and
-   type before T2/T4 land, or state in this doc's own follow-up section that it's
-   deferred and what that costs. **Do not invent the name here.**
+1. **Resolved — `websocket_uptake` does not bind T2/T4's shape.** Checked
+   `at_libraries.git@websocket_uptake` (`e22cffbed`, last commit 2025-01-15) and
+   `origin/websocket_test` (same date) directly: both are ~8-month-stale, single-author
+   spikes, and neither reaches the goal this ladder exists for — `AtWebSocketConnection`
+   there still wraps `dart:io.WebSocket`, so it doesn't solve browser/WASM compat either.
+   Its `AtConnection<T>` + `T get underlying` redesign is a different (broader,
+   unfinished — `base_connection.dart` is left dead in that tree) shape than this
+   release's minimal return-type flip. Decision: proceed independently per T2/T4 as
+   specified above; do not retrofit the generic `underlying` shape. If that spike is
+   ever revived, reconciling it against this release's `AtLookupTransport` is that
+   effort's problem to solve, not a constraint on this one.
 2. **Where does `AtTransport` (as `AtLookupTransport`) live long-term** — `at_lookup` or
    a future `at_transport` package? Deferred by the ladder until the interface is
    written; this release keeps it in `at_lookup` by default.
-3. **Which `at_lookup` checkout is canonical** — this one, or `at_libraries.git @
-   websocket_uptake`, which `origin/websocket_test` overrides to? A cut landed in the
-   wrong checkout is reverted on reconcile — confirm before merging.
+3. **Resolved — this checkout (`packages/at_lookup` in `at_client_sdk`) is canonical
+   for this release.** `origin/websocket_test` points `at_client`'s dependency at
+   `at_libraries.git@websocket_uptake` via a git override, but that branch is dead (see
+   item 1) — there is no active alternative checkout to defer to. T1–T5 land here.
 
 ## Exit — no `wasm_gates.yaml` stanza this window
 
