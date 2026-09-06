@@ -188,7 +188,9 @@ The largest item, and the one breaking change with an unknown external blast rad
 Design in [`design.md`](design.md) §2.1.
 
 - **T1 — Audit `implements AtConnection` and `getSocket()` callers.** In-repo:
-  `remote_secondary.dart`, `monitor.dart`. External implementors are unknown
+  `remote_secondary.dart` — and only that one now. ⚠️ This row said
+  `monitor.dart` too; `Monitor` gave up its socket in X6 and calls `getSocket`
+  zero times. External implementors are unknown
   ([`decisions.md`](decisions.md) OQ-8). **Do this before writing the interface** —
   enumerate the blast radius first.
 - **T2 — Define `AtTransport`.** Inbound `Stream<List<int>>`, a sink,
@@ -199,9 +201,18 @@ Design in [`design.md`](design.md) §2.1.
   through in `base_connection.dart:10,14,50` (`late final Socket _socket`,
   `socket.destroy()`, `socket.remoteAddress`), `outbound_connection.dart` and
   `outbound_connection_impl.dart`.
-- **T4 — Retype the three factories** at `at_lookup_impl.dart:740,749,756` from
-  `SecureSocket` onto `AtTransport`. They are already injectable and already plumbed by
-  S1; the return type is the whole blocker.
+- **T4 — Retype the three factories** — `AtLookupSecureSocketFactory`,
+  `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory`, at
+  `at_lookup_impl.dart:1312,1323,1332` (this row cited `:740,749,756`, which is stale) —
+  from `SecureSocket` onto `AtTransport`. They are already injectable and already plumbed
+  by S1; the return type is the whole blocker.
+  ⚠️ **`AtLookupImpl`'s `dart:io` binding is five occurrences, not a rewrite** (measured
+  2026-09-06): those three factory classes, which are the io implementations co-located at
+  the foot of the file, plus `createOutBoundConnection` at `:834`, whose local is typed
+  `SecureSocket` and which catches `SocketException` — io-typed only because the factory's
+  return type is. Retype the three, move their bodies to `_io`, and the core is io-free
+  with no logic change. `at_lookup.dart`, where `withSecureSocket` lives, imports no
+  `dart:io` at all today.
 - **T5 — `at_lookup_io.dart`.** Native transport wrapping `SecureSocket`; absorb
   `src/util/secure_socket_util.dart` whole (certs, `SecurityContext`, TLS keylog) as
   native-only.
@@ -214,6 +225,33 @@ Design in [`design.md`](design.md) §2.1.
   the two existing escape hatches — the abstract interface, or the `proxy:<host>`
   convention. The production answer is OQ-7.
 - **T8 — Publish `at_lookup` 4.0.0.** → T0 green for at_lookup, T2.2
+- **T9 — Let the APP inject the transport, and thread it to every construction site**
+  (gkc, 2026-09-06). This is the structural gap the rest of phase T does not close:
+  retyping the factories makes a web transport *possible*, but nothing lets an app
+  *supply* one. `at_client_web` needs every `AtLookUp` its process builds to sit on a
+  WebSocket, so the transport joins [`AtClientStorage`](#5a-client-storage-bundle-x) and
+  `AtKeysIo` as a thing the app hands in.
+  **Six production sites hardcode `secureSocketTransport(...)`, in three packages**
+  (measured 2026-09-06): at_client `client/remote_secondary.dart:150` and
+  `service/notification_service_impl.dart:92` — the only two files in at_client importing
+  `at_lookup_io.dart`, and the sync service inherits the first through its own
+  `RemoteSecondary`; at_auth `at_auth_impl.dart:151` and `:259` and
+  `enroll/enrollment_handshake.dart:61`; at_server_status `at_status_impl.dart:115`.
+  ⚠️ **at_auth is not optional here.** A web app authenticates *before* it has an
+  `AtClient`, so an injection that reaches only at_client still drags `dart:io` through
+  onboarding, `authenticate` and the enrollment handshake. The transport is an
+  ecosystem-level injection, not an at_client parameter.
+  ⚠️ **The factory is nearer neutral than "not yet built":** `withSecureSocket` already
+  takes an `AtLookupTransport`, so what is missing is a neutral NAME and an io-free
+  `AtLookupImpl` for it to construct (T4). Its own dartdoc anticipates the sibling:
+  "Named for its transport, so a differently-transported factory can join it later rather
+  than this one growing a mode flag."
+  **Open: where the injected transport lives.** `AtClientPreference` is the wrong home —
+  it is a data bag, the transport is a live object carrying three factories, and
+  `setPreferences` would make it swappable mid-life. Reading it off `AtClient` matches
+  `atKeysIo` exactly and reaches `NotificationServiceImpl` and `SyncServiceImpl`, which
+  build their own connections; a shared platform bundle carrying transport + storage +
+  keysIo is the other shape. Not settled.
 
 ---
 
@@ -416,6 +454,25 @@ D-12. Independent of the P series, which is `at_server`-side.
     ⚠️ **The "back-pressure seam is unreachable" half of this row was WRONG.** The seam is
     explicit on `AtLookupMuxable.notifications`, wired to `pauseDelivery()` and pinned by
     at_lookup's own tests — at_client simply never reached it. One pause fixes both halves.
+  ⛔ **THREE connections to the atServer is the default, and stays** (gkc, 2026-09-06): the
+  verb processor, the monitor, and the sync service. That has been at_client's behaviour all
+  along and nothing here changes it — `AtClientImpl._init` builds the first through
+  `buildRemoteSecondary`, `NotificationServiceImpl` hands `Monitor` a FRESH lookup, and
+  `SyncServiceImpl.create` builds its own `RemoteSecondary`. The `monitor:` and
+  `remoteSecondary:` injection points are test-only; at_auth's `reuse: true` supplies the verb
+  connection rather than adding a fourth, so the count is three either way.
+  ⚠️ **Nothing pins this**, and `Monitor`'s dartdoc still offers the collapse to two ("or the
+  one `RemoteSecondary` already holds"). It carries two reasons against — no atServer
+  implements `monitor:multiplexed`, and `_onNotification` pauses the connection while a
+  handler runs, which on a shared socket would deadlock the handler's own put — but it reads
+  as an option rather than a ruling. A test asserting the three lookups are distinct instances
+  would need a `@visibleForTesting` getter for sync's, which is private. Owed, not done.
+  ⚠️ **Sync's promptness rides on the MONITOR connection, not its own.**
+  `statsServiceListener` subscribes to `statsNotification` through the notification service
+  and enqueues a system sync on each one; its own connection carries only `sync:`, `batch:`
+  and `stats:3`. So a monitor that goes silently deaf costs sync its trigger and drops it to
+  the 30-second `_periodicSyncInterval` safety net — which is what the watchdog above now
+  catches.
   - **The socket-alive-but-silent watchdog is back**, as `AtClientPreference.
     monitorSilenceTimeout` (default 60s, `Duration.zero` off) driving a timer in `Monitor`
     that rebuilds through `stopNotifications`/`startNotifications`.
