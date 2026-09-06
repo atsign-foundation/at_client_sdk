@@ -325,6 +325,12 @@ D-12. Independent of the P series, which is `at_server`-side.
     distinct paths report distinct locations and are let through, while the box named
     `sha(atSign)` on the global instance is the same one. The plan's earlier
     "already present on the spike" was true of the spike and false of trunk.
+    ✅ **The override is now removable: `at_persistence_secondary_server` 5.3.0 was published
+    2026-09-06 (gkc) and carries `HiveInstances.forPath`** — verified by unpacking the pub.dev
+    archive: `lib/src/impl/hive/hive_instances.dart` is present with `forPath`, and `hive.dart`
+    exports it. **Owed on #2208:** drop the `dependency_overrides` block, take the constraint to
+    `^5.3.0`, and re-run the packs. Until that lands the branch pins a git ref to an unpublished
+    commit, which is what made it awkward to merge to trunk.
   - **The location key needed the atSign**, not just the directory — see
     [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05).
   - **Moving the queue onto a per-path instance exposed a latent lost-delete.** A delete
@@ -398,6 +404,16 @@ D-12. Independent of the P series, which is `at_server`-side.
   authenticates without supplying it, so a #2787 server refuses bare `pkam:` (AT0401).
   Both are addressed by the X4a rework and the enrollment-fixture sweep, not by the
   release code itself.
+
+⛔ **X5 and X6 stack on #2208** (gkc, 2026-09-06). Both need the `storage:` injection that
+lands there — X5 to hand each file its own bundle, X6 to move the consumers onto the factory —
+so neither can be trunk-based until #2208 merges, and #2208 is not to grow further.
+⚠️ **A stacked PR gets no real CI**: the workflows trigger on `pull_request` to `trunk` only,
+so a PR based on `gkc-at-client-storage-release` shows two trivial checks. Dispatch
+`at_client_sdk` and `at_libraries` by `gh workflow run --ref <branch>` on every push, and
+retarget to trunk once the base merges. That signal is not optional here: CI is what caught
+both regressions of 2026-09-06 — the lost delete and the enrollment-id defect — neither of
+which any local run could see.
 
 - **X5 — Move the functional pack onto an in-memory bundle per file.** The named consumer:
   `test_utils.dart` shares `test/hive/client/$atsign` across every file, so one file
