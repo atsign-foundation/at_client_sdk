@@ -15,7 +15,6 @@ dependencies:
   crypton: ^2.2.1
   crypto: ^3.0.5
   ecdsa: ^0.1.0
-  dart_periphery: ^0.9.5
   elliptic: ^0.3.10
   pointycastle: ^3.9.1
   at_commons: ^5.6.0
@@ -27,6 +26,9 @@ dependencies:
   pqcrypto: ^0.3.0
 
 dev_dependencies:
+  # Used only by example/zariot — FFI-based, and keeping it out of
+  # `dependencies` keeps dart:ffi off every consumer's resolved graph.
+  dart_periphery: ^0.9.5
   lints: ^6.0.0
   test: ^1.25.0
   collection: ^1.19.1
