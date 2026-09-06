@@ -18,7 +18,7 @@
   client and the enrollment UI works without `AtClientManager`; it previously
   reached the current-atSign client at five sites and threw for such an app.
   A service the widget did not build is no longer disposed with the widget.
-- build: require `at_client` ^3.14.1, the first version carrying
+- build: require `at_client` ^3.15.0-rc1, the first version carrying
   `AtClient.create`; the floor still said ^3.11.0.
 - feat: `CramDialog` and `PkamDialog` take an optional `authService`, and
   `ApkamActivationDialog` an optional `enrollmentService`. Both default to the

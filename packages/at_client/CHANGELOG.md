@@ -1,4 +1,4 @@
-## 3.14.1
+## 3.15.0-rc1
 - feat: at_client builds its connections through `AtLookUp.withSecureSocket`,
   which returns the muxable that owns reconnect, reauth and heartbeat. Requires
   `at_lookup` ^3.7.0-rc1. Credentials travel as an `AtAuthenticator` built from

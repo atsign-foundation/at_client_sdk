@@ -20,7 +20,7 @@ dependencies:
   at_chops: ^3.0.0
   at_lookup: ^3.5.0
   at_auth: ^4.0.0-rc1
-  at_client: ^3.14.1
+  at_client: ^3.15.0-rc1
   encrypt: ^5.0.3
   intl: ^0.20.2
   file_picker: ^11.0.02
