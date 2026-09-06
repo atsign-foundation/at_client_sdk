@@ -218,7 +218,7 @@ rather than choosing a backend.
 
 **Design** (ruled by [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)).
 `at_client` owns a storage abstraction covering the keystore **and** the sync queue
-(§2.3), and a bundle is injected rather than located: `hiveStoragePath` is deprecated in
+(§2.3), and a bundle is injected rather than named by a path: `hiveStoragePath` is deprecated in
 this major, and its successor is a constructed bundle passed to a new static factory on
 `AtClient`. A path *string* was considered and rejected — it leaves `at_client`
 constructing the backend, which is what forces a backend import or a conditional barrel
@@ -289,14 +289,17 @@ abstract class AtClientStorage {
 - **`clear()` empties keystore and queue together**, and forgets the last principal.
   `detach()` stamps the departing holder as the last principal, so a holder that clears
   and then keeps writing is still guarded; the fixture sequence is detach, clear, next.
-- **Isolation is per *location*, and distinct locations already separate two clients of one
-  atSign.** The keystore opens on `HiveInstances.forPath(storagePath)` (pinned upstream,
+- **Isolation is per *location*, and two clients of one atSign at distinct storage paths
+  are already separated.** The keystore opens on `HiveInstances.forPath(storagePath)` (pinned upstream,
   #2776) and the spike's queue does the same, so two `HiveAtClientStorage` objects for one
   atSign at **different** paths get separate stores today; only the **same** path shares.
   The guard is therefore per-location, not per-atSign: each impl reports a canonical
   `location` and `AtClientStorageBase` refuses a second open at one already open — allowing
   N distinct-location clients of one atSign (the multi-enrollment fixture) while catching an
-  accidental shared path. X4's per-atSign guard was the wrong shape. The full design —
+  accidental shared *location*. ⚠️ Not a shared *path*: two atSigns under one directory are
+  two boxes that share nothing, and the e2e fixtures rely on that, so a directory-only key
+  would refuse them. This sentence said "shared path" until 2026-09-06, which the ruling it
+  cites contradicts. X4's per-atSign guard was the wrong shape. The full design —
   test-supplied locations, `storage:` injected on `create` and the manager, and the
   injected-vs-owned close lifecycle — is
   [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05). A half-cleared store —

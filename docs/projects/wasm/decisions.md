@@ -318,7 +318,7 @@ qualify at each use.)
 **The defect this names.** Today storage is keyed by the atSign alone, a survival of the
 one-client-per-atSign era: the keystore box is `sha256(atSign)`, the sync-queue box is
 `syncqueue_<sha256(atSign)>`, and `AtClientImpl` takes `preference.hiveStoragePath`
-verbatim — nothing derives a per-enrollment location. Two enrollments handed the same
+verbatim — nothing derives a per-enrollment storage path. Two enrollments handed the same
 path therefore share one box; on the global Hive instance they are literally one store.
 `HiveInstances.forPath(path)` isolates by *path*, but nothing makes two enrollments *use*
 different paths, and the per-atSign "refuse the second client" guard built during X4
@@ -327,9 +327,9 @@ merely hid the collision rather than isolating the data.
 **Resolved — the isolation key.** See
 [D-14](#d-14--the-storage-isolation-design-2026-09-05). Neither route below was taken: both
 changed production's on-disk layout for a case that does not occur in production (one
-enrollment per atSign per process). The location stays atSign-keyed in production and is
-*test-supplied* where a single process stands in for several enrollments, with a per-location
-guard catching accidental sharing. The declined routes were a per-enrollment subdirectory
+enrollment per atSign per process). Production keeps one storage path per atSign, and the
+per-enrollment discriminator is *test-supplied* where a single process stands in for several
+enrollments, with a per-location guard catching accidental sharing. The declined routes were a per-enrollment subdirectory
 (`<hiveStoragePath>/<enrollmentId>`) and the enrollment in the box name
 (`sha(atSign|enrollmentId)`, cross-repo).
 
@@ -388,8 +388,9 @@ canonical dir"; building it showed that key is too coarse, and the test *two atS
 one directory both open* now pins it.) This
 is the correctly-shaped replacement for X4's per-**atSign** guard, which blocked legitimate
 distinct-location multi-enrollment and did not generalise to SQLite. N clients of one atSign
-at N distinct locations pass; two at one location throw, the error naming the location and the
-last principal.
+at N distinct locations pass; two at one location throw, the error naming the location and
+the last **claim holder** — which `principalOf` renders as `atSign|enrollmentId`, so it
+carries the enrolled principal too.
 
 **4 — `storage:` is injected on both doors.** An optional `storage:` parameter on the direct
 `create` factory, threaded through `AtClientManager.setCurrentAtSign`; omitting it builds the

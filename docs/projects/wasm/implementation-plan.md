@@ -422,10 +422,60 @@ retarget to trunk once the base merges. That signal is not optional here: CI is 
 both regressions of 2026-09-06 — the lost delete and the enrollment-id defect — neither of
 which any local run could see.
 
-- **X5 — Move the functional pack onto an in-memory bundle per file.** The named consumer:
-  `test_utils.dart` shares `test/hive/client/$atsign` across every file, so one file
-  inherits the next's pending sync queue and the next client's scoped enrollment is refused
-  `AT0009` pushing keys it did not write. Depends on X3.
+- **X5 — Each functional test file gets its own storage, on a selectable backend.**
+  ✅ **BUILT 2026-09-06, and not on this branch.** It is
+  [#2210](https://github.com/atsign-foundation/at_client_sdk/pull/2210) on
+  `gkc-x5-functional-storage`, stacked on #2208. ⛔ **This row said "Move the functional
+  pack onto an in-memory bundle per file … Depends on X3" until 2026-09-06**, which would
+  have sent a reader to rebuild finished, CI-green work. **The detail lives in that
+  branch's copy of this row — read it there, not here**, and this row stays a pointer
+  until the merge-back folds the two.
+  Three things worth knowing before then, because they change what the row asked for:
+  gkc ruled the backend is chosen by an environment variable (`AT_FUNCTIONAL_STORAGE`,
+  Hive by default) with two extra beta-only CI jobs for `sqlite` and `memory`; "a bundle
+  per file" is not buildable as written, since a bundle is bound to one atSign, so the
+  unit is per *(file, atSign)*; and the `AT0009` consumer this row named is **not in the
+  trunk-based pack** — there is no PQ namespace-key test there (0 matches, against 12 on
+  this branch). The real consumer was `enrollment_test`, whose scoped enrollments shared
+  one atSign's store with seventeen other files.
+  Depends on X3.
+**⛔ THIS SECTION EXISTS IN THREE DIVERGING COPIES, and no one of them is true.** Found by
+a cold read 2026-09-06. The spike has D-13, D-14 and the X4a row; `gkc-at-client-storage-release`
+and `gkc-x5-functional-storage` have neither ruling and the pre-D-14 X4 text; only the X5
+branch knows X5 is built. **The branches carrying the code carry the stalest plan.** Nothing
+can catch this: `docs/projects/wasm/` is read by no test, script or workflow, unlike
+`docs/projects/pq/`, on which the whole acceptance rig is anchored. Re-derive the spread
+rather than trusting any single copy:
+
+```bash
+for w in at_client_sdk at_client_sdk-x4a at_client_sdk-x5; do
+  echo "== $w"; grep -c 'D-14' ~/dev/atsign/repos/$w/docs/projects/wasm/decisions.md
+done
+```
+
+**Owed, found while building X5 and each verified in source, none of them fixed:**
+
+- **`AtClientImpl.create` silently discards an injected `storage` for an atSign already in
+  `atClientInstanceMap`.** The cached branch adopts `preferences.crypto` and documents that
+  `atKeysIo` and `atChops` are honoured only on first construction; it says nothing about
+  `storage`, never attaches it, and neither errors nor logs. ⚠️ **The unsafe door is the one
+  [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05) point 5 tells fixtures to
+  use** — "builds each via direct `create` with its own injected located storage" — and
+  because the bundle is never attached, the per-location guard cannot fire either, so both
+  mechanisms fail silently at once. The manager door is safe: a different bundle fails the
+  short-circuit, and `stop()` evicts the client from the cache before `create` runs again.
+- **An injected bundle is a silent no-op when `isLocalStoreRequired` is false.** `_init`
+  guards the whole storage block on it, so the storage is never attached and `stop()` has
+  nothing to release. A caller believing it supplied storage is wrong, with no signal.
+- **On SQLite, store failures escape at_client's `on DataStoreException` handlers.** Measured
+  with a control: the Hive keystore names `DataStoreException` 28 times in 5.3.0, the SQLite
+  one once, and `local_secondary.dart` has four handlers. They log and rethrow, so the cost is
+  a lost diagnostic line rather than wrong behaviour — which is why the pack is green on
+  `sqlite`. Worth knowing before diagnosing a SQLite-backed failure.
+- **`InMemoryAtClientStorage` keys its location on `identityHashCode`**, a hash and not an
+  identity, so two live in-memory storages whose hashes collided would be refused as one
+  store. Negligible at the handful per process the pack opens; wrong in principle.
+
 - **X6 — Consumers.** `at_client_flutter` and `at_onboarding_cli` move onto the factory, so
   both are WASM-ready ahead of the next major. Whether they move in this major or the next
   is open.
