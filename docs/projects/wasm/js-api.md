@@ -13,7 +13,7 @@ sequencing see [`implementation-plan.md`](implementation-plan.md); for the gates
 (D-10) and `AtCollection<T>` (`packages/at_client/lib/src/collections/collections.dart`)
 is the sole JS/TS data plane (D-9 amended, D-11 added). §6, §8, §9, §10 and §11 updated to
 match; see `decisions.md` §2.6 for the measured findings this rewrite is based on and
-`plans/wasm/api-designing.md` §2.3–§2.4 for the Dart-side (Layer B/C) shape.
+the Layer A/B/C design note §2.3–§2.4 for the Dart-side (Layer B/C) shape.
 
 ## Table of contents
 
@@ -139,7 +139,7 @@ Measured by compiling the same facade both ways:
 | Loading                      | `require` / `<script>`; runs `main()` on load                                           | fetch → `compile` → `instantiate` → `invoke`                                             |
 | Bundlers                     | **trivial — it is just JavaScript**                                                     | manual `.wasm` asset handling, per bundler                                               |
 | Browsers                     | **universal**                                                                           | Chrome 119+ / Firefox 120+ / Safari 18.2+                                                |
-| CSP                          | **nothing special**                                                                     | requires `script-src 'wasm-unsafe-eval'`                                                 |
+| CSP                          | ⚠️ **not "nothing special"** — see §8a                                                   | requires `script-src 'wasm-unsafe-eval'`                                                 |
 | Node                         | works; needs the shim in [§7](#7-typescript-supplied-implementations-and-node)          | works unmodified                                                                         |
 | `is` / `as` on interop types | **correct**                                                                             | **broken** — all interop types share one `externref` representation                      |
 | Promises                     | **real native `Promise`**                                                               | `JSPromise` (also awaitable)                                                             |
@@ -183,12 +183,17 @@ that here rather than letting it erode silently.
 2. **"No `dart:html` / `dart:js`" becomes self-imposed.** Under dart2wasm it was
    compiler-enforced. Under dart2js it is a policy kept in order to leave dart2wasm open
    — so it moves into [`acceptance.md`](acceptance.md) T0.1 as an explicit rule.
-3. **`cryptography`'s Web Crypto path becomes reachable.** Open question C1 exists
-   because `cryptography` 2.x's browser path uses `dart:html`, which dart2wasm rejects.
-   Under dart2js that path *works*. The question changes from "will it compile?" to
-   "which path does it select, and is it faster?" — and a Web Crypto-backed Argon2id and
-   AES could remove the deferred performance work entirely. See
-   [§11](#11-open-questions).
+3. **The Web Crypto path becomes reachable — for `better_cryptography`, not
+   `cryptography`.** *(Corrected 2026-08-30; the original claim here misattributed the
+   dependency.)* `cryptography` uses `dart:js_interop` and a **runtime**
+   `window.isSecureContext` probe, so its branch is selected under *both* web targets and
+   the compiler does not decide it. The package that genuinely requires `dart:html` is
+   **`better_cryptography`**, which backs the **default AES path** and selects its backend
+   at compile time via `dart.library.html`. So under dart2js, AES becomes Web
+   Crypto-backed; under dart2wasm it stays pure Dart.
+   Argon2id is **not** affected either way: `cryptography` 2.9.0 has no Argon2id override
+   and Argon2id is absent from the WebCrypto spec, so the deferred Argon2id work stands.
+   See [`design.md`](design.md) §C1 and [§11](#11-open-questions).
 4. **Storage gets safer, not riskier.** `package:sqlite3`'s web support was originally
    built for dart2js — `common.dart` documents interfaces implemented by "the `dart:ffi`
    and the `dart:js` WASM version". The validated dart2wasm compile was the *less*
@@ -206,9 +211,10 @@ product; the compiler is a packaging decision.*
 **Inside `at_client_web`.** No new Dart package;
 [`decisions.md`](decisions.md) D-4 stands unamended.
 
-1. **The npm package is not a Dart package.** It is a build artifact — the compiled
-   `.js`, a hand-written `index.js` wrapper, and a hand-written `index.d.ts`. Publishing
-   to npm implies no pub package.
+1. **The npm package is not a Dart package.** It is a build artifact — the compiled Dart
+   `.js` engine plus a wrapper **authored once in TypeScript**, from which both the
+   shipped `.js` and the `.d.ts` are generated (§8, D-20). Publishing to npm implies no
+   pub package.
 2. **The facade is an entry point, not a library.** `dart compile js` compiles a
    *program*. The facade only exists because a `main()` calls `createJSInteropWrapper`
    and installs the result. Packages ship entry points routinely without being split.
@@ -221,7 +227,9 @@ packages/at_client_web/
   lib/at_client_web.dart        # Dart-facing platform impls — unchanged by this doc
   lib/src/js/                   # the @JSExport facade, marshalling, error mapping
   web/at_client_js.dart         # main() that installs the facade  ← dart compile js
-  npm/                          # package.json, index.js, index.d.ts (hand-written)
+  npm/src/                      # index.ts + shim.ts — hand-written TypeScript, the ONLY
+                                #   hand-maintained facade source
+  npm/dist/                     # index.js + index.d.ts — GENERATED by tsc, never edited
 ```
 
 **Recorded wrinkle:** `at_client_web` then does two jobs, and its name says "web" while
@@ -240,6 +248,33 @@ is **removed**, not deprecated in place. `AtCollection<T>`
 `at_client.dart:28`) is the **sole** JS/TS data plane. The older `at_collection/` tree
 (`AtCollectionModel`, `AtJsonCollectionModel`, factories) is `@Deprecated` at
 `at_client.dart:31-38` in favour of it and is never bound — see [§9](#9-deliberately-excluded).
+
+### 5.0 Binding rule: every protocol operation returns a `Promise`
+
+**No synchronous escape hatch may ship, for any operation that could later touch storage or
+the network.** No `getSync`, no synchronous getter that reads data.
+
+```ts
+// NEVER
+const value = client.getSync('key.atsign');
+
+// ALWAYS
+const value = await client.get('key.atsign');
+```
+
+**Why this is a rule and not a style preference.** The first browser release is remote-only
+with an in-memory cache ([`decisions.md`](decisions.md) D-13), and Dart runs on the main
+thread (D-15). Some operations *could* therefore return synchronously today. If any of them
+does, the V2 storage upgrade — SQLite, possibly in a Worker, both asynchronous — becomes a
+**breaking change to a published npm surface** for every consumer that adopted the
+synchronous form.
+
+Holding the surface async from day one makes V2 a purely internal refactor that the host
+page never observes. It costs nothing now and cannot be retrofitted later.
+
+Recorded as D-16.
+
+---
 
 ### 5.1 Why no raw key plane is exposed at all
 
@@ -455,15 +490,61 @@ bare `await`.
 
 ## 8. npm packaging
 
+> **Corrected 2026-08-30 (D-20).** An earlier version of this section specified a
+> hand-written `index.js` *and* a hand-written `index.d.ts`. That is two hand-maintained
+> descriptions of one surface, and they will drift. **Author the wrapper once, in
+> TypeScript; generate both outputs from it.**
+
 ```
-@atsign/at-client
-  package.json        # GENERATED by build tooling, not hand-committed — see below
-  index.js            # sets globalThis.self on Node, loads the bundle, wraps the raw
-                       # facade in a real ES class, re-exports it
-  index.d.ts          # hand-written; documentation value, not generated (see below)
-  at_client.js        # dart compile js output
-  at_client.js.map
+src/                  # hand-written — the only facade source
+  shim.ts             # Node globals; MUST be imported before the engine (see below)
+  index.ts            # imports the internal engine, wraps it in a real ES class,
+                      #   enforces the Promise-only surface (§5.0), maps errors
+
+dist/                 # GENERATED by tsc — never hand-edited, never reviewed for style
+  index.js            # what a vanilla-JS consumer executes
+  index.d.ts          # what gives TS consumers autocomplete
+  index.js.map
+
+at_client.js          # dart compile js output — internal engine, not a public entry point
+at_client.js.map
+package.json          # GENERATED by build tooling, not hand-committed — see below
 ```
+
+**Why this and not hand-written JS:**
+
+- **The behaviour and the types cannot misalign**, because they are emitted from the same
+  file. Drift is not managed, it is impossible.
+- **One bug surface.** Changing how the facade talks to the Dart engine is one edit.
+- **Vanilla-JS consumers are unaffected.** They import `dist/index.js` and neither know nor
+  care that it was authored in TypeScript — while their editor quietly reads the `.d.ts`
+  and gives them autocomplete anyway.
+
+The Dart-generated `at_client.js` stays **strictly internal**: it is not a documented entry
+point, and `package.json`'s `exports` must not expose it.
+
+⚠️ **One trap, created by this package's own Node shim.** §7 requires
+`globalThis.self = globalThis` to run **before** the compiled Dart bundle loads. ES module
+imports are hoisted and evaluated before the importing module's body, so the obvious
+TypeScript is silently wrong:
+
+```ts
+// BROKEN — the import is evaluated first; every Promise then hangs, with no error
+globalThis.self = globalThis;
+import './at_client.js';
+```
+
+Put the assignment in its own module and import it first, since imports evaluate in order:
+
+```ts
+// index.ts
+import './shim.js';        // side-effect module — sets globalThis.self
+import './at_client.js';   // now safe
+```
+
+A dynamic `await import('./at_client.js')` after the assignment also works. **Whichever is
+chosen, it needs a timeout-bounded test** — the failure mode is a silent hang, not an
+error, which is exactly the class of bug this programme exists to remove.
 
 Notes:
 
@@ -512,14 +593,72 @@ Notes:
 
   This is where a `@JSExport`-produced object becomes a real, `instanceof`-checkable,
   autocomplete-friendly class — the compiled facade cannot do this on its own, and no
-  amount of Layer B design (`plans/wasm/api-designing.md`) fixes it, because the
+  amount of Layer B design (see the Layer A/B/C design note) fixes it, because the
   limitation is in `@JSExport` itself.
 - **The `.d.ts` stays hand-written.** Sass keeps its `.d.ts` in a *separate repo*
   (`sass/sass` → `js-api-doc/index.d.ts`), framed explicitly as user-facing documentation
-  rather than generated types. `plans/wasm/api-designing.md` §2.6 (re-costed 2026-08-18
+  rather than generated types. The Layer A/B/C design note §2.6 (re-costed 2026-08-18
   for Layer B's generics) recommends **drift detection** — a CI diff of generated-vs-committed
   — over full generation, for the same reason: a hand-authored `.d.ts` carries
   documentation value generated output loses. See [§11](#11-open-questions) JS-5.
+
+---
+
+## 8a. The deployment contract
+
+**What the host must provide.** This section exists because the three browser concerns —
+serving the build, storing keys, and integrating an identity provider — all meet here, and
+no earlier document owned it.
+
+### 8a.1 Hard requirements
+
+| # | Requirement | Consequence if omitted |
+| --- | --- | --- |
+| 1 | **A secure context** — HTTPS, or `localhost` | `crypto.subtle` is **absent, not degraded**. The non-extractable key-wrapping key cannot be generated at all, so the browser key store fails outright |
+| 2 | `script-src 'wasm-unsafe-eval'` | Required for **any** Dart web build. See 8a.2 — the "dart2js needs nothing" row above is wrong |
+| 3 | `application/wasm` MIME on `.wasm` responses | Streaming instantiation fails |
+| 4 | `worker-src blob:` | Needed if any part of the stack moves off the main thread |
+
+**Requirement 1 is functional, not hygiene.** A spike served over plain http measures a
+configuration that cannot ship: it would report the key-storage design as broken and every
+accelerable crypto primitive as pure Dart. **Serve the host page over HTTPS or localhost
+from the first commit.**
+
+Absence of `crypto.subtle` must **fail loudly** and must never silently degrade to
+plaintext storage.
+
+### 8a.2 Why "dart2js needs nothing" was wrong
+
+The compile-target table above credits dart2js with requiring no CSP allowance. That holds
+for the *Dart bundle* alone, and only while nothing else in the stack is WebAssembly.
+
+It stops holding the moment a local store returns: SQLite-wasm is fetched from a URL at
+runtime, ~1 MB+, **regardless of which Dart compiler produced the bundle**. The serving
+requirement is therefore **compiler-independent** — which is precisely what the dart2js
+framing hid.
+
+Under D-13 the default V1 payload carries no such asset, which is a real payload win. It
+becomes the default in V2 — and a consumer who injects a SQLite bundle before then takes on
+the serving requirement with it.
+**Whoever owns the deployment contract must own that asset: its origin, its MIME type, and
+whether the npm package ships it.**
+
+### 8a.3 Explicitly *not* required
+
+| Header | Status |
+| --- | --- |
+| `COOP: same-origin` / `COEP: require-corp` | **Not required, and deliberately avoided.** Only a `SharedArrayBuffer`-based VFS would need them, and D-18 rejects that option. Cross-origin isolation severs `window.opener`, which would break popup OIDC flows |
+
+### 8a.4 Keep asset locations configurable
+
+Do not hard-code same-origin paths for the `.wasm` bundle or any runtime-fetched asset.
+CDN and sub-path deployments are normal, and under any future `COEP: require-corp` a
+cross-origin asset additionally needs CORP/CORS headers from the CDN.
+
+### 8a.5 Release ownership
+
+The `.d.ts` and npm release path has no CI, no versioning convention, and no named owner.
+Serving is not only headers — it is a release pipeline. This blocks any non-`0.x` publish.
 
 ---
 
@@ -574,7 +713,7 @@ Notes:
   project's own T6/T4 gates exercise it against a live atServer — the marker reflects a
   gap in *our* boundary validation, not upstream's contract.
 - **No `dispose()` on `AtCollection`, at all.** Every reference SDK in Axis C
-  (§1 of `plans/wasm/api-designing.md`) has an explicit cleanup call
+  (§1 of the Layer A/B/C design note) has an explicit cleanup call
   (`removeChannel`, `stopClient`). Upstream's own comments (`collections.dart:439`/`:447`)
   acknowledge the gap ("Held so a future `dispose()` can cancel cleanly"), and
   `availableEvents`' scheduler runs for the collection's lifetime regardless
@@ -641,7 +780,7 @@ change; document the gap and ship read-compatibility in the meantime.**
 `static final AtClientManager _singleton` driven by `setCurrentAtSign(...)`. A JS
 consumer calling `AtClient.create({atSign: '@alice'})` then `AtClient.create({atSign:
 '@bob'})` expects two independent clients — every reference SDK in Axis C
-(`plans/wasm/api-designing.md` §1) is multi-instance by construction — but today the
+(Layer A/B/C design note §1) is multi-instance by construction — but today the
 second call mutates global state under the first. **Interim: ship documented as one
 atSign per page/process, plus a facade-level `AtFailure.alreadyInitialised` thrown on a
 second *distinct* atSign** (converts silent corruption into a clear error, ~10 lines in
