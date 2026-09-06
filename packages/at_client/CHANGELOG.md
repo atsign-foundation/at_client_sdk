@@ -1,4 +1,13 @@
 ## 3.14.1
+- feat: `AtClient.create` builds a client and wires its notification, sync and
+  enrollment services, taking `storage` as a named parameter alongside
+  `atKeysIo`. It registers nothing: the client is unknown to `AtClientManager`
+  and the caller owns its lifetime, which is what an app managing its own
+  clients needs. `AtClientManager` is unchanged, so code using it sees no
+  difference. A service builder replaces any of the three services. The
+  factory refuses an atSign whose client is already live rather than handing
+  back one the caller does not own, and refuses a `storage` that
+  `isLocalStoreRequired: false` would never open.
 - feat: `AtClientStorage.isHeldBy` says whether a given client is the one
   currently holding the storage.
 - fix: `setCurrentAtSign` no longer rebuilds the client when it is handed the

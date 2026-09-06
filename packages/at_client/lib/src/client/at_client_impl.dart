@@ -257,6 +257,13 @@ class AtClientImpl implements AtClient {
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
 
+  /// Whether a live client is already filed for [atSign].
+  ///
+  /// [atClientInstanceMap] is keyed by atSign, so two enrollments of one
+  /// atSign share an entry. [stop] removes the entry, freeing the atSign.
+  static bool holdsLiveClient(String atSign) =>
+      atClientInstanceMap.containsKey(AtUtils.fixAtSign(atSign));
+
   static final Finalizer<String> _finalizer = Finalizer((service) {
     _logger.finer('Outgoing $service has been garbage collected');
   });

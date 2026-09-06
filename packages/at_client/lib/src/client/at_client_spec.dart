@@ -1,17 +1,89 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtEnrollment, AtKeysIo;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
+import 'package:at_client/src/service/enrollment_service_impl.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
+  /// Builds a client for [atSign] and wires its notification, sync and
+  /// enrollment services.
+  ///
+  /// Nothing registers the client this returns. It is unknown to
+  /// [AtClientManager], and the caller owns its lifetime, ending it with
+  /// [stop]. Code that wants the shared current-atSign client goes on calling
+  /// [AtClientManager.setCurrentAtSign], whose behaviour is unchanged.
+  ///
+  /// [storage] is borrowed rather than owned, so [stop] detaches from it
+  /// without closing it and the caller closes it when done. Supply none and
+  /// the client opens a Hive store under `preference.hiveStoragePath` and
+  /// closes that itself.
+  ///
+  /// Each builder replaces one service with the caller's own; by default each
+  /// service is the real one.
+  ///
+  /// Throws a [StateError] when a client for [atSign] is already live, rather
+  /// than handing back one this caller does not own. [stop] releases it.
+  static Future<AtClient> create({
+    required String atSign,
+    required AtClientPreference preference,
+    String? namespace,
+    AtClientStorage? storage,
+    AtKeysIo? atKeysIo,
+    String? enrollmentId,
+    AtLookUp? atLookUp,
+    SecondaryAddressFinder? secondaryAddressFinder,
+    FutureOr<NotificationService> Function(AtClient)?
+        notificationServiceBuilder,
+    FutureOr<SyncService> Function(AtClient)? syncServiceBuilder,
+    FutureOr<EnrollmentService> Function(AtClient)? enrollmentServiceBuilder,
+  }) async {
+    if (AtClientImpl.holdsLiveClient(atSign)) {
+      throw StateError(
+          'A client for $atSign is already live. AtClient.create builds a '
+          'client the caller owns, so it will not hand back one owned '
+          'elsewhere; stop() the existing client first.');
+    }
+    if (storage != null && !preference.isLocalStoreRequired) {
+      throw ArgumentError.value(
+          storage,
+          'storage',
+          'preference.isLocalStoreRequired is false for $atSign, so this '
+              'storage would never be opened');
+    }
+    final client = await AtClientImpl.create(
+      atSign,
+      namespace,
+      preference,
+      atKeysIo: atKeysIo,
+      atLookUp: atLookUp,
+      enrollmentId: enrollmentId,
+      storage: storage,
+    );
+    client.notificationService = notificationServiceBuilder == null
+        ? await NotificationServiceImpl.create(client,
+            secondaryAddressFinder: secondaryAddressFinder)
+        : await notificationServiceBuilder(client);
+    client.syncService = syncServiceBuilder == null
+        ? await SyncServiceImpl.create(client)
+        : await syncServiceBuilder(client);
+    client.enrollmentService = enrollmentServiceBuilder == null
+        ? EnrollmentServiceImpl(client, AtEnrollment.create())
+        : await enrollmentServiceBuilder(client);
+    return client;
+  }
+
   @experimental
   set telemetry(AtTelemetryService? telemetryService);
 
