@@ -5,6 +5,10 @@
   behaviour every existing caller already gets. Passing true lets an app with
   no teardown of its own still choose the backend and the location without
   having to close anything.
+- **DEPRECATED:** `AtClientPreference.hiveStoragePath`. Supply an
+  `AtClientStorage` instead: it chooses the backend as well as the location,
+  and `closedByClient: true` keeps the client closing the store, so nothing is
+  given up by moving. Still honoured until the next major release.
 - **DEPRECATED:** `AtClientPreference.commitLogPath`. Nothing reads it — the
   client is commit-log-free — so whatever is set there has no effect. It will
   be removed in the next major release.

@@ -11,7 +11,11 @@ class AtClientPreference {
   ///
   /// Setting this leaves the client owning its store: it opens the store and
   /// closes it again when it stops. Supplying a bundle instead chooses the
-  /// backend as well as the location, and hands the caller the lifetime.
+  /// backend as well as the location, and can hand the lifetime back with
+  /// `closedByClient: true`, so nothing is given up by supplying one.
+  @Deprecated('Supply an AtClientStorage instead, which chooses the backend as '
+      'well as the location; pass closedByClient: true to keep having the '
+      'client close it. Will be removed in the next major release.')
   String? hiveStoragePath;
 
   /// Local device path of commit log.

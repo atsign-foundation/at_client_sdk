@@ -77,14 +77,23 @@ Future<void> onboard(BuildContext context) async {
     var dir = await getApplicationSupportDirectory();
     _logger.info('Application support directory: ${dir.path}');
 
-    var acp = AtClientPreference()
-      ..namespace = namespace
-      ..hiveStoragePath = dir.path;
+    var acp = AtClientPreference()..namespace = namespace;
+    // closedByClient: this app picks the location and the client still closes
+    // the store when it stops, so there is nothing to tear down.
+    var storage = HiveAtClientStorage(
+      atSign: response.atSign,
+      storagePath: dir.path,
+      closedByClient: true,
+    );
 
     _logger.info('Setting current atSign: ${response.atSign}');
     // Hand the client the session; it rebuilds its own authenticated connection
     // from the session's key source rather than adopting auth's.
-    await AtClientManager.getInstance().fromAuthSession(response.session!, acp);
+    await AtClientManager.getInstance().fromAuthSession(
+      response.session!,
+      acp,
+      storage: storage,
+    );
 
     _logger.info('Navigation to HomePage');
     if (context.mounted) {
@@ -327,9 +336,14 @@ Future<void> _setupAtClient(BuildContext context, AuthResponse response) async {
   var dir = await getApplicationSupportDirectory();
   _logger.info('Using directory: ${dir.path}');
 
-  var acp = AtClientPreference()
-    ..namespace = namespace
-    ..hiveStoragePath = dir.path;
+  var acp = AtClientPreference()..namespace = namespace;
+  // closedByClient: this app picks the location and the client still closes the
+  // store when it stops, so there is nothing to tear down.
+  var storage = HiveAtClientStorage(
+    atSign: response.atSign,
+    storagePath: dir.path,
+    closedByClient: true,
+  );
 
   if (response.enrollmentId == null) {
     _logger.warning("EnrollmentId is null");
@@ -338,7 +352,11 @@ Future<void> _setupAtClient(BuildContext context, AuthResponse response) async {
   if (session != null) {
     // Preferred path: hand over the session; the client rebuilds its own
     // authenticated connection from the session's key source.
-    await AtClientManager.getInstance().fromAuthSession(session, acp);
+    await AtClientManager.getInstance().fromAuthSession(
+      session,
+      acp,
+      storage: storage,
+    );
   } else {
     // Transitional fallback for flows that hand back only atAuthKeys with no
     // AtKeysIo source (e.g. APKAM enrollment): adopt auth's already-
@@ -350,6 +368,7 @@ Future<void> _setupAtClient(BuildContext context, AuthResponse response) async {
       enrollmentId: response.enrollmentId,
       atChops: response.atChops,
       atLookUp: response.atLookUp,
+      storage: storage,
     );
   }
 
