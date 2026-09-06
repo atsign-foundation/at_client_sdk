@@ -47,6 +47,11 @@ class AtClientImpl implements AtClient {
   /// keystore was injected, storage is not required, or [stop] has released it.
   AtClientStorage? _storage;
 
+  /// Storage handed to this client by its caller, if any. A client that was
+  /// given one never closes it: the caller owns its lifetime and may hand the
+  /// same store to a later client.
+  AtClientStorage? _injectedStorage;
+
   /// Whether this client built [_storage] itself and so closes it on [stop];
   /// injected storage is only detached.
   bool _ownsStorage = false;
@@ -319,6 +324,7 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
+    AtClientStorage? storage,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -347,6 +353,7 @@ class AtClientImpl implements AtClient {
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         enrollmentId: enrollmentId,
+        storage: storage,
       );
 
       try {
@@ -377,7 +384,9 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     this.enrollmentId,
+    AtClientStorage? storage,
   }) {
+    _injectedStorage = storage;
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -408,15 +417,26 @@ class AtClientImpl implements AtClient {
     if (_preference!.isLocalStoreRequired) {
       AtSyncQueue? syncQueue;
       if (_localSecondaryKeyStore == null) {
-        final storagePath = preference!.hiveStoragePath;
-        if (storagePath == null) {
-          throw Exception('Please set local storage path');
+        // A caller that supplied storage picked the backend and the location;
+        // this client only borrows it, so `stop()` detaches without closing.
+        // Otherwise build the default Hive store under the preference's path
+        // and own it.
+        final injected = _injectedStorage;
+        final AtClientStorage storage;
+        if (injected != null) {
+          storage = injected;
+          _ownsStorage = false;
+        } else {
+          final storagePath = preference!.hiveStoragePath;
+          if (storagePath == null) {
+            throw Exception('Please set local storage path');
+          }
+          storage =
+              HiveAtClientStorage(atSign: _atSign, storagePath: storagePath);
+          _ownsStorage = true;
         }
-        final storage =
-            HiveAtClientStorage(atSign: _atSign, storagePath: storagePath);
         await storage.attach(this);
         _storage = storage;
-        _ownsStorage = true;
         syncQueue = storage.syncQueue;
       }
 

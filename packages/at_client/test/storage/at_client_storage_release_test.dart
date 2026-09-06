@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/sqlite.dart';
 import 'package:test/test.dart';
 
 import 'storage_contract.dart';
@@ -100,5 +101,41 @@ void main() {
     expect(ok.storage, isNotNull,
         reason: 'a failed build must not leave its claim behind, or no client '
             'for that atSign could ever be built in this isolate again');
+  });
+
+  test(
+      'a client uses the storage it is given, and stop() does not close what '
+      'it does not own', () async {
+    final injected = InMemoryAtClientStorage(atSign: '@injected');
+    // No hiveStoragePath: supplying storage picks the backend AND the
+    // location, so the preference no longer has to name one.
+    final client = await AtClientImpl.create(
+            '@injected', 'wavi', AtClientPreference(), storage: injected)
+        as AtClientImpl;
+
+    expect(identical(client.storage, injected), isTrue,
+        reason: 'the client used the storage it was handed rather than '
+            'building a Hive one from the preference');
+
+    await client.stop();
+
+    expect(injected.isAttached, isFalse, reason: 'stop() dropped the claim');
+    await injected.attach(FakeClient('@injected', null));
+    expect(injected.isAttached, isTrue,
+        reason: 'an injected store outlives the client that borrowed it - the '
+            'caller owns its lifetime, so stop() must not have closed it');
+    await injected.close();
+  });
+
+  test('a client with no injected storage still owns and closes its own',
+      () async {
+    final client =
+        await AtClientImpl.create('@ownsits', 'wavi', pref()) as AtClientImpl;
+    final own = client.storage!;
+    await client.stop();
+    await expectLater(() => own.attach(FakeClient('@ownsits', null)),
+        throwsA(isA<StateError>()),
+        reason: 'storage the client built itself is closed on release, and a '
+            'closed store cannot be reopened');
   });
 }

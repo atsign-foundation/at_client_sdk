@@ -28,6 +28,14 @@
   directory plus the atSign, since two atSigns under one directory are two boxes
   and share nothing. `AtSyncQueue` takes the storage path it should open under,
   and `AtClientStorage` implementations report the store they point at.
+- feat: `AtClient.create` and `AtClientManager.setCurrentAtSign` accept a
+  `storage:` argument, and `AtServiceFactory.atClient` passes one through. A
+  caller that supplies storage picks both the backend and where it lives, so
+  `AtClientPreference.hiveStoragePath` no longer has to name a location; omit it
+  and the client builds the Hive store under that path exactly as before. The
+  client only borrows storage it was given: `stop()` detaches without closing,
+  so one store can be handed to a later client, while storage the client built
+  itself is still closed on release.
 - fix: a delete that supersedes a queued update is no longer lost on push. Queue
   entries carry a monotonic `seq`, and the drain removes only the version it
   actually pushed, so a write that replaced the entry mid-flight stays queued for
