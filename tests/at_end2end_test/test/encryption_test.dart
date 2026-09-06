@@ -47,12 +47,8 @@ void main() {
     // AtClientImpl.create() adopts this preference's crypto config onto it
     // (CryptoRuntime resolves against the live preference.crypto). This test
     // depends on that production behaviour.
-    final atClientManager =
-        await AtClientManager.getInstance().setCurrentAtSign(
-      atSign,
-      namespace,
-      preference,
-    );
+    final atClientManager = await TestSuiteInitializer.getInstance()
+        .switchToAtSign(atSign, namespace, preference: preference);
     return atClientManager.atClient;
   }
 
@@ -68,8 +64,8 @@ void main() {
         defaultProviderId: defaultProviderId,
         providers: providers,
       );
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, namespace, preference);
+    final atClientManager = await TestSuiteInitializer.getInstance()
+        .switchToAtSign(atSign, namespace, preference: preference);
     return atClientManager.atClient;
   }
 
