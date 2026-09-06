@@ -292,15 +292,31 @@ D-12. Independent of the P series, which is `at_server`-side.
   one location per atSign, as today; the enrollment discriminator is test-supplied. The work:
   (1) each `AtClientStorage` reports a canonical `location`, and `AtClientStorageBase` refuses
   a second open at an already-open location — the per-location guard replacing X4's per-atSign
-  one, so N distinct-location clients of one atSign pass; (2) an optional `storage:` on the
-  `create` factory, threaded through `setCurrentAtSign`, with the manager's
-  `refuseChangedStoragePath` short-circuit removed; (3) rewrite the multi-enrollment fixtures
+  one, so N distinct-location clients of one atSign pass; (2) ✅ an optional `storage:` on the
+  `create` factory, threaded through `setCurrentAtSign` and `AtServiceFactory.atClient` — a
+  caller supplying storage picks backend and location together, and the client only borrows it
+  (`stop()` detaches without closing). `refuseChangedStoragePath` needed no removal here: it is
+  spike-only and does not exist on trunk; (3) rewrite the multi-enrollment fixtures
   onto direct `create` with a shared lifecycle-owning test helper (builds located storage +
   client, closes both in `tearDown`); (4) correct the stale `hive_at_client_storage.dart` NOTE
   (distinct paths isolate; only same-location collides). **This lands on #2208's branch**
   (`gkc-at-client-storage-release`), combining with X4's release code into one PR rather than a
   separate prerequisite — X4a is what turns #2208's per-atSign-guard reds green.
-  **Built 2026-09-06, items 1 and 4 done; 2 and 3 still owed.** Five commits on that branch,
+  **Built 2026-09-06: items 1, 2 and 4 done on #2208; item 3 moved off it.**
+  ⛔ **The fixture rewrite is NOT part of #2208** (gkc, 2026-09-06), because the fixtures it
+  would rewrite are not on that branch: #2208 is trunk-based and has no
+  `tests/at_end2end_test/test/pq/` at all. The multi-enrollment fixtures are spike-side, and
+  most of the pattern is already there — `EnrolledClient` exists in two copies (the e2e and
+  functional packs), builds each enrollment through `AtClientManager(atSign)` rather than the
+  shared `getInstance().setCurrentAtSign`, which is exactly
+  [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05)'s decision 5; and
+  `TestPreferences.forCoLocatedClient` already keys `hiveStoragePath` on
+  `$atSign/$device`. What is left there is **consolidation, not capability**: `getPreference`
+  still keys the path on the atSign alone, so tests that need a second co-located client
+  hand-roll it — `nskey_self_notify_live_test.dart:100` sets `$atSign/$device-$runId` and its
+  comment at `:81` names the reason. Owed on the spike, after the merge-back so it can use the
+  `storage:` injection: make the per-enrollment location systematic instead of per-test.
+  Five commits on that branch,
   unpushed as of writing. Four things the build corrected, each measured rather than reasoned:
   - **The forPath mechanism was spike-only, so the pin had to be ported.** Trunk (and therefore
     #2208) carried *no* `dependency_overrides` at all and resolved published
