@@ -1,6 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart'
+    show
+        AtKeysIo,
+        authenticatorFor,
+        authenticatorForChops,
+        authenticatorForCramSecret,
+        authenticatorForPrivateKey;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
@@ -9,7 +16,7 @@ import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
 
@@ -30,13 +37,96 @@ class RemoteSecondary implements Secondary {
   set atChops(AtChops? value) {
     _atChops = value;
     atLookUp.atChops = value;
+    _installAuthenticator();
+  }
+
+  /// The keystore an authenticator reads, when this client was given one.
+  AtKeysIo? _atKeysIo;
+
+  /// The legacy credential, for a client that was given no keystore.
+  String? _privateKey;
+  String? _cramSecret;
+
+  /// Hands the lookup an authenticator, so authentication is decided from the
+  /// keystore rather than from credentials parked on at_lookup.
+  ///
+  /// Called from the constructor as well as the [atChops] setter, because the
+  /// constructor sets `atLookUp.atChops` directly - hooking only the setter
+  /// installs nothing on the path that matters.
+  ///
+  /// Installed beside `atChops`, not instead of it: at_auth's
+  /// `EnrollmentApprover` reads that field for enrollment crypto, which is not
+  /// authentication.
+  void _installAuthenticator() {
+    final lookUp = atLookUp;
+    // `AtLookUp` does not declare the seam - that interface is frozen because
+    // mocks implement it - so any other implementation keeps its behaviour.
+    if (lookUp is! AtLookupMuxable) {
+      return;
+    }
+
+    final io = _atKeysIo;
+    if (io != null) {
+      lookUp.authenticator = authenticatorFor(
+        io,
+        _atSign,
+        enrollmentId: lookUp.enrollmentId,
+        chops: _atChops,
+      );
+      return;
+    }
+
+    // No keystore. The order from here is the ladder's own - atChops, then
+    // privateKey, then cramSecret - so a client holding more than one
+    // authenticates with the same credential it did before. That precedence is
+    // stated rather than fallen into.
+    final chops = _atChops;
+    if (chops != null) {
+      lookUp.authenticator = authenticatorForChops(
+        _atSign,
+        chops,
+        enrollmentId: lookUp.enrollmentId,
+        signingAlgo: _preference.signingAlgoType,
+        // The same preference fields the constructor stamps on the lookup, so
+        // the authenticator and the ladder it replaces read them alike.
+        hashingAlgo: _preference.hashingAlgoType,
+      );
+      return;
+    }
+
+    // The legacy credential, and precisely the caller the ladder existed for.
+    // Without this, deleting the ladder would make a keystore mandatory.
+    final privateKey = _privateKey;
+    if (privateKey != null) {
+      lookUp.authenticator = authenticatorForPrivateKey(
+        _atSign,
+        privateKey,
+        enrollmentId: lookUp.enrollmentId,
+      );
+      return;
+    }
+
+    // Nothing in this tree sets `preference.cramSecret` - every in-tree CRAM
+    // goes through onboarding, which builds its own lookup - but the field is
+    // public API, so a consumer that set it kept working through the ladder
+    // and must keep working through the seam.
+    final cramSecret = _cramSecret;
+    if (cramSecret != null) {
+      lookUp.authenticator = authenticatorForCramSecret(_atSign, cramSecret);
+      return;
+    }
+
+    // None of the four: nothing to authenticate with, so nothing is
+    // installed. That is a real mode - at_server_status holds no key material
+    // at all, and an OTP enrollment submit routes through auth: false.
   }
 
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
       AtChops? atChops,
       AtLookUp? atLookUp,
-      String? enrollmentId}) {
+      String? enrollmentId,
+      AtKeysIo? atKeysIo}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -46,20 +136,30 @@ class RemoteSecondary implements Secondary {
       ..pathToCerts = preference.pathToCerts
       ..tlsKeysSavePath = preference.tlsKeysSavePath;
     _atChops = atChops;
+    _atKeysIo = atKeysIo;
+    _privateKey = privateKey;
+    _cramSecret = preference.cramSecret;
+    // privateKey and cramSecret are no longer set ON the lookup: both are
+    // credentials, and credentials now travel as an authenticator, which
+    // _installAuthenticator supplies below from whichever of the four shapes
+    // this client actually holds.
     this.atLookUp = atLookUp ??
-        AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
-            privateKey: privateKey,
-            cramSecret: preference.cramSecret,
-            secondaryAddressFinder:
-                AtClientManager.getInstance().secondaryAddressFinder,
-            secureSocketConfig: secureSocketConfig,
-            clientConfig: _getClientConfig());
+        AtLookUp.withSecureSocket(
+          atSign: atSign,
+          rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
+          transport: secureSocketTransport(secureSocketConfig),
+          authenticator: null,
+          secondaryAddressFinder:
+              AtClientManager.getInstance().secondaryAddressFinder,
+          clientConfig: _getClientConfig(),
+        );
     this.atLookUp.enrollmentId = enrollmentId;
     logger.finer(
         'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
     this.atLookUp.signingAlgoType = preference.signingAlgoType;
     this.atLookUp.hashingAlgoType = preference.hashingAlgoType;
     this.atLookUp.atChops = atChops;
+    _installAuthenticator();
   }
 
   Map<String, String> _getClientConfig() {
