@@ -284,10 +284,11 @@ D-12. Independent of the P series, which is `at_server`-side.
   [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05) (resolving
   [D-13](decisions.md#d-13--local-storage-is-isolated-per-atsign-enrollmentid-not-per-atsign-2026-09-05)).
   **at_client-only, not cross-repo** — corrects the earlier "likely cross-repo" scoping. The
-  isolating mechanism is already present on the spike: the keystore opens on
+  isolating mechanism is merged upstream and wired **on the spike**: the keystore opens on
   `HiveInstances.forPath(storagePath)` (pinned upstream #2776, SHA `5c0e603c`) and the spike's
   `AtSyncQueue` on `forPath` too, so two clients of one atSign at **different** locations
-  already get separate stores; only the **same** location shares. Production is unchanged —
+  get separate stores there; only the **same** location shares. ⚠️ Trunk has neither the pin
+  nor the queue's `forPath`, so X4a ports both before the guard means anything. Production is unchanged —
   one location per atSign, as today; the enrollment discriminator is test-supplied. The work:
   (1) each `AtClientStorage` reports a canonical `location`, and `AtClientStorageBase` refuses
   a second open at an already-open location — the per-location guard replacing X4's per-atSign
@@ -299,6 +300,33 @@ D-12. Independent of the P series, which is `at_server`-side.
   (distinct paths isolate; only same-location collides). **This lands on #2208's branch**
   (`gkc-at-client-storage-release`), combining with X4's release code into one PR rather than a
   separate prerequisite — X4a is what turns #2208's per-atSign-guard reds green.
+  **Built 2026-09-06, items 1 and 4 done; 2 and 3 still owed.** Five commits on that branch,
+  unpushed as of writing. Four things the build corrected, each measured rather than reasoned:
+  - **The forPath mechanism was spike-only, so the pin had to be ported.** Trunk (and therefore
+    #2208) carried *no* `dependency_overrides` at all and resolved published
+    `at_persistence_secondary_server`, which predates #2776 — so the keystore opened on the
+    global Hive there. Without the pin a per-location guard is meaningless: two clients at
+    distinct paths report distinct locations and are let through, while the box named
+    `sha(atSign)` on the global instance is the same one. The plan's earlier
+    "already present on the spike" was true of the spike and false of trunk.
+  - **The location key needed the atSign**, not just the directory — see
+    [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05).
+  - **Moving the queue onto a per-path instance exposed a latent lost-delete.** A delete
+    superseding a queued update pushed as the *update*: the drain removed the entry
+    unconditionally, discarding whichever write replaced it mid-flight. Bisected to the forPath
+    commit across four arms (baseline +82, forPath +81 −1, guard +81 −1, pin-only-with-queues-on-global
+    +82), then fixed by porting the spike's `seq` / `removeIfUnchanged`, which leaves
+    `at_sync_queue.dart` byte-identical on both branches.
+  - **The onboarding-CLI pack had no local runner and polluted `$HOME`.** It writes keyfiles to
+    `$HOME/.atsign/keys` (the functional pack deliberately does not — see
+    `build_test_atkeys.dart`), and `onboard` refuses when one already exists, so a second local
+    run failed for atSigns the recycled virtualenv had never onboarded. The pack now has a
+    runner that points `HOME` at a throwaway directory for the test invocation alone.
+  **Three packs green locally on this branch:** functional +82, e2e +32, onboarding-CLI +15.
+  ⚠️ **CI's onboarding-CLI red is NOT explained by that local work** — CI starts from a clean
+  `$HOME`, so its cause is something else. Every local failure was the stale-keyfile
+  precondition; the `HiveError: Box not found` lines appear 11–14 times in *every* arm including
+  the pre-X4a baseline and fail no test locally. That red is still open.
 - **X4 — Inject it, and release it.** ⏸ **X4a lands on this branch (#2208), so X4 and X4a
   ship as one PR.** Its release code (`stop()` releases storage, PR #2208) is sound, but the
   per-atSign guard it carries is superseded

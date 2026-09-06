@@ -368,8 +368,14 @@ isolate, construct impls with distinct locations.
 
 **3 — A per-location guard, enforced by the base.** Each impl reports a canonical `location`
 identity; `AtClientStorageBase` keeps a static registry and refuses to open a second storage
-at a location already open. Backend-agnostic — the Hive canonical dir, the SQLite db-file, a
-unique-per-instance token for in-memory (so two in-memory stores never falsely collide). This
+at a location already open. The identity is the *store*, not merely where its files sit: the
+Hive canonical dir **plus the atSign**, the SQLite db-file plus the atSign, and a
+unique-per-instance token for in-memory (so two in-memory stores never falsely collide). Both
+halves are needed — a box name derives from the atSign, so two atSigns under one directory are
+two boxes that share nothing, and a directory-only key would refuse them. The e2e fixtures do
+exactly that, sharing `test/hive/client` across atSigns. (First written here as "the Hive
+canonical dir"; building it showed that key is too coarse, and the test *two atSigns sharing
+one directory both open* now pins it.) This
 is the correctly-shaped replacement for X4's per-**atSign** guard, which blocked legitimate
 distinct-location multi-enrollment and did not generalise to SQLite. N clients of one atSign
 at N distinct locations pass; two at one location throw, the error naming the location and the
@@ -396,7 +402,10 @@ the client, tracks both, and in `tearDown` stops every client and closes every s
 forgotten cleanup cannot leave a location registered and trip the next test's guard.
 
 **Consequences.** X4a is **at_client-only, not cross-repo**: the isolating mechanism
-(`forPath`) is already present on the spike for both keystore and queue, so X4a adds the
+(`forPath`) is merged upstream and already wired on the spike for both keystore and queue.
+⚠️ It is **not** on trunk — trunk carries no `dependency_overrides` at all and resolves a
+published `at_persistence_secondary_server` that predates it, so X4a must port the pin and the
+queue's `forPath` there before a per-location guard means anything. Beyond that port X4a adds the
 per-location guard, the `storage:` injection, the impl `location` report, and the fixture
 rewrite behind the helper — and corrects the stale `hive_at_client_storage.dart` NOTE
 (distinct paths *do* isolate; only same-location collides). X4a lands on #2208's branch, so
