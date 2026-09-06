@@ -55,6 +55,10 @@ final _childIsolateLogger = AtSignLogger('ChildIsolate')..level = 'warning';
 var isolateResponseQueue = Queue();
 
 var childIsolateSendPortMap = <ClientId, SendPort>{};
+// This file's two clients run in child isolates, which are separate heaps: a
+// storage bundle built here could not be reached from there, and the isolates
+// are handed path strings instead. These two paths are this file's own and no
+// other file opens them.
 final String clientOneHiveKeyStorePath = 'test/hive/client1';
 final String clientTwoHiveKeyStorePath = 'test/hive/client2';
 late Isolate clientOneIsolate;
@@ -64,6 +68,7 @@ late Completer clientOneAck;
 late Completer clientTwoAck;
 
 void main() async {
+  TestUtils.isolateStorage('sync_multiple_client_test');
   AtSignLogger.root_level = 'shout';
   var mainIsolateReceivePort = ReceivePort('MainIsolateReceivePort');
   SyncServiceImpl.queueSize = 1;
@@ -326,8 +331,13 @@ Future<void> startClient(ChildIsolatePreferences clientParameters) async {
       currentAtSign, clientParameters.clientId.name,
       hiveStoragePath: clientParameters.hiveStoragePath,
       commitLogPath: clientParameters.commitLogPath);
+  // This isolate has no file-level fixture - TestUtils' static is null in a
+  // fresh heap - so it builds its bundle from the path the main isolate sent.
   atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
-      preference: atClientPreferences);
+      preference: atClientPreferences,
+      storage: HiveAtClientStorage(
+          atSign: currentAtSign,
+          storagePath: clientParameters.hiveStoragePath));
 }
 
 Future<void> updateOrDeleteKey(AtKey atKey, int randomValueForOperation,
@@ -355,6 +365,8 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
           demo_credentials.pkamPrivateKeyMap[currentAtSign]!));
 
   AtChops atChops = AtChopsImpl(atChopsKeys);
+  // No storage bundle: this client sets isLocalStoreRequired false and opens
+  // no local store at all.
   atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
       currentAtSign,
       namespace,

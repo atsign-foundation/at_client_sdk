@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 import 'test_utils.dart';
 
 void main() {
+  TestUtils.isolateStorage('at_exception_test');
   late AtClientManager atClientManager;
   late AtClient atClient;
   late String atSign;

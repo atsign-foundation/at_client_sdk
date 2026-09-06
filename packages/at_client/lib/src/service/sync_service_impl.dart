@@ -659,7 +659,7 @@ class SyncServiceImpl implements SyncService {
           // user-level write is already lost.
           _logger
               .info('keystore miss for $atKey on push; dropping queue entry');
-          await localSecondary.removeFromSyncQueue(atKey);
+          await localSecondary.removeFromSyncQueueIfUnchanged(atKey, entry.seq);
           _bailIfStopped();
           continue;
         }
@@ -670,6 +670,7 @@ class SyncServiceImpl implements SyncService {
         batchSources.add(_BatchSource(
           atKey: atKey,
           op: entry.op,
+          seq: entry.seq,
         ));
       }
       if (batchRequests.isEmpty) {
@@ -718,7 +719,8 @@ class SyncServiceImpl implements SyncService {
               commitId > _highestPushedCommitId!) {
             _highestPushedCommitId = commitId;
           }
-          await localSecondary.removeFromSyncQueue(source.atKey);
+          await localSecondary.removeFromSyncQueueIfUnchanged(
+              source.atKey, source.seq);
           _bailIfStopped();
           keyInfoList.add(KeyInfo(
             source.atKey,
@@ -1593,9 +1595,17 @@ class _BatchSource {
   final String atKey;
   final SyncQueueOp op;
 
+  /// The queue entry's [SyncQueueEntry.seq] at batch-build time — the
+  /// version this batch actually pushed. Success-path removal passes it to
+  /// [LocalSecondary.removeFromSyncQueueIfUnchanged], so an entry replaced
+  /// mid-flight (an update superseded by a delete, or by a newer value)
+  /// stays queued for the next round instead of being discarded.
+  final int seq;
+
   const _BatchSource({
     required this.atKey,
     required this.op,
+    required this.seq,
   });
 }
 
