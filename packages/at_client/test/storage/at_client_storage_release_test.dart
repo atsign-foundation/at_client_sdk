@@ -1,10 +1,43 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/sqlite.dart';
+import 'package:at_client/src/sync/at_sync_queue.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:test/test.dart';
 
 import 'storage_contract.dart';
+
+/// A storage whose [openBackend] can be held open on [gate], so a test can
+/// interleave a second [attach] while the first is still inside it.
+class _GatedStorage extends AtClientStorageBase {
+  _GatedStorage(this._location, {Completer<void>? gate}) : _gate = gate;
+  final String _location;
+  final Completer<void>? _gate;
+
+  @override
+  String get location => _location;
+
+  @override
+  Future<void> openBackend() async {
+    final gate = _gate;
+    if (gate != null) await gate.future;
+  }
+
+  @override
+  Future<void> closeBackend() async {}
+
+  @override
+  Future<void> clearData() async {}
+
+  @override
+  AtKeyValueStore<String, AtData, AtMetaData?> get keyStore =>
+      throw UnimplementedError();
+
+  @override
+  AtSyncQueue get syncQueue => throw UnimplementedError();
+}
 
 void main() {
   late Directory dir;
@@ -40,6 +73,32 @@ void main() {
     expect(sameStore.isAttached, isTrue,
         reason: 'stop() closed the first storage, releasing the store');
     await sameStore.close();
+  });
+
+  test(
+      'a second attach() racing the first cannot claim the same location '
+      'before the first finishes opening', () async {
+    final gate = Completer<void>();
+    final first = _GatedStorage('@race-loc', gate: gate);
+    final second = _GatedStorage('@race-loc');
+
+    final firstAttach = first.attach(FakeClient('@race', 'e1'));
+    // first is now suspended inside openBackend(), still awaiting gate.
+
+    await expectLater(
+        () => second.attach(FakeClient('@race', 'e2')),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('already open at'))),
+        reason: 'the claim must be visible to a second attach() as soon as '
+            'the first has passed its own checks, not only once the first '
+            'has finished opening its backend — otherwise both attach and '
+            'the loser\'s later close() tears down the backend the winner '
+            'still uses');
+
+    gate.complete();
+    await firstAttach;
+    expect(first.isAttached, isTrue);
+    await first.close();
   });
 
   test('two storages for one atSign at different locations both open',
