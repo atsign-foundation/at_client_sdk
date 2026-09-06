@@ -40,11 +40,29 @@ echo "*** Clearing client test storage"
 rm -rf test/hive
 find test -name '*.atKeys' -delete 2>/dev/null || true
 
+# These tests onboard through at_onboarding_cli, which writes its keyfiles to
+# $HOME/.atsign/keys - the real one. Those keys are for virtualenv-only demo
+# atSigns; they outlive the container the compose down above just recycled, and
+# `onboard` refuses when a keyfile already exists. So the next local run fails
+# with "Keys file already exists" for atSigns the fresh virtualenv has never
+# onboarded, which reads as a product bug and is not. Give the run a throwaway
+# HOME instead: the keys land beside it and go when it does, and the real
+# ~/.atsign/keys is neither written nor read.
+#
+# Scoped to `dart test` deliberately - docker reads its context from the real
+# $HOME/.docker and pub its cache from $HOME/.pub-cache, so neither moves.
+REAL_HOME="$HOME"
+TEST_HOME="$(mktemp -d)"
+trap 'rm -rf "$TEST_HOME"' EXIT
+mkdir -p "$TEST_HOME/.atsign/keys"
+echo "*** Throwaway HOME for this run: $TEST_HOME"
+
 echo "*** Running tests"
 # Let the run fail through to cleanup, then propagate its code - otherwise
 # set -e aborts before teardown on the very failure this exists to catch.
 set +e
-dart test --concurrency=1 -r expanded
+HOME="$TEST_HOME" PUB_CACHE="${PUB_CACHE:-$REAL_HOME/.pub-cache}" \
+  dart test --concurrency=1 -r expanded
 TEST_EXIT=$?
 set -e
 
