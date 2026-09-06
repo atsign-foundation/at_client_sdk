@@ -476,6 +476,24 @@ done
   identity, so two live in-memory storages whose hashes collided would be refused as one
   store. Negligible at the handful per process the pack opens; wrong in principle.
 
+**Also found by the 2026-09-06 cold read, recorded not acted on:**
+
+- **`ff6014420` rewrote the workspace root `pubspec.yaml` from CRLF to LF** — 122 carriage
+  returns to 0 — while `origin/trunk` still has 122. Its message describes only the
+  constraint change. Merging #2208 therefore rewrites every line of that file and will
+  conflict with any concurrent edit to it. Whether this repo should be LF throughout is a
+  decision, not a fix. Re-derive: `git show <ref>:pubspec.yaml | tr -cd '\r' | wc -c`.
+- **`design.md`'s `AtClientStorage` interface block is missing `isHeldBy`**, added 2026-09-06
+  on the X5 branch, and its `attach` dartdoc has drifted: the doc says "and [clear] has not
+  run since", the code says "and neither [forgetPrincipal] nor [clear] has run since".
+- **D-13's parenthetical mischaracterises D-12 while warning about it.** It says D-12's
+  "principal" names the claim holder; D-12 uses *both* senses — the claim holder at "the
+  owner of a claim is the client object, compared by identity", and the enrolled principal
+  three lines later at "a different enrollment cannot inherit records it cannot decrypt".
+  The warning to qualify at each use is right; its example is wrong.
+- **The X5 row's heading on the X5 branch outran its own body** — "Each functional test file
+  gets its own storage" over a body that corrects the unit to per *(file, atSign)*.
+
 - **X6 — Consumers.** `at_client_flutter` and `at_onboarding_cli` move onto the factory, so
   both are WASM-ready ahead of the next major. Whether they move in this major or the next
   is open.
