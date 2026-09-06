@@ -88,8 +88,16 @@ abstract class AtClientStorageBase implements AtClientStorage {
           '${held == null ? '' : ', last held by $held'}; close it before '
           'opening a second there, or give this one its own location');
     }
-    await openBackend();
+    // Claimed before the await, not after: two attach() calls for the same
+    // location can otherwise both read no occupant and both pass the check
+    // above while the first is still suspended inside openBackend().
     _openByLocation[here] = this;
+    try {
+      await openBackend();
+    } catch (_) {
+      if (identical(_openByLocation[here], this)) _openByLocation.remove(here);
+      rethrow;
+    }
     _owner = owner;
     _lastPrincipal = principal;
   }
