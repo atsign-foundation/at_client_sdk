@@ -14,6 +14,7 @@ import 'test_utils.dart';
 late AtSignLogger logger;
 
 void main() {
+  TestUtils.isolateStorage('at_lookup_race_test');
   late String atSign;
   late AtClientManager atClientManager;
   late AtClient atClient;

@@ -15,6 +15,9 @@ abstract class AtClientStorage {
   /// Drops [owner]'s claim, keeping the backend open.
   Future<void> detach(AtClient owner);
 
+  /// Whether [client] is the one currently holding this storage.
+  bool isHeldBy(AtClient client);
+
   AtKeyValueStore<String, AtData, AtMetaData?> get keyStore;
 
   AtSyncQueue get syncQueue;
@@ -54,6 +57,9 @@ abstract class AtClientStorageBase implements AtClientStorage {
       '${client.getCurrentAtSign()}|${client.enrollmentId ?? 'legacy'}';
 
   bool get isAttached => _owner != null;
+
+  @override
+  bool isHeldBy(AtClient client) => identical(_owner, client);
 
   /// The store this points at, in a form two storages over the same records
   /// report identically — everything that decides which records they resolve

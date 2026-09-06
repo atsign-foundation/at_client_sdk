@@ -41,6 +41,7 @@ echo "*** Checking test environment" && dart run test/check_test_env.dart
 
 echo "*** Clearing client test storage" && rm -rf test/hive && rm -f test/testData/@srie.atKeys
 
+echo "*** Storage backend: ${AT_FUNCTIONAL_STORAGE:-hive (default)}"
 echo "*** Running tests"
 # Let the test run fail through to cleanup (so a flake doesn't leave the
 # container up), then propagate its exit code.

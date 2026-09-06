@@ -293,14 +293,54 @@ D-12. Independent of the P series, which is `at_server`-side.
   established. And trunk's `AtClient.stop()` dartdoc *promises* resurrection: "Local
   storage is NOT closed. The instance remains in the internal cache and reuses its
   still-open local keystore when resumed". X4's storage release therefore changes a
-  documented contract, and the packs (X5) and that dartdoc move with it. The storage-release
-  work is parked as a git stash named `x4-release-wip` on the repository's stash stack
-  (its label names a branch since deleted; resume by branching from trunk and popping it)
-  until then.
-- **X5 — Move the functional pack onto an in-memory bundle per file.** The named consumer:
-  `test_utils.dart` shares `test/hive/client/$atsign` across every file, so one file
-  inherits the next's pending sync queue and the next client's scoped enrollment is refused
-  `AT0009` pushing keys it did not write. Depends on X3.
+  documented contract, and the packs (X5) and that dartdoc move with it. ⚠️ **This said the
+  storage-release work was parked as a git stash named `x4-release-wip` until 2026-09-06.**
+  It is not: it is [#2208](https://github.com/atsign-foundation/at_client_sdk/pull/2208) on
+  branch `gkc-at-client-storage-release`, which X5 is stacked on. Resume by checking that
+  branch out, never from a stash.
+- **X5 — Each functional test file gets its own storage, on a selectable backend.**
+  ✅ **Built 2026-09-06.** The consumer was real: `test_utils.dart` gave every file
+  `test/hive/client/$atsign`, the runner clears that directory once per run and never
+  between files, and CI never clears it at all. Each file now names itself
+  (`TestUtils.isolateStorage('<file>')`) and gets one bundle per atSign, at a location no
+  other file opens.
+  **Which backend is built comes from `AT_FUNCTIONAL_STORAGE`** (gkc, 2026-09-06):
+  `hive` by default — what the pack has always run on, so the default run's behaviour is
+  unchanged — or `sqlite` or `memory`. An unrecognised value is refused rather than
+  defaulted, so a typo cannot quietly run the backend it was meant to replace. A second CI
+  job, `functional_tests_storage`, runs the same pack again on the other two, beta channel
+  only; the existing job's matrix is untouched, so nothing is renamed.
+  **Measured against `at_virtual_env:local`, 82 tests each: hive 82, sqlite 82, memory 82,
+  all passing.** That is the first time either SQLite-backed bundle has carried a live put,
+  get, sync drain or notification rather than only the unit contract tests. ✅ **CI agrees:
+  on [#2210](https://github.com/atsign-foundation/at_client_sdk/pull/2210) both new jobs
+  passed first time, and the run is 11 of 11 green** — `end2end_test_14` needed one re-run
+  for `bypasscache_test`, the intermittent that has its own row and fails pre-X4a. Re-derive
+  rather than quoting: `gh run list --branch gkc-x5-functional-storage`.
+  ⚠️ **"A bundle per file" was not buildable as written.** A bundle is bound to one atSign
+  at construction and several files drive two, so the unit is per *(file, atSign)*. Three
+  things the build found, none of them visible by reading:
+  - **The claim guard caught nine tests sharing one atSign's store across principals.**
+    `enrollment_test` re-authenticates as its own enrolment and reads what the owner wrote
+    locally, so it hands the store over explicitly at the five points where it stops every
+    client. The guard firing is the evidence that the sharing was real and unnoticed.
+  - **A child isolate is a separate heap**, so `sync_multiple_client_test`'s two clients
+    cannot be handed a bundle at all — that isolate builds its own from the path string it
+    is sent. The third client in that file sets `isLocalStoreRequired` false and opens no
+    local store.
+  - **`setCurrentAtSign` treated any storage argument as a change** and took the
+    destructive stop/recreate path, which would have altered the client lifecycle at every
+    site the pack touches. Re-offering the bundle a client already holds is now not a
+    change; a different bundle still rebuilds.
+  Two `at_client` changes ride with it: `fromAuthSession` accepts a `storage` bundle, being
+  the one door that could not take one; and `commitLogPath` came off the pack's preferences,
+  it being read nowhere in `at_client`. A preference now carries no storage path at all, so
+  a call site that forgets a bundle fails loudly instead of opening the shared directory.
+  ⚠️ **Owed, found while scoping and not fixed:** `InMemoryAtClientStorage` distinguishes
+  instances by `identityHashCode`, which is a hash and not an identity, so two live
+  in-memory storages whose hashes collided would be refused as one store. Negligible at the
+  handful per test process this pack opens; wrong in principle.
+  Depends on X3.
 - **X6 — Consumers.** `at_client_flutter` and `at_onboarding_cli` move onto the factory, so
   both are WASM-ready ahead of the next major. Whether they move in this major or the next
   is open.

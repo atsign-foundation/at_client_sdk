@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/sqlite.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
@@ -186,6 +187,54 @@ void main() {
     await injected.close();
   });
 
+  test(
+      're-offering the storage a client already holds does not rebuild the '
+      'client', () async {
+    final storage = InMemoryAtClientStorage(atSign: '@sticky');
+    final manager = AtClientManager('@sticky');
+    await manager.setCurrentAtSign('@sticky', 'wavi', AtClientPreference(),
+        storage: storage);
+    final first = manager.atClient;
+
+    await manager.setCurrentAtSign('@sticky', 'wavi', AtClientPreference(),
+        storage: storage);
+
+    expect(first.isStopped, isFalse,
+        reason: 'the second call offered nothing that changed, so it must '
+            'have taken the idempotency short-circuit. The rebuild path stops '
+            'the outgoing client first, so a stopped one means it rebuilt');
+    expect(identical(manager.atClient, first), isTrue,
+        reason: 'and the same client must still be current');
+
+    await first.stop();
+    await storage.close();
+  });
+
+  test('fromAuthSession hands its storage to the client it builds', () async {
+    final injected = InMemoryAtClientStorage(atSign: '@handoff');
+    final keysIo = _AttachWatchingKeysIo(injected);
+    final session = AtAuthSession(
+        atSign: '@handoff',
+        rootDomain: const AtRootDomain('root.atsign.org', 64),
+        namespace: 'wavi',
+        atKeysIo: keysIo);
+
+    // The client derives its AtChops from the session's key source, and this
+    // one refuses - but only after _init has attached whatever storage it was
+    // given, which is the moment the watcher records.
+    await expectLater(
+        () => AtClientManager('@handoff')
+            .fromAuthSession(session, AtClientPreference(), storage: injected),
+        throwsA(anything));
+
+    expect(keysIo.storageWasAttached, isTrue,
+        reason: 'fromAuthSession must pass storage down to '
+            'AtClientImpl.create. Without it the client builds its own from '
+            'hiveStoragePath, which this preference does not set, so it fails '
+            'before ever reading a key');
+    await injected.close();
+  });
+
   test('a client with no injected storage still owns and closes its own',
       () async {
     final client =
@@ -197,4 +246,24 @@ void main() {
         reason: 'storage the client built itself is closed on release, and a '
             'closed store cannot be reopened');
   });
+}
+
+/// Records whether [_storage] was already attached when the client asked this
+/// source for key material, then refuses: attachment happens in `_init`, so
+/// reading `true` here proves the storage reached the client.
+class _AttachWatchingKeysIo extends WrittenAtKeysIo {
+  _AttachWatchingKeysIo(this._storage);
+
+  final AtClientStorageBase _storage;
+  bool storageWasAttached = false;
+
+  @override
+  Future<AtKeys> read(String atSign) {
+    storageWasAttached = _storage.isAttached;
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> write(String atSign, AtKeys atKeys) =>
+      throw UnimplementedError();
 }

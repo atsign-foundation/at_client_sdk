@@ -4,6 +4,7 @@ import 'package:test/test.dart';
 import 'test_utils.dart';
 
 void main() {
+  TestUtils.isolateStorage('at_client_lifecycle_functional_test');
   late String firstAtSign;
   late String secondAtSign;
   final namespace = 'lifecycletest';
