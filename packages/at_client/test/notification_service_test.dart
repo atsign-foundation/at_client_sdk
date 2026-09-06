@@ -1729,15 +1729,16 @@ void main() {
               'change how often the notification connection is probed; the '
               'muxable owns the probe now, so a preference that does not '
               'reach it is not overridden, it is silently ignored');
-      expect(ns.monitor.lookUp.heartbeatResponseTimeout,
-          Duration(milliseconds: 7),
+      expect(
+          ns.monitor.lookUp.heartbeatResponseTimeout, Duration(milliseconds: 7),
           reason: 'and monitorHeartbeatResponseTimeout decides how long an '
               'unanswered probe waits before the connection is torn down and '
               'rebuilt. Both sides default to 10 seconds, so only a tuned '
               'value can tell a wired field from an unwired one');
     });
 
-    test('an untouched preference gives the documented 59s, not the 30s '
+    test(
+        'an untouched preference gives the documented 59s, not the 30s '
         'underneath', () async {
       final ns = await NotificationServiceImpl.create(mockAtClientImpl,
               secondaryAddressFinder: mockSecondaryAddressFinder)

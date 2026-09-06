@@ -24,8 +24,9 @@ void main() {
   setUp(() => AtClientManager.getInstance().reset());
   tearDown(() => AtClientManager.getInstance().reset());
 
-  testWidgets('works against an app-owned client, without AtClientManager',
-      (tester) async {
+  testWidgets('works against an app-owned client, without AtClientManager', (
+    tester,
+  ) async {
     final service = MockFlutterEnrollmentService();
     final atClient = MockAtClient();
     final remoteSecondary = MockRemoteSecondary();
@@ -34,26 +35,37 @@ void main() {
     when(() => remoteSecondary.atLookUp).thenReturn(MockAtLookUp());
     when(() => atClient.getCurrentAtSign()).thenReturn('@appowned');
     when(() => service.atClient).thenReturn(atClient);
-    when(() =>
-            service.getEnrollments(statusFilters: any(named: 'statusFilters')))
-        .thenAnswer((_) => const Stream<EnrollmentServerResponse>.empty());
-    when(() => service.list(any(), any(),
+    when(
+      () => service.getEnrollments(statusFilters: any(named: 'statusFilters')),
+    ).thenAnswer((_) => const Stream<EnrollmentServerResponse>.empty());
+    when(
+      () => service.list(
+        any(),
+        any(),
         drx: any(named: 'drx'),
-        arx: any(named: 'arx'))).thenAnswer((_) async => []);
+        arx: any(named: 'arx'),
+      ),
+    ).thenAnswer((_) async => []);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: EnrollmentRequestList(enrollmentService: service)),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: EnrollmentRequestList(enrollmentService: service)),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // AtClientManager was reset, so its atClient getter throws. The widget
     // catches everything and renders the message rather than crashing, which
     // is what makes this a trap - so assert on the absence of that text.
-    expect(find.textContaining('No atClient yet'), findsNothing,
-        reason: 'every client read goes through the service the app supplied, '
-            'so an app that built its client with AuthService.createClient '
-            'can use this widget - reaching AtClientManager here would throw '
-            'for exactly the apps the new factory exists to serve');
+    expect(
+      find.textContaining('No atClient yet'),
+      findsNothing,
+      reason:
+          'every client read goes through the service the app supplied, '
+          'so an app that built its client with AuthService.createClient '
+          'can use this widget - reaching AtClientManager here would throw '
+          'for exactly the apps the new factory exists to serve',
+    );
     verify(() => service.atClient).called(greaterThan(0));
   });
 }

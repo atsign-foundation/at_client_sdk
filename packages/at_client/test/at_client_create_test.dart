@@ -166,8 +166,8 @@ void main() {
             preference: pref(),
             storage: first,
             syncServiceBuilder: (_) => throw StateError('builder exploded')),
-        throwsA(isA<StateError>()
-            .having((e) => e.message, 'message', contains('builder exploded'))));
+        throwsA(isA<StateError>().having(
+            (e) => e.message, 'message', contains('builder exploded'))));
 
     // The client is filed before its services are wired, so a throw here can
     // strand an entry nothing holds a reference to. Asserted directly, before
