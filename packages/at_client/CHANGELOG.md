@@ -1,4 +1,8 @@
 ## 3.14.1
+- fix: `setCurrentAtSign` no longer rebuilds the client when it is handed the
+  storage that client already holds. Offering the same bundle is not a
+  change, and the rebuild it used to force stopped a working client and its
+  services for nothing. A different bundle still rebuilds, as it must.
 - feat: `AtClientManager.fromAuthSession` accepts a `storage` bundle and
   passes it to the client it builds, as `setCurrentAtSign` already did. A
   caller handing storage in no longer has to avoid the auth hand-off to do

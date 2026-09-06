@@ -187,6 +187,29 @@ void main() {
     await injected.close();
   });
 
+  test(
+      're-offering the storage a client already holds does not rebuild the '
+      'client', () async {
+    final storage = InMemoryAtClientStorage(atSign: '@sticky');
+    final manager = AtClientManager('@sticky');
+    await manager.setCurrentAtSign('@sticky', 'wavi', AtClientPreference(),
+        storage: storage);
+    final first = manager.atClient;
+
+    await manager.setCurrentAtSign('@sticky', 'wavi', AtClientPreference(),
+        storage: storage);
+
+    expect(first.isStopped, isFalse,
+        reason: 'the second call offered nothing that changed, so it must '
+            'have taken the idempotency short-circuit. The rebuild path stops '
+            'the outgoing client first, so a stopped one means it rebuilt');
+    expect(identical(manager.atClient, first), isTrue,
+        reason: 'and the same client must still be current');
+
+    await first.stop();
+    await storage.close();
+  });
+
   test('fromAuthSession hands its storage to the client it builds', () async {
     final injected = InMemoryAtClientStorage(atSign: '@handoff');
     final keysIo = _AttachWatchingKeysIo(injected);

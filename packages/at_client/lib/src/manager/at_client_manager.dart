@@ -105,6 +105,11 @@ class AtClientManager {
     // Callers needing a forced reset for a SAME-atSign change of
     // preferences / atChops / enrollmentId still get one — we only
     // skip when nothing in the request changed.
+    //
+    // Re-offering the storage the current client already holds is not a
+    // change either: it is what a caller that owns one bundle for the whole
+    // of its work does on every call, and rebuilding on it would tear the
+    // client down for nothing.
     final currentAtSign = _currentAtClient?.getCurrentAtSign();
     if (currentAtSign != null &&
         currentAtSign == atSign &&
@@ -112,7 +117,7 @@ class AtClientManager {
         atKeysIo == null &&
         atLookUp == null &&
         enrollmentId == null &&
-        storage == null &&
+        _storageIsUnchanged(storage) &&
         _currentAtClient!.isStopped == false) {
       // The full stop/recreate path below recreates via AtClientImpl.create(),
       // which adopts the supplied preference's crypto config onto a re-used
@@ -180,6 +185,14 @@ class AtClientManager {
     _logger.info("setCurrentAtSign complete");
 
     return this;
+  }
+
+  /// Whether [storage] would leave the current client's storage as it is:
+  /// either none was offered, or it is the object that client already holds.
+  bool _storageIsUnchanged(AtClientStorage? storage) {
+    if (storage == null) return true;
+    final current = _currentAtClient;
+    return current is AtClientImpl && identical(current.storage, storage);
   }
 
   /// Explicit, typed hand-off from auth to client.
