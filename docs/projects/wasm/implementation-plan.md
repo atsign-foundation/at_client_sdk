@@ -316,7 +316,8 @@ D-12. Independent of the P series, which is `at_server`-side.
   hand-roll it — `nskey_self_notify_live_test.dart:100` sets `$atSign/$device-$runId` and its
   comment at `:81` names the reason. Owed on the spike, after the merge-back so it can use the
   `storage:` injection: make the per-enrollment location systematic instead of per-test.
-  Five commits on that branch,
+  The branch's commits and push state are re-derived, never quoted here
+  (`git log origin/trunk..gkc-at-client-storage-release`).
   unpushed as of writing. Four things the build corrected, each measured rather than reasoned:
   - **The forPath mechanism was spike-only, so the pin had to be ported.** Trunk (and therefore
     #2208) carried *no* `dependency_overrides` at all and resolved published
@@ -375,10 +376,14 @@ D-12. Independent of the P series, which is `at_server`-side.
   ship as one PR.** Its release code (`stop()` releases storage, PR #2208) is sound, but the
   per-atSign guard it carries is superseded
   by [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05)'s per-location guard
-  and is reworked in place on this branch as part of X4a. A new static
-  factory on `AtClient` that builds *and*
-  wires the services, taking a bundle; `stop()` releases the claim and closes what the
-  bundle opened. Deprecate `AtClientPreference.hiveStoragePath` with a migration note.
+  and is reworked in place on this branch as part of X4a. ❌ **A new static factory on
+  `AtClient` that builds *and* wires the services is NOT built** — #2208 adds an optional
+  `storage:` to the existing `AtClientImpl.create` instead, which delivers the injection
+  without that entry point (found by a cold read, 2026-09-06); `stop()` releases the claim and closes what the
+  bundle opened. ❌ **`AtClientPreference.hiveStoragePath` is NOT yet deprecated in code** — it carries no
+  `@Deprecated` on either branch, while [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)
+  and `design.md` describe the deprecation as done. Ruled, not shipped: annotate it with a
+  migration note, or correct those three sentences. Found by a cold read, 2026-09-06.
   Depends on X1. **Measured 2026-09-05 on trunk `d13516d95` (the X3 merge), storage-release
   semantics built and run against the packs before landing anything:** 69 tests red across three causes —
   (a) 38 fixtures that rebuild a client for one atSign without stopping the previous one,
