@@ -1,7 +1,9 @@
 import 'dart:async' show unawaited;
 import 'dart:convert' show base64Encode;
 
+import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
     show NskeyAdvertisement, NskeySeed;
@@ -76,25 +78,11 @@ class NskeySeeding {
   /// its `preference.namespace`; those clients are most of the fleet during
   /// the rollout, so that is where seeding coverage actually comes from.
   ///
-  /// `*` is skipped. It authorises every namespace, and "every namespace" is
-  /// not a list that can be minted. `__manage` is skipped for the same reason
-  /// it is not an app namespace.
-  ///
-  /// ⚠️ **A wildcard enrollment therefore seeds NOTHING, and nothing else
-  /// mints for it.** This said "a wildcard enrollment mints on demand when it
-  /// writes into a specific one instead", and there is no such path: the only
-  /// production caller of `PublishedNskeyKeyRing.mintAndPublish` is [seed]
-  /// below, and the ring's `_mintUnlessPublished` is reachable only from that
-  /// same method. Writing does not mint — an outbound share resolves the
-  /// **recipient's** nskey (`NskeyProvider._nskeyOwnerOf` is
-  /// `atKey.sharedWith ?? recordOwner`), so a sender consults its own key only
-  /// for self data, and consulting is not minting.
-  ///
-  /// The consequence is that an atSign reachable only through a wildcard
-  /// enrollment publishes no advertisement, so nobody can seal to it in any
-  /// namespace. Whether that is reachable in practice depends on what the
-  /// atServer grants a first enrollment, which is not this package's to
-  /// assert.
+  /// `*` is not a namespace data lives in, so nothing mints for it as such;
+  /// an enrollment granted it seeds `preference.namespace`, exactly as the
+  /// atSign's own credential does, since a wildcard grant is that credential's
+  /// privilege under another name. `__manage` is skipped: not an app
+  /// namespace.
   ///
   /// Read by the routes that have to iterate — [seed] and
   /// [requestMissingPrivates] — which have no other way to know what to loop
@@ -108,18 +96,22 @@ class NskeySeeding {
   /// [isSeedable], which answers "that namespace never holds a key of its own"
   /// from the argument alone.
   Future<Set<String>> authorisedNamespaces() async {
+    final own = atClient.getPreferences()?.namespace;
+    final ownNamespace =
+        (own == null || own.isEmpty) ? const <String>{} : {own};
     final enrollmentId = atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
-    if (enrollmentId == null || enrollmentId.isEmpty) {
-      final own = atClient.getPreferences()?.namespace;
-      return (own == null || own.isEmpty) ? const {} : {own};
-    }
+    if (isAtSignCredential(enrollmentId)) return ownNamespace;
 
     try {
       final mine = (await atClient.enrollmentService!.fetchEnrollmentRequests())
           .where((e) => e.enrollmentId == enrollmentId);
+      final granted = {
+        for (final enrollment in mine) ...?enrollment.namespace?.keys
+      };
       return {
-        for (final enrollment in mine)
-          ...?enrollment.namespace?.keys.where(isSeedable)
+        ...granted.where(isSeedable),
+        if (granted.contains(EnrollmentConstants.allNamespaces))
+          ...ownNamespace,
       };
     } catch (e) {
       _logger.info('Could not read this enrollment to find its namespaces, so '

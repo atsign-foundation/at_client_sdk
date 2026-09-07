@@ -328,9 +328,10 @@ void main() {
       atSign,
       rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort),
       atKeysIo: keysIo,
-      // Named rather than defaulted: with no id, AtAuthRequest falls back to
-      // the keyfile's FLAT enrollment id, which is not this one.
-    )..enrollmentId = enrollmentId);
+    ));
+    expect(response.session?.enrollmentId, enrollmentId,
+        reason: 'the device keyfile must resolve to $enrollmentId, or the '
+            'amendment below would be measuring the wrong enrollment');
     expect(response.isSuccessful, isTrue,
         reason: 'could not re-authenticate as $enrollmentId, so the amendment '
             'below would be measuring the wrong enrollment');
@@ -498,8 +499,9 @@ void main() {
         atSign,
         rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort),
         atKeysIo: keyfiles[device]!,
-      )..enrollmentId = client.enrollmentId);
+      ));
       expect(response.isSuccessful, isTrue);
+      expect(response.session!.enrollmentId, client.enrollmentId);
       final manager = await AtClientManager(atSign).setCurrentAtSign(
           atSign, namespace, preference,
           atChops: auth.atChops,

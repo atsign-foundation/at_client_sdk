@@ -12,6 +12,7 @@ import 'package:at_auth/at_auth.dart'
         KeyEntryStatus,
         CryptographicMaterialStatus,
         WrittenAtKeysIo;
+import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -118,16 +119,13 @@ class KeyPackageMinting with ApkamSigning {
       return nothing;
     }
 
-    // enroll:update is self-only, so the client has to be able to NAME the
-    // enrollment the write lands on. A client running as `primary` cannot: the
-    // atServer knows it by that name, but nothing in its keyfile says so, and
-    // the id is what the verb keys on.
+    // enroll:update amends an enrollment record, and the atSign's own
+    // credential has none on a released atServer.
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
     final enrolment = atLookUp?.enrollmentId;
-    if (enrolment == null) {
-      logger.info('Not reconciling the key package for $atSign: this client '
-          'names no enrollment, so it cannot say which record\'s '
-          'metadata.keyPackage to amend');
+    if (enrolment == null || isAtSignCredential(enrolment)) {
+      logger.info('Not reconciling the key package for $atSign: the atSign\'s '
+          'own credential has no enrollment record to amend');
       return nothing;
     }
 

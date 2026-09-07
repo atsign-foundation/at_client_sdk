@@ -17,40 +17,48 @@ import 'proven_elsewhere.dart';
 /// every check in this directory. Widening that class is what makes these rows
 /// real; the rows existing never did.
 void main() {
-  test('UC-G1.1 · the derivation is offered, not applied', () {
-    // GIVEN a keyfile holding exactly one active privateAuthentication
-    //       material.
-    // WHEN  a caller asks AtKeys.resolveAuthenticatingEnrollment().
-    // THEN  it returns that material's enrollment; with two it throws naming
-    //       both; with none it returns null.
-    // AND   authentication does NOT apply it: a request with no enrollment id
-    //       falls back to the flat, stored, deprecated AtKeys.enrollmentId.
-    provenIn('packages/at_auth/test/at_keys_test.dart',
-        'the authenticating enrollment is null with no typed auth material',
-        proves: 'the resolver answers null rather than guessing when a file '
-            'holds nothing typed — the arm the no-id default is measured '
-            'against',
-        clauses: ['with none it returns null']);
+  test('UC-G1.1 · the keys name the enrollment', () {
+    // GIVEN a keyfile.
+    // WHEN  AtAuthImpl.authenticate is handed it and asks
+    //       AtKeys.enrollmentToAuthenticateAs().
+    // THEN  the one enrollment holding active typed material; with none the
+    //       flat stored id; with neither primary; with several it throws.
+    // AND   primary never reaches the wire.
+    // AND   a client built with an AtKeysIo runs as the same answer, and a
+    //       disagreeing id passed beside it is shouted about and ignored.
     provenIn('packages/at_auth/test/at_auth_test.dart',
-        'on a RETROFITTED keyfile a no-id request authenticates as the LEGACY',
-        proves: 'the second clause AS WRITTEN, on the retrofitted file it '
-            'names. It retrofits a legacy keyfile for real, checks the '
-            'premise that the two sources then give different non-null '
-            'answers (flat legacy-1, resolver new-123), calls '
-            'AtAuthImpl.authenticate with no enrollment id, and asserts on '
-            'the id that reached PkamAuthenticator — legacy-1. '
-            'Mutation-proven: making authenticate consult the resolver '
-            'reddens it quoting this reason, while the separate '
-            'explicitly-supplied-id test stays green, so the control is not '
-            'entangled with the property under test. ⚠️ This cited "with no '
-            'enrollment id supplied, the FLAT stored one is used" until '
-            '2026-08-27, saying its legacy-only fixture "is what makes the '
-            'assertion discriminate". It is the opposite: with the resolver '
-            'answering null there, "authentication read the flat field" and '
-            '"the resolver had nothing to offer" are the same observation — '
-            'and that test never calls authenticate at all, asserting only '
-            'two properties of the document',
-        clauses: ['authentication does **not** apply it']);
+        'a RETROFITTED keyfile authenticates as the successor, not the flat',
+        proves: 'the typed material wins on the one shape where the flat id '
+            'and the typed id are both real and differ: a legacy keyfile is '
+            'retrofitted for real, authenticated with nothing passed, and '
+            'the id that reached PkamAuthenticator is the successor',
+        clauses: ['the one enrollment holding active typed']);
+    provenIn('packages/at_auth/test/at_auth_test.dart',
+        'a legacy keyfile authenticates as its flat stored enrollment',
+        proves: 'with no typed material the flat stored id is what reaches '
+            'pkam — asserted after checking the resolver has nothing to offer '
+            'on this fixture',
+        clauses: ['with none, as the flat stored']);
+    provenIn('packages/at_auth/test/at_auth_test.dart',
+        'an ancient keyfile with no enrollment id authenticates as primary',
+        proves: 'a keyfile holding neither reaches pkam as primary',
+        clauses: ['with neither, as `primary`']);
+    provenIn('packages/at_auth/test/plural_enrollments_test.dart',
+        'the enrollment to authenticate as is refused rather than picked from',
+        proves: 'two live enrollments throw, and the message names both',
+        clauses: ['with several it throws naming them all']);
+    provenIn('packages/at_commons/test/pkam_verb_builder_test.dart',
+        'the atSign\'s own credential authenticates with no enrollment id on',
+        proves: 'the bare pkam: is pinned as a raw literal for primary, with '
+            'and without the algorithm fields',
+        clauses: ['`PkamVerbBuilder` omits it']);
+    provenIn(
+        'packages/at_client/test/at_client_create_derives_enrollment_test.dart',
+        'a disagreeing id is ignored and the keys win',
+        proves: 'AtClientImpl.create runs and files the client under the '
+            'enrollment its keys authenticate as, not the one the caller '
+            'named',
+        clauses: ['logged at shout level and']);
   });
 
   test(

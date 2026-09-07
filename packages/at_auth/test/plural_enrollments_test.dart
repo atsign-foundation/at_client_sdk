@@ -155,4 +155,15 @@ void main() {
       expect(keys.resolveAuthenticatingEnrollment(), 'e2');
     });
   });
+
+  test('the enrollment to authenticate as is refused rather than picked from',
+      () {
+    // The document a writer refuses to create, read anyway: two live
+    // enrollments, and the derivation names both rather than choosing.
+    expect(
+        () =>
+            AtKeys.fromJson(twoLiveEnrollments()).enrollmentToAuthenticateAs(),
+        throwsA(isA<AtKeysEnrollmentException>().having(
+            (e) => '$e', 'message', allOf(contains('e1'), contains('e2')))));
+  });
 }

@@ -137,9 +137,6 @@ class AtAuthRequest extends AuthRequest {
   // Controls how the authentication is performed
   AtKeysIo? atKeysIo;
 
-  /// The enrollmentId for APKAM authentication
-  String? enrollmentId;
-
   /// The keys for authentication of an atSign.
   @Deprecated('remove in v5')
   AtKeys? atAuthKeys;

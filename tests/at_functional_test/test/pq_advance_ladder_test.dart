@@ -111,27 +111,20 @@ void main() {
   /// [posture] — which is what an advance IS. The same restart path a
   /// production app walks when it ships a new stage.
   Future<AtClient> clientAt(PqPosture posture, String enrollmentId) async {
-    // ⚠️ **Name the enrollment.** Left unset, `AtAuthRequest.enrollmentId`
-    // defaults to the keyfile's FLAT id — the original OTP enrollment — and
-    // the algorithm and the chops are then resolved from that one. By rung 2
-    // this keyfile holds two enrollments, so the client would authenticate
-    // with the legacy RSA keypair while the preference told at_chops the
-    // algorithm was ML-DSA-65, and PKAM would fail deep inside a startup step
-    // with "ML-DSA-65 secret key must be 4032 bytes: 1216" — the RSA key's
-    // length, signed as though it were the other algorithm.
-    //
-    // `AtKeys.resolveAuthenticatingEnrollment` exists for callers with no id
-    // and REFUSES to choose between several, on purpose. This ladder always
-    // knows which rung it is on, so it says so.
+    // The keyfile names the enrollment: once a rung has retrofitted, the
+    // successor's typed material is the one active authentication key, so
+    // at_auth resolves it; the flat id — the OTP enrollment — is what it
+    // falls back to only before any retrofit.
     final auth = AtAuth.create();
     final response = await auth.authenticate(AtAuthRequest(
       atSign,
       rootDomain: AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
       atKeysIo: keysIo,
-    )..enrollmentId = enrollmentId);
+    ));
     expect(response.isSuccessful, isTrue,
-        reason: 'could not authenticate from the ladder keyfile as '
-            '$enrollmentId');
+        reason: 'could not authenticate from the ladder keyfile');
+    expect(response.session!.enrollmentId, enrollmentId,
+        reason: 'the ladder keyfile must resolve to the rung being asked for');
 
     // ⚠️ ONE store for the whole ladder, and that is the point of the row: an
     // install does not move its storage on every upgrade, and the durability

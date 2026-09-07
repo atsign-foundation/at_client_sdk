@@ -156,7 +156,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-C1.5  | The retrofit axis: an argless retrofit follows the posture                          | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.6  | The grouped posture: one value sets every axis                                      | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.7  | The signing-set axis: which keys an enrollment holds                                | PROVEN    | `c1_rollout_test.dart`       |
-| UC-G1.1   | The derivation is offered, not applied                                             | PROVEN    | `g1_keyfile_test.dart` |
+| UC-G1.1   | The keys name the enrollment                                                       | PROVEN    | `g1_keyfile_test.dart` |
 | UC-G1.2   | A retrofit leaves one active auth key, touching nothing legacy                     | PROVEN    | `g1_keyfile_test.dart` |
 | UC-G1.3   | Retirement frees the slot                                                          | PROVEN    | `g1_keyfile_test.dart` |
 | UC-G1.4   | Opening a legacy keyfile does not upgrade it                                       | PROVEN    | `g1_keyfile_test.dart` |
@@ -3156,26 +3156,30 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
 
 ### 16.2 The keyfile rows
 
-#### UC-G1.1 — the derivation is offered, not applied
-  *Given* a keyfile holding exactly one active `privateAuthentication`
-  material.
-  *When* a caller asks `AtKeys.resolveAuthenticatingEnrollment()`.
-  *Then* it returns that material's enrollment id; with two it throws naming
-  both; with none it returns null.
-  *And* authentication does **not** apply it: handed a request with no
-  enrollment id, `AtAuthImpl.authenticate` uses the flat stored
-  `AtKeys.enrollmentId` — on a retrofitted file deliberately the legacy
-  enrollment, not the active typed material's.
+#### UC-G1.1 — the keys name the enrollment
+  *Given* a keyfile.
+  *When* `AtAuthImpl.authenticate` is handed it — there is no enrollment id
+  to hand beside it any more — and asks `AtKeys.enrollmentToAuthenticateAs()`.
+  *Then* it authenticates as the one enrollment holding active typed
+  `privateAuthentication` material; with none, as the flat stored
+  `AtKeys.enrollmentId`; with neither, as `primary`, the atServer's name for
+  the atSign's own credential; with several it throws naming them all.
+  *And* `primary` never reaches the wire: `PkamVerbBuilder` omits it, so the
+  bare `pkam:` a released atServer expects is what goes out.
+  *And* a client built with an `AtKeysIo` runs as the same answer; an
+  `enrollmentId` passed beside it that disagrees is logged at shout level and
+  ignored.
 
-  ⚠️ **This row read "the enrollment id is derived, not stored", and asserted
-  that a client reading with no id supplied authenticates as the active
-  material's enrollment. Both halves were false.** The implicit derivation it
-  described (`AtKeys.activeEnrollmentId`) existed for three days — added
-  2026-08-11, the day this row was written, and deleted 2026-08-14 by
-  [`decisions.md` 100](detail/decisions.md#100-the-seven-shapes-ruling-99-left-open-2026-08-14)
-  ruling 1, which replaced guessing with a resolver you invoke by name.
-  `resolveAuthenticatingEnrollment()` has **zero production callers**, which is
-  the point of it rather than a gap. Corrected 2026-08-18.
+  ⚠️ **This row read "the derivation is offered, not applied" from 2026-08-18
+  to 2026-09-07**, and asserted that `authenticate` used the flat stored id —
+  on a retrofitted file deliberately the legacy enrollment — unless the
+  request named another. That left every keyfile-only caller, the onboarding
+  CLI's `authenticate()` and every `CLIBase` app among them, running as the
+  legacy enrollment after a retrofit, and naming the successor was each
+  caller's job. Ruled the other way in
+  [`decisions.md` 132](detail/decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07):
+  `AtAuthRequest.enrollmentId` is removed, the keys decide, and `primary` is a
+  name the client carries.
 
 #### UC-G1.2 — a retrofit leaves exactly one active authentication key, and touches nothing legacy
   *Given* a legacy keyfile that then retrofits.

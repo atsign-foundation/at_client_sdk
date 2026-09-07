@@ -34,6 +34,10 @@ import 'package:at_lookup/at_lookup.dart';
 /// app with no teardown of its own wants. Supplying none falls back to a Hive
 /// store under the deprecated `preference.hiveStoragePath`.
 ///
+/// With [atKeysIo] the enrollment is the keys' own answer,
+/// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
+/// logged at shout level and ignored.
+///
 /// Each builder replaces one service with the caller's own; by default each
 /// service is the real one.
 ///

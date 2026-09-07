@@ -96,13 +96,14 @@ void main() {
     // A fresh connection, authenticating from the keyfile alone. This is the
     // assertion that matters: the atServer verified an ML-DSA PKAM signature
     // against the enrollment record it created at activation.
-    final reauth = await AtAuth.create().authenticate(
-        AtAuthRequest(atSign, atKeysIo: keysIo)
-          ..enrollmentId = enrollmentId
+    final reauth = await AtAuth.create()
+        .authenticate(AtAuthRequest(atSign, atKeysIo: keysIo)
           ..rootDomain = rootDomain);
     expect(reauth.isSuccessful, true,
         reason: 'no RSA APKAM exists anywhere, so this can only have '
             'succeeded by ML-DSA');
+    expect(reauth.session!.enrollmentId, enrollmentId,
+        reason: 'the keyfile alone names the enrollment: nothing passed an id');
 
     // --- the signing root exists, and is mutable ---------------------------
     final rootValue = await client.getRemoteSecondary()!.executeCommand(

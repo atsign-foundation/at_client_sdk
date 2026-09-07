@@ -1,7 +1,7 @@
 import 'dart:async' show Completer;
 
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
-import 'package:at_commons/at_commons.dart' show AtKey;
+import 'package:at_commons/at_commons.dart' show AtKey, EnrollmentConstants;
 import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -205,7 +205,8 @@ class MintLock {
   /// meeting its own token is not contention. A client with no enrollment id
   /// authenticates as the owner and there is only ever one of those, so the
   /// sentinel below is equally distinct from any enrollment's id.
-  String get _holder => atClient.enrollmentId ?? 'primary';
+  String get _holder =>
+      atClient.enrollmentId ?? EnrollmentConstants.primaryEnrollmentId;
 
   Future<bool> _take(AtKey lockKey,
       {required bool ownLockIsNotContention}) async {

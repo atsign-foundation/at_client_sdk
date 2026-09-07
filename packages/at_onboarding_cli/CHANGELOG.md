@@ -1,5 +1,12 @@
 ## 1.17.0-rc1
 
+- feat: `authenticate()` authenticates as the keyfile's own enrollment (at_auth
+  4.0.0-rc2's `AtKeys.enrollmentToAuthenticateAs`): the one enrollment holding
+  active typed authentication material, else the flat stored id, else `primary`
+  for a keyfile that predates enrollments. Its `enrollmentId` parameter is
+  deprecated: a value that disagrees with the keyfile is logged at shout level
+  and ignored. A retrofitted keyfile therefore authenticates as its successor
+  with nothing passed.
 - fix: `createAtClient` waits for the client's post-quantum startup to finish,
   bounded at 30 seconds, before handing the client to a command. A command's
   process ends with the command, and the startup — which publishes the

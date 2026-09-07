@@ -200,15 +200,31 @@ void main() {
             'of this must not publish a discoverable record');
   });
 
-  test('a wildcard enrollment seeds nothing at start', () async {
+  test('a wildcard enrollment seeds the namespace the app runs in', () async {
     final s = seeding(
         enrollmentId: 'enroll-priv',
+        preferenceNamespace: 'buzz',
         enrollmentNamespaces: {'*': 'rw', '__manage': 'rw', 'wavi': 'rw'});
-
-    expect(await s.authorisedNamespaces(), {'wavi'},
+    expect(await s.authorisedNamespaces(), {'wavi', 'buzz'},
         reason: '"every namespace" is not a list that can be minted, so a '
-            'wildcard mints on demand instead; __manage is not an app '
-            'namespace either');
+            'wildcard grant seeds the preference namespace — exactly as the '
+            'atSign\'s own credential does — beside any namespace named '
+            'outright; __manage is not an app namespace');
+  });
+  test('a root enrollment granted only the wildcard seeds like the atSign',
+      () async {
+    final s = seeding(
+        enrollmentId: 'enroll-root',
+        preferenceNamespace: 'buzz',
+        enrollmentNamespaces: {'*': 'rw', '__manage': 'rw'});
+    expect(await s.authorisedNamespaces(), {'buzz'},
+        reason: 'a root enrollment is the atSign\'s own privilege under '
+            'another name; seeding nothing left such an atSign unreachable');
+  });
+  test('primary is the atSign\'s own credential and seeds the same way',
+      () async {
+    final s = seeding(enrollmentId: 'primary', preferenceNamespace: 'wavi');
+    expect(await s.authorisedNamespaces(), {'wavi'});
   });
 
   group('the rotation question follows the route that asked to seed', () {

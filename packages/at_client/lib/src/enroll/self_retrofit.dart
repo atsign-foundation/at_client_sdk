@@ -224,10 +224,10 @@ Future<AtAuthSession> retrofitIdentity({
 
   // Authenticate under the new enrollment: the retrofit response's session
   // is the legacy one, and only authenticate() mints a session carrying the
-  // new id (with the ML-DSA chops and algorithm resolved from the keyfile).
+  // new id — the keyfile's own answer now that the successor's material is
+  // filed, with the chops and algorithm resolved from it.
   final auth = await AtAuth.create()
       .authenticate(AtAuthRequest(session.atSign, atKeysIo: session.atKeysIo)
-        ..enrollmentId = response.enrollmentId
         // Carried through deliberately: the switched-to client's start-time
         // self-heal — the signing-root pull, the nskey pulls, the store
         // hydration — all key off its namespace, and a client built without
@@ -238,6 +238,12 @@ Future<AtAuthSession> retrofitIdentity({
     throw AtClientException.message(
         'the retrofitted enrollment ${response.enrollmentId} failed to '
         'authenticate; the legacy client is untouched');
+  }
+  if (auth.session!.enrollmentId != response.enrollmentId) {
+    throw AtClientException.message(
+        'the keyfile authenticates as ${auth.session!.enrollmentId} after '
+        'retrofitting to ${response.enrollmentId}; the legacy client is '
+        'untouched');
   }
 
   return auth.session!;

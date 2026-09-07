@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart'
-    show AtAuthSession, AtEnrollment, AtKeysIo;
+    show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys;
+import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_client/src/enroll/pq_native_onboard.dart'
     show firstEnrollmentAppName, firstEnrollmentDeviceName;
@@ -713,6 +714,10 @@ class AtClientImpl implements AtClient {
   /// the quiet ones: a storage bundle refuses a second open at a location
   /// already open, but on a cache hit nothing opens, so the path is dropped.
   ///
+  /// With [atKeysIo] the enrollment is the keys' own answer,
+  /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
+  /// logged at shout level and ignored.
+  ///
   /// Nothing in this library ever removes an entry from that cache, so a client
   /// that has been stopped is returned from here and restarted rather than
   /// rebuilt. A process that needs a second, genuinely separate client for one
@@ -750,6 +755,28 @@ class AtClientImpl implements AtClient {
               'Supply one or the other for $currentAtSign');
     }
 
+    if (atKeysIo != null) {
+      final logger = AtSignLogger('AtClientImpl ($currentAtSign)');
+      AtKeys? keys;
+      try {
+        keys = await atKeysIo.read(currentAtSign);
+      } on Exception catch (e) {
+        // Survivable when the AtChops are injected, and the caller's id is
+        // then the only answer there is.
+        logger.warning('Could not read the keys for $currentAtSign, so which '
+            'enrollment they authenticate as is unknown; running as '
+            '${enrollmentId ?? "the atSign's own credential"}: $e');
+      }
+      if (keys != null) {
+        final derived = keys.enrollmentToAuthenticateAs();
+        if (enrollmentId != null && enrollmentId != derived) {
+          logger.shout('$currentAtSign was asked to run as enrollment '
+              '$enrollmentId, but its keys authenticate as $derived; using '
+              '$derived');
+        }
+        enrollmentId = derived;
+      }
+    }
     // Fetch cached AtClientImpl for re-use, or create a new one and init it.
     // Keyed by (atSign, enrollmentId) — see [instanceKey]; two enrollments of
     // one atSign are different principals and must not share a client.
@@ -1951,7 +1978,7 @@ class AtClientImpl implements AtClient {
   /// source at all) leaves the preference's value as the fallback.
   Future<void> _resolveSigningAlgoFromKeyMaterial() async {
     final id = enrollmentId;
-    if (_atKeysIo == null || id == null) return;
+    if (_atKeysIo == null || id == null || isAtSignCredential(id)) return;
     try {
       final keys = await _atKeysIo!.read(_atSign);
       resolved_algo.recordResolvedSigningAlgo(
@@ -2048,11 +2075,12 @@ class AtClientImpl implements AtClient {
     final id = enrollmentId;
     final keysIo = _atKeysIo;
     if (keysIo == null) return;
-    final subject = id ?? 'this atSign\'s own keys';
+    final ownKeys = isAtSignCredential(id);
+    final subject = ownKeys ? 'this atSign\'s own keys' : id!;
 
     final wanted = _preference!.authenticationKeyAlgorithm;
     SigningAlgoType held;
-    if (id == null) {
+    if (ownKeys) {
       // A PRE-ENROLLMENT atSign: it holds no enrollment at all and
       // authenticates with the flat `at_pkam_publickey`, which at_lookup signs
       // with rsa2048. So it compares as rsa2048 — and at a legacy posture,
@@ -2084,7 +2112,7 @@ class AtClientImpl implements AtClient {
       final String appName;
       final String deviceName;
       final Map<String, String> grants;
-      if (id == null) {
+      if (ownKeys) {
         final first = firstEnrollmentIdentity();
         appName = first.appName;
         deviceName = first.deviceName;

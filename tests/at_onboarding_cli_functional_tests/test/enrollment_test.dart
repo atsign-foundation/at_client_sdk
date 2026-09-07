@@ -171,8 +171,7 @@ void main() {
 
       // 4.7 Authenticate now with the approved enrollmentID
       logger.info('Authenticating with enrollment atKeys');
-      bool authResultWithEnrollment =
-          await onboardingService_2.authenticate(enrollmentId: enrollmentId);
+      bool authResultWithEnrollment = await onboardingService_2.authenticate();
       expect(authResultWithEnrollment, true);
       enrolledClientKeysFile.deleteSync();
 

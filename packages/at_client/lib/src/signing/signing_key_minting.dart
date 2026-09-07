@@ -7,6 +7,7 @@ import 'package:at_auth/at_auth.dart'
         WrittenAtKeysIo;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65KeyPair, RsaKeyPair, SigningAlgoType;
+import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart'
     show ApkamSigning, serialiseApskWrite;
@@ -329,7 +330,7 @@ class SigningKeyMinting with ApkamSigning {
         authentication: authenticationSigningKey);
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
 
-    if (atLookUp?.enrollmentId == null) {
+    if (isAtSignCredential(atLookUp?.enrollmentId)) {
       // The unlocked variant: reconcileSigningKeys already holds the lock for
       // this whole publish-then-file section, and acquiring it again here would
       // wait on a chain entry only this call chain can complete.

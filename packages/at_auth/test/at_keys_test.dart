@@ -1364,5 +1364,33 @@ void main() {
               .resolveAuthenticatingEnrollment(),
           isNull);
     });
+
+    // enrollmentToAuthenticateAs: one test per branch, so a mutation of one
+    // branch reddens exactly one of them.
+    test('the enrollment to authenticate as is the one with typed material',
+        () {
+      expect(
+          AtKeys(
+                  atsign: '@alice'.toAtsign(),
+                  keysList: [authKey('auth:mldsa65:1', enrollmentId: 'E1')])
+              .enrollmentToAuthenticateAs(),
+          'E1');
+    });
+
+    test('a legacy keyfile authenticates as its flat stored enrollment', () {
+      final legacy = legacyAtKeys(atsign: '@alice'.toAtsign());
+      // ignore: deprecated_member_use_from_same_package
+      expect(legacy.enrollmentId, isNotNull,
+          reason: 'the fixture must store an id for this to say anything');
+      // ignore: deprecated_member_use_from_same_package
+      expect(legacy.enrollmentToAuthenticateAs(), legacy.enrollmentId);
+    });
+
+    test('a keyfile that predates enrollments authenticates as primary', () {
+      final ancient = legacyAtKeys(atsign: '@alice'.toAtsign());
+      // ignore: deprecated_member_use_from_same_package
+      ancient.enrollmentId = null;
+      expect(ancient.enrollmentToAuthenticateAs(), 'primary');
+    });
   });
 }

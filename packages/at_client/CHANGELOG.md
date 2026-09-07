@@ -1,5 +1,18 @@
 ## 3.15.0-rc1
 
+- feat: a client built with an `AtKeysIo` runs as the enrollment its keys
+  authenticate as (`AtKeys.enrollmentToAuthenticateAs`, at_auth 4.0.0-rc2):
+  the one enrollment holding active typed authentication material, else the
+  flat stored id, else `primary` for a keyfile that predates enrollments. An
+  `enrollmentId` passed to `AtClientImpl.create`, `setCurrentAtSign` or
+  `buildAtClient` that disagrees is logged at shout level and ignored, so a
+  retrofitted keyfile starts as its successor with nothing passed. `primary`
+  never reaches the wire, and a client running as it fetches, updates and
+  lists no enrollment record, exactly as one with no id did.
+- fix: an enrollment granted `*` seeds the namespace the app runs in
+  (`preference.namespace`), as the atSign's own credential does. It seeded
+  nothing, so an atSign reachable only through a root enrollment published no
+  namespace advertisement and nobody could seal to it.
 - feat: `AtClientPreference.monitorSilenceTimeout` (default 60s) rebuilds a
   notification connection that answers heartbeats while delivering nothing. A
   heartbeat proves the socket is alive, not that notifications still arrive on

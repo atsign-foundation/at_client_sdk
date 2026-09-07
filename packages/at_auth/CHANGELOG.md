@@ -1,3 +1,16 @@
+## 4.0.0-rc2
+
+- **BREAKING:** `AtAuthRequest.enrollmentId` is removed. The keys decide which
+  enrollment authenticates, through the new
+  `AtKeys.enrollmentToAuthenticateAs()`: the one enrollment holding active
+  typed authentication material, else the flat stored id, else `primary` for a
+  keyfile that predates enrollments. A retrofitted keyfile therefore
+  authenticates as its successor with nothing passed, where it used to
+  authenticate as the legacy enrollment unless the caller named the successor.
+  A keyfile holding several live enrollments throws naming them, as the
+  resolver always has. `primary` never reaches the wire: at_commons 5.18.0's
+  `PkamVerbBuilder` omits it, so the floor moves to that release.
+
 ## 4.0.0-rc1
 
 - fix: **`authenticatorForChops` requires `signingAlgo` and `hashingAlgo`.**

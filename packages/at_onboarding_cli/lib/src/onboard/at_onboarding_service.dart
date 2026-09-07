@@ -29,13 +29,15 @@ abstract class AtOnboardingService implements ProgressPublisher {
   /// - Delete cram secret from server
   Future<void> completeActivation();
 
-  /// Authenticate into secondary server using PKAM privateKey for legacy clients
-  ///
-  /// For clients that are enrolled through APKAM, pass the enrollmentId and
-  /// auth is done using APKAM private key
+  /// Authenticates as the keyfile's own enrollment: the one enrollment
+  /// holding active typed authentication material, else the flat stored id,
+  /// else `primary` for a keyfile that predates enrollments.
   ///
   /// Returns true if authentication is successful
-  Future<bool> authenticate({String? enrollmentId});
+  Future<bool> authenticate(
+      {@Deprecated('the keyfile names the enrollment; a disagreeing value is '
+          'logged at shout level and ignored')
+      String? enrollmentId});
 
   /// Sends an enroll request to the server, and waits for the request to be
   /// approved. Apps that are already enrolled will receive

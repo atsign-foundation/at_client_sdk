@@ -547,7 +547,9 @@ class EnrollmentSubmitter {
       // — so the discriminator has to be which identity is being retrofitted,
       // which is what the session states, rather than a connection field a
       // caller may not have set.
-      final selfApproves = request.session.enrollmentId == null;
+      final sessionEnrollment = request.session.enrollmentId;
+      final selfApproves = sessionEnrollment == null ||
+          sessionEnrollment == EnrollmentConstants.primaryEnrollmentId;
 
       // No otp: the connection's own authentication is the whole authority.
       //

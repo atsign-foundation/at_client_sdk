@@ -51,6 +51,10 @@ void main() {
   /// once and collides on the next run against the same virtualenv.
   final runId = DateTime.now().microsecondsSinceEpoch;
   String pathFor(String label) => 'test/testData/cap-$label-$runId.atKeys';
+
+  /// The keyfile as it was before [retrofit] touched it — what an un-upgraded
+  /// copy holds. The live keyfile names the successor once retrofitted.
+  String preRetrofitPathFor(String label) => '${pathFor(label)}.pre-retrofit';
   AtRootDomain rootDomain() => AtRootDomain(
       ConfigUtil.getYaml()['root_server']['url'],
       ConfigUtil.getYaml()['root_server']['port'] ?? 64);
@@ -82,6 +86,8 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
     final file = File(pathFor(label));
     if (file.existsSync()) file.deleteSync();
+    final snapshot = File(preRetrofitPathFor(label));
+    if (snapshot.existsSync()) snapshot.deleteSync();
     file.parent.createSync(recursive: true);
     await FileAtKeysIo(filePath: (_) => pathFor(label)).write(atSign, keys);
     return response.enrollmentId;
@@ -118,14 +124,18 @@ void main() {
   DateTime? expiryOf(Map<String, dynamic> meta) =>
       meta['expiresAt'] == null ? null : DateTime.parse(meta['expiresAt']);
 
-  /// Authenticates from [label]'s keyfile with no enrollment id named, so the
-  /// flat fields decide — i.e. as the LEGACY enrollment, which is exactly what
-  /// an un-upgraded copy of the keyfile does.
-  Future<AtAuthResponse> authenticateLegacy(String label) async =>
-      AtAuth.create().authenticate(AtAuthRequest(atSign,
-          atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)))
-        ..namespace = namespace
-        ..rootDomain = rootDomain());
+  /// Authenticates as the LEGACY enrollment: from the pre-retrofit snapshot
+  /// once one exists, which is exactly what an un-upgraded copy of the keyfile
+  /// does. The keys name the enrollment, so the live keyfile would resolve the
+  /// successor after a retrofit.
+  Future<AtAuthResponse> authenticateLegacy(String label) async {
+    final snapshot = preRetrofitPathFor(label);
+    final path = File(snapshot).existsSync() ? snapshot : pathFor(label);
+    return AtAuth.create().authenticate(
+        AtAuthRequest(atSign, atKeysIo: FileAtKeysIo(filePath: (_) => path))
+          ..namespace = namespace
+          ..rootDomain = rootDomain());
+  }
 
   /// Retrofits [label] and gives the successor one authentication of its own,
   /// which is what settles the predecessor. The submission alone does not.
@@ -135,6 +145,7 @@ void main() {
   /// the same act that revokes the predecessor, so the successor's stamp is
   /// the witness that the settlement ran over its parent.
   Future<String> retrofit(String label) async {
+    File(pathFor(label)).copySync(preRetrofitPathFor(label));
     final session = (await AtAuth.create().authenticate(AtAuthRequest(atSign,
             atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)))
           ..namespace = namespace

@@ -272,7 +272,7 @@ Future<bool> authenticateWithApkamKeys(
   }
   AtOnboardingService onboardingService =
       AtOnboardingServiceImpl(atSign, preference);
-  return await onboardingService.authenticate(enrollmentId: enrollmentId);
+  return await onboardingService.authenticate();
 }
 
 AtOnboardingPreference getOnboardingPreference(

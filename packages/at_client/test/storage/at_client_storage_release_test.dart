@@ -306,14 +306,22 @@ void main() {
 /// Records whether [_storage] was already attached when the client asked this
 /// source for key material, then refuses: attachment happens in `_init`, so
 /// reading `true` here proves the storage reached the client.
+/// Answers the construction-time read that decides the enrollment, then
+/// refuses the AtChops read — which comes after `_init` has attached the
+/// storage, the moment this records.
 class _AttachWatchingKeysIo extends WrittenAtKeysIo {
   _AttachWatchingKeysIo(this._storage);
 
   final AtClientStorageBase _storage;
   bool storageWasAttached = false;
+  bool _identityRead = false;
 
   @override
-  Future<AtKeys> read(String atSign) {
+  Future<AtKeys> read(String atSign) async {
+    if (!_identityRead) {
+      _identityRead = true;
+      return AtKeys();
+    }
     storageWasAttached = _storage.isAttached;
     throw UnimplementedError();
   }

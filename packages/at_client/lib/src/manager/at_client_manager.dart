@@ -112,6 +112,10 @@ class AtClientManager {
   /// caller that names a different location and is handed the running client
   /// keeps the location that client already has.
   ///
+  /// With [atKeysIo] the enrollment is the keys' own answer,
+  /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
+  /// logged at shout level and ignored.
+  ///
   /// * [serviceFactory] - Overrides service creation (primarily for testing).
   /// * [atChops] - Shared crypto context for the new services.
   Future<AtClientManager> setCurrentAtSign(

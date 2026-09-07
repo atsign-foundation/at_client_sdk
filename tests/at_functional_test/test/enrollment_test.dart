@@ -465,7 +465,6 @@ void main() {
         atKeysIo:
             FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
-      atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
@@ -572,7 +571,6 @@ void main() {
         atKeysIo:
             FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
       );
-      atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
@@ -586,7 +584,7 @@ void main() {
           throwsA(predicate((dynamic e) =>
               e is AtAuthenticationException &&
               e.message.contains(
-                  'AT0025:enrollment_id: ${atAuthRequest.enrollmentId} is denied'))));
+                  'AT0025:enrollment_id: ${atEnrollmentResponse.enrollmentId} is denied'))));
     });
 
     test(
@@ -684,7 +682,6 @@ void main() {
       AtAuth atAuth = AtAuth.create(atChops: atChops);
       AtAuthRequest atAuthRequest =
           AtAuthRequest(atSign, atKeysIo: FileAtKeysIo());
-      atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
@@ -937,7 +934,6 @@ void main() {
       final enrolleeAuth = AtAuth.create(atChops: enrolleeChops);
       final enrolleeAuthRequest = AtAuthRequest(cramAtSign,
           atKeysIo: FileAtKeysIo(filePath: keysFilePath))
-        ..enrollmentId = enrollResponse.enrollmentId
         ..atAuthKeys = enrollResponse.atAuthKeys
         ..rootDomain = rootDomain;
       enrolleeAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =

@@ -144,11 +144,12 @@ void main() {
 
     final rsaAuth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
         atKeysIo: FileAtKeysIo(filePath: t1Path))
-      ..enrollmentId = newId
       ..rootDomain = rootDomain);
     expect(rsaAuth.isSuccessful, true,
         reason: 'the retrofit that carries the rollout window must be usable '
             'immediately, exactly as the PQ one is');
+    expect(rsaAuth.session!.enrollmentId, newId,
+        reason: 'the keyfile alone names the successor: nothing passed an id');
   });
 
   test(
@@ -219,11 +220,12 @@ void main() {
     // signature — an RSA one, whatever it claims, is refused.
     final pqAuth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
         atKeysIo: FileAtKeysIo(filePath: keysFilePath))
-      ..enrollmentId = newId
       ..rootDomain = rootDomain);
     expect(pqAuth.isSuccessful, true,
         reason: 'the retrofitted enrollment must be usable IMMEDIATELY: '
             'keyfile → AtChops → pkam dispatch, all genuinely ML-DSA');
+    expect(pqAuth.session!.enrollmentId, newId,
+        reason: 'the keyfile alone names the successor: nothing passed an id');
   });
 
   test(

@@ -17,6 +17,7 @@ import 'package:at_auth/at_auth.dart'
         publicKeyKid;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, SigningAlgoType;
+import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
@@ -906,18 +907,15 @@ class PqSigningRoot {
     // when it was approved.
     if (await privateHalf(atSign) != null) return 0;
 
-    // A client with no enrollment id is authenticating with the atSign's own
-    // keys. It cannot ask even if it wanted to — enumerating the holders goes
+    // The atSign's own credential cannot ask — enumerating the holders goes
     // through `enroll:listns`, which the atServer refuses without APKAM
-    // authentication — and it has no reason to: it is the atSign, so its route
-    // to a missing root is to mint one, not to request it. Without this guard
-    // every legacy PKAM client would broadcast, be refused, and log a warning
-    // on each start.
-    //
-    // Read off the lookup rather than `sharing.enrollmentId`, which substitutes
-    // the sentinel `'primary'` when there is none and so is never null — a
-    // guard written against it would be dead code that always fell through.
-    if (atClient.getRemoteSecondary()?.atLookUp.enrollmentId == null) return 0;
+    // authentication — and has no reason to: its route to a missing root is
+    // to mint one. Without this guard every such client would broadcast, be
+    // refused, and log a warning on each start.
+    if (isAtSignCredential(
+        atClient.getRemoteSecondary()?.atLookUp.enrollmentId)) {
+      return 0;
+    }
 
     if (!await isFullyPrivileged()) {
       _logger.info('Not requesting the signing root for $atSign: this '

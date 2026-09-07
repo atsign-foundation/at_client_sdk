@@ -767,6 +767,23 @@ class AtKeys {
     return candidates.single;
   }
 
+  /// The enrollment this keyfile authenticates as.
+  ///
+  /// The one enrollment holding active typed authentication material — on a
+  /// retrofitted file the successor, which is what the retrofit was for —
+  /// else the flat stored [enrollmentId], else
+  /// [EnrollmentConstants.primaryEnrollmentId] for a keyfile that predates
+  /// enrollments. Throws, as [resolveAuthenticatingEnrollment] does, when
+  /// several enrollments qualify.
+  String enrollmentToAuthenticateAs() {
+    final resolved = resolveAuthenticatingEnrollment();
+    if (resolved != null) return resolved;
+    // ignore: deprecated_member_use_from_same_package
+    final flat = enrollmentId;
+    if (flat != null && flat.isNotEmpty) return flat;
+    return EnrollmentConstants.primaryEnrollmentId;
+  }
+
   /// Decodes the typed-keys document shape (`version`, `atsign`,
   /// `atsignKeys`, `enrollments`, plus legacy fields flat at the top level).
   /// Json without a `version` field is accepted as the legacy flat shape
@@ -1191,9 +1208,9 @@ class AtKeys {
   ///
   /// A null [algorithm] means the caller leaves `signingAlgoType` at
   /// at_lookup's default, which is what the flat fields' RSA keypair needs.
-  /// A null [enrollmentId] asks for the flat fields directly — callers reach
-  /// here having already defaulted it to this keyfile's own [enrollmentId],
-  /// which on a retrofitted file is deliberately the legacy one.
+  /// A null [enrollmentId] asks for the flat fields directly, as does any id
+  /// with no typed material of its own, [EnrollmentConstants.primaryEnrollmentId]
+  /// included; callers reach here with [enrollmentToAuthenticateAs]'s answer.
   /// Throws [AtKeyNotFoundException] when [enrollmentId] holds typed
   /// authentication material under an algorithm this build cannot sign with.
   /// Falling back to the flat fields there would authenticate as whoever owns

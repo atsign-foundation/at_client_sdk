@@ -180,7 +180,6 @@ void main() {
             filePath: (_) =>
                 '${ConfigUtil.getYaml()['filePath']}/${currentAtSign}_key.atKeys',
           ));
-      atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
           AtBytes.fromString(

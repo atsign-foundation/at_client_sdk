@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -902,7 +903,7 @@ class LocalSecondary implements Secondary {
     }
     // if there is no enrollment, return true
     await getEnrollmentDetails();
-    if (_atClient.enrollmentId == null ||
+    if (isAtSignCredential(_atClient.enrollmentId) ||
         enrollment == null ||
         _shouldSkipKeyFromEnrollmentAuthorization(key)) {
       _logger.finest('Skipping enrollment authorization check for key: $key');
@@ -967,7 +968,7 @@ class LocalSecondary implements Secondary {
   /// this record on every start precisely so that a grant changed since last
   /// time is noticed, and a cache that worked would hide exactly that.
   Future<Enrollment?> _getEnrollmentDetails() async {
-    if (_atClient.enrollmentId == null) {
+    if (isAtSignCredential(_atClient.enrollmentId)) {
       return null;
     }
 

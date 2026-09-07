@@ -145,19 +145,19 @@ void main() {
 const _flatApkamPublicKey = 'ZmxhdC1hcGthbS1wdWJsaWM=';
 const _flatApkamPrivateKey = 'ZmxhdC1hcGthbS1wcml2YXRl';
 
-/// Throws once, then delegates — the transient keyfile failure
-/// `_resolveSigningAlgoFromKeyMaterial` catches and logs, leaving nothing
-/// recorded for a later reader to consult.
+/// Fails the algorithm-resolution read and delegates every other — the
+/// transient keyfile failure `_resolveSigningAlgoFromKeyMaterial` catches and
+/// logs, leaving nothing recorded for a later reader to consult. The read
+/// before it decides the enrollment at construction and has to succeed.
 class _FailsFirstReadAtKeysIo extends WrittenAtKeysIo {
   _FailsFirstReadAtKeysIo(this._delegate);
 
   final InMemoryAtKeysIo _delegate;
-  bool _thrown = false;
+  int _reads = 0;
 
   @override
   Future<AtKeys> read(String atsign) async {
-    if (!_thrown) {
-      _thrown = true;
+    if (++_reads == 2) {
       throw AtKeysNotInMemoryException('transient read failure');
     }
     return await _delegate.read(atsign);

@@ -120,7 +120,7 @@ void main() {
     // hands back.
     final authenticated = await AtOnboardingServiceImpl(atSign,
             _preference(atSign, apkamKeysFilePath, posture: PqPosture.legacy))
-        .authenticate(enrollmentId: enrollmentId);
+        .authenticate();
 
     stdout.writeln('##CLI## $label (${signingAlgo.name}): id=$enrollmentId '
         'keyfileAlgo=${keys.authenticationAlgorithmFor(enrollmentId)} '

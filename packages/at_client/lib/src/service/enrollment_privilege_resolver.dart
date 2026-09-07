@@ -1,3 +1,4 @@
+import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/enroll/privilege_resolver.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart' as privilege;
@@ -33,7 +34,7 @@ class EnrollmentRecordPrivilegeResolver implements EnrollmentPrivilegeResolver {
   @override
   Future<bool> isFullyPrivileged() async {
     final id = _atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
-    if (id == null) return true;
+    if (id == null || isAtSignCredential(id)) return true;
     return isEnrollmentFullyPrivileged(id);
   }
 

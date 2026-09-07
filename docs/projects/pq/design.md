@@ -2122,15 +2122,18 @@ and the whole file is somebody's key material to lose. The ambiguity surfaces
 instead at `resolveAuthenticatingEnrollment()`, where a caller is asking for
 the one answer that does not exist.
 
-**The caller supplies the enrollment id, and `AtKeys` offers a derivation the
-caller can ask for** —
+**The keys name the enrollment** —
+[`decisions.md` 132](detail/decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07).
+`AtKeys.enrollmentToAuthenticateAs()` is what `AtAuthImpl.authenticate` and
+`AtClientImpl.create` ask: the one enrollment holding active authentication
+material, else the flat stored `enrollmentId`, else `primary`, the atServer's
+name for the atSign's own credential; several throw rather than pick.
+`resolveAuthenticatingEnrollment()` remains the typed-only half of that answer.
+This supersedes the "invoke by name" half of
 [`decisions.md` 100](detail/decisions.md#100-the-seven-shapes-ruling-99-left-open-2026-08-14)
-ruling 1. Both live resolvers pass an explicit id; a cold start with no id to
-pass calls `resolveAuthenticatingEnrollment()`, which answers when exactly one
-enrollment holds active authentication material and throws rather than picking
-when several do. A null id keeps meaning the flat block, and the top-level
-`enrollmentId` is explicitly **not** the answer — 99 ruling 7, it belongs to
-the legacy block.
+ruling 1, under which the caller supplied the id and a cold start with none
+fell back to the flat block — which left every keyfile-only caller running as
+the legacy enrollment after a retrofit.
 
 `AtKeys.replaceKey(enrollmentId, keyId, replacements)` retires the named
 keyId's materials and files the replacements in one call. Rotation is never two
@@ -2601,8 +2604,9 @@ the root one first.
 ⚠️ **`isFullyPrivileged` requires `w` on both `*` and `__manage`, while
 approval takes only `__manage`** — so a `__manage`-only approver approves
 without being fully privileged, and the chain-link arm is an ordinary case
-rather than an edge. A client with no enrollment id is fully privileged by
-construction.
+rather than an edge. A client running as the atSign's own credential — no
+enrollment id, or `primary` — is fully privileged by construction, with no
+roster lookup.
 
 **The approver never writes the enrollee's `_apsk`.** It conveys the link as a
 sealed secret and the enrollee stamps it at startup.
@@ -2627,7 +2631,8 @@ Both are constructor refusals in `AtClientPreference`, and both narrow
 
 #### 9.8.6 A pre-enrollment atSign retrofits into a first enrollment
 
-An atSign holding no enrollment id predates enrollments, so it has never
+An atSign holding no enrollment predates enrollments — its client runs as
+`primary`, the atServer's name for that credential — so it has never
 retrofitted. At `legacy` nothing happens — the signing set is empty. At a PQ
 posture the client gives itself a first, fully privileged enrollment and comes
 up on it, rather than minting into the shared `_apsk.primary` record and

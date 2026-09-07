@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart'
     show AtKeys, AtKeysEnrollment, AtKeysIo, WrittenAtKeysIo;
+import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/crypto.dart' show CryptoConfig;
 import 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart'
@@ -665,11 +666,10 @@ class PqClientBootstrap {
     final keysIo = _keysIo;
     if (keysIo is! WrittenAtKeysIo) return;
 
-    // No enrollment id means this client authenticates with the atSign's own
-    // keys and has no id to fetch a record by — and `enroll:fetch` would be
-    // answered for whatever id it was handed rather than refused.
+    // The atSign's own credential has no record to fetch — and `enroll:fetch`
+    // would be answered for whatever id it was handed rather than refused.
     final enrollmentId = _atClient.enrollmentId;
-    if (enrollmentId == null) return;
+    if (enrollmentId == null || isAtSignCredential(enrollmentId)) return;
 
     try {
       // Shared with the authorization path rather than fetched again: one

@@ -9335,6 +9335,12 @@ returns an id the caller then passes back in, and refuses to guess. The
 selection stays the caller's, and the file supplies the candidates rather than
 the verdict.
 
+⚠️ **The "invoked by name" half is superseded by
+[ruling 132](#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07)
+(2026-09-07):** the keys now name the enrollment through
+`enrollmentToAuthenticateAs()`, and the caller's id is gone from
+`AtAuthRequest`. The refusal to pick between several stands.
+
 **2. The accessors split by scope.** `getKey`, `keysForKeyId`, `retireKey` and
 `replaceKey` become enrollment-scoped and take the enrollment beside the keyId;
 a separate family addresses `atSignKeys[]`. Measured: outside at_auth there are
@@ -13759,3 +13765,63 @@ clause found over-pinned this way in one day, after
 [UC-B1.1](../acceptance.md#81-uc-b11--first-client-retrofit-alice1) c3. Neither
 was found by a rail. **The burn-down therefore FALLS before it rises**: removing
 the fragment leaves c4 asserting only unbuilt behaviour.
+
+## 132. The keys name the enrollment, and `primary` names the atSign's own credential (2026-09-07)
+
+**Ruled by gkc, 2026-09-07.** Supersedes the "invoke by name" half of
+[ruling 100](#100-the-seven-shapes-ruling-99-left-open-2026-08-14) item 1; its
+refusal to pick between several stands.
+
+Every keyfile written since APKAM carries an enrollment id, and the enrollment
+it names is either fully privileged, whose predecessor keeps its life, or
+scoped, whose predecessor is revoked at the successor's first authentication.
+Only a keyfile from before enrollments existed carries none, and the atServer's
+name for that credential is `primary`. So a keys source can always say which
+enrollment it authenticates as, and a caller passing an id beside one is
+passing a value the source already holds — or a wrong one.
+
+1. **`AtKeys.enrollmentToAuthenticateAs()`** is the derivation: the one
+   enrollment holding active typed authentication material, else the flat
+   stored `enrollmentId`, else `primary`. Several throw naming them all, as
+   `resolveAuthenticatingEnrollment()` always has.
+2. **`AtAuthRequest.enrollmentId` is removed** (at_auth 4.0.0-rc2, a major
+   line). `AtAuthImpl.authenticate` asks the keys. The minors deprecate rather
+   than remove: `AtOnboardingService.authenticate({enrollmentId})` keeps the
+   parameter, and a value that disagrees with the keyfile is logged at
+   **shout** level and ignored. `AtClientImpl.create`, `setCurrentAtSign` and
+   `buildAtClient` do the same with theirs.
+3. **`primary` never reaches the wire.** `PkamVerbBuilder` (at_commons 5.18.0)
+   omits it: a released atServer knows the credential only by the absence of
+   an id, and a current one answers the bare `pkam:` as `primary`.
+4. **Inside at_client the client carries `primary`**, and a null check that
+   meant "the atSign's own credential" becomes `isAtSignCredential`, true of
+   null and of `primary`. Seven mechanisms key on it, and what they
+   distinguish is whether an enrollment RECORD exists to fetch, update or
+   list on a released atServer — the local privilege check's `enroll:fetch`,
+   the bootstrap's snapshot, key-package and signing-key minting's
+   `enroll:update`, the signing-root request's `enroll:listns`, the start-up
+   retrofit's record read, the algorithm resolver, and the privilege
+   resolver, which answers "fully privileged" for the atSign's own credential
+   without a roster lookup, as it did for null — never privilege as such.
+   **Seeding was keyed on privilege by mistake:** a wildcard grant seeded
+   nothing, which left an atSign reachable only through a root enrollment
+   unreachable. A wildcard grant now seeds the namespace the app runs in,
+   exactly as the atSign's own credential does, and `null`, `primary` and a
+   root enrollment seed alike.
+5. **`enid` stays as it was.** A legacy signer already stamps `primary` and
+   publishes at `_apsk.primary`, so the header carries the name.
+
+What it replaces: a keyfile-only caller — the onboarding CLI's `authenticate()`,
+every `CLIBase` app — came up as the legacy enrollment after a retrofit unless
+it named the successor itself, and nothing told it to.
+
+Pinned by `packages/at_commons/test/pkam_verb_builder_test.dart` (the bare
+`pkam:` for `primary`, as a raw literal), `packages/at_auth/test/at_auth_test.dart`
+and `packages/at_auth/test/plural_enrollments_test.dart` (which id reaches
+pkam from each keyfile shape, and the refusal), `packages/at_auth/test/at_keys_test.dart`
+(the derivation itself), and
+`packages/at_client/test/at_client_create_derives_enrollment_test.dart` (the
+keys win over a caller's id, and the client is filed under them). The
+submitter's self-approval branch keys on the atSign's own credential — null or
+`primary` — exactly as it keyed on null, so nothing about it moved; its removal
+is the separate item the plan carries.

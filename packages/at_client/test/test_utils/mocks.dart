@@ -97,13 +97,14 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
 
 /// `AtKeysIo` is `sealed`, but that only restricts direct subtyping of the
 /// base — `WrittenAtKeysIo` is an ordinary `abstract class`, so extending it
-/// outside at_auth is legal. Both methods throw so any accidental key IO in
-/// the S-2 seam fails loudly (the stub doubles as the behaviour-neutrality
-/// proof). Deliberately does NOT override `flush` (not present on the
-/// at_auth version this branch compiles against).
+/// outside at_auth is legal. `read` answers an empty document, because a
+/// client reads its keys at construction to learn which enrollment it runs
+/// as; `write` throws so any accidental key write fails loudly. Deliberately
+/// does NOT override `flush` (not present on the at_auth version this branch
+/// compiles against).
 class StubAtKeysIo extends WrittenAtKeysIo {
   @override
-  Future<AtKeys> read(String atSign) => throw UnimplementedError();
+  Future<AtKeys> read(String atSign) async => AtKeys();
 
   @override
   Future<void> write(String atSign, AtKeys atKeys) =>

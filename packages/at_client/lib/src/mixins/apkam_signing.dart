@@ -5,7 +5,8 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions, PutRequestOptions;
-import 'package:at_commons/at_commons.dart' show AtKey, AtKeyNotFoundException;
+import 'package:at_commons/at_commons.dart'
+    show AtKey, AtKeyNotFoundException, EnrollmentConstants;
 import 'package:at_client/src/signing/apsk_composition.dart'
     show apskEntries, apskValueOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -62,12 +63,12 @@ mixin ApkamSigning {
   AtSignLogger get logger;
 
   String get enrollmentId {
-    String id =
-        atClient.getRemoteSecondary()?.atLookUp.enrollmentId ?? 'primary';
-    if (id == 'primary') {
-      logger.warning('No enrollmentID ... using "primary"');
+    final id = atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
+    if (id == null) {
+      logger.warning('No enrollment id; using '
+          '"${EnrollmentConstants.primaryEnrollmentId}"');
     }
-    return id;
+    return id ?? EnrollmentConstants.primaryEnrollmentId;
   }
 
   /// the uri (e.g. `public:_apsk.<enrollment_id>.a.__e@atsign`) of the

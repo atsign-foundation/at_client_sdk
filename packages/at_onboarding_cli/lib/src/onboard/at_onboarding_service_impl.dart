@@ -818,7 +818,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   @override
-  Future<bool> authenticate({String? enrollmentId}) async {
+  Future<bool> authenticate(
+      {@Deprecated('the keyfile names the enrollment; a disagreeing value is '
+          'logged at shout level and ignored')
+      String? enrollmentId}) async {
     atAuth ??= AtAuth.create();
     // Held in a local so the client gets the same source auth read from,
     // rather than a second store built over the same path.
@@ -828,17 +831,22 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
             : null,
         passPhrase: atOnboardingPreference.passPhrase);
     var atAuthRequest = AtAuthRequest(_atSign, atKeysIo: atKeysIo)
-      ..enrollmentId = enrollmentId
       ..rootDomain = AtRootDomain(
           atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     var atAuthResponse = await atAuth!.authenticate(atAuthRequest);
     logger.finer('Auth response: $atAuthResponse');
     if (atAuthResponse.isSuccessful &&
         atOnboardingPreference.atKeysFilePath != null) {
+      final authenticatedAs =
+          atAuthResponse.atAuthKeys!.enrollmentToAuthenticateAs();
+      if (enrollmentId != null && enrollmentId != authenticatedAs) {
+        logger.shout('$_atSign was asked to authenticate as enrollment '
+            '$enrollmentId, but its keyfile authenticates as '
+            '$authenticatedAs; using $authenticatedAs');
+      }
       logger.finer('Calling persist keys to local secondary');
       await _initAtClient(atAuth!.atChops!,
-          enrollmentId: atAuthResponse.atAuthKeys!.enrollmentId,
-          atKeysIo: atKeysIo);
+          enrollmentId: authenticatedAs, atKeysIo: atKeysIo);
       await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys!);
     }
 

@@ -227,9 +227,10 @@ void main() {
     await evictCachedAtClients();
     final client = await clientFor(staysPut, PqPosture.legacy);
 
-    expect(client.enrollmentId, isNull,
+    expect(client.enrollmentId, 'primary',
         reason: 'legacy means "do not drive an upgrade", so this client keeps '
-            'authenticating with the atSign\'s own keys');
+            'running as the atSign\'s own credential, which its keys name '
+            'primary');
     expect(await enrollmentsOf(staysPut), hasLength(1),
         reason: 'and it leaves nothing behind on the atServer — primary alone '
             'is what this fixture created, so a SECOND record here would mean '
