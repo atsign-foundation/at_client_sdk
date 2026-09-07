@@ -13,13 +13,17 @@ import 'storage_contract.dart';
 /// A storage whose [openBackend] can be held open on [gate], so a test can
 /// interleave a second [attach] while the first is still inside it.
 class _GatedStorage extends AtClientStorageBase {
-  _GatedStorage(this._location, {Completer<void>? gate, this.closeGate})
+  _GatedStorage(this._location,
+      {Completer<void>? gate, this.closeGate, this.throwOnClose = false})
       : _gate = gate;
   final String _location;
   final Completer<void>? _gate;
 
   /// Held open during closeBackend(), if given.
   final Completer<void>? closeGate;
+
+  /// Makes closeBackend() throw once it is done waiting on [closeGate].
+  final bool throwOnClose;
 
   @override
   String get location => _location;
@@ -34,6 +38,7 @@ class _GatedStorage extends AtClientStorageBase {
   Future<void> closeBackend() async {
     final gate = closeGate;
     if (gate != null) await gate.future;
+    if (throwOnClose) throw StateError('closeBackend boom');
   }
 
   @override
@@ -135,6 +140,21 @@ void main() {
     await second.attach(FakeClient('@close-race', 'e3'));
     expect(second.isAttached, isTrue,
         reason: 'once close() actually finishes, the location is free again');
+    await second.close();
+  });
+
+  test('close() still releases its location claim when closeBackend() throws',
+      () async {
+    final first = _GatedStorage('@close-throw', throwOnClose: true);
+    await first.attach(FakeClient('@close-throw', 'e1'));
+
+    await expectLater(() => first.close(), throwsA(isA<StateError>()));
+
+    final second = _GatedStorage('@close-throw');
+    await second.attach(FakeClient('@close-throw', 'e2'));
+    expect(second.isAttached, isTrue,
+        reason: 'a failed closeBackend() must not leave the location '
+            'claimed forever');
     await second.close();
   });
 

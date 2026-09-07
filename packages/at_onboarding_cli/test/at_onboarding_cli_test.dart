@@ -63,8 +63,6 @@ void main() {
       onboardingService.atLookUp = mockAtLookup;
       mockAtAuth.atChops = AtChopsImpl(AtChopsKeys());
       onboardingService.atAuth = mockAtAuth;
-      onboardingService.atClient = await AtClientImpl.create(
-          atSign, 'unit_test', getAtClientPreferenceAlice());
       when(() => mockAtLookup.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtAuth.authenticate(any()))
@@ -764,14 +762,6 @@ Future<void> tearDownFunc() async {
   if (isExists) {
     Directory('test/storage').deleteSync(recursive: true);
   }
-}
-
-AtClientPreference getAtClientPreferenceAlice() {
-  var preference = AtClientPreference();
-  preference.hiveStoragePath = 'test/storage/hive/client';
-  preference.commitLogPath = 'test/storage/hive/client/commit';
-  preference.rootDomain = 'vip.ve.atsign.zone';
-  return preference;
 }
 
 AtOnboardingPreference getOnboardingPreference() {
