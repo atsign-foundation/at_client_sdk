@@ -12,6 +12,11 @@
   process ends with the command, and the startup — which publishes the
   atSign's namespace keys — ran after it, so an atSign retrofitted by
   `at_activate` could send post-quantum and not receive.
+- fix: `createAtClient` takes `waitForPqStartup` (default true), and the
+  one-shot commands — `otp`, `spp`, `fetch`, `deny`, `revoke`, `unrevoke`,
+  `delete` — pass false: they send one verb and exit, and through a slow path
+  the wait alone exceeded a test's budget. `list`, `approve`, `auto` and the
+  interactive shell keep waiting.
 - fix: `atClient` follows a rebuild. `authenticate()` after `onboard()` builds
   a second client and stops the first, and the field kept pointing at the
   stopped one, whose services throw "has not yet been set". A client somebody

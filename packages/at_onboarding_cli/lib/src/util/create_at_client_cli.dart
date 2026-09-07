@@ -15,6 +15,13 @@ import 'home_directory_util.dart';
 /// A client for the commands that only read or administer an atSign — `otp`,
 /// `list`, `spp`, `approve` and the rest.
 ///
+/// [waitForPqStartup] holds the command until the client's post-quantum
+/// startup has finished, bounded by [startupTailBound]. A command that reads
+/// what that startup leaves behind — `list` after a retrofit — needs it; one
+/// that sends a single verb and exits, `otp` or `spp`, does not, and through a
+/// slow path the wait alone can exceed the command's budget. It defaults to
+/// waiting because an app calling this has no basis to choose.
+///
 /// [posture] is how far into the post-quantum rollout this invocation runs;
 /// null means whatever the at_client this was built against defaults to. It is
 /// optional because this function is exported and apps already call it, but a
@@ -25,7 +32,8 @@ Future<AtClient> createAtClient(
     String? atKeysFilePath,
     String? rootDomain,
     String? passPhrase,
-    PqPosture? posture}) async {
+    PqPosture? posture,
+    bool waitForPqStartup = true}) async {
   final int maxConnectAttempts = 5;
   String nameSpace = 'at_activate';
   atSign = AtUtils.fixAtSign(atSign);
@@ -95,7 +103,7 @@ Future<AtClient> createAtClient(
   // post-quantum startup — seeding and publishing this atSign's namespace keys
   // among it — runs after the client is built and is not awaited by it. Waited
   // for here so a short-lived command still leaves the atSign able to receive.
-  if (client is AtClientImpl) {
+  if (waitForPqStartup && client is AtClientImpl) {
     // ignore: experimental_member_use
     await client.pqBootstrap?.startupComplete.timeout(startupTailBound,
         onTimeout: () => stderr.writeln(chalk.brightYellow(

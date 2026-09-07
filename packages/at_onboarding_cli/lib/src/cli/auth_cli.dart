@@ -225,6 +225,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
                 posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.otp:
@@ -243,6 +244,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
                 posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.interactive:
@@ -279,6 +281,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
                 posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.approve:
@@ -312,6 +315,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
                 posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.revoke:
@@ -323,6 +327,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
                 posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.enroll:
@@ -342,6 +347,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
                 posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.delete:
@@ -353,6 +359,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
                 posture: AuthCliArgs.postureIn(commandArgResults)));
       case AuthCliCommand.decrypt:
         await passPhraseDecryptAtKeys(commandArgResults);
