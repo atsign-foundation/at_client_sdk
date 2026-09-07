@@ -124,7 +124,8 @@ class AtClientManager {
       AtClientStorage? storage,
 
       /// The incoming client authenticates as a different enrollment of
-      /// [atSign] than the outgoing one, over the same store.
+      /// [atSign] than the outgoing one, over the same store, which is handed
+      /// over open for the incoming client to close.
       bool principalChange = false}) async {
     serviceFactory ??= DefaultAtServiceFactory();
 
@@ -154,9 +155,13 @@ class AtClientManager {
     // change either: it is what a caller that owns one bundle for the whole
     // of its work does on every call, and rebuilding on it would tear the
     // client down for nothing.
+    //
+    // A principal change is never a no-op: the incoming client is a different
+    // enrollment by definition, so it always takes the switch below.
     final currentAtSign = _currentAtClient?.getCurrentAtSign();
     if (currentAtSign != null &&
         currentAtSign == atSign &&
+        !principalChange &&
         atChops == null &&
         atKeysIo == null &&
         atLookUp == null &&
@@ -197,15 +202,22 @@ class AtClientManager {
     // A principal change is a SUCCESSION: one enrollment of this atSign replaced
     // by another over the same store, usually an rsa2048-auth enrollment
     // succeeded by an mldsa65-auth one. Two enrollments that are both live get
-    // separate stores instead; here the atServer caps the old one, so the data
-    // follows. The bundle therefore crosses the switch, and the store has to be
-    // told, because `attach` refuses a holder whose principal differs from the
-    // last one. Carried from the outgoing client when the caller named none:
-    // this is the one place that knows which client is being replaced.
-    final carried = principalChange && storage == null
-        ? (previousAtClient is AtClientImpl ? previousAtClient.storage : null)
-        : storage;
-    await previousAtClient?.stop();
+    // separate stores instead; here the atServer retires the old one, so the
+    // data follows. The bundle therefore crosses the switch OPEN — a plain
+    // stop() closes a store the outgoing client built or was told to close —
+    // and the store has to be told, because `attach` refuses a holder whose
+    // principal differs from the last one. Carried from the outgoing client
+    // when the caller named none, or named the one it holds: this is the one
+    // place that knows which client is being replaced.
+    final AtClientStorage? carried;
+    if (principalChange &&
+        previousAtClient is AtClientImpl &&
+        (storage == null || storage.isHeldBy(previousAtClient))) {
+      carried = await previousAtClient.stopHandingOverStorage();
+    } else {
+      await previousAtClient?.stop();
+      carried = storage;
+    }
     // Between holders, never under one: `forgetPrincipal` throws while a client
     // is attached, which is why it follows the stop.
     if (principalChange) await carried?.forgetPrincipal();

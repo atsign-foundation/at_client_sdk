@@ -77,14 +77,10 @@ class AtClientImpl implements AtClient {
   /// keystore was injected, storage is not required, or [stop] has released it.
   AtClientStorage? _storage;
 
-  /// Storage handed to this client by its caller, if any. A client that was
-  /// given one never closes it: the caller owns its lifetime and may hand the
-  /// same store to a later client.
+  /// Storage handed to this client by its caller, if any. Whether this client
+  /// closes it on [stop] is the bundle's own [AtClientStorage.closedByClient].
   AtClientStorage? _injectedStorage;
 
-  /// Whether this client built [_storage] itself and so closes it on [stop];
-  /// injected storage is only detached.
-  bool _ownsStorage = false;
   bool _storageReleased = false;
 
   /// The store this client attached to, or null before [_init] runs.
@@ -866,20 +862,19 @@ class AtClientImpl implements AtClient {
       if (_localSecondaryKeyStore == null) {
         // A caller that supplied storage picked the backend and the location,
         // and the bundle itself says whether `stop()` closes it. Otherwise
-        // build the default Hive store under the preference's path and own it.
+        // build the default Hive store under the preference's path, closed by
+        // the client holding it when that client stops.
         final injected = _injectedStorage;
         final AtClientStorage storage;
         if (injected != null) {
           storage = injected;
-          _ownsStorage = injected.closedByClient;
         } else {
           final storagePath = preference!.hiveStoragePath;
           if (storagePath == null) {
             throw Exception('Please set local storage path');
           }
-          storage =
-              HiveAtClientStorage(atSign: _atSign, storagePath: storagePath);
-          _ownsStorage = true;
+          storage = HiveAtClientStorage(
+              atSign: _atSign, storagePath: storagePath, closedByClient: true);
         }
         await storage.attach(this);
         _storage = storage;
@@ -1218,7 +1213,18 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stop() => _stop(keepStorageOpen: false);
+
+  /// Stops this client and hands back its storage, left open for a successor
+  /// whatever its [AtClientStorage.closedByClient] says; the successor closes
+  /// it. Null when this client held none, or was already stopped.
+  Future<AtClientStorage?> stopHandingOverStorage() async {
+    final storage = _storage;
+    await _stop(keepStorageOpen: true);
+    return storage;
+  }
+
+  Future<void> _stop({required bool keepStorageOpen}) async {
     if (_isStopped) {
       _logger.info('stop() called: but client is already stopped. Ignoring.');
       return;
@@ -1228,22 +1234,23 @@ class AtClientImpl implements AtClient {
     _logger.info('stop() called: stopping at_client for $_atSign');
 
     await _stopBackgroundProcesses();
-    await _releaseStorage();
+    await _releaseStorage(keepOpen: keepStorageOpen);
     // By identity, not by key: the map is keyed (atSign, enrollmentId), so a
     // client filed under an enrollment is not found under the bare atSign and
     // would be left in the map, stopped, for the next caller to restart.
     atClientInstanceMap.removeWhere((_, client) => identical(client, this));
   }
 
-  /// Drops this client's claim on its storage, closing it if this client built
-  /// it. A stopped client keeps nothing open and cannot be restarted.
-  Future<void> _releaseStorage() async {
+  /// Drops this client's claim on its storage, closing a client-closed bundle
+  /// unless [keepOpen]. A stopped client keeps nothing open and cannot be
+  /// restarted.
+  Future<void> _releaseStorage({bool keepOpen = false}) async {
     final storage = _storage;
     if (storage == null) return;
     _storageReleased = true;
     try {
       await storage.detach(this);
-      if (_ownsStorage) await storage.close();
+      if (!keepOpen && storage.closedByClient) await storage.close();
     } catch (e) {
       _logger.warning('Error while releasing storage: $e');
     }

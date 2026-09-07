@@ -40,11 +40,11 @@ final _logger = AtSignLogger('selfRetrofit');
 /// what derives from it. Safe there and only there, because it happens inside
 /// `_init`, before the client has been filed in the instance map or handed to
 /// any caller. Read as a global invariant, this sentence sends a reader
-/// looking for a stale cache entry that does not exist. On the default
-/// [AtClientManager.getInstance] manager the previous client is stopped by
-/// the switch; pass a dedicated [manager] (the `AtClientManager(atSign)`
-/// constructor) to keep the legacy client live alongside, e.g. to drain
-/// in-flight work before retiring it.
+/// looking for a stale cache entry that does not exist. The switch stops the
+/// [manager]'s current client and hands its store to the new one; a dedicated
+/// manager (the `AtClientManager(atSign)` constructor) has no client to stop,
+/// so it carries nothing, and the retrofitted client then needs a [storage] of
+/// its own — the legacy client keeps its store, and nothing crosses.
 ///
 /// The legacy enrollment keeps authenticating until the atServer's expiry
 /// cap retires it — the retrofit caps it, never deletes it — so a failure

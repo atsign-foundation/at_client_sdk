@@ -29,6 +29,14 @@
   behaviour every existing caller already gets. Passing true lets an app with
   no teardown of its own still choose the backend and the location without
   having to close anything.
+- fix: a principal change (`setCurrentAtSign(principalChange: true)`, which
+  `selfRetrofit` uses) hands the outgoing client's store to the incoming one
+  open. It used to stop the outgoing client first, and that closed any store
+  the client had built for itself, so the default path failed with "this
+  storage has been closed and cannot be reopened"; the same-atSign
+  short-circuit also ignored the flag. The store a client builds from
+  `hiveStoragePath` is now a `closedByClient: true` bundle, so which client
+  closes a store is the bundle's say in every case.
 - **DEPRECATED:** `AtClientPreference.hiveStoragePath`. Supply an
   `AtClientStorage` instead: it chooses the backend as well as the location,
   and `closedByClient: true` keeps the client closing the store, so nothing is
