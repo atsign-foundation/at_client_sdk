@@ -724,7 +724,7 @@ shortlist by cross-reads is `tests/at_end2end_test/test/pq/nskey_multi_enrollmen
 ✅ **All four live packs have been run against the merge, and everything it broke in them
 is fixed** (2026-09-07; the post-merge fix-forward section below holds the detail and the
 figures). What the packs still fail is #2797's, on the pre-merge backup as much as here. Still
-owed from the merge session: the spike has not been pushed or run through CI since the merge,
+owed from the merge session: the spike was pushed and run through CI on 2026-09-07, the first time since the merge (what the runs showed, and what was fixed, is in the PQ plan's pointer row for the fix-forward);
 and [#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) is unreconciled.
 
 **Found 2026-09-05 by the wrap-up's cold read and done the same day:** the X3 merge-back
