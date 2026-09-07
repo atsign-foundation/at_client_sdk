@@ -37,12 +37,18 @@ at_auth:
   # the stores' interfaces and the auth flows; anything needing a filesystem, a
   # raw socket or the dart:io HTTP stack moved to at_auth_io.dart.
   #
-  # All four blocked packages are inherited: at_lookup (sockets), at_utils and
-  # chalkdart (the logger), at_server_status. They come off as each is ported.
+  # Three inherited blocked packages, none of them at_auth's own code:
+  # at_lookup (sockets), at_server_status, and chalkdart. at_utils came off with
+  # the 4.0.0 barrel split, which cleaned at_utils.dart and at_logger.dart --
+  # but not at_progress.dart, which still exports src/logging/progress.dart and
+  # its chalkdart import. That barrel is how chalkdart is still reachable here:
+  # at_auth/src/at_auth.dart and seven of its enrollment files import it.
+  # Porting at_progress.dart takes chalkdart off; at_lookup and at_server_status
+  # come off as each is ported.
   ratchets:
     - barrel: package:at_auth/at_auth.dart
       allowed_offenders: []
-      max_blocked_packages: 4
+      max_blocked_packages: 3 # was 4 -- at_utils cleared by the 4.0.0 split
       min_files_walked: 850
   probe:
     - package:at_auth/at_auth.dart
