@@ -12,10 +12,15 @@ import 'package:at_utils/at_progress.dart';
 /// {@endtemplate}
 class FlutterEnrollmentService {
   /// {@macro flutter_enrollment_service}
-  FlutterEnrollmentService() {
+  ///
+  /// Pass [atClient] to work against a client the app owns; with none, the
+  /// service uses [AtClientManager]'s current one as it always has.
+  FlutterEnrollmentService({AtClient? atClient}) : _atClient = atClient {
     _logger.info('Initialising FlutterEnrollmentService');
     _enrollmentRequestsController!.onListen = _listenForNewRequests;
   }
+
+  final AtClient? _atClient;
 
   final AtSignLogger _logger = AtSignLogger('FlutterEnrollmentService');
   final AtEnrollment _atEnrollment = AtEnrollment.create();
@@ -23,7 +28,7 @@ class FlutterEnrollmentService {
   final KeychainAtKeysIo _keychainAtKeysIo = KeychainAtKeysIo();
 
   /// Instance of [AtClient] for the current atSign
-  AtClient get atClient => AtClientManager.getInstance().atClient;
+  AtClient get atClient => _atClient ?? AtClientManager.getInstance().atClient;
 
   static const _kDefaultExpiry = Duration(minutes: 5);
 

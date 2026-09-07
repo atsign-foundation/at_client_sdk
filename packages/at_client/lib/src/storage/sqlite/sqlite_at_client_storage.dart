@@ -9,11 +9,12 @@ import 'package:path/path.dart' as p;
 ///
 /// [dbPath] may be `:memory:`, which is what [InMemoryAtClientStorage] passes.
 class SqliteAtClientStorage extends AtClientStorageBase {
-  SqliteAtClientStorage({required this.atSign, required this.dbPath});
+  SqliteAtClientStorage(
+      {required this.atSign, required this.dbPath, super.closedByClient});
 
   /// The database under [storagePath] laid out as the upstream factory does.
   SqliteAtClientStorage.under(
-      {required this.atSign, required String storagePath})
+      {required this.atSign, required String storagePath, super.closedByClient})
       : dbPath =
             SqlitePersistenceConfig.clientDefaults(storagePath: storagePath)
                 .dbPathFor(atSign);
@@ -78,6 +79,6 @@ class SqliteAtClientStorage extends AtClientStorageBase {
 /// Keystore and sync queue in memory: a SQLite database that is never written
 /// to disk.
 class InMemoryAtClientStorage extends SqliteAtClientStorage {
-  InMemoryAtClientStorage({required super.atSign})
+  InMemoryAtClientStorage({required super.atSign, super.closedByClient})
       : super(dbPath: SqliteAtClientStorage.inMemoryPath);
 }

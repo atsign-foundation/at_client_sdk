@@ -246,6 +246,61 @@ void main() {
         reason: 'storage the client built itself is closed on release, and a '
             'closed store cannot be reopened');
   });
+
+  test('a closedByClient bundle is closed when the client stops', () async {
+    final storage = HiveAtClientStorage(
+        atSign: '@closedbyclient', storagePath: dir.path, closedByClient: true);
+    final client = await AtClient.create(
+        atSign: '@closedbyclient',
+        namespace: 'wavi',
+        preference: pref(),
+        storage: storage);
+
+    await client.stop();
+
+    final second =
+        HiveAtClientStorage(atSign: '@closedbyclient', storagePath: dir.path);
+    StateError? refused;
+    try {
+      await second.attach(FakeClient('@closedbyclient', 'e2'));
+    } on StateError catch (e) {
+      refused = e;
+    }
+    expect(refused, isNull,
+        reason: 'the bundle said the client closes it, so stop() closed it and '
+            'released the store rather than only detaching');
+    expect(second.isAttached, isTrue);
+    await second.close();
+  });
+
+  test(
+      'a borrowed bundle stays open when the client stops, and the caller '
+      'closes it', () async {
+    final storage =
+        HiveAtClientStorage(atSign: '@borrowedopen', storagePath: dir.path);
+    final client = await AtClient.create(
+        atSign: '@borrowedopen',
+        namespace: 'wavi',
+        preference: pref(),
+        storage: storage);
+
+    await client.stop();
+
+    final second =
+        HiveAtClientStorage(atSign: '@borrowedopen', storagePath: dir.path);
+    await expectLater(
+        () => second.attach(FakeClient('@borrowedopen', 'e2')),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('already open at'))),
+        reason: 'the default is borrowed, so stop() detached without closing '
+            'and the store is still held');
+
+    await storage.close();
+    await second.attach(FakeClient('@borrowedopen', 'e2'));
+    expect(second.isAttached, isTrue,
+        reason: 'and closing it is what releases the store');
+    await second.close();
+  });
 }
 
 /// Records whether [_storage] was already attached when the client asked this

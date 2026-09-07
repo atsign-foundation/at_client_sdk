@@ -10,16 +10,27 @@ import 'package:flutter/material.dart';
 /// It listens to real-time updates and provides approval/denial functionality.
 /// {@endtemplate}
 class EnrollmentRequestList extends StatefulWidget {
-  const EnrollmentRequestList({super.key, this.useShrinkWrap = false});
+  const EnrollmentRequestList({
+    super.key,
+    this.useShrinkWrap = false,
+    this.enrollmentService,
+  });
 
   final bool useShrinkWrap;
+
+  /// The service this widget works through, and with it the [AtClient] the
+  /// service holds. Pass one built with an app-owned client to use this
+  /// widget without [AtClientManager]; with none it uses the current-atSign
+  /// client, as it always has.
+  final FlutterEnrollmentService? enrollmentService;
 
   @override
   State<EnrollmentRequestList> createState() => _EnrollmentRequestListState();
 }
 
 class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
-  final FlutterEnrollmentService _service = FlutterEnrollmentService();
+  late final FlutterEnrollmentService _service =
+      widget.enrollmentService ?? FlutterEnrollmentService();
   final List<ServerEnrollmentRequest> _requests = [];
   final List<Timer> _overlayTimers = [];
   StreamSubscription? _subscription;
@@ -65,9 +76,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
           );
 
       // Initial fetch of pending requests
-      final atLookUp = AtClientManager.getInstance().atClient
-          .getRemoteSecondary()!
-          .atLookUp;
+      final atLookUp = _service.atClient.getRemoteSecondary()!.atLookUp;
       final initialRequests = await _service.list([
         EnrollmentStatus.pending,
       ], atLookUp);
@@ -94,10 +103,8 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
   Future<void> _handleApprove(ServerEnrollmentRequest request) async {
     try {
-      final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
-      final atLookUp = AtClientManager.getInstance().atClient
-          .getRemoteSecondary()!
-          .atLookUp;
+      final atSign = _service.atClient.getCurrentAtSign()!;
+      final atLookUp = _service.atClient.getRemoteSecondary()!.atLookUp;
       await _service.approve(
         EnrollmentRequestDecision.approved(
           enrollmentId: request.enrollmentId,
@@ -131,10 +138,8 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
   Future<void> _handleDeny(ServerEnrollmentRequest request) async {
     try {
-      final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
-      final atLookUp = AtClientManager.getInstance().atClient
-          .getRemoteSecondary()!
-          .atLookUp;
+      final atSign = _service.atClient.getCurrentAtSign()!;
+      final atLookUp = _service.atClient.getRemoteSecondary()!.atLookUp;
       await _service.deny(
         EnrollmentRequestDecision.denied(request.enrollmentId, atSign),
         atLookUp,
@@ -199,7 +204,9 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   @override
   void dispose() {
     _subscription?.cancel();
-    _service.dispose();
+    // Only a service this widget built. Disposing one the app supplied would
+    // close a controller the app still holds, and it cannot be reopened.
+    if (widget.enrollmentService == null) _service.dispose();
     for (var timer in _overlayTimers) {
       timer.cancel();
     }

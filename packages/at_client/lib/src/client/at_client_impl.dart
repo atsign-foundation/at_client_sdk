@@ -102,6 +102,24 @@ class AtClientImpl implements AtClient {
   @override
   AtKeysIo? get atKeysIo => _atKeysIo;
 
+  /// Builds a [RemoteSecondary] carrying this client's identity and
+  /// credentials, so every one this client opens is configured alike rather
+  /// than assembled independently at each site.
+  ///
+  /// [atLookUp] injects an already-built lookup; passing none lets
+  /// [RemoteSecondary] open its own connection, which is what a site wanting a
+  /// connection separate from the client's shared one does.
+  @visibleForTesting
+  RemoteSecondary buildRemoteSecondary({AtLookUp? atLookUp}) => RemoteSecondary(
+        _atSign,
+        _preference!,
+        atChops: atChops,
+        atLookUp: atLookUp,
+        privateKey: _preference!.privateKey,
+        enrollmentId: enrollmentId,
+        atKeysIo: _atKeysIo,
+      );
+
   /// Keeps track of CryptoProviders registered with this AtClient
   // ---------------------------------------------------------------------------
   // DataEvent stream — fires on every successful keystore mutation that
@@ -256,6 +274,13 @@ class AtClientImpl implements AtClient {
 
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
+
+  /// Whether a live client is already filed for [atSign].
+  ///
+  /// [atClientInstanceMap] is keyed by atSign, so two enrollments of one
+  /// atSign share an entry. [stop] removes the entry, freeing the atSign.
+  static bool holdsLiveClient(String atSign) =>
+      atClientInstanceMap.containsKey(AtUtils.fixAtSign(atSign));
 
   static final Finalizer<String> _finalizer = Finalizer((service) {
     _logger.finer('Outgoing $service has been garbage collected');
@@ -417,15 +442,14 @@ class AtClientImpl implements AtClient {
     if (_preference!.isLocalStoreRequired) {
       AtSyncQueue? syncQueue;
       if (_localSecondaryKeyStore == null) {
-        // A caller that supplied storage picked the backend and the location;
-        // this client only borrows it, so `stop()` detaches without closing.
-        // Otherwise build the default Hive store under the preference's path
-        // and own it.
+        // A caller that supplied storage picked the backend and the location,
+        // and the bundle itself says whether `stop()` closes it. Otherwise
+        // build the default Hive store under the preference's path and own it.
         final injected = _injectedStorage;
         final AtClientStorage storage;
         if (injected != null) {
           storage = injected;
-          _ownsStorage = false;
+          _ownsStorage = injected.closedByClient;
         } else {
           final storagePath = preference!.hiveStoragePath;
           if (storagePath == null) {
@@ -479,14 +503,7 @@ class AtClientImpl implements AtClient {
     }
 
     // Using ??= because we may be injecting a RemoteSecondary
-    _remoteSecondary ??= RemoteSecondary(
-      _atSign,
-      _preference!,
-      atChops: atChops,
-      atLookUp: atLookUp,
-      privateKey: _preference!.privateKey,
-      enrollmentId: enrollmentId,
-    );
+    _remoteSecondary ??= buildRemoteSecondary(atLookUp: atLookUp);
 
     // Using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
@@ -1296,11 +1313,7 @@ class AtClientImpl implements AtClient {
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
-    var remoteSecondary = RemoteSecondary(
-      _atSign,
-      _preference!,
-      atChops: atChops,
-    );
+    var remoteSecondary = buildRemoteSecondary();
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
@@ -1308,9 +1321,12 @@ class AtClientImpl implements AtClient {
       result = result.trim();
       _logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
-      var streamResult = await (remoteSecondary.atLookUp as AtLookupImpl)
-          .messageListener
-          .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
+      // `readResponse` rather than reaching through to the listener: this
+      // path has already written the bytes to the socket itself, so it needs
+      // the read half alone. The listener is not in at_lookup's barrel.
+      var streamResult = await (remoteSecondary.atLookUp as AtLookupMuxable)
+          .readResponse(
+              maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
       if (streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.complete;

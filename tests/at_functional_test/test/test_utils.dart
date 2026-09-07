@@ -28,8 +28,8 @@ class TestUtils {
   /// Names this test file, giving its clients storage no other file opens.
   ///
   /// Call once, first thing in `main()`. Every bundle it hands out is closed
-  /// in a `tearDownAll` registered here, since a client only borrows the
-  /// storage it is given.
+  /// in a `tearDownAll` registered here, since these bundles are borrowed and
+  /// the client only detaches from them.
   static void isolateStorage(String testFile) {
     final storage = FunctionalStorage(testFile);
     _storage = storage;

@@ -155,7 +155,6 @@ default.
 | `at_lookup/lib/src/util/secure_socket_util.dart:12,23,25,29,35,43,49,54,55` | `SecurityContext.defaultContext`, cert `File`, `setTrustedCertificates`, `SecureSocket.connect` ×2, `setOption(tcpNoDelay)` ×2, TLS-keylog `File` + append-write. **Every connection in every package ends here.** |
 | `at_lookup/lib/src/monitor_client.dart:63`                                  | `SecureSocket.connect(host, int.parse(port))` — raw, bypasses even `SecureSocketUtil`.                                                                                                                             |
 | `at_client/lib/src/stream/stream_notification_handler.dart:27`              | `SecureSocket.connect(host, port)` — raw.                                                                                                                                                                          |
-| `at_client/lib/src/manager/monitor.dart:539`                                | `SecureSocketUtil.createSecureSocket(...)` inside the default `MonitorOutboundConnectionFactory`.                                                                                                                  |
 | `at_lookup/lib/src/cache/cacheable_secondary_address_finder.dart:209,222`   | raw TLS socket to `root.atsign.org:64` for directory lookup.                                                                                                                                                       |
 | `at_auth/lib/src/at_auth_impl.dart:396`                                     | `_defaultProbeSocket` → `SecureSocket.connect`. **Owned by the PQ program's S-5**, not here.                                                                                                                       |
 
@@ -181,9 +180,14 @@ return type is the entire blocker.
 `wss://<host>:<port>/ws`. Framing is unchanged, so the response parser is reused as-is.
 
 **Breaking-change blast radius.** `Socket getSocket()` is on a public interface;
-external `implements AtConnection` users are unknown. In-repo callers are
-`at_client/lib/src/client/remote_secondary.dart` and
-`at_client/lib/src/manager/monitor.dart`. Enumerate before changing.
+external `implements AtConnection` users are unknown. The one in-repo caller is
+`at_client/lib/src/client/remote_secondary.dart`; `monitor.dart` stopped being one
+when Monitor gave up its socket. Enumerate before changing.
+
+⚠️ **The line numbers in this section predate that change** and have not been
+re-derived. `at_client` now reaches the atServer through `AtLookUp.withSecureSocket`
+and a transport, so the inventory above understates how much is already injectable.
+Re-derive it before scoping the transport work.
 
 **Directory lookup.** `root.atsign.org:64` is a raw TLS socket with no browser
 equivalent. Two escape hatches already exist — `SecondaryAddressFinder` is an abstract
@@ -523,8 +527,7 @@ changes no interface, breaks nothing, and shrinks every later diff.
 
 | Seam                                                                                                      | Defined at                                                                            | Never passed by                                                                                                                      |
 | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `AtLookupSecureSocketFactory`, `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory` | `at_lookup/lib/src/at_lookup_impl.dart:740,749,756`, constructor params at `:108-131` | `RemoteSecondary` — `at_client/lib/src/client/remote_secondary.dart:44-56` builds `AtLookupImpl` without any of them                 |
-| `MonitorOutboundConnectionFactory`                                                                        | `at_client/lib/src/manager/monitor.dart:531`, constructor param at `:93`              | `NotificationServiceImpl._` — `notification_service_impl.dart:76-84`; `create` exposes only `monitor:` and `secondaryAddressFinder:` |
+| `AtLookupSecureSocketFactory`, `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory` | `at_lookup/lib/src/at_lookup_impl.dart:740,749,756`, constructor params at `:108-131` | Now PASSED: `RemoteSecondary` builds through `AtLookUp.withSecureSocket` with a `transport:`. The three factories remain for callers building `AtLookupImpl` directly |
 | `AtSyncQueue.open({injectedBox})`                                                                         | `at_client/lib/src/sync/at_sync_queue.dart:116`                                       | Not reachable from `AtClientImpl.create`                                                                                             |
 | `http.Client`                                                                                             | `at_auth/lib/src/registrar/registrar_service.dart:26`                                 | Plumbed — listed for completeness; the default is the only native part                                                               |
 
