@@ -113,8 +113,13 @@ void main() {
     // A FRESH service: an AtOnboardingService binds to the enrollment it last
     // authenticated as, so reusing one across enrolments fetches keys it is
     // not authorized to read.
-    final authenticated = await AtOnboardingServiceImpl(
-            atSign, _preference(atSign, apkamKeysFilePath))
+    // At the legacy posture, deliberately: authenticate() builds a client,
+    // and at the SDK default posture that client retrofits an rsa2048
+    // enrolment on the spot — the retrofit the arm below wants the shipped
+    // command to perform, and one that revokes the enrolment this helper
+    // hands back.
+    final authenticated = await AtOnboardingServiceImpl(atSign,
+            _preference(atSign, apkamKeysFilePath, posture: PqPosture.legacy))
         .authenticate(enrollmentId: enrollmentId);
 
     stdout.writeln('##CLI## $label (${signingAlgo.name}): id=$enrollmentId '
@@ -276,8 +281,11 @@ void main() {
   }, timeout: Timeout(Duration(minutes: 6)));
 }
 
-AtOnboardingPreference _preference(String atSign, String atKeysFilePath) =>
-    AtOnboardingPreference()
+AtOnboardingPreference _preference(String atSign, String atKeysFilePath,
+        {PqPosture? posture}) =>
+    (posture == null
+        ? AtOnboardingPreference()
+        : AtOnboardingPreference(posture: posture))
       ..namespace = 'buzz'
       ..atKeysFilePath = atKeysFilePath
       ..appName = 'buzz'
