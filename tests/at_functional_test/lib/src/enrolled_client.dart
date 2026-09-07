@@ -118,6 +118,10 @@ class EnrolledClient {
     required this.keys,
     required this.manager,
   });
+
+  /// Stops [client]; `TestUtils.isolateStorage`'s teardown stops whatever a
+  /// test did not, so this is for silencing one mid-test.
+  Future<void> stop() => client.stop();
 }
 
 /// Enrols a new APKAM enrollment on [atSign], approves it from [approver], and

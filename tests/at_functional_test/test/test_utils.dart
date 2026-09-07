@@ -58,13 +58,19 @@ class TestUtils {
 
   /// Names this test file, giving its clients storage no other file opens.
   ///
-  /// Call once, first thing in `main()`. Every bundle it hands out is closed
-  /// in a `tearDownAll` registered here, since these bundles are borrowed and
-  /// the client only detaches from them.
+  /// Call once, first thing in `main()`. A `tearDownAll` registered here stops
+  /// every client still running in the isolate and then closes every bundle
+  /// it handed out, since these bundles are borrowed and a client only
+  /// detaches from them.
   static void isolateStorage(String testFile) {
     final storage = FunctionalStorage(testFile);
     _storage = storage;
     tearDownAll(() async {
+      // A client stopped after its store closed keeps syncing into
+      // `Box not found` until the isolate dies.
+      for (final client in List.of(AtClientImpl.atClientInstanceMap.values)) {
+        await client.stop();
+      }
       await storage.closeAll();
       if (identical(_storage, storage)) _storage = null;
     });
