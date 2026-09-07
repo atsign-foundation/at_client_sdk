@@ -394,7 +394,7 @@ D-12. Independent of the P series, which is `at_server`-side.
   retargeted. ⚠️ This row said "stacked" until 2026-09-07, and that
   word carries a consequence: a stacked PR gets no real CI, so it would have a reader discount
   #2211's checks. They were real. **Ruled: they move
-  in THIS major** (gkc, 2026-09-06), and `AtClient.create` has nothing to do with
+  in THIS major** (gkc, 2026-09-06), and `buildAtClient` (then `AtClient.create`) has nothing to do with
   `AtClientManager` — future apps, once the manager is gone, manage their clients'
   lifecycles explicitly, so the job now is to make that *possible* while apps using the
   manager see no change.
@@ -405,7 +405,7 @@ D-12. Independent of the P series, which is `at_server`-side.
   never named, was one of only three production `lib/` sites setting `hiveStoragePath` —
   though it reaches the client through `AtOnboardingServiceImpl`, so there is one seam, not
   two.
-  **What landed.** `AtClient.create` — X4's promised static factory, never built by #2208,
+  **What landed.** `buildAtClient` (then `AtClient.create`) — X4's promised static factory, never built by #2208,
   which added `storage:` to the existing doors instead. It builds a client and wires its
   three services, taking `storage` alongside `atKeysIo`, registers nothing, and refuses an
   atSign whose client is already live rather than handing back one the caller does not own.
@@ -421,7 +421,7 @@ D-12. Independent of the P series, which is `at_server`-side.
   effect.
   ⚠️ **`AtServiceFactory` cannot go manager-free in 3.x**: every method takes an
   `AtClientManager` positionally and non-nullably, and relaxing that makes the three
-  existing `ServiceFactoryWithNoOpSyncService` overrides illegal. `AtClient.create` takes
+  existing `ServiceFactoryWithNoOpSyncService` overrides illegal. `buildAtClient` (then `AtClient.create`) takes
   per-service builder callbacks instead, which covers the only override anyone uses.
   ⚠️ **Owed.** `at_onboarding_cli` and `at_cli_commons` still set `hiveStoragePath` as their
   default (eleven analyzer infos); moving them onto client-closed bundles changes when the
@@ -440,7 +440,7 @@ D-12. Independent of the P series, which is `at_server`-side.
   a permanently deaf notification listener after one failed first connect; two documented
   preferences (`monitorHeartbeatInterval`, `monitorHeartbeatResponseTimeout`) gone dead with
   the effective interval halved 59s → 30s; `at_onboarding_cli`'s and `at_cli_commons`' floors
-  unable to supply what their `lib/` now calls; and `AtClient.create`'s dartdoc asserting the
+  unable to supply what their `lib/` now calls; and `buildAtClient` (then `AtClient.create`)'s dartdoc asserting the
   opposite of what the code does.
   ⚠️ **The retry for the first defect belongs in at_client, NOT at_lookup.**
   `startNotifications` deliberately *surfaces* a failed start — three at_lookup tests pin
@@ -454,7 +454,7 @@ D-12. Independent of the P series, which is `at_server`-side.
   `100e73b9d` restores that wiring, so porting them is now possible and owed.**
   **The rest of that list was worked 2026-09-06 and is now DONE**, each fix pinned by a test
   whose break-it mutation reddens the assertion and quotes its own reason string:
-  - **A half-built client is no longer filed and handed out.** `AtClient.create` wraps its
+  - **A half-built client is no longer filed and handed out.** `buildAtClient` (then `AtClient.create`) wraps its
     service wiring in `try { … } catch (_) { await client.stop(); rethrow; }`, which unfiles
     the client and releases its claim on the storage location.
   - **The four unconditional "borrowed" dartdocs** are corrected, plus two in the functional
@@ -622,7 +622,7 @@ wrong one, or none.
 the type is unchanged, which is exactly why nothing goes red. Prefer identity where the
 question is "is this the object I filed", since identity survives the next key change too.
 
-⛔ **The client factory is `buildAtClient(...)`, not `AtClient.create`** (gkc, 2026-09-07).
+⛔ **The client factory is `buildAtClient(...)`, not a static `AtClient.create`** (gkc, 2026-09-07).
 ⚠️ **And not `createAtClient` either, which is the name the ruling was taken under.**
 `at_onboarding_cli` has exported a top-level `createAtClient` for some time — its own
 dartdoc says "this function is exported and apps already call it" — and 1.16.0 is on
@@ -631,7 +631,7 @@ name ambiguous and eight of at_onboarding_cli's nine test files failed to LOAD, 
 `dart analyze` exit 0 on every package: the collision only bites where both are imported,
 which is the consuming package's compile.
 A static on the interface forces `at_client_spec.dart` to import `at_client_impl.dart`, and
-**49 files under `lib/src` import that interface**, so the impl — and `enrollment_service_impl`
+**50 files under `lib/src` import that interface** (49 before the move; `at_client_factory.dart` is the 50th, created BY it — re-derive with `grep -rlE "^\s*(import|export) .*at_client_spec\.dart" packages/at_client/lib/src/ | wc -l`), so the impl — and `enrollment_service_impl`
 with it — lands in all 49 import closures. That is the entanglement `import_topology_test.dart`
 exists to prevent, and that test is spike-only, which is why X6 shipped the static without
 anything going red. Dart cannot put a static outside its class, so the spelling and the
@@ -665,6 +665,22 @@ without a round trip, which is why this has been invisible.
 ⛔ **Ruled: build a standing subscriber for conveyances** (gkc, 2026-09-07) — nskey privates
 and content keys — so an arrival is filed when it lands rather than at the next start.
 
+⚠️ **It is a HANDLER, not a second listener, and the distinction is the whole scope.** There
+are two jobs on the one `sweepOnce` path and only one is missing:
+- **Answering** another enrollment's request. `_handleRequestPayload` is reachable only from
+  `sweepOnce`, so a holder that is not listening never sees a request arriving after its own
+  start. This EXISTS — `PqClientBootstrap._startEnvelopeListener` — and its dartdoc records it
+  being measured live on 2026-08-17, when "the holder never swept again, and the ask went
+  unanswered for the life of the test".
+- **Filing an arrival nobody asked for.** Nothing does this. `waitForSecret` files what IT is
+  waiting for, and the start sweep files what was already there; an unsolicited conveyance sits
+  in the secret store until the next start.
+So the subscriber is the missing handler on a listener that already runs, not a new sweep.
+⚠️ **One ordering constraint to decide rather than discover**: `collectConveyedKeyMaterial`
+CONSUMES and deletes the envelopes it finds at start, and its own dartdoc warns that an app
+subscribing afterwards sees no arrival event for anything that was waiting. A standing
+subscriber and that start sweep compete for the same envelopes.
+
 ⚠️ **That makes THREE states for the ladder test, not two** (gkc asked for two): conveyed
 **and filed** reads immediately; conveyed **but not filed** misses once and then resolves from
 the store with no round trip; **not conveyed** misses and waits on a holder answering. The
@@ -679,12 +695,45 @@ to all 41; `pq_tag_test.dart` is the only file without it, and correctly so — 
 files, talks to no atServer and failed nothing. Each name matches its own file and all 61 are
 unique, which is what stops two files sharing a location.
 
-⚠️ **X4a item 3 is what remains, and the merge-back is what made it due.** That item — "rewrite
-the multi-enrollment fixtures onto direct `create` with a shared lifecycle-owning test helper
-(builds located storage + client, closes both in `tearDown`)" — was moved off #2208 as
-spike-side work. The per-location guard arrived with the merge, so the spike's fixtures that
-build several enrollments of one atSign at one location, or restart a client after `stop()`,
-now fail against it. That is the guard working, not a regression.
+✅ **X4a item 3 is DONE**, in the merge commit `9c84011df`. The item — "rewrite the
+multi-enrollment fixtures onto direct `create` with a shared lifecycle-owning test helper" —
+was moved off #2208 as spike-side work, and the per-location guard arriving with the merge is
+what made it due. What was built differs from the sketch, and the difference is the point:
+`FunctionalStorage.forPrincipal(atSign, label)` hands a second LIVE principal its own bundle,
+and `enrolAndAuthenticate` DERIVES its own from the device name it already computes, rather
+than taking one. One value therefore names both the enrollment and its store, so they cannot
+drift; threading a bundle per call site would have meant re-evaluating expressions containing
+`uuid.v4()` and silently getting a different label than the enrollment got.
+Measured: the functional pack went `+96 -40` → `+195 -6`, principal-collision failures 36 → 1.
+
+⛔ **Succession is not coexistence, and only succession shares a store.** `forPrincipal` is for
+two enrollments that are live at once. A retrofit is a succession — the atServer caps the old
+enrollment and the new one inherits its data — so it keeps `forAtSign`'s bundle and hands the
+store over instead. Both halves are now expressible; before this only one was.
+
+⚠️ **What the store split EXPOSED is worth more than what it fixed.** Two tests were green only
+because two "installs" shared one local keystore: `nskey_rollout_ladder_live_test` never
+exercised its seal end to end, and `enrollment_test` read records it had never written. That is
+the failure mode the whole X series exists to remove, and only separating the stores could show
+it. ⛔ **Ruled: sweep for the same shape anywhere two clients of one atSign exist** (gkc,
+2026-09-07) — not confined to the nskey family. 42 files build two or more clients; the
+shortlist by cross-reads is `tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart`
+(2 builds / 11 get-put, and the name is the shape), `at_client_lifecycle_functional_test.dart`,
+`pq_posture_grid_test.dart` and the unit `enrollment_service_test.dart`.
+
+⚠️ **Owed after the merge, none of it started:**
+- **The e2e and onboarding-CLI packs have NOT been run** against this merge. A storage /
+  lifecycle change wants all four; one has run. The e2e pack is the higher risk of the two.
+- **Six functional failures remain**, classified: two `enrollment_test` store-split
+  consequences (an enrolled client with its own store lacks the owner's self key and records),
+  one principal collision in `pq_advance_ladder_test`, and three in
+  `self_enrollment_retrofit_live_test` — two `AT0027 revoked`, one `connection went away` —
+  that are UNATTRIBUTED. Attributing those three needs a pre-merge baseline run against
+  `gkc-pq-d1-spike-backup-premergeback-20260907`, which has not been done; do not guess at
+  them from the story.
+- **The ladder test's state 2 does not pass.** Starting the envelope listener on both installs
+  by hand did not make the holder answer within 60s, so `waitForSecret` still times out. The
+  three states are written and state 1 passes; what state 2 needs is unknown.
 
 **Found 2026-09-05 by the wrap-up's cold read and done the same day:** the X3 merge-back
 had been skipped. It landed as `51bdb6230`; `at_sync_queue.dart` kept trunk's `SyncQueueStore`
@@ -696,6 +745,101 @@ links" until 2026-09-07, and both halves of that were wrong** (corrected on the 
 and only **two** of the ten are markdown links — in `implementation-plan.md`'s T-series rows.
 The other eight are prose references that no link checker sees: `decisions.md` ×3,
 `js-api.md` ×5.
+
+### Post-merge fix-forward — the analysis, so none of it is re-derived
+
+⛔ **THREE DEFECTS IN `principalChange`, ALL INTRODUCED BY THE MERGE COMMIT ITSELF** and all
+found by the wrap-up's cold read on 2026-09-07, after `9c84011df` had landed. It has **one
+caller and zero tests**: `grep -rn principalChange packages/ tests/ --include='*.dart'` returns
+the declaration and `self_retrofit.dart` only.
+
+1. ⛔ **`stop()` CLOSES the store `principalChange` is about to carry.** `_releaseStorage`
+   does `if (_ownsStorage) await storage.close()` (`at_client_impl.dart:1246`), `_ownsStorage`
+   is `true` whenever the client built its own store from the preference (`:882`), and
+   `attach()` throws `'this storage has been closed and cannot be reopened'`
+   (`at_client_storage.dart:87`). So the carry works **only** when the outgoing client held a
+   BORROWED bundle. The default path — `selfRetrofit` with no `storage:` — is the one that
+   fails, which is exactly the "exercise the DEFAULT construction, not your caller's" rule.
+2. ⛔ **`principalChange` is dropped by `setCurrentAtSign`'s idempotency short-circuit.** The
+   guard tests `atChops/atKeysIo/atLookUp/enrollmentId` and `_storageIsUnchanged`;
+   `principalChange` is not among them, so a same-atSign call with it set returns the running
+   client, never calls `forgetPrincipal`, and reports success. Masked today only because
+   `fromAuthSession` always passes `session.enrollmentId` — which is nullable.
+3. ⚠️ **`selfRetrofit`'s own dartdoc recommends the shape that breaks it.** It tells callers to
+   pass `AtClientManager(atSign)` to keep the legacy client live alongside. A fresh manager has
+   no current client, so nothing is carried, and the retrofitted client builds a NEW store at
+   the location the still-live legacy client holds — refused by the per-location guard. That
+   also contradicts this plan's own succession-vs-coexistence ruling: the dartdoc is offering
+   coexistence over one store.
+
+**Start here.** Any fix needs a test that builds the DEFAULT shape — an outgoing client owning
+its own store — since that is the untested path all three live on.
+
+
+Everything below was measured on 2026-09-07 against merge commit `9c84011df`. Re-run the
+commands rather than quoting the numbers; the METHOD is the part worth keeping.
+
+**Classify failures by pairing each `[E]` with ITS OWN file.** Counting messages globally and
+files globally and lining them up is wrong and was wrong twice here — it attributed a
+connection error in `self_enrollment_retrofit_live_test` to a storage cause. Walk the log,
+and for each `[E]` line take the file from that line and the message from the next non-stack
+line beneath it.
+
+**Read a run's log only after it is closed.** `wc -c` on a file a background job is still
+appending to measures nothing; two reports of round 7 were built from a half-written log and
+both were wrong in the direction of looking like progress. Check for the runner's own summary
+line before believing any figure, and translate `\r` before grepping — the expanded reporter
+uses carriage returns, so line-based greps under-count files.
+
+**The pack's log grew ~10x at round 8 and that is not a fault.** Two effects: distinct records
+synced 229 → 1381, because far more tests now reach the point of writing anything (151 → 195
+passing); and pulls-per-record 19 → 26.5, because per-principal stores mean each client syncs
+its own. Wall clock 3:13 → 5:11.
+
+**The six remaining functional failures, by cause:**
+- **2, `enrollment_test`** — an enrolled client now has its own store and genuinely lacks the
+  owner's self-encryption key and records. Same class as the ladder: green before only because
+  the stores were shared. Needs the enrolled client given its own key material, not a shared
+  store back.
+- **1, `pq_advance_ladder_test`** — a principal collision between two enrollment-scoped
+  clients (`held by @alice🛠|<uuid>`), not against `legacy`. The remaining instance of the
+  class item 3 fixed 35 of.
+- **3, `self_enrollment_retrofit_live_test`** — two `AT0027 … is revoked`, one `connection went
+  away`. ⛔ UNATTRIBUTED. A retrofit caps the old enrollment, so a capped-then-used connection
+  is a coherent story, but whether it is NEW depends on whether X6's connection changes moved
+  when the old lookup dies. **Attribute with a baseline run on
+  `gkc-pq-d1-spike-backup-premergeback-20260907`, not by reasoning.**
+
+**Where the conveyance investigation got to**, so it is not walked again:
+- An nskey private reaches another enrollment by CONVEYANCE only. Two installs are two devices
+  with two keyfiles and (now) two stores.
+- `PublishedNskeyKeyRing.privateHalf` searches memory (`_ownPrivates`) → the filed keyfile copy
+  (`NskeyPrivateFiling.read`, which reads `keysIo`, NOT the store) → then fires
+  `_askForMissingPrivate` FIRE-AND-FORGET and returns null. The first read after a convey
+  therefore always misses.
+- The conveyance record lookup DOES fall back to remote (`symmetric_aes_gcm_provider.dart`
+  reads `remote: false` then `remote: true`). ⚠️ A `(remote: false)` warning in a log is the
+  first of two attempts and is benign; only a `(remote: true)` warning means the atServer had
+  nothing. Do not conclude "local-only lookup" from the first — that mistake was made here.
+- `askOnReadMiss` defaults **true**, and a ring holding a `privateFiling` derives its own ask,
+  so the self-heal is wired by default.
+- ⛔ **The holder must be LISTENING to answer.** `_handleRequestPayload` is reachable only from
+  `sweepOnce`. This file runs `legacyPlusPqProviders` and drives seeding by hand, so it does
+  not get the wired startup tail that starts the envelope listener — hence the listener is now
+  started by hand there. **That alone did not make state 2 pass**; what state 2 needs is still
+  unknown and is the open question.
+
+**Fixture helpers, so they are not rebuilt:** `FunctionalStorage.forPrincipal(atSign, label)`
+and `TestUtils.storageForPrincipal(atSign, label)` for a second live principal;
+`forAtSign`/`storageFor` for the atSign's own; `enrolAndAuthenticate` takes the file's
+`FunctionalStorage` and derives its own bundle from the device name.
+
+**Traps met, each of which cost a round:** the `keyfiles` map is keyed by the bare device
+(`'ladder-new'`), NOT the deviceName (`'ladder-new-$runId'`); `stopListening()` is synchronous
+while `startListening()` is not; `dart analyze lib test` must run from the package root, not
+from `test/` (exit 64 is a usage error, not a result); and a `git reset` during a merge
+DESTROYS `MERGE_HEAD` — recover by writing `git rev-parse origin/trunk > .git/MERGE_HEAD`
+before committing, or the merge records only one parent.
 
 **Deferred to the major:** deprecating `AtClientManager`. Its `AtSignChangeListener`
 capability exists only because there is a global current atSign, and where that goes is

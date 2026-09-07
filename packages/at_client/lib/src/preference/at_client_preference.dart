@@ -406,7 +406,7 @@ class AtClientPreference {
   }
 
   /// Local device path of hive storage, used when no [AtClientStorage] is
-  /// supplied to [AtClient.create] or [AtClientManager.setCurrentAtSign].
+  /// supplied to [buildAtClient] or [AtClientManager.setCurrentAtSign].
   ///
   /// Setting this leaves the client owning its store: it opens the store and
   /// closes it again when it stops. Supplying a bundle instead chooses the

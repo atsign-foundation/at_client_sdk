@@ -86,9 +86,11 @@ class AtClientManager {
 
   /// Switches the active atSign and (re)creates its associated services.
   ///
-  /// The outgoing client is stopped via [AtClient.stop] and its instance
-  /// remains in cache for resumption. Calling this method again for the same
-  /// atSign resumes it with fresh services.
+  /// The outgoing client is stopped via [AtClient.stop], which UNFILES it and
+  /// releases its storage. ⚠️ It is not resumable: `start()` refuses a client
+  /// whose storage was released, and nothing is left in the cache to resume.
+  /// Calling this method again for the same atSign therefore builds a new
+  /// client rather than reviving the old one.
   ///
   /// Use [AtClient.stop] only when permanently finished with an atSign (e.g.,
   /// logout or app shutdown).

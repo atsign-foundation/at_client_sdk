@@ -57,7 +57,7 @@ Future<AtClient> buildAtClient({
 }) async {
   if (AtClientImpl.holdsLiveClient(atSign)) {
     throw StateError(
-        'A client for $atSign is already live. AtClient.create builds a '
+        'A client for $atSign is already live. buildAtClient builds a '
         'client the caller owns, so it will not hand back one owned '
         'elsewhere; stop() the existing client first.');
   }
