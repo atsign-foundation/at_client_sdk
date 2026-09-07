@@ -76,8 +76,9 @@ class FunctionalStorage {
           InMemoryAtClientStorage(atSign: atSign),
       };
 
-  /// Closes every bundle this file opened. Nothing else does: a client only
-  /// borrows the storage it is given, and detaches from it on `stop()`.
+  /// Closes every bundle this file opened. Nothing else does: these bundles
+  /// are borrowed, so a client detaches from them on `stop()` without
+  /// closing them.
   Future<void> closeAll() async {
     for (final storage in _byAtSign.values) {
       await storage.close();

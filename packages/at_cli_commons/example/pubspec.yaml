@@ -12,6 +12,25 @@ dependencies:
   at_client: ^3.8.0
   args: ^2.7.0
 
+# at_cli_commons is a path dependency, so its own floors must resolve locally
+# too - a published at_client cannot satisfy them while the versions they need
+# are still unreleased. Transitive overrides are not automatic.
+dependency_overrides:
+  at_client:
+    path: ../../at_client
+  at_onboarding_cli:
+    path: ../../at_onboarding_cli
+  at_auth:
+    path: ../../at_auth
+  at_chops:
+    path: ../../at_chops
+  at_commons:
+    path: ../../at_commons
+  at_lookup:
+    path: ../../at_lookup
+  at_utils:
+    path: ../../at_utils
+
 dev_dependencies:
   lints: ^2.1.1
   test: ^1.24.4

@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
@@ -113,21 +114,17 @@ void main() {
     group('Monitor lifecycle tests', () {
       late Monitor monitor;
       late MockAtLookup mockAtLookup;
-      late MockAtChops mockAtChops;
-      late MockSecondaryAddressFinder mockAddressFinder;
+      late _StubMuxable stubMuxable;
 
       setUp(() {
         mockAtLookup = MockAtLookup();
-        mockAtChops = MockAtChops();
-        mockAddressFinder = MockSecondaryAddressFinder();
+        stubMuxable = _StubMuxable();
         when(() => mockAtLookup.close()).thenAnswer((_) async => {});
 
         monitor = Monitor(
           atSign: '@test',
           atClientPreference: AtClientPreference(),
-          atChops: mockAtChops,
-          enrollmentId: null,
-          secondaryAddressFinder: mockAddressFinder,
+          lookUp: stubMuxable,
           handleNotification: (String jsonEncoded) async {},
           getLastNotificationTime: () async => null,
         );
@@ -353,4 +350,28 @@ class _CapturingAtSignChangeListener implements AtSignChangeListener {
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent event) => _onEvent(event);
+}
+
+/// Stands in for the muxable the Monitor now drives, so these tests exercise
+/// Monitor's own state handling rather than a socket.
+class _StubMuxable extends Fake implements AtLookupMuxable {
+  final _notifications = StreamController<String>.broadcast();
+  final _up = StreamController<bool>.broadcast();
+
+  @override
+  Stream<String> get notifications => _notifications.stream;
+
+  @override
+  Stream<bool> get notificationConnectionUp => _up.stream;
+
+  @override
+  Future<void> startNotifications({
+    String? regex,
+    Future<int?> Function()? getLastNotificationTime,
+    bool selfNotificationsEnabled = true,
+  }) async =>
+      _up.add(true);
+
+  @override
+  Future<void> stopNotifications() async => _up.add(false);
 }

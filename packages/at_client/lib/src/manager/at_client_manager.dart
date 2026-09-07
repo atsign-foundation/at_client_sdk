@@ -207,7 +207,9 @@ class AtClientManager {
   /// ([session.atLookUp]) and skip the second handshake — the perf escape hatch.
   /// When false (default) the client opens its own fresh socket.
   ///
-  /// [storage] is borrowed rather than owned, exactly as on [setCurrentAtSign].
+  /// [storage] is borrowed unless it was built with `closedByClient: true`, in
+  /// which case the client closes it on [AtClient.stop]. Same rule as on
+  /// [setCurrentAtSign].
   Future<AtClientManager> fromAuthSession(
       AtAuthSession session, AtClientPreference preference,
       {AtServiceFactory? serviceFactory,
