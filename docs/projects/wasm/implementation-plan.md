@@ -494,7 +494,8 @@ D-12. Independent of the P series, which is `at_server`-side.
     is ahead of at_client on the release train.
     **It has a live test as well as three unit tests**, and it needed no test hook: the
     atServer writes a stats notification to every monitor connection every 15s by default
-    (`at_secondary_config.dart:63` on at_server `origin/trunk`), which is a real clock to
+    (`at_secondary_config.dart:63` on at_server `origin/trunk`), and on every successful
+    change verb besides, so an idle atSign still ticks every 15s — a real clock to
     bracket the budget around. `tests/at_functional_test/test/monitor_silence_test.dart`
     runs two 45-second arms differing only in the budget — 3s must rebuild, 40s must not —
     observed through the public `currentListenerStateStream`, with the stats-arrive premise
