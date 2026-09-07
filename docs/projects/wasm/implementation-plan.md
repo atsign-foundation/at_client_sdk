@@ -384,12 +384,16 @@ D-12. Independent of the P series, which is `at_server`-side.
   in-memory storages whose hashes collided would be refused as one store. Negligible at the
   handful per test process this pack opens; wrong in principle.
   Depends on X3.
-- **X6 — Consumers.** ✅ **Built 2026-09-06** on `gkc-x6-consumers` as
-  [#2211](https://github.com/atsign-foundation/at_client_sdk/pull/2211), which **targets trunk
-  directly** — it was stacked on [#2210](https://github.com/atsign-foundation/at_client_sdk/pull/2210)
-  until that merged and was retargeted. ⚠️ This row said "stacked" until 2026-09-07, and that
+- **X6 — Consumers.** ✅ **Merged to trunk 2026-09-07** as
+  [#2211](https://github.com/atsign-foundation/at_client_sdk/pull/2211), 50 of 50 checks green,
+  merge commit `a7ad4a545` — a merge commit rather than a squash, so the branch's own history is
+  on trunk (#2210 next door was squashed, which is why `git cherry` shows its commits as absent).
+  Built 2026-09-06 on `gkc-x6-consumers`, which GitHub deleted on merge. It **targeted trunk
+  directly**, having been stacked on
+  [#2210](https://github.com/atsign-foundation/at_client_sdk/pull/2210) until that merged and was
+  retargeted. ⚠️ This row said "stacked" until 2026-09-07, and that
   word carries a consequence: a stacked PR gets no real CI, so it would have a reader discount
-  #2211's checks. They are real. **Ruled: they move
+  #2211's checks. They were real. **Ruled: they move
   in THIS major** (gkc, 2026-09-06), and `AtClient.create` has nothing to do with
   `AtClientManager` — future apps, once the manager is gone, manage their clients'
   lifecycles explicitly, so the job now is to make that *possible* while apps using the
@@ -423,10 +427,11 @@ D-12. Independent of the P series, which is `at_server`-side.
   default (eleven analyzer infos); moving them onto client-closed bundles changes when the
   client's store closes, so it wants the live packs rather than riding in on unit
   green. Eleven example apps in the other widget packages still set `commitLogPath`, each
-  needing its own version decision. **X6 itself changes storage ownership semantics, so the
-  live packs are owed before its PR is ready — all FOUR of them, not three. The fourth is
+  needing its own version decision. **X6 changes storage ownership semantics, so the live
+  packs were owed before its PR was ready — all FOUR of them, not three. The fourth is
   the onboarding-CLI **proxy** pack, which cannot run on this Mac at all (see the X6 review
-  notes below), so on this machine "all four" means three run plus one delegated to CI.**
+  notes below), so on this machine "all four" meant three run locally plus one delegated to CI.
+  That is what happened, and #2211 merged with 50 of 50 checks green.**
   Depends on X4.
 
   **Adversarial review of [#2211](https://github.com/atsign-foundation/at_client_sdk/pull/2211),
@@ -536,6 +541,13 @@ D-12. Independent of the P series, which is `at_server`-side.
   always be the same" and nothing enforces it, and the value is sent to the atServer — but
   the bump is a deliberate, infrequent act and the twin stays manual. Do not re-propose
   without new evidence of drift.
+  ⚠️ **That evidence arrived the next day.** On `gkc-pq-d1-spike`, commit `cf58ca023` moved
+  `at_client`'s `pubspec.yaml` to 3.15.0-rc1 and left `AtClientConfig.atClientVersion` at
+  `'3.14.1'`; the drift stood undetected until a cold read on 2026-09-07, and every client
+  built from that branch meanwhile told the atServer it was 3.14.1. Fixed on the spike at
+  `ea7a33fdf`. One instance is not a rate, and the rejection above may still be right — but
+  the "do not re-propose" condition is now satisfied, and a re-proposal should be judged on
+  its merits rather than turned away at the door.
   ⚠️ **Merge-back note for the spike:** three sites now read `preference.signingAlgoType`
   directly (`sync_service_impl.dart`, `notification_service_impl.dart`, `remote_secondary.dart`)
   where the spike calls `signingAlgoOf(atClient)`. They must go back to `signingAlgoOf` when PQ
@@ -556,6 +568,26 @@ filing under the identity `_init` settled. Keep the key and the filing; **delete
 `_stopBackgroundProcesses()` differs only by the spike's `_pqBootstrap?.stop()`. That diff was
 measured 2026-09-05 against trunk `ba281fda3`, before X2 and X3 landed; the X4 row's
 measurement is against `d13516d95`, after them.
+
+⚠️ **The merge-back rule was not followed for X4, X5 or X6, and the accumulation it exists to
+prevent has happened.** X3's merge-back is real — `51bdb6230`, on the spike — but nothing
+carried X4, X5 or X6 across, and all three have now merged to trunk. Measured 2026-09-07 with
+`git grep -c -F <symbol> <ref> -- 'packages/' 'tests/'`, against a positive control of
+`AtClientStorage` at 122 on trunk and 59 on the spike (X2/X3, which did cross):
+
+| Symbol | trunk | `gkc-pq-d1-spike` | Arrived with |
+|-------------------------|-------|-------------------|--------------|
+| `closedByClient`        | 39    | 0                 | X6           |
+| `isolateStorage`        | 24    | 0                 | X5           |
+| `AT_FUNCTIONAL_STORAGE` | 2     | 0                 | X5           |
+| `monitorSilenceTimeout` | 8     | 0                 | X6           |
+
+The spike is 29 commits behind trunk. Measure the gap by **content, not ancestry** — a squash
+merge (#2210) leaves no ancestor and no matching patch-id, so `git cherry` and
+`git merge-base --is-ancestor` both report work missing that is present. Two things the
+reconciliation must not lose: `refuseChangedStoragePath` is still spike-only (11 hits against
+0 on trunk), so the instruction above to delete it is still live and still unexecuted; and the
+`signingAlgoOf` note at the end of the X6 row applies to three files.
 
 **Found 2026-09-05 by the wrap-up's cold read and done the same day:** the X3 merge-back
 had been skipped. It landed as `51bdb6230`; `at_sync_queue.dart` kept trunk's `SyncQueueStore`
