@@ -1,3 +1,9 @@
+## 3.7.0
+
+- feat: AES-CTR via OpenSSL when libcrypto is present, in one-shot (`AtPqc.aesCtr`)
+  and incremental (`AesCtrFfiCipher`, for streams) form. Ciphertext is unchanged;
+  hosts without libcrypto keep the pure-Dart path.
+
 ## 3.6.1
 
 - chore: dart format, and a stale symbol name in one test comment

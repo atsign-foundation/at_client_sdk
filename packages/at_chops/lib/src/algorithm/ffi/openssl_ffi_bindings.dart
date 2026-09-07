@@ -183,7 +183,7 @@ const int evpPkeyKeypair = 0x87;
 // NID_X25519 = 1034
 const int nidX25519 = 1034;
 
-// ── EVP_CIPHER_CTX — for AES-256-GCM symmetric AEAD ─────────────────────────
+// ── EVP_CIPHER_CTX — for symmetric encryption (e.g. AES-GCM, AES-CTR) ───────
 
 final class EVP_CIPHER extends Opaque {}
 
@@ -191,6 +191,15 @@ final class EVP_CIPHER_CTX extends Opaque {}
 
 typedef EvpAes256GcmNative = Pointer<EVP_CIPHER> Function();
 typedef EvpAes256GcmDart = Pointer<EVP_CIPHER> Function();
+
+typedef EvpAes128CtrNative = Pointer<EVP_CIPHER> Function();
+typedef EvpAes128CtrDart = Pointer<EVP_CIPHER> Function();
+
+typedef EvpAes192CtrNative = Pointer<EVP_CIPHER> Function();
+typedef EvpAes192CtrDart = Pointer<EVP_CIPHER> Function();
+
+typedef EvpAes256CtrNative = Pointer<EVP_CIPHER> Function();
+typedef EvpAes256CtrDart = Pointer<EVP_CIPHER> Function();
 
 typedef EvpCipherCtxNewNative = Pointer<EVP_CIPHER_CTX> Function();
 typedef EvpCipherCtxNewDart = Pointer<EVP_CIPHER_CTX> Function();
