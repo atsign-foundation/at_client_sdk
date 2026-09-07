@@ -96,11 +96,12 @@ void main() {
   /// Authenticates from a legacy keyfile — the shared one by default, or an
   /// arm's own.
   ///
-  /// An arm that retrofits **rsa2048** needs its own, because a keyfile is
-  /// retrofitted once: the first arm to retrofit the shared file fixes its
-  /// algorithm, and every later arm asking for a different one is refused.
-  /// The mldsa65 arms share it deliberately — the last of them asserts that a
-  /// rerun reuses rather than re-mints.
+  /// Every arm that authenticates its successor needs its own: the
+  /// successor's first authentication revokes the predecessor, so the legacy
+  /// enrollment of a keyfile one arm retrofitted cannot authenticate for the
+  /// next. A keyfile is also retrofitted once, so the first arm to retrofit it
+  /// fixes its algorithm. The shared file serves the one arm that walks the
+  /// full retrofit.
   Future<AtAuthSession> legacySession([String Function(String)? pathFor]) async {
     final auth = await AtAuth.create().authenticate(
         AtAuthRequest(atSign,
@@ -178,21 +179,15 @@ void main() {
     // flat fields, the PQ one as typed materials under its own id.
     final keys = await FileAtKeysIo(filePath: keysFilePath).read(atSign);
     expect(keys.enrollmentId, session.enrollmentId,
-        reason: 'the flat fields keep the legacy enrollment — it must go on '
-            'authenticating until the atServer\'s cap retires it');
+        reason: 'the flat fields keep the legacy enrollment; a cold start '
+            'resolves the typed material and authenticates as the successor, '
+            'so the flat id names what the predecessor was');
     expect(keys.signingAlgorithmForEnrollment(newId), SigningAlgoType.mldsa65);
 
-    // The acceptance assertion: authenticate under the new id. PKAM is
-    // record-authoritative, so this passes only with a genuine ML-DSA
-    // signature — an RSA one, whatever it claims, is refused.
-    final pqAuth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
-        atKeysIo: FileAtKeysIo(filePath: keysFilePath))
-      ..enrollmentId = newId
-      ..rootDomain = rootDomain);
-    expect(pqAuth.isSuccessful, true,
-        reason: 'the retrofitted enrollment must be usable IMMEDIATELY: '
-            'keyfile → AtChops → pkam dispatch, all genuinely ML-DSA');
-
+    // Read over the legacy connection BEFORE the successor authenticates:
+    // that first authentication revokes the legacy enrollment and drops its
+    // connections, so nothing on `session.atLookUp` runs after it.
+    //
     // The _apsk this enrollment composed on its own enroll:request, published
     // verbatim by the atServer at approval — the server composes none.
     final apskResponse = await session.atLookUp!.executeCommand(
@@ -219,13 +214,27 @@ void main() {
     expect(ok, true,
         reason: 'signer and published verify key must be the same keypair on '
             'the real wire, or every advertised-key verification fails');
+
+    // The acceptance assertion, last: authenticate under the new id. PKAM is
+    // record-authoritative, so this passes only with a genuine ML-DSA
+    // signature — an RSA one, whatever it claims, is refused.
+    final pqAuth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
+        atKeysIo: FileAtKeysIo(filePath: keysFilePath))
+      ..enrollmentId = newId
+      ..rootDomain = rootDomain);
+    expect(pqAuth.isSuccessful, true,
+        reason: 'the retrofitted enrollment must be usable IMMEDIATELY: '
+            'keyfile → AtChops → pkam dispatch, all genuinely ML-DSA');
   });
 
   test(
       'selfRetrofit switches to a working client: verb connection, monitor, '
       'and envelope signing all run under the ML-DSA enrollment',
       timeout: const Timeout(Duration(seconds: 90)), () async {
-    final session = await legacySession();
+    String t3Path(String a) => 'test/testData/rf2c$a.atKeys';
+    await mintLegacyKeyfile(t3Path);
+    final session = await legacySession(t3Path);
+    final deviceRF2C = 'rf2c-${Uuid().v4().hashCode}';
     final manager = await selfRetrofit(
         // Mode B, explicitly: this row tests the PQ retrofit, and the
         // parameter default is the rollout-window RSA mode.
@@ -233,11 +242,14 @@ void main() {
         session: session,
         preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
         appName: 'rf2b-app',
-        deviceName: 'rf2c-${Uuid().v4().hashCode}',
+        deviceName: deviceRF2C,
         namespaces: {namespace: 'rw'},
-        // A dedicated manager keeps the owner client live alongside — the
-        // proven ConcurrentClients shape for two enrollments of one atSign.
-        manager: AtClientManager(atSign));
+        // A dedicated manager and a store of its own: the owner client stays
+        // live over the atSign's bundle, so this cold retrofit is a SECOND
+        // principal rather than a succession from it. Named by the device, so
+        // the enrollment and its store cannot disagree.
+        manager: AtClientManager(atSign),
+        storage: TestUtils.storageForPrincipal(atSign, deviceRF2C));
 
     final client = manager.atClient;
     expect(client.enrollmentId, isNotNull);
@@ -440,7 +452,24 @@ void main() {
   });
 
   test('mint-once per keyfile: a rerun reuses the PQ enrollment', () async {
-    final session = await legacySession();
+    // Its own keyfile, and the successor is never authenticated here, since
+    // that would revoke the legacy enrollment the rerun submits from. The
+    // rerun this pins is a retry after a retrofit that minted and filed but
+    // never switched — the legacy client is still the one running.
+    String t6Path(String a) => 'test/testData/rf2b-rerun$a.atKeys';
+    await mintLegacyKeyfile(t6Path);
+    final session = await legacySession(t6Path);
+
+    final first = await AtEnrollment.create().submit(
+        AtSelfEnrollmentRequest(
+            session: session,
+            appName: 'rf2b-app',
+            deviceName: 'rf2b-rerun-${Uuid().v4().hashCode}',
+            namespaces: {'buzz': 'rw'},
+            metadataBuilder: enrollmentKeyPackageBuilder(atSign,
+                signingAlgo: SigningAlgoType.mldsa65)),
+        session.atLookUp!);
+    expect(first.enrollStatus, EnrollmentStatus.approved);
 
     final again = await AtEnrollment.create().submit(
         AtSelfEnrollmentRequest(
@@ -451,7 +480,10 @@ void main() {
         session.atLookUp!);
 
     expect(again.enrollStatus, EnrollmentStatus.approved);
-    final keys = await FileAtKeysIo(filePath: keysFilePath).read(atSign);
+    expect(again.enrollmentId, first.enrollmentId,
+        reason: 'the rerun must hand back the enrollment the first submit '
+            'minted, not a second one');
+    final keys = await FileAtKeysIo(filePath: t6Path).read(atSign);
     // privateAuthentication, not privateSigning: a retrofit files its APKAM
     // keypair (`fileApkamMaterial`), and nothing in production calls
     // `fileSigningMaterial` at all — per-algorithm signing material has no
