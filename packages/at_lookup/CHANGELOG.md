@@ -1,3 +1,7 @@
+## 4.0.0-rc1
+
+- breaking: `MonitorClient` is removed. It has no replacement.
+
 ## 3.7.0-rc1
 
 - fix: a connection built before anything reads `notifications` now
