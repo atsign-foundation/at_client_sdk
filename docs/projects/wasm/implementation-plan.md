@@ -772,6 +772,21 @@ the declaration and `self_retrofit.dart` only.
    also contradicts this plan's own succession-vs-coexistence ruling: the dartdoc is offering
    coexistence over one store.
 
+⚠️ **Two loose ends from the merge session, recorded 2026-09-07 so they are not lost:**
+- **[#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) is OPEN on trunk**
+  and unmerged — `docs(wasm): record X6's merge, and the merge-back it leaves owed`, branch
+  `gkc-x6-merge-followup` in the `-x6` worktree, 50 checks green when raised. It corrects
+  trunk's copy of this plan; **this branch's copy has moved much further since**, so the two
+  will need reconciling rather than one overwriting the other.
+- ⚠️ **The merge landed as ONE commit, not the "merge then follow-ups on top" that was asked
+  for** (gkc, 2026-09-07). It could not be split: a `packages/`-only merge commit would have
+  recorded trunk as merged while carrying the SPIKE's `tests/` — 73 files, including a
+  `test_utils.dart` with no `isolateStorage` — i.e. a merge commit not containing the merge.
+  And `at_client_impl.dart` and `at_client_manager.dart` each carry the conflict resolution
+  AND the later fixes on adjacent lines. So `9c84011df` contains the merge, six production
+  fixes, X4a item 3 and the fixture reconciliation together; the message names the layers
+  since git cannot.
+
 **Start here.** Any fix needs a test that builds the DEFAULT shape — an outgoing client owning
 its own store — since that is the untested path all three live on.
 
