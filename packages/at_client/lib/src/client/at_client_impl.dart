@@ -2151,8 +2151,9 @@ class AtClientImpl implements AtClient {
           .info('Retrofitted $subject to $newId; this client runs as $newId');
     } on Exception catch (e) {
       // The legacy credential is untouched by a failed retrofit — the atServer
-      // caps a parent enrollment on success, never before, and it never
-      // touches the flat PKAM key at all — so the client is fully usable.
+      // revokes a parent enrollment at its successor's first authentication,
+      // never before, and it never touches the flat PKAM key at all — so the
+      // client is fully usable.
       _logger.warning('The retrofit of $subject did not complete, so this '
           'client comes up on $subject and the next start will try again: $e');
     } on Error catch (e, stackTrace) {

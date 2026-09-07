@@ -71,24 +71,6 @@ echo "*** docker compose up (base port ${BASE_PORT}, range ${BASE_PORT}-${VE_TOP
 docker compose up -d
 cd ..
 
-# Give ONE atSign a zero-hour self-enrollment grace, so the retirement rows can
-# watch a capped legacy enrollment actually age out instead of waiting 30 days.
-#
-# Per-secondary rather than the `apkamSelfEnrollmentGraceHours` env var, which
-# every secondary in the container would inherit: at grace 0 a retrofit kills
-# its parent within a millisecond, and the B1 clone rows need a parent that
-# survives its sibling's retrofit. So the cap tests get their own atSign and
-# everything else keeps the 720h default. Each secondary's `config` is a
-# symlink to one shared directory — replacing the symlink with a private copy
-# is what makes the setting local to this atSign. The env var must stay unset
-# for the yaml to be read at all (env beats yaml in AtSecondaryConfig).
-#
-# BEFORE pkamLoad, deliberately. Restarting a secondary mid-load severs
-# whatever key install was in flight against it and nothing retries — the
-# atSign would come up without a public key and every test on it would fail
-# at authentication, a long way from this line.
-CAP_ATSIGN='eve🛠'
-CAP_PORT=25010
 # `supervisorctl status` exits non-zero whenever ANY program is not RUNNING,
 # and pkamLoad is deliberately STOPPED until it is started below - so the exit
 # code says nothing about readiness here, and waiting on it burns the full 60
@@ -115,17 +97,6 @@ if [[ -z "$ready" ]]; then
   echo "*** atDirectory did not reach RUNNING within 60s - aborting"
   exit 1
 fi
-
-echo "*** Setting apkamSelfEnrollmentGraceHours=0 for @${CAP_ATSIGN}"
-docker exec e2e_virtualenv sh -c "
-  set -e
-  d='/atsign/secondary/${CAP_ATSIGN}'
-  rm -f \"\$d/config\"
-  mkdir -p \"\$d/config\"
-  cp /atsign/secondary/base/config/config.yaml \"\$d/config/config.yaml\"
-  printf '\nenrollment:\n  apkamSelfEnrollmentGraceHours: 0\n' >> \"\$d/config/config.yaml\"
-"
-docker exec e2e_virtualenv supervisorctl restart "${CAP_PORT}_@${CAP_ATSIGN}"
 
 echo "*** Starting pkamLoad"
 for i in $(seq 1 30); do

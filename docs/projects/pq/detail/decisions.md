@@ -12087,6 +12087,17 @@ it.
 **In brief:** *retrofit is a per-device claim; the cap fires on proof, and the
 first-enrollment exemption goes*
 
+⚠️ **The cap itself is gone (recorded 2026-09-07).** at_server
+[PR #2797](https://github.com/atsign-foundation/at_server/pull/2797) (merged 2026-09-05) replaced it: at the successor's first
+authentication the atServer REVOKES a predecessor that is not fully privileged, as
+`superseded` by the successor, and stamps the successor `predecessorSettledAt`; a
+root predecessor keeps its life; `apkamSelfEnrollmentGraceHours` is deleted. The
+trigger this ruling chose stands — settlement runs at the successor's first
+authentication on its own connection, never at the submission — but what it
+triggers is a revocation, so the "migration safety net" below describes a
+mechanism that no longer exists, and there is no window in which a laggard clone
+of a non-root keyfile can still upgrade.
+
 **What a successful retrofit entitles the SDK to claim is that THIS enrollment
 is PQ-authenticated — nothing about the atSign.** Siblings are untouched, the
 parent survives, and the atSign is PQ-authenticated only once the owner has

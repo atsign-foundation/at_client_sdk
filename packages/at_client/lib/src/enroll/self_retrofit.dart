@@ -46,9 +46,10 @@ final _logger = AtSignLogger('selfRetrofit');
 /// so it carries nothing, and the retrofitted client then needs a [storage] of
 /// its own — the legacy client keeps its store, and nothing crosses.
 ///
-/// The legacy enrollment keeps authenticating until the atServer's expiry
-/// cap retires it — the retrofit caps it, never deletes it — so a failure
-/// anywhere in this sequence leaves the legacy client fully usable.
+/// The legacy enrollment keeps authenticating until the new one first
+/// authenticates, which is when the atServer revokes it as superseded (a
+/// fully privileged predecessor keeps its life). So a failure before that
+/// point leaves the legacy client fully usable, and nothing after it does.
 ///
 /// **A fully privileged retrofit also runs the signing-root step in-flow.**
 /// The retrofit is auto-approved by the atServer with no approver client in

@@ -130,7 +130,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-B1.6  | ...is refused outside it                                                            | PROVEN    | `b1_retrofit_test.dart`      |
 | UC-B1.7  | ...holds the parent enrollment's grants, verbatim                                   | PROVEN    | `b1_retrofit_test.dart`      |
 | UC-B2.1  | Un-upgraded copy is locked out after retirement                                     | PROVEN    | `b2_retirement_test.dart`    |
-| UC-B2.2  | Grace-period variant                                                                | PROVEN    | `b2_retirement_test.dart`    |
+| UC-B2.2  | No grace: the window closes at the successor's first authentication                | PROVEN    | `b2_retirement_test.dart`    |
 | UC-B3.1  | A capability-stage enrollment reads PQ but still writes legacy                      | PROVEN    | `b3_mixed_intra_test.dart`   |
 | UC-B3.2  | The app's active release flips self data to the nskey path                          | PROVEN    | `b3_mixed_intra_test.dart`   |
 | UC-B4.1  | Active-PQ `alice` shares toward a `bob` with no namespace key                       | PROVEN    | `b4_mixed_cross_test.dart`   |
@@ -404,8 +404,9 @@ the **existing** immutable write (`Metadata.immutable`) for mint-once, plus —
 - **`EnrollParams.metadata`** — an opaque `Map<String,dynamic>` riding the
   `enroll:request` JSON tail (no grammar change); the server stores and returns
   it. There is **no** `enroll:metadata` verb and no post-enrollment metadata write.
-- **Retirement** — `enroll:revoke` + the enrollment-**expiry timer**. There is
-  **no** per-APKAM-key delete and no TTL/usage eviction of APKAM keys.
+- **Retirement** — `enroll:revoke`, and the **supersession** a retrofit's successor
+  writes at its first authentication. There is **no** per-APKAM-key delete and no
+  TTL/usage eviction of APKAM keys.
 
 The substrate's `<msgId>.<inReplyTo>.<kpid>.__ssenv.<ns>@owner` delivery
 envelope, its
@@ -1478,13 +1479,14 @@ existing enrollment. The authenticated pre-PQ client submits `enroll:request` wi
 (RF-SRV) requires the requested namespaces to **equal** the authenticating
 enrollment's — omitted, they are inherited verbatim; sent and different, the
 request is refused — **auto-approves**, **copies** the old enrollment's expiry (or `null`) to
-the new one, and **caps** the old enrollment to `min(now + server-config grace, its
-existing expiry)` **without removing it** — armed by the new enrollment's first
-authentication on its own connection, not by the submission. There is **no per-APKAM-key delete**; legacy
-retirement is the expiry cap + `enroll:revoke`. Each cloned pre-PQ keyfile retrofits to
+the new one, and **settles** the old enrollment at the new one's first authentication on
+its own connection, not at the submission: a predecessor that is not fully privileged is
+**revoked as superseded**, its own expiry untouched; a fully privileged one keeps its life.
+There is **no per-APKAM-key delete** and no grace; legacy retirement is that revocation +
+`enroll:revoke`. Each cloned pre-PQ keyfile retrofits to
 its **own distinct enrollmentId** — never a second keypair under an existing enrollment.
 ML-DSA APKAM auth is verified after the new keypair is recorded (see `design.md` for the
-authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` metadata tail).
+authenticated self-retrofit flow + settlement and the `enroll:request` metadata tail).
 
 ### 8.1 UC-B1.1 — First client retrofit (`alice1`)
 
@@ -1500,7 +1502,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
      on the authenticated connection. The server requires the namespaces to
      equal the predecessor's, or to be omitted and inherited,
      **auto-approves** and copies the old expiry. The old (legacy) enrollment is
-     capped when the new one first authenticates, not here.
+     settled when the new one first authenticates, not here.
   4. **Verify** PQ APKAM auth succeeds (record-authoritative `signingAlgo`).
   5. If this enrollment is **fully privileged** (`rw` on `*` and `__manage`), take
      `_rootlock@alice`, generate the ML-DSA-65 root keypair and publish
@@ -1513,31 +1515,25 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 - **Then:**
   - `alice1.APKAM = pq` on the fresh auto-approved enrollment; PQ auth works.
   - `public:pq_signing_root@alice` created; `alice1.root⁻¹ = ✓`; `alice1` serves the private to other fully privileged enrollments on request.
-  - The legacy enrollment is **capped** to `min(now + grace, its own remaining lifetime)`
-    and ages out — **not** deleted-by-key.
-  - ⛔ **The cap is armed by the successor enrollment's first authentication on a
-    connection it opened itself**, never by the retrofit submission — a retrofit whose
-    successor never authenticates caps nothing — and it re-arms on each sibling's first
-    such authentication, so `now` is the latest one. **No enrollment is exempt, the
-    atSign's first included.**
-    [UC-B2.2](#92-uc-b22--grace-period-variant) c1 states the same behaviour from the
-    grace-window side, and that is what its row turns on.
+  - The legacy enrollment is **revoked as superseded** at the successor's first
+    authentication, its own expiry untouched — **not** deleted-by-key — unless it is a root
+    enrollment (`rw` on `*` and `__manage`), which keeps its life.
+  - ⛔ **The settlement runs at the successor enrollment's first authentication on a
+    connection it opened itself**, never at the retrofit submission — a retrofit whose
+    successor never authenticates settles nothing — and it runs once: the successor is
+    stamped `predecessorSettledAt`, and a later sibling's first authentication settles only
+    its own predecessor. **No enrollment is exempt from settling, the atSign's first
+    included**; only a root predecessor is exempt from the revocation.
 
-    ✅ **BUILT on at_server `origin/trunk` as of 2026-09-01** — `45846a7b`, via
-    [PR #2781](https://github.com/atsign-foundation/at_server/pull/2781). The cap is
-    armed by the successor, and `preserveFirstEnrollmentOnRetrofit` is **removed**: gone
-    from the server's `lib` entirely, surviving only as a CHANGELOG line recording the
-    removal as BREAKING for operators. ⚠️ **This paragraph said the atServer did not have
-    the behaviour and named the exemption as live, until 2026-09-01.** What the clause
-    waits on now is not the server but a **VE image built from one carrying it**.
-    [Ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
-    ruled it on 2026-08-27.
-
-    ⚠️ **Split out of the clause above on 2026-08-31.** The two travelled as one
-    clause, and its only pin — `retrofit_cap_value_e2e_test.dart`, which proves the cap
-    as a VALUE — therefore counted the arming half proven as well, so the burn-down
-    over-counted by one while [UC-B2.2](#92-uc-b22--grace-period-variant) c1, stating
-    the same unbuilt behaviour, correctly read unproven.
+    ⚠️ **Until 2026-09-07 these two clauses stated a cap** — the legacy enrollment capped
+    to `min(now + grace, its own remaining lifetime)`, armed by the successor's first
+    authentication and re-armed by each sibling's
+    ([ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)), built by at_server
+    [PR #2781](https://github.com/atsign-foundation/at_server/pull/2781). at_server [PR #2797](https://github.com/atsign-foundation/at_server/pull/2797) (merged 2026-09-05) replaced the
+    cap with the revocation above and deleted `apkamSelfEnrollmentGraceHours`; the stamp
+    became `predecessorSettledAt`. The pin moved with it: `retrofit_settlement_e2e_test.dart`
+    proves the revocation, the stamp and the untouched expiry, where
+    `retrofit_cap_value_e2e_test.dart` (the same file, renamed) proved the formula.
   - Legacy *encryption* key retained (history still readable). No re-onboarding.
 
 ### 8.2 UC-B1.2 — Second install on a copied keyfile (`alice1c`)
@@ -1677,76 +1673,36 @@ obeyed.
 ### 9.1 UC-B2.1 — Un-upgraded copy is locked out after retirement
 
 - **Given:** E1's pre-PQ keyfile was copied to a second host `alice1b` (against advice) —
-  the **same** legacy APKAM keypair on two hosts; `alice1` retrofitted (which **capped**
-  E1's legacy enrollment to `min(now + grace, expiry)`); `alice1b` has not retrofitted.
-- **When:** `alice1b` tries to authenticate (legacy) after the cap elapses.
-- **Then:** auth **fails** — the legacy enrollment's expiry cap has elapsed (or it was
-  explicitly `enroll:revoke`d), and `alice1b` never minted its own PQ keypair; `alice1b`
-  must re-enroll. The lockout is the **old enrollment's expiry cap**, **not** an explicit
-  per-pubkey delete.
+  the **same** legacy APKAM keypair on two hosts; `alice1` retrofitted, and its successor's
+  first authentication **revoked** E1's legacy enrollment as superseded; `alice1b` has not
+  retrofitted.
+- **When:** `alice1b` tries to authenticate (legacy) afterwards.
+- **Then:** auth **fails** with `AT0027` — the legacy enrollment was revoked as superseded
+  (or explicitly `enroll:revoke`d), and `alice1b` never minted its own PQ keypair; `alice1b`
+  must re-enroll. The lockout is the **supersession**, **not** an explicit per-pubkey
+  delete.
 
-### 9.2 UC-B2.2 — Grace-period variant
+### 9.2 UC-B2.2 — No grace: the window closes at the successor's first authentication
 
-- **Given:** deployment configured a server-config grace.
-- **When:** `alice1` retrofits, and later a sibling clone of the same pre-PQ keyfile does.
-- **Then:** legacy auth survives until `min(now + grace, its own remaining lifetime)`,
-  where **`now` is the most recent successor enrollment's first authentication on a
-  connection it opened itself** — the cap **re-arms** on each one, and a retrofit whose
-  successor never authenticates arms nothing. Sibling clones may still retrofit (each to
-  its own fresh enrollment) for as long as legacy auth holds; once it lapses, UC-B2.1
-  applies. **So the window is not a fixed deadline: each sibling that upgrades and
-  authenticates extends it by a full grace period**, and a deployment with laggard
-  devices keeps it open as long as they keep arriving.
+- **Given:** `alice1` retrofitted; a sibling clone of the same pre-PQ keyfile has not.
+- **When:** `alice1`'s successor first authenticates on a connection it opened itself, and
+  the clone tries to authenticate or retrofit afterwards.
+- **Then:** legacy auth survives exactly until that first authentication and no longer —
+  there is no grace window and nothing re-arms; the clone is refused with `AT0027` and
+  must re-enroll ([UC-B2.1](#91-uc-b21--un-upgraded-copy-is-locked-out-after-retirement)).
+  A root predecessor is the one exception: supersession never revokes it, so clones of the
+  atSign's first enrollment's keyfile may each retrofit in their own time
+  ([UC-B1.2](#82-uc-b12--second-install-on-a-copied-keyfile-alice1c)).
 
-  ✅ **BUILT on at_server `origin/trunk` as of 2026-09-01** — `45846a7b`, via
-  [PR #2781](https://github.com/atsign-foundation/at_server/pull/2781). The cap is armed
-  by the successor rather than by the retrofit's submission, and
-  `preserveFirstEnrollmentOnRetrofit` is **removed** from the server's `lib`. ⚠️ **This
-  paragraph said the behaviour was RULED AND NOT YET BUILT, and named the exemption as
-  live, until 2026-09-01** — both halves were true of `origin/trunk` before #2781 merged
-  and are false of it now. What the clause waits on is a **VE image built from a server
-  carrying it**; nothing in this repo builds `at_virtual_env:local`.
-  [Ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
-  ruled the trigger and the exemption's retirement on 2026-08-27;
-  [ruling 128](detail/decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)
-  made its justification sound, by guaranteeing the successor holds the predecessor's
-  grants. The clause stays as ruled rather than being weakened to describe the tree — a
-  specification clause can be FALSE of the tree without being wrong.
+  ⚠️ **Until 2026-09-07 this row was the grace-period variant**: legacy auth survived
+  until `min(now + grace, its own remaining lifetime)`, the cap re-arming on each
+  sibling's first authentication ([ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27), built by at_server
+  [PR #2781](https://github.com/atsign-foundation/at_server/pull/2781)), so laggard devices kept the window open. at_server
+  [PR #2797](https://github.com/atsign-foundation/at_server/pull/2797) (merged 2026-09-05) deleted the cap and
+  `apkamSelfEnrollmentGraceHours` with it; the row now states that server's behaviour, and
+  the zero-grace atSign the e2e runner configured for the old row went with the setting.
 
-  ⚠️ **This row made the opposite error until 2026-08-27**: it said the cap "is the grace
-  window" and that clones may retrofit "until the cap elapses" — a fixed deadline set by
-  the first sibling. The re-arm is deliberate, because a deadline fixed by the first
-  sibling's upgrade would strand every laggard whose next run fell outside it.
-
-  **What makes this provable once the atServer lands it**, worked out 2026-08-31 so the
-  next reader does not re-derive it. Six of the seven arms are ordinary live tests; the
-  one that could have blocked the row is *"a retrofit whose successor never authenticates
-  arms nothing"*, because the product path always authenticates — `selfRetrofit` submits
-  and then authenticates, and throws if that fails. ⛔ **The enabling fact is that those
-  are two separable public calls**: `AtEnrollment.submit(EnrollmentRequest, AtLookUp)` is
-  on at_auth's public interface, and `self_retrofit.dart` calls `submit` and
-  `authenticate` at separate points. A live test can submit and stop, which produces the
-  one state that arm needs — a successor that exists on the atServer and has never
-  authenticated. ⚠️ Such a test drives a path the product never takes; that is legitimate
-  because the behaviour under test is the atServer's, but it should say so or a reader
-  will ask why the SDK would ever leave a successor unauthenticated.
-
-  The remaining arms: `now` is the successor's first authentication (submit-and-stop shows
-  no cap, then authenticating makes it appear); the cap re-arms (two siblings, comparing
-  absolute expiries); siblings may still retrofit while legacy auth holds, and `UC-B2.1`
-  applies once it lapses (both already covered). ⚠️ **Nothing here waits out a grace** —
-  every arm observes an expiry appearing or moving, never elapsing, which is why the
-  720-hour default is not an obstacle.
-
-  ⚠️ **The formula arm is already proven, under another row.**
-  `retrofit_cap_value_e2e_test.dart` runs three predecessors straddling the grace with
-  every comparison between two atServer-produced values, and it is pinned to
-  [UC-B1.1](#81-uc-b11--first-client-retrofit-alice1) c3. Citing it here as well is
-  defensible — it would carry one arm of a longer clause rather than the whole of one —
-  but it is the double-count question, and whoever pins this row should decide it
-  deliberately rather than inherit it.
-
-- **Cross-ref:** `decisions.md` (retirement ruling, and [118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27) for the trigger); `design.md` (expiry copy/cap).
+- **Cross-ref:** `decisions.md` (retirement ruling, and [118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27) for the cap this replaced); `design.md` (settlement).
 - **Impl/verify:** **RF-SRV** + **RF-2c**. **Both green 2026-08-05** —
   `tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart`, on the one
   atSign whose atServer `runLocal.sh` gives a zero-hour

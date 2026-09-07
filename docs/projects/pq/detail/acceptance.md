@@ -1026,9 +1026,12 @@ by the retrofit
 ([decisions.md 118](decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)).
 They now state ruled behaviour the atServer does not yet have, and cannot be
 proven until it does. ⚠️ **UC-B1.1's clause was SPLIT on 2026-08-31** (gkc):
-only its cap-VALUE half was provable, so that half is now **c3** and is proven
-live by `retrofit_cap_value_e2e_test.dart`, while the arming half is **c4** and
-stays unproven beside UC-B2.2 c1. Until the split the value half's pin counted
+only its cap-VALUE half was provable, so that half became **c3** and was proven
+live by `retrofit_cap_value_e2e_test.dart`, while the arming half was **c4** and
+stayed unproven beside UC-B2.2 c1. ⚠️ Since 2026-09-07 c3 states the revocation
+at_server #2797 replaced the cap with, c4 the settlement it runs at the successor's
+first authentication, and `retrofit_settlement_e2e_test.dart` (the same file,
+renamed) proves both. Until the split the value half's pin counted
 the arming half proven as well, and the burn-down over-counted by one.
 
 ✅ **Three were fixed in the code instead, on 2026-08-27, and are now ordinary

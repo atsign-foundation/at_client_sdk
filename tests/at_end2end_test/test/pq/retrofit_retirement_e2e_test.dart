@@ -21,20 +21,17 @@ import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
-/// UC-B2.1 / UC-B2.2 — the capped legacy enrollment, watched ageing out.
+/// UC-B2.1 / UC-B2.2 — the superseded legacy enrollment, locked out at once.
 ///
-/// The retrofit **caps** the enrollment it upgrades from rather than deleting
-/// it: sibling clones of one keyfile upgrade on their own schedules and must
-/// keep authenticating until they do. That the cap eventually retires the
-/// legacy credential is the other half, and until now nothing asserted it
-/// anywhere — the whole retirement story rested on a server-side unit test of
-/// a ttl value.
+/// The retrofit's successor **revokes** the enrollment it upgraded from, as
+/// superseded, at its own first authentication — it does not delete the
+/// keypair, and it does not wait: there is no grace. A copy of the keyfile
+/// taken before the upgrade therefore stops authenticating the moment the
+/// upgraded install first connects. The one predecessor that keeps its life
+/// is a fully privileged one, which `retrofit_e2e_test` B1.2 turns on.
 ///
-/// **Runs on `fourthAtSign`, whose atServer is configured with a zero-hour
-/// self-enrollment grace by `runLocal.sh`.** At the default 720h this row
-/// would take a month; per-secondary rather than container-wide because a
-/// zero grace kills a parent within a millisecond of its first retrofit, and
-/// the B1 clone rows need a parent that survives its sibling's.
+/// **Runs on `fourthAtSign`** so the revocations it causes land on no other
+/// row's parent.
 ///
 /// The differential that makes this evidence rather than a green light: a
 /// SECOND legacy enrollment on the same atSign, at the same moment, that
@@ -103,16 +100,17 @@ void main() {
   });
 
   test(
-      'UC-B2.1/B2.2: the retrofit caps its parent, which then fails to '
-      'authenticate while an un-retrofitted sibling still can', () async {
+      'UC-B2.1/B2.2: the retrofit revokes its parent at first authentication, '
+      'which then fails to authenticate while an un-retrofitted sibling still '
+      'can', () async {
     // Two legacy enrollments, minted together. L2 is the control: it is never
-    // a parent of any retrofit, so nothing should ever cap it.
+    // a parent of any retrofit, so nothing should ever revoke it.
     await mintLegacyEnrollment('l1');
     await mintLegacyEnrollment('l2');
 
     // Both authenticate before anything happens. This is the arm that makes
     // the failure below mean something: without it, an atServer that refused
-    // everything would look exactly like a working cap.
+    // everything would look exactly like a working revocation.
     expect((await authenticateLegacy('l1')).isSuccessful, isTrue,
         reason: 'precondition: the legacy enrollment works BEFORE its '
             'retrofit — this is the "before" of a before/after pair');
@@ -139,30 +137,32 @@ void main() {
     );
     final upgraded = manager.atClient;
     expect(AtClientImpl.signingAlgoOf(upgraded), SigningAlgoType.mldsa65,
-        reason: 'the retrofit itself must have succeeded, or the cap below '
-            'is being attributed to a retrofit that never happened');
+        reason: 'the retrofit itself must have succeeded, or the revocation '
+            'below is being attributed to a retrofit that never happened');
 
     // UC-B2.1: the un-upgraded copy is locked out. The lockout is the
-    // enrollment's expiry cap elapsing — checked at auth, per attempt — not
-    // a per-key delete: the keypair in that file is untouched and still
-    // perfectly valid, and it is refused anyway.
+    // supersession — the parent revoked at its successor's first
+    // authentication, checked at auth, per attempt — not a per-key delete:
+    // the keypair in that file is untouched and still perfectly valid, and it
+    // is refused anyway.
     //
     // Named rather than `throwsA(anything)`: a bare catch-all would pass for
     // a malformed keyfile, an unreachable atServer, or any other accident,
     // and the row would be green for the absence of an effect instead of for
-    // the cap.
+    // the revocation.
     await expectLater(
         authenticateLegacy('l1b'),
-        throwsA(predicate((e) =>
-            '$e'.contains('AT0028') && '$e'.contains('expired or invalid'))),
-        reason: 'the retrofit capped the parent to min(now + grace, its own '
-            'expiry), and this deployment\'s grace is zero — a copy that '
-            'never upgraded must stop authenticating, or a stolen keyfile '
-            'outlives the upgrade that was supposed to retire it');
+        throwsA(predicate(
+            (e) => '$e'.contains('AT0027') && '$e'.contains('revoked'))),
+        reason: 'the successor\'s first authentication revoked the parent as '
+            'superseded, and there is no grace — a copy that never upgraded '
+            'must stop authenticating at once, or a stolen keyfile outlives '
+            'the upgrade that was supposed to retire it');
 
     // The control arm, re-run in the same session: the sibling that never
-    // retrofitted still authenticates. So the refusal above is the cap
-    // this retrofit applied, not the environment, the clock, or the atSign.
+    // retrofitted still authenticates. So the refusal above is the
+    // supersession this retrofit caused, not the environment, the clock, or
+    // the atSign.
     expect((await authenticateLegacy('l2')).isSuccessful, isTrue,
         reason: 'a second legacy enrollment of the same atSign, minted at the '
             'same moment and never a parent of any retrofit, must be '
@@ -176,7 +176,7 @@ void main() {
     await mintLegacyEnrollment('l1c');
     expect((await authenticateLegacy('l1c')).isSuccessful, isTrue,
         reason: 'a fresh enrollment authenticates on the same atSign moments '
-            'after the capped one was refused: the route back is enrolling '
+            'after the superseded one was refused: the route back is enrolling '
             'again, and nothing about the atSign itself is broken');
 
     // And the upgraded credential itself keeps working: the retrofit retires

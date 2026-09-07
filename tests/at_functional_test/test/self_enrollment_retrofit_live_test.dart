@@ -179,9 +179,8 @@ void main() {
     // flat fields, the PQ one as typed materials under its own id.
     final keys = await FileAtKeysIo(filePath: keysFilePath).read(atSign);
     expect(keys.enrollmentId, session.enrollmentId,
-        reason: 'the flat fields keep the legacy enrollment; a cold start '
-            'resolves the typed material and authenticates as the successor, '
-            'so the flat id names what the predecessor was');
+        reason: 'the flat fields keep the legacy enrollment; the successor '
+            'lives in the typed material under its own id');
     expect(keys.signingAlgorithmForEnrollment(newId), SigningAlgoType.mldsa65);
 
     // Read over the legacy connection BEFORE the successor authenticates:

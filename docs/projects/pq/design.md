@@ -1142,9 +1142,11 @@ sequence in [`acceptance.md`](acceptance.md).)
    authenticating enrollment's namespaces, then **auto-approves** (no human step,
    no OTP).
 3. The server **COPIES the old enrollment's expiry** (or `null`) to the new
-   enrollment, and **CAPS the old enrollment to `min(now + server-config grace,
-   its existing expiry)` WITHOUT removing it**. The old enrollment ages out on the
-   expiry timer; it is not deleted in place.
+   enrollment. At the new enrollment's first authentication on a connection it
+   opened itself, the server **settles** the old one: not fully privileged, it is
+   **revoked as superseded**, its own expiry untouched; fully privileged, it keeps
+   its life. The successor is stamped `predecessorSettledAt`. Nothing is deleted
+   in place, and there is no grace.
 4. The new client **registers** its key package (already carried in step 1's
    `EnrollParams.metadata` — no post-enrollment write), then acquires the signing
    root — **minting it in-flow if fully privileged and the atSign publishes none,
@@ -1169,10 +1171,10 @@ eviction** prunes keys unused for N days. A distinct labelled per-APKAM record
 (hostname / install-UUID) drives a usable per-APKAM revocation UI (the label is an
 administration aid, not a security boundary).
 
-**Legacy retirement.** Driven by the **enrollment-expiry timer** (the capped old
-enrollment ages out) **+ the existing `enroll:revoke`**. There is **no
-per-APKAM-key delete operation** — the old enrollment's expiry cap is what retires
-the pre-PQ credential. (Per-APKAM auth revocation of a *live* PQ enrollment is the
+**Legacy retirement.** The **supersession** written at the successor's first
+authentication **+ the existing `enroll:revoke`**. There is **no per-APKAM-key
+delete operation** — the revocation is what retires the pre-PQ credential, and a
+copy of the keyfile that has not upgraded by then is locked out. (Per-APKAM auth revocation of a *live* PQ enrollment is the
 existing `enroll:revoke`; per-APKAM future-data revocation is nskey-keypair rotation
 excluding it, [§1.7](#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation).)
 

@@ -21,10 +21,11 @@ void main() {
       // WHEN  alice1 runs the retrofit.
       // THEN  alice1.APKAM = pq on the fresh auto-approved enrollment and PQ
       //       auth works; public:pq_signing_root@alice is created and alice1 serves
-      //       its private on request; the legacy enrollment is CAPPED to
-      //       min(now + grace, expiry) and ages out — not deleted-by-key; the
-      //       legacy encryption key is retained so history stays readable. No
-      //       re-onboarding.
+      //       its private on request; the legacy enrollment is REVOKED as
+      //       superseded at the successor's first authentication, its expiry
+      //       untouched — not deleted-by-key — unless it is a root enrollment;
+      //       the legacy encryption key is retained so history stays readable.
+      //       No re-onboarding.
       provenIn('tests/at_end2end_test/test/pq/retrofit_e2e_test.dart',
           'UC-B1.1: a privileged retrofit mints the signing root in-flow',
           proves:
@@ -49,41 +50,32 @@ void main() {
           ]);
       provenIn(
         'tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart',
-        'UC-B2.1/B2.2: the retrofit caps its parent',
+        'UC-B2.1/B2.2: the retrofit revokes its parent at first authentication',
         proves:
-            'the legacy enrollment is capped and ages out rather than being '
-            'deleted by key — the THEN clause this row shares with B2. It runs '
-            'on an atSign configured with a ZERO-hour grace, which is what '
-            'makes the ageing-out observable inside a test and also what stops '
-            'it saying anything about the VALUE: at zero grace the min always '
-            'takes `now`, so an atServer that set the expiry unconditionally '
-            'would satisfy every assertion in it. The row beside this one '
-            'carries that half',
+            'the legacy enrollment is revoked as superseded rather than deleted '
+            'by key, and at once — the THEN clause this row shares with B2: a '
+            'copy of the pre-PQ keyfile taken before the retrofit is refused '
+            'AT0027 the moment the successor has authenticated, while a sibling '
+            'legacy enrollment minted at the same moment still authenticates',
       );
       provenIn(
-        'tests/at_end2end_test/test/pq/retrofit_cap_value_e2e_test.dart',
-        'UC-B1.1: the cap is min(now + grace, the enrollment\'s own remaining '
-            'lifetime)',
-        proves: 'the cap as a VALUE, at the deployment\'s ordinary grace, with '
-            'three parents whose lifetimes straddle it — and every comparison '
-            'is between two values the ATSERVER produced, never against this '
-            'process\'s clock, which would be measuring clock agreement '
-            'between two machines. A parent expiring in an hour keeps its own '
-            'expiry (the grace is the larger candidate, so the min takes the '
-            'lifetime); a parent expiring in 2000 hours is pulled in by more '
-            'than a day (the grace is the smaller); and a parent with NO '
-            'expiry gains one, which is the case a cap that merely shortened '
-            'an existing lifetime would leave untouched. The two dated arms '
-            'cannot both be satisfied by one behaviour — one tolerates under '
-            '30 seconds of movement and the other demands more than a day — '
-            'and the record\'s version is asserted to have moved, so '
-            '"unchanged" cannot be an enrollment the retrofit never reached. '
-            'The control is the two un-retrofitted siblings, still at version '
-            '1: the cap lands on the enrollment its own child came from and '
-            'nowhere else, which is also what makes it safe on a shared '
-            'atSign',
+        'tests/at_end2end_test/test/pq/retrofit_settlement_e2e_test.dart',
+        'UC-B1.1: the successor settles its predecessor at first authentication',
+        proves: 'the settlement, read off the atServer\'s own records: three '
+            'legacy parents with different lifetimes, one retrofitted. The '
+            'successor carries predecessorSettledAt and names its predecessor; '
+            'the predecessor reads revoked with its expiry EXACTLY where it '
+            'was (a server that still capped would move a one-hour lifetime, '
+            'and either direction shows); the two un-retrofitted parents keep '
+            'their status and expiry, and the one with no expiry gains none. '
+            'Then the lockout: the revoked parent\'s keyfile is refused '
+            'AT0027 while a sibling\'s still authenticates, which is what '
+            'makes it attributable to the settlement. Every comparison is '
+            'between two values the ATSERVER produced, never against this '
+            'process\'s clock',
         clauses: [
-          'min(now + grace, its own remaining lifetime)',
+          'its own expiry untouched',
+          'settles nothing',
         ],
       );
       provenIn(

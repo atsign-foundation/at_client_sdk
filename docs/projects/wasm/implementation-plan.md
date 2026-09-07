@@ -879,11 +879,18 @@ What the merge had broken in them, and the fix for each:
 - **`enrollment_teardown_test` was on no list** — the e2e non-PQ set's one failure was the
   suite manifest naming it; a unit test of the teardown's root check, now allowlisted.
 
-What remains in the three packs is #2797's, and fails on the pre-merge backup too:
-`retrofit_cap_value_e2e_test` reads a stamp the new server no longer writes,
-`retrofit_retirement_e2e_test` expects the cap's exception and gets `AT0027 … revoked`, and
-the CLI's `at_activate list` after a retrofit-at-start re-authenticates as the revoked legacy
-id. All three are named on that P1 row.
+What remained in the three packs was #2797's, and failed on the pre-merge backup too:
+`retrofit_cap_value_e2e_test` read a stamp the new server no longer writes,
+`retrofit_retirement_e2e_test` expected the cap's exception and got `AT0027 … revoked`, and
+the CLI's `at_activate list` after a retrofit-at-start re-authenticated as the revoked legacy
+id. ✅ **Adapted 2026-09-07 at gkc's ask** — the catalogue's B1.1, B2.1 and B2.2 now state
+the revocation (`docs/projects/pq/acceptance.md`), `retrofit_settlement_e2e_test` (the cap
+test renamed) proves it, and the CLI test's enrolment helper authenticates at the legacy
+posture so the shipped command, not the test process, performs the retrofit it measures.
+⚠️ What that last one exposed is a product question for gkc: `AtAuthImpl.authenticate`
+with no enrollment named uses the keyfile's flat id (UC-G1.1 c2, deliberately), which on a
+retrofitted keyfile is the superseded predecessor — usable for a month under the old cap,
+refused `AT0027` at once under #2797.
 
 **Where the conveyance investigation got to**, so it is not walked again:
 - An nskey private reaches another enrollment by CONVEYANCE only. Two installs are two devices
