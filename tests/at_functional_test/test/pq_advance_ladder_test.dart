@@ -61,6 +61,8 @@ void main() {
 
   late InMemoryAtKeysIo keysIo;
   late String legacyEnrollmentId;
+  late AtClientManager ladderManager;
+  late AtClientStorage ladderStorage;
 
   setUpAll(() async {
     final approverKeys = InMemoryAtKeysIo();
@@ -81,6 +83,7 @@ void main() {
     // FROM. An enrollment born ML-DSA would make rung 1 a no-op.
     keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
+    final deviceName = 'ladder-$runId';
     final enrolled = await enrolAndAuthenticate(
       approver: approverManager.atClient,
       atSign: atSign,
@@ -89,11 +92,18 @@ void main() {
       rootDomain: 'vip.ve.atsign.zone',
       rootPort: TestUtils.rootServerPort,
       namespaces: {namespace: 'rw'},
-      deviceName: 'ladder-$runId',
+      deviceName: deviceName,
       atKeysIo: keysIo,
-    storage: TestUtils.storage,
-  );
+      storage: TestUtils.storage,
+    );
     legacyEnrollmentId = enrolled.client.enrollmentId!;
+    // The install's one store: the enrolment built it under the device name,
+    // and every rung below is a restart of the same install over it.
+    ladderManager = enrolled.manager;
+    ladderStorage = TestUtils.storageForPrincipal(atSign, deviceName);
+    expect(ladderStorage.isHeldBy(enrolled.client), isTrue,
+        reason: 'the ladder must walk the store the enrolment built, or the '
+            'durability assertions compare two stores');
     stdout.writeln('##LADDER## rung 0 (legacy) is $legacyEnrollmentId');
   });
 
@@ -101,21 +111,6 @@ void main() {
   /// [posture] — which is what an advance IS. The same restart path a
   /// production app walks when it ships a new stage.
   Future<AtClient> clientAt(PqPosture posture, String enrollmentId) async {
-    // Evict first, on EVERY rung. `AtClientImpl.create` checks the cache under
-    // the id it is ASKED with, and refuses a hit whose rollout axes differ —
-    // those axes are final at construction, so adopting them would leave the
-    // caller writing under a stage it thinks it has left.
-    //
-    // ⚠️ That applies to the legacy → pqReady rung too, which is easy to get
-    // wrong: the enrollment id does change on that rung, but it changes as a
-    // RESULT of the retrofit, which runs inside `create` — after the cache
-    // check. So the id being different afterwards buys nothing here.
-    //
-    // Evicting is what a process restart does for free, and a restart is what
-    // an app shipping a new stage actually performs.
-    AtClientImpl.atClientInstanceMap
-        .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
-
     // ⚠️ **Name the enrollment.** Left unset, `AtAuthRequest.enrollmentId`
     // defaults to the keyfile's FLAT id — the original OTP enrollment — and
     // the algorithm and the chops are then resolved from that one. By rung 2
@@ -138,28 +133,21 @@ void main() {
         reason: 'could not authenticate from the ladder keyfile as '
             '$enrollmentId');
 
-    // ⚠️ ONE directory for the whole ladder, and that is the point of the row.
-    // This used to be per-posture (`$runId-${posture.hashCode}`), which is what
-    // an install moving its storage on every upgrade would do — and no install
-    // does. The durability assertion below only means something if the later
-    // rung reads the SAME store the earlier one wrote to.
-    //
-    // It passed anyway until 2026-08-28, because `hiveStoragePath` was ignored
-    // for the second client of an atSign in one process: every rung silently
-    // shared one Hive box whatever path it named, so "readable after the
-    // advance" was true because the rungs were one store rather than because
-    // anything survived. Honouring the path is what exposed it.
-    final storage = 'test/hive/ladder/$runId';
-    final preference = TestUtils.getPreference(atSign, posture: posture)
-      ..hiveStoragePath = storage
-      ..commitLogPath = storage;
-
-    final manager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign, namespace, preference,
+    // ⚠️ ONE store for the whole ladder, and that is the point of the row: an
+    // install does not move its storage on every upgrade, and the durability
+    // assertions below only mean something if the later rung reads the SAME
+    // store the earlier one wrote to. A rung is a restart of the one install:
+    // the manager stops the previous rung's client, which unfiles it and
+    // releases the store, and the next client attaches to it as the principal
+    // that last held it — rung 1 retrofits itself only after attaching. A
+    // fresh manager per rung left the previous client holding the store, and
+    // the next was refused as a second holder.
+    final manager = await ladderManager.setCurrentAtSign(
+        atSign, namespace, TestUtils.getPreference(atSign, posture: posture),
         atChops: auth.atChops,
         atKeysIo: keysIo,
         enrollmentId: enrollmentId,
-        storage: TestUtils.storageForPrincipal(atSign, enrollmentId));
+        storage: ladderStorage);
     return manager.atClient;
   }
 
