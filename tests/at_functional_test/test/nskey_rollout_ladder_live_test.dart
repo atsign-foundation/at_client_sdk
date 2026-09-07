@@ -154,8 +154,11 @@ void main() {
 
     // The older install seeds what its build can mint.
     final oldRing = PublishedNskeyKeyRing(old.client, lockTtl: shortLockTtl);
-    await NskeySeeding(atClient: old.client, ring: oldRing)
-        .seedNamespace(atSign, namespace);
+    final oldSeeding = NskeySeeding(
+        atClient: old.client,
+        ring: oldRing,
+        privateFiling: oldRing.privateFiling);
+    await oldSeeding.seedNamespace(atSign, namespace);
     final before = await oldRing.publishedAdvertisement(atSign, namespace);
     expect(before, isNotNull,
         reason: 'without a generation there is nothing '
@@ -214,6 +217,22 @@ void main() {
         reason: 'c1: the rollout-1 install added an algorithm without changing '
             'what it seals to, so the older install opens it with the private '
             'it minted itself — no conveyance in this direction');
+
+    // A holder answers a request from its secret store, and the mint does not
+    // fill that: the bootstrap primes it from the filing at every start, and
+    // this file drives the bootstrap's work by hand. Primed the same way, and
+    // WITHOUT the seeding's mint-time push (a seeding given a sharing instance
+    // conveys the private to every member as it mints). Primed HERE and not at
+    // the mint: an answered ask files the private, and the rollout-1 install
+    // has asked twice already — at its own start and while adding to the
+    // generation. Those went unanswered, as every ask to an unprimed holder
+    // does, silently: it answers with nothing and logs nothing.
+    expect(
+        await oldSeeding
+            .hydrateStoreFromFiling(AtClientSecretSharing.forClient(old.client)),
+        greaterThan(0),
+        reason: 'the minted private must be in the older install\'s answer '
+            'store, or no request for it is ever answered');
 
     // ── c2: the direction that DOES need conveyance, in its three states ──
     //
