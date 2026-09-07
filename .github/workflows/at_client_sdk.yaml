@@ -221,6 +221,13 @@ jobs:
   # and the pack above already covers both channels on Hive.
   functional_tests_storage:
     runs-on: ubuntu-latest
+    env:
+      # The same trunk-tracking build functional_tests runs — see its note.
+      # Left unset, docker-compose falls back to the published `vip`, whose
+      # atServer parks a self-enrollment as pending and refuses the current
+      # enroll:request shape, so every post-quantum test in the pack fails
+      # under both backends for reasons that have nothing to do with storage.
+      VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
     strategy:
       fail-fast: false
       matrix:
