@@ -15,6 +15,7 @@ import 'test_utils.dart';
 /// and no `AtLookUp` are injected from auth. If the client's derived `AtChops`
 /// PKAMs on its fresh socket, a put/get round-trip succeeds.
 void main() {
+  TestUtils.isolateStorage('auth_session_handoff_test');
   late String atSign;
   final namespace = 'wavi';
 
@@ -49,8 +50,9 @@ void main() {
     //    client must derive its own AtChops from session.atKeysIo and PKAM on a
     //    fresh socket.
     final preference = TestUtils.getPreference(atSign);
-    final atClientManager = await AtClientManager.getInstance()
-        .fromAuthSession(authResponse.session!, preference);
+    final atClientManager = await AtClientManager.getInstance().fromAuthSession(
+        authResponse.session!, preference,
+        storage: TestUtils.storageFor(atSign));
     final atClient = atClientManager.atClient;
 
     // The client built its own crypto context (not one injected by auth).

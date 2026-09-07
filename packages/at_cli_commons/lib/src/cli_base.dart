@@ -6,6 +6,7 @@ import 'package:at_cli_commons/src/utils.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:at_utils/at_utils_io.dart' show StdErrLoggingHandler;
 import 'package:chalkdart/chalk.dart';
 import 'package:logging/logging.dart';
 
@@ -295,7 +296,7 @@ class CLIBase {
         (downloadDir ?? '$homeDir!/.atsign/downloads/${this.atSign}/$nameSpace')
             .replaceAll('/', Platform.pathSeparator);
 
-    AtSignLogger.defaultLoggingHandler = AtSignLogger.stdErrLoggingHandler;
+    AtSignLogger.defaultLoggingHandler = StdErrLoggingHandler();
 
     logger = AtSignLogger(runtimeType.toString());
     logger.hierarchicalLoggingEnabled = true;
@@ -319,11 +320,9 @@ class CLIBase {
     final AtOnboardingPreference atOnboardingConfig =
         preference ?? AtOnboardingPreference();
     atOnboardingConfig
-      ..hiveStoragePath = localStoragePathToUse
+      ..storagePath = localStoragePathToUse
       ..namespace = nameSpace
       ..downloadPath = downloadPathToUse
-      ..commitLogPath = '$localStoragePathToUse/commitLog'
-          .replaceAll('/', Platform.pathSeparator)
       ..rootDomain = atRootDomain.rootDomain
       ..rootPort = atRootDomain.rootPort
       ..fetchOfflineNotifications = true

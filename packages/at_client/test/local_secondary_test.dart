@@ -85,6 +85,7 @@ void main() {
       await setupLocalStorage(storageDir, atSign);
     });
     tearDown(() async {
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
       AtClientImpl.atClientInstanceMap.remove(atSign);
       await tearDownLocalStorage(storageDir);
     });
@@ -175,7 +176,10 @@ void main() {
 
   group('A group of local secondary execute verb tests', () {
     setUp(() async => await setupLocalStorage(storageDir, atSign));
-    tearDown(() async => await tearDownLocalStorage(storageDir));
+    tearDown(() async {
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
+      await tearDownLocalStorage(storageDir);
+    });
 
     test('test update verb builder', () async {
       final atClientManager = AtClientManager(atSign);
@@ -342,7 +346,10 @@ void main() {
 
   group('writesInProgress tracker', () {
     setUp(() async => await setupLocalStorage(storageDir, atSign));
-    tearDown(() async => await tearDownLocalStorage(storageDir));
+    tearDown(() async {
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
+      await tearDownLocalStorage(storageDir);
+    });
 
     /// Builds a fresh LocalSecondary against the test Hive store. Each
     /// test gets its own AtClient instance (atClientInstanceMap is

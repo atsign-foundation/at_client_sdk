@@ -33,4 +33,20 @@ class AtOnboardingPreference extends AtClientPreference {
 
   /// The password (or pass-phrase) with which the atKeys file is encrypted/decrypted.
   String? passPhrase;
+
+  /// Where to put the client's local storage when no [storage] is supplied.
+  ///
+  /// Defaults to a per-atSign directory under the user's home. The bundle
+  /// built here is closed by the client when it stops, so a CLI has nothing to
+  /// tear down.
+  String? storagePath;
+
+  /// The local storage the client should use, which decides the backend and
+  /// the location and so leaves [storagePath] unread.
+  ///
+  /// Borrowed unless it was built with `closedByClient: true`: by default the
+  /// client detaches from it when it stops and closing it is the caller's job.
+  /// Leave it null and a Hive bundle is built under [storagePath], which the
+  /// client closes itself.
+  AtClientStorage? storage;
 }

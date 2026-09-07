@@ -80,7 +80,8 @@ class AtClientManager {
       AtChops? atChops,
       AtKeysIo? atKeysIo,
       AtLookUp? atLookUp,
-      String? enrollmentId}) async {
+      String? enrollmentId,
+      AtClientStorage? storage}) async {
     serviceFactory ??= DefaultAtServiceFactory();
 
     _logger.info("setCurrentAtSign called with atSign $atSign");
@@ -104,6 +105,11 @@ class AtClientManager {
     // Callers needing a forced reset for a SAME-atSign change of
     // preferences / atChops / enrollmentId still get one — we only
     // skip when nothing in the request changed.
+    //
+    // Re-offering the storage the current client already holds is not a
+    // change either: it is what a caller that owns one bundle for the whole
+    // of its work does on every call, and rebuilding on it would tear the
+    // client down for nothing.
     final currentAtSign = _currentAtClient?.getCurrentAtSign();
     if (currentAtSign != null &&
         currentAtSign == atSign &&
@@ -111,6 +117,7 @@ class AtClientManager {
         atKeysIo == null &&
         atLookUp == null &&
         enrollmentId == null &&
+        _storageIsUnchanged(storage) &&
         _currentAtClient!.isStopped == false) {
       // The full stop/recreate path below recreates via AtClientImpl.create(),
       // which adopts the supplied preference's crypto config onto a re-used
@@ -141,7 +148,8 @@ class AtClientManager {
         atChops: atChops,
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
-        enrollmentId: enrollmentId);
+        enrollmentId: enrollmentId,
+        storage: storage);
 
     var notificationService = await serviceFactory.notificationService(
         _currentAtClient!, this,
@@ -179,6 +187,14 @@ class AtClientManager {
     return this;
   }
 
+  /// Whether [storage] would leave the current client's storage as it is:
+  /// either none was offered, or it is the object that client already holds.
+  bool _storageIsUnchanged(AtClientStorage? storage) {
+    if (storage == null) return true;
+    final current = _currentAtClient;
+    return current != null && storage.isHeldBy(current);
+  }
+
   /// Explicit, typed hand-off from auth to client.
   ///
   /// Consumes an [AtAuthSession] (the key *source* + confirmed params) and lets
@@ -190,9 +206,15 @@ class AtClientManager {
   /// Set [reuse] to adopt auth's already-authenticated connection
   /// ([session.atLookUp]) and skip the second handshake — the perf escape hatch.
   /// When false (default) the client opens its own fresh socket.
+  ///
+  /// [storage] is borrowed unless it was built with `closedByClient: true`, in
+  /// which case the client closes it on [AtClient.stop]. Same rule as on
+  /// [setCurrentAtSign].
   Future<AtClientManager> fromAuthSession(
       AtAuthSession session, AtClientPreference preference,
-      {AtServiceFactory? serviceFactory, bool reuse = false}) async {
+      {AtServiceFactory? serviceFactory,
+      bool reuse = false,
+      AtClientStorage? storage}) async {
     // Destructure rootDomain onto the preference for now. A follow-up will add
     // an AtRootDomain-typed accessor to AtClientPreference so this can stop.
     preference.rootDomain = session.rootDomain.rootDomain;
@@ -207,7 +229,8 @@ class AtClientManager {
         serviceFactory: serviceFactory,
         atKeysIo: session.atKeysIo,
         atLookUp: reuse ? session.atLookUp : null,
-        enrollmentId: session.enrollmentId);
+        enrollmentId: session.enrollmentId,
+        storage: storage);
   }
 
   void listenToAtSignChange(AtSignChangeListener listener) {
@@ -272,6 +295,7 @@ abstract class AtServiceFactory {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
+    AtClientStorage? storage,
   });
 
   Future<NotificationService> notificationService(
@@ -299,6 +323,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
+    AtClientStorage? storage,
   }) async {
     return await AtClientImpl.create(
       atSign,
@@ -309,6 +334,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       atKeysIo: atKeysIo,
       atLookUp: atLookUp,
       enrollmentId: enrollmentId,
+      storage: storage,
     );
   }
 

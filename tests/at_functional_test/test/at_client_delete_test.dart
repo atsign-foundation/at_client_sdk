@@ -4,6 +4,7 @@ import 'package:at_functional_test/src/config_util.dart';
 import 'test_utils.dart';
 
 void main() async {
+  TestUtils.isolateStorage('at_client_delete_test');
   late String currentAtSign;
   late String sharedWithAtSign;
   final namespace = 'wavi';

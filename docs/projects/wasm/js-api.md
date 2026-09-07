@@ -569,7 +569,7 @@ Notes:
   unit tests against `MockAtClient`; nothing in `tests/at_functional_test/` or
   `tests/at_end2end_test/` references it. The API also took a breaking change 2 days
   after introduction (`fb4c96587`, mandatory `typeTag`), reworked `EventSource`
-  semantics since, and ships 7 correctness fixes in the current 3.14.1. **Ruling: the
+  semantics since, and ships 7 correctness fixes in the current 3.15.0-rc1. **Ruling: the
   JS-side collections surface ships marked unstable/0.x in the npm package** until this
   project's own T6/T4 gates exercise it against a live atServer — the marker reflects a
   gap in *our* boundary validation, not upstream's contract.

@@ -18,6 +18,7 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils_io.dart' show StdErrLoggingHandler;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
@@ -31,7 +32,7 @@ const _atSignDefine = String.fromEnvironment('DOCKERSTATS_SMOKE_ATSIGN');
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  AtSignLogger.defaultLoggingHandler = AtSignLogger.stdErrLoggingHandler;
+  AtSignLogger.defaultLoggingHandler = StdErrLoggingHandler();
   AtSignLogger.root_level = 'INFO';
   _smokeLog('main entered');
   runApp(const _SmokeApp());
@@ -104,15 +105,20 @@ class _SmokeBootstrapState extends State<_SmokeBootstrap> {
       }
       _setStatus('Setting up AtClient...');
       final dir = await getApplicationSupportDirectory();
-      final acp = AtClientPreference()
-        ..namespace = applicationNamespace
-        ..commitLogPath = dir.path
-        ..hiveStoragePath = dir.path;
+      final acp = AtClientPreference()..namespace = applicationNamespace;
+      // closedByClient: this app picks the location and the client still closes
+      // the store when it stops, so there is nothing to tear down.
+      final storage = HiveAtClientStorage(
+        atSign: atSign,
+        storagePath: dir.path,
+        closedByClient: true,
+      );
       // Hand the client the session; it rebuilds its own authenticated
       // connection from the session's key source rather than adopting auth's.
       await AtClientManager.getInstance().fromAuthSession(
         response.session!,
         acp,
+        storage: storage,
       );
       _setStatus('AtClient ready, navigating to dashboard');
       if (!mounted) return;

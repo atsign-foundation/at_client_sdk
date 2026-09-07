@@ -42,7 +42,8 @@ class AtEncryptionKeysLoader {
     result = await atClient.getLocalSecondary()!.putValue(
         encryptionPublicKeyAtKey,
         AtCredentials
-            .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY].toString());
+            .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]
+            .toString());
     if (result) {
       _logger.info('encryption public key was set successfully.');
     } else {
@@ -57,6 +58,21 @@ class AtEncryptionKeysLoader {
       _logger.info('self encryption key was set successfully');
     } else {
       _logger.severe('failed to set self encryption key');
+    }
+
+    // set the PKAM pair. A client built without an AtChops of its own rebuilds
+    // one from the keystore, and cannot sign without these.
+    final pkam = atClient.atChops!.atChopsKeys.atPkamKeyPair!;
+    result = await atClient
+        .getLocalSecondary()!
+        .putValue(AtConstants.atPkamPublicKey, pkam.atPublicKey.publicKey);
+    result = result &&
+        await atClient.getLocalSecondary()!.putValue(
+            AtConstants.atPkamPrivateKey, pkam.atPrivateKey.privateKey);
+    if (result) {
+      _logger.info('pkam key pair was set successfully');
+    } else {
+      _logger.severe('failed to set the pkam key pair');
     }
   }
 }

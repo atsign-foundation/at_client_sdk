@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
@@ -39,7 +40,8 @@ void main() {
   group('validate stop() behaviour', () {
     group('Client termination tests', () {
       test(
-        'close() should be idempotent and remove client from instance map',
+        'stop() is idempotent, releases storage, and removes the client from '
+        'the instance map',
         () async {
           final atSign = '@stop_integration';
           final atClient = await AtClientImpl.create(
@@ -49,14 +51,21 @@ void main() {
           ) as AtClientImpl;
 
           expect(AtClientImpl.atClientInstanceMap.containsKey(atSign), true);
+          final storage = atClient.storage as AtClientStorageBase;
+          expect(storage.isAttached, isTrue);
 
-          // Call close multiple times to verify idempotency
           await atClient.stop();
           await atClient.stop();
           await atClient.stop();
 
-          expect(AtClientImpl.atClientInstanceMap.containsKey(atSign), true);
+          expect(AtClientImpl.atClientInstanceMap.containsKey(atSign), false,
+              reason: 'a stopped client keeps nothing open, so nothing should '
+                  'hand it back; a later create() builds a fresh one');
+          expect(storage.isAttached, isFalse,
+              reason: 'stop() drops the claim on the storage it built');
           expect(atClient.isStopped, true);
+          expect(() => atClient.start(), throwsA(isA<StateError>()),
+              reason: 'a client whose storage is released cannot be restarted');
         },
       );
 
@@ -76,9 +85,11 @@ void main() {
             _createPreference('stop_errors'),
             remoteSecondary: mockRemoteSecondary,
           ) as AtClientImpl;
-
           await atClient.stop();
-          expect(AtClientImpl.atClientInstanceMap.containsKey(atSign), true);
+          expect(atClient.isStopped, true);
+          expect(AtClientImpl.atClientInstanceMap.containsKey(atSign), false,
+              reason: 'a failure closing the connection must not leave the '
+                  'client registered as live');
         },
       );
 
@@ -103,21 +114,17 @@ void main() {
     group('Monitor lifecycle tests', () {
       late Monitor monitor;
       late MockAtLookup mockAtLookup;
-      late MockAtChops mockAtChops;
-      late MockSecondaryAddressFinder mockAddressFinder;
+      late _StubMuxable stubMuxable;
 
       setUp(() {
         mockAtLookup = MockAtLookup();
-        mockAtChops = MockAtChops();
-        mockAddressFinder = MockSecondaryAddressFinder();
+        stubMuxable = _StubMuxable();
         when(() => mockAtLookup.close()).thenAnswer((_) async => {});
 
         monitor = Monitor(
           atSign: '@test',
           atClientPreference: AtClientPreference(),
-          atChops: mockAtChops,
-          enrollmentId: null,
-          secondaryAddressFinder: mockAddressFinder,
+          lookUp: stubMuxable,
           handleNotification: (String jsonEncoded) async {},
           getLastNotificationTime: () async => null,
         );
@@ -166,18 +173,18 @@ void main() {
         expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), true);
 
         await _initializeAtClient(secondAtSign);
-
-        expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), true);
+        expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), false,
+            reason: 'switching away stops the outgoing client, and a stopped '
+                'client releases its storage and leaves the map');
         expect(
           AtClientImpl.atClientInstanceMap.containsKey(secondAtSign),
           true,
         );
-
         expect(atClient1.isStopped, true);
-
-        // Verify switching back returns the same cached instance
-        final reusedAtClient = await _initializeAtClient(firstAtSign);
-        expect(identical(atClient1, reusedAtClient), true);
+        final rebuilt = await _initializeAtClient(firstAtSign);
+        expect(identical(atClient1, rebuilt), false,
+            reason: 'switching back opens storage afresh on a new client');
+        expect(rebuilt.isStopped, false);
       });
 
       test('switching to same atSign should handle correctly', () async {
@@ -205,10 +212,10 @@ void main() {
 
           final atClient1 = await _initializeAtClient(atSign);
           await atClient1.stop();
-
           final atClient2 = await _initializeAtClient(atSign);
-
-          expect(identical(atClient1, atClient2), true);
+          expect(identical(atClient1, atClient2), false,
+              reason: 'the stopped client released its storage; the manager '
+                  'builds and wires a new one');
 
           expect((atClient2.syncService as SyncServiceImpl).isStopped, false);
           expect(
@@ -343,4 +350,28 @@ class _CapturingAtSignChangeListener implements AtSignChangeListener {
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent event) => _onEvent(event);
+}
+
+/// Stands in for the muxable the Monitor now drives, so these tests exercise
+/// Monitor's own state handling rather than a socket.
+class _StubMuxable extends Fake implements AtLookupMuxable {
+  final _notifications = StreamController<String>.broadcast();
+  final _up = StreamController<bool>.broadcast();
+
+  @override
+  Stream<String> get notifications => _notifications.stream;
+
+  @override
+  Stream<bool> get notificationConnectionUp => _up.stream;
+
+  @override
+  Future<void> startNotifications({
+    String? regex,
+    Future<int?> Function()? getLastNotificationTime,
+    bool selfNotificationsEnabled = true,
+  }) async =>
+      _up.add(true);
+
+  @override
+  Future<void> stopNotifications() async => _up.add(false);
 }

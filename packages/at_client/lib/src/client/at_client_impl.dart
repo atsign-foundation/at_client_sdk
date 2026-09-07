@@ -44,8 +44,18 @@ class AtClientImpl implements AtClient {
   AtKeyValueStore<String, AtData, AtMetaData?>? _localSecondaryKeyStore;
 
   /// The keystore and sync queue this client holds; null when an external
-  /// keystore was injected or storage is not required.
+  /// keystore was injected, storage is not required, or [stop] has released it.
   AtClientStorage? _storage;
+
+  /// Storage handed to this client by its caller, if any. A client that was
+  /// given one never closes it: the caller owns its lifetime and may hand the
+  /// same store to a later client.
+  AtClientStorage? _injectedStorage;
+
+  /// Whether this client built [_storage] itself and so closes it on [stop];
+  /// injected storage is only detached.
+  bool _ownsStorage = false;
+  bool _storageReleased = false;
 
   @visibleForTesting
   AtClientStorage? get storage => _storage;
@@ -91,6 +101,24 @@ class AtClientImpl implements AtClient {
 
   @override
   AtKeysIo? get atKeysIo => _atKeysIo;
+
+  /// Builds a [RemoteSecondary] carrying this client's identity and
+  /// credentials, so every one this client opens is configured alike rather
+  /// than assembled independently at each site.
+  ///
+  /// [atLookUp] injects an already-built lookup; passing none lets
+  /// [RemoteSecondary] open its own connection, which is what a site wanting a
+  /// connection separate from the client's shared one does.
+  @visibleForTesting
+  RemoteSecondary buildRemoteSecondary({AtLookUp? atLookUp}) => RemoteSecondary(
+        _atSign,
+        _preference!,
+        atChops: atChops,
+        atLookUp: atLookUp,
+        privateKey: _preference!.privateKey,
+        enrollmentId: enrollmentId,
+        atKeysIo: _atKeysIo,
+      );
 
   /// Keeps track of CryptoProviders registered with this AtClient
   // ---------------------------------------------------------------------------
@@ -247,6 +275,13 @@ class AtClientImpl implements AtClient {
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
 
+  /// Whether a live client is already filed for [atSign].
+  ///
+  /// [atClientInstanceMap] is keyed by atSign, so two enrollments of one
+  /// atSign share an entry. [stop] removes the entry, freeing the atSign.
+  static bool holdsLiveClient(String atSign) =>
+      atClientInstanceMap.containsKey(AtUtils.fixAtSign(atSign));
+
   static final Finalizer<String> _finalizer = Finalizer((service) {
     _logger.finer('Outgoing $service has been garbage collected');
   });
@@ -314,6 +349,7 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
+    AtClientStorage? storage,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -342,9 +378,20 @@ class AtClientImpl implements AtClient {
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         enrollmentId: enrollmentId,
+        storage: storage,
       );
 
-      await atClientImpl._init(atLookUp: atLookUp);
+      try {
+        await atClientImpl._init(atLookUp: atLookUp);
+      } catch (_) {
+        // A client that failed to build holds nothing: its claim on the storage
+
+        // would otherwise outlive it and refuse every later client.
+
+        await atClientImpl._releaseStorage();
+
+        rethrow;
+      }
     }
 
     atClientInstanceMap[currentAtSign] = atClientImpl;
@@ -362,7 +409,9 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     this.enrollmentId,
+    AtClientStorage? storage,
   }) {
+    _injectedStorage = storage;
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -393,12 +442,23 @@ class AtClientImpl implements AtClient {
     if (_preference!.isLocalStoreRequired) {
       AtSyncQueue? syncQueue;
       if (_localSecondaryKeyStore == null) {
-        final storagePath = preference!.hiveStoragePath;
-        if (storagePath == null) {
-          throw Exception('Please set local storage path');
+        // A caller that supplied storage picked the backend and the location,
+        // and the bundle itself says whether `stop()` closes it. Otherwise
+        // build the default Hive store under the preference's path and own it.
+        final injected = _injectedStorage;
+        final AtClientStorage storage;
+        if (injected != null) {
+          storage = injected;
+          _ownsStorage = injected.closedByClient;
+        } else {
+          final storagePath = preference!.hiveStoragePath;
+          if (storagePath == null) {
+            throw Exception('Please set local storage path');
+          }
+          storage =
+              HiveAtClientStorage(atSign: _atSign, storagePath: storagePath);
+          _ownsStorage = true;
         }
-        final storage =
-            HiveAtClientStorage(atSign: _atSign, storagePath: storagePath);
         await storage.attach(this);
         _storage = storage;
         syncQueue = storage.syncQueue;
@@ -443,14 +503,7 @@ class AtClientImpl implements AtClient {
     }
 
     // Using ??= because we may be injecting a RemoteSecondary
-    _remoteSecondary ??= RemoteSecondary(
-      _atSign,
-      _preference!,
-      atChops: atChops,
-      atLookUp: atLookUp,
-      privateKey: _preference!.privateKey,
-      enrollmentId: enrollmentId,
-    );
+    _remoteSecondary ??= buildRemoteSecondary(atLookUp: atLookUp);
 
     // Using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
@@ -570,6 +623,10 @@ class AtClientImpl implements AtClient {
       _logger.finer('start() called, but atClient is not stopped. Ignoring');
       return;
     }
+    if (_storageReleased) {
+      throw StateError('this client released its storage when it stopped; '
+          'build a new client rather than restarting this one');
+    }
     _isStopped = false;
   }
 
@@ -584,6 +641,25 @@ class AtClientImpl implements AtClient {
     _logger.info('stop() called: stopping at_client for $_atSign');
 
     await _stopBackgroundProcesses();
+    await _releaseStorage();
+    if (identical(atClientInstanceMap[_atSign], this)) {
+      atClientInstanceMap.remove(_atSign);
+    }
+  }
+
+  /// Drops this client's claim on its storage, closing it if this client built
+  /// it. A stopped client keeps nothing open and cannot be restarted.
+  Future<void> _releaseStorage() async {
+    final storage = _storage;
+    if (storage == null) return;
+    _storageReleased = true;
+    try {
+      await storage.detach(this);
+      if (_ownsStorage) await storage.close();
+    } catch (e) {
+      _logger.warning('Error while releasing storage: $e');
+    }
+    _storage = null;
   }
 
   Future<void> _stopBackgroundProcesses() async {
@@ -1237,11 +1313,7 @@ class AtClientImpl implements AtClient {
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
-    var remoteSecondary = RemoteSecondary(
-      _atSign,
-      _preference!,
-      atChops: atChops,
-    );
+    var remoteSecondary = buildRemoteSecondary();
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
@@ -1249,9 +1321,12 @@ class AtClientImpl implements AtClient {
       result = result.trim();
       _logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
-      var streamResult = await (remoteSecondary.atLookUp as AtLookupImpl)
-          .messageListener
-          .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
+      // `readResponse` rather than reaching through to the listener: this
+      // path has already written the bytes to the socket itself, so it needs
+      // the read half alone. The listener is not in at_lookup's barrel.
+      var streamResult = await (remoteSecondary.atLookUp as AtLookupMuxable)
+          .readResponse(
+              maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
       if (streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.complete;

@@ -1,524 +1,519 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-import 'package:mocktail/mocktail.dart';
+/// Monitor's own concerns, and only those.
+///
+/// This file used to hold eighteen tests, most of them about a socket, a byte
+/// buffer, PKAM authentication, a heartbeat and an
+/// `[1,2,3,5,8,13,21,34]`-second backoff that Monitor no longer has - all of
+/// that moved into at_lookup's `AtLookupMuxable`, where it exists once and is
+/// covered by `muxable_notifications_test.dart` and `socket_delivery_test.dart`.
+///
+/// Two of those tests had no equivalent there and were **ported before being
+/// deleted here**: a failure to connect, and a reachable atServer that rejects
+/// the write. They are now
+/// `muxable_notifications_test.dart`'s "a connection that cannot be
+/// established" group.
+///
+/// What is left is what was always Monitor's: the watermark, the notification
+/// callback, and the two states.
+class FakeMuxable extends Fake implements AtLookupMuxable {
+  // Recreated on demand, exactly as AtLookupImpl does: stopNotifications()
+  // nulls AND closes both controllers, so the next read of `notifications` or
+  // `notificationConnectionUp` builds a fresh one. A fake that reused a single
+  // controller could not reproduce a stop-then-start race at all - the
+  // subscriptions would keep working and the bug would be invisible.
+  /// Counted so a test can prove the back-pressure seam is actually reached,
+  /// rather than inferring it from handling order.
+  int pauses = 0;
+  int resumes = 0;
 
-import 'test_utils/mocks.dart';
+  late StreamController<String> _notifications = _newNotifications();
+  StreamController<bool> _up = StreamController<bool>.broadcast();
 
-class MockSecureSocket extends Mock implements SecureSocket {}
+  StreamController<String> _newNotifications() => StreamController<String>(
+      onPause: () => pauses++, onResume: () => resumes++);
 
-class MockStreamSubscription<T> extends Mock implements StreamSubscription<T> {}
+  bool started = false;
+  int? startedWithWatermark;
+  int startCalls = 0;
 
-class MockOutboundConnection extends Mock implements OutboundConnection {}
+  /// The function Monitor handed down, kept so a test can invoke it AGAIN —
+  /// which is what a reconnect does. Holding only the value it first returned
+  /// cannot tell a live callback from one that captured a stale number.
+  Future<int?> Function()? heldWatermarkSource;
 
-class MockMonitorOutboundConnectionFactory extends Mock
-    implements MonitorOutboundConnectionFactory {}
+  /// Set to make [startNotifications] fail, as an unreachable or rejecting
+  /// atServer does.
+  Object? startError;
 
-class FakeAtSigningInput extends Fake implements AtSigningInput {}
+  @override
+  Stream<String> get notifications => _notifications.stream;
 
-/// Note: The test code here prioritizes brevity over isolation
-/// So while, right now, the tests are all passing despite sharing their mock objects, at some point
-/// we will add a test where that assumption doesn't hold any more, and the tests will start failing
-void main() {
-  SecondaryAddressFinder mockSecondaryAddressFinder =
-      MockSecondaryAddressFinder();
-  MonitorOutboundConnectionFactory mockMonitorOutboundConnectionFactory =
-      MockMonitorOutboundConnectionFactory();
-  OutboundConnection mockOutboundConnection = MockOutboundConnection();
-  SecureSocket mockSocket = MockSecureSocket();
-  AtChops mockAtChops = MockAtChops();
-  late Function(dynamic data) socketOnDataFn;
-  late Function() socketOnDoneFn;
-  // ignore: unused_local_variable
-  late Function(Exception e) socketOnErrorFn;
-  int? lastNotificationTime;
-  Future<int?> getLastNotificationTime() async {
-    return lastNotificationTime;
+  @override
+  Stream<bool> get notificationConnectionUp => _up.stream;
+
+  @override
+  bool get isNotifying => started;
+
+  @override
+  Future<void> startNotifications({
+    String? regex,
+    Future<int?> Function()? getLastNotificationTime,
+    bool selfNotificationsEnabled = true,
+  }) async {
+    startCalls++;
+    if (startError != null) throw startError!;
+    started = true;
+    // Invoked, as the real muxable does on every (re)connect - so these
+    // assertions also prove the callback the Monitor hands down is callable.
+    heldWatermarkSource = getLastNotificationTime;
+    startedWithWatermark = await getLastNotificationTime?.call();
+    _up.add(true);
   }
 
-  var atSign = '@monitor_test';
-  var fakeSecondaryAddress = SecondaryAddress("monitor_test", 12345);
-  var fakeCertsLocation = '/home/ubuntu/Desktop/cert.pem';
-  var fakeTlsKeysSavePath = '/home/ubuntu/Desktop/cert.pem';
-  AtClientPreference atClientPreference = AtClientPreference();
-  atClientPreference.decryptPackets = true;
-  atClientPreference.tlsKeysSavePath = fakeTlsKeysSavePath;
-  atClientPreference.pathToCerts = fakeCertsLocation;
-  late AtSigningResult mockSigningResult;
+  @override
+  Future<void> stopNotifications() async {
+    started = false;
+    if (!_up.isClosed) _up.add(false);
+    // Closed and replaced, as the real one does.
+    final n = _notifications;
+    final u = _up;
+    _notifications = _newNotifications();
+    _up = StreamController<bool>.broadcast();
+    unawaited(n.close());
+    unawaited(u.close());
+  }
 
-  List<(DateTime, NotificationListenerState)> monitorStateHistory = [];
+  /// The atServer sends one.
+  void deliver(String notification) => _notifications.add(notification);
 
+  /// The connection drops under us - the muxable reports it and reconnects.
+  void dropConnection() => _up.add(false);
+
+  void reconnected() => _up.add(true);
+
+  Future<void> dispose() async {
+    // NOT awaited: close() on a single-subscription controller returns a
+    // `done` that only completes once a subscriber has taken the event, and
+    // after stopNotifications these are fresh controllers with no listener.
+    // Awaiting hangs forever - the same trap that made the real
+    // stopNotifications hang before it was fixed.
+    if (!_notifications.isClosed) unawaited(_notifications.close());
+    if (!_up.isClosed) unawaited(_up.close());
+  }
+}
+
+void main() {
+  late FakeMuxable muxable;
   late Monitor monitor;
-  String allFromMonitor = '';
-
-  late Completer doneCompleter;
-  late StreamSubscription currentStateSubscription;
+  late List<String> received;
+  late List<NotificationListenerState> states;
+  int? watermark;
+  Object? watermarkError;
 
   setUp(() {
-    reset(mockSecondaryAddressFinder);
-    reset(mockSocket);
-    reset(mockOutboundConnection);
-    reset(mockMonitorOutboundConnectionFactory);
-    reset(mockAtChops);
-
-    when(() => mockSecondaryAddressFinder.findSecondary(any()))
-        .thenAnswer((_) async => fakeSecondaryAddress);
-    when(() => mockOutboundConnection.getSocket())
-        .thenAnswer((_) => mockSocket);
-    when(() => mockMonitorOutboundConnectionFactory.createConnection(
-            fakeSecondaryAddress,
-            decryptPackets: true,
-            tlsKeysSavePath: fakeTlsKeysSavePath,
-            pathToCerts: fakeCertsLocation))
-        .thenAnswer((_) async => mockOutboundConnection);
-    when(() => mockOutboundConnection.close()).thenAnswer((_) async => {});
-    when(() => mockSocket.listen(any(),
-        onError: any(named: "onError"),
-        onDone: any(named: "onDone"))).thenAnswer((Invocation invocation) {
-      socketOnDataFn = invocation.positionalArguments[0];
-      socketOnDoneFn = invocation.namedArguments[#onDone];
-      socketOnErrorFn = invocation.namedArguments[#onError];
-
-      return MockStreamSubscription<Uint8List>();
-    });
-    doneCompleter = Completer();
-    when(() => mockSocket.done).thenAnswer((_) => doneCompleter.future);
-
-    when(() => mockOutboundConnection.write('from:$atSign\n'))
-        .thenAnswer((Invocation invocation) async {
-      socketOnDataFn("@data:server challenge\n"
-          .codeUnits); // actual challenge is different, of course, but not important for unit tests
-    });
-    when(() => mockOutboundConnection.write(any(that: startsWith('pkam:'))))
-        .thenAnswer((Invocation invocation) async {
-      socketOnDataFn("success\n".codeUnits);
-    });
-    when(() => mockOutboundConnection.write(any(that: startsWith('monitor'))))
-        .thenAnswer((Invocation invocation) async {});
-    mockSigningResult = AtSigningResult()..result = 'mock_signing_result';
-    registerFallbackValue(FakeAtSigningInput());
-    when(() => mockAtChops.sign(any())).thenAnswer((_) => mockSigningResult);
-
-    const List<Duration> testConnectDelays = [
-      Duration(milliseconds: 100),
-      Duration(milliseconds: 200),
-      Duration(milliseconds: 300),
-      Duration(milliseconds: 500),
-      Duration(milliseconds: 800),
-      Duration(milliseconds: 1300),
-      Duration(milliseconds: 2100),
-      Duration(milliseconds: 3400),
-    ];
-    allFromMonitor = '';
+    muxable = FakeMuxable();
+    received = [];
+    states = [];
+    watermark = null;
+    watermarkError = null;
     monitor = Monitor(
-      atSign: atSign,
-      atClientPreference: atClientPreference,
-      atChops: mockAtChops,
-      enrollmentId: null,
-      secondaryAddressFinder: mockSecondaryAddressFinder,
-      handleNotification: (String received) async {
-        allFromMonitor += '$received\n';
+      atSign: '@alice',
+      atClientPreference: AtClientPreference(),
+      lookUp: muxable,
+      handleNotification: (String n) async => received.add(n),
+      getLastNotificationTime: () async {
+        if (watermarkError != null) throw watermarkError!;
+        return watermark;
       },
-      getLastNotificationTime: getLastNotificationTime,
-      connectDelays: testConnectDelays,
-      monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory,
     );
-    monitor.logger.level = 'warning';
-    lastNotificationTime = null;
-    monitorStateHistory.clear();
-    currentStateSubscription = monitor.currentStateStream.listen((s) {
-      final d = DateTime.now().toUtc();
-      monitorStateHistory.add((d, s));
-    });
+    monitor.logger.level = 'severe';
+    monitor.currentStateStream.listen(states.add);
   });
 
-  tearDown(() async {
-    await currentStateSubscription.cancel();
-    monitor.stop();
-    monitorStateHistory.clear();
-  });
+  tearDown(() async => muxable.dispose());
 
-  group('Monitor socket response handling', () {
-    test('Multiple response lines in single call to socket messageHandler',
-        () async {
-      List<String> fromServerList = [
-        'notification:{"id":"1"}\ndata:ok\nnotification:{"id":',
-        '"2"}\nnotification:{"id:"3"}\ndata:',
-        'ok\nnoti',
-        'fication:{"id":"4"}\n'
-      ];
-
+  group('start', () {
+    test('reaches listening, and passes a null watermark through', () async {
       monitor.start();
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.listening);
+      await Future.delayed(const Duration(milliseconds: 20));
 
-      String allFromServer = '';
-      for (String fromServer in fromServerList) {
-        await socketOnDataFn(utf8.encode(fromServer));
-        allFromServer += fromServer;
-      }
-      // The Monitor response handler should filter out data:ok\n responses (heartbeat responses)
-      // and send only notifications to the Monitor's owner's response handler.
-      allFromServer = allFromServer.replaceAll('data:ok\n', '');
-      expect(allFromMonitor, allFromServer);
-    });
-  });
-
-  group('Monitor constructor and start tests', () {
-    /// Create a Monitor with our mock connectivity checker, remote secondary and outbound connection factory.
-    /// Start the monitor with a NULL last notification time
-    /// Check that the monitor has started and has written the correct things to the socket
-    test('Monitor start, secondary OK, NULL lastNotificationTime', () async {
-      monitor.start();
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.listening);
-      final writesToSocket =
-          verify(() => mockOutboundConnection.write(captureAny())).captured;
-      expect(writesToSocket.length, 3);
-      // We've created a monitor with a null lastNotificationTime - expect the command sent to the server to be simply 'monitor\n'
-      expect(writesToSocket.last, 'monitor:selfNotifications\n');
-    });
-
-    /// Create a Monitor with our mock connectivity checker, remote secondary and outbound connection factory.
-    /// Start the monitor with a REAL last notification time
-    /// Check that the monitor has started and has written the correct things to the socket
-    test('Monitor start, secondary OK, with a real lastNotificationTime',
-        () async {
-      lastNotificationTime =
-          DateTime.now().subtract(Duration(days: 1)).millisecondsSinceEpoch;
-      monitor.start();
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.listening);
-      final writesToSocket =
-          verify(() => mockOutboundConnection.write(captureAny())).captured;
-      expect(writesToSocket.length, 3);
-      // We've created a monitor with a real lastNotificationTime
-      expect(writesToSocket.last,
-          'monitor:selfNotifications:$lastNotificationTime\n');
-    });
-
-    test('Monitor start, secondary not available', () async {
-      when(() => mockMonitorOutboundConnectionFactory.createConnection(
-          fakeSecondaryAddress,
-          decryptPackets: true,
-          tlsKeysSavePath: fakeTlsKeysSavePath,
-          pathToCerts: fakeCertsLocation)).thenAnswer((_) async {
-        throw AtConnectException('Mock - connection failed');
-      });
-
-      monitor.start();
-
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.notConnected);
-    });
-
-    test('Monitor start, secondary reachable but rejecting commands', () async {
-      when(() => mockOutboundConnection.write(any()))
-          .thenAnswer((Invocation invocation) async {
-        throw Exception('mockOutboundConnection.write() throwing exception');
-      });
-
-      monitor.start();
-
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.notConnected);
-    });
-
-    test('start, secondary reachable but rejecting commands', () async {
-      when(() => mockOutboundConnection.write(any()))
-          .thenAnswer((Invocation invocation) async {
-        throw Exception('mockOutboundConnection.write() throwing exception');
-      });
-
-      monitor.start();
-
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.notConnected);
-    });
-
-    test('start, secondary reachable but pkam failure', () async {
-      when(() => mockOutboundConnection.write(any(that: startsWith('pkam:'))))
-          .thenAnswer((Invocation invocation) async {
-        throw Exception('mockOutboundConnection.write() throwing exception');
-      });
-
-      monitor.start();
-
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.notConnected);
-    });
-
-    test(
-        'start, secondary OK, socket OK, socket closed, reconnects immediately',
-        () async {
-      monitor.start();
-
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.listening);
-
-      socketOnDoneFn();
-
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.notConnected);
-
-      // should reconnect after the initial reconnectDelay
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.listening);
-    });
-
-    test(
-        'start, secondary OK, socket OK, socket closed, reconnects on third attempt',
-        () async {
-      monitor.start();
-
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.listening);
-
-      socketOnDoneFn();
-
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.notConnected);
-
-      // make connections fail
-      when(() => mockMonitorOutboundConnectionFactory.createConnection(
-          fakeSecondaryAddress,
-          decryptPackets: true,
-          tlsKeysSavePath: fakeTlsKeysSavePath,
-          pathToCerts: fakeCertsLocation)).thenAnswer((_) async {
-        throw AtConnectException('Mock - connection failed');
-      });
-
-      await Future.delayed(monitor.connectDelays[0]);
-      await Future.delayed(monitor.connectDelays[1]);
-      await Future.delayed(Duration(milliseconds: 50)); // fudge factor
-
-      // make connections succeed again
-      when(() => mockMonitorOutboundConnectionFactory.createConnection(
-              fakeSecondaryAddress,
-              decryptPackets: true,
-              tlsKeysSavePath: fakeTlsKeysSavePath,
-              pathToCerts: fakeCertsLocation))
-          .thenAnswer((_) async => mockOutboundConnection);
-
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.listening);
-    });
-
-    test('Monitor heartbeat sending regularly', () async {
-      atClientPreference.monitorHeartbeatInterval = Duration(milliseconds: 20);
-      Duration waitTime = Duration(milliseconds: 25);
-
-      int numHeartbeatsSent = 0;
-      when(() => mockOutboundConnection.write("noop:0\n"))
-          .thenAnswer((Invocation invocation) async {
-        numHeartbeatsSent++;
-        sleep(Duration(milliseconds: 1));
-        socketOnDataFn("@ok\n".codeUnits);
-      });
-
-      monitor.start();
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.listening);
-
-      // We expect the first heartbeat to be sent heartbeatIntervalMillis from now
-      await Future.delayed(waitTime);
-
-      // we should have sent one heartbeat so far
-      expect(numHeartbeatsSent, 1);
-      // and the monitor status is still 'started'
+      expect(monitor.targetState, NotificationListenerState.listening);
       expect(monitor.currentState, NotificationListenerState.listening);
-
-      // Now let's wait long enough for some heartbeats to be sent, check they have all been sent,
-      // and check that the monitor status is still 'started'
-      int additionalHeartbeatsToSend = 3;
-      int expectedHeartbeatCount =
-          numHeartbeatsSent + additionalHeartbeatsToSend;
-      await Future.delayed(waitTime);
-      await Future.delayed(waitTime);
-      await Future.delayed(waitTime);
-      // We're expecting three more to have been sent
-      expect(numHeartbeatsSent, expectedHeartbeatCount);
-      expect(monitor.currentState, NotificationListenerState.listening);
-
-      // Now let's simulate the socket is calling 'onDone'
-      // The monitor's status should go to `notConnected`
-      socketOnDoneFn();
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.notConnected);
-      expect(monitor.currentState, NotificationListenerState.notConnected);
-      expect(monitor.heartbeatTimer, null);
-      expect(numHeartbeatsSent, expectedHeartbeatCount);
+      expect(states, [NotificationListenerState.listening]);
+      expect(muxable.started, isTrue);
+      expect(muxable.startedWithWatermark, isNull);
     });
 
-    test('Test that heartbeat exceptions are caught gracefully', () async {
-      atClientPreference.monitorHeartbeatInterval = Duration(milliseconds: 100);
-
-      int numHeartbeatAttempts = 0;
-      when(() => mockOutboundConnection.write("noop:0\n"))
-          .thenAnswer((Invocation invocation) async {
-        numHeartbeatAttempts++;
-        throw Exception('mockOutboundConnection.write() throwing exception');
-      });
+    test('passes a real watermark through', () async {
+      watermark = 1755600000000;
 
       monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
 
-      await Future.delayed(atClientPreference.monitorHeartbeatInterval +
-          Duration(milliseconds: 10));
-
-      // If there's an unhandled exception, this next assertion will not be made
-      expect(numHeartbeatAttempts, 1);
+      expect(muxable.startedWithWatermark, 1755600000000,
+          reason: 'the watermark is what stops the atServer replaying every '
+              'notification it has ever held');
     });
 
-    test('Test when monitor heartbeat response not received', () async {
-      // Do one successful heartbeat
-      // Then fake a timeout on the next one
-      // When the timeout occurs, socket as marked done
-      // When the socket is marked done, monitor state changes
-      // There is then a brief delay before the next connect attempt
-      // We will make the first reconnect attempt fail
-      // We will make the second reconnect attempt succeed
-      // So we need to verify (1) monitor state changes to "notConnected"
-      // and then (2) monitor state changes back to "connected" after the
-      // reconnect, and then (3) we get another heartbeat
-      int numHeartbeatsSent = 0;
-      bool sendHeartbeatResponse = true;
-      when(() => mockOutboundConnection.write("noop:0\n"))
-          .thenAnswer((Invocation invocation) async {
-        numHeartbeatsSent++;
-        if (sendHeartbeatResponse) {
-          sleep(Duration(milliseconds: 1));
-          socketOnDataFn("@ok\n".codeUnits);
-        }
-      });
+    test('hands down a LIVE watermark source, not a value read once', () async {
+      // The muxable owns reconnection, so it asks this function again on every
+      // reconnect. Monitor must therefore pass the function itself: reading
+      // the number here and passing that pins every later reconnect to the
+      // position held at start, which is the frozen-watermark defect. Every
+      // other test in this group would pass with that defect present, because
+      // they only ever look at the FIRST call.
+      watermark = 1755600000000;
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(muxable.startedWithWatermark, 1755600000000);
 
-      atClientPreference.monitorHeartbeatResponseTimeout =
-          Duration(milliseconds: 20);
-      atClientPreference.monitorHeartbeatInterval = Duration(milliseconds: 60);
+      // The client consumes notifications and its stored watermark advances.
+      watermark = 1755600009999;
+
+      expect(muxable.heldWatermarkSource, isNotNull,
+          reason: 'Monitor must hand a function down at all - without one the '
+              'muxable has nothing to re-ask and every reconnect goes out '
+              'with no watermark');
+      expect(await muxable.heldWatermarkSource!(), 1755600009999,
+          reason: 'invoking it again - which is exactly what a reconnect '
+              'does - must read the CURRENT watermark, not the number that '
+              'was current when notifications started');
+    });
+
+    /// Reading the watermark is a local keystore operation, not part of
+    /// connecting, so its failure must not abort the connect. When such an
+    /// exception reached the connect handler, the monitor retried with backoff
+    /// for as long as the cause persisted - and a cause that is a local
+    /// configuration rather than network weather persists forever. The client
+    /// was silently deaf and the only symptom was the absence of `listening`.
+    test('a watermark read that throws does not stop it connecting', () async {
+      watermarkError =
+          Exception('the keystore refused the lastreceivednotification read');
 
       monitor.start();
-      expect(await monitor.currentStateStream.first,
-          NotificationListenerState.listening);
-      expect(monitor.currentState, NotificationListenerState.listening);
+      await Future.delayed(const Duration(milliseconds: 20));
 
-      // Wait for two heartbeat successes
-      await Future.delayed(atClientPreference.monitorHeartbeatInterval * 2.2);
-      expect(numHeartbeatsSent, 2);
+      expect(monitor.currentState, NotificationListenerState.listening,
+          reason: 'a failed watermark read must not abort the connect');
+      expect(muxable.startedWithWatermark, isNull,
+          reason: 'and it starts with NO watermark rather than a stale one: '
+              'starting without one replays a window, which is recoverable, '
+              'where starting from a wrong one loses notifications');
+    });
 
-      // Let's make reconnects fail, then stop heartbeat responses
-      when(() => mockMonitorOutboundConnectionFactory.createConnection(
-          fakeSecondaryAddress,
-          decryptPackets: true,
-          tlsKeysSavePath: fakeTlsKeysSavePath,
-          pathToCerts: fakeCertsLocation)).thenAnswer((_) async {
-        throw AtConnectException('Mock - connection failed');
-      });
+    test('a second start is refused rather than doubling up', () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
 
-      // Let's NOT send a response to the next heartbeat(s).
-      sendHeartbeatResponse = false;
+      expect(muxable.startCalls, 1,
+          reason: 'a second monitor: on the same connection would duplicate '
+              'every notification');
+    });
 
-      // Wait for the heartbeat timeout
-      await Future.delayed((atClientPreference.monitorHeartbeatResponseTimeout +
-              atClientPreference.monitorHeartbeatInterval) *
-          1.2);
+    test('a start that fails is retried, not abandoned', () async {
+      // at_lookup SURFACES a failed start rather than retrying it - three of
+      // its own tests pin that - so the retry has to live here. Before this,
+      // one failed start left the client deaf for the life of the process:
+      // start() short-circuits on a targetState that is already listening, so
+      // nothing could ask again.
+      muxable.startError = AtConnectException('mock - connection failed');
 
-      // Status should be "notConnected"
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(muxable.startCalls, 1);
       expect(monitor.currentState, NotificationListenerState.notConnected);
 
-      // Wait for the first delay timeout
-      await Future.delayed(monitor.connectDelays[0] * 1.1);
+      // The first backoff step is 1s; clear the fault and let it come round.
+      muxable.startError = null;
+      await Future.delayed(const Duration(milliseconds: 1400));
 
-      expect(monitor.currentState, NotificationListenerState.notConnected);
+      expect(muxable.startCalls, greaterThan(1),
+          reason: 'the monitor asked again on its own, which is what the '
+              'public contract promises: reconnect until successful or until '
+              'stopListening');
+      expect(monitor.currentState, NotificationListenerState.listening,
+          reason: 'and once the fault cleared it actually got there');
+    }, timeout: Timeout(Duration(seconds: 15)));
 
-      // let's start sending responses to heartbeats again
-      sendHeartbeatResponse = true;
-
-      // and let's make creating new connections succeed again
-      when(() => mockMonitorOutboundConnectionFactory.createConnection(
-              fakeSecondaryAddress,
-              decryptPackets: true,
-              tlsKeysSavePath: fakeTlsKeysSavePath,
-              pathToCerts: fakeCertsLocation))
-          .thenAnswer((_) async => mockOutboundConnection);
-
-      // Wait for the second delay timeout
-      await Future.delayed(monitor.connectDelays[1] * 1.1);
-
-      // Now the monitor state should be 'connected' again
-      expect(monitor.currentState, NotificationListenerState.listening);
-
-      // Finally, let's make sure that heartbeats are happening again, and the monitor is still happy
-      int lastHeartbeatCount = numHeartbeatsSent;
-      int additionalHeartbeatsToSend = 3;
-      await Future.delayed(atClientPreference.monitorHeartbeatInterval * 3.5);
-      int expectedHeartbeatCount =
-          lastHeartbeatCount + additionalHeartbeatsToSend;
-      expect(numHeartbeatsSent >= expectedHeartbeatCount, true);
-      expect(monitor.currentState, NotificationListenerState.listening);
-    });
-
-    test('verify no race when stop is called', () async {
-      // When start is called, some amount of time passes before the connection
-      // is made. If stop is called while the connection is still being created
-      // then we want to avoid the possibility that the connection is there
-      // and being listened to even though the targetState is now `notConnected`
-
-      // To explain what's happening in a bit more detail:
-      // The Monitor.stayConnected loop (while targetState == listening)
-      //   starts by creating a "connectionDoneCompleter"
-      //   once the connection is established, currentState is set to listening
-      //   and we then await ConnectionDoneCompleter.future
-      // stop() sets targetState to notConnected
-      //   and then calls closeConnection
-      //   which among other things will call connectionDoneCompleter.complete()
-      //   (if there is a non-null connectionDoneCompleter)
-      // This test therefore creates a situation where stop() is called while
-      //   a connection is being established, and verifies that it is then closed
-      //   pretty much immediately, because connectionDoneCompleter.future has
-      //   been completed
-
-      // let's add a delay before returning the connection
-      Completer createConnectionCalled = Completer();
-      when(() => mockMonitorOutboundConnectionFactory.createConnection(
-          fakeSecondaryAddress,
-          decryptPackets: true,
-          tlsKeysSavePath: fakeTlsKeysSavePath,
-          pathToCerts: fakeCertsLocation)).thenAnswer((_) async {
-        createConnectionCalled.complete();
-        await Future.delayed(Duration(milliseconds: 50));
-        return mockOutboundConnection;
-      });
-
-      // let's make a completer for when the monitor command is issued,
-      Completer monitorCommandIssued = Completer();
-      when(() => mockOutboundConnection.write(any(that: startsWith('monitor'))))
-          .thenAnswer((Invocation invocation) async {
-        monitorCommandIssued.complete();
-      });
-
-      // monitor.logger.level = 'info';
+    test('a retry stops when stop() arrives', () async {
+      muxable.startError = AtConnectException('mock - connection failed');
       monitor.start();
-      await createConnectionCalled.future;
+      await Future.delayed(const Duration(milliseconds: 20));
+
       monitor.stop();
+      muxable.startError = null;
+      final callsAtStop = muxable.startCalls;
+      await Future.delayed(const Duration(milliseconds: 1400));
 
-      // We've called stop, but we are still in the process of
-      // creating the monitor connection, and we expect the monitor
-      // command to be issued as usual
-      await monitorCommandIssued.future;
+      expect(muxable.startCalls, callsAtStop,
+          reason: 'a pending retry must not resurrect a monitor the caller '
+              'has stopped');
+    }, timeout: Timeout(Duration(seconds: 15)));
 
-      // small wait to let things play out
-      await Future.delayed(Duration(milliseconds: 50));
-      expect(monitorStateHistory.length, 3);
-      expect(monitorStateHistory[0].$2, NotificationListenerState.notConnected);
-      expect(monitorStateHistory[1].$2, NotificationListenerState.listening);
-      expect(monitorStateHistory[2].$2, NotificationListenerState.notConnected);
+    test('a start that fails leaves it notConnected', () async {
+      // Ported in spirit from "secondary not available" and "secondary
+      // reachable but rejecting commands", both of which now fail inside the
+      // muxable. What matters HERE is only that Monitor does not claim to be
+      // listening when the start did not succeed.
+      muxable.startError = AtConnectException('mock - connection failed');
+
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(monitor.currentState, NotificationListenerState.notConnected);
+      expect(states, isEmpty,
+          reason: 'no state change was published, because none happened - a '
+              'listener that saw `listening` here would wait forever');
+    });
+  });
+
+  group('notifications', () {
+    test('reach handleNotification, and stamp lastReceipt', () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(monitor.lastReceipt, isNull);
+
+      muxable.deliver('notification: {"id":"abc"}');
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(received, ['notification: {"id":"abc"}']);
+      expect(monitor.lastReceipt, isNotNull);
+    });
+
+    test('are handled one at a time, and pause the connection while they are',
+        () async {
+      final log = <String>[];
+      monitor = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference(),
+        lookUp: muxable,
+        handleNotification: (String n) async {
+          log.add('enter $n');
+          await Future.delayed(const Duration(milliseconds: 20));
+          log.add('exit $n');
+        },
+        getLastNotificationTime: () async => null,
+      );
+      monitor.logger.level = 'severe';
+
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.deliver('A');
+      muxable.deliver('B');
+      await Future.delayed(const Duration(milliseconds: 120));
+
+      expect(log, ['enter A', 'exit A', 'enter B', 'exit B'],
+          reason: 'listen() discards the future an async handler returns, so '
+              'without the pause both run at once - the watermark is then '
+              'written out of arrival order and the atServer replays a window '
+              'on the next reconnect');
+      // Measured 1 and 1, not 2 and 2: the second notification is delivered
+      // out of the controller's buffer while it is still draining, and a
+      // pause during that does not re-fire onPause. What matters is that the
+      // seam is reached at all and left balanced.
+      expect(muxable.pauses, greaterThan(0),
+          reason: 'the pause reached the connection rather than being an '
+              'accident of handler timing: at_lookup carries it to the '
+              'socket, which is what keeps a reconnect backlog arriving at '
+              'the rate this client can absorb');
+      expect(muxable.resumes, muxable.pauses,
+          reason: 'and every pause was matched, so a handler cannot leave the '
+              'connection stopped for good');
+    });
+
+    test('a handler that throws does not kill the stream', () async {
+      monitor = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference(),
+        lookUp: muxable,
+        handleNotification: (String n) async {
+          received.add(n);
+          throw StateError('handler blew up on $n');
+        },
+        getLastNotificationTime: () async => null,
+      );
+      monitor.logger.level = 'severe';
+
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.deliver('notification: {"id":"one"}');
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.deliver('notification: {"id":"two"}');
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(received, hasLength(2),
+          reason: 'one bad notification must not deafen the client to every '
+              'notification after it');
+    });
+  });
+
+  group('connection state', () {
+    test('a dropped connection surfaces, and so does the recovery', () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      muxable.dropConnection();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(monitor.currentState, NotificationListenerState.notConnected);
+
+      muxable.reconnected();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(monitor.currentState, NotificationListenerState.listening);
+
+      expect(
+          states,
+          [
+            NotificationListenerState.listening,
+            NotificationListenerState.notConnected,
+            NotificationListenerState.listening,
+          ],
+          reason: 'noports subscribes to this stream for the life of its '
+              'daemon; every transition has to reach it');
+    });
+
+    test('an unchanged state is not republished', () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.reconnected(); // already up
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(states, [NotificationListenerState.listening],
+          reason: 'a repeated identical state is noise on a stream something '
+              'reacts to');
+    });
+  });
+
+  /// at_lookup recovers a connection that DROPS. It cannot see one that stays
+  /// up, answers every heartbeat, and delivers nothing - only this class knows
+  /// when a notification last arrived. Without these the client reports
+  /// `listening` for ever while deaf, which is what the public contract on
+  /// `NotificationService.currentListenerState` promises it will not do.
+  group('a connection that is up but silent', () {
+    Monitor monitorWithBudget(Duration budget) {
+      final m = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference()
+          ..monitorSilenceTimeout = budget,
+        lookUp: muxable,
+        handleNotification: (String n) async => received.add(n),
+        getLastNotificationTime: () async => null,
+      );
+      m.logger.level = 'severe';
+      return m;
+    }
+
+    test('is rebuilt', () async {
+      monitor = monitorWithBudget(const Duration(milliseconds: 40));
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(muxable.startCalls, 1);
+
+      await Future.delayed(const Duration(milliseconds: 150));
+
+      expect(muxable.startCalls, greaterThan(1),
+          reason: 'nothing arrived for longer than the budget on a connection '
+              'that never went down, so the monitor tore it down and asked '
+              'for a new one - at_lookup sees a healthy socket here and will '
+              'never do it');
+      monitor.stop();
+    });
+
+    test('is left alone while notifications keep arriving', () async {
+      // Budget comfortably longer than the delivery gap: the check fires one
+      // budget after connect, so a gap anywhere near it races the first tick.
+      monitor = monitorWithBudget(const Duration(milliseconds: 100));
+      monitor.start();
+
+      for (var i = 0; i < 12; i++) {
+        await Future.delayed(const Duration(milliseconds: 25));
+        muxable.deliver('notification: {"id":"$i"}');
+      }
+
+      expect(muxable.startCalls, 1,
+          reason: 'the check is about SILENCE, not about elapsed time - a busy '
+              'connection outlives many budgets and must not be rebuilt under '
+              'a working client');
+      // Handling is serialised now, so the last delivery is still in flight.
+      await Future.delayed(const Duration(milliseconds: 40));
+      expect(received, hasLength(12));
+      monitor.stop();
+    });
+
+    test('is left alone when the budget is zero', () async {
+      monitor = monitorWithBudget(Duration.zero);
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 170));
+
+      expect(muxable.startCalls, 1,
+          reason: 'an atServer configured to send no stats notifications is '
+              'silent when healthy, so an operator must be able to turn the '
+              'check off rather than have it rebuild a good connection');
+      monitor.stop();
+    });
+  });
+
+  group('stop', () {
+    test('stops the muxable and reports notConnected', () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      monitor.stop();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(monitor.targetState, NotificationListenerState.notConnected);
+      expect(monitor.currentState, NotificationListenerState.notConnected);
+      expect(muxable.started, isFalse);
+    });
+
+    test('start immediately after stop does not leave it deaf', () async {
+      // The MIRROR of the race above, and the one _start's post-await
+      // re-check does NOT cover. _stop awaits stopNotifications, which closes
+      // both controllers; if _start runs meanwhile its `??=` sees non-null
+      // subscription fields and keeps the OLD ones, pointed at controllers
+      // that are about to close - so at_lookup reconnects and notifies into a
+      // stream nobody is listening to.
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      monitor.stop();
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 60));
+
+      muxable.deliver('notification: {"id":"after-restart"}');
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(received, ['notification: {"id":"after-restart"}'],
+          reason: 'a restarted monitor must still hear the atServer - the '
+              'failure here is silent, and looks exactly like an atServer '
+              'with nothing to say');
+      expect(monitor.currentState, NotificationListenerState.listening,
+          reason: 'and it must not report notConnected while at_lookup is '
+              'connected and notifying');
+    });
+
+    test('stop during start does not leave it listening', () async {
+      // The race the old implementation needed a done-completer for: stop()
+      // arriving while the connection is still being established. Here the
+      // ordering is the muxable's, but the observable requirement is the same
+      // - when the dust settles, nothing is listening.
+      monitor.start();
+      monitor.stop();
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(monitor.targetState, NotificationListenerState.notConnected);
+      expect(monitor.currentState, NotificationListenerState.notConnected);
+      expect(muxable.started, isFalse,
+          reason: 'a connection established after stop() was called must not '
+              'be left running');
     });
   });
 }

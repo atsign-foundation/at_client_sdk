@@ -98,16 +98,24 @@ Future<void> logout() async {
 
 Future<void> _setupAtClient(AuthResponse response) async {
   final dir = await getApplicationSupportDirectory();
-  final acp = AtClientPreference()
-    ..namespace = _namespace
-    ..commitLogPath = dir.path
-    ..hiveStoragePath = dir.path;
+  final acp = AtClientPreference()..namespace = _namespace;
+  // closedByClient: the app picks the backend and the location, and the client
+  // still closes the store when it stops, so there is nothing to tear down.
+  final storage = HiveAtClientStorage(
+    atSign: response.atSign,
+    storagePath: dir.path,
+    closedByClient: true,
+  );
 
   final session = response.session;
   if (session != null) {
     // Preferred path: hand over the session; the client rebuilds its own
     // connection from the session's key source.
-    await AtClientManager.getInstance().fromAuthSession(session, acp);
+    await AtClientManager.getInstance().fromAuthSession(
+      session,
+      acp,
+      storage: storage,
+    );
   } else {
     // Transitional fallback for flows that hand back only atAuthKeys with no
     // AtKeysIo source (e.g. APKAM enrollment): adopt auth's already-
@@ -119,6 +127,7 @@ Future<void> _setupAtClient(AuthResponse response) async {
       enrollmentId: response.enrollmentId,
       atChops: response.atChops,
       atLookUp: response.atLookUp,
+      storage: storage,
     );
   }
   _log.info('atClient ready for ${response.atSign}');

@@ -18,6 +18,7 @@ import 'sync_multiple_client_test.dart';
 import 'test_utils.dart';
 
 void main() {
+  TestUtils.isolateStorage('enrollment_test');
   late AtClientManager atClientManager;
   late String atSign;
   String namespace = 'wavi';
@@ -54,9 +55,20 @@ void main() {
         aliceApkamSymmetricKey, encryptionPublicKeyMap[atSign]!);
   });
 
-  tearDown(() {
+  tearDown(() async {
+    for (final c
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await c.stop();
+    }
+    for (final c
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await c.stop();
+    }
     AtClientManager.getInstance().reset();
     AtClientImpl.atClientInstanceMap.clear();
+    // Every client is stopped, and what comes next authenticates as a
+    // different enrollment of the same atSign on the same store.
+    await TestUtils.storage.allowPrincipalChange();
   });
 
   group('A group of tests for APKAM scenarios using at_auth', () {
@@ -67,7 +79,8 @@ void main() {
       final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
         ..appName = 'wavi'
         ..deviceName = 'pixel1'
-        ..rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)
+        ..rootDomain =
+            AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)
         ..atKeysIo =
             FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys');
       // onboard with enable enrollment set
@@ -83,14 +96,13 @@ void main() {
         apkamAtSign,
         atKeysIo:
             FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
-      )..rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort));
+      )..rootDomain =
+          AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort));
       expect(atAuthResponse.isSuccessful, true);
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
       // create atclient instance
       var atClientPreference = AtClientPreference()
-        ..commitLogPath = 'test/hive/commit/'
-        ..hiveStoragePath = 'test/hive/client'
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort;
 
@@ -103,7 +115,8 @@ void main() {
       final atClientManager = await AtClientManager(apkamAtSign)
           .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
               atChops: atAuth.atChops,
-              enrollmentId: atOnboardingResponse.enrollmentId);
+              enrollmentId: atOnboardingResponse.enrollmentId,
+              storage: TestUtils.storageFor(apkamAtSign));
       //var scanResult = await atClientManager.atClient.getKeys();
       var scanResult = await atClientManager.atClient
           .getRemoteSecondary()
@@ -189,10 +202,8 @@ void main() {
       // an atServer that keeps the credential in an enrollment of its own the
       // same write is a no-op: it already holds this value.
       expect(
-          await atClientManager.atClient
-              .getRemoteSecondary()!
-              .executeCommand(
-                  'update:privatekey:at_pkam_publickey $alicePkamPublicKey\n'),
+          await atClientManager.atClient.getRemoteSecondary()!.executeCommand(
+              'update:privatekey:at_pkam_publickey $alicePkamPublicKey\n'),
           'data:-1',
           reason: 'the owner credential must be the demo keypair again before '
               'anything else authenticates as this atSign');
@@ -252,7 +263,8 @@ void main() {
           otp: 'a1b2c3',
           signingAlgo: SigningAlgoType.rsa2048); //random invalid OTP
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      var newAtLookup =
+          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       expect(
           () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
           throwsA(predicate((dynamic e) =>
@@ -275,7 +287,8 @@ void main() {
           otp: otp,
           signingAlgo: SigningAlgoType.rsa2048);
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      var newAtLookup =
+          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       var enrollmentResponse =
           await atEnrollment.submit(enrollmentRequest, newAtLookup);
       expect(enrollmentResponse.enrollmentId, isNotEmpty);
@@ -415,8 +428,15 @@ void main() {
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
 
       // Set AtClient to null and authenticate with the new auth keys generated for enrollment
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
       // Get AtChops from the AtAuthKeys
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
@@ -442,7 +462,8 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
+      atAuthRequest.rootDomain =
+          AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -451,6 +472,7 @@ void main() {
       // to perform put operation.
       await AtClientManager.getInstance().setCurrentAtSign(
           atSign, namespace, TestUtils.getPreference(atSign),
+          storage: TestUtils.storageFor(atSign),
           atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
 
       // Insert key which has access to namespace authorized by enrollment.
@@ -514,8 +536,15 @@ void main() {
       expect(approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.denied);
 
       // Set AtClient to null and authenticate with the new auth keys generated for enrollment
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
       // Get AtChops from the AtAuthKeys
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
@@ -540,7 +569,8 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
+      atAuthRequest.rootDomain =
+          AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       expect(
           () async => await atAuth.authenticate(atAuthRequest),
@@ -614,8 +644,15 @@ void main() {
       expect(putBuzzKeyResponse.response, isNotEmpty);
 
       // Set AtClient to null and authenticate with the new auth keys generated for enrollment
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
       // Get AtChops from the AtAuthKeys
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
@@ -638,7 +675,8 @@ void main() {
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
       atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
           AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
+      atAuthRequest.rootDomain =
+          AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
@@ -647,6 +685,7 @@ void main() {
       // to perform put operation.
       await AtClientManager.getInstance().setCurrentAtSign(
           atSign, namespace, TestUtils.getPreference(atSign),
+          storage: TestUtils.storageFor(atSign),
           atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
 
       // Insert key which has access to namespace authorized by enrollment.
@@ -692,7 +731,8 @@ void main() {
         () async {
       String random = Uuid().v4().hashCode.toString();
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
-      AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      AtLookUp atLookUp =
+          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtClientManager atClientManager =
           await TestUtils.initAtClient(atSign, namespace);
@@ -728,7 +768,7 @@ void main() {
             deviceName: 'device-$random',
             otp: (await atClientManager.atClient.getOTP()).response,
             namespaces: {'wavi': 'rw'},
-          signingAlgo: SigningAlgoType.rsa2048),
+            signingAlgo: SigningAlgoType.rsa2048),
         atLookUp,
       );
 
@@ -791,6 +831,7 @@ void main() {
 
       final ownerManager = await AtClientManager.getInstance().setCurrentAtSign(
           cramAtSign, namespace, TestUtils.getPreference(cramAtSign),
+          storage: TestUtils.storageFor(cramAtSign),
           atChops: ownerAuth.atChops,
           enrollmentId: onboardResponse.enrollmentId);
       final ownerClient = ownerManager.atClient;
@@ -817,8 +858,8 @@ void main() {
       // generates a fresh APKAM keypair and wraps its apkamSymmetricKey with
       // the atSign's default encryption public key.
       final random = Uuid().v4().hashCode;
-      final enrolleeLookup =
-          AtLookupImpl(cramAtSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      final enrolleeLookup = AtLookupImpl(
+          cramAtSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       final enrollResponse = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
           atSign: cramAtSign,
@@ -852,8 +893,15 @@ void main() {
       // (e) Verify outcomes: the enrollee authenticates with its own APKAM
       // keypair plus the atSign's default encryption/self keys, then can act in
       // its granted namespace (buzz) but not in an ungranted one (wavi).
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
       final enrolleeChopsKeys = AtChopsKeys.create(
           AtEncryptionKeyPair.create(encryptionKeyPair.atPublicKey.publicKey,
@@ -880,6 +928,7 @@ void main() {
 
       await AtClientManager.getInstance().setCurrentAtSign(
           cramAtSign, 'buzz', TestUtils.getPreference(cramAtSign),
+          storage: TestUtils.storageFor(cramAtSign),
           atChops: enrolleeChops, enrollmentId: enrollResponse.enrollmentId);
       final enrolleeClient = AtClientManager.getInstance().atClient;
 
@@ -903,10 +952,10 @@ void main() {
   });
 }
 
+/// Only ever handed to a [RemoteSecondary], which opens no local store, so
+/// this carries no storage path.
 AtClientPreference getClient2Preferences() {
   return AtClientPreference()
-    ..commitLogPath = 'test/hive/client_2/commit'
-    ..hiveStoragePath = 'test/hive/client_2'
     ..rootDomain = 'vip.ve.atsign.zone'
     ..rootPort = TestUtils.rootServerPort;
 }
