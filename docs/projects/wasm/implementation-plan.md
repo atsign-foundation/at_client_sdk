@@ -384,8 +384,12 @@ D-12. Independent of the P series, which is `at_server`-side.
   in-memory storages whose hashes collided would be refused as one store. Negligible at the
   handful per test process this pack opens; wrong in principle.
   Depends on X3.
-- **X6 — Consumers.** ✅ **Built 2026-09-06** on `gkc-x6-consumers`, stacked on
-  [#2210](https://github.com/atsign-foundation/at_client_sdk/pull/2210). **Ruled: they move
+- **X6 — Consumers.** ✅ **Built 2026-09-06** on `gkc-x6-consumers` as
+  [#2211](https://github.com/atsign-foundation/at_client_sdk/pull/2211), which **targets trunk
+  directly** — it was stacked on [#2210](https://github.com/atsign-foundation/at_client_sdk/pull/2210)
+  until that merged and was retargeted. ⚠️ This row said "stacked" until 2026-09-07, and that
+  word carries a consequence: a stacked PR gets no real CI, so it would have a reader discount
+  #2211's checks. They are real. **Ruled: they move
   in THIS major** (gkc, 2026-09-06), and `AtClient.create` has nothing to do with
   `AtClientManager` — future apps, once the manager is gone, manage their clients'
   lifecycles explicitly, so the job now is to make that *possible* while apps using the
@@ -417,10 +421,12 @@ D-12. Independent of the P series, which is `at_server`-side.
   per-service builder callbacks instead, which covers the only override anyone uses.
   ⚠️ **Owed.** `at_onboarding_cli` and `at_cli_commons` still set `hiveStoragePath` as their
   default (eleven analyzer infos); moving them onto client-closed bundles changes when the
-  client's store closes, so it wants all three live packs rather than riding in on unit
+  client's store closes, so it wants the live packs rather than riding in on unit
   green. Eleven example apps in the other widget packages still set `commitLogPath`, each
   needing its own version decision. **X6 itself changes storage ownership semantics, so the
-  three live packs are owed before its PR is ready.**
+  live packs are owed before its PR is ready — all FOUR of them, not three. The fourth is
+  the onboarding-CLI **proxy** pack, which cannot run on this Mac at all (see the X6 review
+  notes below), so on this machine "all four" means three run plus one delegated to CI.**
   Depends on X4.
 
   **Adversarial review of [#2211](https://github.com/atsign-foundation/at_client_sdk/pull/2211),
@@ -505,6 +511,31 @@ D-12. Independent of the P series, which is `at_server`-side.
     `deprecated_member_use` from at_chops/at_auth plus 3 `unnecessary_import` this PR did
     add; those three are removed. `--fatal-infos` is not a CI gate — CI runs bare
     `dart analyze` and `flutter analyze --no-fatal-infos`.
+  **Raised while building X6, tracked nowhere else:**
+  - **The monitor connection advertises nothing.** `RemoteSecondary` passes
+    `clientConfig: _getClientConfig()` — version, clientId, appName, appVersion, platform —
+    and `NotificationServiceImpl` passes none, so that parameter takes its `const {}`
+    default. `AtClientConfig.atClientVersion` therefore reaches the atServer over the verb
+    connection only. Whether that is deliberate is unknown: the socket-owning Monitor built
+    its own connection, so there was nothing to inherit. Worth settling if the atServer logs
+    or branches on client version per connection.
+  - **`Monitor` is arguably no longer required.** It is not exported from at_client's barrel,
+    has exactly one consumer, and that consumer uses five members — `currentState`,
+    `targetState`, `currentStateStream`, `start()`, `stop()`. What is left in it is
+    `NotificationServiceImpl`'s own concern, and `Monitor.lastReceipt` is already dead:
+    written once, read only by a test, while the public `NotificationService.lastReceipt` is
+    served by a second copy. A fold-in would move the watchdog and the retry with it. Not
+    started; it is a second structural change and X6 was already large.
+  - **`buildRemoteSecondary` is not the only construction site.** `SyncServiceImpl.create`
+    builds a `RemoteSecondary` directly rather than through it — functionally equivalent, it
+    omits `privateKey` which the constructor recovers from the preference. #2211's own
+    description calls `buildRemoteSecondary` "the one place a connection is built", which
+    overstates it. Either route sync through it or correct the sentence.
+  **Considered and rejected (gkc, 2026-09-06):** a rail asserting
+  `AtClientConfig.atClientVersion` matches `pubspec.yaml`. Its dartdoc says the two "must
+  always be the same" and nothing enforces it, and the value is sent to the atServer — but
+  the bump is a deliberate, infrequent act and the twin stays manual. Do not re-propose
+  without new evidence of drift.
   ⚠️ **Merge-back note for the spike:** three sites now read `preference.signingAlgoType`
   directly (`sync_service_impl.dart`, `notification_service_impl.dart`, `remote_secondary.dart`)
   where the spike calls `signingAlgoOf(atClient)`. They must go back to `signingAlgoOf` when PQ
@@ -529,8 +560,13 @@ measurement is against `d13516d95`, after them.
 **Found 2026-09-05 by the wrap-up's cold read and done the same day:** the X3 merge-back
 had been skipped. It landed as `51bdb6230`; `at_sync_queue.dart` kept trunk's `SyncQueueStore`
 abstraction and the spike's `HiveInstances.forPath(path)` default together, and the queue's
-`storagePath` became optional so trunk's SQLite storage compiles on the spike. Also owed: nine dangling links to a `plans/wasm/`
-directory that does not exist (`implementation-plan.md`, `js-api.md`, `decisions.md`).
+`storagePath` became optional so trunk's SQLite storage compiles on the spike. Also owed:
+references to a `plans/wasm/` directory that does not exist. ⚠️ **Recorded as "nine dangling
+links" until 2026-09-07, and both halves of that were wrong** (corrected on the spike
+2026-09-06, and this copy had not caught up): it is ten lines, one of which names two files,
+and only **two** of the ten are markdown links — in `implementation-plan.md`'s T-series rows.
+The other eight are prose references that no link checker sees: `decisions.md` ×3,
+`js-api.md` ×5.
 
 **Deferred to the major:** deprecating `AtClientManager`. Its `AtSignChangeListener`
 capability exists only because there is a global current atSign, and where that goes is
