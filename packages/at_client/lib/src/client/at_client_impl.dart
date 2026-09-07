@@ -339,7 +339,7 @@ class AtClientImpl implements AtClient {
   @override
   SyncService get syncService {
     if (_syncService == null) {
-      _logger.info('AtClient ($_atSign) isStopped: $isStopped');
+      _logger.finer('AtClient ($_atSign) isStopped: $isStopped');
       throw StateError('SyncService has not yet been set');
     }
     return _syncService!;
@@ -359,7 +359,7 @@ class AtClientImpl implements AtClient {
   @override
   NotificationService get notificationService {
     if (_notificationService == null) {
-      _logger.info('AtClient ($_atSign) isStopped: $isStopped');
+      _logger.finer('AtClient ($_atSign) isStopped: $isStopped');
       throw StateError('notificationService has not yet been set');
     }
     return _notificationService!;
@@ -371,7 +371,7 @@ class AtClientImpl implements AtClient {
   set enrollmentService(EnrollmentService? enrollmentService) {
     _enrollmentService = enrollmentService;
     if (enrollmentService != null) {
-      _logger.info('AtClient ($_atSign) isStopped: $isStopped');
+      _logger.finer('AtClient ($_atSign) isStopped: $isStopped');
       _finalizer.attach(enrollmentService, 'EnrollmentService for $_atSign');
     }
   }
@@ -1098,7 +1098,7 @@ class AtClientImpl implements AtClient {
       }
       return;
     }
-    _logger.shout(
+    _logger.info(
         'disallowLegacyEncryption is false, so this client may still encrypt '
         'new data with the legacy (RSA/AES) provider — harvestable now, '
         'openable by a quantum computer later. It becomes the default in '

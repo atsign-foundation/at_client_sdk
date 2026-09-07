@@ -246,7 +246,7 @@ class SyncServiceImpl implements SyncService {
     _statsNotificationSubscription = _atClient.notificationService
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
-      _logger.info('RCVD: stats notification in sync: ${notification.value}');
+      _logger.finer('RCVD: stats notification in sync: ${notification.value}');
       final raw = notification.value;
       if (raw == null) return;
       final int observedServerCommitId;
@@ -324,7 +324,7 @@ class SyncServiceImpl implements SyncService {
         return;
       }
       if (inSync) {
-        _logger.info('server and local are in sync - ${syncRequest.id}');
+        _logger.finer('server and local are in sync - ${syncRequest.id}');
         syncRequest.result!
           ..syncStatus = SyncStatus.success
           ..lastSyncedOn = DateTime.now().toUtc()
@@ -346,6 +346,7 @@ class SyncServiceImpl implements SyncService {
       final syncResult = await syncInternal(serverCommitId, syncRequest,
           localCommitIdBeforeSync: localCommitIdBeforeSync);
 
+      _logRoundSummary(syncRequest, syncResult);
       _syncComplete(syncRequest);
       serverCommitId = await _getServerCommitId();
       final localCommitId = await _getLocalCommitId();
@@ -479,9 +480,31 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
+  /// One `info` line per round that moved data; the per-entry lines are `finer`.
+  void _logRoundSummary(SyncRequest syncRequest, SyncResult syncResult) {
+    final keys = syncResult.keyInfoList;
+    if (keys.isEmpty) return;
+    var pulledUpdates = 0, pulledDeletes = 0, conflicts = 0, pushed = 0;
+    for (final k in keys) {
+      if (k.syncDirection == SyncDirection.localToRemote) {
+        pushed++;
+      } else if (k.conflictInfo != null) {
+        conflicts++;
+      } else if (k.commitOp == CommitOp.DELETE) {
+        pulledDeletes++;
+      } else {
+        pulledUpdates++;
+      }
+    }
+    _logger.info('sync round ${syncRequest.id} '
+        '(${syncRequest.requestSource.name}): pulled $pulledUpdates update(s) '
+        'and $pulledDeletes delete(s), $conflicts conflict(s) skipped, '
+        'pushed $pushed; server commit id $_latestKnownServerCommitId');
+  }
+
   void _syncComplete(SyncRequest syncRequest) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
-    _logger.info(
+    _logger.finer(
         'Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource}; syncRequest.onDone : ${syncRequest.onDone}');
     // If specific onDone callback is set, call specific onDone callback,
     // else call the global onDone callback.
@@ -971,7 +994,7 @@ class SyncServiceImpl implements SyncService {
           _promoteServerCommitId(lastReceivedServerCommitId);
           break;
         }
-        _logger.info('Received ${listOfCommitEntriesFromServer.length}'
+        _logger.finer('Received ${listOfCommitEntriesFromServer.length}'
             ' from server');
         // Iterates over each commit entry. If the serverCommitEntry's
         // atKey is in the [pendingPushAtKeys] set we have a local
@@ -1284,7 +1307,7 @@ class SyncServiceImpl implements SyncService {
     var serverCommitId = await _getServerCommitId(forceFresh: true);
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     final pendingPushCount = await _atClient.getLocalSecondary()!.syncQueueSize;
-    _logger.info('server commit id: $serverCommitId '
+    _logger.finer('server commit id: $serverCommitId '
         'lastReceivedServerCommitId: $lastReceivedServerCommitId '
         'pending push count: $pendingPushCount');
     // We're "in sync" iff the client→server queue is empty AND the
@@ -1340,7 +1363,7 @@ class SyncServiceImpl implements SyncService {
     // If server commit id is null, set to -1;
     fresh ??= -1;
     _promoteServerCommitId(fresh);
-    _logger.info(
+    _logger.finer(
         'Returning serverCommitId $fresh ${forceFresh ? "(forced fresh)" : "(cold fetch)"}');
     return fresh;
   }
@@ -1416,7 +1439,8 @@ class SyncServiceImpl implements SyncService {
       case '+':
       case '#':
       case '*':
-        _logger.info('Pulling to local: UPDATE: ${serverCommitEntry['atKey']}');
+        _logger
+            .finer('Pulling to local: UPDATE: ${serverCommitEntry['atKey']}');
         var builder = UpdateVerbBuilder()
           ..atKey = AtKey.fromString(serverCommitEntry['atKey'])
           ..value = serverCommitEntry['value'];
@@ -1425,7 +1449,8 @@ class SyncServiceImpl implements SyncService {
         await _pullToLocal(builder);
         break;
       case '-':
-        _logger.info('Pulling to local: DELETE: ${serverCommitEntry['atKey']}');
+        _logger
+            .finer('Pulling to local: DELETE: ${serverCommitEntry['atKey']}');
         var builder = DeleteVerbBuilder()
           ..atKey = AtKey.fromString(serverCommitEntry['atKey']);
         await _pullToLocal(builder);

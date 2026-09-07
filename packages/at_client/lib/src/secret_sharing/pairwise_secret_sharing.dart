@@ -340,7 +340,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         ..shouldEncrypt = false
         ..useRemoteAtServer = true,
     );
-    logger.info('Stored secret envelope $atKey for kpid ${recipientKey.kid}');
+    logger.finer('Stored secret envelope $atKey for kpid ${recipientKey.kid}');
 
     if (sendWakeUpNotification) {
       await _sendWakeUp(atKey, appNamespace);

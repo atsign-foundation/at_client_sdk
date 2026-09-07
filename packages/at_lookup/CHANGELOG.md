@@ -1,3 +1,8 @@
+## 3.7.0-rc2
+
+- fix: opening and closing a connection, and sending the monitor command, are
+  logged at `finer` rather than `info`
+
 ## 3.7.0-rc1
 
 - feat: `AtLookupMuxable.notificationConnectionUp` — `true` when `monitor:` is

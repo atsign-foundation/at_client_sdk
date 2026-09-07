@@ -547,7 +547,7 @@ class NotificationServiceImpl extends NotificationService {
         if (n.key == myStatsNotifKey) {
           logger.finer('Received ${n.key} (serverCommitId) ${n.value}');
         } else {
-          logger.info('Received ${n.key}');
+          logger.finer('Received ${n.key}');
         }
         // Saves latest notification id to the keys if its not a stats notification.
         if (n.id != '-1') {
@@ -1084,7 +1084,7 @@ class NotificationServiceImpl extends NotificationService {
       logger.info('startListening() called, but already targeting listening');
       return;
     }
-    logger.info('startListening(): starting notification listener');
+    logger.finer('startListening(): starting notification listener');
     monitor.start();
   }
 

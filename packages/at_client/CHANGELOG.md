@@ -1,5 +1,14 @@
 ## 3.15.0-rc1
 
+- fix: sync logs one `info` line per round that moved data — entries pulled,
+  deletes, conflicts skipped, entries pushed, and the server commit id — and
+  its per-entry lines, the stats-notification receipt, the commit-id checks,
+  each notification received, each secret envelope stored, and the client
+  lifecycle getters are `finer`. The legacy-encryption posture announcement is
+  `info`, not `shout`, and the `primary` fallback in `ApkamSigning` is `finer`,
+  not a warning on every access. A functional-pack run's log at `info` is a
+  tenth of its former length.
+
 - feat: a client built with an `AtKeysIo` runs as the enrollment its keys
   authenticate as (`AtKeys.enrollmentToAuthenticateAs`, at_auth 4.0.0-rc2):
   the one enrollment holding active typed authentication material, else the

@@ -133,7 +133,7 @@ class AtClientManager {
       bool principalChange = false}) async {
     serviceFactory ??= DefaultAtServiceFactory();
 
-    _logger.info("setCurrentAtSign called with atSign $atSign");
+    _logger.finer("setCurrentAtSign called with atSign $atSign");
     AtUtils.fixAtSign(atSign);
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort);
@@ -266,7 +266,7 @@ class AtClientManager {
       _notifyListeners(switchAtSignEvent);
     }
 
-    _logger.info("setCurrentAtSign complete");
+    _logger.finer("setCurrentAtSign complete");
 
     return this;
   }

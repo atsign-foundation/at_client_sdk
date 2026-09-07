@@ -65,7 +65,7 @@ mixin ApkamSigning {
   String get enrollmentId {
     final id = atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
     if (id == null) {
-      logger.warning('No enrollment id; using '
+      logger.finer('No enrollment id; using '
           '"${EnrollmentConstants.primaryEnrollmentId}"');
     }
     return id ?? EnrollmentConstants.primaryEnrollmentId;
@@ -111,7 +111,7 @@ mixin ApkamSigning {
 
     String? published;
     try {
-      logger.info('publishPublicSigningKey: checking $publicSigningKeyUri');
+      logger.finer('publishPublicSigningKey: checking $publicSigningKeyUri');
       final current = await atClient.get(
         AtKey.fromString(publicSigningKeyUri),
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
@@ -122,7 +122,7 @@ mixin ApkamSigning {
     }
 
     if (published == value) {
-      logger.info('publishPublicSigningKey: have already published');
+      logger.finer('publishPublicSigningKey: have already published');
       return;
     }
     if (published != null) {
