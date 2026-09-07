@@ -334,6 +334,7 @@ class AtClientImpl implements AtClient {
     if (cache != null) {
       syncService.addProgressListener(ContentKeyEviction(cache));
     }
+    _pqBootstrap?.sharing.attachToServices();
   }
 
   @override
@@ -354,6 +355,7 @@ class AtClientImpl implements AtClient {
       _notificationService!,
       'NotificationService for $_atSign',
     );
+    _pqBootstrap?.sharing.attachToServices();
   }
 
   @override

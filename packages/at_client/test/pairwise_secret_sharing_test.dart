@@ -821,6 +821,89 @@ void main() {
     });
 
     test(
+        'a listener started before the services are set attaches to them '
+        'when they arrive, and delivers', () async {
+      final syncService = MockSyncService();
+      SyncProgressListener? registeredListener;
+      when(() => syncService.addProgressListener(any())).thenAnswer((inv) {
+        registeredListener = inv.positionalArguments[0];
+      });
+      when(() => syncService.removeProgressListener(any())).thenAnswer((_) {});
+
+      final listeningB =
+          buildSharer('enroll-b', seedB, syncService: syncService);
+      await listeningB.register();
+      final client = listeningB.atClient as MockAtClient;
+      final notifications = client.notificationService;
+      // AtClientImpl's getters throw until AtClientManager sets the services,
+      // which it does after the client, and the PQ startup the client
+      // launches, already exist.
+      when(() => client.syncService)
+          .thenThrow(StateError('SyncService has not yet been set'));
+      when(() => client.notificationService)
+          .thenThrow(StateError('notificationService has not yet been set'));
+
+      final received = <ReceivedEnvelope>[];
+      final sub = listeningB.receivedEnvelopes.listen(received.add);
+      await listeningB.startListening();
+      expect(registeredListener, isNull,
+          reason: 'there was nothing to attach to yet; the start must still '
+              'have succeeded rather than thrown');
+
+      when(() => client.syncService).thenReturn(syncService);
+      when(() => client.notificationService).thenReturn(notifications);
+      listeningB.attachToServices();
+      listeningB.attachToServices();
+      expect(registeredListener, isNotNull,
+          reason: 'the listener must attach to the sync service once it is '
+              'set, or an envelope delivered by sync is never noticed');
+      verify(() => syncService.addProgressListener(any())).called(1);
+      verify(() => notifications.subscribe(
+          regex: any(named: 'regex'),
+          shouldDecrypt: any(named: 'shouldDecrypt'))).called(1);
+
+      await sharerA.sendEnvelope(listeningB.myKeyPackage, 'myapp', {'x': 1});
+      final envelopeKeyString =
+          remoteData.keys.firstWhere((k) => k.contains('.__ssenv.'));
+      registeredListener!.onSyncProgressEvent(SyncProgress()
+        ..keyInfoList = [
+          KeyInfo(
+              envelopeKeyString, SyncDirection.remoteToLocal, CommitOp.UPDATE)
+        ]);
+      await Future.delayed(Duration(milliseconds: 50));
+      expect(received, hasLength(1),
+          reason: 'a listener attached after start must deliver exactly as '
+              'one attached at start does');
+
+      listeningB.stopListening();
+      verify(() => syncService.removeProgressListener(any())).called(1);
+      await sub.cancel();
+    });
+
+    test(
+        'a client holding no key package starts no listener and throws '
+        'nothing, however the services arrive', () async {
+      final syncService = MockSyncService();
+      when(() => syncService.addProgressListener(any())).thenAnswer((_) {});
+      final unregistered =
+          buildSharer('enroll-c', seedB, syncService: syncService);
+      final client = unregistered.atClient as MockAtClient;
+      final notifications = client.notificationService;
+      expect(unregistered.heldKpids, isEmpty,
+          reason: 'the control: a sharer that never registered holds no '
+              'address, so what follows is about the empty case');
+
+      await unregistered.startListening();
+      unregistered.attachToServices();
+
+      verifyNever(() => syncService.addProgressListener(any()));
+      verifyNever(() => notifications.subscribe(
+          regex: any(named: 'regex'),
+          shouldDecrypt: any(named: 'shouldDecrypt')));
+      unregistered.stopListening();
+    });
+
+    test(
         'a sync-less client receives an envelope via a wake-up notification '
         'and a remote sweep', () async {
       // sharerB's sync delivers nothing here (its progress listener is a

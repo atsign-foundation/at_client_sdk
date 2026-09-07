@@ -1,5 +1,13 @@
 ## 3.15.0-rc1
 
+- fix: the envelope listener attaches to the client's sync and notification
+  services whenever `AtClientManager` sets them, instead of failing when the
+  PQ startup reached it first; a client holding no key package now says at
+  `finer` that it has nothing to listen for instead of warning. The warning
+  had fired for 83 of the functional pack's 148 clients, and the ones that
+  did hold a key package were left unable to answer another enrollment's
+  secret request or to notice an envelope arriving after start.
+
 - fix: sync logs one `info` line per round that moved data — entries pulled,
   deletes, conflicts skipped, entries pushed, and the server commit id — and
   its per-entry lines, the stats-notification receipt, the commit-id checks,

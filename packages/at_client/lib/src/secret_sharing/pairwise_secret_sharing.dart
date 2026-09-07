@@ -152,6 +152,10 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   SyncService? _listeningTo;
   StreamSubscription<AtNotification>? _wakeUpSubscription;
 
+  /// The addresses [startListening] took, so a service that arrives later is
+  /// attached for the same ones.
+  Set<String>? _listeningFor;
+
   /// Envelope keys already emitted on [receivedEnvelopes], so a sweep that
   /// races a slow delete cannot emit a payload twice.
   final Set<String> _consumedEnvelopeKeys = {};
@@ -392,6 +396,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     // rotation addresses the superseded key, and its envelope is openable but
     // only if it is looked for.
     final Set<String> addresses = heldKpids;
+    if (addresses.isEmpty) {
+      logger.finer('Not listening for envelopes: this client holds no key '
+          'package, so nothing can be addressed to it');
+      return;
+    }
     final List<String> markers = [
       for (final held in addresses) EnvelopeAddressing.fragmentFor(held)
     ];
@@ -399,16 +408,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     _syncListener = _EnvelopeSyncListener(markers, () {
       _sweepInBackground();
     });
-    _listeningTo = atClient.syncService;
-    _listeningTo!.addProgressListener(_syncListener!);
-    // A wake-up notification only nudges us; the envelope itself is fetched
-    // from the atServer (a sync-less client has no local copy), so the sweep
-    // it triggers reads remote.
-    _wakeUpSubscription = atClient.notificationService
-        .subscribe(
-            regex: EnvelopeAddressing.regexForAny(addresses),
-            shouldDecrypt: false)
-        .listen((_) => _sweepInBackground(fromRemote: true));
+    _listeningFor = addresses;
+    attachToServices();
     // Envelopes only reach the local store via sync, so a client that does
     // not sync must sweep the atServer or its periodic sweep can never find
     // anything — leaving a missed wake-up as an unrecoverable loss of a
@@ -434,6 +435,61 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
     unawaited(_wakeUpSubscription?.cancel());
     _wakeUpSubscription = null;
+    _listeningFor = null;
+  }
+
+  /// Hooks the running listener onto whichever of the client's sync and
+  /// notification services are set, once each, so a service set after
+  /// [startListening] is attached too; a no-op before it and after
+  /// [stopListening].
+  void attachToServices() {
+    final listener = _syncListener;
+    final addresses = _listeningFor;
+    if (listener == null || addresses == null) return;
+    // Best effort, because this runs inside the client's service setters and a
+    // client must come up whether or not its envelope listener did.
+    if (_listeningTo == null) {
+      try {
+        final sync = _serviceIfSet(() => atClient.syncService);
+        if (sync != null) {
+          _listeningTo = sync;
+          sync.addProgressListener(listener);
+        }
+      } catch (e) {
+        logger.warning('Could not attach the envelope listener to sync for '
+            '${atClient.getCurrentAtSign()}; envelopes delivered by sync will '
+            'wait for the next periodic sweep: $e');
+      }
+    }
+    if (_wakeUpSubscription == null) {
+      try {
+        final notifications = _serviceIfSet(() => atClient.notificationService);
+        if (notifications != null) {
+          // A wake-up notification only nudges us; the envelope itself is
+          // fetched from the atServer (a sync-less client has no local copy),
+          // so the sweep it triggers reads remote.
+          _wakeUpSubscription = notifications
+              .subscribe(
+                  regex: EnvelopeAddressing.regexForAny(addresses),
+                  shouldDecrypt: false)
+              .listen((_) => _sweepInBackground(fromRemote: true));
+        }
+      } catch (e) {
+        logger.warning('Could not subscribe to envelope wake-ups for '
+            '${atClient.getCurrentAtSign()}; envelopes will wait for sync or '
+            'the next periodic sweep: $e');
+      }
+    }
+  }
+
+  /// A service getter throws [StateError] until the manager sets it and again
+  /// once the client is stopped; both read as absent here.
+  T? _serviceIfSet<T>(T Function() read) {
+    try {
+      return read();
+    } on StateError {
+      return null;
+    }
   }
 
   /// [sweepOnce] for the three callers that cannot await it — the sync-progress
