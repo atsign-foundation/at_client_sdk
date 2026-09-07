@@ -279,8 +279,12 @@ that capability exists only to announce that a global current atSign changed.
 
 **Surface (ruled 2026-09-05).** The owner of a claim is the client object, compared by
 identity — not the instance key, which for a legacy client is the bare atSign and so cannot
-tell two legacy clients of one atSign apart. Owned storage is closed on release; injected
-storage is only detached, the client knowing which it has. After detach, only the same
+tell two legacy clients of one atSign apart. Whether a release closes the storage is the
+bundle's own `closedByClient` — false by default, true for the store a client builds for
+itself (X6 put the flag on the bundle on 2026-09-06; the fix-forward of 2026-09-07 made the
+client-built store such a bundle too, and this read "owned storage is closed on release;
+injected storage is only detached, the client knowing which it has" until then). After
+detach, only the same
 principal may re-attach until `clear()` runs — the bundle remembers who held it last, so a
 different enrollment cannot inherit records it cannot decrypt and pushes it cannot make.
 A deliberate hand-over is `forgetPrincipal()`, which lifts the last-holder guard while keeping
@@ -407,8 +411,12 @@ mirroring the reality that they are separate processes with separate managers.
 
 **6 — Lifecycle.** A location is registered when its backend opens and released only when it
 closes — never on detach, since a detached-but-open backend still occupies the location.
-**Owned** storage closes on `stop()` (X4). **Injected** storage is only detached; the
-*caller* owns the close (D-12), so it can hand one store to successive clients. A shared
+Storage closes on `stop()` when its bundle says so — `closedByClient`, true for the store a
+client builds itself and false by default for one handed in (X4 ruled this by origin, owned
+against injected; X6 moved it onto the bundle; the fix-forward of 2026-09-07 finished the
+move). A borrowed bundle is only detached, so the *caller* owns the close (D-12) and can hand
+one store to successive clients; a principal change hands a bundle over open whichever it
+is, the incoming client closing it. A shared
 **test helper** owns the whole per-enrollment lifecycle — it builds the located storage and
 the client, tracks both, and in `tearDown` stops every client and closes every storage — so a
 forgotten cleanup cannot leave a location registered and trip the next test's guard.

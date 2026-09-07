@@ -721,19 +721,14 @@ shortlist by cross-reads is `tests/at_end2end_test/test/pq/nskey_multi_enrollmen
 (2 builds / 11 get-put, and the name is the shape), `at_client_lifecycle_functional_test.dart`,
 `pq_posture_grid_test.dart` and the unit `enrollment_service_test.dart`.
 
-⚠️ **Owed after the merge, none of it started:**
+⚠️ **Owed after the merge** (the post-merge fix-forward section below holds the detail):
 - **The e2e and onboarding-CLI packs have NOT been run** against this merge. A storage /
   lifecycle change wants all four; one has run. The e2e pack is the higher risk of the two.
-- **Six functional failures remain**, classified: two `enrollment_test` store-split
-  consequences (an enrolled client with its own store lacks the owner's self key and records),
-  one principal collision in `pq_advance_ladder_test`, and three in
-  `self_enrollment_retrofit_live_test` — two `AT0027 revoked`, one `connection went away` —
-  that are UNATTRIBUTED. Attributing those three needs a pre-merge baseline run against
-  `gkc-pq-d1-spike-backup-premergeback-20260907`, which has not been done; do not guess at
-  them from the story.
-- **The ladder test's state 2 does not pass.** Starting the envelope listener on both installs
-  by hand did not make the holder answer within 60s, so `waitForSecret` still times out. The
-  three states are written and state 1 passes; what state 2 needs is unknown.
+- ✅ Of the six functional failures, three are fixed (`enrollment_test`,
+  `pq_advance_ladder_test`, `nskey_rollout_ladder_live_test`), and the three in
+  `self_enrollment_retrofit_live_test` are attributed by a two-arm differential to
+  at_server #2797's revocation — a P1 row of the PQ table — and not to the merge.
+- ✅ The ladder test's state 2 passes: the holder was listening but unprimed.
 
 **Found 2026-09-05 by the wrap-up's cold read and done the same day:** the X3 merge-back
 had been skipped. It landed as `51bdb6230`; `at_sync_queue.dart` kept trunk's `SyncQueueStore`
@@ -748,29 +743,30 @@ The other eight are prose references that no link checker sees: `decisions.md` �
 
 ### Post-merge fix-forward — the analysis, so none of it is re-derived
 
-⛔ **THREE DEFECTS IN `principalChange`, ALL INTRODUCED BY THE MERGE COMMIT ITSELF** and all
-found by the wrap-up's cold read on 2026-09-07, after `9c84011df` had landed. It has **one
-caller and zero tests**: `grep -rn principalChange packages/ tests/ --include='*.dart'` returns
-the declaration and `self_retrofit.dart` only.
+✅ **The three defects in `principalChange` are FIXED (2026-09-07)**, each pinned by
+`packages/at_client/test/at_client_manager_principal_change_test.dart`, which builds the
+default shape — an outgoing client owning a store it built from `hiveStoragePath` — and was
+red on every case before the fix, and red again under each of two break-it mutations. All
+three were introduced by the merge commit `9c84011df` itself and found by the wrap-up's cold
+read the same day; `principalChange` had one caller (`self_retrofit.dart`) and no test. What
+each was, and what it is now:
 
-1. ⛔ **`stop()` CLOSES the store `principalChange` is about to carry.** `_releaseStorage`
-   does `if (_ownsStorage) await storage.close()` (`at_client_impl.dart:1246`), `_ownsStorage`
-   is `true` whenever the client built its own store from the preference (`:882`), and
-   `attach()` throws `'this storage has been closed and cannot be reopened'`
-   (`at_client_storage.dart:87`). So the carry works **only** when the outgoing client held a
-   BORROWED bundle. The default path — `selfRetrofit` with no `storage:` — is the one that
-   fails, which is exactly the "exercise the DEFAULT construction, not your caller's" rule.
-2. ⛔ **`principalChange` is dropped by `setCurrentAtSign`'s idempotency short-circuit.** The
-   guard tests `atChops/atKeysIo/atLookUp/enrollmentId` and `_storageIsUnchanged`;
-   `principalChange` is not among them, so a same-atSign call with it set returns the running
-   client, never calls `forgetPrincipal`, and reports success. Masked today only because
-   `fromAuthSession` always passes `session.enrollmentId` — which is nullable.
-3. ⚠️ **`selfRetrofit`'s own dartdoc recommends the shape that breaks it.** It tells callers to
-   pass `AtClientManager(atSign)` to keep the legacy client live alongside. A fresh manager has
-   no current client, so nothing is carried, and the retrofitted client builds a NEW store at
-   the location the still-live legacy client holds — refused by the per-location guard. That
-   also contradicts this plan's own succession-vs-coexistence ruling: the dartdoc is offering
-   coexistence over one store.
+1. `stop()` closed the store the switch was about to carry: `_ownsStorage` was true for a
+   client-built store, `_releaseStorage` closed it, and `attach()` refused it as closed — so
+   the carry worked only for a BORROWED bundle, and the default path failed. Now
+   `AtClientImpl.stopHandingOverStorage()` stops the client and returns its store open
+   whatever `closedByClient` says, and `setCurrentAtSign` uses it whenever the caller named no
+   bundle or named the one the outgoing client holds; the incoming client closes it. The
+   `_ownsStorage` field is gone: the store a client builds for itself is now a
+   `closedByClient: true` bundle, so which client closes a store is the bundle's say in every
+   case — the completion of X6's ruling.
+2. The same-atSign short-circuit ignored the flag: `!principalChange` is now among its
+   conditions, so a principal change always takes the switch.
+3. `selfRetrofit`'s dartdoc recommended a dedicated `AtClientManager(atSign)` "to keep the
+   legacy client live alongside"; a fresh manager has no client to hand over, so that shape
+   built a second store at the location the legacy client held and was refused. It now says
+   what a dedicated manager does — carries nothing, so the retrofitted client needs a
+   `storage` of its own.
 
 ⚠️ **Two loose ends from the merge session, recorded 2026-09-07 so they are not lost:**
 - **[#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) is OPEN on trunk**
@@ -787,8 +783,6 @@ the declaration and `self_retrofit.dart` only.
   fixes, X4a item 3 and the fixture reconciliation together; the message names the layers
   since git cannot.
 
-**Start here.** Any fix needs a test that builds the DEFAULT shape — an outgoing client owning
-its own store — since that is the untested path all three live on.
 
 
 Everything below was measured on 2026-09-07 against merge commit `9c84011df`. Re-run the
@@ -811,19 +805,43 @@ synced 229 → 1381, because far more tests now reach the point of writing anyth
 passing); and pulls-per-record 19 → 26.5, because per-principal stores mean each client syncs
 its own. Wall clock 3:13 → 5:11.
 
-**The six remaining functional failures, by cause:**
-- **2, `enrollment_test`** — an enrolled client now has its own store and genuinely lacks the
-  owner's self-encryption key and records. Same class as the ladder: green before only because
-  the stores were shared. Needs the enrolled client given its own key material, not a shared
-  store back.
-- **1, `pq_advance_ladder_test`** — a principal collision between two enrollment-scoped
-  clients (`held by @alice🛠|<uuid>`), not against `legacy`. The remaining instance of the
-  class item 3 fixed 35 of.
-- **3, `self_enrollment_retrofit_live_test`** — two `AT0027 … is revoked`, one `connection went
-  away`. ⛔ UNATTRIBUTED. A retrofit caps the old enrollment, so a capped-then-used connection
-  is a coherent story, but whether it is NEW depends on whether X6's connection changes moved
-  when the old lookup dies. **Attribute with a baseline run on
-  `gkc-pq-d1-spike-backup-premergeback-20260907`, not by reasoning.**
+**The six functional failures at `9c84011df`, re-measured 2026-09-07 by pairing each `[E]`
+with its own file** — which corrected this section's own count: it said two in
+`enrollment_test`, and there was one there and one in `nskey_rollout_ladder_live_test`.
+- **1, `enrollment_test`** ("atclient get when enrollment request has only read access") —
+  ✅ fixed. The enrolled client's `AtChops` had its self-encryption key line commented out,
+  which the shared store used to mask; and it read records the owner's client had written
+  local-first and never synced. Its chops carry the key now, the owner writes remote-first,
+  and the enrolled client reads them from the atServer.
+- **1, `nskey_rollout_ladder_live_test`** (state 2's precondition: the holder never
+  answered) — ✅ fixed, and the open question below is closed: **the holder's answer store
+  was never primed.** The file builds `NskeySeeding` by hand with neither a sharing instance
+  nor a filing, so the mint-time `_convey` — which is what puts a minted private into the
+  minter's secret store — returned before doing anything, and a holder with no candidate
+  answers every request with nothing and logs nothing. The test now primes the store the
+  way the bootstrap does at every start, `hydrateStoreFromFiling`, and does so just before
+  the conveyance states rather than at the mint, because an answered ask FILES the private
+  and the rollout-1 install asks twice before then (at its own start, and while adding to
+  the generation). Verified from the log: the request, the answer envelope addressed to the
+  requester carrying the request id, and "Filed the nskey private … that a holder conveyed
+  on request", 350ms apart.
+- **1, `pq_advance_ladder_test`** (a principal collision between two enrollment-scoped
+  clients) — ✅ fixed. `clientAt` built every rung on a fresh `AtClientManager(atSign)`
+  against `storageForPrincipal(atSign, enrollmentId)`, so rung 0's client still held the
+  store when rung 1 asked for it. Every rung is a restart of the one install: the ladder now
+  walks the enrolment's own manager and its one bundle (the one `enrolAndAuthenticate` built
+  under the device name), the switch stopping the previous rung's client before the next
+  attaches — which is also what made the manual cache evict unnecessary.
+- **3, `self_enrollment_retrofit_live_test`** — ⛔ **NOT THE MERGE'S**, attributed by the
+  two-arm differential this section asked for: the same three cases fail with the same three
+  messages ("connection went away" on the legacy session's next verb after the successor's
+  first authentication, then `AT0027 … is revoked` twice) on the pre-merge backup and on the
+  merged spike, run alone with one invocation against one `at_virtual_env:local` — whose
+  binary carries `predecessorSettledAt` and no `apkamSelfEnrollmentGraceHours`. They are
+  at_server #2797's immediate revocation of a retrofit predecessor, and belong to the PQ
+  table's P1 row "at_server now revokes a non-root retrofit predecessor at the successor's
+  first authentication", which already named this file. The pack stays at `-3` until that
+  row lands.
 
 **Where the conveyance investigation got to**, so it is not walked again:
 - An nskey private reaches another enrollment by CONVEYANCE only. Two installs are two devices
@@ -838,11 +856,12 @@ its own. Wall clock 3:13 → 5:11.
   nothing. Do not conclude "local-only lookup" from the first — that mistake was made here.
 - `askOnReadMiss` defaults **true**, and a ring holding a `privateFiling` derives its own ask,
   so the self-heal is wired by default.
-- ⛔ **The holder must be LISTENING to answer.** `_handleRequestPayload` is reachable only from
-  `sweepOnce`. This file runs `legacyPlusPqProviders` and drives seeding by hand, so it does
-  not get the wired startup tail that starts the envelope listener — hence the listener is now
-  started by hand there. **That alone did not make state 2 pass**; what state 2 needs is still
-  unknown and is the open question.
+- ⛔ **The holder must be LISTENING to answer, and PRIMED.** `_handleRequestPayload` is
+  reachable only from `sweepOnce`, so this file starts the envelope listener by hand (it runs
+  `legacyPlusPqProviders` and gets no wired startup tail). That alone did not make state 2
+  pass, because a listening holder answers from its secret store, and the by-hand seeding
+  never filled it — see the ladder entry above. Both halves are needed, and only the second
+  fails silently.
 
 **Fixture helpers, so they are not rebuilt:** `FunctionalStorage.forPrincipal(atSign, label)`
 and `TestUtils.storageForPrincipal(atSign, label)` for a second live principal;

@@ -273,10 +273,12 @@ abstract class AtClientStorage {
   present the same owner and an idempotent re-attach rule would wave the second through —
   the silent sharing this exists to refuse. Identity tells two instances apart; the refusal
   message still describes the holder by atSign and enrollment for a human.
-- **Owned storage is closed on release; injected storage is only detached.** The client
-  knows which it has — it either built the bundle or was handed it — so the flag lives on
-  the client and this interface stays neutral. An in-memory fixture therefore survives
-  `stop()` and can be inspected afterwards; an app can hand one bundle to a later client.
+- **A bundle says whether the client closes it: `closedByClient`.** False by default, so a
+  bundle handed to a client is only detached on `stop()` and the caller closes it; the
+  store a client builds for itself from a path is built with it true. An in-memory fixture
+  therefore survives `stop()` and can be inspected afterwards; an app can hand one bundle
+  to a later client. A principal change hands the outgoing client's bundle to the incoming
+  one open whatever the flag says, and the incoming client closes it.
 - **After detach, only the same principal may re-attach.** The bundle remembers the
   `(atSign, enrollmentId)` that last held it and refuses a different one until `clear()`
   has run. A new instance of the same principal — a restart within the process, a client
