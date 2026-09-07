@@ -27,22 +27,27 @@ import 'package:test/test.dart';
 void main() {
   late String alice;
   late String bob;
+  late String authType;
   final namespace = TestConstants.namespace;
+  // One manager per atSign, so alice and bob are live at once. Through the
+  // singleton, bringing one up stops the other, and a client rebuilt by a
+  // bare switch holds no nskey keyfile: the private it then mints is filed
+  // nowhere, and every later client of the atSign adopts a generation it
+  // cannot open.
+  final managers = <String, AtClientManager>{};
 
-  setUpAll(() async {
+  setUpAll(() {
     alice = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     bob = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    final authType = ConfigUtil.getYaml()['authType'];
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(alice, namespace, authType, posture: legacyPlusPqProviders);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(bob, namespace, authType, posture: legacyPlusPqProviders);
+    authType = ConfigUtil.getYaml()['authType'];
   });
 
   Future<AtClient> clientFor(String atSign) async {
-    final manager = await AtClientManager.getInstance().setCurrentAtSign(
-        atSign, namespace, TestPreferences.getInstance().getPreference(atSign,
-            posture: legacyPlusPqProviders));
+    final manager =
+        managers.putIfAbsent(atSign, () => AtClientManager(atSign));
+    await TestSuiteInitializer.getInstance().testInitializer(
+        atSign, namespace, authType,
+        posture: legacyPlusPqProviders, manager: manager);
     return manager.atClient;
   }
 

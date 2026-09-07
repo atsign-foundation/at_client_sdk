@@ -229,8 +229,13 @@ class TestSuiteInitializer {
       return acm.setCurrentAtSign(atSign, namespace, pref);
     }
     final credentials = _authCache[atSign];
+    // The nskey keyfile too: a rebuild without it holds no filing, so every
+    // private the earlier client minted is unreachable and a published
+    // generation is adopted with no private half.
     return acm.setCurrentAtSign(atSign, namespace, pref,
-        atChops: credentials?.atChops, enrollmentId: credentials?.enrollmentId);
+        atChops: credentials?.atChops,
+        atKeysIo: await _nskeyKeyfileFor(atSign, pref),
+        enrollmentId: credentials?.enrollmentId);
   }
 
   /// The preference [atSign] was brought up under, or one built at [posture]

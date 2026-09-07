@@ -91,15 +91,18 @@ void main() {
 
     // A second enrollment of @bob, genuinely distinct: its own enrollment id,
     // its own APKAM keypair, its own client.
+    final bob2Device = 'bob2-${DateTime.now().microsecondsSinceEpoch}';
     final bobSecond = await enrolAndAuthenticate(
       approver: bobPrimary,
       atSign: bob,
       namespace: sharedNamespace,
-      preference: TestPreferences.getInstance().getPreference(bob,
-          posture: legacyPlusPqProviders),
+      // Its own store: bob's primary client holds the atSign's, and one
+      // location holds one client.
+      preference: TestPreferences.getInstance().forCoLocatedClient(bob,
+          posture: legacyPlusPqProviders, device: bob2Device),
       rootDomain: bobPreference.rootDomain,
       rootPort: bobPreference.rootPort,
-      deviceName: 'bob2-${DateTime.now().microsecondsSinceEpoch}',
+      deviceName: bob2Device,
     );
 
     expect(identical(bobSecond.client, bobPrimary), isFalse,

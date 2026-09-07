@@ -30,16 +30,18 @@ import 'package:test/test.dart';
 void main() {
   late String alice;
   late String bob;
+  late String authType;
   final namespace = TestConstants.namespace;
+  // One manager per atSign for the whole file, so alice and bob are live at
+  // once and nothing switches. Through the singleton, bringing one up stops
+  // the other, and a stopped client's services throw; the cache used to hand
+  // the stopped client back on the next switch, and no longer does.
+  final managers = <String, AtClientManager>{};
 
-  setUpAll(() async {
+  setUpAll(() {
     alice = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     bob = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    final authType = ConfigUtil.getYaml()['authType'];
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(alice, namespace, authType, posture: legacyPlusPqProviders);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(bob, namespace, authType, posture: legacyPlusPqProviders);
+    authType = ConfigUtil.getYaml()['authType'];
   });
 
   /// Bring an atSign up on the nskey data path, minting and publishing its
@@ -47,10 +49,11 @@ void main() {
   /// read live, so the config is set once both exist.
   Future<({AtClient client, PublishedNskeyKeyRing ring})> nskeyClient(
       String atSign) async {
-    final preference = TestPreferences.getInstance().getPreference(atSign,
-        posture: legacyPlusPqProviders);
-    final manager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, namespace, preference);
+    final manager =
+        managers.putIfAbsent(atSign, () => AtClientManager(atSign));
+    await TestSuiteInitializer.getInstance().testInitializer(
+        atSign, namespace, authType,
+        posture: legacyPlusPqProviders, manager: manager);
     final client = manager.atClient;
 
     // The client's OWN ring, not one built here.
@@ -136,9 +139,6 @@ void main() {
     // record is alice-owned, so a reader keying its ring by sharedBy would look
     // up ALICE's private and fail. It resolves because the nskey owner is
     // sharedWith.
-    await AtClientManager.getInstance().setCurrentAtSign(
-        bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: legacyPlusPqProviders));
     await E2ESyncService.getInstance().syncData(bobSide.client.syncService);
 
     final received = await bobSide.client.get(AtKey()
@@ -182,13 +182,9 @@ void main() {
       ..sharedWith = bob
       ..sharedBy = alice;
 
-    // A live subscription on the receiving side is not expressible here:
-    // AtClientManager is a singleton, and `setCurrentAtSign` tears down the
-    // previous atSign's monitor *and* unsets its notificationService. Bob
-    // cannot hold a subscription while alice sends, in either order. So the
-    // send half is asserted on the wire, and the receive half is covered by
+    // The send half is asserted on the wire; the receive half is covered by
     // `notify_request_transformer_test` and the response transformer's own
-    // namespace handling at unit level.
+    // namespace handling at unit level, and by `nskey_notify_test` live.
     final result = await aliceSide.client.notificationService
         .notify(NotificationParams.forUpdate(notifyKey, value: plaintext));
     expect(result.notificationStatusEnum, NotificationStatusEnum.delivered);
@@ -206,9 +202,6 @@ void main() {
 
     // And on the wire: the recipient's atServer holds the frame, and the value
     // it holds is ciphertext, not the plaintext alice passed.
-    await AtClientManager.getInstance().setCurrentAtSign(
-        bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: legacyPlusPqProviders));
     final listed = (await bobSide.client.notifyList(regex: keyName))
         .replaceFirst('data:', '');
     final frames = jsonDecode(listed) as List;
@@ -290,9 +283,6 @@ void main() {
         reason: 'the walk found bob\'s key one level up, and the content key '
             'lives there');
 
-    await AtClientManager.getInstance().setCurrentAtSign(
-        bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: legacyPlusPqProviders));
     await E2ESyncService.getInstance().syncData(bobSide.client.syncService);
 
     final received = await bobSide.client.get(AtKey()
@@ -327,9 +317,6 @@ void main() {
         (await aliceSide.client.get(before)).metadata?.appMetadata?.additional;
 
     // Bob rotates. Alice is told nothing — the whole point.
-    await AtClientManager.getInstance().setCurrentAtSign(
-        bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: legacyPlusPqProviders));
     final rotated = await bobSide.ring.mintAndPublish(namespace);
     expect(rotated.nskeyKid, isNotNull);
 
@@ -367,9 +354,6 @@ void main() {
     expect(await bobSide.client.put(shared, 'bob wrote this'), true);
     await E2ESyncService.getInstance().syncData(bobSide.client.syncService);
 
-    await AtClientManager.getInstance().setCurrentAtSign(
-        alice, namespace, TestPreferences.getInstance().getPreference(alice,
-            posture: legacyPlusPqProviders));
     await E2ESyncService.getInstance().syncData(aliceSide.client.syncService);
 
     final received = await aliceSide.client.get(AtKey()
@@ -397,9 +381,6 @@ void main() {
     expect(await runtime.isReadyFor(bob, unusedNs), isFalse,
         reason: 'bob has no key at this namespace nor at any ancestor of it');
 
-    await AtClientManager.getInstance().setCurrentAtSign(
-        bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: legacyPlusPqProviders));
     await bobSide.ring.mintAndPublish(unusedNs);
 
     // A fresh sender. ⚠️ This said it was so the answer came "from bob's
@@ -421,7 +402,7 @@ void main() {
   /// The negative alongside the per-recipient CK test: distinct keys are only
   /// meaningful if the other party genuinely cannot open the wrong one.
   test('bob cannot open the content key alice cut for herself', () async {
-    await nskeyClient(bob);
+    final bobSide = await nskeyClient(bob);
     final aliceSide = await nskeyClient(alice);
 
     final selfKey = AtKey()
@@ -434,14 +415,11 @@ void main() {
     final selfCk =
         (await aliceSide.client.get(selfKey)).metadata?.appMetadata?.additional;
 
-    await AtClientManager.getInstance().setCurrentAtSign(
-        bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: legacyPlusPqProviders));
 
     // Bob asks alice's atServer for the conveyance carrying her self CK. It is
     // a self key of alice's, so he is not a party to it at all.
     await expectLater(
-      AtClientManager.getInstance().atClient.get(AtKey()
+      bobSide.client.get(AtKey()
         ..key = '${selfCk?['ckKid']}.__ck'
         ..namespace = namespace
         ..sharedBy = alice),

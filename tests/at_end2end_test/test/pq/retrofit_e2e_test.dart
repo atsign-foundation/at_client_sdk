@@ -167,8 +167,11 @@ void main() {
       // parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
-      preference: TestPreferences.getInstance().getPreference(atSign,
-          posture: PqPosture.legacy),
+      // Its own store location: the owner client holds the atSign's, and a
+      // dedicated manager carries nothing across, so this is a second
+      // principal rather than a succession.
+      preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
+          posture: PqPosture.legacy, device: 'rf-e1-$runId'),
       appName: 'rf-e1',
       deviceName: 'rf-e1-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw'},
@@ -240,8 +243,10 @@ void main() {
       // parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: cloneSession,
-      preference: TestPreferences.getInstance().getPreference(atSign,
-          posture: PqPosture.legacy),
+      // Its own store location, as a clone on another host has: the owner
+      // client holds the atSign's, and B1.1's retrofit holds its own.
+      preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
+          posture: PqPosture.legacy, device: 'rf-e1-clone-$runId'),
       // Deliberately the same (appName, deviceName) as B1.1: sibling clones
       // of one keyfile legitimately carry one app's identity, and the
       // atServer exempts this branch from the duplicate-enrollment refusal.
@@ -380,8 +385,8 @@ void main() {
           // parameter default is the rollout-window RSA mode.
           signingAlgo: SigningAlgoType.mldsa65,
           session: await legacySession('e2'),
-          preference: TestPreferences.getInstance().getPreference(atSign,
-              posture: PqPosture.legacy),
+          preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
+              posture: PqPosture.legacy, device: 'rf-e2-esc-$runId'),
           appName: 'rf-e2',
           deviceName: 'rf-e2-esc-$runId',
           namespaces: {'*': 'rw', '__manage': 'rw'},
@@ -399,8 +404,8 @@ void main() {
       // parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
-      preference: TestPreferences.getInstance().getPreference(atSign,
-          posture: PqPosture.legacy),
+      preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
+          posture: PqPosture.legacy, device: 'rf-e2-$runId'),
       appName: 'rf-e2',
       deviceName: 'rf-e2-$runId',
       namespaces: {namespace: 'rw'},

@@ -128,8 +128,10 @@ void main() {
       // parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
-      preference: TestPreferences.getInstance().getPreference(atSign,
-          posture: PqPosture.legacy),
+      // Its own store location: the owner client holds the atSign's, and a
+      // dedicated manager carries nothing across.
+      preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
+          posture: PqPosture.legacy, device: 'rt-l1-$runId'),
       appName: 'rt-l1',
       deviceName: 'rt-l1-$runId',
       namespaces: {namespace: 'rw'},

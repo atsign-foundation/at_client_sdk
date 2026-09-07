@@ -142,8 +142,8 @@ void main() {
         // parameter default is the rollout-window RSA mode.
         signingAlgo: SigningAlgoType.mldsa65,
         session: session,
-        preference: TestPreferences.getInstance().getPreference(atSign,
-            posture: PqPosture.legacy),
+        preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
+            posture: PqPosture.legacy, device: 'b01-priv-rf-$runId'),
         appName: 'b01-priv',
         deviceName: 'b01-priv-rf-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw'},
@@ -208,8 +208,8 @@ void main() {
         // parameter default is the rollout-window RSA mode.
         signingAlgo: SigningAlgoType.mldsa65,
         session: session,
-        preference: TestPreferences.getInstance().getPreference(atSign,
-            posture: PqPosture.legacy),
+        preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
+            posture: PqPosture.legacy, device: 'b01-scoped-rf-$runId'),
         appName: 'b01-scoped',
         deviceName: 'b01-scoped-rf-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw'},

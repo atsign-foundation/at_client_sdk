@@ -26,6 +26,7 @@
 # run turns into a red test instead.
 paths:
   - test/suite_manifest_test.dart
+  - test/enrollment_teardown_test.dart
   - test/bypasscache_test.dart
   - test/concurrent_notify_test.dart
   - test/deletion_key_test.dart
