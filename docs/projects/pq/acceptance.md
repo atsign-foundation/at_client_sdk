@@ -3957,8 +3957,9 @@ is where its missing lever lives.
   which moves it into the atServer's revoke.
 
   ⚠️ **A client that starts and then runs for weeks does not notice until it
-  restarts**, and two clients get no check at all: one holding no enrollment id
-  returns before fetching anything, and one whose fetch throws discards the list.
+  restarts**, and two clients get no check at all: one running as the atSign's
+  own credential — no enrollment id, or `primary` — returns before fetching
+  anything, and one whose fetch throws discards the list.
   That is accepted rather than overlooked — the revoker rotates immediately, and
   this path is the backstop for when it could not.
 
@@ -4310,8 +4311,8 @@ for them, and each says so where it happened.
 asked for "no mint at all when there is no enrollment id";
 [ruling 127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30)
 dropped the commit that would have created that behaviour, because publishing
-`_apsk` under `primary` with no enrollment id is a working, pinned capability
-that the guard would have deleted. There is no mechanism to write a row about.
+`_apsk` directly under `primary`, with no enrollment record to route it
+through, is a working, pinned capability that the guard would have deleted. There is no mechanism to write a row about.
 
 So ten of the work item's eleven map to a row here, and the eleventh row is
 [UC-G3.3](#uc-g33--the-form-_apsk-takes-follows-the-algorithm-and-nothing-else-may-decide-it),

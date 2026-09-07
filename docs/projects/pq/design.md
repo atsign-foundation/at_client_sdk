@@ -2649,11 +2649,13 @@ dropping its own authentication key.
   is refused, so they could never have been omitted; the connection making the
   request has proved possession of the atSign's own root credential and is
   already unscoped, so there is nothing narrower to bound it by.
-- ⛔ **There is no guard skipping the mint when the enrollment id is null.**
-  One was proposed and dropped by
+- ⛔ **There is no guard skipping the mint when the client runs as the atSign's
+  own credential (no enrollment id, or `primary`).** One was proposed and
+  dropped by
   [`decisions.md` 127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30):
-  publishing `_apsk` directly with no enrollment id is a working, pinned
-  capability, and skipping the mint would delete it. The residual that guard
+  publishing `_apsk` directly under `primary`, with no enrollment record to
+  route it through, is a working, pinned capability, and skipping the mint
+  would delete it. The residual that guard
   was aimed at is recorded there as open.
 
 #### 9.8.7 A legacy enrollment's one keypair, and how the rules compose

@@ -13789,14 +13789,17 @@ passing a value the source already holds — or a wrong one.
    than remove: `AtOnboardingService.authenticate({enrollmentId})` keeps the
    parameter, and a value that disagrees with the keyfile is logged at
    **shout** level and ignored. `AtClientImpl.create`, `setCurrentAtSign` and
-   `buildAtClient` do the same with theirs.
+   `buildAtClient` do the same with theirs — and keep the parameter
+   undeprecated, because a client built with no keys source (injected
+   AtChops, or `fromAuthSession`'s pass-through) has no other way to say
+   which enrollment it is.
 3. **`primary` never reaches the wire.** `PkamVerbBuilder` (at_commons 5.18.0)
    omits it: a released atServer knows the credential only by the absence of
    an id, and a current one answers the bare `pkam:` as `primary`.
 4. **Inside at_client the client carries `primary`**, and a null check that
    meant "the atSign's own credential" becomes `isAtSignCredential`, true of
-   null and of `primary`. Seven mechanisms key on it, and what they
-   distinguish is whether an enrollment RECORD exists to fetch, update or
+   null and of `primary`. The mechanisms that key on it are listed here, and
+   what they distinguish is whether an enrollment RECORD exists to fetch, update or
    list on a released atServer — the local privilege check's `enroll:fetch`,
    the bootstrap's snapshot, key-package and signing-key minting's
    `enroll:update`, the signing-root request's `enroll:listns`, the start-up
@@ -13808,12 +13811,14 @@ passing a value the source already holds — or a wrong one.
    unreachable. A wildcard grant now seeds the namespace the app runs in,
    exactly as the atSign's own credential does, and `null`, `primary` and a
    root enrollment seed alike.
-5. **`enid` stays as it was.** A legacy signer already stamps `primary` and
-   publishes at `_apsk.primary`, so the header carries the name.
+5. **`enid` stays as it was.** A signer running as the atSign's own
+   credential already stamps `primary` in the envelope header and publishes
+   its signing key at `_apsk.primary`, so the header carries the name.
 
 What it replaces: a keyfile-only caller — the onboarding CLI's `authenticate()`,
-every `CLIBase` app — came up as the legacy enrollment after a retrofit unless
-it named the successor itself, and nothing told it to.
+every `CLIBase` app — came up as the pre-retrofit enrollment, the one the
+retrofit replaced, unless it named the successor itself, and nothing told it
+to.
 
 Pinned by `packages/at_commons/test/pkam_verb_builder_test.dart` (the bare
 `pkam:` for `primary`, as a raw literal), `packages/at_auth/test/at_auth_test.dart`
