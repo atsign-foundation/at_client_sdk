@@ -2,7 +2,12 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+
+class _MockKeyStore extends Mock
+    implements AtKeyValueStore<String, AtData, AtMetaData?> {}
 
 void main() {
   test(
@@ -29,5 +34,33 @@ void main() {
     await storage.close();
     AtClientImpl.atClientInstanceMap.remove('@storagewire');
     dir.deleteSync(recursive: true);
+  });
+
+  test('a bundle and an injected keystore together are refused, not merged',
+      () async {
+    // An injected keystore skips the storage block entirely — keystore AND
+    // sync queue — so accepting both would hand the caller the keystore it
+    // named beside a queue on the global Hive instance. That is the shared
+    // queue the per-file storage isolation exists to remove, and it would be
+    // silent.
+    final dir = Directory.systemTemp.createTempSync('at_client_both_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final storage =
+        HiveAtClientStorage(atSign: '@bothstores', storagePath: dir.path);
+    addTearDown(storage.close);
+
+    await expectLater(
+        AtClientImpl.create('@bothstores', 'wavi',
+            AtClientPreference()..hiveStoragePath = dir.path,
+            storage: storage, localSecondaryKeyStore: _MockKeyStore()),
+        throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message',
+            contains('replaces it rather than combining'))),
+        reason: 'the two name different stores, so one of them would be '
+            'silently dropped — and it is the bundle, taking the isolated '
+            'sync queue with it');
+
+    expect(AtClientImpl.atClientInstanceMap.containsKey('@bothstores'), isFalse,
+        reason: 'refused before anything was filed, so a second attempt is not '
+            'handed a half-built client');
   });
 }

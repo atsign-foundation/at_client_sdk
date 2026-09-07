@@ -10,6 +10,7 @@ import 'test_utils.dart';
 /// The tests verify the put and get functionality where key is created using AtKey concrete
 /// class
 void main() {
+  TestUtils.isolateStorage('atclient_put_test');
   late AtClientManager atClientManager;
   late String atSign;
   final namespace = 'wavi';

@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 import 'test_utils.dart';
 
 void main() async {
+  TestUtils.isolateStorage('atclient_sync_conflict_test');
   late AtClientManager atClientManager;
   late String atSign;
   String namespace = 'wavi';

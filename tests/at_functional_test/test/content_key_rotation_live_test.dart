@@ -25,6 +25,7 @@ import 'test_utils.dart';
 /// (`nskey_rotation_live_test.dart`). The two levers are not substitutes, and
 /// the cost difference is O(1) against O(n)-per-enrollment.
 void main() {
+  TestUtils.isolateStorage('content_key_rotation_live_test');
   late AtClientManager atClientManager;
   late AtClient atClient;
   late String atSign;

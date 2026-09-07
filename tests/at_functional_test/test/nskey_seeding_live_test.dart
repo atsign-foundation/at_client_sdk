@@ -27,6 +27,7 @@ import 'test_utils.dart';
 /// published nothing, or published something whose private was lost, is
 /// indistinguishable from a mint that never happened until you look there.
 void main() {
+  TestUtils.isolateStorage('nskey_seeding_live_test');
   late String atSign;
   // A namespace nothing has minted for, so the first seed below provably does
   // work. Against the shared `wavi` the first seed would find an existing key,

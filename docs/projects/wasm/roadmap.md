@@ -36,7 +36,7 @@ canonical home rather than duplicating it.
 | [`design.md`](design.md)                           | The per-capability seam designs — transport, storage bootstrap, sync queue, keys, HTTP, connectivity, logging, filesystem, process/env. Current call sites with `file:line`, the proposed interface, and who implements it on each platform. Plus the dead-end seams and the `AtClientPreference` reframe. |
 | [`implementation-plan.md`](implementation-plan.md) | The build sequence — phases, the task backlog (P/T/I/C/G/D groups), dependency order, and the publish ladder.                                                                                                                                                                                              |
 | [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T6, with the measured evidence for each and an explicit statement of what each tier does *not* prove.                                                                                                                                                                                 |
-| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-14), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
+| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-11), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
 | [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, and npm packaging.                                                                                                               |
 
 ---
@@ -224,7 +224,11 @@ projects **S-5** (at_auth 4.0.0 — the `at_auth_io.dart` barrel, dropping the
 at [`../pq/implementation-plan.md`](../pq/implementation-plan.md) — ⚠️ this cited
 **lines 312–339**, and a line number is not an address: that plan was restructured
 on 2026-08-26 and the range now lands on unrelated prose. Find S-5 and S-6 by name
-in [`../pq/detail/implementation-plan.md`](../pq/detail/implementation-plan.md).
+in `docs/projects/pq/detail/implementation-plan.md`, which holds the discharged
+gate bodies. ⚠️ **That file is not on trunk and never has been** (0 commits touching
+`docs/projects/pq/detail` on `origin/trunk`, 2026-09-07) — it exists only on
+`gkc-pq-d1-spike`, so this was a live link on the spike and a dead one from the moment
+these docs landed on trunk in #2207. It is deliberately not a link here for that reason.
 That
 plan explicitly names *this* effort as the separate "wasm-port" that owns
 `at_lookup` and `at_chops`.

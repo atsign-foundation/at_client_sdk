@@ -46,6 +46,7 @@ import 'test_utils.dart';
 /// for the same reason. Asserting both in one file keeps the pattern visible:
 /// neither key record is immutable, and both are minted behind a lock that is.
 void main() {
+  TestUtils.isolateStorage('pq_signing_root_mint_lock_test');
   late AtClient atClient;
   late String atSign;
   const namespace = 'wavi';

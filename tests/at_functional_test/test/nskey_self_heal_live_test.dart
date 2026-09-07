@@ -33,6 +33,7 @@ import 'test_utils.dart';
 /// that "fixed" the seeker by rotating the namespace key would strand every
 /// peer that had already fetched the old generation.
 void main() {
+  TestUtils.isolateStorage('nskey_self_heal_live_test');
   late AtClient approver;
   late String atSign;
 
@@ -77,7 +78,8 @@ void main() {
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
         atKeysIo: atKeysIo,
-      );
+    storage: TestUtils.storage,
+  );
 
   test('an enrollment that missed the mint pulls the private from a holder',
       () async {

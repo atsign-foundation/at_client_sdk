@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:at_functional_test/src/at_keys_initializer.dart';
+import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
@@ -9,6 +10,7 @@ import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_client/at_client.dart';
 
 import 'package:at_demo_data/at_demo_data.dart';
+import 'package:test/test.dart';
 
 /// Legacy in every axis, with the post-quantum providers configured — the
 /// combination the post-quantum tests in this pack need, and one **no
@@ -52,6 +54,40 @@ class TestUtils {
   static int get rootServerPort =>
       int.tryParse(Platform.environment['VIRTUALENV_BASE_PORT'] ?? '') ?? 64;
 
+  static FunctionalStorage? _storage;
+
+  /// Names this test file, giving its clients storage no other file opens.
+  ///
+  /// Call once, first thing in `main()`. Every bundle it hands out is closed
+  /// in a `tearDownAll` registered here, since these bundles are borrowed and
+  /// the client only detaches from them.
+  static void isolateStorage(String testFile) {
+    final storage = FunctionalStorage(testFile);
+    _storage = storage;
+    tearDownAll(() async {
+      await storage.closeAll();
+      if (identical(_storage, storage)) _storage = null;
+    });
+  }
+
+  /// This file's storage. Throws rather than falling back to a shared one:
+  /// silently sharing is what [isolateStorage] exists to stop.
+  static FunctionalStorage get storage =>
+      _storage ??
+      (throw StateError('this test file has not called '
+          'TestUtils.isolateStorage(<file name>) at the top of main(), so it '
+          'has no storage of its own'));
+
+  /// The bundle every client this file builds for [atSign] shares.
+  static AtClientStorage storageFor(String atSign) =>
+      storage.forAtSign(atSign);
+
+  /// A bundle for a second live principal on [atSign] — an enrolled client
+  /// running beside the owner client that approved it. See
+  /// [FunctionalStorage.forPrincipal] for why a retrofit does NOT come here.
+  static AtClientStorage storageForPrincipal(String atSign, String label) =>
+      storage.forPrincipal(atSign, label);
+
   /// [posture], [authenticationKeyAlgorithm], [dataSigningKeyAlgorithms],
   /// [keyEstablishmentAlgorithms] and [sealsToKeyAlgorithms] must be threaded
   /// here because all five are final at construction — a test cannot set any
@@ -79,6 +115,10 @@ class TestUtils {
   /// and a test that has not chosen is a test whose subject is undeclared.
   /// Required so the compiler names every site, and so a new test cannot be
   /// written without choosing.
+  ///
+  /// The preference carries no storage path: what opens the store is the
+  /// bundle passed to `setCurrentAtSign`, and a call site that forgets one
+  /// fails loudly there rather than quietly opening the shared directory.
   ///
   /// ⚠️ **An approver or fixture client is `PqPosture.legacy`**, whatever the
   /// test is about. Seeding is the only posture-gated step in the whole PQ
@@ -109,8 +149,6 @@ class TestUtils {
         dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
         keyEstablishmentAlgorithms: keyEstablishmentAlgorithms,
         sealsToKeyAlgorithms: sealsToKeyAlgorithms);
-    preference.hiveStoragePath = 'test/hive/client/$atsign';
-    preference.commitLogPath = 'test/hive/client/$atsign';
     preference.rootDomain = 'vip.ve.atsign.zone';
     preference.rootPort = rootServerPort;
     preference.decryptPackets = false;
@@ -151,11 +189,16 @@ class TestUtils {
   /// parameter on that alone would leave every caller here naming nothing, and
   /// this is where most callers are. A supplied preference naming a different
   /// posture is refused rather than silently winning.
+  ///
+  /// [storage] overrides this file's bundle, for a caller that has none —
+  /// a child isolate is a fresh heap, so [isolateStorage]'s static is null
+  /// there and the isolate has to build its own from what it was handed.
   static Future<AtClientManager> initAtClient(
       String currentAtSign, String namespace,
       {required PqPosture posture,
       AtClientPreference? preference,
-      AtKeysIo? atKeysIo}) async {
+      AtKeysIo? atKeysIo,
+      AtClientStorage? storage}) async {
     // `info`, matching the e2e pack (`test_initializers.dart`), not `shout`.
     //
     // At `shout` the client's own account of what it did is filtered out
@@ -182,7 +225,8 @@ class TestUtils {
     var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, preference,
         atKeysIo: atKeysIo,
-        atChops: encryptionKeysLoader.createAtChopsFromDemoKeys(currentAtSign));
+        atChops: encryptionKeysLoader.createAtChopsFromDemoKeys(currentAtSign),
+        storage: storage ?? storageFor(currentAtSign));
     // Set the preferences again because (1) setCurrentAtSign might do nothing
     // because currentAtSign is the same, and (2) some other test may have messed
     // with the preferences

@@ -45,6 +45,7 @@ import 'test_utils.dart';
 ///
 /// What this file does prove live is the entitlement guard below.
 void main() {
+  TestUtils.isolateStorage('signing_root_pull_test');
   late AtClient atClient;
   late String atSign;
   const namespace = 'wavi';

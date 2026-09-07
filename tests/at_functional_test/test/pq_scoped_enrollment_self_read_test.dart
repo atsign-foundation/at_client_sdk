@@ -37,6 +37,7 @@ import 'test_utils.dart';
 /// would make approval-time conveyance impossible — so both arms are needed to
 /// say the boundary is a boundary rather than a wall.
 void main() {
+  TestUtils.isolateStorage('pq_scoped_enrollment_self_read_test');
   final atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
 
   /// Unique per run, and it does two jobs. The atServer refuses a second
@@ -144,7 +145,8 @@ void main() {
       namespaces: {granted: 'rw'},
       atKeysIo: enrolleeKeysIo,
       signingAlgo: SigningAlgoType.mldsa65,
-    );
+    storage: TestUtils.storage,
+  );
 
     // ⚠️ The PQ startup steps are fire-and-forget, and the one that matters
     // here is the sweep that files an arriving nskey private out of the

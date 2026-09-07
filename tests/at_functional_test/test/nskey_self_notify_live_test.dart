@@ -34,6 +34,7 @@ import 'test_utils.dart';
 /// client notifying itself over its own connection — green for a reason that
 /// has nothing to do with the claim.
 void main() {
+  TestUtils.isolateStorage('nskey_self_notify_live_test');
   late AtClient approver;
   late String atSign;
   late InMemoryAtKeysIo approverKeysIo;
@@ -108,7 +109,8 @@ void main() {
       rootPort: TestUtils.rootServerPort,
       deviceName: '$device-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw', namespace: 'rw'},
-    );
+    storage: TestUtils.storage,
+  );
   }
 
   test('a self notification reaches a second enrollment and decrypts',

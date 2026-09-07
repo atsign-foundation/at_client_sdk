@@ -1,3 +1,14 @@
+## 3.1.2
+
+- chore: set `AtOnboardingPreference.storagePath` rather than the now-deprecated
+  `AtClientPreference.hiveStoragePath`. The store lands in the same place; the
+  bundle is built by at_onboarding_cli and closed by the client, so `CLIBase`
+  still has nothing to tear down.
+- chore: stop setting `AtClientPreference.commitLogPath`, which at_client reads
+  nowhere, so the value had no effect. No behaviour changes.
+- build: require `at_onboarding_cli` ^1.17.0-rc1, the first version carrying
+  `AtOnboardingPreference.storagePath`.
+
 ## 3.1.1
 
 - fix: `getUserName` now resolves via `USER` → `LOGNAME` → `USERNAME` → `whoami`

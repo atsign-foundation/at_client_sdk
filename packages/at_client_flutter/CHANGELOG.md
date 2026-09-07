@@ -30,19 +30,13 @@
   compares normalized in `_indexOf` and `removeAtsignFromKeychain`, and still
   returns the stored spelling; a value `toAtsign()` rejects is compared as it
   stands, so a malformed entry stays readable and removable.
-- fix: `EnrollmentRequestList` no longer disposes an `enrollmentService` it
-  was given. `FlutterEnrollmentService.dispose()` closes the request stream
-  and drops the controller, so routing away from the widget left a caller's
-  shared service throwing on every later `getEnrollments()`. It now closes
-  only a service it created itself.
 - fix: the enrollment request list can approve a pq-mode request. The
   approve action null-banged `encryptedAPKAMSymmetricKey`, which a
   request that expects the approver to mint its key does not carry, so
   every such approval crashed before the service was called; and a
   post-approval conveyance refusal now clears the row and shows the
   refusal's own message instead of `Failed to approve`. The list widget
-  gains an injectable `enrollmentService` (the `ApkamActivationDialog`
-  pattern) and resolves its `AtClient` through the service's seam.
+  resolves its `AtClient` through the injected service's seam.
 - fix: an approval whose secret conveyance was refused is no longer
   re-reported as `Enrollment failed`. at_client's `approve()` now throws
   `EnrollmentConveyanceException` after a server-side approval whose
@@ -78,6 +72,28 @@
   by the same predicate the reads use. `getAllAtsigns` threw a `TypeError` on
   one (a `String` used as a condition) and `removeAtsignFromKeychain` silently
   kept it.
+- feat: `AuthService.createClient` turns a completed authentication into a
+  client the app owns, taking `storage` to decide the backend and the location.
+  The app owns its lifetime, so it no longer has to go through
+  `AtClientManager`; one that wants the shared current-atSign client goes on
+  calling `AtClientManager.fromAuthSession`. ⚠️ The client is not invisible to
+  `AtClientManager` — a later `setCurrentAtSign` for the same atSign adopts it
+  and stops it on the next switch, so do not mix the two for one atSign in
+  one process. The bundle is borrowed unless built with `closedByClient:
+  true`, in which case the client closes it on stop.
+- feat: `FlutterEnrollmentService` takes an optional `atClient`, so it can work
+  against a client the app owns. With none it uses `AtClientManager`'s current
+  client, as it always has.
+- feat: `EnrollmentRequestList` takes an optional `enrollmentService`, and
+  every client read now goes through it. Give it one built with an app-owned
+  client and the enrollment UI works without `AtClientManager`; it previously
+  reached the current-atSign client at five sites and threw for such an app.
+  A service the widget did not build is no longer disposed with the widget:
+  `FlutterEnrollmentService.dispose()` closes the request stream and drops the
+  controller, so routing away from the widget left a caller's shared service
+  throwing on every later `getEnrollments()`.
+- build: require `at_client` ^3.15.0-rc1, the first version carrying
+  `buildAtClient`; the floor still said ^3.11.0.
 - feat: `CramDialog` and `PkamDialog` take an optional `authService`, and
   `ApkamActivationDialog` an optional `enrollmentService`. Both default to the
   real service, so existing call sites are unaffected; passing one lets the

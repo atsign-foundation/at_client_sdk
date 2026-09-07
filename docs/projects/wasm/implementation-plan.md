@@ -188,7 +188,9 @@ The largest item, and the one breaking change with an unknown external blast rad
 Design in [`design.md`](design.md) §2.1.
 
 - **T1 — Audit `implements AtConnection` and `getSocket()` callers.** In-repo:
-  `remote_secondary.dart`, `monitor.dart`. External implementors are unknown
+  `remote_secondary.dart` — and only that one now. ⚠️ This row said
+  `monitor.dart` too; `Monitor` gave up its socket in X6 and calls `getSocket`
+  zero times. External implementors are unknown
   ([`decisions.md`](decisions.md) OQ-8). **Do this before writing the interface** —
   enumerate the blast radius first.
 - **T2 — Define `AtTransport`.** Inbound `Stream<List<int>>`, a sink,
@@ -199,9 +201,18 @@ Design in [`design.md`](design.md) §2.1.
   through in `base_connection.dart:10,14,50` (`late final Socket _socket`,
   `socket.destroy()`, `socket.remoteAddress`), `outbound_connection.dart` and
   `outbound_connection_impl.dart`.
-- **T4 — Retype the three factories** at `at_lookup_impl.dart:740,749,756` from
-  `SecureSocket` onto `AtTransport`. They are already injectable and already plumbed by
-  S1; the return type is the whole blocker.
+- **T4 — Retype the three factories** — `AtLookupSecureSocketFactory`,
+  `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory`, at
+  `at_lookup_impl.dart:1312,1323,1332` (this row cited `:740,749,756`, which is stale) —
+  from `SecureSocket` onto `AtTransport`. They are already injectable and already plumbed
+  by S1; the return type is the whole blocker.
+  ⚠️ **`AtLookupImpl`'s `dart:io` binding is five occurrences, not a rewrite** (measured
+  2026-09-06): those three factory classes, which are the io implementations co-located at
+  the foot of the file, plus `createOutBoundConnection` at `:834`, whose local is typed
+  `SecureSocket` and which catches `SocketException` — io-typed only because the factory's
+  return type is. Retype the three, move their bodies to `_io`, and the core is io-free
+  with no logic change. `at_lookup.dart`, where `withSecureSocket` lives, imports no
+  `dart:io` at all today.
 - **T5 — `at_lookup_io.dart`.** Native transport wrapping `SecureSocket`; absorb
   `src/util/secure_socket_util.dart` whole (certs, `SecurityContext`, TLS keylog) as
   native-only.
@@ -214,6 +225,33 @@ Design in [`design.md`](design.md) §2.1.
   the two existing escape hatches — the abstract interface, or the `proxy:<host>`
   convention. The production answer is OQ-7.
 - **T8 — Publish `at_lookup` 4.0.0.** → T0 green for at_lookup, T2.2
+- **T9 — Let the APP inject the transport, and thread it to every construction site**
+  (gkc, 2026-09-06). This is the structural gap the rest of phase T does not close:
+  retyping the factories makes a web transport *possible*, but nothing lets an app
+  *supply* one. `at_client_web` needs every `AtLookUp` its process builds to sit on a
+  WebSocket, so the transport joins [`AtClientStorage`](#5a-client-storage-bundle-x) and
+  `AtKeysIo` as a thing the app hands in.
+  **Six production sites hardcode `secureSocketTransport(...)`, in three packages**
+  (measured 2026-09-06): at_client `client/remote_secondary.dart:150` and
+  `service/notification_service_impl.dart:92` — the only two files in at_client importing
+  `at_lookup_io.dart`, and the sync service inherits the first through its own
+  `RemoteSecondary`; at_auth `at_auth_impl.dart:151` and `:259` and
+  `enroll/enrollment_handshake.dart:61`; at_server_status `at_status_impl.dart:115`.
+  ⚠️ **at_auth is not optional here.** A web app authenticates *before* it has an
+  `AtClient`, so an injection that reaches only at_client still drags `dart:io` through
+  onboarding, `authenticate` and the enrollment handshake. The transport is an
+  ecosystem-level injection, not an at_client parameter.
+  ⚠️ **The factory is nearer neutral than "not yet built":** `withSecureSocket` already
+  takes an `AtLookupTransport`, so what is missing is a neutral NAME and an io-free
+  `AtLookupImpl` for it to construct (T4). Its own dartdoc anticipates the sibling:
+  "Named for its transport, so a differently-transported factory can join it later rather
+  than this one growing a mode flag."
+  **Open: where the injected transport lives.** `AtClientPreference` is the wrong home —
+  it is a data bag, the transport is a live object carrying three factories, and
+  `setPreferences` would make it swappable mid-life. Reading it off `AtClient` matches
+  `atKeysIo` exactly and reaches `NotificationServiceImpl` and `SyncServiceImpl`, which
+  build their own connections; a shared platform bundle carrying transport + storage +
+  keysIo is the other shape. Not settled.
 
 ---
 
@@ -269,10 +307,7 @@ D-12. Independent of the P series, which is `at_server`-side.
   sync queue, with the claim/release semantics D-12 requires: the bundle refuses a second
   opener itself rather than `at_client` keeping a registry. Ships with the Hive-backed
   implementation wired in as the default, so it is exercised rather than declared. The
-  per-object claim only. (That per-atSign guard is since **superseded by
-  [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05)** — the guard is per
-  *location*, so N clients of one atSign at distinct locations are allowed and only a shared
-  location is refused. This row describes what X2 shipped, not the live plan.) It waited for X4 because nothing
+  per-object claim only: the Hive backend's per-atSign guard waits for X4, because nothing
   releases storage before then and the guard would refuse every same-atSign rebuild.
 - **X3 — Three implementations.** ✅ Merged, #2205, and merged back into the spike at
   `51bdb6230`. Hive-backed (today's behaviour), SQLite-backed, and
@@ -280,113 +315,15 @@ D-12. Independent of the P series, which is `at_server`-side.
   `SqliteAtClientStorage` on `:memory:`, and both SQLite-backed classes are exported only from
   `package:at_client/sqlite.dart`, so X5's pack imports that barrel. → X5, and the SQLite one
   pairs with P5.
-- **X4a — Isolate storage per location.** Prerequisite for X4, design ruled by
-  [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05) (resolving
-  [D-13](decisions.md#d-13--local-storage-is-isolated-per-atsign-enrollmentid-not-per-atsign-2026-09-05)).
-  **at_client-only, not cross-repo** — corrects the earlier "likely cross-repo" scoping. The
-  isolating mechanism is merged upstream and wired **on the spike**: the keystore opens on
-  `HiveInstances.forPath(storagePath)` (pinned upstream #2776, SHA `5c0e603c`) and the spike's
-  `AtSyncQueue` on `forPath` too, so two clients of one atSign at **different** locations
-  get separate stores there; only the **same** location shares. ⚠️ Trunk has neither the pin
-  nor the queue's `forPath`, so X4a ports both before the guard means anything. Production is unchanged —
-  one location per atSign, as today; the enrollment discriminator is test-supplied. The work:
-  (1) each `AtClientStorage` reports a canonical `location`, and `AtClientStorageBase` refuses
-  a second open at an already-open location — the per-location guard replacing X4's per-atSign
-  one, so N distinct-location clients of one atSign pass; (2) ✅ an optional `storage:` on the
-  `create` factory, threaded through `setCurrentAtSign` and `AtServiceFactory.atClient` — a
-  caller supplying storage picks backend and location together, and the client only borrows it
-  (`stop()` detaches without closing). `refuseChangedStoragePath` needed no removal here: it is
-  spike-only and does not exist on trunk; (3) rewrite the multi-enrollment fixtures
-  onto direct `create` with a shared lifecycle-owning test helper (builds located storage +
-  client, closes both in `tearDown`); (4) correct the stale `hive_at_client_storage.dart` NOTE
-  (distinct paths isolate; only same-location collides). **This lands on #2208's branch**
-  (`gkc-at-client-storage-release`), combining with X4's release code into one PR rather than a
-  separate prerequisite — X4a is what turns #2208's per-atSign-guard reds green.
-  **Built 2026-09-06: items 1, 2 and 4 done on #2208; item 3 moved off it.**
-  ⛔ **The fixture rewrite is NOT part of #2208** (gkc, 2026-09-06), because the fixtures it
-  would rewrite are not on that branch: #2208 is trunk-based and has no
-  `tests/at_end2end_test/test/pq/` at all. The multi-enrollment fixtures are spike-side, and
-  most of the pattern is already there — `EnrolledClient` exists in two copies (the e2e and
-  functional packs), builds each enrollment through `AtClientManager(atSign)` rather than the
-  shared `getInstance().setCurrentAtSign`, which is exactly
-  [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05)'s decision 5; and
-  `TestPreferences.forCoLocatedClient` already keys `hiveStoragePath` on
-  `$atSign/$device`. What is left there is **consolidation, not capability**: `getPreference`
-  still keys the path on the atSign alone, so tests that need a second co-located client
-  hand-roll it — `nskey_self_notify_live_test.dart:100` sets `$atSign/$device-$runId` and its
-  comment at `:81` names the reason. Owed on the spike, after the merge-back so it can use the
-  `storage:` injection: make the per-enrollment location systematic instead of per-test.
-  The branch's commits and push state are re-derived, never quoted here
-  (`git log origin/trunk..gkc-at-client-storage-release`).
-  unpushed as of writing. Four things the build corrected, each measured rather than reasoned:
-  - **The forPath mechanism was spike-only, so the pin had to be ported.** Trunk (and therefore
-    #2208) carried *no* `dependency_overrides` at all and resolved published
-    `at_persistence_secondary_server`, which predates #2776 — so the keystore opened on the
-    global Hive there. Without the pin a per-location guard is meaningless: two clients at
-    distinct paths report distinct locations and are let through, while the box named
-    `sha(atSign)` on the global instance is the same one. The plan's earlier
-    "already present on the spike" was true of the spike and false of trunk.
-    ✅ **The override is now removable: `at_persistence_secondary_server` 5.3.0 was published
-    2026-09-06 (gkc) and carries `HiveInstances.forPath`** — verified by unpacking the pub.dev
-    archive: `lib/src/impl/hive/hive_instances.dart` is present with `forPath`, and `hive.dart`
-    exports it. ✅ **Done** (`ff6014420`): the
-    `dependency_overrides` block is gone and the constraint is `^5.3.0`, so resolution is hosted
-    rather than a git ref to an unpublished commit — which is what had made the branch awkward
-    to merge to trunk. Verified behaviourally identical: unit 692, and all three packs matching
-    their git-pinned runs exactly (functional +82, e2e +32, onboarding-CLI +15).
-  - **The location key needed the atSign**, not just the directory — see
-    [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05).
-  - **Moving the queue onto a per-path instance exposed a latent lost-delete.** A delete
-    superseding a queued update pushed as the *update*: the drain removed the entry
-    unconditionally, discarding whichever write replaced it mid-flight. Bisected to the forPath
-    commit across four arms (baseline +82, forPath +81 −1, guard +81 −1, pin-only-with-queues-on-global
-    +82), then fixed by porting the spike's `seq` / `removeIfUnchanged`, which leaves
-    `at_sync_queue.dart` byte-identical on both branches.
-  - **The onboarding-CLI pack had no local runner and polluted `$HOME`.** It writes keyfiles to
-    `$HOME/.atsign/keys` (the functional pack deliberately does not — see
-    `build_test_atkeys.dart`), and `onboard` refuses when one already exists, so a second local
-    run failed for atSigns the recycled virtualenv had never onboarded. The pack now has a
-    runner that points `HOME` at a throwaway directory for the test invocation alone.
-  **Three packs green locally on this branch:** functional +82, e2e +32, onboarding-CLI +15.
-  **CI settled it (run against `e1dfba219`, 2026-09-06): 46 pass / 3 fail.**
-  `functional_tests_at_onboarding_cli` went **fail → pass** on both variants, so X4a is what
-  fixes that red; `unit_at_client` passes on both channels. The local chase could never have
-  explained it — CI starts from a clean `$HOME`, while every local failure was the stale-keyfile
-  precondition. (The `HiveError: Box not found` lines are noise either way: 11–14 times in
-  *every* local arm including the pre-X4a baseline, failing no test.)
-  **The three remaining reds were not this branch either, but they were not one cause.**
-  In that run all three — `end2end_test_14`, `end2end_tests`, `build_and_test (at_lookup)` —
-  showed the atDirectory `root.atsign.wtf:64` unreachable: 30 and 23 occurrences of
-  `AtLookup.findAtServer timed out` in the two complete e2e logs, the missing
-  `atKeys/@ce2e*_key.atKeys` a downstream effect. ⚠️ **First recorded here as "one
-  environmental cause"; re-running them on 2026-09-06 disproved half of it.** `at_lookup` and
-  `end2end_tests` went green, confirming the outage for those two — but `end2end_test_14`
-  failed again at `11 passed, 18 failed` with **zero** atDirectory timeouts and 67
-  `AT0401 pkam authentication failed`. The outage had masked a *second, pre-existing* defect,
-  and one run showing a single cause is not evidence that every red shares it.
-  **That second defect is now fixed** (`6f1c7770f`, not X4a work): the e2e pack's 36
-  `setCurrentAtSign` call sites passed only a preference, so every switch to another atSign
-  rebuilt the client with no `AtChops` and a null `enrollmentId`; under `authType: apkam` the
-  atKeys carry a real enrollment id the atServer expects PKAM to name. `TestSuiteInitializer`
-  now caches each atSign's credentials and `switchToAtSign` re-supplies them — **on a real
-  switch only**, since the idempotency short-circuit needs both null and a stopped client
-  releases its storage. Result: **31 passed, 1 failed, 0 AT0401** — 17 tests fixed, none
-  broken. So **X4a introduced no CI regression**, and #2208 stands at 48 pass / 1 fail against
-  the 2 pre-existing reds it inherited. The survivor is a stale-cache assertion that also
-  fails pre-X4a — see its own defect row.
-- **X4 — Inject it, and release it.** ⏸ **X4a lands on this branch (#2208), so X4 and X4a
-  ship as one PR.** Its release code (`stop()` releases storage, PR #2208) is sound, but the
-  per-atSign guard it carries is superseded
-  by [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05)'s per-location guard
-  and is reworked in place on this branch as part of X4a. ❌ **A new static factory on
-  `AtClient` that builds *and* wires the services is NOT built** — #2208 adds an optional
-  `storage:` to the existing `AtClientImpl.create` instead, which delivers the injection
-  without that entry point (found by a cold read, 2026-09-06); `stop()` releases the claim and closes what the
-  bundle opened. ❌ **`AtClientPreference.hiveStoragePath` is NOT yet deprecated in code** — it carries no
-  `@Deprecated` on either branch, while [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)
-  and `design.md` describe the deprecation as done. Ruled, not shipped: annotate it with a
-  migration note, or correct those three sentences. Found by a cold read, 2026-09-06.
-  Depends on X1. **Measured 2026-09-05 on trunk `d13516d95` (the X3 merge), storage-release
+- **X4 — Inject it, and release it.** A new static factory on `AtClient` that builds *and*
+  wires the services, taking a bundle; `stop()` releases the claim and closes what the
+  bundle opened. Deprecate `AtClientPreference.hiveStoragePath` with a migration note.
+  Depends on X1.
+  ⚠️ **What #2208 actually shipped is narrower than this sentence.** It added `storage:` to
+  the doors that already existed (`AtClientImpl.create`, `setCurrentAtSign`, and via X5
+  `fromAuthSession`) and the release semantics, and left the static factory and the
+  deprecation unbuilt. Both landed in X6 instead, the deprecation only once
+  `AtClientStorage.closedByClient` made a bundle able to be closed by the client. **Measured 2026-09-05 on trunk `d13516d95` (the X3 merge), storage-release
   semantics built and run against the packs before landing anything:** 69 tests red across three causes —
   (a) 38 fixtures that rebuild a client for one atSign without stopping the previous one,
   which the per-atSign Hive guard now refuses; (b) a sync round outliving `stop()` and
@@ -399,104 +336,226 @@ D-12. Independent of the P series, which is `at_server`-side.
   established. And trunk's `AtClient.stop()` dartdoc *promises* resurrection: "Local
   storage is NOT closed. The instance remains in the internal cache and reuses its
   still-open local keystore when resumed". X4's storage release therefore changes a
-  documented contract, and the packs (X5) and that dartdoc move with it. The storage-release
-  work is **PR #2208** (`feat(at_client): stop() releases the client's storage`) on the
-  remote branch `gkc-at-client-storage-release`, a **draft paused behind X4a** — its
-  release code is sound, its per-atSign guard superseded by D-14's per-location one. Resume by checking that branch
-  out, not from a stash.
-
-  **PR #2208's two CI failures, both ours (classified 2026-09-05):**
-  `functional_tests_at_onboarding_cli` is the Hive-box sharing this ruling fixes (X4a);
-  `end2end_test_14` is a fixture issue — the `.atKeys` carry an enrollmentId but the test
-  authenticates without supplying it, so a #2787 server refuses bare `pkam:` (AT0401).
-  Both are addressed by the X4a rework and the enrollment-fixture sweep, not by the
-  release code itself.
-
-⛔ **X5 and X6 stack on #2208** (gkc, 2026-09-06). Both need the `storage:` injection that
-lands there — X5 to hand each file its own bundle, X6 to move the consumers onto the factory —
-so neither can be trunk-based until #2208 merges, and #2208 is not to grow further.
-⚠️ **A stacked PR gets no real CI**: the workflows trigger on `pull_request` to `trunk` only,
-so a PR based on `gkc-at-client-storage-release` shows two trivial checks. Dispatch
-`at_client_sdk` and `at_libraries` by `gh workflow run --ref <branch>` on every push, and
-retarget to trunk once the base merges. That signal is not optional here: CI is what caught
-both regressions of 2026-09-06 — the lost delete and the enrollment-id defect — neither of
-which any local run could see.
-
+  documented contract, and the packs (X5) and that dartdoc move with it. ⚠️ **This said the
+  storage-release work was parked as a git stash named `x4-release-wip` until 2026-09-06.**
+  It is not: it is [#2208](https://github.com/atsign-foundation/at_client_sdk/pull/2208) on
+  branch `gkc-at-client-storage-release`, which X5 is stacked on. Resume by checking that
+  branch out, never from a stash.
 - **X5 — Each functional test file gets its own storage, on a selectable backend.**
-  ✅ **BUILT 2026-09-06, and not on this branch.** It is
-  [#2210](https://github.com/atsign-foundation/at_client_sdk/pull/2210) on
-  `gkc-x5-functional-storage`, stacked on #2208. ⛔ **This row said "Move the functional
-  pack onto an in-memory bundle per file … Depends on X3" until 2026-09-06**, which would
-  have sent a reader to rebuild finished, CI-green work. **The detail lives in that
-  branch's copy of this row — read it there, not here**, and this row stays a pointer
-  until the merge-back folds the two.
-  Three things worth knowing before then, because they change what the row asked for:
-  gkc ruled the backend is chosen by an environment variable (`AT_FUNCTIONAL_STORAGE`,
-  Hive by default) with two extra beta-only CI jobs for `sqlite` and `memory`; "a bundle
-  per file" is not buildable as written, since a bundle is bound to one atSign, so the
-  unit is per *(file, atSign)*; and the `AT0009` consumer this row named is **not in the
-  trunk-based pack** — there is no PQ namespace-key test there (0 matches, against 12 on
-  this branch). The real consumer was `enrollment_test`, whose scoped enrollments shared
-  one atSign's store with seventeen other files.
+  ✅ **Built 2026-09-06.** The consumer was real: `test_utils.dart` gave every file
+  `test/hive/client/$atsign`, the runner clears that directory once per run and never
+  between files, and CI never clears it at all. Each file now names itself
+  (`TestUtils.isolateStorage('<file>')`) and gets one bundle per atSign, at a location no
+  other file opens.
+  **Which backend is built comes from `AT_FUNCTIONAL_STORAGE`** (gkc, 2026-09-06):
+  `hive` by default — what the pack has always run on, so the default run's behaviour is
+  unchanged — or `sqlite` or `memory`. An unrecognised value is refused rather than
+  defaulted, so a typo cannot quietly run the backend it was meant to replace. A second CI
+  job, `functional_tests_storage`, runs the same pack again on the other two, beta channel
+  only; the existing job's matrix is untouched, so nothing is renamed.
+  **Measured against `at_virtual_env:local`, 82 tests each: hive 82, sqlite 82, memory 82,
+  all passing.** That is the first time either SQLite-backed bundle has carried a live put,
+  get, sync drain or notification rather than only the unit contract tests. ✅ **CI agrees:
+  on [#2210](https://github.com/atsign-foundation/at_client_sdk/pull/2210) both new jobs
+  passed first time, and the run is 11 of 11 green** — `end2end_test_14` needed one re-run
+  for `bypasscache_test`, the intermittent that has its own row and fails pre-X4a. Re-derive
+  rather than quoting: `gh run list --branch gkc-x5-functional-storage`.
+  ⚠️ **"A bundle per file" was not buildable as written.** A bundle is bound to one atSign
+  at construction and several files drive two, so the unit is per *(file, atSign)*. Three
+  things the build found, none of them visible by reading:
+  - **The claim guard caught nine tests sharing one atSign's store across principals.**
+    `enrollment_test` re-authenticates as its own enrolment and reads what the owner wrote
+    locally, so it hands the store over explicitly at the five points where it stops every
+    client. The guard firing is the evidence that the sharing was real and unnoticed.
+  - **A child isolate is a separate heap**, so `sync_multiple_client_test`'s two clients
+    cannot be handed a bundle at all — that isolate builds its own from the path string it
+    is sent. The third client in that file sets `isLocalStoreRequired` false and opens no
+    local store.
+  - **`setCurrentAtSign` treated any storage argument as a change** and took the
+    destructive stop/recreate path, which would have altered the client lifecycle at every
+    site the pack touches. Re-offering the bundle a client already holds is now not a
+    change; a different bundle still rebuilds.
+  Two `at_client` changes ride with it: `fromAuthSession` accepts a `storage` bundle, being
+  the one door that could not take one; and `commitLogPath` came off the pack's preferences,
+  it being read nowhere in `at_client`. A preference now carries no storage path at all, so
+  a call site that forgets a bundle fails loudly instead of opening the shared directory.
+  ⚠️ **Owed, found while scoping and not fixed:** `InMemoryAtClientStorage` distinguishes
+  instances by `identityHashCode`, which is a hash and not an identity, so two live
+  in-memory storages whose hashes collided would be refused as one store. Negligible at the
+  handful per test process this pack opens; wrong in principle.
   Depends on X3.
-**⛔ THIS SECTION EXISTS IN THREE DIVERGING COPIES, and no one of them is true.** Found by
-a cold read 2026-09-06. The spike has D-13, D-14 and the X4a row; `gkc-at-client-storage-release`
-and `gkc-x5-functional-storage` have neither ruling and the pre-D-14 X4 text; only the X5
-branch knows X5 is built. **The branches carrying the code carry the stalest plan.** Nothing
-can catch this: `docs/projects/wasm/` is read by no test, script or workflow, unlike
-`docs/projects/pq/`, on which the whole acceptance rig is anchored. Re-derive the spread
-rather than trusting any single copy:
+- **X6 — Consumers.** ✅ **Merged to trunk 2026-09-07** as
+  [#2211](https://github.com/atsign-foundation/at_client_sdk/pull/2211), 50 of 50 checks green,
+  merge commit `a7ad4a545` — a merge commit rather than a squash, so the branch's own history is
+  on trunk (#2210 next door was squashed, which is why `git cherry` shows its commits as absent).
+  Built 2026-09-06 on `gkc-x6-consumers`, which GitHub deleted on merge. It **targeted trunk
+  directly**, having been stacked on
+  [#2210](https://github.com/atsign-foundation/at_client_sdk/pull/2210) until that merged and was
+  retargeted. ⚠️ This row said "stacked" until 2026-09-07, and that
+  word carries a consequence: a stacked PR gets no real CI, so it would have a reader discount
+  #2211's checks. They were real. **Ruled: they move
+  in THIS major** (gkc, 2026-09-06), and `AtClient.create` has nothing to do with
+  `AtClientManager` — future apps, once the manager is gone, manage their clients'
+  lifecycles explicitly, so the job now is to make that *possible* while apps using the
+  manager see no change.
+  ⚠️ **The row's premise was wrong in both directions.** `at_client_flutter`'s `lib/` had
+  nothing to move: zero references to `AtClientPreference`, `AtClientImpl` or
+  `AtClientStorage`; it wraps `AtAuth` and reads `AtClientManager.getInstance().atClient`,
+  and only its example apps set storage paths. Meanwhile `at_cli_commons`, which the row
+  never named, was one of only three production `lib/` sites setting `hiveStoragePath` —
+  though it reaches the client through `AtOnboardingServiceImpl`, so there is one seam, not
+  two.
+  **What landed.** `AtClient.create` — X4's promised static factory, never built by #2208,
+  which added `storage:` to the existing doors instead. It builds a client and wires its
+  three services, taking `storage` alongside `atKeysIo`, registers nothing, and refuses an
+  atSign whose client is already live rather than handing back one the caller does not own.
+  `AtOnboardingPreference.storage` carries a bundle through to `setCurrentAtSign`;
+  `at_cli_commons` needed no change, because `CLIBase` already passes the caller's own
+  preference object through untouched. `AuthService.createClient` turns a completed
+  authentication into a client the app owns, and `FlutterEnrollmentService` takes an
+  optional client so it can work against one.
+  **`AtClientStorage.closedByClient`** (gkc's idea, 2026-09-06) moves lifetime ownership onto
+  the bundle instead of inferring it from how the storage arrived. That removed the last
+  argument for `hiveStoragePath`, which is now deprecated along with `commitLogPath` — the
+  latter read by nothing anywhere, so every caller setting it was setting a value with no
+  effect.
+  ⚠️ **`AtServiceFactory` cannot go manager-free in 3.x**: every method takes an
+  `AtClientManager` positionally and non-nullably, and relaxing that makes the three
+  existing `ServiceFactoryWithNoOpSyncService` overrides illegal. `AtClient.create` takes
+  per-service builder callbacks instead, which covers the only override anyone uses.
+  ⚠️ **Owed.** `at_onboarding_cli` and `at_cli_commons` still set `hiveStoragePath` as their
+  default (eleven analyzer infos); moving them onto client-closed bundles changes when the
+  client's store closes, so it wants the live packs rather than riding in on unit
+  green. Eleven example apps in the other widget packages still set `commitLogPath`, each
+  needing its own version decision. **X6 changes storage ownership semantics, so the live
+  packs were owed before its PR was ready — all FOUR of them, not three. The fourth is
+  the onboarding-CLI **proxy** pack, which cannot run on this Mac at all (see the X6 review
+  notes below), so on this machine "all four" meant three run locally plus one delegated to CI.
+  That is what happened, and #2211 merged with 50 of 50 checks green.**
+  Depends on X4.
 
-```bash
-for w in at_client_sdk at_client_sdk-x4a at_client_sdk-x5; do
-  echo "== $w"; grep -c 'D-14' ~/dev/atsign/repos/$w/docs/projects/wasm/decisions.md
-done
-```
-
-**Owed, found while building X5 and each verified in source, none of them fixed:**
-
-- **`AtClientImpl.create` silently discards an injected `storage` for an atSign already in
-  `atClientInstanceMap`.** The cached branch adopts `preferences.crypto` and documents that
-  `atKeysIo` and `atChops` are honoured only on first construction; it says nothing about
-  `storage`, never attaches it, and neither errors nor logs. ⚠️ **The unsafe door is the one
-  [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05) point 5 tells fixtures to
-  use** — "builds each via direct `create` with its own injected located storage" — and
-  because the bundle is never attached, the per-location guard cannot fire either, so both
-  mechanisms fail silently at once. The manager door is safe: a different bundle fails the
-  short-circuit, and `stop()` evicts the client from the cache before `create` runs again.
-- **An injected bundle is a silent no-op when `isLocalStoreRequired` is false.** `_init`
-  guards the whole storage block on it, so the storage is never attached and `stop()` has
-  nothing to release. A caller believing it supplied storage is wrong, with no signal.
-- **On SQLite, store failures escape at_client's `on DataStoreException` handlers.** Measured
-  with a control: the Hive keystore names `DataStoreException` 28 times in 5.3.0, the SQLite
-  one once, and `local_secondary.dart` has four handlers. They log and rethrow, so the cost is
-  a lost diagnostic line rather than wrong behaviour — which is why the pack is green on
-  `sqlite`. Worth knowing before diagnosing a SQLite-backed failure.
-- **`InMemoryAtClientStorage` keys its location on `identityHashCode`**, a hash and not an
-  identity, so two live in-memory storages whose hashes collided would be refused as one
-  store. Negligible at the handful per process the pack opens; wrong in principle.
-
-**Also found by the 2026-09-06 cold read, recorded not acted on:**
-
-- **`ff6014420` rewrote the workspace root `pubspec.yaml` from CRLF to LF** — 122 carriage
-  returns to 0 — while `origin/trunk` still has 122. Its message describes only the
-  constraint change. Merging #2208 therefore rewrites every line of that file and will
-  conflict with any concurrent edit to it. Whether this repo should be LF throughout is a
-  decision, not a fix. Re-derive: `git show <ref>:pubspec.yaml | tr -cd '\r' | wc -c`.
-- **`design.md`'s `AtClientStorage` interface block is missing `isHeldBy`**, added 2026-09-06
-  on the X5 branch, and its `attach` dartdoc has drifted: the doc says "and [clear] has not
-  run since", the code says "and neither [forgetPrincipal] nor [clear] has run since".
-- **D-13's parenthetical mischaracterises D-12 while warning about it.** It says D-12's
-  "principal" names the claim holder; D-12 uses *both* senses — the claim holder at "the
-  owner of a claim is the client object, compared by identity", and the enrolled principal
-  three lines later at "a different enrollment cannot inherit records it cannot decrypt".
-  The warning to qualify at each use is right; its example is wrong.
-- **The X5 row's heading on the X5 branch outran its own body** — "Each functional test file
-  gets its own storage" over a body that corrects the unit to per *(file, atSign)*.
-
-- **X6 — Consumers.** `at_client_flutter` and `at_onboarding_cli` move onto the factory, so
-  both are WASM-ready ahead of the next major. Whether they move in this major or the next
-  is open.
+  **Adversarial review of [#2211](https://github.com/atsign-foundation/at_client_sdk/pull/2211),
+  2026-09-06** (13 agents, six dimensions, every finding attacked by a skeptic). Five
+  high-severity defects were confirmed in source and **fixed on the branch** at `100e73b9d`:
+  a permanently deaf notification listener after one failed first connect; two documented
+  preferences (`monitorHeartbeatInterval`, `monitorHeartbeatResponseTimeout`) gone dead with
+  the effective interval halved 59s → 30s; `at_onboarding_cli`'s and `at_cli_commons`' floors
+  unable to supply what their `lib/` now calls; and `AtClient.create`'s dartdoc asserting the
+  opposite of what the code does.
+  ⚠️ **The retry for the first defect belongs in at_client, NOT at_lookup.**
+  `startNotifications` deliberately *surfaces* a failed start — three at_lookup tests pin
+  that, one reasoning "failing loudly beats a connection that silently never receives
+  anything". Fixing it in at_lookup reddened all three; `Monitor` retries instead.
+  ⚠️ **One of the six author claims was FALSE: "deleting monitor_test.dart's 13 tests is
+  safe".** Eleven are covered by at_lookup's 26 muxable tests; **two are not** — the heartbeat
+  *cadence* tests, which set the preference and asserted the resulting interval, where
+  at_lookup's replacements set `AtLookupImpl.heartbeatInterval` directly and cannot see an
+  `AtClientPreference` at all. They were unportable while the wiring was missing; **the fix at
+  `100e73b9d` restores that wiring, so porting them is now possible and owed.**
+  **The rest of that list was worked 2026-09-06 and is now DONE**, each fix pinned by a test
+  whose break-it mutation reddens the assertion and quotes its own reason string:
+  - **A half-built client is no longer filed and handed out.** `AtClient.create` wraps its
+    service wiring in `try { … } catch (_) { await client.stop(); rethrow; }`, which unfiles
+    the client and releases its claim on the storage location.
+  - **The four unconditional "borrowed" dartdocs** are corrected, plus two in the functional
+    pack that stated the rule as a general claim about clients and four more in the
+    CHANGELOGs.
+  - **Notification handling is serialised again.** `Monitor._onNotification` pauses the
+    subscription for the duration of the handler, exactly as the socket-owning Monitor did.
+    ⚠️ **The "back-pressure seam is unreachable" half of this row was WRONG.** The seam is
+    explicit on `AtLookupMuxable.notifications`, wired to `pauseDelivery()` and pinned by
+    at_lookup's own tests — at_client simply never reached it. One pause fixes both halves.
+  ⛔ **THREE connections to the atServer is the default, and stays** (gkc, 2026-09-06): the
+  verb processor, the monitor, and the sync service. That has been at_client's behaviour all
+  along and nothing here changes it — `AtClientImpl._init` builds the first through
+  `buildRemoteSecondary`, `NotificationServiceImpl` hands `Monitor` a FRESH lookup, and
+  `SyncServiceImpl.create` builds its own `RemoteSecondary`. The `monitor:` and
+  `remoteSecondary:` injection points are test-only; at_auth's `reuse: true` supplies the verb
+  connection rather than adding a fourth, so the count is three either way.
+  ⚠️ **Nothing pins this**, and `Monitor`'s dartdoc still offers the collapse to two ("or the
+  one `RemoteSecondary` already holds"). It carries two reasons against — no atServer
+  implements `monitor:multiplexed`, and `_onNotification` pauses the connection while a
+  handler runs, which on a shared socket would deadlock the handler's own put — but it reads
+  as an option rather than a ruling. A test asserting the three lookups are distinct instances
+  would need a `@visibleForTesting` getter for sync's, which is private. Owed, not done.
+  ⚠️ **Sync's promptness rides on the MONITOR connection, not its own.**
+  `statsServiceListener` subscribes to `statsNotification` through the notification service
+  and enqueues a system sync on each one; its own connection carries only `sync:`, `batch:`
+  and `stats:3`. So a monitor that goes silently deaf costs sync its trigger and drops it to
+  the 30-second `_periodicSyncInterval` safety net — which is what the watchdog above now
+  catches.
+  - **The socket-alive-but-silent watchdog is back**, as `AtClientPreference.
+    monitorSilenceTimeout` (default 60s, `Duration.zero` off) driving a timer in `Monitor`
+    that rebuilds through `stopNotifications`/`startNotifications`.
+    ⚠️ **Ruled: at_client, not at_lookup** (gkc, 2026-09-06). The argument for putting it in
+    at_lookup mis-cited `at_lookup_impl.dart:914-922`, which argues against Monitor owning
+    the reconnect BACKOFF and is conditioned on "a connection that also carries verb
+    traffic" — Monitor's is dedicated. This PR changes at_lookup by zero lines and at_lookup
+    is ahead of at_client on the release train.
+    **It has a live test as well as three unit tests**, and it needed no test hook: the
+    atServer writes a stats notification to every monitor connection every 15s by default
+    (`at_secondary_config.dart:63` on at_server `origin/trunk`), which is a real clock to
+    bracket the budget around. `tests/at_functional_test/test/monitor_silence_test.dart`
+    runs two 45-second arms differing only in the budget — 3s must rebuild, 40s must not —
+    observed through the public `currentListenerStateStream`, with the stats-arrive premise
+    asserted first so a server that stopped sending them fails as itself. ⚠️ What no test
+    here does is wedge a real atServer into answering heartbeats while delivering nothing;
+    the arms reproduce the condition the watchdog keys on, not the fault that causes it.
+  - **The Flutter app-owned path works end to end.** `EnrollmentRequestList` takes an
+    optional `enrollmentService` and every client read goes through it.
+    ⚠️ **It was six reaches, not five, and the sixth fires first**: the service's constructor
+    wires `onListen` to a method whose first statement touches `atClient`, which runs
+    synchronously inside the widget's own `.listen`. Swapping only the five named sites would
+    not have fixed it. The widget now disposes only a service it built itself.
+  - **`at_onboarding_cli` is 1.17.0-rc1** (gkc, 2026-09-06), and `at_cli_commons` floors it
+    there — it had pinned `^1.16.1-rc2`, which resolves a version without `storagePath`.
+  - **`dart analyze --fatal-infos`**: ⚠️ **that row's diagnosis was WRONG.** None of the 143
+    same-package uses of the two deprecated fields produces a diagnostic, because
+    `deprecated_member_use_from_same_package` is not in `package:lints/recommended.yaml`,
+    which is all this package includes. The 289 infos were 286 pre-existing
+    `deprecated_member_use` from at_chops/at_auth plus 3 `unnecessary_import` this PR did
+    add; those three are removed. `--fatal-infos` is not a CI gate — CI runs bare
+    `dart analyze` and `flutter analyze --no-fatal-infos`.
+  **Raised while building X6, tracked nowhere else:**
+  - **The monitor connection advertises nothing.** `RemoteSecondary` passes
+    `clientConfig: _getClientConfig()` — version, clientId, appName, appVersion, platform —
+    and `NotificationServiceImpl` passes none, so that parameter takes its `const {}`
+    default. `AtClientConfig.atClientVersion` therefore reaches the atServer over the verb
+    connection only. Whether that is deliberate is unknown: the socket-owning Monitor built
+    its own connection, so there was nothing to inherit. Worth settling if the atServer logs
+    or branches on client version per connection.
+  - **`Monitor` is arguably no longer required.** It is not exported from at_client's barrel,
+    has exactly one consumer, and that consumer uses five members — `currentState`,
+    `targetState`, `currentStateStream`, `start()`, `stop()`. What is left in it is
+    `NotificationServiceImpl`'s own concern, and `Monitor.lastReceipt` is already dead:
+    written once, read only by a test, while the public `NotificationService.lastReceipt` is
+    served by a second copy. A fold-in would move the watchdog and the retry with it. Not
+    started; it is a second structural change and X6 was already large.
+  - **`buildRemoteSecondary` is not the only construction site.** `SyncServiceImpl.create`
+    builds a `RemoteSecondary` directly rather than through it — functionally equivalent, it
+    omits `privateKey` which the constructor recovers from the preference. #2211's own
+    description calls `buildRemoteSecondary` "the one place a connection is built", which
+    overstates it. Either route sync through it or correct the sentence.
+  **Considered and rejected (gkc, 2026-09-06):** a rail asserting
+  `AtClientConfig.atClientVersion` matches `pubspec.yaml`. Its dartdoc says the two "must
+  always be the same" and nothing enforces it, and the value is sent to the atServer — but
+  the bump is a deliberate, infrequent act and the twin stays manual. Do not re-propose
+  without new evidence of drift.
+  ⚠️ **That evidence arrived the next day.** On `gkc-pq-d1-spike`, commit `cf58ca023` moved
+  `at_client`'s `pubspec.yaml` to 3.15.0-rc1 and left `AtClientConfig.atClientVersion` at
+  `'3.14.1'`; the drift stood undetected until a cold read on 2026-09-07, and every client
+  built from that branch meanwhile told the atServer it was 3.14.1. Fixed on the spike at
+  `ea7a33fdf`. One instance is not a rate, and the rejection above may still be right — but
+  the "do not re-propose" condition is now satisfied, and a re-proposal should be judged on
+  its merits rather than turned away at the door.
+  ⚠️ **Merge-back note for the spike:** three sites now read `preference.signingAlgoType`
+  directly (`sync_service_impl.dart`, `notification_service_impl.dart`, `remote_secondary.dart`)
+  where the spike calls `signingAlgoOf(atClient)`. They must go back to `signingAlgoOf` when PQ
+  algorithm resolution lands, or a per-enrollment ML-DSA enrollment signs with the preference's
+  algorithm instead of its own.
+  ⚠️ **This row previously said "at_cli_commons needed no change".** A later commit on the same
+  branch changed it, and its floors were not re-derived afterwards — which is how two of the
+  five defects arrived.
 
 **Sequencing.** Each X item lands as its own PR on **trunk** and is merged back into
 `gkc-pq-d1-spike` before the next starts, so the drift never accumulates into one large
@@ -510,24 +569,133 @@ filing under the identity `_init` settled. Keep the key and the filing; **delete
 measured 2026-09-05 against trunk `ba281fda3`, before X2 and X3 landed; the X4 row's
 measurement is against `d13516d95`, after them.
 
+⚠️ **The merge-back rule was not followed for X4, X5 or X6, and the accumulation it exists to
+prevent has happened.** X3's merge-back is real — `51bdb6230`, on the spike — but nothing
+carried X4, X5 or X6 across, and all three have now merged to trunk. Measured 2026-09-07 with
+`git grep -c -F <symbol> <ref> -- 'packages/' 'tests/'`, against a positive control of
+`AtClientStorage` at 122 on trunk and 59 on the spike (X2/X3, which did cross):
+
+| Symbol | trunk | `gkc-pq-d1-spike` | Arrived with |
+|-------------------------|-------|-------------------|--------------|
+| `closedByClient`        | 39    | 0                 | X6           |
+| `isolateStorage`        | 24    | 0                 | X5           |
+| `AT_FUNCTIONAL_STORAGE` | 2     | 0                 | X5           |
+| `monitorSilenceTimeout` | 8     | 0                 | X6           |
+
+Measure the gap by **content, not ancestry** — a squash merge (#2210) leaves no ancestor and
+no matching patch-id, so `git cherry` and `git merge-base --is-ancestor` both report work
+missing that is present.
+
+✅ **The merge-back was done 2026-09-07**, 43 conflicted files and 127 hunks, and all seven
+packages analyze clean afterwards. `refuseChangedStoragePath` was deleted as ruled — the
+definition, three call sites and its five covering tests. What that ruling gives up, which was
+not written down when it was made: the per-location storage guard subsumes the guard's
+*opening* case, but two of the three call sites — `create`'s cache hit and `setPreferences` —
+never open anything, so a preference naming a different location is now dropped quietly there.
+`create`'s dartdoc says so. Nothing published carried the guard: at_client's last released
+version is 3.14.0.
+
+⚠️ **The `signingAlgoOf` note names three files and one of them is wrong.**
+`sync_service_impl.dart` and `notification_service_impl.dart` did need it restored.
+`remote_secondary.dart` did not: `RemoteSecondary` holds no `AtClient` to pass, and it already
+threads the resolution through its own `signingAlgoType` constructor parameter into
+`_signingAlgoType`, which is what `_installAuthenticator` reads. Trunk's copy read
+`_preference.signingAlgoType` there; keeping the spike's file was the whole fix.
+
+⚠️ **One key-shape defect, met THREE times, and no instance had a compiler behind it.** The
+instance map is keyed `(atSign, enrollmentId)` on this branch and by the bare atSign on trunk,
+and every lookup written against the old shape still compiles and still returns a value — the
+wrong one, or none.
+
+1. **`AtClientImpl.holdsLiveClient`** (trunk, the guard the client factory uses to refuse an
+   atSign already live) did `containsKey(fixAtSign(atSign))`, missing every *enrolled* client
+   and reporting an atSign free while one was running. Now matches any key for the atSign.
+2. **`AtClientImpl.stop()`** unfiled with `atClientInstanceMap.remove(_atSign)` while `create`
+   files under `instanceKey(atSign, enrollmentId)` — so a client filed under an enrollment was
+   **never unfiled**, and stayed in the map, stopped, for the next caller to be handed and try
+   to restart. It now removes **by identity**, which no future key change can break.
+3. **Ten test teardowns** did `atClientInstanceMap[atSign]` or `.remove(atSign)`, so an
+   enrolled client was never stopped and its storage location stayed claimed for the next test.
+   These were most of the 63 unit failures the merge produced.
+
+**When a key gains a component, grep for lookups by the OLD key rather than for the type** —
+the type is unchanged, which is exactly why nothing goes red. Prefer identity where the
+question is "is this the object I filed", since identity survives the next key change too.
+
+⛔ **The client factory is `buildAtClient(...)`, not `AtClient.create`** (gkc, 2026-09-07).
+⚠️ **And not `createAtClient` either, which is the name the ruling was taken under.**
+`at_onboarding_cli` has exported a top-level `createAtClient` for some time — its own
+dartdoc says "this function is exported and apps already call it" — and 1.16.0 is on
+pub.dev, so the holder is real and outside this tree. Importing both barrels made the
+name ambiguous and eight of at_onboarding_cli's nine test files failed to LOAD, with
+`dart analyze` exit 0 on every package: the collision only bites where both are imported,
+which is the consuming package's compile.
+A static on the interface forces `at_client_spec.dart` to import `at_client_impl.dart`, and
+**49 files under `lib/src` import that interface**, so the impl — and `enrollment_service_impl`
+with it — lands in all 49 import closures. That is the entanglement `import_topology_test.dart`
+exists to prevent, and that test is spike-only, which is why X6 shipped the static without
+anything going red. Dart cannot put a static outside its class, so the spelling and the
+invariant could not both survive; the spelling gave way, at no external cost, because 3.15.0-rc1
+is unpublished. The factory now lives in `lib/src/client/at_client_factory.dart`, and moving it
+also freed the interface of four impl imports it no longer needs. ⚠️ `js-api.md` still specifies
+a JavaScript facade constructed as `AtClient.create(...)`; that is a different language surface
+and was deliberately left alone, but the two now differ and the JS design should say why.
+
+⚠️ **Per-enrolment stores exposed that conveyance has no standing subscriber** (found
+2026-09-07, while chasing why `nskey_rollout_ladder_live_test` went red under item 3).
+An nskey private reaches another enrolment of one atSign by CONVEYANCE, never by a shared
+store and never by a shared keyfile — two installs are two devices with two of each. Three
+arrival paths exist and the third is missing:
+
+1. **At start** — `collectConveyedKeyMaterial` sweeps waiting envelopes into the keyfile and
+   consumes them.
+2. **On a read miss** — `privateHalf` fires `_askForMissingPrivate` →
+   `requestAndFileNskeyPrivate` → `waitForSecret`, a targeted temporary subscription for one
+   secret with a 30s timeout, which files what arrives.
+3. **Unsolicited, mid-session — nothing.** `published_nskey_key_ring.dart` says so in its own
+   words: "there is no such arrival path mid-session: nothing subscribes to `receivedSecrets`
+   to file an nskey private, and `NskeyPrivateFiling.filePending` runs at start."
+
+So **conveyed is not filed**. A proactively conveyed generation sits in the secret store
+until the next start, and the first read of anything sealed to it misses once — `privateHalf`
+returns null immediately while the ask runs asynchronously — even though the material is
+already on the device. `waitForSecret` checks the store first, so the ask then resolves
+without a round trip, which is why this has been invisible.
+
+⛔ **Ruled: build a standing subscriber for conveyances** (gkc, 2026-09-07) — nskey privates
+and content keys — so an arrival is filed when it lands rather than at the next start.
+
+⚠️ **That makes THREE states for the ladder test, not two** (gkc asked for two): conveyed
+**and filed** reads immediately; conveyed **but not filed** misses once and then resolves from
+the store with no round trip; **not conveyed** misses and waits on a holder answering. The
+middle state is the one a standing subscriber removes, and it is the one no test covers.
+
+⚠️ **X5's fixture contract is mandatory, and 41 spike files predated it.** `test_utils.dart`
+now refuses to hand out storage unless the file called `TestUtils.isolateStorage('<file>')` at
+the top of `main()` — a `StateError` naming the fix. Trunk updated its own 20 functional files;
+the spike's 41 client-building files were written before the contract existed, so the first
+live run after the merge was `+96 -40` with 35 of the 40 failures being that one message. Added
+to all 41; `pq_tag_test.dart` is the only file without it, and correctly so — it inspects local
+files, talks to no atServer and failed nothing. Each name matches its own file and all 61 are
+unique, which is what stops two files sharing a location.
+
+⚠️ **X4a item 3 is what remains, and the merge-back is what made it due.** That item — "rewrite
+the multi-enrollment fixtures onto direct `create` with a shared lifecycle-owning test helper
+(builds located storage + client, closes both in `tearDown`)" — was moved off #2208 as
+spike-side work. The per-location guard arrived with the merge, so the spike's fixtures that
+build several enrollments of one atSign at one location, or restart a client after `stop()`,
+now fail against it. That is the guard working, not a regression.
+
 **Found 2026-09-05 by the wrap-up's cold read and done the same day:** the X3 merge-back
 had been skipped. It landed as `51bdb6230`; `at_sync_queue.dart` kept trunk's `SyncQueueStore`
 abstraction and the spike's `HiveInstances.forPath(path)` default together, and the queue's
-`storagePath` became optional so trunk's SQLite storage compiles on the spike.
-
-**Also owed: this doc set points at a `plans/wasm/` directory that does not exist**, and
-neither `api-designing.md` nor `key-storage.md` is anywhere on this machine — they were
-working notes that never landed. ⚠️ **Recorded as "nine dangling links" until 2026-09-06,
-and both halves of that were wrong**: the count is ten lines (one of which names both
-files), and only **two** of the ten are markdown links (`implementation-plan.md`, in the
-T-series rows). The other eight are prose references, which no link checker sees —
-`decisions.md` ×3, `js-api.md` ×5. What is owed is
-a decision before an edit: recover the two files, or rewrite every reference to stand
-without them. Re-derive rather than quoting:
-
-```bash
-grep -rn --no-ignore-files 'plans/wasm' docs/projects/wasm/ | grep -v 'a `plans/wasm/`'
-```
+`storagePath` became optional so trunk's SQLite storage compiles on the spike. Also owed:
+references to a `plans/wasm/` directory that does not exist. ⚠️ **Recorded as "nine dangling
+links" until 2026-09-07, and both halves of that were wrong** (corrected on the spike
+2026-09-06, and this copy had not caught up): it is ten lines, one of which names two files,
+and only **two** of the ten are markdown links — in `implementation-plan.md`'s T-series rows.
+The other eight are prose references that no link checker sees: `decisions.md` ×3,
+`js-api.md` ×5.
 
 **Deferred to the major:** deprecating `AtClientManager`. Its `AtSignChangeListener`
 capability exists only because there is a global current atSign, and where that goes is
@@ -579,7 +747,7 @@ count is sound for at_client's own sync service, and the extension seam is fine 
 - **I8 — Storage backend selectable from `AtClientPreference`.**
   `storage_manager.dart:16` hardcodes `HiveAtPersistenceFactory()` and requires
   `hiveStoragePath`. Introduce the backend choice (`AtPersistenceBackendId` already has
-  `hive` and `sqlite`) and an opaque storage handle. Remove the unused
+  `hive` and `sqlite`) and an opaque storage location. Remove the unused
   `keyStoreSecret` parameter while in the file. Resolve OQ-3 here.
 - **I9 — Backend-neutral `AtSyncQueue`.** Replace the direct `Hive.openBox` at
   `at_sync_queue.dart:121` with a small spec interface plus Hive and SQLite

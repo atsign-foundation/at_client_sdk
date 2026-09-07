@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/secondary_address_finder_source.dart';
@@ -99,10 +100,15 @@ class AtClientManager {
   /// would briefly run two sync services against one Hive store. But it means
   /// that of [preference], only `crypto` is adopted — a caller changing
   /// anything else and expecting it to take effect gets nothing, silently. The
-  /// two exceptions are a changed rollout axis and a changed
-  /// `hiveStoragePath`, which are refused outright rather than dropped, because
-  /// neither could be honoured and both would otherwise leave the caller
-  /// believing its data is somewhere it is not.
+  /// The one exception is a changed rollout axis, which is refused outright
+  /// rather than dropped, because it could not be honoured and would otherwise
+  /// leave the caller running under a stage it thinks it has left.
+  ///
+  /// ⚠️ A changed `hiveStoragePath` is among the SILENT ones. It was refused
+  /// until the per-location storage guard replaced that check, and the guard
+  /// only fires where a store is opened — which a cached client does not do. A
+  /// caller that names a different location and is handed the running client
+  /// keeps the location that client already has.
   ///
   /// * [serviceFactory] - Overrides service creation (primarily for testing).
   /// * [atChops] - Shared crypto context for the new services.
@@ -112,7 +118,12 @@ class AtClientManager {
       AtChops? atChops,
       AtKeysIo? atKeysIo,
       AtLookUp? atLookUp,
-      String? enrollmentId}) async {
+      String? enrollmentId,
+      AtClientStorage? storage,
+
+      /// The incoming client authenticates as a different enrollment of
+      /// [atSign] than the outgoing one, over the same store.
+      bool principalChange = false}) async {
     serviceFactory ??= DefaultAtServiceFactory();
 
     _logger.info("setCurrentAtSign called with atSign $atSign");
@@ -136,6 +147,11 @@ class AtClientManager {
     // Callers needing a forced reset for a SAME-atSign change of
     // preferences / atChops / enrollmentId still get one — we only
     // skip when nothing in the request changed.
+    //
+    // Re-offering the storage the current client already holds is not a
+    // change either: it is what a caller that owns one bundle for the whole
+    // of its work does on every call, and rebuilding on it would tear the
+    // client down for nothing.
     final currentAtSign = _currentAtClient?.getCurrentAtSign();
     if (currentAtSign != null &&
         currentAtSign == atSign &&
@@ -143,6 +159,7 @@ class AtClientManager {
         atKeysIo == null &&
         atLookUp == null &&
         enrollmentId == null &&
+        _storageIsUnchanged(storage) &&
         _currentAtClient!.isStopped == false) {
       // The full stop/recreate path below recreates via AtClientImpl.create(),
       // which adopts the supplied preference's crypto config onto a re-used
@@ -161,10 +178,6 @@ class AtClientManager {
             running: existing.getPreferences(),
             asked: preference,
             cacheKey: AtClientImpl.instanceKey(atSign, existing.enrollmentId));
-        AtClientImpl.refuseChangedStoragePath(
-            running: existing.getPreferences(),
-            asked: preference,
-            cacheKey: AtClientImpl.instanceKey(atSign, existing.enrollmentId));
         existing.getPreferences()?.crypto = preference.crypto;
       }
       _logger
@@ -179,7 +192,21 @@ class AtClientManager {
     // Stop the outgoing atsign
     _atSign = atSign;
     final previousAtClient = _currentAtClient;
+    // A principal change is a SUCCESSION: one enrollment of this atSign replaced
+    // by another over the same store, usually an rsa2048-auth enrollment
+    // succeeded by an mldsa65-auth one. Two enrollments that are both live get
+    // separate stores instead; here the atServer caps the old one, so the data
+    // follows. The bundle therefore crosses the switch, and the store has to be
+    // told, because `attach` refuses a holder whose principal differs from the
+    // last one. Carried from the outgoing client when the caller named none:
+    // this is the one place that knows which client is being replaced.
+    final carried = principalChange && storage == null
+        ? (previousAtClient is AtClientImpl ? previousAtClient.storage : null)
+        : storage;
     await previousAtClient?.stop();
+    // Between holders, never under one: `forgetPrincipal` throws while a client
+    // is attached, which is why it follows the stop.
+    if (principalChange) await carried?.forgetPrincipal();
 
     // Spin up the new atClient
     _currentAtClient = await serviceFactory.atClient(
@@ -187,7 +214,8 @@ class AtClientManager {
         atChops: atChops,
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
-        enrollmentId: enrollmentId);
+        enrollmentId: enrollmentId,
+        storage: carried);
 
     var notificationService = await serviceFactory.notificationService(
         _currentAtClient!, this,
@@ -225,6 +253,14 @@ class AtClientManager {
     return this;
   }
 
+  /// Whether [storage] would leave the current client's storage as it is:
+  /// either none was offered, or it is the object that client already holds.
+  bool _storageIsUnchanged(AtClientStorage? storage) {
+    if (storage == null) return true;
+    final current = _currentAtClient;
+    return current != null && storage.isHeldBy(current);
+  }
+
   /// Explicit, typed hand-off from auth to client.
   ///
   /// Consumes an [AtAuthSession] (the key *source* + confirmed params) and lets
@@ -236,9 +272,16 @@ class AtClientManager {
   /// Set [reuse] to adopt auth's already-authenticated connection
   /// ([session.atLookUp]) and skip the second handshake — the perf escape hatch.
   /// When false (default) the client opens its own fresh socket.
+  ///
+  /// [storage] is borrowed unless it was built with `closedByClient: true`, in
+  /// which case the client closes it on [AtClient.stop]. Same rule as on
+  /// [setCurrentAtSign].
   Future<AtClientManager> fromAuthSession(
       AtAuthSession session, AtClientPreference preference,
-      {AtServiceFactory? serviceFactory, bool reuse = false}) async {
+      {AtServiceFactory? serviceFactory,
+      bool reuse = false,
+      AtClientStorage? storage,
+      bool principalChange = false}) async {
     // Destructure rootDomain onto the preference for now. A follow-up will add
     // an AtRootDomain-typed accessor to AtClientPreference so this can stop.
     preference.rootDomain = session.rootDomain.rootDomain;
@@ -253,7 +296,9 @@ class AtClientManager {
         serviceFactory: serviceFactory,
         atKeysIo: session.atKeysIo,
         atLookUp: reuse ? session.atLookUp : null,
-        enrollmentId: session.enrollmentId);
+        enrollmentId: session.enrollmentId,
+        storage: storage,
+        principalChange: principalChange);
   }
 
   void listenToAtSignChange(AtSignChangeListener listener) {
@@ -318,6 +363,7 @@ abstract class AtServiceFactory {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
+    AtClientStorage? storage,
   });
 
   Future<NotificationService> notificationService(
@@ -345,6 +391,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
+    AtClientStorage? storage,
   }) async {
     return await AtClientImpl.create(
       atSign,
@@ -355,6 +402,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       atKeysIo: atKeysIo,
       atLookUp: atLookUp,
       enrollmentId: enrollmentId,
+      storage: storage,
     );
   }
 

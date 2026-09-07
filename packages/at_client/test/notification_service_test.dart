@@ -1918,6 +1918,66 @@ void main() {
           NotificationListenerState.notConnected);
     });
   });
+
+  /// [AtClientPreference.monitorHeartbeatInterval] and
+  /// [AtClientPreference.monitorHeartbeatResponseTimeout] are the only public
+  /// controls over the notification connection's liveness probe, and nothing
+  /// between them and the socket reads them any more: Monitor holds the
+  /// preference but never looks at either field, because the muxable it drives
+  /// owns the heartbeat. This constructor is the one place the two values
+  /// cross that gap, so it is the only place a test can pin them. at_lookup's
+  /// own heartbeat tests set the interval on the implementation directly and
+  /// cannot see an AtClientPreference at all.
+  group('the heartbeat preferences reach the muxable', () {
+    late AtClientPreference preference;
+
+    setUp(() {
+      preference = AtClientPreference()
+        ..namespace = 'wavi'
+        ..monitorAutoStart = false;
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(preference);
+    });
+
+    test('a tuned interval and response timeout are both carried across',
+        () async {
+      preference
+        ..monitorHeartbeatInterval = Duration(milliseconds: 20)
+        ..monitorHeartbeatResponseTimeout = Duration(milliseconds: 7);
+
+      final ns = await NotificationServiceImpl.create(mockAtClientImpl,
+              secondaryAddressFinder: mockSecondaryAddressFinder)
+          as NotificationServiceImpl;
+
+      expect(ns.monitor.lookUp.heartbeatInterval, Duration(milliseconds: 20),
+          reason: 'an application that tunes monitorHeartbeatInterval must '
+              'change how often the notification connection is probed; the '
+              'muxable owns the probe now, so a preference that does not '
+              'reach it is not overridden, it is silently ignored');
+      expect(
+          ns.monitor.lookUp.heartbeatResponseTimeout, Duration(milliseconds: 7),
+          reason: 'and monitorHeartbeatResponseTimeout decides how long an '
+              'unanswered probe waits before the connection is torn down and '
+              'rebuilt. Both sides default to 10 seconds, so only a tuned '
+              'value can tell a wired field from an unwired one');
+    });
+
+    test(
+        'an untouched preference gives the documented 59s, not the 30s '
+        'underneath', () async {
+      final ns = await NotificationServiceImpl.create(mockAtClientImpl,
+              secondaryAddressFinder: mockSecondaryAddressFinder)
+          as NotificationServiceImpl;
+
+      // A raw-literal pin on the default, not a second wiring test: every
+      // mutation that reddens this one reddens the test above too.
+      expect(ns.monitor.lookUp.heartbeatInterval, Duration(seconds: 59),
+          reason: 'the documented default is what a client that never touched '
+              'the preference gets, and at_lookup initialises 30 underneath. '
+              'Changing that default nearly doubles the idle traffic of '
+              'every such client, so this assertion is what an intended '
+              'change edits');
+    });
+  });
 }
 
 class StatsAtKeyMatcher extends Matcher {

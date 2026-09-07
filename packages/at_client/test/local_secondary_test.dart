@@ -93,6 +93,13 @@ void main() {
       await setupLocalStorage(storageDir, atSign);
     });
     tearDown(() async {
+      // Every client for this atSign, not just the bare-keyed one: the map is
+      // keyed (atSign, enrollmentId), so an enrolled client is filed under
+      // '$atSign|<id>' and would be left holding its storage location.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
       AtClientImpl.atClientInstanceMap.remove(atSign);
       await tearDownLocalStorage(storageDir);
     });
@@ -183,7 +190,16 @@ void main() {
 
   group('A group of local secondary execute verb tests', () {
     setUp(() async => await setupLocalStorage(storageDir, atSign));
-    tearDown(() async => await tearDownLocalStorage(storageDir));
+    tearDown(() async {
+      // Every client for this atSign, not just the bare-keyed one: the map is
+      // keyed (atSign, enrollmentId), so an enrolled client is filed under
+      // '$atSign|<id>' and would be left holding its storage location.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
+      await tearDownLocalStorage(storageDir);
+    });
 
     test('test update verb builder', () async {
       final atClientManager = AtClientManager(atSign);
@@ -350,7 +366,16 @@ void main() {
 
   group('writesInProgress tracker', () {
     setUp(() async => await setupLocalStorage(storageDir, atSign));
-    tearDown(() async => await tearDownLocalStorage(storageDir));
+    tearDown(() async {
+      // Every client for this atSign, not just the bare-keyed one: the map is
+      // keyed (atSign, enrollmentId), so an enrolled client is filed under
+      // '$atSign|<id>' and would be left holding its storage location.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
+      await tearDownLocalStorage(storageDir);
+    });
 
     /// Builds a fresh LocalSecondary against the test Hive store. Each
     /// test gets its own AtClient instance (atClientInstanceMap is
@@ -905,7 +930,12 @@ void main() {
       await setupLocalStorage(storageDir, atSign);
     });
     tearDown(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      // stop() before dropping the entry: removing it only forgets the
+      // client, while the storage location stays claimed until it stops.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
       await tearDownLocalStorage(storageDir);
     });
 

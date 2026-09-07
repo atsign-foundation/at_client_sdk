@@ -69,6 +69,7 @@ import 'test_utils.dart';
 /// has to read the first. Reading the second compares ids that no client is
 /// running under, which passes just as happily and measures nothing.
 void main() {
+  TestUtils.isolateStorage('pq_stage_arm_test');
   // All three cells share one atSign on purpose: they are compared against
   // each other, so anything that differs between them other than the posture
   // is a second variable, and a per-cell atSign would be exactly that.
@@ -121,7 +122,8 @@ void main() {
         // thing under test.
         deviceName: 'stagearm-${entry.key}-'
             '${DateTime.now().microsecondsSinceEpoch}',
-      );
+    storage: TestUtils.storage,
+  );
     }
   });
 

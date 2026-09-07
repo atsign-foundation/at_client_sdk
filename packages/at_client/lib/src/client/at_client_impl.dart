@@ -74,10 +74,25 @@ class AtClientImpl implements AtClient {
   AtKeyValueStore<String, AtData, AtMetaData?>? _localSecondaryKeyStore;
 
   /// The keystore and sync queue this client holds; null when an external
-  /// keystore was injected or storage is not required.
+  /// keystore was injected, storage is not required, or [stop] has released it.
   AtClientStorage? _storage;
 
-  @visibleForTesting
+  /// Storage handed to this client by its caller, if any. A client that was
+  /// given one never closes it: the caller owns its lifetime and may hand the
+  /// same store to a later client.
+  AtClientStorage? _injectedStorage;
+
+  /// Whether this client built [_storage] itself and so closes it on [stop];
+  /// injected storage is only detached.
+  bool _ownsStorage = false;
+  bool _storageReleased = false;
+
+  /// The store this client attached to, or null before [_init] runs.
+  ///
+  /// Not test-only: a retrofit rebuilds the client for the same atSign over
+  /// the same store, so it has to read the outgoing client's bundle to carry
+  /// it across. A preference carries no storage location, so there is nowhere
+  /// else to recover it from.
   AtClientStorage? get storage => _storage;
   @visibleForTesting
   LocalSecondary? localSecondary;
@@ -511,7 +526,7 @@ class AtClientImpl implements AtClient {
   ///
   /// A caller that names no enrollment usually means *this atSign's client*
   /// rather than *a client belonging to no enrollment* — `at_activate`'s
-  /// `otp`, `list` and `spp` build their client through `createAtClient`, which
+  /// `otp`, `list` and `spp` build their client through `buildAtClient`, which
   /// names none, and most tests do the same. Taking `null` literally hands
   /// those callers a brand-new client carrying no key material, which does not
   /// fail here: it fails much later, on the first verb, as
@@ -595,47 +610,32 @@ class AtClientImpl implements AtClient {
             'signing and enrolling under a stage it thinks it has left');
   }
 
-  /// Refuses a preference naming a different [AtClientPreference.hiveStoragePath]
-  /// from the one this client's store is already open at.
+  /// Whether a live client is already filed for [atSign], under any enrollment.
   ///
-  /// Separate from [refuseChangedRolloutAxes] because it is a different kind of
-  /// claim: the rollout axes decide what a client *writes*, this decides
-  /// *where*. `rolloutDifferencesFrom` says in its own dartdoc that what it
-  /// compares is the whole of what a posture can change, and a storage path is
-  /// not one of those.
+  /// [atClientInstanceMap] is keyed by `(atSign, enrollmentId)` — see
+  /// [instanceKey] — so one atSign can hold several entries, one per enrolled
+  /// principal, and any of them means the atSign is live. Matching the bare
+  /// atSign alone would miss every enrolled client and report an atSign free
+  /// while one is running. [stop] removes an entry; the atSign is free when the
+  /// last one goes.
+  static bool holdsLiveClient(String atSign) =>
+      liveClientsFor(atSign).isNotEmpty;
+
+  /// Every client filed for [atSign], under any enrollment.
   ///
-  /// **Why refusing rather than adopting.** `StorageManager` opens the Hive
-  /// bundle once, at the first path it is given, and nothing reopens it — so a
-  /// later path is not applied however it is delivered. Adopting it silently
-  /// leaves the caller believing its data is going somewhere it is not, and
-  /// [setPreferences] is worse still: it would make the client *report* a path
-  /// it never used. That is the same failure the rollout guard beside this one
-  /// exists to stop, and it gets the same answer.
-  ///
-  /// A null [AtClientPreference.hiveStoragePath] on [asked] is not a conflict:
-  /// a caller that named no path is not asking for a different one.
-  ///
-  /// An [ArgumentError] for the same reason as its sibling — two places in one
-  /// app disagreeing about where this atSign's data lives is a caller
-  /// programming error, not something the atServer did.
-  static void refuseChangedStoragePath({
-    required AtClientPreference? running,
-    required AtClientPreference asked,
-    required String cacheKey,
-  }) {
-    if (running == null) return;
-    final was = running.hiveStoragePath;
-    final now = asked.hiveStoragePath;
-    if (was == null || now == null || was == now) return;
-    throw ArgumentError.value(
-        'hiveStoragePath (asked $now, running $was)',
-        'preference',
-        'the client for $cacheKey already has its local store open at $was, '
-            'and nothing reopens it — so $now would never be used. Stop that '
-            'client before building one somewhere else, or give this '
-            'preference the path it is running under. Ignoring the difference '
-            'would leave this caller believing its data is at a path it is '
-            'not.');
+  /// One atSign can hold several entries, one per enrolled principal, so a
+  /// caller wanting "the client for this atSign" has to match the whole family
+  /// rather than the bare atSign key.
+  static List<AtClientImpl> liveClientsFor(String atSign) {
+    final fixed = AtUtils.fixAtSign(atSign);
+    return [
+      for (final entry in atClientInstanceMap.entries)
+        if (entry.key is String &&
+            ((entry.key as String) == fixed ||
+                (entry.key as String).startsWith('$fixed|')) &&
+            entry.value is AtClientImpl)
+          entry.value as AtClientImpl
+    ];
   }
 
   static final Finalizer<String> _finalizer = Finalizer((service) {
@@ -708,13 +708,14 @@ class AtClientImpl implements AtClient {
   /// `AtKeys` is meant to be born at construction and immutable after, which is
   /// why the key source in particular is not re-read.
   ///
-  /// Two mismatches are **refused** rather than ignored, because accepting them
+  /// One mismatch is **refused** rather than ignored, because accepting it
   /// would leave a caller believing something that is not true: a preference
-  /// naming different rollout axes, and one naming a different
-  /// `hiveStoragePath` — see [refuseChangedRolloutAxes] and
-  /// [refuseChangedStoragePath]. Everything else in the list above fails
-  /// quietly, so a test or an app that needs a genuinely different client must
-  /// not rely on passing different arguments here.
+  /// naming different rollout axes — see [refuseChangedRolloutAxes].
+  /// Everything else in the list above fails quietly, so a test or an app that
+  /// needs a genuinely different client must not rely on passing different
+  /// arguments here. A preference naming a different storage location is among
+  /// the quiet ones: a storage bundle refuses a second open at a location
+  /// already open, but on a cache hit nothing opens, so the path is dropped.
   ///
   /// Nothing in this library ever removes an entry from that cache, so a client
   /// that has been stopped is returned from here and restarted rather than
@@ -735,8 +736,23 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
+    AtClientStorage? storage,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
+
+    // Refused rather than resolved: an injected keystore skips the storage
+    // bundle entirely — keystore AND sync queue — so a caller passing both is
+    // asking for two different stores at once and would silently get the
+    // keystore it named beside a queue on the global Hive instance, shared with
+    // every other client that took this path.
+    if (storage != null && localSecondaryKeyStore != null) {
+      throw ArgumentError.value(
+          'storage and localSecondaryKeyStore',
+          'storage',
+          'a storage bundle carries the keystore AND the sync queue, so an '
+              'injected keystore replaces it rather than combining with it. '
+              'Supply one or the other for $currentAtSign');
+    }
 
     // Fetch cached AtClientImpl for re-use, or create a new one and init it.
     // Keyed by (atSign, enrollmentId) — see [instanceKey]; two enrollments of
@@ -750,10 +766,6 @@ class AtClientImpl implements AtClient {
       // that names different ones is asking for something this cannot give.
       refuseChangedRolloutAxes(
           running: atClientImpl!.getPreferences(),
-          asked: preferences,
-          cacheKey: cacheKey);
-      refuseChangedStoragePath(
-          running: atClientImpl.getPreferences(),
           asked: preferences,
           cacheKey: cacheKey);
       await atClientImpl.start();
@@ -777,9 +789,20 @@ class AtClientImpl implements AtClient {
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         enrollmentId: enrollmentId,
+        storage: storage,
       );
 
-      await atClientImpl._init(atLookUp: atLookUp);
+      try {
+        await atClientImpl._init(atLookUp: atLookUp);
+      } catch (_) {
+        // A client that failed to build holds nothing: its claim on the storage
+
+        // would otherwise outlive it and refuse every later client.
+
+        await atClientImpl._releaseStorage();
+
+        rethrow;
+      }
     }
 
     // Not [cacheKey]: `_init` may have settled a different identity than the
@@ -804,7 +827,9 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     this.enrollmentId,
+    AtClientStorage? storage,
   }) {
+    _injectedStorage = storage;
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -839,12 +864,23 @@ class AtClientImpl implements AtClient {
     if (_preference!.isLocalStoreRequired) {
       AtSyncQueue? syncQueue;
       if (_localSecondaryKeyStore == null) {
-        final storagePath = preference!.hiveStoragePath;
-        if (storagePath == null) {
-          throw Exception('Please set local storage path');
+        // A caller that supplied storage picked the backend and the location,
+        // and the bundle itself says whether `stop()` closes it. Otherwise
+        // build the default Hive store under the preference's path and own it.
+        final injected = _injectedStorage;
+        final AtClientStorage storage;
+        if (injected != null) {
+          storage = injected;
+          _ownsStorage = injected.closedByClient;
+        } else {
+          final storagePath = preference!.hiveStoragePath;
+          if (storagePath == null) {
+            throw Exception('Please set local storage path');
+          }
+          storage =
+              HiveAtClientStorage(atSign: _atSign, storagePath: storagePath);
+          _ownsStorage = true;
         }
-        final storage =
-            HiveAtClientStorage(atSign: _atSign, storagePath: storagePath);
         await storage.attach(this);
         _storage = storage;
         syncQueue = storage.syncQueue;
@@ -1174,6 +1210,10 @@ class AtClientImpl implements AtClient {
       _logger.finer('start() called, but atClient is not stopped. Ignoring');
       return;
     }
+    if (_storageReleased) {
+      throw StateError('this client released its storage when it stopped; '
+          'build a new client rather than restarting this one');
+    }
     _isStopped = false;
   }
 
@@ -1188,6 +1228,26 @@ class AtClientImpl implements AtClient {
     _logger.info('stop() called: stopping at_client for $_atSign');
 
     await _stopBackgroundProcesses();
+    await _releaseStorage();
+    // By identity, not by key: the map is keyed (atSign, enrollmentId), so a
+    // client filed under an enrollment is not found under the bare atSign and
+    // would be left in the map, stopped, for the next caller to restart.
+    atClientInstanceMap.removeWhere((_, client) => identical(client, this));
+  }
+
+  /// Drops this client's claim on its storage, closing it if this client built
+  /// it. A stopped client keeps nothing open and cannot be restarted.
+  Future<void> _releaseStorage() async {
+    final storage = _storage;
+    if (storage == null) return;
+    _storageReleased = true;
+    try {
+      await storage.detach(this);
+      if (_ownsStorage) await storage.close();
+    } catch (e) {
+      _logger.warning('Error while releasing storage: $e');
+    }
+    _storage = null;
   }
 
   Future<void> _stopBackgroundProcesses() async {
@@ -1323,10 +1383,6 @@ class AtClientImpl implements AtClient {
   @override
   void setPreferences(AtClientPreference preference) async {
     refuseChangedRolloutAxes(
-        running: _preference,
-        asked: preference,
-        cacheKey: instanceKey('$_atSign', enrollmentId));
-    refuseChangedStoragePath(
         running: _preference,
         asked: preference,
         cacheKey: instanceKey('$_atSign', enrollmentId));

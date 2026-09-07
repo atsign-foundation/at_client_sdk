@@ -86,13 +86,34 @@ echo "*** Checking docker readiness" && dart run check_docker_readiness.dart
 # `lookup:publickey@sitaram` until it answers - state that only pkamLoad
 # creates - so in a suite that deliberately runs without pkamLoad it can never
 # pass. It hangs for its full five-minute timeout and then fails, which reads
-# as a broken environment. CI does not call it either (at_libraries.yaml runs
-# readiness, then this sleep, then the tests); it is dead code in this package.
+# as a broken environment. CI does not call it either (at_libraries.yaml's
+# functional_tests_at_onboarding_cli job runs readiness, then this sleep, then
+# the tests); it is dead code in this package.
 echo "*** Waiting 10s for the atSigns to come up" && sleep 10
 
 echo "*** Clearing client test storage"
 rm -rf test/hive
 find test -name '*.atKeys' -delete 2>/dev/null || true
+
+# at_onboarding_cli falls back to $HOME/.atsign/keys - the real one - whenever
+# a preference leaves atKeysFilePath null or an auth_cli invocation omits -k,
+# and on a developer machine that directory holds live personal keyfiles. Tests
+# take their paths from test/utils/test_keys_dir.dart instead; this is the
+# backstop for anything that slips through. A demo-atSign keyfile left in the
+# real directory outlives the container the compose down above just recycled,
+# and onboarding refuses when a keyfile already exists, so the next run fails
+# with "Keys file already exists" for an atSign the fresh virtualenv has never
+# onboarded - which reads as a product bug and is not. With a throwaway HOME
+# such a keyfile lands beside it and goes when it does, and the real
+# ~/.atsign/keys is neither written nor read.
+#
+# Scoped to `dart test` deliberately - docker reads its context from the real
+# $HOME/.docker and pub its cache from $HOME/.pub-cache, so neither moves.
+REAL_HOME="$HOME"
+TEST_HOME="$(mktemp -d)"
+trap 'rm -rf "$TEST_HOME"' EXIT
+mkdir -p "$TEST_HOME/.atsign/keys"
+echo "*** Throwaway HOME for this run: $TEST_HOME"
 
 echo "*** Running tests"
 # Let the run fail through to cleanup, then propagate its code - otherwise
@@ -107,7 +128,8 @@ if [[ -n "${ACCEPTANCE_REPORT:-}" ]]; then
   REPORT_ARG="--file-reporter json:${ACCEPTANCE_REPORT}"
   echo "*** Writing acceptance report to ${ACCEPTANCE_REPORT}"
 fi
-dart test --concurrency=1 -r expanded ${REPORT_ARG}
+HOME="$TEST_HOME" PUB_CACHE="${PUB_CACHE:-$REAL_HOME/.pub-cache}" \
+  dart test --concurrency=1 -r expanded ${REPORT_ARG}
 TEST_EXIT=$?
 set -e
 

@@ -42,16 +42,14 @@ Future<AtClient> createAtClient(
       (atKeysFilePath ?? '$homeDir/.atsign/keys/${atSign}_key.atKeys')
           .replaceAll('/', Platform.pathSeparator);
   String? localStoragePathToUse = storageDir?.path;
-  String? commitLogStoragePathToUse =
-      ('${storageDir?.path}/commit').replaceAll('/', Platform.pathSeparator);
   String downloadPathToUse = ('$homeDir!/.atsign/downloads/$atSign/$nameSpace')
       .replaceAll('/', Platform.pathSeparator);
 
   String rootServer = rootDomain ?? AuthCliArgs.defaultAtDirectoryFqdn;
-  
+
   // Parse rootServer using AtRootDomain
   AtRootDomain parsedRootDomain = AtRootDomain.parse(rootServer);
-  
+
   AtOnboardingPreference atOnboardingPreference =
       AuthCliArgs.preferenceUnder(posture)
         ..atKeysFilePath = atKeysFilePathToUse
@@ -59,8 +57,7 @@ Future<AtClient> createAtClient(
         ..rootDomain = parsedRootDomain.rootDomain
         ..rootPort = parsedRootDomain.rootPort
         ..passPhrase = passPhrase
-        ..hiveStoragePath = localStoragePathToUse
-        ..commitLogPath = commitLogStoragePathToUse
+        ..storagePath = localStoragePathToUse
         ..downloadPath = downloadPathToUse;
 
   AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(

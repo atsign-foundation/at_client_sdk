@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 import 'test_utils.dart';
 
 void main() {
+  TestUtils.isolateStorage('atclient_remote_secondary_test');
   late AtClientManager atClientManager;
   late String atSign;
   final namespace = 'wavi';

@@ -6,6 +6,7 @@ import 'test_utils.dart';
 /// The tests verify the put and get functionality where key is created using AtKey
 /// static factory methods
 void main() {
+  TestUtils.isolateStorage('atkey_static_test');
   late String atSign;
   late String sharedWithAtSign;
   String namespace = 'wavi';

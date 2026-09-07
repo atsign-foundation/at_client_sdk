@@ -38,7 +38,7 @@ dependencies:
   async: ^2.9.0
   at_base2e15: ^1.0.0
   at_file_saver: ^0.1.2
-  at_persistence_secondary_server: ^5.1.0
+  at_persistence_secondary_server: ^5.3.0
   at_persistence_spec: ^3.0.0
   at_utf7: ^1.0.0
   basic_utils: ^5.6.1
@@ -120,33 +120,3 @@ dev_dependencies:
   plugin_platform_interface: ^2.1.6
   test: ^1.25.0
   test_process: ^2.1.0
-
-# TEMPORARY, and it must come out before this branch merges.
-#
-# Points at_persistence_secondary_server at the at_server branch carrying
-# "a store honours the storagePath it is given" (gkc-multiple-stores). Until
-# that is published, a second AtClient for one atSign in this process silently
-# attaches to the first's Hive box whatever hiveStoragePath it was given —
-# which is what makes two co-located enrollments share one notification replay
-# watermark, so one consumes the other's offline backlog with nothing logged.
-#
-# Workspace root only, deliberately: `dependency_overrides` are honoured here
-# and reach every member listed under `workspace:` above. tests/pq_matrix/*
-# are NOT members by design — they resolve the released at_client from pub.dev
-# as the matrix's control arm — so they neither get this nor should.
-dependency_overrides:
-  at_persistence_secondary_server:
-    git:
-      url: https://github.com/atsign-foundation/at_server.git
-      # A SHA, not a branch: the branch this used to name was deleted when
-      # PR 2776 merged on 2026-08-30, and every cold checkout then failed
-      # `dart pub get` with "Could not find git ref". It survived locally
-      # only because ~/.pub-cache still held the bare mirror. A sha cannot
-      # be deleted out from under this, and cannot drift when its branch
-      # moves. ⚠️ THE OVERRIDE IS NOW REMOVABLE and this comment said
-      # "published tops out at 5.2.1, which predates the fix" until
-      # 2026-09-06: 5.3.0 shipped that day and carries HiveInstances.
-      # #2208 already dropped this block on its own branch. Deleting it
-      # here and taking ^5.3.0 is what remains.
-      ref: 5c0e603c02c438dcbdc0531717ebfd71f62a48ad
-      path: packages/at_persistence_secondary_server

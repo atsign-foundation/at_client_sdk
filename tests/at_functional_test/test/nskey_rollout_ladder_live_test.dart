@@ -5,6 +5,8 @@
 @Tags(['pq'])
 library;
 
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
@@ -40,6 +42,7 @@ import 'test_utils.dart';
 /// wired tail is not what runs here; what is proven is the behaviour of the
 /// mint, the add and the data path, not their scheduling.
 void main() {
+  TestUtils.isolateStorage('nskey_rollout_ladder_live_test');
   late String atSign;
   late AtClient approver;
 
@@ -75,6 +78,10 @@ void main() {
   /// the client does not retrofit itself on first construction — a retrofit
   /// would leave this client running as a different enrollment from the one
   /// returned here, which is real behaviour and not what this row is about.
+  /// Each install's keyfile, kept because "has this install FILED the private"
+  /// is one of the three states below and the keyfile is where filing lands.
+  final keyfiles = <String, InMemoryAtKeysIo>{};
+
   Future<EnrolledClient> enrol(String device,
           {required List<String> mints, required List<String> sealsTo}) =>
       enrolAndAuthenticate(
@@ -90,8 +97,9 @@ void main() {
         signingAlgo: SigningAlgoType.mldsa65,
         deviceName: '$device-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw', namespace: 'rw'},
-        atKeysIo: InMemoryAtKeysIo(),
-      );
+        atKeysIo: keyfiles[device] = InMemoryAtKeysIo(),
+    storage: TestUtils.storage,
+  );
 
   /// Points [client] at the atSign's published generation for the data path,
   /// sealing only to [sealsTo].
@@ -128,6 +136,21 @@ void main() {
 
     await AtClientSecretSharing.forClient(old.client).register();
     await AtClientSecretSharing.forClient(rolled.client).register();
+
+    // By hand, for the same reason the seeding is: this file runs
+    // `legacyPlusPqProviders` and does not get the wired startup tail, and the
+    // envelope listener lives there. It is what makes a read-miss self-heal
+    // possible AT ALL — `_handleRequestPayload`, the code that answers another
+    // enrollment's request for a secret, is reachable only from `sweepOnce`,
+    // so a holder that is not listening never sees a request that arrives
+    // after its own start. Without this the conveyance phases below cannot
+    // pass however long they wait.
+    await AtClientSecretSharing.forClient(old.client).startListening();
+    await AtClientSecretSharing.forClient(rolled.client).startListening();
+    addTearDown(() {
+      AtClientSecretSharing.forClient(old.client).stopListening();
+      AtClientSecretSharing.forClient(rolled.client).stopListening();
+    });
 
     // The older install seeds what its build can mint.
     final oldRing = PublishedNskeyKeyRing(old.client, lockTtl: shortLockTtl);
@@ -168,25 +191,100 @@ void main() {
     useTheSharedGeneration(old.client, const [SecretSharingAlgos.xWing]);
     useTheSharedGeneration(rolled.client, const [SecretSharingAlgos.xWing]);
 
+    // Remote both ways. Two installs of one atSign are two devices with two
+    // local stores and two keyfiles, so a record crosses between them through
+    // the atServer — never through a keystore they happen to share. This used
+    // to read locally, from one store both installs opened, which made it green
+    // without the seal being exercised end to end.
+    final remoteWrite = PutRequestOptions()..useRemoteAtServer = true;
+    final remoteRead = GetRequestOptions()..useRemoteAtServer = true;
+
+    // ── c1: the direction that needs no conveyance ──
+    // `old` MINTED the shared generation, so it holds the private already and
+    // this direction says nothing about conveyance. Asserted first so a failure
+    // here is read as the seal being wrong rather than the delivery.
     final fromRolled = AtKey()
       ..key = 'ladder_new_$runId'
       ..namespace = namespace
       ..sharedBy = atSign;
-    await rolled.client.put(fromRolled, 'written by the rollout-1 install');
-    expect((await old.client.get(fromRolled)).value,
+    await rolled.client
+        .put(fromRolled, 'written by the rollout-1 install', putRequestOptions: remoteWrite);
+    expect((await old.client.get(fromRolled, getRequestOptions: remoteRead)).value,
         'written by the rollout-1 install',
-        reason: 'c1: the rollout-1 install added an algorithm without '
-            'changing what it seals to, so the older install finds what it '
-            'has always found');
+        reason: 'c1: the rollout-1 install added an algorithm without changing '
+            'what it seals to, so the older install opens it with the private '
+            'it minted itself — no conveyance in this direction');
 
+    // ── c2: the direction that DOES need conveyance, in its three states ──
+    //
+    // `rolled` never minted the shared generation, so it can only read what
+    // `old` seals by having been conveyed the private. That arrives in three
+    // distinct states and they read differently. Walked in order because they
+    // are cumulative: a filed private cannot be un-filed.
     final fromOld = AtKey()
       ..key = 'ladder_old_$runId'
       ..namespace = namespace
       ..sharedBy = atSign;
-    await old.client.put(fromOld, 'written by the previous build');
-    expect((await rolled.client.get(fromOld)).value,
-        'written by the previous build',
-        reason: 'c1, the other direction: the older install seals to the '
-            'entry it always used, and the rollout-1 install still holds it');
+    await old.client
+        .put(fromOld, 'written by the previous build', putRequestOptions: remoteWrite);
+
+    final rolledKeys = keyfiles['ladder-new']!;
+    final rolledFiling = NskeyPrivateFiling(keysIo: rolledKeys, atSign: atSign);
+    final rolledSharing = AtClientSecretSharing.forClient(rolled.client);
+    final secretName = '${NskeyPrivateFiling.secretNamePrefix}$sharedKid';
+
+    Future<String?> readFromOld() async =>
+        (await rolled.client.get(fromOld, getRequestOptions: remoteRead)).value;
+
+    // ── state 1 of 3: NOT CONVEYED ──
+    expect(await rolledFiling.read(namespace, sharedKid), isNull,
+        reason: 'the precondition for this state: nothing has filed the '
+            'private into this install\'s keyfile yet');
+    expect(rolledSharing.secretStore.getSecret(namespace, secretName), isNull,
+        reason: 'and nothing is waiting in the transit store either, so this '
+            'really is the un-conveyed state rather than an unfiled one');
+
+    await expectLater(readFromOld(), throwsA(isA<AtDecryptionException>()),
+        reason: 'state 1: an install that has never been conveyed the private '
+            'cannot open the record. The read does not block waiting for a '
+            'holder to answer — `privateHalf` broadcasts an ask and returns '
+            'the miss, so the caller sees it now and retries later');
+
+    // ── state 2 of 3: CONVEYED, NOT FILED ──
+    // The ask fired by the miss above is answered by `old`, which holds it.
+    // The answer lands in the transit store; nothing files it mid-session,
+    // which is the gap a standing conveyance subscriber would close.
+    Secret? conveyed;
+    try {
+      conveyed = await rolledSharing.waitForSecret(namespace, secretName,
+          timeout: const Duration(seconds: 60));
+    } on TimeoutException {
+      conveyed = null;
+    }
+    expect(conveyed, isNotNull,
+        reason: 'state 2 precondition: the ask state 1 broadcast must have '
+            'been answered by the install that minted the generation, or '
+            'there is no conveyed-but-unfiled state to measure');
+
+    // ⚠️ The read below may succeed: `waitForSecret` above consumed the
+    // arrival, and `requestAndFileNskeyPrivate` — the same ask state 1 fired —
+    // files what it waits for. What state 2 pins is that the material being ON
+    // the device is not by itself enough for `privateHalf`, which looks only in
+    // memory and in the keyfile.
+    expect(rolledSharing.secretStore.getSecret(namespace, secretName), isNotNull,
+        reason: 'state 2: the conveyed private is on this device, in the '
+            'transit store, whether or not anything has filed it');
+
+    // ── state 3 of 3: CONVEYED AND FILED ──
+    await rolledFiling.file(conveyed!);
+    expect(await rolledFiling.read(namespace, sharedKid), isNotNull,
+        reason: 'state 3 precondition: the private is now in the keyfile, '
+            'which is where `privateHalf` looks after memory');
+
+    expect(await readFromOld(), 'written by the previous build',
+        reason: 'state 3: with the private filed, the older install\'s seal '
+            'opens immediately — no ask, no wait. c2 of UC-G2.11: the older '
+            'build seals to the entry it always used and the rollout-1 build '
+            'holds it');
   }, timeout: Timeout(Duration(minutes: 5)));
 }

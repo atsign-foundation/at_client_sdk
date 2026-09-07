@@ -13,7 +13,7 @@ import 'package:at_client/src/response/at_notification.dart'
 import 'package:at_client/src/service/notification_service.dart'
     show NotificationParams;
 import 'package:at_client/src/service/sync_service.dart'
-    show SyncDirection, SyncProgress, SyncProgressListener;
+    show SyncDirection, SyncProgress, SyncProgressListener, SyncService;
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
@@ -145,6 +145,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       StreamController<ReceivedSecret>.broadcast();
   Timer? _sweepTimer;
   _EnvelopeSyncListener? _syncListener;
+
+  /// The service [_syncListener] was added to, held so it can be removed from
+  /// the same one. `AtClient.syncService` throws once the client is stopped,
+  /// and this runs during that teardown.
+  SyncService? _listeningTo;
   StreamSubscription<AtNotification>? _wakeUpSubscription;
 
   /// Envelope keys already emitted on [receivedEnvelopes], so a sweep that
@@ -394,7 +399,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     _syncListener = _EnvelopeSyncListener(markers, () {
       _sweepInBackground();
     });
-    atClient.syncService.addProgressListener(_syncListener!);
+    _listeningTo = atClient.syncService;
+    _listeningTo!.addProgressListener(_syncListener!);
     // A wake-up notification only nudges us; the envelope itself is fetched
     // from the atServer (a sync-less client has no local copy), so the sweep
     // it triggers reads remote.
@@ -422,7 +428,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     _sweepTimer?.cancel();
     _sweepTimer = null;
     if (_syncListener != null) {
-      atClient.syncService.removeProgressListener(_syncListener!);
+      _listeningTo?.removeProgressListener(_syncListener!);
+      _listeningTo = null;
       _syncListener = null;
     }
     unawaited(_wakeUpSubscription?.cancel());

@@ -102,6 +102,10 @@ void main() {
 
   tearDown(() async {
     try {
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
       await Hive.close();
       AtClientImpl.atClientInstanceMap.clear();
       final dir = Directory(storageDir);

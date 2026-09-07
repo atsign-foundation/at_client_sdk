@@ -4,6 +4,7 @@ import 'package:test/test.dart';
 import 'test_utils.dart';
 
 void main() {
+  TestUtils.isolateStorage('at_client_lifecycle_functional_test');
   late String firstAtSign;
   late String secondAtSign;
   final namespace = 'lifecycletest';
@@ -24,9 +25,9 @@ void main() {
 
   group('AtClient lifecycle tests', () {
     test('create, use, and stop AtClient successfully', () async {
-      var atClientManager =
-          await TestUtils.initAtClient(firstAtSign, namespace,
-              posture: PqPosture.legacy);
+      var atClientManager = await TestUtils.initAtClient(
+          firstAtSign, namespace,
+          posture: PqPosture.legacy);
       var atClient = atClientManager.atClient;
 
       final phoneKey = AtKey()
@@ -40,15 +41,15 @@ void main() {
       await (atClient as AtClientImpl).stop();
       expect(
         AtClientImpl.atClientInstanceMap.containsKey(firstAtSign),
-        true,
-        reason: 'Client instance should remain in map even after stop',
+        false,
+        reason: 'a stopped client releases its storage and leaves the map',
       );
     });
 
     test('close() is idempotent and handles active operations', () async {
-      var atClientManager =
-          await TestUtils.initAtClient(secondAtSign, namespace,
-              posture: PqPosture.legacy);
+      var atClientManager = await TestUtils.initAtClient(
+          secondAtSign, namespace,
+          posture: PqPosture.legacy);
       var atClient = atClientManager.atClient as AtClientImpl;
 
       await atClient.put(AtKey()..key = 'location', 'San Francisco');
@@ -58,13 +59,14 @@ void main() {
       await atClient.stop();
       await atClient.stop();
 
-      expect(AtClientImpl.atClientInstanceMap.containsKey(secondAtSign), true);
+      expect(AtClientImpl.atClientInstanceMap.containsKey(secondAtSign), false,
+          reason: 'stop() is idempotent, and the first call already released');
     });
 
     test('stop with active notifications cleans up gracefully', () async {
-      var atClientManager =
-          await TestUtils.initAtClient(firstAtSign, namespace,
-              posture: PqPosture.legacy);
+      var atClientManager = await TestUtils.initAtClient(
+          firstAtSign, namespace,
+          posture: PqPosture.legacy);
       var atClient = atClientManager.atClient;
 
       final receivedNotifications = <AtNotification>[];
@@ -85,9 +87,9 @@ void main() {
   });
 
   group('Implicit client caching behavior', () {
-    test('keeps both clients in cache when switching atSigns', () async {
+    test('switching atSigns stops and releases the outgoing client', () async {
       final atClient1 = (await TestUtils.initAtClient(firstAtSign, namespace,
-          posture: PqPosture.legacy))
+              posture: PqPosture.legacy))
           .atClient;
       var atKey = AtKey()
         ..key = 'alice_data'
@@ -95,12 +97,14 @@ void main() {
       await atClient1.put(atKey, 'Alice value');
 
       final atClient2 = (await TestUtils.initAtClient(secondAtSign, namespace,
-          posture: PqPosture.legacy))
+              posture: PqPosture.legacy))
           .atClient;
       atKey = AtKey()..key = 'bob_data';
       await atClient2.put(atKey, 'Bob value');
 
-      expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), true);
+      expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), false,
+          reason: 'the outgoing client is stopped, and a stopped client leaves '
+              'the map');
       expect(AtClientImpl.atClientInstanceMap.containsKey(secondAtSign), true);
 
       // Verify current atSign is correct
@@ -112,16 +116,17 @@ void main() {
         ..key = 'verify_read'
         ..namespace = namespace;
       await AtClientManager.getInstance().atClient.put(verifyKey, 'test');
-      final result = await AtClientManager.getInstance().atClient.get(verifyKey);
+      final result =
+          await AtClientManager.getInstance().atClient.get(verifyKey);
       expect(result.value, 'test');
 
       await (atClient1 as AtClientImpl).stop();
       await (atClient2 as AtClientImpl).stop();
     });
 
-    test('reuses cached instance when switching back to same atSign', () async {
+    test('switching back builds a fresh client on the same store', () async {
       final atClient1 = (await TestUtils.initAtClient(firstAtSign, namespace,
-          posture: PqPosture.legacy))
+              posture: PqPosture.legacy))
           .atClient;
       final key = AtKey()
         ..key = 'alice_reuse'
@@ -131,10 +136,14 @@ void main() {
       await TestUtils.initAtClient(secondAtSign, namespace,
           posture: PqPosture.legacy);
       final reusedAtClient = (await TestUtils.initAtClient(
-              firstAtSign, namespace, posture: PqPosture.legacy))
+              firstAtSign, namespace,
+              posture: PqPosture.legacy))
           .atClient;
 
-      expect(identical(atClient1, reusedAtClient), true);
+      expect(identical(atClient1, reusedAtClient), false,
+          reason: 'the first client released its storage when the manager '
+              'switched away; the store itself persists, so the value below '
+              'is still there');
 
       final AtValue result = await reusedAtClient.get(key);
       expect(result.value, 'Alice value');
@@ -142,21 +151,23 @@ void main() {
       await (reusedAtClient as AtClientImpl).stop();
     });
 
-    test('soft-close stops services but keeps instance in cache', () async {
+    test('stop() on the outgoing client releases it from the cache', () async {
       final atClient1 = (await TestUtils.initAtClient(firstAtSign, namespace,
-          posture: PqPosture.legacy))
+              posture: PqPosture.legacy))
           .atClient as AtClientImpl;
       final atClientManager = await TestUtils.initAtClient(
-          secondAtSign, namespace, posture: PqPosture.legacy);
+          secondAtSign, namespace,
+          posture: PqPosture.legacy);
 
-      expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), true);
+      expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), false);
       expect(atClient1.isStopped, true);
 
       await atClient1.stop();
       await (atClientManager.atClient as AtClientImpl).stop();
     });
 
-    test('rapid switching preserves all instances', () async {
+    test('rapid switching leaves only the current client in the cache',
+        () async {
       final atClientManager = AtClientManager.getInstance();
       final switchSequence = [
         firstAtSign,
@@ -178,9 +189,9 @@ void main() {
             'v');
       }
 
-      expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), true);
+      expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), false,
+          reason: 'every switch away released the outgoing client');
       expect(AtClientImpl.atClientInstanceMap.containsKey(secondAtSign), true);
-
       await (atClientManager.atClient as AtClientImpl).stop();
     });
   });

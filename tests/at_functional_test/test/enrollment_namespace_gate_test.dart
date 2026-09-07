@@ -38,6 +38,7 @@ import 'test_utils.dart';
 /// the same record back on the same atSign, and the two arms differ in exactly
 /// one thing: which enrollment is asking.
 void main() {
+  TestUtils.isolateStorage('enrollment_namespace_gate_test');
   late AtClient atClient;
   late String atSign;
   const namespace = 'buzz';

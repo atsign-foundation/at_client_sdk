@@ -41,6 +41,7 @@ import 'test_utils.dart';
 /// Both need two genuine enrollments to test at all, since the interesting
 /// case is one enrollment reaching for another's record.
 void main() {
+  TestUtils.isolateStorage('apsk_server_side_test');
   late AtClient approver;
   late String atSign;
   const namespace = 'buzz';
@@ -67,7 +68,8 @@ void main() {
         rootDomain: rootDomain,
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
-      );
+    storage: TestUtils.storage,
+  );
 
   String apskKeyFor(String enrollmentId) =>
       'public:_apsk.$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
@@ -227,7 +229,8 @@ void main() {
       rootPort: TestUtils.rootServerPort,
       deviceName: 'apsk-heal-$runId',
       atKeysIo: keysIo,
-    );
+    storage: TestUtils.storage,
+  );
 
     // The control: before the heal this enrollment holds no signing key, so
     // whatever the record carries now is not what the assertion below is

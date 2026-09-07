@@ -35,6 +35,7 @@ import 'test_utils.dart';
 /// run against a real atServer that actually refuses a revoked credential and
 /// actually stops serving a deleted record.
 void main() {
+  TestUtils.isolateStorage('nskey_rotation_live_test');
   late AtClient approver;
   late String atSign;
   const namespace = 'buzz';
@@ -96,7 +97,8 @@ void main() {
         deviceName: '$device-$runId',
         atKeysIo: atKeysIo,
         namespaces: namespaces,
-      );
+    storage: TestUtils.storage,
+  );
 
   /// What revocation actually needs, which is NOT what rotation needs.
   /// Rotating is gated on `rw` for the namespace — the bar the atServer already

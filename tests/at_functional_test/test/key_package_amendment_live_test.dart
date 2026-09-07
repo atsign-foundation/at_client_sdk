@@ -36,6 +36,7 @@ import 'test_utils.dart';
 /// refused, and a file that hard-codes one passes on a fresh virtualenv and
 /// fails on the second run against the same one.
 void main() {
+  TestUtils.isolateStorage('key_package_amendment_live_test');
   late AtClient approver;
   late String atSign;
   const namespace = 'buzz';
@@ -75,7 +76,8 @@ void main() {
       rootPort: TestUtils.rootServerPort,
       deviceName: '$device-$runId',
       atKeysIo: keysIo,
-    );
+    storage: TestUtils.storage,
+  );
   }
 
   /// The key package the atServer is serving for [client], **verified the way
@@ -342,7 +344,8 @@ void main() {
         atSign, namespace, preference,
         atChops: auth.atChops,
         atKeysIo: keysIo,
-        enrollmentId: enrollmentId);
+        enrollmentId: enrollmentId,
+        storage: TestUtils.storageForPrincipal(atSign, enrollmentId));
     // ⚠️ **Startup is deliberately NOT awaited here.** Step 9 of the PQ
     // bootstrap sweeps for envelopes, and a sweep consumes and DELETES what
     // it opens — so a caller that awaits `startupComplete` before subscribing
@@ -501,7 +504,8 @@ void main() {
           atSign, namespace, preference,
           atChops: auth.atChops,
           atKeysIo: keyfiles[device]!,
-          enrollmentId: client.enrollmentId);
+          enrollmentId: client.enrollmentId,
+        storage: TestUtils.storageForPrincipal(atSign, client.enrollmentId));
 
       final party = AtClientSecretSharing(manager.atClient)
         ..sendWakeUpNotification = false;

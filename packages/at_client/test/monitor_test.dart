@@ -30,8 +30,16 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   // `notificationConnectionUp` builds a fresh one. A fake that reused a single
   // controller could not reproduce a stop-then-start race at all - the
   // subscriptions would keep working and the bug would be invisible.
-  StreamController<String> _notifications = StreamController<String>();
+  /// Counted so a test can prove the back-pressure seam is actually reached,
+  /// rather than inferring it from handling order.
+  int pauses = 0;
+  int resumes = 0;
+
+  late StreamController<String> _notifications = _newNotifications();
   StreamController<bool> _up = StreamController<bool>.broadcast();
+
+  StreamController<String> _newNotifications() => StreamController<String>(
+      onPause: () => pauses++, onResume: () => resumes++);
 
   bool started = false;
   int? startedWithWatermark;
@@ -78,7 +86,7 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
     // Closed and replaced, as the real one does.
     final n = _notifications;
     final u = _up;
-    _notifications = StreamController<String>();
+    _notifications = _newNotifications();
     _up = StreamController<bool>.broadcast();
     unawaited(n.close());
     unawaited(u.close());
@@ -215,6 +223,46 @@ void main() {
               'every notification');
     });
 
+    test('a start that fails is retried, not abandoned', () async {
+      // at_lookup SURFACES a failed start rather than retrying it - three of
+      // its own tests pin that - so the retry has to live here. Before this,
+      // one failed start left the client deaf for the life of the process:
+      // start() short-circuits on a targetState that is already listening, so
+      // nothing could ask again.
+      muxable.startError = AtConnectException('mock - connection failed');
+
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(muxable.startCalls, 1);
+      expect(monitor.currentState, NotificationListenerState.notConnected);
+
+      // The first backoff step is 1s; clear the fault and let it come round.
+      muxable.startError = null;
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(muxable.startCalls, greaterThan(1),
+          reason: 'the monitor asked again on its own, which is what the '
+              'public contract promises: reconnect until successful or until '
+              'stopListening');
+      expect(monitor.currentState, NotificationListenerState.listening,
+          reason: 'and once the fault cleared it actually got there');
+    }, timeout: Timeout(Duration(seconds: 15)));
+
+    test('a retry stops when stop() arrives', () async {
+      muxable.startError = AtConnectException('mock - connection failed');
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      monitor.stop();
+      muxable.startError = null;
+      final callsAtStop = muxable.startCalls;
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(muxable.startCalls, callsAtStop,
+          reason: 'a pending retry must not resurrect a monitor the caller '
+              'has stopped');
+    }, timeout: Timeout(Duration(seconds: 15)));
+
     test('a start that fails leaves it notConnected', () async {
       // Ported in spirit from "secondary not available" and "secondary
       // reachable but rejecting commands", both of which now fail inside the
@@ -243,6 +291,47 @@ void main() {
 
       expect(received, ['notification: {"id":"abc"}']);
       expect(monitor.lastReceipt, isNotNull);
+    });
+
+    test('are handled one at a time, and pause the connection while they are',
+        () async {
+      final log = <String>[];
+      monitor = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference(),
+        lookUp: muxable,
+        handleNotification: (String n) async {
+          log.add('enter $n');
+          await Future.delayed(const Duration(milliseconds: 20));
+          log.add('exit $n');
+        },
+        getLastNotificationTime: () async => null,
+      );
+      monitor.logger.level = 'severe';
+
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.deliver('A');
+      muxable.deliver('B');
+      await Future.delayed(const Duration(milliseconds: 120));
+
+      expect(log, ['enter A', 'exit A', 'enter B', 'exit B'],
+          reason: 'listen() discards the future an async handler returns, so '
+              'without the pause both run at once - the watermark is then '
+              'written out of arrival order and the atServer replays a window '
+              'on the next reconnect');
+      // Measured 1 and 1, not 2 and 2: the second notification is delivered
+      // out of the controller's buffer while it is still draining, and a
+      // pause during that does not re-fire onPause. What matters is that the
+      // seam is reached at all and left balanced.
+      expect(muxable.pauses, greaterThan(0),
+          reason: 'the pause reached the connection rather than being an '
+              'accident of handler timing: at_lookup carries it to the '
+              'socket, which is what keeps a reconnect backlog arriving at '
+              'the rate this client can absorb');
+      expect(muxable.resumes, muxable.pauses,
+          reason: 'and every pause was matched, so a handler cannot leave the '
+              'connection stopped for good');
     });
 
     test('a handler that throws does not kill the stream', () async {
@@ -304,6 +393,75 @@ void main() {
       expect(states, [NotificationListenerState.listening],
           reason: 'a repeated identical state is noise on a stream something '
               'reacts to');
+    });
+  });
+
+  /// at_lookup recovers a connection that DROPS. It cannot see one that stays
+  /// up, answers every heartbeat, and delivers nothing - only this class knows
+  /// when a notification last arrived. Without these the client reports
+  /// `listening` for ever while deaf, which is what the public contract on
+  /// `NotificationService.currentListenerState` promises it will not do.
+  group('a connection that is up but silent', () {
+    Monitor monitorWithBudget(Duration budget) {
+      final m = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference()
+          ..monitorSilenceTimeout = budget,
+        lookUp: muxable,
+        handleNotification: (String n) async => received.add(n),
+        getLastNotificationTime: () async => null,
+      );
+      m.logger.level = 'severe';
+      return m;
+    }
+
+    test('is rebuilt', () async {
+      monitor = monitorWithBudget(const Duration(milliseconds: 40));
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(muxable.startCalls, 1);
+
+      await Future.delayed(const Duration(milliseconds: 150));
+
+      expect(muxable.startCalls, greaterThan(1),
+          reason: 'nothing arrived for longer than the budget on a connection '
+              'that never went down, so the monitor tore it down and asked '
+              'for a new one - at_lookup sees a healthy socket here and will '
+              'never do it');
+      monitor.stop();
+    });
+
+    test('is left alone while notifications keep arriving', () async {
+      // Budget comfortably longer than the delivery gap: the check fires one
+      // budget after connect, so a gap anywhere near it races the first tick.
+      monitor = monitorWithBudget(const Duration(milliseconds: 100));
+      monitor.start();
+
+      for (var i = 0; i < 12; i++) {
+        await Future.delayed(const Duration(milliseconds: 25));
+        muxable.deliver('notification: {"id":"$i"}');
+      }
+
+      expect(muxable.startCalls, 1,
+          reason: 'the check is about SILENCE, not about elapsed time - a busy '
+              'connection outlives many budgets and must not be rebuilt under '
+              'a working client');
+      // Handling is serialised now, so the last delivery is still in flight.
+      await Future.delayed(const Duration(milliseconds: 40));
+      expect(received, hasLength(12));
+      monitor.stop();
+    });
+
+    test('is left alone when the budget is zero', () async {
+      monitor = monitorWithBudget(Duration.zero);
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 170));
+
+      expect(muxable.startCalls, 1,
+          reason: 'an atServer configured to send no stats notifications is '
+              'silent when healthy, so an operator must be able to turn the '
+              'check off rather than have it rebuild a good connection');
+      monitor.stop();
     });
   });
 

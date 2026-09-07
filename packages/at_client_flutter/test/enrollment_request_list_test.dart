@@ -1,10 +1,14 @@
-/// The approval list's last hop tells the truth.
+/// The approval list's last hop tells the truth, and every client read goes
+/// through the service it was given.
 ///
 /// A post-approval conveyance refusal means the enrollment is live and
 /// cannot decrypt — reporting it as `Failed to approve` invites a retry of
 /// an approval that already went through, and leaving the row listed says
 /// the request is still pending when it is not. And a pq-mode request wraps
 /// no symmetric key at all, so the row's approve action must not demand one.
+/// An injected service belongs to the caller: the widget neither disposes it
+/// nor reaches past it to [AtClientManager], so an app that owns its own
+/// client can use this widget.
 library;
 
 // The conveyance surface is deliberately marked @experimental and will be
@@ -34,6 +38,8 @@ class FakeEnrollmentRequestDecision extends Fake
 class FakeAtLookUp extends Fake implements AtLookUp {}
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   const atSign = '@alice';
   const enrollmentId = 'list-eid-1';
 
@@ -58,6 +64,10 @@ void main() {
   });
 
   setUp(() {
+    // Nothing here may reach the manager: every client read is expected to
+    // go through the injected service.
+    AtClientManager.getInstance().reset();
+
     service = MockFlutterEnrollmentService();
     atClient = MockAtClient();
     secondary = MockRemoteSecondary();
@@ -68,13 +78,22 @@ void main() {
     ).thenAnswer((_) => Stream.value(request));
     // The initial fetch; the stream above already delivers the request and
     // the widget de-duplicates, so empty keeps the fixture single-sourced.
-    when(() => service.list(any(), any())).thenAnswer((_) async => []);
+    when(
+      () => service.list(
+        any(),
+        any(),
+        drx: any(named: 'drx'),
+        arx: any(named: 'arx'),
+      ),
+    ).thenAnswer((_) async => []);
     when(() => service.atClient).thenReturn(atClient);
     when(() => service.dispose()).thenAnswer((_) async {});
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(atLookUp);
   });
+
+  tearDown(() => AtClientManager.getInstance().reset());
 
   Future<void> pumpList(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -161,5 +180,30 @@ void main() {
     );
 
     verifyNever(() => service.dispose());
+  });
+
+  testWidgets('works against an app-owned client, without AtClientManager', (
+    tester,
+  ) async {
+    when(
+      () => service.getEnrollments(statusFilters: any(named: 'statusFilters')),
+    ).thenAnswer((_) => const Stream<EnrollmentServerResponse>.empty());
+
+    await pumpList(tester);
+    await tester.pumpAndSettle();
+
+    // AtClientManager was reset, so its atClient getter throws. The widget
+    // catches everything and renders the message rather than crashing, which
+    // is what makes this a trap - so assert on the absence of that text.
+    expect(
+      find.textContaining('No atClient yet'),
+      findsNothing,
+      reason:
+          'every client read goes through the service the app supplied, '
+          'so an app that built its client with AuthService.createClient '
+          'can use this widget - reaching AtClientManager here would throw '
+          'for exactly the apps the new factory exists to serve',
+    );
+    verify(() => service.atClient).called(greaterThan(0));
   });
 }

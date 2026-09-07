@@ -20,6 +20,7 @@ import 'package:uuid/uuid.dart';
 import 'test_utils.dart';
 
 void main() async {
+  TestUtils.isolateStorage('no_commit_live_test');
   late String currentAtSign;
   final namespace = 'wavi';
   late AtClient atClient;

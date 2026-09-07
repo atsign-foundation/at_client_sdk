@@ -8,6 +8,7 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show SignedEnvelope;
 import 'package:at_commons/at_commons.dart' show AtBytes;
+import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:uuid/uuid.dart';
 
@@ -181,6 +182,15 @@ Future<EnrolledClient> enrolAndAuthenticate({
   required AtClientPreference preference,
   required String rootDomain,
   required int rootPort,
+  /// This test file's storage. The enrolled client gets its OWN bundle from
+  /// it, told apart by the device name below: the enrollee and the owner
+  /// client that approves for it are two live principals on one atSign, and
+  /// one store holds one principal.
+  ///
+  /// Required rather than optional: a preference carries no storage path any
+  /// more, so a caller that omits this fails at `_init` with 'Please set local
+  /// storage path' instead of here, where the compiler names the call site.
+  required FunctionalStorage storage,
   String? deviceName,
   Map<String, String>? namespaces,
   AtKeysIo? atKeysIo,
@@ -220,6 +230,10 @@ Future<EnrolledClient> enrolAndAuthenticate({
     authenticator: null,
   );
 
+  // Resolved once: it names the enrollment AND its store, so the two cannot
+  // disagree.
+  final resolvedDeviceName = deviceName ?? 'enrolled-${Uuid().v4().hashCode}';
+
   final response = await AtEnrollment.create().submit(
     legacyMode
         // No metadataBuilder and no resolver: a legacy request advertises no
@@ -228,7 +242,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
         ? AtEnrollmentRequest(
             session: session,
             appName: namespace,
-            deviceName: deviceName ?? 'enrolled-${Uuid().v4().hashCode}',
+            deviceName: resolvedDeviceName,
             namespaces: namespaces ?? {namespace: 'rw'},
             otp: otp,
             signingAlgo: signingAlgo,
@@ -236,7 +250,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
         : AtEnrollmentRequest.pq(
             session: session,
             appName: namespace,
-            deviceName: deviceName ?? 'enrolled-${Uuid().v4().hashCode}',
+            deviceName: resolvedDeviceName,
             namespaces: namespaces ?? {namespace: 'rw'},
             otp: otp,
             // pq mode, so the approver mints the symmetric key and seals it to
@@ -277,8 +291,9 @@ Future<EnrolledClient> enrolAndAuthenticate({
   // one. It is necessary but NOT sufficient, and on its own changes nothing
   // observable — see the class doc: while AtClientImpl hands back a cached
   // client for this atSign, none of these arguments are applied at all.
-  final manager = await AtClientManager(atSign)
-      .fromAuthSession(response.session ?? session, preference, reuse: true);
+  final manager = await AtClientManager(atSign).fromAuthSession(
+      response.session ?? session, preference,
+      reuse: true, storage: storage.forPrincipal(atSign, resolvedDeviceName));
 
   // Null in legacy mode: `built` is only populated by the pq metadataBuilder,
   // and there is no key package to read a kid out of.

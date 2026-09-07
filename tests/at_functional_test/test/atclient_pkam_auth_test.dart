@@ -13,6 +13,7 @@ import 'test_utils.dart';
 late String atSign;
 
 void main() {
+  TestUtils.isolateStorage('atclient_pkam_auth_test');
   String namespace = 'wavi';
   late AtClientManager atClientManager;
 

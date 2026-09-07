@@ -253,6 +253,26 @@
     that program, call the shipped `at_activate` binary rather than
     re-implementing its `main`; there is no supported library entry point for
     activation, and there was not one before.
+- feat: `AtOnboardingPreference.storagePath` says where the client's local
+  storage goes, replacing this package's use of the now-deprecated
+  `AtClientPreference.hiveStoragePath`. A caller that still sets the old field
+  keeps the location it had.
+- feat: the onboarding service now builds the client's storage itself — a Hive
+  bundle marked `closedByClient`, so the client closes it on stop exactly as it
+  closed the store it used to open. Supply `storage` to choose the backend or
+  the location yourself; the client closes that too if you built it with
+  `closedByClient: true`, and otherwise you close it.
+- chore: stop setting `AtClientPreference.commitLogPath`, which at_client reads
+  nowhere, and drop `HomeDirectoryUtil.getCommitLogPath` with its last caller.
+  No behaviour changes: the value was never read.
+- feat: `AtOnboardingPreference.storage` supplies the client's local storage,
+  which decides the backend and the location and so leaves `hiveStoragePath`
+  unread. Borrowed unless built with `closedByClient: true`: by default the
+  client detaches from it when it stops and closing it is the caller's job.
+  Leave it unset and the client
+  goes on opening a Hive store under `hiveStoragePath` and closing it itself.
+  `CLIBase` carries it through, so an at_cli_commons caller supplying its own
+  preference can inject storage without any change there.
 
 ## 1.16.1-rc1
 - fix: pass passPhrase to FileAtKeysIo during onboarding so password-protected atKeys files are written correctly

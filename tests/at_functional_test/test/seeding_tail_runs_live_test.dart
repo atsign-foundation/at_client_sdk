@@ -31,6 +31,7 @@ import 'test_utils.dart';
 /// a client whose startup tail never fires passes it. This file is the arm
 /// that would have gone red.
 void main() {
+  TestUtils.isolateStorage('seeding_tail_runs_live_test');
   late String atSign;
   // Run-unique: against a namespace something has already minted for, seeding
   // adopts the existing advertisement and every assertion below would hold for

@@ -116,12 +116,12 @@ class LocalSecondary implements Secondary {
   /// the open; concurrent callers await the same in-flight future so
   /// we never call `Hive.openBox` twice for the same atSign.
   ///
-  /// Must run AFTER the at_persistence_secondary_server's
-  /// `HiveAtPersistenceFactory.initialize(...)` has called
-  /// `Hive.init(...)`, which is guaranteed by the
-  /// [StorageManager] init ordering during AtClient init. We
-  /// intentionally do not call `Hive.init` here — rerunning it with a
-  /// different path would silently misroute the box.
+  /// The queue opens on the instance owning the client's
+  /// `hiveStoragePath` — the same one the keystore uses — so a client's two
+  /// halves cannot land in different places. A client configuring no path
+  /// falls back to the package-global instance, which is why this must still
+  /// run after the keystore's initialisation has called `Hive.init(...)`; we
+  /// never call it here ourselves.
   Future<AtSyncQueue> _ensureSyncQueueOpen() {
     final existing = _syncQueue;
     if (existing != null) return Future.value(existing);
@@ -185,11 +185,6 @@ class LocalSecondary implements Secondary {
     return q.readEntry(atKey);
   }
 
-  /// Removes [atKey] from both the in-memory queue and the persisted
-  /// box. Called after a successful server-side push, OR when a
-  /// drain attempt finds the underlying keystore value missing
-  /// (race-tolerated removal: a queue write may have committed
-  /// without the keystore write landing, e.g. across a crash).
   /// Removes [atKey]'s queue entry only while it is still the version
   /// stamped [seq]; returns whether it removed. The drain's success-path
   /// removal — see [AtSyncQueue.removeIfUnchanged] for why unconditional
@@ -199,6 +194,11 @@ class LocalSecondary implements Secondary {
     return q.removeIfUnchanged(atKey, seq);
   }
 
+  /// Removes [atKey] from both the in-memory queue and the persisted
+  /// box. Called after a successful server-side push, OR when a
+  /// drain attempt finds the underlying keystore value missing
+  /// (race-tolerated removal: a queue write may have committed
+  /// without the keystore write landing, e.g. across a crash).
   Future<void> removeFromSyncQueue(String atKey) async {
     final q = await _ensureSyncQueueOpen();
     await q.remove(atKey);

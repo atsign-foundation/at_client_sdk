@@ -46,6 +46,7 @@ import 'test_utils.dart';
 ///   being false, or the first two assertions pass for a reader that says yes
 ///   to anything.
 void main() {
+  TestUtils.isolateStorage('pq_released_peer_test');
   final atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
   final namespace = 'wavi';
 
@@ -115,7 +116,8 @@ void main() {
         atSign, namespace, TestUtils.getPreference(atSign,
             posture: legacyPlusPqProviders),
         atKeysIo: keysIo,
-        atChops: loader.createAtChopsFromDemoKeys(atSign));
+        atChops: loader.createAtChopsFromDemoKeys(atSign),
+        storage: TestUtils.storageFor(atSign));
     await loader.setEncryptionKeys(manager.atClient, atSign);
     await AtClientSecretSharing.forClient(manager.atClient).register();
 
@@ -131,7 +133,8 @@ void main() {
         // against the same virtualenv must not collide with the first's.
         deviceName: 'relpeer-${entry.key}-'
             '${DateTime.now().microsecondsSinceEpoch}',
-      );
+    storage: TestUtils.storage,
+  );
       // The id the client is RUNNING as, not the one it was enrolled as: a pq
       // posture retrofits itself during construction and advertises its
       // `_apsk` under the new id. Asking about the enrolled id would ask about

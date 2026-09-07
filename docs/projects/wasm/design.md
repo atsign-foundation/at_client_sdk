@@ -155,7 +155,6 @@ default.
 | `at_lookup/lib/src/util/secure_socket_util.dart:12,23,25,29,35,43,49,54,55` | `SecurityContext.defaultContext`, cert `File`, `setTrustedCertificates`, `SecureSocket.connect` ×2, `setOption(tcpNoDelay)` ×2, TLS-keylog `File` + append-write. **Every connection in every package ends here.** |
 | `at_lookup/lib/src/monitor_client.dart:63`                                  | `SecureSocket.connect(host, int.parse(port))` — raw, bypasses even `SecureSocketUtil`.                                                                                                                             |
 | `at_client/lib/src/stream/stream_notification_handler.dart:27`              | `SecureSocket.connect(host, port)` — raw.                                                                                                                                                                          |
-| `at_client/lib/src/manager/monitor.dart:539`                                | `SecureSocketUtil.createSecureSocket(...)` inside the default `MonitorOutboundConnectionFactory`.                                                                                                                  |
 | `at_lookup/lib/src/cache/cacheable_secondary_address_finder.dart:209,222`   | raw TLS socket to `root.atsign.org:64` for directory lookup.                                                                                                                                                       |
 | `at_auth/lib/src/at_auth_impl.dart:396`                                     | `_defaultProbeSocket` → `SecureSocket.connect`. **Owned by the PQ program's S-5**, not here.                                                                                                                       |
 
@@ -181,9 +180,14 @@ return type is the entire blocker.
 `wss://<host>:<port>/ws`. Framing is unchanged, so the response parser is reused as-is.
 
 **Breaking-change blast radius.** `Socket getSocket()` is on a public interface;
-external `implements AtConnection` users are unknown. In-repo callers are
-`at_client/lib/src/client/remote_secondary.dart` and
-`at_client/lib/src/manager/monitor.dart`. Enumerate before changing.
+external `implements AtConnection` users are unknown. The one in-repo caller is
+`at_client/lib/src/client/remote_secondary.dart`; `monitor.dart` stopped being one
+when Monitor gave up its socket. Enumerate before changing.
+
+⚠️ **The line numbers in this section predate that change** and have not been
+re-derived. `at_client` now reaches the atServer through `AtLookUp.withSecureSocket`
+and a transport, so the inventory above understates how much is already injectable.
+Re-derive it before scoping the transport work.
 
 **Directory lookup.** `root.atsign.org:64` is a raw TLS socket with no browser
 equivalent. Two escape hatches already exist — `SecondaryAddressFinder` is an abstract
@@ -218,9 +222,9 @@ rather than choosing a backend.
 
 **Design** (ruled by [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)).
 `at_client` owns a storage abstraction covering the keystore **and** the sync queue
-(§2.3), and a bundle is injected rather than named by a path: `hiveStoragePath` is deprecated in
+(§2.3), and a bundle is injected rather than located: `hiveStoragePath` is deprecated in
 this major, and its successor is a constructed bundle passed to a new static factory on
-`AtClient`. A path *string* was considered and rejected — it leaves `at_client`
+`AtClient`. A location *string* was considered and rejected — it leaves `at_client`
 constructing the backend, which is what forces a backend import or a conditional barrel
 into the package. `AtKeysIo` (§2.4) is the shape: a neutral interface here, real
 implementations supplied by whoever knows the platform.
@@ -282,16 +286,26 @@ abstract class AtClientStorage {
   from the functional pack, and this makes it unrepresentable rather than a fixture's job
   to avoid.
 - **`forgetPrincipal()` is the deliberate hand-over.** It drops the guard and keeps the
-  data, so a caller that *means* to give one principal's storage to another — the same
-  atSign moving from a legacy client to an enrolled one — says so in one call, rather than
-  reaching for `clear()` and losing the records to get past the refusal. It throws while
+  data, so a caller that *means* to give one principal's storage to another says so in one
+  call, rather than reaching for `clear()` and losing the records to get past the refusal.
+  ⚠️ **The common case is enrolled to enrolled, not legacy to enrolled** — a self-retrofit
+  fires on `retrofitIsDue`, which compares the *authentication key algorithm* the posture
+  wants against the one the enrollment holds, so the usual shape is an rsa2048-auth
+  enrollment succeeded by an mldsa65-auth one. Both sides are enrollments; only the id and
+  the key algorithm differ. Legacy-to-enrolled is the same mechanism at the far end of the
+  same ladder, not a separate case.
+  **Succession is not coexistence, and only succession shares a store.**
+  [D-13](decisions.md#d-13--local-storage-is-isolated-per-atsign-enrollmentid-not-per-atsign-2026-09-05)
+  keeps two *live* enrollments of one atSign apart, because each holds key material the
+  other cannot read. A retrofit is not two live enrollments: the atServer caps the old one,
+  the new one inherits its data, and one store follows the succession. It throws while
   a client is attached: hand-over happens between holders, never under one.
 - **`clear()` empties keystore and queue together**, and forgets the last principal.
   `detach()` stamps the departing holder as the last principal, so a holder that clears
   and then keeps writing is still guarded; the fixture sequence is detach, clear, next.
 - **Isolation is per *location*, and two clients of one atSign at distinct storage paths
-  are already separated.** The keystore opens on `HiveInstances.forPath(storagePath)` (pinned upstream,
-  #2776) and the spike's queue does the same, so two `HiveAtClientStorage` objects for one
+  are already separated.** The keystore opens on `HiveInstances.forPath(storagePath)` and the queue does
+  the same (`at_sync_queue.dart`), so two `HiveAtClientStorage` objects for one
   atSign at **different** paths get separate stores today; only the **same** path shares.
   The guard is therefore per-location, not per-atSign: each impl reports a canonical
   `location` and `AtClientStorageBase` refuses a second open at one already open — allowing
@@ -350,10 +364,6 @@ seam) through to `AtClientImpl.create` as an intermediate step. The seam stays u
 tests; it stops being the route to backend selection. Drop the direct `hive` dependency
 once this and §2.2 land.
 
-The global-instance landmine above is the trunk state; the spike already opens the queue on
-`HiveInstances.forPath(path)`, so distinct paths isolate the queue as well as the
-keystore. Isolation is resolved per location, not per enrollment — see
-[D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05).
 
 ### 2.4 Key material — the exemplar
 
@@ -534,8 +544,7 @@ changes no interface, breaks nothing, and shrinks every later diff.
 
 | Seam                                                                                                      | Defined at                                                                            | Never passed by                                                                                                                      |
 | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `AtLookupSecureSocketFactory`, `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory` | `at_lookup/lib/src/at_lookup_impl.dart:740,749,756`, constructor params at `:108-131` | `RemoteSecondary` — `at_client/lib/src/client/remote_secondary.dart:44-56` builds `AtLookupImpl` without any of them                 |
-| `MonitorOutboundConnectionFactory`                                                                        | `at_client/lib/src/manager/monitor.dart:531`, constructor param at `:93`              | `NotificationServiceImpl._` — `notification_service_impl.dart:76-84`; `create` exposes only `monitor:` and `secondaryAddressFinder:` |
+| `AtLookupSecureSocketFactory`, `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory` | `at_lookup/lib/src/at_lookup_impl.dart:740,749,756`, constructor params at `:108-131` | Now PASSED: `RemoteSecondary` builds through `AtLookUp.withSecureSocket` with a `transport:`. The three factories remain for callers building `AtLookupImpl` directly |
 | `AtSyncQueue.open({injectedBox})`                                                                         | `at_client/lib/src/sync/at_sync_queue.dart:116`                                       | Not reachable from `AtClientImpl.create`                                                                                             |
 | `http.Client`                                                                                             | `at_auth/lib/src/registrar/registrar_service.dart:26`                                 | Plumbed — listed for completeness; the default is the only native part                                                               |
 

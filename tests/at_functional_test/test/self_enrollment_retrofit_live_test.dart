@@ -38,6 +38,7 @@ import 'test_utils.dart';
 /// virtualenv, and enrollment_test.dart already consumes both dedicated
 /// CRAM atSigns in the same suite run.
 void main() {
+  TestUtils.isolateStorage('self_enrollment_retrofit_live_test');
   late String atSign;
   late AtClient atClient;
   const namespace = 'buzz';
@@ -355,14 +356,20 @@ void main() {
     // No signingAlgo argument. Under the legacy posture (or the old parameter
     // default) this call resolves rsa2048 and mints RSA — the assertions below
     // are what tell the two apart.
+    final deviceRF2D = 'rf2d-${Uuid().v4().hashCode}';
     final manager = await selfRetrofit(
         session: session,
         preference:
             TestUtils.getPreference(atSign, posture: PqPosture.pqActive),
         appName: 'rf2b-app',
-        deviceName: 'rf2d-${Uuid().v4().hashCode}',
+        deviceName: deviceRF2D,
         namespaces: {namespace: 'rw'},
-        manager: AtClientManager(atSign));
+        manager: AtClientManager(atSign),
+        // Its own store: the owner client is live and holds the atSign's
+        // bundle, so this cold retrofit is a SECOND principal rather than a
+        // succession from it. Named by the device, so the enrollment and
+        // its store cannot disagree.
+        storage: TestUtils.storageForPrincipal(atSign, deviceRF2D));
 
     final client = manager.atClient;
     expect(client.enrollmentId, isNot(session.enrollmentId));
@@ -410,13 +417,19 @@ void main() {
     String t5Path(String a) => 'test/testData/rf2b-t5$a.atKeys';
     await mintLegacyKeyfile(t5Path);
     final session = await legacySession(t5Path);
+    final deviceRF2E = 'rf2e-${Uuid().v4().hashCode}';
     final manager = await selfRetrofit(
         session: session,
         preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
         appName: 'rf2b-app',
-        deviceName: 'rf2e-${Uuid().v4().hashCode}',
+        deviceName: deviceRF2E,
         namespaces: {namespace: 'rw'},
-        manager: AtClientManager(atSign));
+        manager: AtClientManager(atSign),
+        // Its own store: the owner client is live and holds the atSign's
+        // bundle, so this cold retrofit is a SECOND principal rather than a
+        // succession from it. Named by the device, so the enrollment and
+        // its store cannot disagree.
+        storage: TestUtils.storageForPrincipal(atSign, deviceRF2E));
 
     final client = manager.atClient;
     expect(client.enrollmentId, isNot(session.enrollmentId));

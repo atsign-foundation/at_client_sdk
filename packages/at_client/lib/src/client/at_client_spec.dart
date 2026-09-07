@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:at_client/src/client/at_reachability.dart';
 import 'dart:io';
 

@@ -10,6 +10,7 @@ import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
 import 'package:at_client/src/service/enrollment_service_impl.dart'
     show EnrollmentServiceImpl;
+import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart' show AtClientException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -100,6 +101,11 @@ Future<AtClientManager> selfRetrofit({
   Duration? apkamKeysExpiryDuration,
   AtClientManager? manager,
   SigningAlgoType? signingAlgo,
+
+  /// The store the retrofitted client keeps. Defaults to the one the
+  /// client being retrofitted already holds, since a retrofit changes
+  /// which enrollment authenticates and not where the data lives.
+  AtClientStorage? storage,
 }) async {
   final newSession = await retrofitIdentity(
     session: session,
@@ -111,8 +117,13 @@ Future<AtClientManager> selfRetrofit({
     signingAlgo: signingAlgo,
   );
 
+  // The retrofit re-authenticates as a NEW enrollment of the same atSign over
+  // the SAME store, so the bundle has to cross the switch and the store has to
+  // be handed over. The manager does both: it is what stops the outgoing client
+  // and therefore the only thing that knows which client is being replaced.
   final switched = await (manager ?? AtClientManager.getInstance())
-      .fromAuthSession(newSession, preference);
+      .fromAuthSession(newSession, preference,
+          storage: storage, principalChange: true);
 
   // The signing-root step (in-flow, privileged only): mint if the atSign
   // publishes no root yet. Inside its own guard because the retrofit itself

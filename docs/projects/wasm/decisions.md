@@ -523,7 +523,7 @@ confirmed correct and is the only one recorded below.
 `final` event subclasses, pre-allocated enum slack); there is no `@experimental`. Against
 that: the API is roughly four months old (born `df1272374`, 2026-04-27), took a breaking
 change 2 days after introduction (`fb4c96587`, mandatory `typeTag`), reworked
-`EventSource` semantics since, ships 7 correctness fixes in the current 3.14.1, and has
+`EventSource` semantics since, ships 7 correctness fixes in the current 3.15.0-rc1, and has
 **zero functional/e2e coverage** — all 209 tests in `packages/at_client/test/` are
 mocktail unit tests against `MockAtClient`; nothing in `tests/at_functional_test/` or
 `tests/at_end2end_test/` references it. `js-api.md` §10 marks the JS-side collections

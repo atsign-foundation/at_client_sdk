@@ -30,6 +30,7 @@ import 'test_utils.dart';
 /// than trusting a code read — the same class of cross-tier assumption that
 /// has already been wrong twice on this branch.
 void main() {
+  TestUtils.isolateStorage('enrollment_chain_link_live_test');
   late AtClient atClient;
   late String atSign;
   const namespace = 'buzz';

@@ -45,6 +45,7 @@ import 'test_utils.dart';
 /// A pass here is therefore *both* arms succeeding, which reads oddly until you
 /// see that the mldsa65 arm succeeding is precisely the claim.
 void main() {
+  TestUtils.isolateStorage('pkam_record_authoritative_test');
   late AtClient approver;
   late String atSign;
   const namespace = 'buzz';
@@ -72,7 +73,8 @@ void main() {
       // Unique per run: the atServer refuses a second enrollment carrying an
       // (appName, deviceName) pair that already has one approved.
       deviceName: 'pkamalgo-${DateTime.now().microsecondsSinceEpoch}',
-    );
+    storage: TestUtils.storage,
+  );
 
     /// Authenticates on a fresh connection, signing RSA with the enrollment's
     /// real keypair while telling the atServer [claimedAlgo].

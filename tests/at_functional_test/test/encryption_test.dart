@@ -5,6 +5,7 @@ import 'test_utils.dart';
 import 'package:test/test.dart';
 
 void main() {
+  TestUtils.isolateStorage('encryption_test');
   late String atSign_1;
   final namespace = 'functional_encryption_test';
 
@@ -24,9 +25,9 @@ void main() {
   });
 
   Future<AtClient> getAtClient(String atSign) async {
-    return (await AtClientManager.getInstance().setCurrentAtSign(
-            atSign, namespace, TestUtils.getPreference(atSign_1,
-                posture: PqPosture.legacy)))
+    return (await AtClientManager.getInstance().setCurrentAtSign(atSign,
+            namespace, TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+            storage: TestUtils.storageFor(atSign)))
         .atClient;
   }
 

@@ -25,6 +25,7 @@ import 'test_utils.dart';
 /// this test used `put` and `get`, which wrote locally and read locally — so it
 /// passed without the key ever reaching the atServer, and proved nothing.
 void main() {
+  TestUtils.isolateStorage('underscore_public_key_hiding_test');
   late AtClientManager atClientManager;
   late String atSign;
   const namespace = 'wavi';

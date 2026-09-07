@@ -2,7 +2,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
-import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
@@ -58,11 +57,14 @@ void main() async {
   });
 
   /// Makes [atSign] the current atSign and returns its client.
+  ///
+  /// Through `switchToAtSign` rather than `setCurrentAtSign`, because a switch
+  /// rebuilds the client and a rebuild with no credentials cannot authenticate
+  /// an APKAM enrollment.
   Future<AtClient> as(String atSign) async {
-    await AtClientManager.getInstance().setCurrentAtSign(atSign, namespace,
-        TestPreferences.getInstance()
-            .getPreference(atSign, posture: PqPosture.legacy));
-    return AtClientManager.getInstance().atClient;
+    final atClientManager = await TestSuiteInitializer.getInstance()
+        .switchToAtSign(atSign, namespace, posture: PqPosture.legacy);
+    return atClientManager.atClient;
   }
 
   Future<void> setAtSignOneAutoNotify(bool autoNotify) async {

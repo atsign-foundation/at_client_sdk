@@ -38,6 +38,13 @@ void main() {
 
   Future<void> tearDownLocalSecondary() async {
     try {
+      // Every client for this atSign, not just the bare-keyed one: the map is
+      // keyed (atSign, enrollmentId), so an enrolled client is filed under
+      // '$atSign|<id>' and would be left holding its storage location.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
       // Close every Hive box (including the sync-queue box) so the next
       // setUp doesn't reattach to leftover in-memory state.
       //

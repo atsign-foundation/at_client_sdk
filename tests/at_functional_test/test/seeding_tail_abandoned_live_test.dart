@@ -35,6 +35,7 @@ import 'test_utils.dart';
 /// Confirmed live in both directions on 2026-08-26 by the at_talk demo
 /// session, where the only variable was the client's LIFETIME.
 void main() {
+  TestUtils.isolateStorage('seeding_tail_abandoned_live_test');
   late String atSign;
   final namespace = 'seedstopped${DateTime.now().microsecondsSinceEpoch}';
 

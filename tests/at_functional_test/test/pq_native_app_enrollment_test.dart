@@ -36,6 +36,7 @@ import 'test_utils.dart';
 /// ML-DSA either way. What distinguishes the fix from the defect is that the
 /// enrollment id does NOT change — nothing was thrown away.
 void main() {
+  TestUtils.isolateStorage('pq_native_app_enrollment_test');
   final atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
   final runId = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
   final namespace = 'pqnat$runId';
@@ -50,7 +51,8 @@ void main() {
         atSign, namespace, TestUtils.getPreference(atSign,
             posture: legacyPlusPqProviders),
         atKeysIo: keysIo,
-        atChops: loader.createAtChopsFromDemoKeys(atSign));
+        atChops: loader.createAtChopsFromDemoKeys(atSign),
+        storage: TestUtils.storageFor(atSign));
     await loader.setEncryptionKeys(manager.atClient, atSign);
     await AtClientSecretSharing.forClient(manager.atClient).register();
     approver = manager.atClient;
@@ -74,7 +76,8 @@ void main() {
       deviceName: 'pqnat-$label-$runId',
       atKeysIo: keysIo,
       signingAlgo: signingAlgo,
-    );
+    storage: TestUtils.storage,
+  );
     final runningAs = enrolled.client.enrollmentId!;
     stdout.writeln('##NATIVE## $label: enrolledAs=${enrolled.enrollmentId} '
         'runningAs=$runningAs');

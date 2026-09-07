@@ -319,11 +319,9 @@ class CLIBase {
     final AtOnboardingPreference atOnboardingConfig =
         preference ?? AtOnboardingPreference();
     atOnboardingConfig
-      ..hiveStoragePath = localStoragePathToUse
+      ..storagePath = localStoragePathToUse
       ..namespace = nameSpace
       ..downloadPath = downloadPathToUse
-      ..commitLogPath = '$localStoragePathToUse/commitLog'
-          .replaceAll('/', Platform.pathSeparator)
       ..rootDomain = atRootDomain.rootDomain
       ..rootPort = atRootDomain.rootPort
       ..fetchOfflineNotifications = true

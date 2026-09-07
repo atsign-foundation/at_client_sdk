@@ -172,6 +172,9 @@ class SyncServiceImpl implements SyncService {
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops,
         enrollmentId: atClient.enrollmentId,
+        // Sync's own connection, built with the same key material the client
+        // holds, so its authenticator matches the client's rather than
+        // falling to a different credential.
         signingAlgoType: signingAlgoOf(atClient),
         atKeysIo: atClient.atKeysIo);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);

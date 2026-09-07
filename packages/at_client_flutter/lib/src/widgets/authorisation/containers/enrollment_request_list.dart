@@ -18,7 +18,10 @@ class EnrollmentRequestList extends StatefulWidget {
 
   final bool useShrinkWrap;
 
-  /// Injection seam for tests; defaults to a real [FlutterEnrollmentService].
+  /// The service this widget works through, and with it the [AtClient] the
+  /// service holds. Pass one built with an app-owned client to use this
+  /// widget without [AtClientManager]; with none it uses the current-atSign
+  /// client, as it always has.
   final FlutterEnrollmentService? enrollmentService;
 
   @override

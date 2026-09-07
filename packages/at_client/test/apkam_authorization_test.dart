@@ -269,7 +269,13 @@ void main() {
           .executeVerb(verbBuilder, sync: false);
       expect(reservedKeyUpdateResult, isNotNull);
       expect(reservedKeyUpdateResult!.startsWith('data:'), true);
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      // Every client for this atSign, not just the bare-keyed one: the map is
+      // keyed (atSign, enrollmentId), so an enrolled client is filed under
+      // '$atSign|<id>' and would be left holding its storage location.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
@@ -472,7 +478,13 @@ void main() {
           await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(updateReservedKeyResult, isNotNull);
       expect(updateReservedKeyResult!.startsWith('data:'), true);
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      // Every client for this atSign, not just the bare-keyed one: the map is
+      // keyed (atSign, enrollmentId), so an enrolled client is filed under
+      // '$atSign|<id>' and would be left holding its storage location.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
@@ -595,7 +607,13 @@ void main() {
       expect(scanJson.contains('@alice:location@alice'), true);
       expect(scanJson.contains('@alice:phone.wavi@alice'), true);
       expect(scanJson.contains('@bob:shared_key@alice'), true);
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      // Every client for this atSign, not just the bare-keyed one: the map is
+      // keyed (atSign, enrollmentId), so an enrolled client is filed under
+      // '$atSign|<id>' and would be left holding its storage location.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
       // create an atClient for new enrollment
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
@@ -631,6 +649,10 @@ Future<void> setupLocalStorage(String storageDir, String atSign) async {
 
 Future<void> tearDownLocalStorage(String storageDir) async {
   try {
+    for (final c
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await c.stop();
+    }
     // Both registries: the keystore's boxes live on a per-path instance that
     // Hive.close() does not reach, and would stay open over the directory
     // deleted below — the next test then reopens the cached box and reads

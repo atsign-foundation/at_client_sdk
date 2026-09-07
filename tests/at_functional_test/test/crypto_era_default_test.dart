@@ -20,6 +20,7 @@ import 'test_utils.dart';
 /// every one of them. That gap is exactly the kind this branch has been bitten
 /// by twice: a code path that looks wired, is unit-green, and never executes.
 void main() {
+  TestUtils.isolateStorage('crypto_era_default_test');
   late String atSign;
   const namespace = 'wavi';
 

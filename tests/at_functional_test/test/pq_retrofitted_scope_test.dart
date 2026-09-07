@@ -57,6 +57,7 @@ import 'test_utils.dart';
 /// enrollment, so `runningAs != enrolledAs` is the precondition rather than a
 /// nice-to-have.
 void main() {
+  TestUtils.isolateStorage('pq_retrofitted_scope_test');
   late String atSign;
   late AtClient approver;
 
@@ -104,7 +105,8 @@ void main() {
       // one. appName is the namespace here, so deviceName carries the variance.
       deviceName: 'rs-$label-${uuid.v4().hashCode}',
       namespaces: {namespace: 'rw'},
-    );
+    storage: TestUtils.storage,
+  );
 
     expect(enrolled.client.enrollmentId, isNot(enrolled.enrollmentId),
         reason: 'the precondition for every assertion in this file: the client '
@@ -315,7 +317,8 @@ void main() {
       namespaces: {namespace: 'rw'},
       // A real keyfile on disk, which is the whole point of this arm.
       atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
-    );
+    storage: TestUtils.storage,
+  );
 
     expect(enrolled.client.enrollmentId, enrolled.enrollmentId,
         reason: 'step 1 must NOT have retrofitted, or the keyfile the cold '
@@ -335,7 +338,7 @@ void main() {
       TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
       atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
       enrollmentId: enrolled.enrollmentId,
-    );
+        storage: TestUtils.storageForPrincipal(atSign, enrolled.enrollmentId));
     final client = cold.atClient;
 
     expect(client.enrollmentId, isNot(enrolled.enrollmentId),

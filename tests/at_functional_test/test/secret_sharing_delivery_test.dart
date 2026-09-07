@@ -32,6 +32,7 @@ import 'test_utils.dart';
 /// the atServer by the time `sendEnvelope` returns, and that a client which
 /// has never synced can still fetch and decrypt it.
 void main() {
+  TestUtils.isolateStorage('secret_sharing_delivery_test');
   late AtClient atClient;
   late String atSign;
   const namespace = 'wavi';

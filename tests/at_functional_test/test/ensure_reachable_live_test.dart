@@ -28,6 +28,7 @@ import 'test_utils.dart';
 /// downcasts to reach it — the downcast below is only to stop the startup
 /// tail, which is a test manoeuvre and not something an app does.
 void main() {
+  TestUtils.isolateStorage('ensure_reachable_live_test');
   late String atSign;
   final namespace = 'ensurereach${DateTime.now().microsecondsSinceEpoch}';
 

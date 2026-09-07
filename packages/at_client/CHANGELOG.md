@@ -1,5 +1,69 @@
 ## 3.15.0-rc1
 
+- feat: `AtClientPreference.monitorSilenceTimeout` (default 60s) rebuilds a
+  notification connection that answers heartbeats while delivering nothing. A
+  heartbeat proves the socket is alive, not that notifications still arrive on
+  it, so without this a client can report `listening` while permanently deaf.
+  `Duration.zero` turns it off, which an atServer configured to send no stats
+  notifications needs.
+- fix: the notification monitor handles one notification at a time again,
+  pausing the connection while it does. The pause reaches the socket, so a
+  backlog after a reconnect arrives at the rate the client can absorb, and the
+  last-notification watermark is written in arrival order rather than
+  whichever `put` happens to land last.
+- refactor: the client factory is the top-level `buildAtClient(...)`, not a
+  static `AtClient.create`. A static on the interface forced
+  `at_client_spec.dart` to import `at_client_impl.dart`, and 49 files under
+  `lib/src` import that interface — so the impl, and everything it reaches,
+  landed in all 49 import closures. Nothing published carried the static.
+  Named `buildAtClient` rather than `createAtClient`, which `at_onboarding_cli`
+  already exports; importing both barrels would make the name ambiguous.
+- fix: `buildAtClient` no longer leaves a part-built client behind when
+  wiring its services throws. The client is filed before the services are
+  wired, so a failure used to strand an entry no caller held a reference to,
+  still claiming its storage; it is now stopped, which unfiles it and releases
+  that claim.
+- feat: `AtClientStorage.closedByClient` lets a bundle say that the client
+  closes it on `stop()`, instead of ownership being inferred from how the
+  storage reached the client. False by default, which is the borrowed
+  behaviour every existing caller already gets. Passing true lets an app with
+  no teardown of its own still choose the backend and the location without
+  having to close anything.
+- **DEPRECATED:** `AtClientPreference.hiveStoragePath`. Supply an
+  `AtClientStorage` instead: it chooses the backend as well as the location,
+  and `closedByClient: true` keeps the client closing the store, so nothing is
+  given up by moving. Still honoured until the next major release.
+- **DEPRECATED:** `AtClientPreference.commitLogPath`. Nothing reads it — the
+  client is commit-log-free — so whatever is set there has no effect. It will
+  be removed in the next major release.
+- feat: `buildAtClient` builds a client and wires its notification, sync and
+  enrollment services, taking `storage` as a named parameter alongside
+  `atKeysIo`. The caller owns its lifetime, which is what an app managing its
+  own clients needs. `AtClientManager` is unchanged, so code using it sees no
+  difference. ⚠️ The client is not invisible to `AtClientManager`: it is filed
+  in the instance map like any other, so a later `setCurrentAtSign` for the
+  same atSign adopts it, replaces its services and stops it on the next
+  switch. Do not mix the two for one atSign in one process.
+  A service builder replaces any of the three services. The
+  factory refuses an atSign whose client is already live rather than handing
+  back one the caller does not own, and refuses a `storage` that
+  `isLocalStoreRequired: false` would never open.
+- feat: `AtClientStorage.isHeldBy` says whether a given client is the one
+  currently holding the storage.
+- fix: `setCurrentAtSign` no longer rebuilds the client when it is handed the
+  storage that client already holds. Offering the same bundle is not a
+  change, and the rebuild it used to force stopped a working client and its
+  services for nothing. A different bundle still rebuilds, as it must.
+- feat: `AtClientManager.fromAuthSession` accepts a `storage` bundle and
+  passes it to the client it builds, as `setCurrentAtSign` already did. A
+  caller handing storage in no longer has to avoid the auth hand-off to do
+  it. The bundle is borrowed unless built with `closedByClient: true`, in
+  which case the client closes it on `stop()`.
+- build: require `at_persistence_secondary_server` ^5.3.0. This package's
+  keystore and sync queue open on `HiveInstances`, which 5.3.0 is the first
+  release to carry; the floor still said ^5.1.0, so a consumer could resolve
+  a version without it and fail to compile.
+
 - fix: `stop()` no longer races an in-flight sync round. The round ends at its
   next step once the service is stopped, its request is reported as stopped
   rather than as an unexpected exception, and what it had not pushed stays
@@ -7,6 +71,38 @@
   pending writes on the atServer first awaits `waitUntilCaughtUp`.
   `LocalSecondary.syncQueueSyncSnapshot` is null for a closed queue, as for one
   never opened.
+
+- **BREAKING (behaviour):** `AtClient.stop()` releases the client's storage
+  and removes the client from the instance cache. A stopped client keeps nothing
+  open and cannot be restarted; `start()` on one throws, and the next `create()`
+  or `setCurrentAtSign` builds a fresh client on freshly opened storage. Before,
+  a stopped client stayed cached with its store open and was handed back on the
+  next request. Switching atSigns therefore reopens storage cold on the way
+  back. With release in place, a storage refuses to open a store another
+  storage already has open. A client whose construction fails releases the
+  storage it had claimed before rethrowing.
+- fix: a client's local storage is isolated by where it was told to put it.
+  Its sync queue now opens on the Hive instance owning its `hiveStoragePath`,
+  the same one its keystore uses; before, the queue opened on the package-global
+  instance under a box named from the atSign alone, so two clients of one atSign
+  shared a queue however different the paths they were given, and a client's
+  keystore and queue could land on different instances. Two clients of one
+  atSign given separate directories are therefore separate stores, which is what
+  lets two enrollments of one atSign — whose namespace scopes differ — run side
+  by side without seeing each other's records or pending writes. The guard that
+  refuses a second opener is keyed by the store rather than by the atSign: the
+  directory plus the atSign, since two atSigns under one directory are two boxes
+  and share nothing. `AtSyncQueue` takes the storage path it should open under,
+  and `AtClientStorage` implementations report the store they point at.
+- feat: `buildAtClient` and `AtClientManager.setCurrentAtSign` accept a
+  `storage:` argument, and `AtServiceFactory.atClient` passes one through. A
+  caller that supplies storage picks both the backend and where it lives, so
+  `AtClientPreference.hiveStoragePath` no longer has to name a location; omit it
+  and the client builds the Hive store under that path exactly as before. The
+  client borrows storage it was given by default: `stop()` detaches without
+  closing, so one store can be handed to a later client. A bundle built with
+  `closedByClient: true` is closed by the client instead, and storage the
+  client built itself is always closed on release.
 
 - feat: `AtClientStorage` — a client's local keystore and its sync queue as one
   object, with `HiveAtClientStorage` as the default. A client claims its storage
@@ -206,24 +302,6 @@
     takes an enrolment that authenticates post-quantum and owns no signing key,
     which is the shape of a keyfile written before enrolments were given a
     signing key at creation.
-
-- fix: **a client that already exists refuses a preference naming a different
-  `hiveStoragePath`, where it used to ignore it silently.** `StorageManager`
-  opens the local store once, at the first path it is given, and nothing
-  reopens it — so a later path was never applied however it was delivered, and
-  `setPreferences` made it worse by adopting the value anyway, leaving the
-  client *reporting* a path it had never used.
-  - `AtClientImpl.refuseChangedStoragePath` throws `ArgumentError` naming both
-    paths, from the three places that hand a preference to a client that
-    already exists: `AtClientImpl.create`'s cached branch, `setPreferences`,
-    and `AtClientManager.setCurrentAtSign`'s same-atSign short circuit.
-  - Same reasoning as the rollout-axis refusal beside it, and deliberately
-    separate from it: those axes decide what a client writes, this decides
-    where. A caller that names no path is not asking for a different one and
-    is unaffected.
-  - ⚠️ **Previously-working callers can now throw.** An app that re-created a
-    client for one atSign and enrollment with a different storage path kept
-    working by accident, on the first path. It now fails loudly instead.
 
 - feat: **`PqPosture.legacy` now stands in for a build that predates the
   post-quantum providers, rather than a current build configured
@@ -517,9 +595,10 @@ hunting for a constructor argument that never existed in a release. -->
   kept what was pushed, the queue read empty, and the client reported
   itself in sync: an awaited `delete()` that silently never synced,
   observed live as the server's latest commit entry for a deleted key
-  still reading `*`. Queue entries now carry a monotonic sequence number
-  and the push round removes only the exact version it pushed; a
-  superseded entry stays queued and goes out on the next round.
+  still reading `*`. Queue entries now carry a monotonic `seq` and the push
+  round removes only the exact version it pushed; a superseded entry stays
+  queued and goes out on the next round. `ts` cannot serve as that identity —
+  an update and a delete of one key land well inside the same millisecond.
 - fix: `SyncServiceImpl.stop()` now actually halts sync activity. A sync
   run in flight when `stop()` was called kept executing after `stop()`
   returned: it resumed from its network await, read whatever local state
@@ -562,14 +641,21 @@ hunting for a constructor argument that never existed in a release. -->
 - refactor: `Monitor` takes an `AtLookupMuxable` and drops everything that
   duplicated at_lookup — the byte buffer, the framing constants, the overflow
   check, prompt stripping, PKAM authentication, `sendCommand`, the heartbeat
-  and the `[1,2,3,5,8,13,21,34]`-second reconnect backoff. 582 lines to 170.
-  What remains is what was only ever Monitor's: the watermark, the notification
-  callback, and `currentState`/`targetState`. The five members anything outside
-  `monitor.dart` uses are unchanged — `start`, `stop`, `currentState`,
-  `targetState`, `currentStateStream`. **The class as a whole lost about
-  fifteen public members** and its constructor now requires `lookUp`, so a deep
-  importer of `src/manager/monitor.dart` breaks; it is not in this package's
-  barrel.
+  and the `[1,2,3,5,8,13,21,34]`-second reconnect backoff.
+  What remains is what only `Monitor` can do: the watermark, the notification
+  callback, `currentState`/`targetState`, the retry of a first connect that
+  failed, and the check for a connection that is up and answering but
+  delivering nothing. What moved is covered by
+  at_lookup's own 26 notification tests, including reconnect inside the backoff
+  window and asking the caller for its CURRENT watermark. The five members
+  anything outside `monitor.dart` uses are unchanged — `start`, `stop`,
+  `currentState`, `targetState`, `currentStateStream`. **The class as a whole
+  lost about fifteen public members**: its constructor now requires `lookUp`
+  and no longer takes `atChops`, `enrollmentId`, `secondaryAddressFinder`,
+  `connectDelays` or `monitorOutboundConnectionFactory`, and
+  `onSocketDataReceipt` is gone, the framing it did being at_lookup's now. A
+  deep importer of `src/manager/monitor.dart` breaks; it is not in this
+  package's barrel.
 - fix: `start()` and `stop()` are serialised, so their bodies cannot
   interleave. Both are fire-and-forget and both await at_lookup partway
   through; a `stop()` immediately followed by a `start()` left this class
@@ -588,12 +674,16 @@ hunting for a constructor argument that never existed in a release. -->
   collapse the two into one — a one-line change, and not safe until an atServer
   implements `monitor:multiplexed`.
 
-- refactor: `RemoteSecondary` builds its lookup with
-  `AtLookUp.withSecureSocket` and no longer sets `privateKey` or `cramSecret`
-  on it. Both are credentials, and credentials now travel as an authenticator;
+- refactor: at_client builds its connections through
+  `AtLookUp.withSecureSocket`, which returns the muxable that owns reconnect,
+  reauth and heartbeat; it requires `at_lookup` ^3.7.0-rc1. `RemoteSecondary`
+  no longer sets `privateKey` or `cramSecret` on its lookup. Both are
+  credentials, and credentials now travel as an authenticator;
   `_installAuthenticator` supplies one from whichever of the four shapes the
   client holds - keystore, AtChops, private key, CRAM secret - in the ladder's
-  own precedence order.
+  own precedence order, so every connection a client opens is configured alike
+  instead of assembled independently at each site. The sync service's own
+  connection now gets the client's key material.
 - refactor: the file-stream path reads its `stream:done` through
   `AtLookupMuxable.readResponse` rather than reaching into the message
   listener, which is deliberately not part of at_lookup's public surface.

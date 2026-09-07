@@ -38,6 +38,7 @@ import 'test_utils.dart';
 /// test that passed the same instance twice would be asserting that a variable
 /// equals itself.
 void main() {
+  TestUtils.isolateStorage('copied_keyfile_test');
   late AtClient atClient;
   late String atSign;
   const namespace = 'buzz';

@@ -47,6 +47,7 @@ import 'test_utils.dart';
 /// enrollment, so the request was a client asking itself over a connection that
 /// carried no enrollment id.
 void main() {
+  TestUtils.isolateStorage('signing_root_pull_two_enrollments_test');
   late AtClient approver;
   late String atSign;
   late Uint8List rootPrivate;
@@ -97,7 +98,8 @@ void main() {
         deviceName: '$device-$runId',
         namespaces: namespaces ??
             {'*': 'rw', '__manage': 'rw', namespace: 'rw'},
-      );
+    storage: TestUtils.storage,
+  );
 
   test('a holder answers another enrollment and the private is filed',
       () async {

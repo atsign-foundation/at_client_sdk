@@ -38,6 +38,7 @@ import 'test_utils.dart';
 /// `enrollment_test.dart`, and two tests sharing one CRAM secret means
 /// whichever runs second fails — passing alone and failing in the suite.
 void main() {
+  TestUtils.isolateStorage('pq_native_onboard_live_test');
   final atSign = ConfigUtil.getYaml()['atSign']['apkamThirdAtSign'] as String;
   final cramSecret = cramKeyMap[atSign]!;
   final rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
@@ -69,6 +70,7 @@ void main() {
       atKeysIo: keysIo,
       appName: 'wavi',
       deviceName: 'pq-onboard',
+      storage: TestUtils.storageFor(atSign),
     );
     final client = manager.atClient;
     final enrollmentId = client.enrollmentId;

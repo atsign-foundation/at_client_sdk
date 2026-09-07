@@ -39,6 +39,7 @@ import 'test_utils.dart';
 /// `parkedTotal` is asserted, not just arrival: a run that somehow delivered
 /// without parking would otherwise look identical to a pass.
 void main() {
+  TestUtils.isolateStorage('nskey_park_and_redrive_live_test');
   late AtClient approver;
   late String atSign;
   late InMemoryAtKeysIo approverKeysIo;
@@ -72,7 +73,8 @@ void main() {
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw', nsA: 'rw', nsB: 'rw'},
-      );
+    storage: TestUtils.storage,
+  );
 
   test('a notification that outruns its key is parked, then delivered when it lands',
       timeout: Timeout(Duration(minutes: 3)), () async {

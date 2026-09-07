@@ -51,6 +51,7 @@ import 'test_utils.dart';
 /// connection being down because a notify travels the verb connection, which
 /// is a different socket.
 void main() {
+  TestUtils.isolateStorage('monitor_reconnect_live_test');
   late AtClientManager atClientManager;
   late String currentAtSign;
   final namespace = 'wavi';

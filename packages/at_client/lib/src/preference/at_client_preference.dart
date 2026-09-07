@@ -405,10 +405,24 @@ class AtClientPreference {
     return Set.unmodifiable(algorithms);
   }
 
-  /// Local device path of hive storage
+  /// Local device path of hive storage, used when no [AtClientStorage] is
+  /// supplied to [AtClient.create] or [AtClientManager.setCurrentAtSign].
+  ///
+  /// Setting this leaves the client owning its store: it opens the store and
+  /// closes it again when it stops. Supplying a bundle instead chooses the
+  /// backend as well as the location, and can hand the lifetime back with
+  /// `closedByClient: true`, so nothing is given up by supplying one.
+  @Deprecated('Supply an AtClientStorage instead, which chooses the backend as '
+      'well as the location; pass closedByClient: true to keep having the '
+      'client close it. Will be removed in the next major release.')
   String? hiveStoragePath;
 
-  /// Local device path of commit log
+  /// Local device path of commit log.
+  ///
+  /// Read by nothing: the client keeps no commit log of its own, so whatever
+  /// is set here has no effect.
+  @Deprecated('Nothing reads this; the client is commit-log-free. Will be '
+      'removed in the next major release.')
   String? commitLogPath;
 
   /// Syncing strategy of the client [SyncStrategy]
@@ -489,6 +503,20 @@ class AtClientPreference {
   ///
   /// See also [monitorHeartbeatInterval]
   Duration monitorHeartbeatResponseTimeout = Duration(seconds: 10);
+
+  /// How long the notifications monitor tolerates a connection that answers
+  /// heartbeats while delivering nothing, before rebuilding it.
+  ///
+  /// A heartbeat proves the socket is alive, not that notifications are still
+  /// arriving on it; without this a client can sit reporting
+  /// [NotificationListenerState.listening] while permanently deaf. The
+  /// atServer writes a stats notification to every monitor connection on its
+  /// own timer, so a healthy connection is never silent for long.
+  ///
+  /// [Duration.zero] turns the check off, which is what an atServer
+  /// configured to send no stats notifications needs - against one of those,
+  /// silence is normal and this would rebuild a healthy connection.
+  Duration monitorSilenceTimeout = Duration(seconds: 60);
 
   /// - when true, then the notifications monitor will be started either the
   /// first time that [NotificationService.subscribe] is called by the

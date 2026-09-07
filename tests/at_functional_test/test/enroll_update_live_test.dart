@@ -44,6 +44,7 @@ import 'test_utils.dart';
 /// refused, so a file that hard-codes one passes on a fresh virtualenv and
 /// fails on the second run against the same one.
 void main() {
+  TestUtils.isolateStorage('enroll_update_live_test');
   late AtClient approver;
   late String atSign;
   const namespace = 'buzz';
@@ -75,7 +76,8 @@ void main() {
         rootDomain: rootDomain,
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
-      );
+    storage: TestUtils.storage,
+  );
 
   /// The enrollment record as the atServer holds it, read back rather than
   /// remembered: what these rows assert is what the record says afterwards,

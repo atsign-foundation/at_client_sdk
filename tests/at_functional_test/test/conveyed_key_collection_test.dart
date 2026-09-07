@@ -36,6 +36,7 @@ import 'test_utils.dart';
 /// - a sweep runs (the transit buffer is in memory, and nothing else fills it);
 /// - the filer moves the material into `AtKeys`.
 void main() {
+  TestUtils.isolateStorage('conveyed_key_collection_test');
   late AtClient atClient;
   late String atSign;
   const namespace = 'wavi';

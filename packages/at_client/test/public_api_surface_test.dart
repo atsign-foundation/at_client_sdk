@@ -127,6 +127,10 @@ void main() {
 /// widens this surface updates the set here in the same commit.
 const Set<String> _atClientBarrelExports = {
   'package:at_client/src/client/at_client_impl.dart',
+  // Added 2026-09-07: the client factory moved off the AtClient interface,
+  // because a static there forced at_client_spec.dart to import the impl and
+  // 49 files under lib/src import that interface.
+  'package:at_client/src/client/at_client_factory.dart',
   'package:at_client/src/client/at_client_spec.dart',
   // Added 2026-08-27 for AtClient.ensureReachable's result type. An app
   // asking whether peers can seal to it needs the outcome vocabulary,

@@ -87,11 +87,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     enrollCheckpoint = EnrollmentCheckpoint(_atSign);
 
     // set default LocalStorage paths for this instance
-    atOnboardingPreference.commitLogPath ??=
-        HomeDirectoryUtil.getCommitLogPath(_atSign, enrollmentId: enrollmentId);
-    atOnboardingPreference.hiveStoragePath ??=
-        HomeDirectoryUtil.getHiveStoragePath(_atSign,
-            enrollmentId: enrollmentId);
+    atOnboardingPreference.storagePath ??=
+        // ignore: deprecated_member_use
+        atOnboardingPreference.hiveStoragePath ??
+            HomeDirectoryUtil.getHiveStoragePath(_atSign,
+                enrollmentId: enrollmentId);
     atOnboardingPreference.atKeysFilePath ??=
         HomeDirectoryUtil.getAtKeysPath(_atSign);
   }
@@ -134,6 +134,18 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
+  /// The bundle this client opens: the caller's if it supplied one, otherwise
+  /// a fresh Hive bundle the client closes when it stops.
+  ///
+  /// Fresh each time, because every call here stops the previous client first —
+  /// which closes the bundle it was given — and a closed bundle cannot reopen.
+  AtClientStorage _storageForClient() =>
+      atOnboardingPreference.storage ??
+      HiveAtClientStorage(
+          atSign: _atSign,
+          storagePath: atOnboardingPreference.storagePath!,
+          closedByClient: true);
+
   /// [atKeysIo] is the key *source* the client keeps for everything the
   /// injected [atChops] cannot answer — resolving its PKAM algorithm from the
   /// key material, filing conveyed privates, sourcing per-algorithm signing
@@ -155,7 +167,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         serviceFactory: atServiceFactory,
-        enrollmentId: enrollmentId);
+        enrollmentId: enrollmentId,
+        storage: _storageForClient());
 
     // Read before the `??=` below erases the distinction, because which of the
     // two flows this is decides whether the preference gets to say how the

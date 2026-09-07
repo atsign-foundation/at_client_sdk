@@ -11,6 +11,7 @@ import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
+import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart'
     show AtClientException, AtRootDomain;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -175,6 +176,11 @@ Future<AtClientManager> pqNativeOnboard({
   bool? mintLegacyMaterial,
   AtClientManager? manager,
   AtAuth? atAuth,
+
+  /// The store the activated client opens. An activation builds the
+  /// atSign's first client, so there is no earlier holder to inherit
+  /// from and the caller supplies it.
+  AtClientStorage? storage,
 }) async {
   final request = AtOnboardingRequest(atSign,
       rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort))
@@ -202,7 +208,7 @@ Future<AtClientManager> pqNativeOnboard({
   }
 
   final switched = await (manager ?? AtClientManager.getInstance())
-      .fromAuthSession(response.session!, preference);
+      .fromAuthSession(response.session!, preference, storage: storage);
 
   await mintSigningRootAfterActivation(switched.atClient, atKeysIo: atKeysIo);
 

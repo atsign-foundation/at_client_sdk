@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/sqlite.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -13,20 +14,34 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
 
-/// Drops EVERY cached client for [atSign], whatever enrollment it was filed
-/// under.
+/// Stops and drops EVERY cached client for [atSign], whatever enrollment it
+/// was filed under.
 ///
 /// `atClientInstanceMap.remove(atSign)` clears only the entry for a client with
 /// no enrollment id; a client created WITH one is filed under `atSign|id` and
 /// survives it. A later create for that atSign then finds the leftover and
 /// adopts it, which surfaces as an unrelated test failing on rollout axes or
-/// on a RemoteSecondary that is not this test's mock.
-void _dropCachedClients(String atSign) {
-  AtClientImpl.atClientInstanceMap.removeWhere((key, _) =>
-      key == atSign || (key is String && key.startsWith('$atSign|')));
+/// on a RemoteSecondary that is not this test's mock. Dropping an entry
+/// releases nothing on its own, so each client is stopped before it goes.
+Future<void> _dropCachedClients(String atSign) async {
+  final keys = AtClientImpl.atClientInstanceMap.keys
+      .whereType<String>()
+      .where((key) => key == atSign || key.startsWith('$atSign|'))
+      .toList();
+  for (final key in keys) {
+    await (AtClientImpl.atClientInstanceMap[key] as AtClientImpl?)?.stop();
+    AtClientImpl.atClientInstanceMap.remove(key);
+  }
 }
 
 void main() {
+  tearDown(() async {
+    for (final c
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await c.stop();
+    }
+  });
+
   /// A self-retrofit changes the enrollment a client authenticates as, and the
   /// old id keeps existing — the atServer caps it rather than deleting it, and
   /// any caller that captured it earlier still holds one. The cache has to send
@@ -38,12 +53,12 @@ void main() {
       ..commitLogPath = 'test/hive/commit'
       ..isLocalStoreRequired = true;
 
-    setUp(() {
-      _dropCachedClients(atSign);
+    setUp(() async {
+      await _dropCachedClients(atSign);
       AtClientImpl.supersededInstanceKeys.clear();
     });
-    tearDown(() {
-      _dropCachedClients(atSign);
+    tearDown(() async {
+      await _dropCachedClients(atSign);
       AtClientImpl.supersededInstanceKeys.clear();
     });
 
@@ -73,10 +88,16 @@ void main() {
         () async {
       // The control. It has to be able to stay green while the assertion above
       // goes red, or that test would show only that create() returns something.
+      // Two enrollments of one atSign are two principals, so each gets its own
+      // storage: they are live at the same moment, and one location holds one.
       final first = await AtClientImpl.create(atSign, 'wavi', pref(),
-          enrollmentId: 'enroll-new');
+          enrollmentId: 'enroll-new',
+          storage:
+              InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
       final other = await AtClientImpl.create(atSign, 'wavi', pref(),
-          enrollmentId: 'enroll-old');
+          enrollmentId: 'enroll-old',
+          storage:
+              InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
 
       expect(identical(other, first), isFalse,
           reason: 'two enrollment ids with nothing linking them are two '
@@ -105,11 +126,15 @@ void main() {
   group('A group of at client impl create tests', () {
     final String atSign = '@alice';
     setUp(() async {
-      _dropCachedClients(atSign);
+      await _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
     tearDown(() async {
-      _dropCachedClients(atSign);
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
+      await _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
@@ -151,12 +176,16 @@ void main() {
       ..commitLogPath = 'test/hive/path';
 
     setUp(() async {
-      _dropCachedClients(atSign);
+      await _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
     tearDown(() async {
-      _dropCachedClients(atSign);
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
+      await _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
@@ -438,7 +467,7 @@ void main() {
       expect(atResponse.response, 'ok');
     });
     tearDown(() async {
-      _dropCachedClients(atSign);
+      await _dropCachedClients(atSign);
     });
   });
   group('A group of test to validate max length of a key', () {
@@ -467,8 +496,8 @@ void main() {
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     MockLocalSecondary mockLocalSecondary = MockLocalSecondary();
     MockAtChopsKeys mockAtChopsKeys = MockAtChopsKeys();
-    setUp(() {
-      _dropCachedClients('@alice');
+    setUp(() async {
+      await _dropCachedClients('@alice');
       var key = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
       registerFallbackValue(FakeLookupVerbBuilder());
       when(() => mockLocalSecondary.executeVerb(any()))

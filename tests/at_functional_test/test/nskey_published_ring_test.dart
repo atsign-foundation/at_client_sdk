@@ -23,6 +23,7 @@ import 'test_utils.dart';
 ///   cross-atSign half is covered in `at_end2end_test`; this is the other half,
 ///   and until it ran the claim was aspirational.
 void main() {
+  TestUtils.isolateStorage('nskey_published_ring_test');
   late AtClient atClient;
   late String atSign;
   const namespace = 'wavi';

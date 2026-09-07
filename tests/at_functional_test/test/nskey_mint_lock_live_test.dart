@@ -43,6 +43,7 @@ import 'test_utils.dart';
 /// makes this client take the loser path — the path a genuine sibling would
 /// put it on.
 void main() {
+  TestUtils.isolateStorage('nskey_mint_lock_live_test');
   late AtClient atClient;
   late String atSign;
   // Its own namespace: this file takes and holds a mint lock, which is exactly

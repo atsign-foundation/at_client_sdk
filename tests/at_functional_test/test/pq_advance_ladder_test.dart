@@ -49,6 +49,7 @@ import 'test_utils.dart';
 /// previous one having run, so the file would pass or fail on declaration
 /// order, which is not a property of the code.
 void main() {
+  TestUtils.isolateStorage('pq_advance_ladder_test');
   final atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
 
   /// Run-unique. A namespace key is minted once and thereafter ADOPTED, and
@@ -69,7 +70,8 @@ void main() {
         atSign, namespace, TestUtils.getPreference(atSign,
             posture: legacyPlusPqProviders),
         atKeysIo: approverKeys,
-        atChops: loader.createAtChopsFromDemoKeys(atSign));
+        atChops: loader.createAtChopsFromDemoKeys(atSign),
+        storage: TestUtils.storageFor(atSign));
     await loader.setEncryptionKeys(approverManager.atClient, atSign);
     await AtClientSecretSharing.forClient(approverManager.atClient).register();
 
@@ -89,7 +91,8 @@ void main() {
       namespaces: {namespace: 'rw'},
       deviceName: 'ladder-$runId',
       atKeysIo: keysIo,
-    );
+    storage: TestUtils.storage,
+  );
     legacyEnrollmentId = enrolled.client.enrollmentId!;
     stdout.writeln('##LADDER## rung 0 (legacy) is $legacyEnrollmentId');
   });
@@ -155,7 +158,8 @@ void main() {
         atSign, namespace, preference,
         atChops: auth.atChops,
         atKeysIo: keysIo,
-        enrollmentId: enrollmentId);
+        enrollmentId: enrollmentId,
+        storage: TestUtils.storageForPrincipal(atSign, enrollmentId));
     return manager.atClient;
   }
 

@@ -24,6 +24,7 @@ import 'test_utils.dart';
 /// records as a lesson already learned. The last test here syncs and then asks
 /// the atServer itself what it stored.
 void main() {
+  TestUtils.isolateStorage('nskey_data_path_live_test');
   late AtClientManager atClientManager;
   late String atSign;
   const namespace = 'wavi';

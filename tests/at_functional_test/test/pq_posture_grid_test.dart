@@ -86,6 +86,7 @@ class _GridEnvelopeSigner with ApkamSigning, EnvelopeSigning {
 }
 
 void main() {
+  TestUtils.isolateStorage('pq_posture_grid_test');
   final atSigns = <String>[
     ConfigUtil.getYaml()['atSign']['firstAtSign'] as String,
     ConfigUtil.getYaml()['atSign']['secondAtSign'] as String,
@@ -215,7 +216,6 @@ void main() {
 
   /// Keyed by cell name, so a failure says which cell produced it.
   final cells = <String, EnrolledClient>{};
-  final storagePaths = <String, String>{};
 
   /// One keyfile per cell, and it is not optional.
   ///
@@ -232,12 +232,9 @@ void main() {
 
   AtClientPreference preferenceFor(String name, String atSign,
       {required String role, required PqPosture posture}) {
-    final storage = 'test/hive/pqprobe/$role-${slug(name)}';
-    final preference = TestUtils.getPreference(atSign, posture: posture)
-      ..hiveStoragePath = storage
-      ..commitLogPath = storage;
-    if (role == 'cell') storagePaths[name] = storage;
-    return preference;
+    // No storage path: a bundle decides the location now, and `hiveStoragePath`
+    // would be ignored beside one.
+    return TestUtils.getPreference(atSign, posture: posture);
   }
 
   /// The atSign's primary, holding a registered key package in [namespace].
@@ -252,7 +249,7 @@ void main() {
   /// This said "one per cell rather than one per atSign" until 2026-08-29 and
   /// asked for a per-cell `hiveStoragePath` that was silently dropped: every
   /// approver after the first ran on the first cell's store. It surfaced when
-  /// `AtClientImpl.refuseChangedStoragePath` started refusing exactly that,
+  /// `AtClientImpl` briefly refused exactly that,
   /// and nothing else in the suite would have shown it — the grid was green
   /// throughout.
   ///
@@ -283,7 +280,8 @@ void main() {
         preferenceFor(slug(atSign), atSign,
             role: 'approver', posture: legacyPlusPqProviders),
         atKeysIo: keysIo,
-        atChops: loader.createAtChopsFromDemoKeys(atSign));
+        atChops: loader.createAtChopsFromDemoKeys(atSign),
+        storage: TestUtils.storageFor(atSign));
     await loader.setEncryptionKeys(manager.atClient, atSign);
     await AtClientSecretSharing.forClient(manager.atClient).register();
     approvers[atSign] = manager.atClient;
@@ -352,7 +350,8 @@ void main() {
         // The cell's own keyfile. Without it there is nowhere to file a minted
         // namespace private, and the cell measures an inert client.
         atKeysIo: keysIo,
-      );
+    storage: TestUtils.storage,
+  );
       stdout.writeln('##GRID## up: $name '
           'enrolledAs=${cells[name]!.enrollmentId} '
           'runningAs=${cells[name]!.client.enrollmentId}');
@@ -361,36 +360,39 @@ void main() {
 
   test('every client stands up together, each with its own store', () async {
     expect(cells, hasLength(cellSpec.length));
-    expect(storagePaths.values.toSet(), hasLength(cellSpec.length),
-        reason: 'one hiveStoragePath per client. TestUtils.getPreference keys '
-            'storage on the atSign alone, so without the override the '
-            'enrollments of one atSign share a Hive box and a commit log');
-    for (final entry in storagePaths.entries) {
-      expect(Directory(entry.value).existsSync(), isTrue,
-          reason: '${entry.key}: no store at ${entry.value}');
-
-      // ⚠️ A DIRECTORY IS NOT A STORE, and this test was named for something
-      // it did not check until 2026-08-29. `hiveStoragePath` used to be
-      // ignored for the second client of an atSign in one process — every
-      // client attached to the first one's Hive box — and yet each named
-      // directory still appeared, because the encryption-secret file
-      // `<sha>.hash` is written at the path a client asks for even when its
-      // box is opened somewhere else entirely. So "each with its own store"
-      // was green while all six shared one.
-      //
-      // The `.hive` file is the store. Asserting it is what makes this row
-      // mean its own name.
-      final files = Directory(entry.value)
-          .listSync()
-          .whereType<File>()
-          .map((f) => f.uri.pathSegments.last)
-          .toList();
-      expect(files.where((n) => n.endsWith('.hive')), isNotEmpty,
-          reason: '${entry.key}: ${entry.value} holds no .hive file, so this '
-              'client is not storing here — its box is open somewhere else '
-              'and this directory has only the secret beside it. Found: '
-              '$files');
+    // ⚠️ A DIRECTORY IS NOT A STORE, and this row was named for something it
+    // did not check until 2026-08-29: `hiveStoragePath` was ignored for the
+    // second client of an atSign, every client attached to the first one's
+    // box, and each named directory still appeared because the `<sha>.hash`
+    // secret is written where a client asks even when its box opens elsewhere.
+    // So "each with its own store" was green while all six shared one.
+    //
+    // Storage is a bundle now, not a path, so the check is against the bundle
+    // and not against a naming scheme: a distinct location per cell, each one
+    // actually held by its own client. That is the property the model
+    // enforces — `AtClientStorageBase` refuses a second holder at a location —
+    // rather than something this test has to reconstruct from directories.
+    final stores = {
+      for (final entry in cells.entries)
+        entry.key: (entry.value.client as AtClientImpl).storage
+    };
+    for (final entry in stores.entries) {
+      expect(entry.value, isNotNull,
+          reason: '${entry.key}: no store attached, so this cell measures '
+              'nothing');
+      expect(entry.value!.isHeldBy(cells[entry.key]!.client), isTrue,
+          reason: '${entry.key}: its store is held by a different client, so '
+              'the two share one and this cell reads the other one\'s '
+              'records');
     }
+    // By identity: `location` is declared on `AtClientStorageBase`, not on the
+    // `AtClientStorage` interface. It costs nothing here — the base keys its
+    // open storages BY location and refuses a second at one, so distinct
+    // objects that are all open are distinct locations.
+    expect(stores.values.toSet(), hasLength(cellSpec.length),
+        reason: 'one store per cell. Two enrollments of one atSign sharing a '
+            "store hands one principal the other's records and pending "
+            'writes, which is what D-13 and the claim guard exist to stop');
     expect(
         cells.values.map((c) => c.client.enrollmentId).toSet(),
         hasLength(cellSpec.length),

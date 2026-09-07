@@ -12,11 +12,24 @@ import 'package:at_utils/at_logger.dart';
 import 'at_credentials.dart';
 import 'at_test_credentials.dart';
 
+/// What an atSign's initial authentication produced, kept so that switching
+/// back to that atSign later can be given the same credentials again.
+class _AuthCredentials {
+  final AtChops atChops;
+  final String? enrollmentId;
+
+  _AuthCredentials(this.atChops, this.enrollmentId);
+}
+
 class TestSuiteInitializer {
   static final TestSuiteInitializer _singleton =
       TestSuiteInitializer._internal();
 
   static final AtSignLogger logger = AtSignLogger(' TestSuiteInitialized ');
+
+  /// The credentials [testInitializer] authenticated each atSign with, keyed
+  /// by atSign. Read by [switchToAtSign].
+  final Map<String, _AuthCredentials> _authCache = {};
 
   TestSuiteInitializer._internal() {
     AtSignLogger.root_level = 'info';
@@ -141,6 +154,11 @@ class TestSuiteInitializer {
       // route has in common.
       TestPreferences.refuseDurableWritesToLongLivedAtSigns(
           atSign, atClientPreference);
+      // Remember what this atSign authenticated with. Switching away and back
+      // rebuilds the client, and a rebuild with no credentials cannot
+      // authenticate an APKAM enrollment - see [switchToAtSign].
+      _authCache[atSign] =
+          _AuthCredentials(atChops, atAuthResponse?.atAuthKeys?.enrollmentId);
       // Create the atClientManager for the atSign
       var atClientManager = await (manager ?? AtClientManager.getInstance())
           .setCurrentAtSign(atSign, namespace, atClientPreference,
@@ -177,6 +195,72 @@ class TestSuiteInitializer {
     } on Exception catch (e) {
       print('Exception in setting the encryption: $e');
       rethrow;
+    }
+  }
+
+  /// Makes [atSign] current again, re-supplying the credentials its initial
+  /// [testInitializer] authentication produced.
+  ///
+  /// **Why the credentials have to be repeated.** `setCurrentAtSign` for an
+  /// atSign other than the current one stops that client and builds a fresh
+  /// one, and it keeps no credentials of its own: called with only a
+  /// preference, it builds a client with no `AtChops` and a null
+  /// `enrollmentId`. Under `authType: apkam` the atKeys carry a real
+  /// enrollment id, the atServer expects PKAM to name it, and the rebuilt
+  /// client cannot - which is `AT0401 pkam authentication failed`, the whole
+  /// of `end2end_test_14`. It is invisible under `authType: pkam` and against
+  /// the local fixture, both of which authenticate with a null enrollment id.
+  ///
+  /// **Why only on a real switch.** `setCurrentAtSign`'s idempotency
+  /// short-circuit requires `atChops` and `enrollmentId` to be null, so
+  /// passing them for the atSign already current would force a stop/recreate
+  /// on every call - and a stopped client releases its storage, so each no-op
+  /// switch would reopen the store cold.
+  ///
+  /// [posture] is optional here, unlike on [testInitializer]: the atSign has
+  /// already been brought up, so the preference it was brought up under is
+  /// the answer. Naming one asks `TestPreferences` for that posture, which
+  /// refuses if it disagrees with the preference already built.
+  Future<AtClientManager> switchToAtSign(String atSign, String namespace,
+      {AtClientPreference? preference, PqPosture? posture}) async {
+    final acm = AtClientManager.getInstance();
+    final pref = preference ?? _preferenceFor(atSign, posture);
+    if (_currentAtSign() == atSign) {
+      return acm.setCurrentAtSign(atSign, namespace, pref);
+    }
+    final credentials = _authCache[atSign];
+    return acm.setCurrentAtSign(atSign, namespace, pref,
+        atChops: credentials?.atChops, enrollmentId: credentials?.enrollmentId);
+  }
+
+  /// The preference [atSign] was brought up under, or one built at [posture]
+  /// when a switch names one.
+  ///
+  /// A posture is never invented here. `AtClientPreference.posture` is final
+  /// and decides what a client mints and publishes on the atSign, so a switch
+  /// back reuses what `testInitializer` chose rather than guessing at it.
+  AtClientPreference _preferenceFor(String atSign, PqPosture? posture) {
+    final preferences = TestPreferences.getInstance();
+    if (posture != null) {
+      return preferences.getPreference(atSign, posture: posture);
+    }
+    final existing = preferences.atClientPreferencesMap[atSign];
+    if (existing == null) {
+      throw StateError(
+          'no preference has been built for $atSign, so a switch to it has no '
+          'posture to run at. Call testInitializer for $atSign first, or name '
+          'a posture here.');
+    }
+    return existing;
+  }
+
+  /// The atSign the manager currently holds, or null if it holds no client.
+  /// `AtClientManager.atClient` throws rather than returning null.
+  String? _currentAtSign() {
+    try {
+      return AtClientManager.getInstance().atClient.getCurrentAtSign();
+    } on StateError {
+      return null;
     }
   }
 

@@ -6,6 +6,7 @@ import 'package:test/test.dart';
 import 'test_utils.dart';
 
 void main() {
+  TestUtils.isolateStorage('atclient_sharedkey_test');
   late AtClientManager atClientManager;
   late AtClient atClient;
   late String currentAtSign;

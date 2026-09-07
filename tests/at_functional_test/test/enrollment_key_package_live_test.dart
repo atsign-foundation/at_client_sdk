@@ -33,6 +33,7 @@ import 'test_utils.dart';
 /// is approving, verifies it against the `_apsk` the atServer publishes on
 /// approval, and seals this atSign's secrets to it.
 void main() {
+  TestUtils.isolateStorage('enrollment_key_package_live_test');
   late AtClient atClient;
   late String atSign;
   const namespace = 'buzz';

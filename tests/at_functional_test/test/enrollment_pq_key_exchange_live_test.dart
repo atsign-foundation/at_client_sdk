@@ -40,6 +40,7 @@ import 'test_utils.dart';
 /// either client — a mocked atServer accepts a request that the real one
 /// rejects outright, so nothing short of a live request proves the wire.
 void main() {
+  TestUtils.isolateStorage('enrollment_pq_key_exchange_live_test');
   late AtClient atClient;
   late String atSign;
   const namespace = 'buzz';

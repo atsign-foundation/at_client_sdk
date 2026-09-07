@@ -44,6 +44,7 @@ import 'test_utils.dart';
 /// virtualenv, so these three are this file's alone (see `config.yaml`) and it
 /// clears its own keyfiles before running.
 void main() {
+  TestUtils.isolateStorage('pq_legacy_interop_live_test');
   final rootDomain =
       AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
   final legacyPeer =
@@ -78,8 +79,9 @@ void main() {
     // Its own manager, not the singleton: the two sides of an interop test
     // have to be live at the same time, and `getInstance().setCurrentAtSign`
     // stops the outgoing client.
-    final manager = await AtClientManager(atSign)
-        .fromAuthSession(response.session!, preferenceFor(atSign));
+    final manager = await AtClientManager(atSign).fromAuthSession(
+        response.session!, preferenceFor(atSign),
+        storage: TestUtils.storageFor(atSign));
     return manager.atClient;
   }
 
@@ -130,6 +132,7 @@ void main() {
       appName: 'wavi',
       deviceName: 'pq-native',
       manager: AtClientManager(pqNative),
+      storage: TestUtils.storageFor(pqNative),
     ))
         .atClient;
   });
@@ -290,6 +293,7 @@ void main() {
       deviceName: 'pq-opt-out',
       mintLegacyMaterial: false,
       manager: AtClientManager(pqOptOut),
+      storage: TestUtils.storageFor(pqOptOut),
     ))
         .atClient;
 
