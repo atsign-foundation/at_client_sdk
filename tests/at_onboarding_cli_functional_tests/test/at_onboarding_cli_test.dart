@@ -261,7 +261,7 @@ void main() {
       // asks for `storage/hive/client` instead, which the cache cannot honour
       // — evict, or this authenticates the activation's client and the
       // preference below is decoration.
-      evictCachedAtClients();
+      await evictCachedAtClients();
       expect(await onboardingService.authenticate(), true);
     });
 

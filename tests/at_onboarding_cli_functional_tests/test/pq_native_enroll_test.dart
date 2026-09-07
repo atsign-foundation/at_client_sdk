@@ -60,7 +60,7 @@ void main() {
     // can never honour — and each enrolment builds its own service for the same
     // atSign too. Evict, or they all run against the onboard's client and its
     // store.
-    evictCachedAtClients();
+    await evictCachedAtClients();
 
     // A semi-permanent passcode, so each enrolment below does not need its own
     // freshly fetched OTP — the same shape the other CLI command tests use.

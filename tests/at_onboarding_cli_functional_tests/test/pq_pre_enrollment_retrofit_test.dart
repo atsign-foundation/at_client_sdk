@@ -169,7 +169,7 @@ void main() {
         reason: 'and that one record is primary itself, not some other '
             'enrollment this fixture did not create');
 
-    evictCachedAtClients();
+    await evictCachedAtClients();
     final client = await clientFor(retrofits, PqPosture.pqReady);
 
     expect(client.enrollmentId, isNotNull,
@@ -224,7 +224,7 @@ void main() {
   test('the same atSign shape at a legacy posture does not', () async {
     expect(await enrollmentsOf(staysPut), hasLength(1));
 
-    evictCachedAtClients();
+    await evictCachedAtClients();
     final client = await clientFor(staysPut, PqPosture.legacy);
 
     expect(client.enrollmentId, isNull,

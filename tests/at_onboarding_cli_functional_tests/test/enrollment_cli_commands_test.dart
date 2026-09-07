@@ -43,7 +43,7 @@ void main() {
     // path; every CLI command below asks for a freshly minted one, and the
     // cache key carries only `(atSign, enrollmentId)`. Evict, or those commands
     // run against the onboard's client rather than their own.
-    evictCachedAtClients();
+    await evictCachedAtClients();
     // Set SPP
     List<String> args = [
       'spp',

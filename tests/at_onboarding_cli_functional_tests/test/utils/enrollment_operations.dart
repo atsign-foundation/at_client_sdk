@@ -32,7 +32,7 @@ class EnrollmentOperations {
   EnrollmentOperations(this.atsign);
 
   Future<String?> getOtp(String atKeysFilePath) async {
-    evictCachedAtClients();
+    await evictCachedAtClients();
     AtOnboardingService? onboardingService = AtOnboardingServiceImpl(
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();
@@ -53,7 +53,7 @@ class EnrollmentOperations {
       String? encApkamSymmetricKey,
       String? appName,
       String? deviceName}) async {
-    evictCachedAtClients();
+    await evictCachedAtClients();
     AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();
@@ -96,7 +96,7 @@ class EnrollmentOperations {
       String? enrollmentId,
       String? appName,
       String? deviceName}) async {
-    evictCachedAtClients();
+    await evictCachedAtClients();
     AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();

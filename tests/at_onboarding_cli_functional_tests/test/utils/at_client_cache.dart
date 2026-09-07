@@ -41,7 +41,13 @@ const Duration cliCommandTimeout = Duration(seconds: 120);
 /// ⛔ **Never call this while another service has an operation in flight.** It
 /// resets the shared `AtClientManager`. Evict *between* operations, never
 /// inside one — and prefer not to need it at all.
-void evictCachedAtClients() {
+Future<void> evictCachedAtClients() async {
+  // Stopped, not dropped: a client left running keeps its claim on its
+  // storage location, and the next client of the atSign is refused there.
+  for (final client
+      in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+    await client.stop();
+  }
   AtClientImpl.atClientInstanceMap.clear();
   AtClientManager.getInstance().reset();
 }
