@@ -721,14 +721,11 @@ shortlist by cross-reads is `tests/at_end2end_test/test/pq/nskey_multi_enrollmen
 (2 builds / 11 get-put, and the name is the shape), `at_client_lifecycle_functional_test.dart`,
 `pq_posture_grid_test.dart` and the unit `enrollment_service_test.dart`.
 
-⚠️ **Owed after the merge** (the post-merge fix-forward section below holds the detail):
-- **The e2e and onboarding-CLI packs have NOT been run** against this merge. A storage /
-  lifecycle change wants all four; one has run. The e2e pack is the higher risk of the two.
-- ✅ Of the six functional failures, three are fixed (`enrollment_test`,
-  `pq_advance_ladder_test`, `nskey_rollout_ladder_live_test`), and the three in
-  `self_enrollment_retrofit_live_test` are attributed by a two-arm differential to
-  at_server #2797's revocation — a P1 row of the PQ table — and not to the merge.
-- ✅ The ladder test's state 2 passes: the holder was listening but unprimed.
+✅ **All four live packs have been run against the merge, and everything it broke in them
+is fixed** (2026-09-07; the post-merge fix-forward section below holds the detail and the
+figures). What the packs still fail is #2797's, on the pre-merge backup as much as here. Still
+owed from the merge session: the spike has not been pushed or run through CI since the merge,
+and [#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) is unreconciled.
 
 **Found 2026-09-05 by the wrap-up's cold read and done the same day:** the X3 merge-back
 had been skipped. It landed as `51bdb6230`; `at_sync_queue.dart` kept trunk's `SyncQueueStore`
@@ -840,8 +837,53 @@ with its own file** — which corrected this section's own count: it said two in
   binary carries `predecessorSettledAt` and no `apkamSelfEnrollmentGraceHours`. They are
   at_server #2797's immediate revocation of a retrofit predecessor, and belong to the PQ
   table's P1 row "at_server now revokes a non-root retrofit predecessor at the successor's
-  first authentication", which already named this file. The pack stays at `-3` until that
-  row lands.
+  first authentication", which already named this file. ✅ **Adapted the same day, at gkc's
+  ask:** the full-retrofit arm reads the published key and verifies the key package over the
+  legacy connection BEFORE the successor authenticates — the act that revokes it — and the
+  switch and rerun arms get their own legacy keyfiles, the rerun submitting twice inside one
+  arm and never authenticating its successor. The keyfile's flat id still names the
+  predecessor, and that stays right: a cold start resolves the typed material and
+  authenticates as the successor. **The functional pack is +201.**
+
+**The other three packs, run 2026-09-07 once the functional pack was green** — every arm on
+the same `at_virtual_env:local`, the pre-merge backup run with the same invocation as the
+differential:
+
+| Pack                         | At the merge | Pre-merge backup | Now      |
+| ---------------------------- | ------------ | ---------------- | -------- |
+| e2e, PQ set (10 files)       | +10 -11      | +19 -2           | +19 -2   |
+| e2e, non-PQ set (11 files)   | +50 -1       | not run          | +51      |
+| onboarding-CLI (6 files)     | +15 -4       | +20 -1           | +20 -1   |
+
+What the merge had broken in them, and the fix for each:
+- **Storage collisions** — e2e `nskey_multi_enrollment`, `retrofit_e2e` B1.1 and B1.2,
+  `retrofit_retirement`; CLI `pq_native_enroll` and `enrollment_cli_commands`. X4's
+  per-location guard refuses a second bundle at a location a live client holds. In the e2e
+  pack a second enrollment or a dedicated-manager retrofit was built at the owner's location
+  (they used to share it silently); each now gets a `forCoLocatedClient` location named by its
+  device. In the CLI pack `evictCachedAtClients()` dropped clients from the cache without
+  stopping them, so their claims outlived them; it stops them first now.
+- **Stale client references** — e2e `nskey_cross_atsign` ×3, `era_default_read`, and
+  `nskey_notify` downstream of it; CLI `enrollment_test` ×2. Before the merge `stop()` left a
+  stopped client in the instance cache, so the next `setCurrentAtSign` for that atSign handed
+  it back and re-wired its services: a resurrection the tests leaned on across singleton
+  switches. `stop()` now unfiles by identity, so a stale reference stays dead. The two e2e
+  files run one manager per atSign, both live, and switch nothing; `switchToAtSign` rebuilds
+  with the nskey keyfile as well as the credentials (a rebuilt client without it filed nothing
+  it minted, and every later client of the atSign adopted a generation it could not open —
+  which is what silenced `nskey_notify`); and `AtOnboardingServiceImpl` adopts the client the
+  manager built when the one it held has been stopped, leaving an injected client alone.
+- **The signing-root client had no storage** — the CLI's PQ-native onboard built it through
+  `fromAuthSession` with no bundle, and X6 had moved the service's default off
+  `hiveStoragePath`. It is built with the service's storage now.
+- **`enrollment_teardown_test` was on no list** — the e2e non-PQ set's one failure was the
+  suite manifest naming it; a unit test of the teardown's root check, now allowlisted.
+
+What remains in the three packs is #2797's, and fails on the pre-merge backup too:
+`retrofit_cap_value_e2e_test` reads a stamp the new server no longer writes,
+`retrofit_retirement_e2e_test` expects the cap's exception and gets `AT0027 … revoked`, and
+the CLI's `at_activate list` after a retrofit-at-start re-authenticates as the revoked legacy
+id. All three are named on that P1 row.
 
 **Where the conveyance investigation got to**, so it is not walked again:
 - An nskey private reaches another enrollment by CONVEYANCE only. Two installs are two devices
