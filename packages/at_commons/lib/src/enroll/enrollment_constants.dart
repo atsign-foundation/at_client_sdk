@@ -18,6 +18,14 @@ class EnrollmentConstants {
   /// `keys:get` at enrollment time, never synced.
   static const String regexForSEK =
       '.*\\.${AtConstants.defaultSelfEncryptionKey}\\.${EnrollmentConstants.enrollManageNamespace}@';
+  /// The enrollment an atSign's own credential authenticates as: the flat
+  /// keyfile material with no enrollment record of its own.
+  ///
+  /// It never reaches the wire. A `pkam:` naming it is refused by every
+  /// released atServer, which knows the credential only by the absence of an
+  /// id, so [PkamVerbBuilder] omits it.
+  static const String primaryEnrollmentId = 'primary';
+
   static const String pkamNamespace = '__pkams';
   static const String globalNamespace = '__global';
   static const String allNamespaces = '*';

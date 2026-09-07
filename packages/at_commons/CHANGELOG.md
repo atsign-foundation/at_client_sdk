@@ -1,3 +1,11 @@
+## 5.18.0
+
+- feat: `EnrollmentConstants.primaryEnrollmentId` (`primary`) names the
+  enrollment an atSign's own credential authenticates as: the flat keyfile
+  material with no enrollment record of its own. `PkamVerbBuilder` keeps it off
+  the wire, emitting the bare `pkam:` a released atServer expects for that
+  credential, so a client can carry one name for every credential it holds.
+
 ## 5.17.0
 
 - fix: `EnrollmentConstants.regexForPerEnrollmentNamespaces` anchors the
