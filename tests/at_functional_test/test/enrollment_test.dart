@@ -637,19 +637,23 @@ void main() {
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
       // Insert a key with wavi and buzz namespace for atClient.get to fetch the data
       // Run AtClient.get before authenticating with enrollment because enrollment has only
-      // read access.
+      // read access. Written to the atServer, since the enrolled client below
+      // has a store of its own and reads them from there.
+      final remoteWrite = PutRequestOptions()..useRemoteAtServer = true;
       AtKey atKey =
           AtKey.self('phone', namespace: 'wavi', sharedBy: atSign).build();
       String value = '12345';
-      AtResponse putWaviKeyResponse =
-          await AtClientManager.getInstance().atClient.putText(atKey, value);
+      AtResponse putWaviKeyResponse = await AtClientManager.getInstance()
+          .atClient
+          .putText(atKey, value, putRequestOptions: remoteWrite);
       expect(putWaviKeyResponse.response, isNotEmpty);
 
       // Put key with buzz namespace
       atKey = AtKey.self('mobile', namespace: 'buzz', sharedBy: atSign).build();
       value = '99899';
-      AtResponse putBuzzKeyResponse =
-          await AtClientManager.getInstance().atClient.putText(atKey, value);
+      AtResponse putBuzzKeyResponse = await AtClientManager.getInstance()
+          .atClient
+          .putText(atKey, value, putRequestOptions: remoteWrite);
       expect(putBuzzKeyResponse.response, isNotEmpty);
 
       // Set AtClient to null and authenticate with the new auth keys generated for enrollment
@@ -671,7 +675,9 @@ void main() {
           atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
       AtChopsKeys atChopsKeys =
           AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-      // atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
+      // The enrolled client has a store of its own, so the self key has to
+      // come with its chops: nothing else files it there.
+      atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
       AtChops atChops = AtChopsImpl(atChopsKeys);
 
       // Authenticate the atSign
@@ -723,12 +729,15 @@ void main() {
               e.message.contains(
                   'Cannot perform llookup on mobile.buzz$atSign due to insufficient privilege'))));
 
-      // Get the key which has access to namespace
+      // Get the key which has access to namespace. The owner's client wrote
+      // it, and this client's own store has not synced it, so read it from
+      // the atServer.
       AtKey getWaviKey = atKey =
           AtKey.self('phone', namespace: 'wavi', sharedBy: atSign).build();
 
-      AtValue atValue =
-          await AtClientManager.getInstance().atClient.get(getWaviKey);
+      AtValue atValue = await AtClientManager.getInstance().atClient.get(
+          getWaviKey,
+          getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
       expect(atValue.value, '12345');
     });
   });
