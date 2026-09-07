@@ -13,9 +13,13 @@ import 'storage_contract.dart';
 /// A storage whose [openBackend] can be held open on [gate], so a test can
 /// interleave a second [attach] while the first is still inside it.
 class _GatedStorage extends AtClientStorageBase {
-  _GatedStorage(this._location, {Completer<void>? gate}) : _gate = gate;
+  _GatedStorage(this._location, {Completer<void>? gate, this.closeGate})
+      : _gate = gate;
   final String _location;
   final Completer<void>? _gate;
+
+  /// Held open during closeBackend(), if given.
+  final Completer<void>? closeGate;
 
   @override
   String get location => _location;
@@ -27,7 +31,10 @@ class _GatedStorage extends AtClientStorageBase {
   }
 
   @override
-  Future<void> closeBackend() async {}
+  Future<void> closeBackend() async {
+    final gate = closeGate;
+    if (gate != null) await gate.future;
+  }
 
   @override
   Future<void> clearData() async {}
@@ -100,6 +107,35 @@ void main() {
     await firstAttach;
     expect(first.isAttached, isTrue);
     await first.close();
+  });
+
+  test(
+      'close() does not release its location claim until closeBackend() '
+      'finishes, so a racing attach() cannot open a second backend over the '
+      'one still being torn down', () async {
+    final closeGate = Completer<void>();
+    final first = _GatedStorage('@close-race', closeGate: closeGate);
+    await first.attach(FakeClient('@close-race', 'e1'));
+
+    final closeFuture = first.close();
+    // first is now suspended inside closeBackend(), still awaiting closeGate.
+
+    final second = _GatedStorage('@close-race');
+    await expectLater(
+        () => second.attach(FakeClient('@close-race', 'e2')),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('already open at'))),
+        reason: 'the claim must still read as held for the whole of '
+            'closeBackend(), or a second attach() at the same location opens '
+            'a backend over the boxes/db the first is still tearing down — '
+            'the mirror of the race attach() already guards against');
+
+    closeGate.complete();
+    await closeFuture;
+    await second.attach(FakeClient('@close-race', 'e3'));
+    expect(second.isAttached, isTrue,
+        reason: 'once close() actually finishes, the location is free again');
+    await second.close();
   });
 
   test('two storages for one atSign at different locations both open',
@@ -185,6 +221,35 @@ void main() {
         reason: 'an injected store outlives the client that borrowed it - the '
             'caller owns its lifetime, so stop() must not have closed it');
     await injected.close();
+  });
+
+  test(
+      'AtClientImpl.create() refuses a caller-supplied storage that differs '
+      'from what the cached client for this atSign already holds', () async {
+    final held = InMemoryAtClientStorage(atSign: '@guarded');
+    final first = await AtClientImpl.create(
+            '@guarded', 'wavi', AtClientPreference(), storage: held)
+        as AtClientImpl;
+
+    final other = InMemoryAtClientStorage(atSign: '@guarded');
+    await expectLater(
+        () => AtClientImpl.create('@guarded', 'wavi', AtClientPreference(),
+            storage: other),
+        throwsA(isA<IllegalArgumentException>()),
+        reason: 'silently keeping the cached client on its original storage '
+            'would leave `other` unattached while the caller believes it is '
+            'live, and every put/get would land in `held` instead');
+    expect(other.isAttached, isFalse,
+        reason: 'the rejected storage was never attached');
+
+    final again = await AtClientImpl.create(
+            '@guarded', 'wavi', AtClientPreference(), storage: held)
+        as AtClientImpl;
+    expect(identical(again, first), isTrue,
+        reason: 're-offering the storage the cached client already holds is '
+            'not a change, and must still reuse it');
+
+    await first.stop();
   });
 
   test(

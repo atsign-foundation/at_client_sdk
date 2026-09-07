@@ -357,6 +357,14 @@ class AtClientImpl implements AtClient {
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(currentAtSign)) {
       atClientImpl = atClientInstanceMap[currentAtSign];
+      // Refuse a storage the cached client doesn't already hold.
+      if (storage != null && !storage.isHeldBy(atClientImpl!)) {
+        throw IllegalArgumentException(
+            'AtClientImpl.create($currentAtSign, ...): a client for this '
+            'atSign already exists and holds different storage. Call '
+            'stop() on it first, or omit storage to keep reusing the '
+            'storage the existing client already holds.');
+      }
       await atClientImpl!.start();
       // Re-using a cached AtClient skips _init. Adopt the supplied preference's
       // crypto config so providers (and a changed defaultProviderId) added

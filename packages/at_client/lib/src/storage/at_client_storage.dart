@@ -149,8 +149,9 @@ abstract class AtClientStorageBase implements AtClientStorage {
     _closed = true;
     _owner = null;
     final here = location;
-    if (identical(_openByLocation[here], this)) _openByLocation.remove(here);
+    // Released after closeBackend() finishes, not before.
     await closeBackend();
+    if (identical(_openByLocation[here], this)) _openByLocation.remove(here);
   }
 
   /// Opens the backend. Idempotent.

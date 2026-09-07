@@ -152,6 +152,12 @@
   crashed for a non-nullable item type).
 - fix: `AtCollection` reads no longer duplicate the preceding item when a key
   expires or is deleted between the scan and its per-key read.
+- fix: `RemoteSecondary`'s authenticator path sends client version, id,
+  appName and platform on every authenticated connection.
+- fix: `AtClientImpl.create()` rejects a caller-supplied `storage` that a
+  cached client for the same atSign isn't already holding.
+- fix: closing one client's storage can no longer race a concurrent
+  `attach()` into opening a backend over it mid-teardown.
 
 ## 3.14.0
 - feat (experimental): per-APKAM same-atSign secret-sharing substrate —

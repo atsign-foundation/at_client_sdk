@@ -5,6 +5,18 @@ import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'test_utils/mocks.dart';
 
+/// Captures the command sent via [sendSync].
+class _CapturingCommandExecutor implements AtCommandExecutor {
+  String? lastCommand;
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    lastCommand = command;
+    return '';
+  }
+}
+
 void main() {
   AtLookupImpl mockAtLookUp = MockAtLookUpImpl();
   SecondaryAddressFinder mockSecondaryAddressFinder =
@@ -46,6 +58,30 @@ void main() {
 
       expect(remoteSecondary.atLookUp, same(mockAtLookUp),
           reason: 'the caller supplied it, so it is used as given');
+    });
+
+    test(
+        'the installed authenticator still carries clientConfig, so the '
+        'from: command it sends keeps naming this client to the atServer',
+        () async {
+      final preference = AtClientPreference()
+        ..privateKey = 'dummy_private_key'
+        ..atClientParticulars.appName = 'remote_secondary_test_app';
+      final remoteSecondary = RemoteSecondary(atsign, preference);
+      final authenticator =
+          (remoteSecondary.atLookUp as AtLookupMuxable).authenticator;
+      expect(authenticator, isNotNull);
+
+      final capturingExecutor = _CapturingCommandExecutor();
+      await authenticator!(capturingExecutor);
+
+      expect(capturingExecutor.lastCommand, contains(':clientConfig:'),
+          reason: '_installAuthenticator builds authenticatorForPrivateKey '
+              'without threading _getClientConfig() through, so the from: '
+              'command it sends drops the client version/id/appName the '
+              'atServer used to receive from every authenticated connection');
+      expect(
+          capturingExecutor.lastCommand, contains('remote_secondary_test_app'));
     });
 
     test('test findSecondaryUrl', () async {

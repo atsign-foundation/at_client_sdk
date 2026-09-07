@@ -72,6 +72,7 @@ class RemoteSecondary implements Secondary {
         _atSign,
         enrollmentId: lookUp.enrollmentId,
         chops: _atChops,
+        clientConfig: _getClientConfig(),
       );
       return;
     }
@@ -90,6 +91,7 @@ class RemoteSecondary implements Secondary {
         // The same preference fields the constructor stamps on the lookup, so
         // the authenticator and the ladder it replaces read them alike.
         hashingAlgo: _preference.hashingAlgoType,
+        clientConfig: _getClientConfig(),
       );
       return;
     }
@@ -102,6 +104,7 @@ class RemoteSecondary implements Secondary {
         _atSign,
         privateKey,
         enrollmentId: lookUp.enrollmentId,
+        clientConfig: _getClientConfig(),
       );
       return;
     }
@@ -112,7 +115,11 @@ class RemoteSecondary implements Secondary {
     // and must keep working through the seam.
     final cramSecret = _cramSecret;
     if (cramSecret != null) {
-      lookUp.authenticator = authenticatorForCramSecret(_atSign, cramSecret);
+      lookUp.authenticator = authenticatorForCramSecret(
+        _atSign,
+        cramSecret,
+        clientConfig: _getClientConfig(),
+      );
       return;
     }
 
