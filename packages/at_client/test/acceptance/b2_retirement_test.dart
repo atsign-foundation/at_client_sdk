@@ -71,8 +71,7 @@ void main() {
       provenIn(
         'tests/at_end2end_test/test/pq/retrofit_e2e_test.dart',
         'UC-B1.2: a clone of the same pre-PQ keyfile gets its OWN enrollment',
-        proves:
-            'the exception: B1.1\'s predecessor is a ROOT enrollment, so '
+        proves: 'the exception: B1.1\'s predecessor is a ROOT enrollment, so '
             'its successor\'s first authentication leaves it alive, and a '
             'clone of that keyfile still authenticates as it afterwards and '
             'retrofits to its own fresh enrollment',

@@ -13784,6 +13784,14 @@ passing a value the source already holds — or a wrong one.
    enrollment holding active typed authentication material, else the flat
    stored `enrollmentId`, else `primary`. Several throw naming them all, as
    `resolveAuthenticatingEnrollment()` always has.
+   A document holding no authentication material at all —
+   `AtKeys.holdsAuthenticationMaterial` false: a store that only files nskey
+   privates, a keychain read before onboarding — names no enrollment, and a
+   client built on one keeps the id its caller passed beside the injected
+   AtChops. Found 2026-09-07 by the e2e job whose initializer hands every
+   client such a stand-in beside an APKAM enrollment id: derived as `primary`,
+   the connection sent a bare `pkam:` signed with the enrollment's key, and
+   the atServer refused it.
 2. **`AtAuthRequest.enrollmentId` is removed** (at_auth 4.0.0-rc2, a major
    line). `AtAuthImpl.authenticate` asks the keys. The minors deprecate rather
    than remove: `AtOnboardingService.authenticate({enrollmentId})` keeps the

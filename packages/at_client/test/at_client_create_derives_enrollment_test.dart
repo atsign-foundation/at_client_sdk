@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
@@ -69,6 +70,22 @@ void main() {
     expect(AtClientImpl.atClientInstanceMap.keys,
         contains(AtClientImpl.instanceKey(atSign, 'stored-1')),
         reason: 'and it is filed under the enrollment it actually runs as');
+  });
+
+  test('a document holding no authentication material names no enrollment',
+      () async {
+    // A store that only files other material — the e2e initializer's
+    // nskey stand-in, a keychain read before onboarding — beside a caller
+    // whose credentials arrive as injected AtChops.
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, AtKeys());
+    final client = await AtClientImpl.create(atSign, 'wavi', pref(),
+        atChops: AtChopsImpl(AtChopsKeys()),
+        atKeysIo: io,
+        enrollmentId: 'apkam-1');
+    expect(client.enrollmentId, 'apkam-1',
+        reason: 'no material, so nothing to derive from; the caller\'s id '
+            'is the credential\'s');
   });
 
   test('a keyfile that predates enrollments runs the client as primary',

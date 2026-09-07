@@ -10,6 +10,9 @@
   A keyfile holding several live enrollments throws naming them, as the
   resolver always has. `primary` never reaches the wire: at_commons 5.18.0's
   `PkamVerbBuilder` omits it, so the floor moves to that release.
+- feat: `AtKeys.holdsAuthenticationMaterial` — whether the document holds
+  typed authentication material or the flat APKAM keypair. A document holding
+  neither authenticates as nothing, whatever its flat id says.
 
 ## 4.0.0-rc1
 

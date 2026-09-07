@@ -9,6 +9,9 @@
   retrofitted keyfile starts as its successor with nothing passed. `primary`
   never reaches the wire, and a client running as it fetches, updates and
   lists no enrollment record, exactly as one with no id did.
+  A keys source whose document holds no authentication material at all — a
+  store that only files nskey privates, a keychain read before onboarding —
+  names no enrollment, and the caller's id stands beside its injected AtChops.
 - fix: an enrollment granted `*` seeds the namespace the app runs in
   (`preference.namespace`), as the atSign's own credential does. It seeded
   nothing, so an atSign reachable only through a root enrollment published no

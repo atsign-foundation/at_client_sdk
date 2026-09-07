@@ -767,6 +767,15 @@ class AtKeys {
     return candidates.single;
   }
 
+  /// Whether this document holds any authentication material: typed, or the
+  /// flat APKAM keypair. A document holding none authenticates as nothing,
+  /// whatever its flat [enrollmentId] says — a store that only files other
+  /// material, or one read before onboarding, is the shape.
+  bool get holdsAuthenticationMaterial =>
+      authenticatableEnrollmentIds.isNotEmpty ||
+      // ignore: deprecated_member_use_from_same_package
+      apkamPrivateKey != null;
+
   /// The enrollment this keyfile authenticates as.
   ///
   /// The one enrollment holding active typed authentication material — on a

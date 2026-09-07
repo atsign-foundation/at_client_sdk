@@ -767,7 +767,13 @@ class AtClientImpl implements AtClient {
             'enrollment they authenticate as is unknown; running as '
             '${enrollmentId ?? "the atSign's own credential"}: $e');
       }
-      if (keys != null) {
+      if (keys != null && !keys.holdsAuthenticationMaterial) {
+        // A store that only files other material names no enrollment; the
+        // caller's id is the credential's, carried in the injected AtChops.
+        logger.finer('The keys for $currentAtSign hold no authentication '
+            'material, so they name no enrollment; running as '
+            '${enrollmentId ?? "the atSign's own credential"}');
+      } else if (keys != null) {
         final derived = keys.enrollmentToAuthenticateAs();
         if (enrollmentId != null && enrollmentId != derived) {
           logger.shout('$currentAtSign was asked to run as enrollment '
