@@ -90,6 +90,21 @@ Future<AtClient> createAtClient(
     throw UnAuthenticatedException(msg);
   }
   stderr.writeln(chalk.brightGreen('Connected'));
-  // Get the AtClient which the onboardingService just authenticated
-  return AtClientManager.getInstance().atClient;
+  final client = AtClientManager.getInstance().atClient;
+  // A command's process ends when the command does, and the client's
+  // post-quantum startup — seeding and publishing this atSign's namespace keys
+  // among it — runs after the client is built and is not awaited by it. Waited
+  // for here so a short-lived command still leaves the atSign able to receive.
+  if (client is AtClientImpl) {
+    // ignore: experimental_member_use
+    await client.pqBootstrap?.startupComplete.timeout(startupTailBound,
+        onTimeout: () => stderr.writeln(chalk.brightYellow(
+            'The client\'s startup did not finish within '
+            '${startupTailBound.inSeconds}s; continuing. What it left undone '
+            'is retried at the next start.')));
+  }
+  return client;
 }
+
+/// How long a command waits for the client's post-quantum startup to finish.
+const Duration startupTailBound = Duration(seconds: 30);

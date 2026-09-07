@@ -1,5 +1,10 @@
 ## 1.17.0-rc1
 
+- fix: `createAtClient` waits for the client's post-quantum startup to finish,
+  bounded at 30 seconds, before handing the client to a command. A command's
+  process ends with the command, and the startup — which publishes the
+  atSign's namespace keys — ran after it, so an atSign retrofitted by
+  `at_activate` could send post-quantum and not receive.
 - fix: `atClient` follows a rebuild. `authenticate()` after `onboard()` builds
   a second client and stops the first, and the field kept pointing at the
   stopped one, whose services throw "has not yet been set". A client somebody
