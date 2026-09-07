@@ -1,5 +1,13 @@
 ## 1.17.0-rc1
 
+- fix: `atClient` follows a rebuild. `authenticate()` after `onboard()` builds
+  a second client and stops the first, and the field kept pointing at the
+  stopped one, whose services throw "has not yet been set". A client somebody
+  injected still stays.
+- fix: the client that mints the signing root after a post-quantum activation
+  is built with the service's storage. It had none, and failed with "Please
+  set local storage path" whenever the preference named no path.
+
 - **Behaviour change, from `at_client` rather than from this package.**
   `authenticate()` builds an `AtClient`, and a client at a post-quantum posture
   now gives an atSign that holds no enrollment its first one — rewriting the

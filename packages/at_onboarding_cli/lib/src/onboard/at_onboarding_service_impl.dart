@@ -238,7 +238,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // depends on.
     _atLookUp!.hashingAlgoType = atOnboardingPreference.hashingAlgoType;
 
-    atClient ??= atClientManager.atClient;
+    _adoptBuiltClient(atClientManager.atClient);
     // The caller's, on both flows, and deliberately not [authenticationSigner]:
     // this field is what at_auth's EnrollmentApprover reads for enrollment
     // crypto, where the material that matters is the encryption keypair and the
@@ -257,6 +257,15 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         enrollmentId: lookUp.enrollmentId,
         chops: authenticationSigner,
       );
+    }
+  }
+
+  /// Points [atClient] at [built] when this service holds none, or holds one
+  /// the manager has since stopped; a client somebody injected stays.
+  void _adoptBuiltClient(AtClient built) {
+    final held = atClient;
+    if (held == null || (held is AtClientImpl && held.isStopped)) {
+      atClient = built;
     }
   }
 
@@ -410,9 +419,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'retries it');
       return;
     }
-    final manager = await AtClientManager.getInstance()
-        .fromAuthSession(session, atOnboardingPreference);
-    atClient ??= manager.atClient;
+    final manager = await AtClientManager.getInstance().fromAuthSession(
+        session, atOnboardingPreference,
+        storage: _storageForClient());
+    _adoptBuiltClient(manager.atClient);
     await mintSigningRootAfterActivation(manager.atClient, atKeysIo: atKeysIo);
   }
 
