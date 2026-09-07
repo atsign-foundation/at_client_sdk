@@ -1,3 +1,7 @@
+## 4.0.0-rc1
+
+- breaking: `MonitorClient` is removed. It has no replacement.
+
 ## 3.7.0-rc5
 
 - chore: `AtLookupMuxable.readResponse` is deprecated: it was added for the
