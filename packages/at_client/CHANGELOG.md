@@ -1,5 +1,11 @@
 ## 3.15.0-rc1
 
+- fix: work parked on a network read when the client stops no longer touches
+  the local store on resume: a sync round's in-sync check does not read the
+  pull cursor, its pull does not persist it, and a notification batch cut by
+  the stop does not write the watermark for what came after; that store is
+  closed by then, and each was a `Box not found` in the log.
+
 - fix: the envelope listener attaches to the client's sync and notification
   services whenever `AtClientManager` sets them, instead of failing when the
   PQ startup reached it first; a client holding no key package now says at

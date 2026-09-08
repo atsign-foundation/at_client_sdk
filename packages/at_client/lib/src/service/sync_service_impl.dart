@@ -1083,6 +1083,13 @@ class SyncServiceImpl implements SyncService {
   /// losing the reason a sync failed is not.
   @visibleForTesting
   Future<void> persistPullCursor(int lastReceivedServerCommitId) async {
+    if (isStopped) {
+      // Reached from a finally after the stop guard's own bail-out; the
+      // store is closed, and the next start re-reads from the last cursor.
+      _logger.finer('Not persisting the pull cursor at '
+          '$lastReceivedServerCommitId: the service has been stopped');
+      return;
+    }
     try {
       await _atClient.put(_lastReceivedServerCommitIdAtKey,
           lastReceivedServerCommitId.toString(),
@@ -1305,6 +1312,9 @@ class SyncServiceImpl implements SyncService {
     // Force-fresh: see [_getServerCommitId] doc — we're deciding whether
     // sync work is needed; a stale cache would skip the run.
     var serverCommitId = await _getServerCommitId(forceFresh: true);
+    // stop() may have landed during that network read and closed the store
+    // the next line reads.
+    _bailIfStopped();
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     final pendingPushCount = await _atClient.getLocalSecondary()!.syncQueueSize;
     _logger.finer('server commit id: $serverCommitId '

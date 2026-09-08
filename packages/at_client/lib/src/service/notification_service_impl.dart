@@ -551,6 +551,9 @@ class NotificationServiceImpl extends NotificationService {
         }
         // Saves latest notification id to the keys if its not a stats notification.
         if (n.id != '-1') {
+          // stop() may have landed during the previous write and closed the
+          // store this one goes to.
+          if (isStopped) return;
           try {
             await atClient.put(
                 lastReceivedNotificationAtKey, _watermarkValue(n),

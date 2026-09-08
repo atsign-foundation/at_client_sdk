@@ -44,6 +44,7 @@ void main() {
   setUpAll(() {
     registerFallbackValue(AtKey());
     registerFallbackValue(StatsVerbBuilder());
+    registerFallbackValue(PutRequestOptions());
   });
 
   setUp(() async {
@@ -98,11 +99,43 @@ void main() {
     // the pending-push snapshot, let alone pushed.
     await Future.delayed(Duration(milliseconds: 20));
     verifyNever(() => local.peekSyncQueue(limit: any(named: 'limit')));
+    // The in-sync check reads the pull cursor from the local store right after
+    // its network read; on a stopped client that store is already closed.
+    verifyNever(() => atClient.get(any()));
     expect(errorResult, isNotNull,
         reason: 'the stranded request must be answered, not left dangling');
     expect(
         errorResult!.atClientException?.message, contains('has been stopped'),
         reason: 'the request is answered as stopped, not as any other error');
+  });
+
+  test(
+      'a run parked on its pull fetch when stop() lands does not write the '
+      'pull cursor on resume', () async {
+    final park = Completer<String>();
+    when(() => remote.executeVerb(any())).thenAnswer((invocation) {
+      if (invocation.positionalArguments.first is StatsVerbBuilder) {
+        return Future.value('data:[{"value":"9"}]');
+      }
+      return park.future;
+    });
+
+    SyncResult? errorResult;
+    service.sync(onError: (result) => errorResult = result as SyncResult?);
+    await Future.delayed(Duration(milliseconds: 20));
+    verify(() => remote.executeVerb(any())).called(2);
+
+    final stopFuture = service.stop();
+    park.complete('data:[]');
+    await stopFuture;
+    await Future.delayed(Duration(milliseconds: 20));
+    // The pull's cursor is persisted in a finally, so the stop guard's own
+    // bail-out reaches it; the store it writes is closed by then.
+    verifyNever(() => atClient.put(any(), any(),
+        putRequestOptions: any(named: 'putRequestOptions')));
+    expect(
+        errorResult?.atClientException?.message, contains('has been stopped'),
+        reason: 'the stranded request is answered as stopped');
   });
 
   test('control: without stop(), the same parked run resumes and does work',

@@ -1,5 +1,6 @@
 // ignore_for_file: deprecated_member_use_from_same_package
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
@@ -1608,6 +1609,36 @@ void main() {
       service = await NotificationServiceImpl.create(mockAtClientImpl,
           monitor: fakeMonitor) as NotificationServiceImpl;
       service.stopAllSubscriptions();
+    });
+
+    test('a batch cut by stop() writes no watermark after the stop', () async {
+      final park = Completer<bool>();
+      var puts = 0;
+      when(() => mockAtClientImpl.put(any(), any(),
+          putRequestOptions: any(named: 'putRequestOptions'))).thenAnswer((_) {
+        puts++;
+        return puts == 1 ? park.future : Future.value(true);
+      });
+      String notification(String id) =>
+          '{"id":"$id","from":"@alice","to":"@alice","key":"$id.wavi@alice",'
+          '"value":null,"operation":"update","epochMillis":1,'
+          '"messageType":"MessageType.key","isEncrypted":false}';
+      final live = await NotificationServiceImpl.create(mockAtClientImpl,
+          monitor: fakeMonitor) as NotificationServiceImpl;
+
+      final receipt = live.handleNotificationReceipt(
+          'notification: ${notification('n1')}notification: ${notification('n2')}');
+      await Future.delayed(Duration.zero);
+      expect(puts, 1,
+          reason: 'the first watermark write is parked, so the stop below '
+              'lands mid-batch');
+
+      await live.stop();
+      park.complete(true);
+      await receipt;
+      expect(puts, 1,
+          reason: 'the second notification was handled after stop(); its '
+              'watermark write would land on a store the stop has closed');
     });
 
     test('is written unencrypted, without the payload or the metadata',
