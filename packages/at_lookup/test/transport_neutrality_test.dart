@@ -8,22 +8,37 @@ import 'package:test/test.dart';
 /// it across the whole import graph; until at_lookup has one, this covers the
 /// directory the seam lives in.
 void main() {
-  const allowed = {'dart:async'};
+  /// The `dart:` libraries that resolve on every platform. `dart:io` and
+  /// `dart:ffi` are absent by construction; so are the web-only ones, because a
+  /// file under the seam has to compile both ways.
+  const platformNeutral = {
+    'dart:async',
+    'dart:collection',
+    'dart:convert',
+    'dart:core',
+    'dart:developer',
+    'dart:math',
+    'dart:typed_data',
+  };
 
-  test('lib/src/transport imports no platform library', () {
-    final directory = Directory('lib/src/transport');
-    expect(directory.existsSync(), isTrue,
-        reason: 'run this from the at_lookup package root');
+  test('lib/src/transport reaches only platform-neutral libraries', () {
+    final sources = Directory('lib/src/transport')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))
+        .toList();
+
+    expect(sources, isNotEmpty,
+        reason: 'lib/src/transport holds no Dart sources — either the seam has '
+            'moved, or this suite is not running from the at_lookup package '
+            'root');
 
     final pattern = RegExp('''^\\s*(?:import|export)\\s+['"](dart:[a-z_]+)''');
     final offenders = [
-      for (final file in directory
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((file) => file.path.endsWith('.dart')))
+      for (final file in sources)
         for (final line in file.readAsLinesSync())
           if (pattern.firstMatch(line) case final match?
-              when !allowed.contains(match.group(1)))
+              when !platformNeutral.contains(match.group(1)))
             '${file.path}: ${match.group(1)}',
     ];
 
