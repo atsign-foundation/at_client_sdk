@@ -123,8 +123,17 @@ Future<int> wrappedMain(List<String> arguments) async {
 
   final first = arguments.first;
   if (first.startsWith('-') && first != '-h' && first != '--help' && first != '--version') {
-    // no command found ... legacy ... insert 'onboard' as the command
-    arguments = ['onboard', ...arguments];
+    // This used to insert 'onboard' and carry on. It no longer does: a command
+    // is named or the invocation is refused, so that what the binary is about
+    // to do is stated rather than inferred from the shape of the arguments.
+    stderr.writeln('Version: $packageVersion');
+    stderr.writeln('No command was given. "$first" is an option, not a '
+        'command — an invocation with no command used to be treated as '
+        '"onboard", and no longer is. Name the command you want:');
+    aca.parser.printAllCommandsUsage(showSubCommandParams: false);
+    stderr.writeln('\nFor an activation that is "onboard": '
+        'auth onboard -a <atSign> -c <cram secret>\n');
+    return 1;
   }
 
   final ArgResults topLevelResults;
@@ -226,7 +235,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureIn(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.otp:
         // generate a one-time-passcode for this atSign. This is a passcode
@@ -245,7 +254,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureIn(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.interactive:
         // Interactive session for various enrollment management activities:
@@ -259,7 +268,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
-                posture: AuthCliArgs.postureIn(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.list:
         await list(
@@ -270,7 +279,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
-                posture: AuthCliArgs.postureIn(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.fetch:
         await fetch(
@@ -282,7 +291,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureIn(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.approve:
         await approve(
@@ -293,7 +302,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
-                posture: AuthCliArgs.postureIn(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.auto:
         await autoApprove(
@@ -304,7 +313,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
-                posture: AuthCliArgs.postureIn(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.deny:
         await deny(
@@ -316,7 +325,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureIn(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.revoke:
         await revoke(
@@ -328,7 +337,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureIn(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.enroll:
         // App which doesn't have auth keys and is not the first app.
@@ -348,7 +357,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureIn(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.delete:
         await deleteEnrollment(
@@ -360,7 +369,7 @@ Future<int> wrappedMain(List<String> arguments) async {
                     commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
-                posture: AuthCliArgs.postureIn(commandArgResults)));
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
       case AuthCliCommand.decrypt:
         await passPhraseDecryptAtKeys(commandArgResults);
 
@@ -566,7 +575,12 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     // `authenticate()` declared the other, and once the shipped default became
     // `pqReady` they stopped agreeing: an RSA-2048 APKAM key with an ML-DSA-65
     // declaration, which at_chops refuses by size.
-    signingAlgo: AuthCliArgs.postureIn(argResults)?.authenticationKeyAlgorithm,
+    // The enroller rule, not the raw argument: an unnamed --posture means
+    // legacy here, and the algorithm has to agree with the posture the
+    // service was built at or at_chops is handed a key of one algorithm and a
+    // declaration of another.
+    signingAlgo:
+        AuthCliArgs.postureForEnroller(argResults).posture.authenticationKeyAlgorithm,
     // Null unless `--key-exchange` was named, and null means "the posture
     // decides" — resolved in the service against the same preference this
     // command's `signingAlgo` above is resolved against.
@@ -1163,12 +1177,15 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
 
   // The posture rides the constructor, not a cascade: it is final in
   // AtClientPreference, and every axis it supplies is fixed at construction.
-  // An unnamed --posture leaves the superclass's own default in place rather
-  // than the CLI restating one, so this binary rides the rollout schedule of
-  // the at_client it was built against — which is what `preferenceUnder`
-  // does, and what naming `PqPosture.legacy` here did not.
+  // This serves `onboard` and `enroll`, so an unnamed --posture resolves to
+  // legacy and says so — the CLI states its own default rather than taking
+  // whichever one the at_client it was compiled against happens to carry.
+  final enroller = AuthCliArgs.postureForEnroller(ar);
+  if (enroller.notice != null) {
+    stderr.writeln('${chalk.blue('[Information]')} ${enroller.notice}');
+  }
   AtOnboardingPreference atOnboardingPreference =
-      AuthCliArgs.preferenceUnder(AuthCliArgs.postureIn(ar))
+      AuthCliArgs.preferenceUnder(enroller.posture)
         ..rootDomain = rootDomain.rootDomain
         ..rootPort = rootDomain.rootPort
         ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]

@@ -1,5 +1,20 @@
 ## 1.17.0-rc1
 
+- **BREAKING:** an invocation with no command is refused instead of being
+  treated as `onboard`. `auth -a <atSign> -c <secret>` activated an atSign
+  without the word appearing anywhere; it now prints the command list and
+  exits 1. `auth onboard -a <atSign> -c <secret>` is the same activation.
+  `--help` and `--version` are unaffected.
+- **BREAKING:** `--posture` is resolved by role rather than inherited from
+  at_client. `onboard` and `enroll` default to `legacy` and announce it, so
+  the keys they write stay usable by a legacy app and a default invocation
+  puts no post-quantum machinery in the picture. Every other command defaults
+  to `pqReady` and **refuses** `--posture legacy`: approving a post-quantum
+  enrolment means minting a symmetric key and encapsulating it to the
+  requester's key package, which a posture configuring no post-quantum
+  providers cannot do — at_client already refuses such an approval before it
+  reaches the atServer, and this turns that runtime failure into a usage
+  message. Naming `--posture` explicitly is unchanged on every command.
 - feat: `authenticate()` authenticates as the keyfile's own enrollment (at_auth
   4.0.0-rc2's `AtKeys.enrollmentToAuthenticateAs`): the one enrollment holding
   active typed authentication material, else the flat stored id, else `primary`

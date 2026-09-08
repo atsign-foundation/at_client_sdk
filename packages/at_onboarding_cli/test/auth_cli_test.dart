@@ -305,35 +305,51 @@ void postureArgumentTests() {
           same(AtOnboardingPreference().posture));
     });
 
-    test('the CLI names a posture constant in exactly one place', () {
-      // `?? PqPosture.legacy` where a preference is built is how an unset
-      // --posture quietly stopped meaning "no opinion", and the assertion
-      // above cannot see it while legacy is still the default. The three
-      // entries of `postureNames` are the whole legitimate vocabulary; a
-      // fourth mention in code is a construction site restating a default.
-      final named = <String>[];
+    test('a posture constant is named where the roles are decided, nowhere else',
+        () {
+      // `?? PqPosture.legacy` where a preference is BUILT is how an unset
+      // --posture quietly stopped meaning "no opinion", and that is what this
+      // catches. It used to say the three `postureNames` entries were the whole
+      // legitimate vocabulary; the CLI now states its own two role defaults
+      // rather than inheriting at_client's, so the vocabulary is those three
+      // plus the defaults — and the guard moved from counting mentions to
+      // naming the file allowed to hold them, which is strictly sharper: a
+      // construction site restating a default is now caught wherever it sits,
+      // not only when it pushes a total past three.
+      final byFile = <String, List<String>>{};
       for (final path in const [
         'lib/src/cli/auth_cli.dart',
         'lib/src/cli/auth_cli_args.dart',
         'lib/src/util/create_at_client_cli.dart',
       ]) {
         final lines = File(path).readAsLinesSync();
-        expect(lines, isNotEmpty, reason: '$path did not read; a rail over an '
-            'empty file passes for the wrong reason');
+        expect(lines, isNotEmpty,
+            reason: '$path did not read; a rail over an '
+                'empty file passes for the wrong reason');
         for (final line in lines) {
           final code = line.trim();
           if (code.startsWith('//')) continue;
           if (RegExp(r'PqPosture\.(legacy|pqReady|pqActive)').hasMatch(code)) {
-            named.add('$path | $code');
+            (byFile[path] ??= <String>[]).add(code);
           }
         }
       }
-      expect(named, hasLength(3),
-          reason: 'expected only the three postureNames entries, got:\n'
-              '${named.join('\n')}');
-      expect(named.every((l) => l.contains('auth_cli_args.dart')), isTrue,
-          reason: 'the map is the one place a posture constant belongs:\n'
-              '${named.join('\n')}');
+      for (final path in const [
+        'lib/src/cli/auth_cli.dart',
+        'lib/src/util/create_at_client_cli.dart',
+      ]) {
+        expect(byFile[path] ?? const <String>[], isEmpty,
+            reason: 'a command and a client factory take the posture they are '
+                'handed; naming one here restates a default where nothing '
+                'reviews it:\n${(byFile[path] ?? const []).join('\n')}');
+      }
+      final args = byFile['lib/src/cli/auth_cli_args.dart'] ?? const <String>[];
+      expect(args, hasLength(6),
+          reason: 'expected the three postureNames entries plus the three '
+              'lines that decide a role default — the legacy an enroller '
+              'falls to, the legacy an approver refuses, and the pqReady it '
+              'falls to. Anything else is a fourth opinion about what a '
+              'command runs at:\n${args.join('\n')}');
     });
 
     test('every command that builds a client passes the posture to it', () {
@@ -386,11 +402,81 @@ void postureArgumentTests() {
     });
 
     test('an unnamed posture stays null rather than resolving to legacy', () {
-      // "The caller said nothing" and "the caller asked for the default stage"
-      // are the same value today and will not be after R-2. Collapsing them
-      // here would leave this binary running the old default through the flip.
+      // `postureIn` is the RAW answer and deliberately keeps "the caller said
+      // nothing" distinct from any stage name. Which default that becomes is
+      // the role's decision, and the two roles below make opposite ones — so
+      // collapsing it here would make one of them unstateable.
       final parsed = args.createStatusCommandParser().parse([]);
       expect(AuthCliArgs.postureIn(parsed), isNull);
+    });
+
+    test('an enroller with no --posture runs legacy, and says so', () {
+      final parsed = args.createEnrollCommandParser().parse([]);
+      final resolved = AuthCliArgs.postureForEnroller(parsed);
+      expect(resolved.posture, same(PqPosture.legacy),
+          reason: 'the keys onboard and enroll write have to stay usable by a '
+              'legacy app, and a default invocation puts no post-quantum '
+              'machinery in the picture');
+      expect(resolved.notice, isNotNull,
+          reason: 'a default this consequential is announced, or a caller who '
+              'wanted a post-quantum enrolment finds out when a peer cannot '
+              'read something');
+      expect(resolved.notice, contains('legacy'));
+    });
+
+    test('an enroller that names a posture gets it, with nothing announced',
+        () {
+      final parsed =
+          args.createEnrollCommandParser().parse(['--posture', 'pqActive']);
+      final resolved = AuthCliArgs.postureForEnroller(parsed);
+      expect(resolved.posture, same(PqPosture.pqActive));
+      expect(resolved.notice, isNull,
+          reason: 'nothing was defaulted, so there is nothing to tell anyone');
+    });
+
+    test('an approver with no --posture runs pqReady', () {
+      final parsed = args.createStatusCommandParser().parse([]);
+      expect(AuthCliArgs.postureForApprover(parsed), same(PqPosture.pqReady),
+          reason: 'approving a post-quantum enrolment means minting a '
+              'symmetric key and encapsulating it to the requester\'s key '
+              'package, which needs the post-quantum providers');
+    });
+
+    test('an approver naming legacy is refused, and told why', () {
+      final parsed =
+          args.createStatusCommandParser().parse(['--posture', 'legacy']);
+      expect(
+          () => AuthCliArgs.postureForApprover(parsed),
+          throwsA(isA<ArgumentError>().having((e) => e.message, 'message',
+              contains('configures no post-quantum providers'))),
+          reason: 'at_client already refuses such an approval before it '
+              'reaches the atServer; refusing the argument turns that runtime '
+              'failure into a usage message');
+    });
+
+    test('a bare invocation is refused rather than treated as onboard',
+        () async {
+      // The shim inserted `onboard` whenever the first argument was an option,
+      // so `auth -a @alice -c <secret>` activated an atSign without the word
+      // appearing anywhere. It is retired: a command is named or nothing runs.
+      // Driving `wrappedMain` reaches the refusal before any parsing of a
+      // command, so this needs no atServer.
+      expect(await wrappedMain(['-a', '@alice']), 1);
+      // The positive control: the same shape WITH the command still parses
+      // past this point. `status` is chosen because it takes no cram secret
+      // and no keyfile — a non-1 answer here would mean the refusal above was
+      // about something other than the missing command.
+      expect(await wrappedMain(['--version']), 0,
+          reason: 'a leading option that is not a command must still be '
+              'served, or the refusal has swallowed --version and --help too');
+    });
+
+    test('an approver may still name pqActive', () {
+      final parsed =
+          args.createStatusCommandParser().parse(['--posture', 'pqActive']);
+      expect(AuthCliArgs.postureForApprover(parsed), same(PqPosture.pqActive),
+          reason: 'pqReady is the default rather than the ceiling — what is '
+              'refused is dropping BELOW what an approver needs');
     });
 
     test('a named posture is the one that comes back', () {

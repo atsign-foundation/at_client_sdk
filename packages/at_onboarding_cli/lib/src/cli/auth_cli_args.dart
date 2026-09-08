@@ -138,13 +138,78 @@ class AuthCliArgs {
 
   /// The posture [results] names, or null when it named none.
   ///
-  /// Null rather than `PqPosture.legacy`: "the caller said nothing" and "the
-  /// caller asked for the default stage" are the same today and will not be
-  /// after R-2, and a CLI that resolved them to the same value here would go
-  /// on running the old default through the flip.
+  /// The raw answer. Neither role uses it directly — [postureForEnroller] and
+  /// [postureForApprover] each resolve the unnamed case their own way, because
+  /// what a sensible default is depends entirely on which of the two jobs the
+  /// invocation is doing.
   static PqPosture? postureIn(ArgResults results) {
     final named = results[argNamePosture];
     return named == null ? null : postureNames[named];
+  }
+
+  /// The posture an **enroller** command — `onboard` or `enroll` — runs at:
+  /// whatever `--posture` named, else [PqPosture.legacy].
+  ///
+  /// Legacy, so that the keys this command writes are usable by a legacy app,
+  /// and so that a default invocation puts no post-quantum machinery in the
+  /// picture at all. `notice` is non-null exactly when the default was taken,
+  /// and the command prints it: a caller who wanted a post-quantum enrolment
+  /// finds out at the moment it happens rather than when a peer cannot read
+  /// something.
+  ///
+  /// Returned rather than printed here, so that a test can assert on the words
+  /// without capturing a stream, and so that a resolver called twice cannot
+  /// announce itself twice.
+  static ({PqPosture posture, String? notice}) postureForEnroller(
+      ArgResults results) {
+    final named = postureIn(results);
+    if (named != null) return (posture: named, notice: null);
+    return (
+      posture: PqPosture.legacy,
+      notice: 'No --posture given, so this runs at "legacy": classical keys '
+          'throughout, no post-quantum key material, and a keyfile a '
+          'previously published build can read. Name --posture pqReady or '
+          '--posture pqActive to enrol further into the rollout.',
+    );
+  }
+
+  /// The posture an **approver** command runs at: whatever `--posture` named,
+  /// else [PqPosture.pqReady]. Naming `legacy` is refused.
+  ///
+  /// An approver has to be able to service the enrolments it is sent, and a
+  /// post-quantum request asks its approver to mint a symmetric key and
+  /// encapsulate it to the key package the request advertised — work a posture
+  /// configuring no post-quantum providers cannot do. at_client already
+  /// refuses such an approval before it reaches the atServer, leaving the
+  /// enrollment pending; refusing the argument turns that runtime failure into
+  /// a usage message. The other direction needs no default at all: the
+  /// post-quantum branch is chosen by the **absence** of a wrapped symmetric
+  /// key on the request, so a `pqReady` approver approves a legacy request
+  /// exactly as before.
+  ///
+  /// **Not `pqActive`, and the reason is not about the approver.** Its data
+  /// signing key is ML-DSA, which makes this atSign's `_apsk` an array rather
+  /// than the bare string every consumer predating the array can parse. That
+  /// is a fleet-visible change, and an approver has no more say over its peers
+  /// than an enroller does.
+  ///
+  /// **Stated here rather than inherited.** Leaving it to `AtClientPreference`
+  /// would move this binary's behaviour whenever the library's default moves,
+  /// which is a decision about the rollout schedule and not about what an
+  /// approver needs.
+  static PqPosture postureForApprover(ArgResults results) {
+    final named = postureIn(results);
+    if (named == PqPosture.legacy) {
+      throw ArgumentError.value(
+          'legacy',
+          '--$argNamePosture',
+          'this command approves, lists or manages enrollments, and a legacy '
+              'posture configures no post-quantum providers — so it cannot '
+              'mint and seal the symmetric key a post-quantum enrolment asks '
+              'its approver for, and would leave such a request pending. Run '
+              'it at pqReady (the default) or pqActive');
+    }
+    return named ?? PqPosture.pqReady;
   }
 
   /// The key-exchange modes a `--key-exchange` argument may name.
@@ -175,9 +240,14 @@ class AuthCliArgs {
   ///
   /// A posture is final in `AtClientPreference`, so it rides the constructor
   /// and cannot be assigned afterwards — and the constructor takes no "no
-  /// opinion" value. Naming `PqPosture.legacy` for an unset `--posture`
-  /// instead would collapse the distinction [postureIn] exists to keep, and
-  /// pin the binary to the stage that was current on the day it was compiled.
+  /// opinion" value.
+  ///
+  /// ⚠️ **No auth_cli command reaches the null path any more.** Both roles
+  /// resolve their own default — [postureForEnroller] and
+  /// [postureForApprover] — so a command always hands this a posture it chose.
+  /// Null survives for `createAtClient`'s exported callers, which are apps
+  /// rather than this binary and may legitimately want to ride at_client's
+  /// schedule.
   static AtOnboardingPreference preferenceUnder(PqPosture? posture) =>
       posture == null
           ? AtOnboardingPreference()
@@ -379,16 +449,23 @@ class AuthCliArgs {
     // for a day, reaching only the two commands that took the onboarding
     // service, until createAtClient was given the posture too.
     //
-    // No defaultsTo, deliberately: an unset posture means "whatever the
-    // at_client this was compiled against defaults to", so the CLI does not
-    // pin itself to the stage that was current on the day it was written.
+    // No defaultsTo, because the two ROLES resolve an unset value differently
+    // and a parser-level default could only state one of them: an enroller
+    // falls to legacy, an approver to pqReady, and an approver refuses legacy
+    // outright. See postureForEnroller and postureForApprover, which are where
+    // that lives — and note the CLI states both itself rather than inheriting
+    // at_client's default, so this binary's behaviour does not move when the
+    // library's does.
     p.addOption(argNamePosture,
         help: 'How far into the post-quantum rollout to run. legacy drives no '
             'upgrade and configures no post-quantum providers, so it cannot '
             'read post-quantum data; pqReady moves the credentials and keeps '
             'writes legacy; '
-            'pqActive makes post-quantum writes the default. Defaults to the '
-            'built-in default of the at_client this was built against',
+            'pqActive makes post-quantum writes the default. onboard and '
+            'enroll default to legacy, so the keys they write stay usable by a '
+            'legacy app; every other command defaults to pqReady and refuses '
+            'legacy, because approving a post-quantum enrolment needs the '
+            'post-quantum providers',
         mandatory: false,
         allowed: postureNames.keys,
         hide: hide);

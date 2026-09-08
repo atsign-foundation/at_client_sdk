@@ -236,6 +236,9 @@ void main() {
         'A test to verify atSign is activated and .atKeys file is generated using activate_cli',
         () async {
       List<String> args = [
+        // Named, not inferred. The CLI used to insert 'onboard' whenever the
+        // first argument was an option; it no longer does, and refuses instead.
+        'onboard',
         '-a',
         atSign,
         '-c',
