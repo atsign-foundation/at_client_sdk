@@ -21,9 +21,12 @@ import 'package:test/test.dart';
 ///
 /// ⚠️ **It is not an impossible combination, and nothing here should be read
 /// as saying so.** A real client built this way works: an enrollment
-/// advertises a key package in every key-exchange mode, and
-/// `reconcileKeyPackage` mints one at every client start whatever the posture,
-/// so such a client is conveyed nskey privates like any other. Some tests
+/// advertises a key package in every key-exchange mode, and the startup's
+/// conveyed-key collection registers one through
+/// `KeyPackageRegistration.register()` whatever the posture — not
+/// `reconcileKeyPackage`, which is off wherever the posture configures no
+/// post-quantum providers — so such a client is conveyed nskey privates like
+/// any other. Some tests
 /// using this posture mint their own ring in-process; others read a private
 /// that reached them by conveyance. What keeps it out of `PqPosture` is that
 /// the release programme does not offer it as a stage, not that it could not

@@ -146,10 +146,13 @@ class PqPosture {
   ///
   /// ⚠️ **What this is NOT.** Turning it off does not make key material
   /// unreachable — an enrollment advertises a key package in **every**
-  /// key-exchange mode (`AtEnrollmentRequest`'s own dartdoc says so, and
-  /// `reconcileKeyPackage` mints one at every client start regardless of
-  /// posture), so a client at [legacy] still acquires conveyed nskey privates
-  /// and then declines to use them. The axis withholds the *providers*, not
+  /// key-exchange mode (`AtEnrollmentRequest`'s own dartdoc says so), and the
+  /// startup's conveyed-key collection registers one through
+  /// `KeyPackageRegistration.register()` whatever the posture, so a client at
+  /// [legacy] still acquires conveyed nskey privates and then declines to use
+  /// them. ⚠️ **`reconcileKeyPackage` is not that route** — it is switched off
+  /// wherever this axis is false, and the key it would reconcile is not the
+  /// one a provider-less client holds. The axis withholds the *providers*, not
   /// the *keys*. Anything reading it as a statement about what a client could
   /// obtain is wrong.
   ///

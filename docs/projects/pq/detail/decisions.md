@@ -13960,3 +13960,235 @@ bought only the case where a caller pins `authenticationKeyAlgorithm` to
 `rsa2048` while moving the data signing set to `mldsa65`. That combination
 takes no retrofit, mints ML-DSA, and drops the RSA key that signed everything.
 It is left reachable and unfixed.
+
+## 135. `legacy` is the control arm: no wire write, no subscription, no keyfile change (2026-09-08)
+
+**In brief:** *a client at `legacy` runs no post-quantum startup at all, so a
+breakage can be bisected against a default with no post-quantum in the picture*
+
+**Ruled by gkc, 2026-09-08**, after reading `Prepared x-wing key package for
+enrollment primary` in a run whose clients were all built at `PqPosture.legacy`.
+Settles the question [134](#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08)
+left open about what the name should mean.
+
+**The reason is debugging, not fidelity.** From 3.x a developer can choose any
+posture, and the default stays `legacy` faithfully so that anything the project
+breaks can be reproduced with no post-quantum machinery running. A control arm
+that registers the providers, mints an encapsulation key or writes to the
+atServer is not a control. Fidelity to a pre-post-quantum build falls out of
+that; it is not the argument.
+
+**What the tree did before this ruling.** `AtClientImpl` switched off three of
+the nine startup gates when `configuresPqProviders` was false —
+`reconcileKeyPackage`, `requestMissingPrivates`, `sweepUnanchoredEnrollments`.
+Everything else ran. Measured on 2026-09-08:
+
+- `collectConveyedKeys` reached `KeyPackageRegistration.register()`, which minted
+  an X-Wing encapsulation keypair **and published `_apsk`** to the atServer.
+- `startEnvelopeListener` took a one-minute periodic sweep timer, a sync
+  progress listener and a notification subscription.
+- `requestRootPrivate`, `publishRootLink`, `publishChainLink` and `askOnReadMiss`
+  were all on.
+- `collectConveyedKeys` filed conveyed nskey privates into the keyfile, and
+  `reconcileEnrollmentSnapshot` wrote to it as well.
+
+Only `mintInUseSigningKeys` was genuinely inert, because an empty in-use set
+returns before it can retire anything — which is what stops a `legacy` posture
+downgrading a keyfile that already holds a signing key.
+
+**Two things the plan row recorded were wrong, and both change the shape of the
+complaint.** A `legacy` client did **not** advertise a key package — that gate
+went off in `3406e4a6e`. And the encapsulation keypair was never persisted:
+`bindKeyPackageToAtKeys` sets `loadApkamKeys` only ("adoption only — nothing is
+written back"), and `saveApkamKeys` has no assignment in any package's `lib/`.
+So the keypair was minted fresh in memory every process, carried a new `kpid`
+every process, and the envelope listener watched an address no peer could learn.
+The defence the row recorded — that a key package is a receive-side capability
+and a rollout needs receivers reachable before senders switch on — was written
+believing the package was advertised. It was not, so that key establishment had
+no product at all.
+
+**The baseline, measured rather than assumed.** `tests/pq_matrix/published/`
+resolves at_client **3.14.0**, the last published build. It ships the
+secret-sharing substrate as library code — `_apsk` appears in 7 of its 215 Dart
+files — but its startup calls none of it: across all 102 files in its `lib/`,
+zero hits for `collectConveyedKeyMaterial`, `PqPosture`, `pqBootstrap`,
+`NskeySeeding` and `PqSigningRoot`.
+
+**The ruling.** A client whose posture is `legacy` runs no part of the
+post-quantum startup:
+
+- no `_apsk` publish, no key-package advertisement, no root link, no chain link,
+  no signing-root private request, no missing-privates request, no unanchored
+  sweep;
+- no encapsulation keypair minted, in memory or otherwise;
+- no envelope listener, no periodic sweep timer, no sync progress listener, no
+  notification subscription;
+- no conveyed key material collected or filed;
+- **and no modification of the AtKeys file**, which strikes
+  `reconcileEnrollmentSnapshot` too.
+
+That is the whole of `PqClientBootstrap`, so the gate is not a tenth boolean but
+the decision not to run it. Eight keyfile write sites exist in at_client's
+`lib/`; the ones a `legacy` start reaches are the signing-root store and retire,
+the nskey filing, and the enrollment snapshot, and all four go.
+
+**Nothing is lost by not publishing `_apsk`.** at_server `origin/trunk`
+(`66598e85`) writes `public:_apsk.<enrollmentId>.a.__e@<atSign>` **when the
+enrollment is approved**, from the `EnrollParams.apsk` the client carried on
+`enroll:request` (`EnrollDataStoreValue.apsk`), and `EnrollmentSubmitter`
+composes that value as `advertisedSigningKey?.publicKey ?? apkamPublicKey`. So a
+legacy enrolment's advertisement is published by the atServer at approval, and an
+inert client never needs to republish it. The one credential this does not cover
+is `primary`, whose `_apsk` has no `enroll:request` to ride — and at `legacy`
+nothing signs an envelope that anything verifies, so nothing asks for it.
+
+## 136. at_auth stays posture-blind, and both its doors demand the algorithm (2026-09-08)
+
+**In brief:** *at_auth carries what it is given, and the onboarding door gets the
+enrollment door's required `signingAlgo`*
+
+**Ruled by gkc, 2026-09-08.** at_auth never sees a `PqPosture` — the word appears
+in three comments and nothing else. What makes an enrolment legacy there is five
+independent caller-supplied values: `signingAlgo`, `keyExchangeMode`,
+`mintLegacyMaterial`, `advertisedSigningKey` and `metadataBuilder`.
+
+**That stays.** at_auth genuinely cannot see a preference, and `keyExchangeMode`
+answers a question no posture can — whether the approver on the other side
+conveys. Moving `PqPosture` down would import five axes at_auth has no use for
+(`configuresPqProviders`, `writesPqByDefault`, `disallowLegacyEncryption`,
+`sealsToKeyAlgorithms`, `seedNamespaceKeys`); bundling the five into a record
+would still need a per-axis override for the key exchange, at which point it is
+the five parameters wearing a struct.
+
+**What changes is that the two doors stop disagreeing.**
+`AtEnrollmentRequest.signingAlgo` is required with no default, and its dartdoc
+names the defect a default caused: an app enrolling over OTP always got RSA-2048
+and had no way to ask otherwise, so on an atSign whose deployment had moved, every
+install created an RSA-authenticating enrollment the client then retrofitted away.
+The onboarding door still carries that default — `AuthRequest.signingAlgoType =
+SigningAlgoType.rsa2048` — and `AtOnboardingRequest.mintLegacyMaterial` resolves
+null to true. `signingAlgoType` becomes **required**, and the compiler enumerates
+the call sites.
+
+`mintLegacyMaterial` keeps its opt-out shape and its null-means-true resolution:
+it is a statement about the ecosystem rather than about this atSign, and no
+client-side stage can know when the ecosystem is ready. All three named postures
+set it true, so it never varies today.
+
+## 137. auth_cli has two roles, and they take opposite postures (2026-09-08)
+
+**In brief:** *enroller names its stage or is refused; approver runs at `pqReady`,
+refuses `legacy`, and never asks at_client what the default is*
+
+**Ruled by gkc, 2026-09-08.** Two roles run the binary and they need different
+things. **Enroller** is `onboard` and `enroll` — the commands that mint key
+material for an app. **Approver** is every command that builds a client from the
+atSign's own keyfile: `spp`, `otp`, `interactive`, `list`, `fetch`, `approve`,
+`auto`, `deny`, `revoke`, `unrevoke` and `delete`. The split is already clean in
+the source — `interactive`'s own dartdoc says it offers every command *except*
+onboard and enroll.
+
+**Enroller.** `--posture` is **optional and defaults to `legacy`**, and the run
+says so as it goes: a command that was not told which stage it is enrolling at
+prints what it chose and what that means, so an operator who wanted a
+post-quantum enrolment learns it at the moment it happens rather than when a peer
+cannot read something. A `legacy` posture means purely legacy,
+so that legacy apps can use the keys the command writes. That is already what the
+values produce: rsa2048 APKAM, legacy key exchange, no key package and no
+advertised signing key, so `adoptMaterials` adopts nothing, `fileApkamMaterial`
+and `fileSigningMaterial` are both skipped, `hasTypedContent` is false, and
+`AtKeys.toJson` returns the flat document. Probed 2026-09-08 against the real
+writer with a positive control that came back carrying `version`, `atsign` and
+`enrollments`. The shape matches a real keyfile in the corpus:
+`~/.atsign/keys/@baboonblue18_key.atKeys` holds five top-level keys and no
+`version`.
+
+**The implicit-onboard shim is retired, and it stands on one ground only.**
+`auth_cli.dart` inserted `onboard` when the first argument was a flag — its own
+comment called the path legacy. A command is now named or the invocation is
+refused. ⚠️ Part of the case put for retiring it was that the bare form can carry
+no `--posture`; the enroller default above voids that argument entirely, and what
+remains is that a command should be named. Breaking: of the eleven
+`runCliCommand` sites in the two CLI packs, ten name a command word and one — the
+activation test in `at_onboarding_cli_test.dart` — relies on the shim, as does
+every pre-subcommand script in the wild.
+
+**Approver.** The default is `pqReady`, and `--posture legacy` is **refused**. The
+mechanism behind the refusal already exists and this moves it earlier: an approver
+whose posture configures no post-quantum providers refuses a request that expects
+it to mint and seal a symmetric key, before the approval reaches the atServer, so
+the enrollment stays pending and an approver that can service it still may. Making
+it an argument error turns a runtime failure into a usage message.
+
+The reverse direction is what makes the split safe: the post-quantum branch is
+keyed on the **absence** of a wrapped symmetric key, not on the approver's
+posture, so a `pqReady` approver approves a legacy request normally.
+
+**Not `pqActive`, and the reason is not about the approver.** Its only differences
+from `pqReady` are the data signing key and post-quantum-by-default writes, and
+the first is disqualifying: `bareApskValueOf` returns the bare string only for a
+single active `rsa2048` entry, so a `pqActive` approver publishes an `_apsk`
+**array**, which breaks every consumer that predates it — fail-closed, but
+service-breaking for anything already running. That is fleet-visible, and an
+approver controls its peers no more than an enroller does.
+
+**auth_cli states its own defaults and never inherits at_client's.** Today
+`preferenceUnder(null)` returns a bare `AtOnboardingPreference`, whose posture
+comes from `AtClientPreference`'s default — so the CLI's behaviour moves whenever
+the library's default moves. It stops doing that: the approver default is written
+in auth_cli, and [138](#138-the-posture-ladder-moves-back-a-stage-2026-09-08)
+moves the library's default underneath it without touching the CLI.
+
+**The retrofit is not what makes an approver capable, and the ruling does not say
+it is.** `configuresPqProviders` is a posture axis, so a `pqReady` approver holding
+an un-retrofitted rsa2048 keyfile already configures the providers and can already
+mint and encapsulate. The retrofit fires because `pqReady`'s authentication
+algorithm is ML-DSA, and it is worth having for its own reason — the APKAM public
+key sits harvestable on the enrollment record.
+
+**The first approver run converts the operator's keyfile, and that is accepted
+with two conditions.** The retrofit files typed material under the new enrollment
+id and flushes, so a legacy-flat document becomes a version 1 one. Authentication
+survives: the flat fields stay under the keyfile's never-lose contract, and
+[118](#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
+as superseded by at_server PR #2797 leaves a **root** predecessor its life rather
+than revoking it at the successor's first authentication. The conditions are that
+the pre-retrofit document is written alongside first, and that the run says
+clearly what it is doing. What nobody has tested is whether a published at_auth
+can parse a version 1 document at all, which is the mirror of issue #2154.
+
+## 138. The posture ladder moves back a stage (2026-09-08)
+
+**In brief:** *3.x defaults to `legacy`, 4.x to `pqReady`, 5.x to `pqActive`*
+
+**Ruled by gkc, 2026-09-08.** The shipped default moves back to `PqPosture.legacy`
+for at_client 3.x, `pqReady` becomes the 4.x default, and `pqActive` the 5.x one.
+Reverses `06c2b8b22` ("the default posture is pqReady", 2026-08-26) and re-scopes
+the R-2 release step, which had become a single `pqReady` → `pqActive` flip at
+4.0.0 and is now two flips across two majors.
+
+**The rationale is gkc's:** from 3.x a developer can choose a different posture,
+and the default stays `legacy` faithfully, so that anything the project breaks can
+be debugged with no post-quantum machinery in the picture. It is why
+[135](#135-legacy-is-the-control-arm-no-wire-write-no-subscription-no-keyfile-change-2026-09-08)
+makes `legacy` inert rather than merely quiet.
+
+**Free to do.** In-tree at_client is `3.15.0-rc1`; the last published version is
+`3.14.0` and the local pub-cache holds no 3.15 prerelease while holding a
+`3.12.0-rc.2`, so the absence is meaningful. `06c2b8b22` is on
+`origin/gkc-pq-d1-spike` only, not on trunk. The pqReady default has never
+shipped.
+
+**`legacy` does double duty, and the axis it is asked about is
+`configuresPqProviders`.** A fidelity fixture wants it false; a shipped default
+would rather have it true, so that tomorrow's senders are not writing into the
+dark. gkc ruled false: a control arm that registers the providers is not a
+control, and the fixture's job is the one that cannot be done any other way.
+
+**The price, stated rather than discovered later.** A 5.x sender cannot reach a
+3.x recipient that never seeded a namespace key. It is refused, not silently lost.
+The intervening stage is what stops this being worse: 4.x at `pqReady` seeds and
+reads while still **writing legacy**, so by the time 5.x switches writes on the
+keys are already out there, and the dark 3.x period strands nobody in the
+meantime.

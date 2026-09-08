@@ -43,9 +43,11 @@ void main() {
       // data without also moving the key exchange, whose stated reason — that
       // a legacy key-exchange enrollment advertises no key package and so
       // could be conveyed nothing — is FALSE. A key package is advertised in
-      // every mode, and `reconcileKeyPackage` mints one at every client start
-      // whatever the posture, so such a client acquires the privates and then
-      // declines to use them. The assertion happened to hold; its reason did
+      // every mode, and the startup's conveyed-key collection registers one
+      // through `KeyPackageRegistration.register()` whatever the posture — not
+      // `reconcileKeyPackage`, which is off wherever the posture configures no
+      // post-quantum providers — so such a client acquires the privates and
+      // then declines to use them. The assertion happened to hold; its reason did
       // not, and a pin defended by a false reason is worse than no pin.
       final withoutProviders = [
         PqPosture.legacy,

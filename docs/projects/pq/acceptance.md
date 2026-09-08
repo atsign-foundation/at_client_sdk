@@ -2131,13 +2131,19 @@ These invariants are testable against **every** UC above:
   post-quantum provider, so a record stamped with one is refused by name with
   `CryptoProviderNotRegistered`, exactly as a build predating those providers
   refuses it. The carve-out is a deliberate configuration and nothing more: the
-  stage withholds the *providers*, not the *keys*. Such a client still
-  advertises a key package and is still conveyed nskey privates — it simply
-  declines to use them.
+  stage withholds the *providers*, not the *keys*. Such a client is still
+  conveyed nskey privates — it simply declines to use them.
+  ⚠️ **Two corrections, 2026-09-08.** This said such a client *advertises a key
+  package*, and it does not: the advertisement step is switched off wherever the
+  posture configures no post-quantum providers, and the encapsulation keypair its
+  startup mints is held in memory for the process and never filed. And the route
+  named below is wrong — what registers a package for a client holding none is
+  `KeyPackageRegistration.register()` on the conveyed-key collection step, which
+  is ungated; `reconcileKeyPackage` is the gated one.
   ⚠️ **This paragraph argued until 2026-08-29 that a legacy key-exchange
-  enrollment advertises no key package and so could be conveyed nothing.** That
-  is false: a key package is advertised in every mode, and `reconcileKeyPackage`
-  mints one at every client start whatever the posture. No post-quantum key is
+  enrollment advertises no key package and so could be conveyed nothing.** The
+  conveyance half was false: a key package rides every mode, and a package is
+  registered at every client start whatever the posture. No post-quantum key is
   conveyed under RSA in any mode either — every conveyance is KEM-sealed with
   no classical branch — so neither of the reasons once given here holds.
 - **No silent scheme substitution, in either direction.** The SDK never chooses

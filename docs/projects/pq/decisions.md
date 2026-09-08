@@ -192,6 +192,10 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [132] | The keys name the enrollment, and `primary` names the atSign's own credential               | 2026-09-07 | LIVE               |
 | [133] | A revocation follows approval, and a replacement settles itself                             | 2026-09-08 | LIVE               |
 | [134] | A posture move replaces the enrollment, so the auth key is never retained                   | 2026-09-08 | LIVE               |
+| [135] | `legacy` is the control arm: no wire write, no keyfile change                               | 2026-09-08 | LIVE               |
+| [136] | at_auth stays posture-blind, and both doors demand the algorithm                            | 2026-09-08 | LIVE               |
+| [137] | auth_cli has two roles, and they take opposite postures                                     | 2026-09-08 | LIVE               |
+| [138] | The posture ladder moves back a stage                                                       | 2026-09-08 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -328,3 +332,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 [132]: detail/decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07
 [133]: detail/decisions.md#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08
 [134]: detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08
+[135]: detail/decisions.md#135-legacy-is-the-control-arm-no-wire-write-no-subscription-no-keyfile-change-2026-09-08
+[136]: detail/decisions.md#136-at_auth-stays-posture-blind-and-both-its-doors-demand-the-algorithm-2026-09-08
+[137]: detail/decisions.md#137-auth_cli-has-two-roles-and-they-take-opposite-postures-2026-09-08
+[138]: detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08
