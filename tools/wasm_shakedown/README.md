@@ -15,10 +15,9 @@ The default config is `.github/wasm_gates.yaml`, resolved against the pub worksp
 root so the command works from anywhere in the repo. CI passes `--config` explicitly,
 so the workflow names the file rather than leaning on that default.
 
-at_chops, at_auth and at_utils are gated today — all three already web-safe, at_chops
-behind `at_chops_ffi.dart`, at_auth behind `at_auth_io.dart` and at_utils behind
-`at_utils_io.dart`, so each gate holds a line rather than recording a backlog.
-at_lookup and at_client own 6 and 7 offenders respectively and join as each is ported.
+at_chops, at_auth, at_utils and at_lookup are gated today — each already web-safe
+behind its own `_io`/`_ffi` barrel, so a gate holds a line rather than recording a
+backlog. at_client owns 7 offenders and joins as it is ported.
 
 ## Why this exists
 
@@ -107,13 +106,13 @@ live walk. There is deliberately no way to write a baseline back from a run — 
 generator existed once and was removed, because the failure output already carries
 what it would have printed.
 
-Every gated package has an empty allow list. at_chops' and at_utils' ceilings are 0;
-at_auth's 2 is `at_lookup` and `chalkdart`, the latter through `at_progress.dart`.
+Every gated package has an empty allow list. at_chops', at_utils' and at_lookup's
+ceilings are 0; at_auth's 1 is `chalkdart`, reached through `at_progress.dart`.
 
 Every run prints its figures whether or not it fails:
 
 ```
-package:at_auth/at_auth.dart — 951 files walked, 0/0 offenders, 2/2 blocked
+package:at_auth/at_auth.dart — 948 files walked, 0/0 offenders, 1/1 blocked
 ```
 
 `min_files_walked` guards the rest — every other check is about what the walk did

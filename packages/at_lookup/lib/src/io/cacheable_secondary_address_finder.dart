@@ -7,7 +7,7 @@ import 'package:at_utils/at_logger.dart';
 
 import '../cache/secondary_address_finder.dart';
 import '../util/lookup_util.dart';
-import '../util/tls_connect.dart' show Abandonment;
+import '../util/abandonment.dart' show Abandonment;
 import 'secure_socket_util.dart';
 
 class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {

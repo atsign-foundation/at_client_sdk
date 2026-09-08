@@ -6,7 +6,8 @@ import 'package:test/test.dart';
 /// toolchain fails when a native import lands in a library that claims to be
 /// web-safe. This walks the source instead. The `wasm_gates.yaml` stanza does
 /// it across the whole import graph, including the packages `at_lookup.dart`
-/// pulls in; until at_lookup has one, this covers at_lookup's own sources.
+/// pulls in; this runs under plain `dart test`, with no tooling and no
+/// resolution, so at_lookup's own sources are held even where that cannot run.
 void main() {
   /// The `dart:` libraries that resolve on every platform. `dart:io` and
   /// `dart:ffi` are absent by construction; so are the web-only ones, because a
