@@ -303,7 +303,7 @@ void main() {
       //       peer sealed — configuration selects behaviour, not capability.
       provenIn(
         'tests/at_functional_test/test/crypto_era_default_test.dart',
-        'a client that named no CryptoConfig still resolves the nskey providers',
+        'a client that named no CryptoConfig gets the default posture\'s providers',
         proves: 'the era default supplies the nskey providers to a client that '
             'named none, so an app that never mentions crypto is not silently '
             'excluded from PQ',

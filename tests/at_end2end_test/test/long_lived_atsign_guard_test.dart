@@ -39,20 +39,41 @@ void main() {
             'would refuse every non-PQ test');
   });
 
-  test('the shipped default is refused there', () {
-    // A bare preference takes the SDK default, which is what an unwitting new
-    // test would get by naming nothing — the exact case the guard is for.
+  test('a post-quantum posture is refused there', () {
     expect(
-        () => check(protectedAtSign, AtClientPreference()),
+        () => check(
+            protectedAtSign, AtClientPreference(posture: PqPosture.pqReady)),
         throwsA(isA<StateError>().having((e) => e.message, 'message',
             allOf(contains('RETROFIT'), contains(protectedAtSign)))),
-        reason: 'the default posture authenticates with ML-DSA, which is '
-            'stronger than the RSA enrollment these atSigns hold, so the next '
-            'start would retrofit and cap the enrollment CI depends on');
+        reason: 'this posture authenticates with ML-DSA, which is stronger '
+            'than the RSA enrollment these atSigns hold, so the next start '
+            'would retrofit and cap the enrollment CI depends on');
+  });
+
+  test('the shipped default no longer reaches that case, and is allowed', () {
+    // ⚠️ **This asserted the OPPOSITE until 2026-09-08**, when a bare
+    // preference took `pqReady` and an unwitting new test naming nothing would
+    // have retrofitted these atSigns. The default moved back to `legacy`, so
+    // the hazard the guard was built for is no longer the DEFAULT path — but
+    // the guard stays, because a test that names a post-quantum posture
+    // deliberately is still one keystroke from permanent damage. Asserted
+    // rather than deleted: "the default is safe here" is a property worth
+    // going red if the ladder moves again.
+    expect(() => check(protectedAtSign, AtClientPreference()), returnsNormally,
+        reason: 'the shipped default drives no retrofit, seeds nothing and '
+            'runs no post-quantum startup, so it writes nothing to these '
+            'atSigns that outlives the run');
   });
 
   test('a throwaway atSign is not restricted', () {
-    expect(() => check(throwawayAtSign, AtClientPreference()), returnsNormally,
+    // ⚠️ Named `pqReady`, not bare. The shipped default is `legacy`, which the
+    // guard allows on ANY atSign — so a bare preference here would pass
+    // whether or not the atSign was the reason, and the row would be green for
+    // a guard that refused nothing at all.
+    expect(
+        () => check(
+            throwawayAtSign, AtClientPreference(posture: PqPosture.pqReady)),
+        returnsNormally,
         reason: 'a local run generates demo atSigns and discards the '
             'virtualenv, so the guard must not fire there — otherwise the PQ '
             'tests could not run at all');

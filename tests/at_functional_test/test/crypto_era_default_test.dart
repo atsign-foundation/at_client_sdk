@@ -28,7 +28,7 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
   });
 
-  test('a client that named no CryptoConfig still resolves the nskey providers',
+  test('a client that named no CryptoConfig gets the default posture\'s providers',
       () async {
     // The SDK's default, read rather than named: this test's subject IS the
     // default, so a named constant would leave it passing while measuring a
@@ -47,16 +47,33 @@ void main() {
 
     final resolved = CryptoConfig.forClient(client);
 
-    expect(resolved.lookup(symmetricAesGcmCryptoProviderId), isNotNull,
-        reason: 'an inbound PQ record names this provider — a client that '
-            'cannot resolve it fails on data already sent to it');
-    expect(resolved.lookup(nskeyCryptoProviderId), isNotNull,
-        reason: 'and the content key it cites is conveyed under this one');
+    // ⚠️ **These two asserted `isNotNull` until 2026-09-08**, when the shipped
+    // default was `pqReady`. It is `legacy` again, which configures no
+    // post-quantum providers at all — so an inbound record naming one has
+    // nothing to resolve to and the read throws naming the id, exactly as a
+    // build predating those providers does. That is the point of the stage,
+    // not a gap in it.
+    expect(resolved.lookup(symmetricAesGcmCryptoProviderId), isNull,
+        reason: 'the shipped default stands in for a build from before these '
+            'schemes, so a record stamped with one does not open here');
+    expect(resolved.lookup(nskeyCryptoProviderId), isNull,
+        reason: 'and the content key it cites is unreachable for the same '
+            'reason');
     expect(resolved.defaultProviderId, legacyCryptoProviderId,
-        reason: 'final 3.x reads PQ and still writes legacy; moving this is '
-            'the 4.x step and a fleet-wide commitment. True of the shipped '
-            'default whether that is legacy or pqReady — both carry '
-            'writesPqByDefault false — and it is pqActive that moves it, '
-            'which is why this reads the default rather than naming one');
+        reason: 'the shipped default writes legacy whichever stage it is — '
+            'legacy and pqReady both carry writesPqByDefault false, and it is '
+            'pqActive that moves it, which is why this reads the default '
+            'rather than naming one');
+
+    // The control, and it is what stops the three rows above passing for a
+    // build that dropped the providers everywhere. A stage that DOES configure
+    // them still resolves both, over the same client construction.
+    final ready = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: InMemoryAtKeysIo(), posture: PqPosture.pqReady);
+    final readyConfig = CryptoConfig.forClient(ready.atClient);
+    expect(readyConfig.lookup(symmetricAesGcmCryptoProviderId), isNotNull,
+        reason: 'an inbound PQ record names this provider, and a client at a '
+            'stage that reads post-quantum data must resolve it');
+    expect(readyConfig.lookup(nskeyCryptoProviderId), isNotNull);
   });
 }
