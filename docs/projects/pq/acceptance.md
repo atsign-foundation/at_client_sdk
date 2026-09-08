@@ -2131,8 +2131,10 @@ These invariants are testable against **every** UC above:
   post-quantum provider, so a record stamped with one is refused by name with
   `CryptoProviderNotRegistered`, exactly as a build predating those providers
   refuses it. The carve-out is a deliberate configuration and nothing more: the
-  stage withholds the *providers*, not the *keys*. Such a client is still
-  conveyed nskey privates — it simply declines to use them.
+  stage runs none of the post-quantum startup at all: it collects nothing,
+  files nothing and publishes nothing, so it is not conveyed nskey privates
+  either. The enrollment RECORD still advertises a key package, because that
+  rides `enroll:request` rather than any client start.
   ⚠️ **Two corrections, 2026-09-08.** This said such a client *advertises a key
   package*, and it does not: the advertisement step is switched off wherever the
   posture configures no post-quantum providers, and the encapsulation keypair its

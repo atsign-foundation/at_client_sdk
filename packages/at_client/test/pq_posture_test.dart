@@ -42,12 +42,12 @@ void main() {
       // ⚠️ This row replaced one asserting that no stage reads post-quantum
       // data without also moving the key exchange, whose stated reason — that
       // a legacy key-exchange enrollment advertises no key package and so
-      // could be conveyed nothing — is FALSE. A key package is advertised in
-      // every mode, and the startup's conveyed-key collection registers one
-      // through `KeyPackageRegistration.register()` whatever the posture — not
-      // `reconcileKeyPackage`, which is off wherever the posture configures no
-      // post-quantum providers — so such a client acquires the privates and
-      // then declines to use them. The assertion happened to hold; its reason did
+      // could be conveyed nothing — is FALSE, though not for the reason first
+      // given. A key package is advertised in every mode, because that rides
+      // `enroll:request` rather than a client start, so the RECORD is the same
+      // whatever the key-exchange mode. What a legacy client does not do is
+      // collect anything sealed to it: a posture configuring no post-quantum
+      // providers runs none of the startup. The assertion happened to hold; its reason did
       // not, and a pin defended by a false reason is worse than no pin.
       final withoutProviders = [
         PqPosture.legacy,

@@ -144,15 +144,25 @@ class PqPosture {
   /// default. It is false under [legacy] and true under [pqReady] and
   /// [pqActive].
   ///
-  /// ⚠️ **What this is NOT.** Turning it off does not make key material
-  /// unreachable — an enrollment advertises a key package in **every**
-  /// key-exchange mode (`AtEnrollmentRequest`'s own dartdoc says so), and the
-  /// startup's conveyed-key collection registers one through
-  /// `KeyPackageRegistration.register()` whatever the posture, so a client at
-  /// [legacy] still acquires conveyed nskey privates and then declines to use
-  /// them. ⚠️ **`reconcileKeyPackage` is not that route** — it is switched off
-  /// wherever this axis is false, and the key it would reconcile is not the
-  /// one a provider-less client holds. The axis withholds the *providers*, not
+  /// ⚠️ **What this switches off is the whole post-quantum startup, not just
+  /// the providers.** A client with this false makes no wire write, takes no
+  /// subscription and changes no keyfile: it registers no key package,
+  /// publishes no `_apsk`, asks for nothing and collects nothing. That is what
+  /// makes it a control arm — a stage whose behaviour a comparison can
+  /// attribute nothing to.
+  ///
+  /// ⚠️ **This paragraph used to say the opposite**, that the axis withholds
+  /// the *providers* and not the *keys*, so such a client still acquired
+  /// conveyed nskey privates and merely declined to use them. It did, and it
+  /// was work with no product: it could open none of what it filed, and the
+  /// filing was a write to the user's credential file.
+  ///
+  /// What is unchanged is the **record**: an enrollment advertises a key
+  /// package in every key-exchange mode, because that rides `enroll:request`
+  /// rather than any client start. So a peer's view of such an enrollment is
+  /// the same; what differs is that nothing collects what is sealed to it
+  /// until a posture that configures the providers is adopted, and then the
+  /// very next start collects everything waiting. The axis withholds the *providers*, not
   /// the *keys*. Anything reading it as a statement about what a client could
   /// obtain is wrong.
   ///
@@ -313,10 +323,12 @@ class PqPosture {
   /// providers existed refuses it. An app that needs to read post-quantum data
   /// wants [pqReady].
   ///
-  /// ⚠️ The refusal is a *configuration* choice, not an inability: this
-  /// enrollment still advertises a key package and can still be conveyed the
-  /// privates it is declining to use. That is what makes the stage a faithful
-  /// stand-in rather than a broken client, and it is also why nothing here
+  /// ⚠️ The refusal is a *configuration* choice, not an inability: the
+  /// enrollment record still advertises a key package, because that rides
+  /// `enroll:request` rather than any client start, so a peer cannot tell this
+  /// enrollment from any other. What the stage does not do is run any of the
+  /// startup that would collect what is sealed to it. That is what makes it a
+  /// faithful stand-in rather than a broken client, and it is why nothing here
   /// argues from key availability.
   static const PqPosture legacy = PqPosture._(
     authenticationKeyAlgorithm: SigningAlgoType.rsa2048,

@@ -1,5 +1,19 @@
 ## 3.15.0-rc1
 
+- **BREAKING:** a posture that configures no post-quantum providers now runs
+  **none** of the post-quantum startup — no wire write, no subscription and no
+  change to the keyfile. It used to switch off three of the startup's steps and
+  leave the rest running, which had such a client minting an X-Wing
+  encapsulation keypair afresh every process, publishing `_apsk`, taking a
+  one-minute sweep timer plus a sync listener and a notification subscription,
+  asking peers for privates, filing the answers into the keyfile and then
+  refusing to use any of it. `PqStartupGates` gains a gate for every step and a
+  `PqStartupGates.inert()` naming them all off. The enrollment RECORD is
+  unchanged — a key package rides `enroll:request`, not a client start — so a
+  peer's view of such an enrollment is the same, and the first start under a
+  posture that does configure the providers collects everything waiting.
+  Keyed on the axis rather than on `PqPosture.legacy` by identity, so a
+  deployment that builds its own provider-less posture gets the same client.
 - perf: a sync round that a stats notification triggered reads the atServer's
   commit id from the cache that notification promoted, instead of fetching
   it again with a `stats` verb; app-triggered rounds, the warm start and the

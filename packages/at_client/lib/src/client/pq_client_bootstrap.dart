@@ -28,40 +28,84 @@ import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
-/// Gates for the PQ startup's ACTIVE steps — the ones that write to the
-/// atServer on the client's own initiative.
+/// Gates for the PQ startup's steps — **every** step, not only the ones that
+/// write to the atServer.
 ///
-/// Every default is on, and the posture turns two of them off. `AtClientImpl`
-/// passes [reconcileKeyPackage] and [requestMissingPrivates] as false when
-/// `PqPosture.configuresPqProviders` is false, so a stage standing in for a
-/// build that predates the post-quantum providers neither advertises a key
-/// package nor asks for privates it has no provider to use. Every other
-/// default is still on for every stage.
+/// Every default is on. `AtClientImpl` passes [PqStartupGates.inert] when
+/// `PqPosture.configuresPqProviders` is false, and that turns the whole
+/// startup off: a client standing in for a build that predates the
+/// post-quantum providers makes no wire write, takes no subscription and
+/// changes no keyfile. It is the control arm the rollout is debugged against,
+/// so anything it does is something a comparison against it cannot attribute.
 ///
-/// The two read-precondition steps (hydrating held secrets and collecting
-/// conveyed key material) deliberately have no gate here: gating them breaks
-/// *decryption*, not quietens writes — the collect sweep is the only route by
-/// which a conveyed nskey private reaches the keyfile. A client that cannot
-/// resolve the providers fails before it needs one either way, so leaving them
-/// on costs it nothing and keeps the sweep available the moment a posture that
-/// does configure them is adopted.
+/// ⚠️ **The read-precondition steps are gated too, and that reverses an
+/// earlier argument.** Hydrating held secrets and collecting conveyed key
+/// material used to be ungated on the grounds that gating them breaks
+/// *decryption* rather than quietening writes — the collect sweep being the
+/// only route by which a conveyed nskey private reaches the keyfile. That
+/// argument does not survive: a client that configures no post-quantum
+/// providers cannot open such a record whether or not it holds the key, so
+/// the sweep files material it can never use, and the filing is a write to
+/// the user's credential file. The moment a posture that configures the
+/// providers is adopted, the very next start collects everything waiting.
 ///
-/// Two of 14.13's active sites live outside the startup and are not gated
-/// by this object: `KeyPackageRegistration.register()`'s
-/// `publishPublicSigningKey`, and namespace-key seeding, which keeps its
-/// own `AtClientPreference.seedNamespaceKeys` knob.
+/// One active site still lives outside this object and is not gated by it:
+/// `KeyPackageRegistration.register()`'s `publishPublicSigningKey`. It is
+/// reached from [collectConveyedKeys], so gating that step closes it — but
+/// anything else calling `register()` still publishes.
 @experimental
 class PqStartupGates {
   const PqStartupGates({
+    this.hydrateHeldSecrets = true,
+    this.collectConveyedKeys = true,
+    this.startEnvelopeListener = true,
     this.mintInUseSigningKeys = true,
     this.reconcileKeyPackage = true,
+    this.seedNamespaceKeys = true,
     this.requestRootPrivate = true,
     this.requestMissingPrivates = true,
     this.publishRootLink = true,
     this.publishChainLink = true,
     this.sweepUnanchoredEnrollments = true,
+    this.reconcileEnrollmentSnapshot = true,
     this.askOnReadMiss = true,
   });
+
+  /// Every gate off: the startup runs, every step returns at once, and
+  /// `startupComplete` completes having done nothing.
+  ///
+  /// The object is still built and [PqClientBootstrap.startup] is still
+  /// called, deliberately. Constructing costs nothing observable — no I/O, no
+  /// subscription, no registration — while a null bootstrap would make
+  /// `AtClientImpl.pqBootstrap` unusable for every caller that awaits
+  /// `startupComplete`, and one that never completed would hang them instead.
+  const PqStartupGates.inert()
+      : hydrateHeldSecrets = false,
+        collectConveyedKeys = false,
+        startEnvelopeListener = false,
+        mintInUseSigningKeys = false,
+        reconcileKeyPackage = false,
+        seedNamespaceKeys = false,
+        requestRootPrivate = false,
+        requestMissingPrivates = false,
+        publishRootLink = false,
+        publishChainLink = false,
+        sweepUnanchoredEnrollments = false,
+        reconcileEnrollmentSnapshot = false,
+        askOnReadMiss = false;
+
+  /// Read-precondition: primes the in-memory store this client answers other
+  /// enrollments' pulls from, and may write a reconciled signing-root private.
+  final bool hydrateHeldSecrets;
+
+  /// Read-precondition: files the key material conveyed to this enrollment
+  /// into the keyfile. Also the route by which `_apsk` gets published, via
+  /// `KeyPackageRegistration.register()`.
+  final bool collectConveyedKeys;
+
+  /// Active: the periodic sweep timer, the sync progress listener and the
+  /// notification subscription that let envelopes arrive after start.
+  final bool startEnvelopeListener;
 
   /// Active: brings this enrollment's signing keys into line with
   /// `AtClientPreference.dataSigningKeyAlgorithms` — minting, advertising and
@@ -79,6 +123,12 @@ class PqStartupGates {
   /// enrollment was created, which is every start after the first.
   final bool reconcileKeyPackage;
 
+  /// Active: mints and publishes this atSign's namespace keys. ANDed with
+  /// `AtClientPreference.seedNamespaceKeys`, which is the knob an app sets;
+  /// this one exists so that "the whole startup is off" is a statement about
+  /// one object rather than about two.
+  final bool seedNamespaceKeys;
+
   /// Active: broadcasts an ask for the signing-root private.
   final bool requestRootPrivate;
 
@@ -94,6 +144,11 @@ class PqStartupGates {
   /// Active: a fully privileged client signs and conveys links for
   /// approved enrollments that lack one.
   final bool sweepUnanchoredEnrollments;
+
+  /// Writes the atServer's view of this enrollment's grants onto the keyfile.
+  /// Not a wire write, but a write to the user's credential file, which is
+  /// what puts it behind a gate.
+  final bool reconcileEnrollmentSnapshot;
 
   /// Active: the read path's self-heal — a miss on an own generation
   /// broadcasts a pull. Off means the key ring is built without the
@@ -379,6 +434,7 @@ class PqClientBootstrap {
   /// serve. The store is in-memory by design and a restart empties it, which
   /// is why this is a re-prime on every start rather than a one-off.
   Future<void> _hydrateHeldSecrets() async {
+    if (!_gates.hydrateHeldSecrets) return;
     final keysIo = _keysIo;
     if (keysIo == null) return;
     try {
@@ -429,6 +485,7 @@ class PqClientBootstrap {
   ///
   /// Stopped by [stop], which the client's teardown calls.
   Future<void> _startEnvelopeListener() async {
+    if (!_gates.startEnvelopeListener) return;
     try {
       await sharing.startListening();
     } catch (e) {
@@ -442,6 +499,7 @@ class PqClientBootstrap {
   /// which a conveyed nskey private reaches the keyfile — a
   /// read-precondition, never gated.
   Future<void> _collectConveyedKeys() async {
+    if (!_gates.collectConveyedKeys) return;
     final keysIo = _keysIo;
     if (keysIo == null) return;
     try {
@@ -523,6 +581,7 @@ class PqClientBootstrap {
   /// nothing rotates it back out, so a client built to read must not publish
   /// PQ state merely because it named no posture.
   Future<void> _seedNamespaceKeys() async {
+    if (!_gates.seedNamespaceKeys) return;
     if (_keysIo == null) return;
     if (_atClient.getPreferences()?.seedNamespaceKeys != true) return;
     try {
@@ -663,6 +722,7 @@ class PqClientBootstrap {
   /// share: a hand-rolled read → mutate → flush loses whichever flushes
   /// second, and this tree has lost key material exactly that way.
   Future<void> _reconcileEnrollmentSnapshot() async {
+    if (!_gates.reconcileEnrollmentSnapshot) return;
     final keysIo = _keysIo;
     if (keysIo is! WrittenAtKeysIo) return;
 

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
@@ -580,22 +581,65 @@ void main() {
           remoteSecondary: mockRemoteSecondary, atChops: chops);
 
       final gates = (ac as AtClientImpl).pqBootstrap!.gates;
-      expect(gates.reconcileKeyPackage, isFalse,
-          reason: 'advertising an encapsulation key it will not decapsulate '
-              'with invites peers to seal records this client refuses');
-      expect(gates.requestMissingPrivates, isFalse,
-          reason: 'and asking for privates it has no provider to use files '
-              'material that can only sit there');
-      expect(gates.sweepUnanchoredEnrollments, isFalse,
-          reason: 'the sweep signs links and seals secrets, which this posture '
-              'has no providers for. Gated here as well as refused in '
-              'EnrollmentServiceImpl, so the startup does not call a step that '
-              'would throw');
-      expect(gates.mintInUseSigningKeys, isTrue,
-          reason: 'the control: the posture switches off exactly the three '
-              'post-quantum steps, not the startup generally. Minting stays '
-              'on, and at this posture it is a no-op for its own reason — the '
-              'in-use set is empty');
+      // Every gate, listed rather than sampled. The contract is that this
+      // client does nothing at all — no wire write, no subscription, no change
+      // to the keyfile — so a sample would let a step back in unnoticed, and
+      // the guard below fails if a gate is added without a row here.
+      expect([
+        gates.hydrateHeldSecrets,
+        gates.collectConveyedKeys,
+        gates.startEnvelopeListener,
+        gates.mintInUseSigningKeys,
+        gates.reconcileKeyPackage,
+        gates.seedNamespaceKeys,
+        gates.requestRootPrivate,
+        gates.requestMissingPrivates,
+        gates.publishRootLink,
+        gates.publishChainLink,
+        gates.sweepUnanchoredEnrollments,
+        gates.reconcileEnrollmentSnapshot,
+        gates.askOnReadMiss,
+      ], everyElement(isFalse),
+          reason: 'a posture configuring no post-quantum providers is the arm '
+              'the rollout is debugged against; anything it does is something '
+              'a comparison against it cannot attribute');
+      // Named individually where the reason is specific, so a failure says
+      // which promise broke rather than only that one did.
+      expect(gates.collectConveyedKeys, isFalse,
+          reason: 'the collect step files conveyed material into the keyfile '
+              'and publishes _apsk through register(); this client can open '
+              'none of what it would file');
+      expect(gates.startEnvelopeListener, isFalse,
+          reason: 'a sweep timer, a sync listener and a notification '
+              'subscription, watching an address no peer can learn');
+      expect(gates.reconcileEnrollmentSnapshot, isFalse,
+          reason: 'not a wire write, but a write to the user\'s credential '
+              'file, which the ruling forbids just as squarely');
+    });
+
+    test('every gate on PqStartupGates is covered by the inert arm above', () {
+      // The tripwire for the row above. Sampling is what let three gates be
+      // read as "the startup", so a gate added without a row there would
+      // otherwise be off in the constant and unasserted in the test.
+      final source =
+          File('lib/src/client/pq_client_bootstrap.dart').readAsStringSync();
+      final classBody = source.substring(source.indexOf('class PqStartupGates'),
+          source.indexOf('class PqClientBootstrap'));
+      // The initialiser branch is not decoration: a gate declared
+      // `final bool foo = false;` is one no constructor can set, so
+      // `inert()` could not turn it off — and the first mutation written
+      // against this rail used exactly that shape and slipped through it.
+      final fields =
+          RegExp(r'^  final bool (\w+)\s*(?:=[^;]*)?;', multiLine: true)
+              .allMatches(classBody)
+              .map((m) => m.group(1)!)
+              .toList();
+      expect(fields, isNotEmpty,
+          reason: 'if this finds nothing the count below proves nothing');
+      expect(fields, hasLength(13),
+          reason: 'PqStartupGates gained or lost a gate. Add it to the inert '
+              'arm above and to PqStartupGates.inert(), then move this number '
+              '— the gates are: ${fields.join(', ')}');
     });
 
     test('a configuring posture leaves both steps on', () async {
@@ -610,8 +654,26 @@ void main() {
           remoteSecondary: mockRemoteSecondary, atChops: chops);
 
       final gates = (ac as AtClientImpl).pqBootstrap!.gates;
-      expect(gates.reconcileKeyPackage, isTrue);
-      expect(gates.requestMissingPrivates, isTrue);
+      // The control, and it carries the weight now that the legacy arm asserts
+      // every gate is off: it has to be able to stay green while that one goes
+      // red, which means asserting the same list is entirely ON.
+      expect([
+        gates.hydrateHeldSecrets,
+        gates.collectConveyedKeys,
+        gates.startEnvelopeListener,
+        gates.mintInUseSigningKeys,
+        gates.reconcileKeyPackage,
+        gates.seedNamespaceKeys,
+        gates.requestRootPrivate,
+        gates.requestMissingPrivates,
+        gates.publishRootLink,
+        gates.publishChainLink,
+        gates.sweepUnanchoredEnrollments,
+        gates.reconcileEnrollmentSnapshot,
+        gates.askOnReadMiss,
+      ], everyElement(isTrue),
+          reason: 'without this the row above passes just as well for a build '
+              'that switched the startup off for every posture');
     });
 
     test('the legacy posture configures no post-quantum providers', () async {

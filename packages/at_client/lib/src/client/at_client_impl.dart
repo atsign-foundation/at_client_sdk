@@ -973,29 +973,29 @@ class AtClientImpl implements AtClient {
     // Built before the crypto config adopts its era default, because the
     // config's nskey providers read through the bootstrap's key ring — the
     // same ring the startup steps mint into and file from.
-    // A stage that configures no post-quantum providers advertises no key
-    // package and asks for no privates. Both steps are otherwise ungated by
-    // posture, which left such a client minting an X-Wing package, publishing
-    // it, asking peers for privates, filing the answers and then refusing to
-    // use any of it. The advertisement is the harmful half: a peer reads it
-    // and seals to an atSign whose client then declines the record, so the
-    // write is lost to a reader that advertised capability it had switched
-    // off. `KeyPackageStatus.absent` is what the substrate documents for "an
-    // older client", which is exactly what this stage stands in for.
+    // A stage that configures no post-quantum providers runs NONE of the
+    // startup — no wire write, no subscription, no change to the keyfile. It
+    // stands in for a build that predates these providers, and it is the arm
+    // the rollout is debugged against, so anything it did would be something
+    // a comparison against it could not attribute.
+    //
+    // This used to switch off three steps and leave six running, which had
+    // such a client minting an X-Wing keypair afresh every process, publishing
+    // `_apsk`, taking a sweep timer and two subscriptions, asking peers for
+    // privates, filing the answers into the keyfile and then refusing to use
+    // any of it. The advertisement was the harmful half, and it was already
+    // gone; what remained was work with no product.
+    //
+    // Keyed on the axis rather than on `posture == PqPosture.legacy`: a
+    // deployment that builds its own posture with the providers off wants the
+    // same client, and identity comparison would silently give it a different
+    // one.
     _pqBootstrap = PqClientBootstrap(
       this,
       keysIo: _atKeysIo,
       gates: (_preference?.posture.configuresPqProviders ?? true)
           ? const PqStartupGates()
-          : const PqStartupGates(
-              reconcileKeyPackage: false,
-              requestMissingPrivates: false,
-              // The sweep signs links and seals secrets, which this posture
-              // has no providers for. Gated here as well as refused in
-              // `EnrollmentServiceImpl` so the startup does not call a step
-              // that would throw: the gate is the startup's answer, the throw
-              // is every other caller's.
-              sweepUnanchoredEnrollments: false),
+          : const PqStartupGates.inert(),
       privilege: EnrollmentRecordPrivilegeResolver(this,
           listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
               .fetchEnrollmentRequests),

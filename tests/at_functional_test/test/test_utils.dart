@@ -23,10 +23,11 @@ import 'package:test/test.dart';
 /// as saying so.** A real client built this way works: an enrollment
 /// advertises a key package in every key-exchange mode, and the startup's
 /// conveyed-key collection registers one through
-/// `KeyPackageRegistration.register()` whatever the posture — not
-/// `reconcileKeyPackage`, which is off wherever the posture configures no
-/// post-quantum providers — so such a client is conveyed nskey privates like
-/// any other. Some tests
+/// `KeyPackageRegistration.register()` — so such a client is conveyed nskey
+/// privates like any other. ⚠️ **That last step turns on the providers axis
+/// this posture sets true**, and not on the legacy ones beside it: a posture
+/// configuring no post-quantum providers runs none of the startup, collects
+/// nothing and is conveyed nothing. Some tests
 /// using this posture mint their own ring in-process; others read a private
 /// that reached them by conveyance. What keeps it out of `PqPosture` is that
 /// the release programme does not offer it as a stage, not that it could not
