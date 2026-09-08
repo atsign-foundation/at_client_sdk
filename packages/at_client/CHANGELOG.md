@@ -1,5 +1,15 @@
 ## 3.15.0-rc1
 
+- **BREAKING:** the default `PqPosture` is `legacy` again. It moved to
+  `pqReady` earlier in this same **unpublished** release candidate; the ladder
+  is now 3.x `legacy`, 4.x `pqReady`, 5.x `pqActive`. A client that names no
+  posture drives no upgrade, configures no post-quantum providers and — with
+  the entry below — runs no post-quantum startup, so it is the arm anything
+  else can be debugged against. Nothing published moves: `3.14.0` is the last
+  released version and never had the `pqReady` default. An app that wants a
+  later stage names one. ⚠️ **A bare `AtClientPreference` therefore cannot be
+  handed a `CryptoConfig` registering post-quantum providers** — the `crypto`
+  setter refuses that combination — so a caller doing so names `pqReady` too.
 - **BREAKING:** a posture that configures no post-quantum providers now runs
   **none** of the post-quantum startup — no wire write, no subscription and no
   change to the keyfile. It used to switch off three of the startup's steps and
@@ -259,12 +269,14 @@
   enrollment naming an `(appName, deviceName)` an approved one already holds, so
   a constant would leave every clone of a copied keyfile after the first refused
   at every start.
-  **⚠️ Consumers should read this as a behaviour change, not only a feature.**
+  **⚠️ Consumers should read this as a behaviour change, not only a feature —
+  but it no longer reaches a caller that names nothing.** This entry said
   `AtClientPreference` defaults to `PqPosture.pqReady`, so a client built with
-  default preferences on such an atSign will self-enrol and rewrite its
-  `.atKeys` on its first start — including one built by `at_onboarding_cli`'s
-  `authenticate()`, and therefore by every `at_activate` command. Name
-  `PqPosture.legacy` to keep an atSign where it is.
+  default preferences on such an atSign would self-enrol and rewrite its
+  `.atKeys` on its first start, including every `at_activate` command. The
+  default is `PqPosture.legacy` again (see the entry above), which drives no
+  retrofit at all, so this now describes what a caller gets when it NAMES
+  `pqReady` or `pqActive`.
 - fix: **a failed self-retrofit can no longer fail client construction.** The
   step documents itself as never fatal and caught only `Exception`, while the
   paths it calls can throw `Error` — `ArgumentError` from a session with no

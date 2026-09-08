@@ -180,18 +180,24 @@ void main() {
             'it');
   });
 
-  test('seeding follows the posture, and the shipped default now seeds',
+  test('seeding follows the posture, and the shipped default does not seed',
       () async {
-    // Minting publishes a permanent, discoverable record on the atSign, so
-    // this stayed off by default while the data path was experimental. ⚠️ That
-    // is what this test used to assert — "seeding is off unless the preference
-    // asks for it", against a legacy default. This release candidate is the
-    // one that turns it on fleet-wide: the default posture is pqReady, and
-    // seeding is one of the four axes that moves with it.
-    expect(AtClientPreference().seedNamespaceKeys, isTrue,
-        reason: 'the shipped default is pqReady, whose whole point is that a '
-            'client is READY — it holds the keys a peer needs before anyone '
-            'writes post-quantum to it');
+    // Minting publishes a permanent, discoverable record on the atSign, so it
+    // is off by default. ⚠️ **This assertion has now been inverted twice.** It
+    // read "off unless the preference asks", then briefly "the shipped default
+    // now seeds" when the default moved to pqReady on 2026-08-26, and is off
+    // again since the ladder moved back a stage on 2026-09-08: 3.x defaults to
+    // legacy, and seeding turns on at 4.x with pqReady. What is stable through
+    // all three is the sentence the test is named for — seeding follows the
+    // posture — which is why the arms below matter more than this line.
+    expect(AtClientPreference().seedNamespaceKeys, isFalse,
+        reason: 'the shipped default is legacy, which publishes no '
+            'discoverable record at all');
+    expect(AtClientPreference(posture: PqPosture.pqReady).seedNamespaceKeys,
+        isTrue,
+        reason: 'and pqReady is where it turns on: a client is READY when it '
+            'holds the keys a peer needs before anyone writes post-quantum '
+            'to it');
     // And the axis is still an axis: a client that names the legacy era
     // publishes nothing, which is what makes a compatibility test possible.
     expect(AtClientPreference(posture: PqPosture.legacy).seedNamespaceKeys,

@@ -559,10 +559,31 @@ void main() {
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
       expect(config.defaultProviderId, legacyCryptoProviderId,
-          reason: 'the 3.x default: read everything, write legacy');
-      expect(config.lookup(symmetricAesGcmCryptoProviderId), isNotNull,
-          reason: 'the default posture configures the post-quantum providers, '
-              'so a record already sent to this client opens');
+          reason: 'the 3.x default writes legacy');
+      // ⚠️ This asserted `isNotNull` while the default was pqReady. The 3.x
+      // default is legacy, which configures NO post-quantum providers — so a
+      // record stamped with one has nothing to resolve to and the read throws
+      // naming the id, exactly as a build predating them does. The arm below
+      // is what keeps this from being a claim about every posture.
+      expect(config.lookup(symmetricAesGcmCryptoProviderId), isNull,
+          reason: 'the default posture registers no post-quantum provider, so '
+              'a record sent by a later peer does not open here');
+      final ready = await AtClientImpl.create(
+        '@ready',
+        'buzz',
+        AtClientPreference(posture: PqPosture.pqReady)
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path',
+        remoteSecondary: mockRemoteSecondary,
+        atChops: AtChopsImpl(mockAtChopsKeys),
+      );
+      expect(
+          CryptoConfig.eraDefaultFor(ready)!
+              .lookup(symmetricAesGcmCryptoProviderId),
+          isNotNull,
+          reason: 'the control: a stage that configures the providers still '
+              'resolves them, so the row above is about the DEFAULT and not '
+              'about a build that dropped them everywhere');
     });
 
     test('the legacy posture advertises no key package and asks for nothing',

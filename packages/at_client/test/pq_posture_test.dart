@@ -218,21 +218,30 @@ void main() {
   });
 
   group('the preference applies the posture at construction', () {
-    test('a bare preference runs the pqReady posture', () {
+    test('a bare preference runs the legacy posture', () {
       // The shipped default, pinned as a raw expectation rather than derived
-      // from the constant, so moving the default is an edit here and that
-      // edit is the review. It moved legacy → pqReady for this release
-      // candidate; 4.0 moves it again, to pqActive.
+      // from the constant, so moving the default is an edit here and that edit
+      // is the review. The ladder is 3.x legacy, 4.x pqReady, 5.x pqActive.
+      //
+      // ⚠️ This read `pqReady` between 2026-08-26 and 2026-09-08. The default
+      // moved back a stage so that what an app gets when it names nothing is
+      // the CONTROL arm: no post-quantum machinery in the picture, so anything
+      // the project breaks can be reproduced without it. A developer who wants
+      // a later stage names one.
       final preference = AtClientPreference();
-      expect(preference.posture, same(PqPosture.pqReady),
+      expect(preference.posture, same(PqPosture.legacy),
           reason: 'the default stage is the default — an app that names '
-              'nothing rides the SDK\'s own rollout schedule');
-      // Still false at pqReady, and it is pqActive that turns it on: this
-      // stage reads post-quantum and goes on writing what the fleet can read.
+              'nothing gets the stage the rollout is debugged against');
       expect(preference.disallowLegacyEncryption, false);
-      expect(preference.authenticationKeyAlgorithm, SigningAlgoType.mldsa65);
-      expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048});
-      expect(preference.seedNamespaceKeys, true);
+      expect(preference.authenticationKeyAlgorithm, SigningAlgoType.rsa2048,
+          reason: 'classical throughout: this drives no upgrade');
+      expect(preference.dataSigningKeyAlgorithms, isEmpty,
+          reason: 'the enrollment holds no signing key of its own, so its '
+              'APKAM authentication key signs and `_apsk` advertises it bare');
+      expect(preference.seedNamespaceKeys, false);
+      expect(preference.posture.configuresPqProviders, false,
+          reason: 'the axis that makes this a control rather than a '
+              'conservatively configured current build');
     });
 
     test('pqActive sets disallowLegacyEncryption', () {
@@ -375,14 +384,22 @@ void main() {
           AtClientPreference(posture: PqPosture.pqReady)
               .authenticationKeyAlgorithm,
           SigningAlgoType.mldsa65);
+      // Named against `pqReady`, not against a bare preference. The default is
+      // `legacy`, whose data signing set is EMPTY, and the coherence rule
+      // refuses an empty set beside a post-quantum authentication key: with no
+      // signing key of its own the enrollment signs with its authentication
+      // key, and `_apsk` must be able to state that key in the bare form every
+      // deployed reader parses, which only rsa2048 can. So this arm names the
+      // posture whose set has a member — the axis override is what it is about,
+      // not what the default happens to be.
       expect(
           AtClientPreference(
+                  posture: PqPosture.pqReady,
                   authenticationKeyAlgorithm: SigningAlgoType.mldsa65)
               .authenticationKeyAlgorithm,
           SigningAlgoType.mldsa65,
           reason: 'raising an axis above the posture is what "beats it" means '
-              'now — the default posture wants ML-DSA here anyway, and naming '
-              'it explicitly is still allowed');
+              'now, and naming it explicitly is still allowed');
     });
 
     test('but an explicit value may not be WEAKER than the posture', () {
@@ -411,11 +428,17 @@ void main() {
 
   group('the data signing set', () {
     test('follows the posture, and an explicit set beats it both ways', () {
-      expect(AtClientPreference().dataSigningKeyAlgorithms,
+      expect(AtClientPreference().dataSigningKeyAlgorithms, isEmpty,
+          reason: 'the shipped default is legacy, where the enrollment holds '
+              'no signing key of its own and its APKAM authentication key '
+              'signs — which is what `_apsk` advertises, bare');
+      expect(
+          AtClientPreference(posture: PqPosture.pqReady)
+              .dataSigningKeyAlgorithms,
           {SigningAlgoType.rsa2048},
-          reason: 'the shipped default is pqReady, which keeps one active '
-              'signing key and keeps it classical — the array form a deployed '
-              'reader cannot parse is what 4.0 takes on');
+          reason: 'pqReady is where the enrollment gains a signing key of its '
+              'own, and keeps it classical — the array form a deployed reader '
+              'cannot parse is what the stage after takes on');
       expect(
           AtClientPreference(posture: PqPosture.pqActive)
               .dataSigningKeyAlgorithms,

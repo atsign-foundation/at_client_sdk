@@ -138,7 +138,10 @@ void main() {
       AtClientImpl.create(
         atSign,
         'buzz',
-        AtClientPreference()
+        // `pqReady`, named rather than defaulted: the 3.x default is `legacy`, which
+        // runs no post-quantum startup at all, and this exercises exactly that
+        // startup. The stage is the fixture here, not the thing under test.
+        AtClientPreference(posture: PqPosture.pqReady)
           ..hiveStoragePath = storageDir
           ..commitLogPath = '$storageDir/commit',
         remoteSecondary: buildRecordingRemote(

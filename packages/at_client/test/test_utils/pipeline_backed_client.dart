@@ -73,7 +73,12 @@ Future<AtClient> buildPipelineBackedClient({
         })}';
   });
 
-  final preference = AtClientPreference()
+  // `pqReady`, named rather than defaulted. Every caller of this helper that
+  // passes a `crypto` passes one registering the post-quantum providers, and
+  // `AtClientPreference.crypto` REFUSES such a config under a posture that
+  // configures none — which the 3.x default, `legacy`, does not. A caller
+  // wanting the provider-less stage builds its own preference and says so.
+  final preference = AtClientPreference(posture: PqPosture.pqReady)
     ..hiveStoragePath = storagePath
     ..commitLogPath = '$storagePath/commit'
     ..isLocalStoreRequired = true;

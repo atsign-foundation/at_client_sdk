@@ -239,10 +239,17 @@ void main() {
               : 'data:{"$enrollKey":{"appName":"buzz","deviceName":"pixel",'
                   '"namespace":{"buzz":"rw"}}}');
 
+      // `pqReady`, named rather than defaulted. This helper serves both arms:
+      // one where the request carries no wrapped key and the APPROVER must
+      // mint and seal one, which a posture configuring no post-quantum
+      // providers refuses outright — and one where the request carries its own,
+      // which such an approver handles either way. Naming the stage keeps the
+      // second arm as the control it is: a post-quantum approver serving a
+      // legacy request normally.
       final client = await AtClientImpl.create(
           atSign,
           'buzz',
-          AtClientPreference()
+          AtClientPreference(posture: PqPosture.pqReady)
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit',
           remoteSecondary: secondary);

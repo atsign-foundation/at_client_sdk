@@ -2418,9 +2418,12 @@ while configuring the post-quantum providers, and then sets
 with no writing axis moved and is identical at the other two stages.
 
 ⚠️ **Two things in this paragraph were wrong and are corrected above.** It said
-the test builds "a bare `AtClientPreference` — therefore `PqPosture.legacy`":
-a bare preference has been `PqPosture.pqReady` since the default moved, so the
-inference never held. And on 2026-08-29 `PqPosture.legacy` stopped configuring
+the test builds "a bare `AtClientPreference` — therefore `PqPosture.legacy`".
+⚠️ **That inference is sound again, and was not in between**: a bare preference
+was `PqPosture.pqReady` from 2026-08-26 until the ladder moved back a stage on
+2026-09-08, and is `legacy` either side of that window. The test does not rely
+on it — it names its posture — so this is a note about the reasoning, not about
+the test. And on 2026-08-29 `PqPosture.legacy` stopped configuring
 the post-quantum providers at all, which makes `legacy` + `CryptoConfig.nskey`
 a combination `AtClientPreference.crypto` now refuses outright — so the
 construction the argument rested on can no longer be built. **Whether the
@@ -3117,11 +3120,14 @@ Re-derive rather than restating a number:
 `grep -c '^  final ' packages/at_client/lib/src/preference/pq_posture.dart`.
 
 ⚠️ **And this said "a bare preference runs the legacy posture, byte-identical
-to the pre-posture SDK".** That was true until the default moved to
-`PqPosture.pqReady` on 2026-08-26. A bare preference now runs **pqReady**:
-ML-DSA PKAM, namespace-key seeding on, pq key exchange — and a client with an
-enrollment id retrofits itself at startup with no opt-out. An app that must
-stay put names `PqPosture.legacy` explicitly.
+to the pre-posture SDK".** ⚠️ **That claim is TRUE again, and this note records
+a round trip rather than a correction.** It held until the default moved to
+`PqPosture.pqReady` on 2026-08-26, when a bare preference began running ML-DSA
+PKAM, namespace-key seeding and pq key exchange, retrofitting itself at startup
+with no opt-out. The ladder moved back a stage on 2026-09-08 — 3.x legacy, 4.x
+pqReady, 5.x pqActive — so a bare preference runs `legacy` once more, and now
+runs no post-quantum startup at all. An app that wants a later stage names one;
+an app that must stay put no longer has to name anything.
 
 ### 15.7 UC-C1.7 — The signing-set axis: which keys an enrollment holds
 

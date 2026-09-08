@@ -192,7 +192,7 @@ class AtClientPreference {
   final List<String> sealsToKeyAlgorithms;
 
   AtClientPreference(
-      {this.posture = PqPosture.pqReady,
+      {this.posture = PqPosture.legacy,
       SigningAlgoType? authenticationKeyAlgorithm,
       Set<SigningAlgoType>? dataSigningKeyAlgorithms,
       List<String>? sealsToKeyAlgorithms,

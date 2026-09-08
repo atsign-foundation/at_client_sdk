@@ -106,7 +106,13 @@ void main() {
     final client = await AtClientImpl.create(
       atSign,
       'buzz',
-      AtClientPreference()
+      // ⚠️ `pqReady`, named rather than defaulted. The 3.x default is `legacy`,
+      // which runs no post-quantum startup at all — so a bare preference would
+      // make this client inert for TWO reasons and the assertion below would
+      // hold whether or not the missing AtKeysIo was doing any work. The
+      // posture has to be one that WOULD write, so that the absent key source
+      // is the only thing stopping it.
+      AtClientPreference(posture: PqPosture.pqReady)
         ..hiveStoragePath = storageDir
         ..commitLogPath = '$storageDir/commit',
       remoteSecondary: buildRecordingRemote(

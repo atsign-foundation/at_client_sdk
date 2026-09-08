@@ -178,7 +178,10 @@ void main() {
       final client = await AtClientImpl.create(
           '@evictionwiring',
           'test',
-          AtClientPreference()
+          // `pqReady`, named rather than defaulted: the 3.x default is `legacy`, which
+          // runs no post-quantum startup at all, and this exercises exactly that
+          // startup. The stage is the fixture here, not the thing under test.
+          AtClientPreference(posture: PqPosture.pqReady)
             ..hiveStoragePath = 'test/hive/evictionwiring'
             ..commitLogPath = 'test/hive/evictionwiring') as AtClientImpl;
       final registered = <SyncProgressListener>[];

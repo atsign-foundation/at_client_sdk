@@ -326,7 +326,7 @@ void main() {
               'would not distinguish "not asked" from "asked and overridden"',
           clauses: ['not asked when no generation is advertised']);
       provenIn('packages/at_client/test/nskey_seeding_test.dart',
-          'seeding follows the posture, and the shipped default now seeds',
+          'seeding follows the posture, and the shipped default does not seed',
           proves: 'that the start-of-client ask is gated on the posture\'s '
               'seedNamespaceKeys, so it never runs at PqPosture.legacy',
           clauses: ['`AtClientPreference.seedNamespaceKeys` is true']);
