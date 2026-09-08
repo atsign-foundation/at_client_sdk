@@ -120,6 +120,11 @@
       "id": 24,
       "prompt": "I'm adding atsign sign-in to my Flutter app and found at_onboarding_flutter on pub.dev. Is that the package I should be using for the onboarding screens?",
       "expected_output": "Says no — at_onboarding_flutter is discontinued and at_client_flutter is its named replacement. Directs the developer to the at_client_flutter auth dialogs instead (AtSignSelectionDialog, AtKeysFileDialog, ApkamActivationDialog, PkamDialog), and notes at_client_flutter is the single dependency needed since it re-exports at_client. Does NOT present at_onboarding_flutter as usable, and does NOT hedge by suggesting either package would work."
+    },
+    {
+      "id": 25,
+      "prompt": "My app has user profiles. Some fields — display name and avatar URL — need to be readable by anyone, without the user having to share them with each viewer individually. Other fields like email and phone must stay private. How should I store the profile?",
+      "expected_output": "Splits the profile by visibility: email and phone stay on the normal encrypted path (AtCollection<T>, or a shared key), while display name and avatar URL go in a public key. Builds the public key with AtKey.public(key, namespace:, sharedBy:).build() rather than hand-setting metadata, then atClient.put. Explains AtCollection cannot carry the public fields because no collection method accepts Metadata, so this is a sanctioned drop to raw put/get for that key only — NOT a reason to abandon collections for the private fields. Warns the public value is SIGNED, not encrypted — readable by anyone and returned by an unauthenticated scan — which is why email and phone must not go in it. For reading another atsign's public profile, notes it is always a remote plookup regardless of remoteLocalPref, so bypassCache is the lever when a cached copy may be stale. May mention the builder's cache(ttr, ccd). Does NOT claim AtCollection has an isPublic or visibility option."
     }
   ]
 }

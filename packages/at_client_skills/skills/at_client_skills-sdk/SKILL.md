@@ -10,7 +10,8 @@ description: >
   developer asks how to send or receive notifications via NotificationService,
   how to do request/response RPC between atsigns (AtRpc), how to run headless
   agents or CLIs (CLIBase) or coordinate multiple agent instances, how to read
-  or write directly against the remote atServer (useRemoteAtServer), which
+  or write directly against the remote atServer (useRemoteAtServer), how to
+  publish intentionally public data (AtKey.public / isPublic), which
   pub.dev packages to add, how to unit-test without a live atServer, or
   whether to use AtCollection vs notifications+SQLite. Warns
   against deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
@@ -520,8 +521,16 @@ round-trip and fail offline; scope per-operation overrides to infrastructure
 keys (give those a distinct key-name prefix within your app's namespace, e.g.
 `lock.`).
 
+**Public data** is the other reason to leave `AtCollection` — collections cannot
+carry public metadata, since no collection method accepts `Metadata`. Build
+public keys with `AtKey.public(key, namespace:, sharedBy:).build()` and raw
+`put`. Public values are **signed, not encrypted**, so never put anything
+private in one; reading another atsign's public key is always a remote
+`plookup`, where `bypassCache` is the useful lever.
+
 Read [references/12-remote-atserver.md](references/12-remote-atserver.md) when
-an operation must see or produce server-side truth immediately.
+an operation must see or produce server-side truth immediately, or when
+publishing public data.
 
 ---
 
