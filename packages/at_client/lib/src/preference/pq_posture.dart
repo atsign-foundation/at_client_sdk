@@ -74,6 +74,10 @@ class PqPosture {
   /// seam against a released atServer where a stale reader seeing an absent
   /// field falls back to `rsa2048` — a silent wrong-algorithm PKAM. The name
   /// stays out there; nothing on this side repeats the mistake.
+  ///
+  /// ⚠️ **Pinning this below what [dataSigningKeyAlgorithms] wants suppresses
+  /// the retrofit that keeps old signatures verifiable** — see the warning on
+  /// that field.
   final SigningAlgoType authenticationKeyAlgorithm;
 
   /// Which algorithms the enrollment keeps an active **data signing** key for
@@ -90,6 +94,18 @@ class PqPosture {
   /// spells that way; a posture wanting ML-DSA reaches it by *retiring* the RSA
   /// key afterwards, not by skipping it. A retired key stays advertised, which
   /// is what keeps everything it signed verifiable.
+  ///
+  /// ⚠️ **Setting this to `{mldsa65}` while [authenticationKeyAlgorithm] stays
+  /// `rsa2048` strands what the RSA key signed, and nothing refuses the
+  /// combination.** The two axes normally move together: a credential whose
+  /// posture wants a stronger authentication algorithm retrofits into a new
+  /// enrollment, so the old one keeps its own published signing key and goes
+  /// on verifying what it signed. Pin the authentication axis to `rsa2048`
+  /// and no retrofit fires, so the same enrollment mints ML-DSA — and an
+  /// enrollment holding no signing key of its own signed with its
+  /// authentication key, which the mint then drops from the advertisement.
+  /// Everything that key signed stops verifying. Reaching this needs both
+  /// axes set by hand; the named postures never produce it.
   final Set<SigningAlgoType> dataSigningKeyAlgorithms;
 
   /// Whether this client mints and publishes namespace encapsulation keys for
