@@ -2434,7 +2434,9 @@ rather than re-ruled here.
 whether an app that configures nothing enters it. 3 of the 5 A3 rows do not vary
 at all; the 2 that do are [UC-A3.2](#42-uc-a32--a-client-mints-and-publishes-the-nskey-for-each-namespace-it-is-authorised-for),
 because `seedNamespaceKeys` is false at legacy so whether the mint fires is a
-stage decision, and [UC-A3.3](#43-uc-a33--self-write-with-no-namespace-key-has-no-pq-fallback),
+stage decision — and since 2026-09-08 the whole startup is off at that stage, so
+the mint is one of several things that do not happen rather than the only one —
+and [UC-A3.3](#43-uc-a33--self-write-with-no-namespace-key-has-no-pq-fallback),
 whose legacy escape hatch pqActive closes.
 
 Sorting all 68 by the shape that could prove them:
@@ -2968,8 +2970,13 @@ Four residues this catalogue states rather than hides:
   host it.
 - **UC-C1.4**'s Given is unprovable live by an existing ruling.
 - **The 3 vacuous-at-legacy rows** — UC-A4.3, UC-B5.4 and UC-B1.3 — have an
-  invariant Then and a Given that legacy cannot satisfy, since
-  `seedNamespaceKeys: false` means there is no nskey to convey. A legacy cell
+  invariant Then and a Given that legacy cannot satisfy. ⚠️ **The reason given
+  here was narrower than the mechanism, and became wrong on 2026-09-08.** It
+  said `seedNamespaceKeys: false` means there is no nskey to convey, which named
+  one axis; a posture configuring no post-quantum providers now runs **none** of
+  the startup, so nothing is minted, nothing is collected and nothing is
+  conveyed — the Given is unsatisfiable for the whole mechanism rather than for
+  the seeding step alone. A legacy cell
   would pass while measuring nothing, which is the failure a matrix is worst at
   showing.
 

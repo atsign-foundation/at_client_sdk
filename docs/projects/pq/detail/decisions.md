@@ -14034,12 +14034,25 @@ the decision not to run it. Eight keyfile write sites exist in at_client's
 the nskey filing, and the enrollment snapshot, and all four go.
 
 **Nothing is lost by not publishing `_apsk`.** at_server `origin/trunk`
-(`66598e85`) writes `public:_apsk.<enrollmentId>.a.__e@<atSign>` **when the
-enrollment is approved**, from the `EnrollParams.apsk` the client carried on
-`enroll:request` (`EnrollDataStoreValue.apsk`), and `EnrollmentSubmitter`
-composes that value as `advertisedSigningKey?.publicKey ?? apkamPublicKey`. So a
-legacy enrolment's advertisement is published by the atServer at approval, and an
-inert client never needs to republish it. The one credential this does not cover
+(`66598e85`) never composes the value: `_apskRecordValue` takes the enrollment
+RECORD and emits `apskLegacy` verbatim or `jsonEncode(apsk)`, and its dartdoc
+says why — *"so an approver cannot substitute its own"*. The record's fields are
+set from `EnrollParams.apsk` / `apskLegacy` on `enroll:request`, and
+`EnrollmentSubmitter` composes that value as
+`advertisedSigningKey?.publicKey ?? apkamPublicKey`. So a legacy enrolment's
+advertisement is published by the atServer, and an inert client never needs to
+republish it.
+
+⚠️ **This said the record is written "when the enrollment is approved", and that
+is the dominant path rather than the rule.** A cold read on 2026-09-08 found
+**four** publish sites, not one: the CRAM branch of `enroll:request` and the
+self-enrollment retrofit branch both auto-approve and publish during the
+request; the `approve` operation is the third; and **`enroll:update` is the
+fourth**, guarded on a supplied `apsk`/`apskLegacy` against an enrollment the
+handler has already asserted is approved. So an enrollment's `_apsk` can change
+after approval, from a value carried on a verb that is not `enroll:request`.
+Nothing above turns on that — an inert client sends none of those verbs — but
+the sentence was not the whole rule and read as if it were. The one credential this does not cover
 is `primary`, whose `_apsk` has no `enroll:request` to ride — and at `legacy`
 nothing signs an envelope that anything verifies, so nothing asks for it.
 
