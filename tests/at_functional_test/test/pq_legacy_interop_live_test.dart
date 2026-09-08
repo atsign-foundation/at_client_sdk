@@ -67,7 +67,8 @@ void main() {
   Future<AtClient> onboardLegacy(String atSign) async {
     final atKeysIo = FileAtKeysIo(filePath: keysFilePath);
     final response = await AtAuth.create().onboard(
-        AtOnboardingRequest(atSign, rootDomain: rootDomain)
+        AtOnboardingRequest(atSign,
+            signingAlgoType: SigningAlgoType.rsa2048, rootDomain: rootDomain)
           ..atKeysIo = atKeysIo
           ..appName = 'wavi'
           ..deviceName = 'legacy'

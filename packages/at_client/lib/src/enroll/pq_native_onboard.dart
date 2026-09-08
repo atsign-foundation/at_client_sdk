@@ -183,6 +183,7 @@ Future<AtClientManager> pqNativeOnboard({
   AtClientStorage? storage,
 }) async {
   final request = AtOnboardingRequest(atSign,
+      signingAlgoType: SigningAlgoType.mldsa65,
       rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort))
     ..atKeysIo = atKeysIo
     ..appName = appName

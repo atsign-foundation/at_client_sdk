@@ -1,5 +1,15 @@
 ## 4.0.0-rc2
 
+- **BREAKING:** `signingAlgoType` moves off `AuthRequest` and onto
+  `AtOnboardingRequest`, where it becomes a required constructor argument. It
+  defaulted to `rsa2048` on the shared base, which let an activation inherit an
+  algorithm its caller never chose — the state that produced the same defect
+  `AtEnrollmentRequest.signingAlgo` already guards against on the enrolment
+  door, where the argument is required for that reason. Authentication is
+  unaffected and loses a field it never read: the algorithm an existing keyfile
+  authenticates with is resolved from that keyfile, so a caller-settable value
+  there could only ever be wrong silently. Callers of `AtOnboardingRequest`
+  state the algorithm they want; `rsa2048` reproduces the previous behaviour.
 - **BREAKING:** a self-enrollment no longer approves its own request, and no
   longer sends `encryptedAPKAMSymmetricKey`. The atServer migrates a legacy
   credential into an enrollment named `primary` and approves a retrofit of it

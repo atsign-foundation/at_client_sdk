@@ -102,13 +102,13 @@ void main() {
             String publicKey,
             String privateKey
           })? advertisedSigningKey}) =>
-      AtOnboardingRequest(atSign)
+      AtOnboardingRequest(atSign,
+          signingAlgoType: signingAlgo ?? SigningAlgoType.rsa2048)
         ..atKeysIo = keysIo
         ..appName = 'wavi'
         ..deviceName = 'iphone'
         ..mintLegacyMaterial = mintLegacyMaterial
-        ..advertisedSigningKey = advertisedSigningKey
-        ..signingAlgoType = signingAlgo ?? SigningAlgoType.rsa2048;
+        ..advertisedSigningKey = advertisedSigningKey;
 
   /// The request the onboard actually submitted.
   FirstEnrollmentRequest submittedRequest() =>

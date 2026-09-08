@@ -32,8 +32,12 @@ void main() {
     return (io, public);
   }
 
-  AtOnboardingRequest request() =>
-      AtOnboardingRequest(atSign, rootDomain: AtRootDomain('vip', 64));
+  // rsa2048 deliberately: every test below asserts the request comes back
+  // carrying mldsa65, and a fixture that started there would be green whether
+  // or not `makeActivationPqNative` moved it.
+  AtOnboardingRequest request() => AtOnboardingRequest(atSign,
+      signingAlgoType: SigningAlgoType.rsa2048,
+      rootDomain: AtRootDomain('vip', 64));
 
   test('at pqActive the activation carries an ML-DSA-65 signing key', () async {
     // The algorithm the enrollment will KEEP. Minting rsa2048 here would leave

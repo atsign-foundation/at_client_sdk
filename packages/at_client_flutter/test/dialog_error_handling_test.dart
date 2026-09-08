@@ -1,4 +1,5 @@
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client_flutter/src/services/auth_service.dart';
 import 'package:at_client_flutter/src/services/enrollment_service.dart';
 import 'package:at_client_flutter/src/widgets/apkam_dialog.dart';
@@ -101,7 +102,10 @@ void main() {
                   result = await showDialog<AtOnboardingResponse>(
                     context: context,
                     builder: (context) => CramDialog(
-                      request: AtOnboardingRequest('@alice'),
+                      request: AtOnboardingRequest(
+                        '@alice',
+                        signingAlgoType: SigningAlgoType.rsa2048,
+                      ),
                       cramKey: '@alice:activation_key:secret',
                       authService: mockAuthService,
                     ),

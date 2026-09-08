@@ -78,7 +78,8 @@ void main() {
         () async {
       var apkamAtSign = ConfigUtil.getYaml()['atSign']['apkamFirstAtSign'];
       var atAuth = AtAuth.create();
-      final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
+      final onBoardingRequest = AtOnboardingRequest(apkamAtSign,
+          signingAlgoType: SigningAlgoType.rsa2048)
         ..appName = 'wavi'
         ..deviceName = 'pixel1'
         ..rootDomain =
@@ -837,7 +838,8 @@ void main() {
       // .atKeys file; authenticate to load those keys into AtChops.
       final ownerAuth = AtAuth.create();
       final onboardResponse = await ownerAuth.onboard(
-        AtOnboardingRequest(cramAtSign)
+        AtOnboardingRequest(cramAtSign,
+            signingAlgoType: SigningAlgoType.rsa2048)
           ..appName = 'wavi'
           ..deviceName = 'pixel-onboard'
           ..rootDomain = rootDomain

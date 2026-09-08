@@ -69,7 +69,8 @@ void main() {
   /// [AtOnboardingRequest] — a default is not a constant this package can
   /// reference, so nothing but this pins the two together.
   group('the first-enrollment constants match at_auth\'s own defaults', () {
-    final request = AtOnboardingRequest('@alice');
+    final request =
+        AtOnboardingRequest('@alice', signingAlgoType: SigningAlgoType.rsa2048);
 
     test('appName', () {
       expect(firstEnrollmentAppName, request.appName);

@@ -339,7 +339,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
 
     atAuth ??= AtAuth.create();
-    var atOnboardingRequest = AtOnboardingRequest(_atSign);
+    // The same source `sendEnrollRequest` reads, and for the same reason: the
+    // preference is what `authenticate()` stamps on the connection, so minting
+    // under anything else hands at_chops a key of one algorithm and a
+    // declaration of another.
+    var atOnboardingRequest = AtOnboardingRequest(_atSign,
+        signingAlgoType: atOnboardingPreference.authenticationKeyAlgorithm);
     atOnboardingRequest.rootDomain = AtRootDomain(
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     atOnboardingRequest.retryOptions =
