@@ -2,9 +2,11 @@
 
 - fix: work parked on a network read when the client stops no longer touches
   the local store on resume: a sync round's in-sync check does not read the
-  pull cursor, its pull does not persist it, and a notification batch cut by
-  the stop does not write the watermark for what came after; that store is
-  closed by then, and each was a `Box not found` in the log.
+  pull cursor, its pull does not persist it, a notification batch cut by
+  the stop does not write the watermark for what came after, and a monitor
+  whose start or reconnect completes after the stop does not read the
+  watermark; that store is closed by then, and each was a `Box not found`
+  in the log.
 
 - fix: the envelope listener attaches to the client's sync and notification
   services whenever `AtClientManager` sets them, instead of failing when the

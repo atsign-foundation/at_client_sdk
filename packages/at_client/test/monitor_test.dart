@@ -54,6 +54,10 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   /// atServer does.
   Object? startError;
 
+  /// Awaited between the start and the watermark read, where the real
+  /// muxable authenticates, so a test can land a stop() in that window.
+  Future<void>? startGate;
+
   @override
   Stream<String> get notifications => _notifications.stream;
 
@@ -72,6 +76,7 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
     startCalls++;
     if (startError != null) throw startError!;
     started = true;
+    if (startGate != null) await startGate;
     // Invoked, as the real muxable does on every (re)connect - so these
     // assertions also prove the callback the Monitor hands down is callable.
     heldWatermarkSource = getLastNotificationTime;
@@ -118,6 +123,7 @@ void main() {
   late List<NotificationListenerState> states;
   int? watermark;
   Object? watermarkError;
+  var watermarkReads = 0;
 
   setUp(() {
     muxable = FakeMuxable();
@@ -125,12 +131,14 @@ void main() {
     states = [];
     watermark = null;
     watermarkError = null;
+    watermarkReads = 0;
     monitor = Monitor(
       atSign: '@alice',
       atClientPreference: AtClientPreference(),
       lookUp: muxable,
       handleNotification: (String n) async => received.add(n),
       getLastNotificationTime: () async {
+        watermarkReads++;
         if (watermarkError != null) throw watermarkError!;
         return watermark;
       },
@@ -261,6 +269,29 @@ void main() {
       expect(muxable.startCalls, callsAtStop,
           reason: 'a pending retry must not resurrect a monitor the caller '
               'has stopped');
+    }, timeout: Timeout(Duration(seconds: 15)));
+
+    test(
+        'a stop() that lands while the start is authenticating keeps the '
+        'watermark unread', () async {
+      final gate = Completer<void>();
+      muxable.startGate = gate.future;
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(muxable.startCalls, 1,
+          reason: 'the start is in flight, parked where the real muxable '
+              'authenticates');
+
+      monitor.stop();
+      gate.complete();
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(watermarkReads, 0,
+          reason: 'the watermark lives in the client store, which stop() '
+              'has closed by the time the start resumes; reading it there is '
+              'the "Box not found" the live packs log');
+      expect(muxable.startedWithWatermark, isNull,
+          reason: 'the start still completes, without a watermark');
     }, timeout: Timeout(Duration(seconds: 15)));
 
     test('a start that fails leaves it notConnected', () async {

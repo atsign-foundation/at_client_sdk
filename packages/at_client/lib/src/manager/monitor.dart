@@ -182,6 +182,13 @@ class Monitor {
     // and passing the number would pin every later reconnect to the position
     // held at start, re-requesting the whole retained backlog each time.
     Future<int?> currentWatermark() async {
+      // Called by the muxable after it authenticates, and on every
+      // reconnect; a stop() by then has closed the store the watermark is in.
+      if (_targetState != NotificationListenerState.listening) {
+        logger.finer('Not reading the last-notification watermark: the '
+            'monitor has been stopped');
+        return null;
+      }
       try {
         return await getLastNotificationTime();
       } catch (e) {
