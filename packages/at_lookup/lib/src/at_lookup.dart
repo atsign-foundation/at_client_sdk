@@ -97,6 +97,9 @@ abstract interface class AtLookUp {
   /// `secureSocketTransport(SecureSocketConfig())` and thereby states it,
   /// while a caller on another transport says nothing about TLS at all.
   ///
+  /// [secondaryAddressFinder] is required for the same reason: the neutral
+  /// barrel cannot name a native implementation, so the caller supplies one.
+  ///
   /// [onConnect] runs on every connection this lookup opens, once it is up
   /// and before anything else is sent on it: a proxy that needs `from:` first
   /// to learn which atServer the connection is for is the case it exists for.
@@ -105,8 +108,8 @@ abstract interface class AtLookUp {
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
     required AtLookupTransport transport,
+    required SecondaryAddressFinder secondaryAddressFinder,
     Map<String, dynamic> clientConfig = const {},
-    SecondaryAddressFinder? secondaryAddressFinder,
     Future<void> Function(AtCommandExecutor connection)? onConnect,
   }) {
     return AtLookupImpl(
