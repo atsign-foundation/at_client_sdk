@@ -189,6 +189,101 @@ void main() {
       }
     });
 
+    group('the flat-to-typed upgrade is preserved once', () {
+      /// A legacy-flat keyfile on disk, and the text it holds.
+      Future<({String path, String text, FileAtKeysIo io})> flatKeyfile(
+          Directory dir) async {
+        final path = '${dir.path}/@alice_key.atKeys';
+        final io = FileAtKeysIo(filePath: (_) => path);
+        await io.write(atsign, legacyAtKeys(atsign: atsign.toAtsign()));
+        final text = await File(path).readAsString();
+        expect(jsonDecode(text) as Map<String, dynamic>,
+            isNot(contains('version')),
+            reason: 'the arm below is about a flat document becoming typed; a '
+                'fixture that started typed would prove nothing');
+        return (path: path, text: text, io: io);
+      }
+
+      test('a flush that makes the document typed copies the flat one aside',
+          () async {
+        final dir = await Directory.systemTemp.createTemp('pre_v1_test');
+        try {
+          final flat = await flatKeyfile(dir);
+          final keys = await flat.io.read(atsign);
+          keys.addKey(symmetricKey('typed'));
+          await flat.io.flush(atsign.toAtsign(), keys);
+
+          final backup = File('${flat.path}${FileAtKeysIo.legacyShapeBackupSuffix}');
+          expect(backup.existsSync(), isTrue,
+              reason: 'the rolling .bak is replaced by the next write, and a '
+                  'client makes several within seconds of this one');
+          expect(await backup.readAsString(), flat.text,
+              reason: 'byte-for-byte the document as it stood before the '
+                  'upgrade, which is the thing an older build can still read');
+          expect(
+              jsonDecode(await File(flat.path).readAsString())
+                  as Map<String, dynamic>,
+              contains('version'),
+              reason: 'the live file really did become typed, or the copy '
+                  'above was taken for no reason');
+        } finally {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      test('a flush that leaves the document flat copies nothing aside',
+          () async {
+        // The control. It must be able to stay green while the assertion above
+        // goes red, so it exercises the same writer over the same fixture and
+        // differs only in whether typed material is added.
+        final dir = await Directory.systemTemp.createTemp('pre_v1_test');
+        try {
+          final flat = await flatKeyfile(dir);
+          // Flushed unchanged: assurance freezes the legacy block, so there is
+          // no legacy mutation a flat-to-flat write could make. What the arm
+          // needs is a flush through the same writer that does not add typed
+          // material, and this is it.
+          final keys = await flat.io.read(atsign);
+          await flat.io.flush(atsign.toAtsign(), keys);
+
+          expect(
+              File('${flat.path}${FileAtKeysIo.legacyShapeBackupSuffix}')
+                  .existsSync(),
+              isFalse,
+              reason: 'nothing changed shape, so there is no pre-upgrade '
+                  'document to keep and a copy would only be confusing');
+          expect(File('${flat.path}.bak').existsSync(), isTrue,
+              reason: 'the ordinary rolling backup still happens; this arm is '
+                  'about the other one');
+        } finally {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      test('a second upgrade does not overwrite the first copy', () async {
+        final dir = await Directory.systemTemp.createTemp('pre_v1_test');
+        try {
+          final flat = await flatKeyfile(dir);
+          final first = await flat.io.read(atsign);
+          first.addKey(symmetricKey('typed'));
+          await flat.io.flush(atsign.toAtsign(), first);
+
+          final second = await flat.io.read(atsign);
+          second.addKey(symmetricKey('later', value: 'bGF0ZXI='));
+          await flat.io.flush(atsign.toAtsign(), second);
+
+          expect(
+              await File('${flat.path}${FileAtKeysIo.legacyShapeBackupSuffix}')
+                  .readAsString(),
+              flat.text,
+              reason: 'a second copy would be a document that is already '
+                  'upgraded, which is not what anyone reaching for this wants');
+        } finally {
+          await dir.delete(recursive: true);
+        }
+      });
+    });
+
     test('Test flush() creates the file (and parent dirs) when absent',
         () async {
       final tempDir = await Directory.systemTemp.createTemp('at_keys_io_test');
@@ -376,7 +471,16 @@ void main() {
           final files = tempDir.listSync().whereType<File>().toList();
           expect(
             files.map((file) => file.path).toSet(),
-            {tempPath, '$tempPath.bak'},
+            // Three, not two. This flush is the moment the document stops
+            // being the flat shape every published build reads, so the writer
+            // keeps a copy of it that the next write will not roll over — see
+            // the `flat-to-typed upgrade is preserved once` group for what
+            // that copy has to contain.
+            {
+              tempPath,
+              '$tempPath.bak',
+              '$tempPath${FileAtKeysIo.legacyShapeBackupSuffix}',
+            },
           );
 
           // The rewritten file is a typed-keys document that reads back with the

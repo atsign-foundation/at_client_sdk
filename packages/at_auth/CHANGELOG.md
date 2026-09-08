@@ -1,5 +1,13 @@
 ## 4.0.0-rc2
 
+- feat: `FileAtKeysIo` keeps a copy of the keyfile at the moment its shape
+  stops being the flat one every published build reads. The `.bak` beside it
+  is rolling — the next write replaces it, and a client's startup makes
+  several within seconds — so it preserves nothing an operator could come
+  back to. The new `<keyfile>.pre-v1` is keyed on the transition rather than
+  on the write and is never overwritten, and the upgrade is announced at
+  `shout`, the one level a CLI that has silenced its logging still shows.
+  Detected from the two documents rather than from a flag a caller passes.
 - **BREAKING:** `signingAlgoType` moves off `AuthRequest` and onto
   `AtOnboardingRequest`, where it becomes a required constructor argument. It
   defaulted to `rsa2048` on the shared base, which let an activation inherit an
