@@ -30,6 +30,7 @@ import 'src/at_lookup.dart'
 import 'src/cache/secondary_address_finder.dart' show SecondaryAddressFinder;
 
 export 'at_lookup.dart';
+export 'src/io/secure_socket_transport.dart';
 
 /// TLS over TCP — the transport to pass to `AtLookUp.withSecureSocket` unless
 /// you are supplying your own.
