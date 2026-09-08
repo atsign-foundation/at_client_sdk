@@ -2353,8 +2353,16 @@ enrollment with no signing key of its own signs with its APKAM authentication
 key, and that is the key `_apsk` advertises for exactly as long as it is the
 signer. It is **not** retained once the enrollment holds signing keys
 ([`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
-ruling 2): a key is retained for what it *signed*, and an enrollment holding
-signing keys held them from birth. Naming an algorithm this build
+ruling 2): a key is retained for what it *signed*, and the premise is that the
+authentication key signed nothing that outlives the transition. ⚠️ **That
+premise, not "an enrollment holding signing keys held them from birth", is the
+reason — the latter is false in general and stood here as the justification
+until 2026-09-08.** What makes the premise hold is that a posture move
+**replaces** the enrollment: a credential whose posture wants a stronger
+authentication algorithm retrofits into a new enrollment owning a data signing
+key from birth, and the superseded enrollment keeps its own `_apsk` record, so
+what its authentication key signed goes on verifying
+([`decisions.md` 134](detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08)). Naming an algorithm this build
 produces no envelope signature for is refused at construction rather than
 skipped. The reasoning for each of those is in
 [`decisions.md` 91.3](detail/decisions.md#913-the-rulings) ruling 16.

@@ -197,9 +197,15 @@ mixin ApkamSigning {
   /// Two jobs, one key, for as long as an enrollment holds no signing material
   /// of its own: it authenticates the connection and it signs what the
   /// enrollment attests to. Once signing keys exist it stops doing the second
-  /// job and drops out of the advertisement entirely ([apskEntries]) — an
-  /// enrollment that holds signing keys held them from birth, so this key
-  /// signed nothing that outlives the transition.
+  /// job and drops out of the advertisement entirely ([apskEntries]), on the
+  /// premise that nothing it signed outlives the transition.
+  ///
+  /// ⚠️ **The premise holds because a posture move replaces the enrollment**,
+  /// and this said "held them from birth" as though it were universal until
+  /// 2026-09-08. A credential whose posture wants a stronger authentication
+  /// algorithm retrofits into a new enrollment rather than reclassifying this
+  /// key, and the old enrollment's record keeps verifying what this key
+  /// signed.
   ApkamSigningKeys? get authenticationSigningKey {
     final keyPair = atClient.atChops?.atChopsKeys.atPkamKeyPair;
     if (keyPair == null) return null;

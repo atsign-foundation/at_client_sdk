@@ -13894,3 +13894,61 @@ last-fully-privileged refusal — are built.
 APPROVER links: a severed link orphans everything behind it, because nothing
 records ancestry beyond an enrollment's immediate approver, and
 `descendantsOf` says so itself.
+
+## 134. A posture move replaces the enrollment, so the authentication key is never retained (2026-09-08)
+
+**In brief:** *`_apsk` walks bare RSA to bare RSA to the array, and what carries
+history across the walk is the superseded enrollment's own record, not a
+retained key*
+
+**Ruled by gkc, 2026-09-08**, over a walk of the three postures. Supersedes
+[127](#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30).
+Confirms [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
+ruling 2 and replaces the justification it was given.
+
+**The stages, as `_apsk` reads them.**
+
+| posture | authentication key | data signing set | `_apsk` |
+|---|---|---|---|
+| `legacy` | `rsa2048` | empty | bare RSA — the authentication key, signing by fallback |
+| `pqReady` | `mldsa65` | `{rsa2048}` | bare RSA — the enrollment's own signing key |
+| `pqActive` | `mldsa65` | `{mldsa65}` | the array: `mldsa65` active, `rsa2048` retired |
+
+**A posture move REPLACES the enrollment rather than moving it, and that is
+what makes the deletion safe.** `AtClientImpl._settleEnrollmentIdentity` runs on
+the startup path before anything derived from the enrollment is built, and
+`retrofitIsDue` fires whenever the posture asks for a stronger authentication
+algorithm than the keyfile holds. So an `rsa2048` credential reaching `pqReady`
+or `pqActive` retrofits into a NEW enrollment that authenticates `mldsa65` and
+owns a data signing key from birth, on an `_apsk` record of its own. The old
+enrollment keeps its record, and its signatures keep verifying against it.
+
+**Measured, because the whole model rests on it (2026-09-08):** the atServer
+publishes `public:_apsk.<enrollmentId>.a.__e` with a plain `keyStore.put`
+carrying no TTL and no metadata, and no path in that tree deletes it — the only
+references are the four publish call sites and the composer. So the record
+outlives revocation, supersession and the expired-key sweep, which takes only
+keys carrying an expiry.
+
+**Consequently the authentication key is never retained, and the reason is the
+replacement, not a claim about birth.** The composer's *"an enrollment that
+holds signing keys held them from birth"* is false in general — the ledger says
+so beneath [114](#114-a-signer-waits-for-its-own-mint-the-mint-alone-does-not-superseded)
+— and it stood as the justification in the composer, in the signer, in
+`design.md` and in the catalogue until this ruling. Each now states the
+premise, and this ruling states why the premise holds.
+
+**`primary` can only ever exist as `legacy`.** Moving it to a PQ posture is a
+retrofit that produces a new enrollment, so a credential with no enrollment id
+never mints and never publishes a minted key under `primary`. That is what
+supersedes 127, whose *"a client with no enrollment"* group pins the opposite
+and is owed a rewrite.
+
+**Declined, with the reason recorded so it is not re-proposed.** Adopting the
+authentication keypair into the keyfile as typed signing material — so that a
+first mint could retire it rather than drop it — was designed in this walk and
+then dropped: the retrofit answers every default path, and adoption would have
+bought only the case where a caller pins `authenticationKeyAlgorithm` to
+`rsa2048` while moving the data signing set to `mldsa65`. That combination
+takes no retrofit, mints ML-DSA, and drops the RSA key that signed everything.
+It is left reachable and unfixed.

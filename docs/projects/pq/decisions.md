@@ -184,13 +184,14 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [124] | The signing root's mint lock is sized against starvation, not contention                     | 2026-08-28 | LIVE                      |
 | [125] | A Hive store's identity is its storage path, not its atSign                                  | 2026-08-28 | LIVE                      |
 | [126] | The mint barrier is deleted: legacy authentication and data signing are one keypair         | 2026-08-30 | AMENDED 2026-08-30        |
-| [127] | A client with no enrollment id still mints and publishes its own signing key                | 2026-08-30 | AMENDED 2026-08-30        |
+| [127] | A client with no enrollment id still mints and publishes its own signing key                | 2026-08-30 | SUPERSEDED by 134         |
 | [128] | A retrofit's successor holds its predecessor's grants                                       | 2026-08-31 | LIVE               |
 | [129] | Revocation cascades to descendants, and the roster does the rest                            | 2026-08-31 | LIVE               |
 | [130] | A revocation is discoverable per namespace                                                  | 2026-08-31 | LIVE               |
 | [131] | The protected header names the KEY, and the enrollment moves to `enid`                      | 2026-08-31 | LIVE               |
 | [132] | The keys name the enrollment, and `primary` names the atSign's own credential               | 2026-09-07 | LIVE               |
 | [133] | A revocation follows approval, and a replacement settles itself                             | 2026-09-08 | LIVE               |
+| [134] | A posture move replaces the enrollment, so the auth key is never retained                   | 2026-09-08 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -326,3 +327,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [131]: detail/decisions.md#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31
 [132]: detail/decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07
 [133]: detail/decisions.md#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08
+[134]: detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08

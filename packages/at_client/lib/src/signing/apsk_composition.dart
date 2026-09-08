@@ -38,12 +38,23 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 ///   retained.
 ///
 /// ⚠️ **The authentication key is never retained, and that asymmetry is the
-/// design rather than an oversight.** An enrollment that holds signing keys
-/// held them from birth, so its authentication key signs nothing that outlives
-/// the transition; retaining it would advertise a key with nothing to verify.
-/// This rests on a deployment premise — that no long-lived auth-key-signed
-/// material is extant — and if that turns out to be false the premise is what
-/// gets revisited, rather than this function growing a special case.
+/// design rather than an oversight.** A key is retained for what it signed,
+/// and the premise is that nothing this key signed outlives the transition;
+/// retaining it would advertise a key with nothing to verify.
+///
+/// ⚠️ **What makes that premise hold is that a posture move REPLACES the
+/// enrollment**, and this comment said "an enrollment holding signing keys held
+/// them from birth" — false in general — until 2026-09-08. A client whose
+/// posture asks for a stronger authentication algorithm than its keyfile holds
+/// retrofits into a new enrollment that owns a data signing key from birth and
+/// publishes under its own id; the old enrollment keeps its record, so what its
+/// authentication key signed goes on verifying against that record rather than
+/// needing a retained entry here.
+///
+/// ⚠️ **One configuration escapes it and is knowingly left unfixed:** pinning
+/// the authentication algorithm to `rsa2048` while the data signing set moves
+/// to `mldsa65` takes no retrofit, mints ML-DSA, and drops the RSA key that
+/// signed everything. Reaching it needs both axes set by hand.
 ///
 /// A key already listed as an active signer is not listed again as retired.
 /// One key described twice, once as current and once as withdrawn, is a

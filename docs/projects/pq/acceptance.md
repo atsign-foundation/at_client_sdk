@@ -4078,11 +4078,19 @@ is where its missing lever lives.
     no signing key of its own and never adds it to the withdrawn loop, so the
     moment a signing key exists the authentication key leaves the advertisement
     **outright, in one step** — and a test pins that as correct. The composer
-    states the reason: an enrollment that holds signing keys held them from
-    birth, so its authentication key signs nothing that outlives the transition,
-    and retaining it would advertise a key with nothing to verify. That rests on
-    a deployment premise — no long-lived auth-key-signed material extant — and
-    if the premise fails it is the premise that gets revisited;
+    states the reason: a key is retained for what it signed, and the premise is
+    that the authentication key signed nothing that outlives the transition, so
+    retaining it would advertise a key with nothing to verify. ⚠️ **The
+    composer's "an enrollment that holds signing keys held them from birth" is
+    false in general and stood here as the reason until 2026-09-08**: an
+    enrollment created without a data signing key has an auth-key-signed key
+    package, and a first mint strands it until the next start re-signs it. The
+    premise holds because a posture move **replaces** the enrollment: reaching a
+    PQ posture retrofits an rsa2048 credential into a new enrollment owning a
+    signing key from birth, and the superseded enrollment keeps its own `_apsk`
+    record — published with no TTL and deleted by nothing — so what its
+    authentication key signed goes on verifying
+    ([`decisions.md` 134](detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08));
   - ⚠️ **an nskey entry is never retired in place, and its retirement is
     GENERATIONAL.** A rotation simply does not mint that algorithm again, and
     what opens history is the previous generation's private, still held — not a
