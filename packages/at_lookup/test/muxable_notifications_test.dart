@@ -49,8 +49,7 @@ void main() {
   /// Not a stylistic choice: this is the shape every caller has at the end of
   /// this project, so testing through it is what proves the factory produces
   /// something fully usable without naming the concrete class. Reaching for
-  /// `AtLookupImpl(...)` here would test a constructor the plan is retiring
-  /// and would leave the factory's own seam unexercised.
+  /// `AtLookupImpl(...)` here would leave the factory's own seam unexercised.
   AtLookupMuxable build({AtAuthenticator? authenticator}) =>
       AtLookUp.withSecureSocket(
         atSign: '@alice',

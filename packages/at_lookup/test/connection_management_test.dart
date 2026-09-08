@@ -22,18 +22,6 @@ void main() {
     });
 
     test(
-        'test AtLookupImpl will use its default transport factory if none is provided to it',
-        () async {
-      AtLookupImpl atLookup = AtLookupImpl('@alice', 'test.test.test', 64,
-          secondaryAddressFinder: finder, transportFactory: null);
-
-      expect(atLookup.transportFactory.runtimeType.toString(),
-          "SecureSocketTransportFactory");
-      expect(() async => await atLookup.createConnection(),
-          throwsA(predicate((dynamic e) => e is SecondaryConnectException)));
-    });
-
-    test(
         'test AtLookupImpl closes invalid connections before creating new ones',
         () async {
       AtLookupImpl atLookup = AtLookupImpl('@alice', 'test.test.test', 64,

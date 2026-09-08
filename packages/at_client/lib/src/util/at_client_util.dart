@@ -3,24 +3,11 @@ import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:crypton/crypton.dart';
 
 class AtClientUtil {
-  @Deprecated('use RemoteSecondary.findSecondaryUrl')
-  static Future<String> findSecondary(
-      String toAtSign, String rootDomain, int rootPort) async {
-    var secondaryUrl =
-        await AtLookupImpl.findSecondary(toAtSign, rootDomain, rootPort);
-    if (secondaryUrl == null) {
-      throw SecondaryNotFoundException(
-          'No secondary url found for atsign: $toAtSign');
-    }
-    return secondaryUrl;
-  }
-
   static List<String> getSecondaryInfo(String? url) {
     var result = <String>[];
     if (url != null && url.contains(':')) {

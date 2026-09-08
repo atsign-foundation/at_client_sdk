@@ -9,7 +9,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
-import 'package:at_lookup/src/io/secure_socket_transport.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
 import 'package:mutex/mutex.dart';
@@ -124,8 +123,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// 10 minutes i.e. 600,000 milliseconds
   int? outboundConnectionTimeout;
 
-  late SecureSocketConfig _secureSocketConfig;
-
   late final AtTransportFactory transportFactory;
 
   late final AtLookupMessageListenerFactory socketListenerFactory;
@@ -156,39 +153,23 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @Deprecated('Use AtLookUp.withSecureSocket, which returns an '
       'AtLookupMuxable. Removed in the next major release.')
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
-      {this.privateKey,
+      {required this.secondaryAddressFinder,
+      required this.transportFactory,
+      this.privateKey,
       this.cramSecret,
-      SecondaryAddressFinder? secondaryAddressFinder,
-      SecureSocketConfig? secureSocketConfig,
       Map<String, dynamic>? clientConfig,
-      AtTransportFactory? transportFactory,
       AtLookupMessageListenerFactory? socketListenerFactory,
       AtLookupOutboundConnectionFactory? outboundConnectionFactory}) {
     _currentAtSign = atSign;
     _rootDomain = rootDomain;
     _rootPort = rootPort;
-    this.secondaryAddressFinder = secondaryAddressFinder ??
-        CacheableSecondaryAddressFinder(rootDomain, rootPort);
-    _secureSocketConfig = secureSocketConfig ?? SecureSocketConfig();
     // Stores the client configurations.
     // If client configurations are not available, defaults to empty map
     _clientConfig = clientConfig ?? {};
-    this.transportFactory = transportFactory ??
-        SecureSocketTransportFactory(secureSocketConfig: _secureSocketConfig);
     this.socketListenerFactory =
         socketListenerFactory ?? AtLookupMessageListenerFactory();
     this.outboundConnectionFactory =
         outboundConnectionFactory ?? AtLookupOutboundConnectionFactory();
-  }
-
-  @Deprecated('use CacheableSecondaryAddressFinder')
-  static Future<String?> findSecondary(
-      String atsign, String? rootDomain, int rootPort) async {
-    // temporary change to preserve backward compatibility and change the callers later on to use
-    // SecondaryAddressFinder.findSecondary
-    return (await CacheableSecondaryAddressFinder(rootDomain!, rootPort)
-            .findSecondary(atsign))
-        .toString();
   }
 
   @override

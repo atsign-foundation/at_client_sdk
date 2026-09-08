@@ -9,6 +9,7 @@ import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
 import 'package:at_server_status/at_server_status.dart';
@@ -32,6 +33,15 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   AtSignLogger logger = AtSignLogger('OnboardingCli');
   AtOnboardingPreference atOnboardingPreference;
   AtLookUp? _atLookUp;
+
+  /// An `AtLookupImpl` over TLS, addressed by [atOnboardingPreference]'s root
+  /// pair — the shape every construction site in this class needs.
+  AtLookupImpl _lookupForPreference() => AtLookupImpl(_atSign,
+      atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort,
+      secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort),
+      transportFactory: SecureSocketTransportFactory(
+          secureSocketConfig: SecureSocketConfig()));
 
   /// The object which controls what types of AtClients, NotificationServices
   /// and SyncServices get created when we call [AtClientManager.setCurrentAtSign].
@@ -152,11 +162,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     AtFileUtil.ensureWritable(File(atOnboardingPreference.atKeysFilePath!));
 
     // Ensure we have an AtLookUp instance and send from: command if using proxy
-    AtLookupImpl atLookUpImpl = AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
+    AtLookupImpl atLookUpImpl = _lookupForPreference();
 
     await _sendFromCommandIfUsingProxy(atLookUpImpl, context: 'onboard');
 
@@ -342,11 +348,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'appName and deviceName are mandatory for enrollment');
     }
 
-    _atLookUp ??= AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
+    _atLookUp ??= _lookupForPreference();
 
     AtEnrollmentRequest newClientEnrollmentRequest = AtEnrollmentRequest(
         atSign: _atSign,
@@ -358,8 +360,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
         apkamKeysExpiryDuration;
 
-    AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
-        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+    AtLookupImpl atLookUpImpl = _lookupForPreference();
 
     if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
@@ -386,11 +387,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     bool logProgress = true,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
   }) async {
-    _atLookUp ??= AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
+    _atLookUp ??= _lookupForPreference();
 
     if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
@@ -786,8 +783,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<bool> isOnboarded() async {
     if (_isUsingProxy) {
       // When using a proxy, try a simple lookup command that doesn't require auth
-      AtLookUp atLookUp = AtLookupImpl(_atSign,
-          atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+      AtLookUp atLookUp = _lookupForPreference();
       await _sendFromCommandIfUsingProxy(atLookUp, context: 'isOnboarded');
 
       try {

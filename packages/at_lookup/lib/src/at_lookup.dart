@@ -74,13 +74,16 @@ abstract interface class AtLookUp {
   /// here: a caller wanting the TLS defaults writes
   /// `secureSocketTransport(SecureSocketConfig())` and thereby states it,
   /// while a caller on another transport says nothing about TLS at all.
+  ///
+  /// [secondaryAddressFinder] is required for the same reason: the neutral
+  /// barrel cannot name a native implementation, so the caller supplies one.
   static AtLookupMuxable withSecureSocket({
     required String atSign,
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
     required AtLookupTransportFactories transport,
+    required SecondaryAddressFinder secondaryAddressFinder,
     Map<String, dynamic> clientConfig = const {},
-    SecondaryAddressFinder? secondaryAddressFinder,
   }) {
     return AtLookupImpl(
       atSign,

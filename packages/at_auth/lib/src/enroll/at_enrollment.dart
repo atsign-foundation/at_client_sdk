@@ -112,10 +112,13 @@ abstract class AtEnrollment {
   ///  To approve an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
+  /// const root = AtRootDomain.atsignDomain;
   /// final atLookup = AtLookUp.withSecureSocket(
   ///   atSign: '@alice',
-  ///   rootDomain: AtRootDomain.atsignDomain,
+  ///   rootDomain: root,
   ///   transport: secureSocketTransport(SecureSocketConfig()),
+  ///   secondaryAddressFinder:
+  ///       CacheableSecondaryAddressFinder(root.rootDomain, root.rootPort),
   ///   authenticator: authenticatorFor(keysIo, '@alice'),
   /// );
   ///
@@ -147,10 +150,13 @@ abstract class AtEnrollment {
   ///  To deny an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
+  /// const root = AtRootDomain.atsignDomain;
   /// final atLookup = AtLookUp.withSecureSocket(
   ///   atSign: '@alice',
-  ///   rootDomain: AtRootDomain.atsignDomain,
+  ///   rootDomain: root,
   ///   transport: secureSocketTransport(SecureSocketConfig()),
+  ///   secondaryAddressFinder:
+  ///       CacheableSecondaryAddressFinder(root.rootDomain, root.rootPort),
   ///   authenticator: authenticatorFor(keysIo, '@alice'),
   /// );
   ///
@@ -171,10 +177,13 @@ abstract class AtEnrollment {
   ///  To revoke an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
+  /// const root = AtRootDomain.atsignDomain;
   /// final atLookup = AtLookUp.withSecureSocket(
   ///   atSign: '@alice',
-  ///   rootDomain: AtRootDomain.atsignDomain,
+  ///   rootDomain: root,
   ///   transport: secureSocketTransport(SecureSocketConfig()),
+  ///   secondaryAddressFinder:
+  ///       CacheableSecondaryAddressFinder(root.rootDomain, root.rootPort),
   ///   authenticator: authenticatorFor(keysIo, '@alice'),
   /// );
   ///

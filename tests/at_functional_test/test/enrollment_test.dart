@@ -11,11 +11,20 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
 import 'sync_multiple_client_test.dart';
 import 'test_utils.dart';
+
+/// An `AtLookupImpl` over TLS — the only shape these tests construct.
+AtLookupImpl _lookup(String atSign, String rootDomain, int rootPort) =>
+    AtLookupImpl(atSign, rootDomain, rootPort,
+        secondaryAddressFinder:
+            CacheableSecondaryAddressFinder(rootDomain, rootPort),
+        transportFactory: SecureSocketTransportFactory(
+            secureSocketConfig: SecureSocketConfig()));
 
 void main() {
   TestUtils.isolateStorage('enrollment_test');
@@ -264,7 +273,7 @@ void main() {
           signingAlgo: SigningAlgoType.rsa2048); //random invalid OTP
       var atEnrollment = AtEnrollment.create();
       var newAtLookup =
-          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+          _lookup(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       expect(
           () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
           throwsA(predicate((dynamic e) =>
@@ -288,7 +297,7 @@ void main() {
           signingAlgo: SigningAlgoType.rsa2048);
       var atEnrollment = AtEnrollment.create();
       var newAtLookup =
-          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+          _lookup(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       var enrollmentResponse =
           await atEnrollment.submit(enrollmentRequest, newAtLookup);
       expect(enrollmentResponse.enrollmentId, isNotEmpty);
@@ -386,7 +395,7 @@ void main() {
       // Submit an enrollment request with at_auth package
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
-      AtLookUp atLookUp = AtLookupImpl(
+      AtLookUp atLookUp = _lookup(
           atSign,
           atClientManager.atClient.getPreferences()!.rootDomain,
           atClientManager.atClient.getPreferences()!.rootPort);
@@ -501,7 +510,7 @@ void main() {
       // Submit an enrollment request with at_auth package
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
-      AtLookUp atLookUp = AtLookupImpl(
+      AtLookUp atLookUp = _lookup(
           atSign,
           atClientManager.atClient.getPreferences()!.rootDomain,
           atClientManager.atClient.getPreferences()!.rootPort);
@@ -586,7 +595,7 @@ void main() {
       // Submit an enrollment request with at_auth package
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
-      AtLookUp atLookUp = AtLookupImpl(
+      AtLookUp atLookUp = _lookup(
           atSign,
           atClientManager.atClient.getPreferences()!.rootDomain,
           atClientManager.atClient.getPreferences()!.rootPort);
@@ -732,7 +741,7 @@ void main() {
       String random = Uuid().v4().hashCode.toString();
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       AtLookUp atLookUp =
-          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+          _lookup(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtClientManager atClientManager =
           await TestUtils.initAtClient(atSign, namespace);
@@ -858,7 +867,7 @@ void main() {
       // generates a fresh APKAM keypair and wraps its apkamSymmetricKey with
       // the atSign's default encryption public key.
       final random = Uuid().v4().hashCode;
-      final enrolleeLookup = AtLookupImpl(
+      final enrolleeLookup = _lookup(
           cramAtSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       final enrollResponse = await AtEnrollment.create().submit(
         AtEnrollmentRequest(

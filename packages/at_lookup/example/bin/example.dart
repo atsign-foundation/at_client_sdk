@@ -7,6 +7,7 @@
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 
 /// The example below demonstrate on how to use at_lookup package to interact with secondary server
 /// to execute the verbs.
@@ -17,6 +18,10 @@ void main() async {
     '@alice',
     'root.atsign.com',
     64,
+    secondaryAddressFinder:
+        CacheableSecondaryAddressFinder('root.atsign.com', 64),
+    transportFactory:
+        SecureSocketTransportFactory(secureSocketConfig: SecureSocketConfig()),
     privateKey: 'privateKey',
     cramSecret: 'cramSecret',
   );

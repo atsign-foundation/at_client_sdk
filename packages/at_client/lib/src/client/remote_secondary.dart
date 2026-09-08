@@ -150,7 +150,9 @@ class RemoteSecondary implements Secondary {
           transport: secureSocketTransport(secureSocketConfig),
           authenticator: null,
           secondaryAddressFinder:
-              AtClientManager.getInstance().secondaryAddressFinder,
+              AtClientManager.getInstance().secondaryAddressFinder ??
+                  CacheableSecondaryAddressFinder(
+                      preference.rootDomain, preference.rootPort),
           clientConfig: _getClientConfig(),
         );
     this.atLookUp.enrollmentId = enrollmentId;

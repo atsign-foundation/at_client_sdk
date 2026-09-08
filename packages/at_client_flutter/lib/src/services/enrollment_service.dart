@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -58,6 +59,13 @@ class FlutterEnrollmentService {
       request.atSign,
       request.rootDomain.rootDomain,
       request.rootDomain.rootPort,
+      secondaryAddressFinder: CacheableSecondaryAddressFinder(
+        request.rootDomain.rootDomain,
+        request.rootDomain.rootPort,
+      ),
+      transportFactory: SecureSocketTransportFactory(
+        secureSocketConfig: SecureSocketConfig(),
+      ),
     );
     try {
       atEnrollmentResponse = await _atEnrollment.submit(request, atLookup);

@@ -152,6 +152,9 @@ class AtAuthImpl implements AtAuth {
       // Installed a few lines below, once the algorithm has been resolved
       // from the keyfile.
       authenticator: null,
+      secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          atAuthRequest.rootDomain.rootDomain,
+          atAuthRequest.rootDomain.rootPort),
     );
     // A typed-material enrollment (a self-retrofit's) authenticates with its
     // own signing keypair and algorithm, resolved from the keyfile rather
@@ -260,6 +263,9 @@ class AtAuthImpl implements AtAuth {
       // Onboarding installs its own once it knows whether this is the CRAM
       // leg or the PKAM one.
       authenticator: null,
+      secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          atOnboardingRequest.rootDomain.rootDomain,
+          atOnboardingRequest.rootDomain.rootPort),
     );
 
     //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.

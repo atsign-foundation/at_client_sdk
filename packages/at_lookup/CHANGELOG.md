@@ -1,5 +1,12 @@
 ## 4.0.0-rc1
 
+- breaking: `AtLookupImpl` requires `secondaryAddressFinder` and
+  `transportFactory`, and no longer takes `secureSocketConfig` — that now
+  belongs to the transport factory. `AtLookUp.withSecureSocket` requires
+  `secondaryAddressFinder` too. Native callers can pass
+  `atLookupOverSecureSocket(...)` from `at_lookup_io.dart` instead.
+- breaking: `AtLookupImpl.findSecondary` is removed. Use a
+  `SecondaryAddressFinder`.
 - breaking: `MonitorClient` is removed. It has no replacement.
 - breaking: `AtLookupTransport` is now `AtLookupTransportFactories`. Callers
   using `secureSocketTransport(...)` are unaffected.

@@ -1,6 +1,7 @@
 import 'package:at_app_flutter/at_app_flutter.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_notify_flutter/screens/notify_screen.dart';
 import 'package:at_notify_flutter/services/notify_service.dart';
 import 'package:at_notify_flutter/utils/init_notify_service.dart';
@@ -132,9 +133,15 @@ class _SecondScreenState extends State<SecondScreen> {
     } else if (!atSignController.text.contains('@')) {
       atSignController.text = '@${atSignController.text}';
     }
-    // ignore: deprecated_member_use
-    var checkPresence = await AtLookupImpl.findSecondary(atSignController.text, AtEnv.rootDomain, 64);
-    return checkPresence != null;
+    try {
+      await CacheableSecondaryAddressFinder(
+        AtEnv.rootDomain,
+        64,
+      ).findSecondary(atSignController.text);
+      return true;
+    } on SecondaryNotFoundException {
+      return false;
+    }
   }
 
   void getAtSignAndInitializeNotify() async {

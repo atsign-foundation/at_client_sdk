@@ -41,10 +41,13 @@ Feel free to fork a copy of the source from the [GitHub Repo](https://github.com
 ### To get the instance of at_lookup
 
 ```dart
+const root = AtRootDomain.atsignDomain;
 final AtLookupMuxable atLookUp = AtLookUp.withSecureSocket(
   atSign: '@alice',
-  rootDomain: AtRootDomain.atsignDomain,
+  rootDomain: root,
   transport: secureSocketTransport(SecureSocketConfig()),
+  secondaryAddressFinder:
+      CacheableSecondaryAddressFinder(root.rootDomain, root.rootPort),
   // How this connection authenticates, as one closure. at_lookup holds no key
   // material of its own; at_auth builds an authenticator from whatever
   // credential you have - a keystore, an AtChops, or a bare private key.
