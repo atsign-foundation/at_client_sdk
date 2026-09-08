@@ -4,6 +4,9 @@
 
 - Document public keys — `AtKey.public`, signed-not-encrypted values, and the
   always-remote `plookup` read path (`references/12-remote-atserver.md`).
+- Document notification delivery confirmation — `send()` → `getStatus(id)` /
+  `fetch(id)`, the two-value status enum, and the expiration window
+  (`references/15-notifications.md`).
 
 ## 1.3.0 — 2026-07-31
 

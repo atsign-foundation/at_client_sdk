@@ -8,6 +8,7 @@ description: >
   CItem<T>, Query<T>, sub-collections, event streams, read receipts, wherePath
   typed predicates, or watchWithTree deep hierarchies. Also use when the
   developer asks how to send or receive notifications via NotificationService,
+  how to confirm a notification was delivered (getStatus / fetch),
   how to do request/response RPC between atsigns (AtRpc), how to run headless
   agents or CLIs (CLIBase) or coordinate multiple agent instances, how to read
   or write directly against the remote atServer (useRemoteAtServer), how to
@@ -20,8 +21,8 @@ license: BSD-3-Clause
 compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
-  version: "1.3.0"
-  last_modified: "Tue, 28 Jul 2026 00:00:00 GMT"
+  version: "1.4.0"
+  last_modified: "Tue, 08 Sep 2026 00:00:00 GMT"
 ---
 
 # atsign-dart-sdk Skill
@@ -398,7 +399,7 @@ These patterns are complementary and can coexist in the same app.
 
 ```dart
 // Send — returns the notification id; body is usually JSON
-await atClient.notificationService.send(
+final id = await atClient.notificationService.send(
   to: '@bob'.toAtsign(),
   namespace: 'sample.my_app',
   body: jsonEncode(payload),
@@ -411,9 +412,18 @@ atClient.notificationService
     .listen((n) => handle(n.value));
 ```
 
+Awaiting `send()` proves only that the notification was accepted for delivery,
+never that it arrived. When a notification carries an action that must not be
+silently lost, use the returned `id` with `getStatus(id)` — but note its status
+enum is only `delivered`/`undelivered`, so one `undelivered` reading is not a
+failure, and the poll deadline must sit inside the notification's `expiration`
+(15 minutes by default). `fetch(id)` gives the finer diagnosis.
+
 Read [references/10-architecture-guide.md](references/10-architecture-guide.md)
-for the full decision guide and the dockerstats Notifications+SQLite example.
-See `packages/at_client/example/bin/notifications.dart` for a minimal
+for the full decision guide and the dockerstats Notifications+SQLite example,
+and [references/15-notifications.md](references/15-notifications.md) for
+delivery confirmation. See
+`packages/at_client/example/bin/notifications.dart` for a minimal
 send/subscribe walkthrough.
 
 ---
