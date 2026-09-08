@@ -1320,7 +1320,7 @@ class AtClientImpl implements AtClient {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
       _logger.finer('ack received for streamId:$streamId');
-      remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
+      remoteSecondary.atLookUp.connection!.add(encryptedData);
       // `readResponse` rather than reaching through to the listener: this
       // path has already written the bytes to the socket itself, so it needs
       // the read half alone. The listener is not in at_lookup's barrel.

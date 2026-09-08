@@ -285,3 +285,20 @@ class SecondaryUrlFinder {
     }
   }
 }
+
+/// Opens the raw TLS socket [SecondaryUrlFinder] asks the atDirectory over.
+///
+/// Not an [AtTransportFactory]: the atDirectory exchange is a line protocol
+/// this class writes and reads directly, and it carries its
+/// [SecureSocketConfig] per call rather than per factory. It moves to
+/// `at_lookup_io.dart` with the finder it serves.
+class AtLookupSecureSocketFactory {
+  const AtLookupSecureSocketFactory();
+
+  Future<SecureSocket> createSocket(
+      String host, String port, SecureSocketConfig socketConfig,
+      {Duration? timeout}) async {
+    return await SecureSocketUtil.createSecureSocket(host, port, socketConfig,
+        timeout: timeout);
+  }
+}

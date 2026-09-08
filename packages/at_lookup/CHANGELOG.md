@@ -3,6 +3,15 @@
 - breaking: `MonitorClient` is removed. It has no replacement.
 - breaking: `AtLookupTransport` is now `AtLookupTransportFactories`. Callers
   using `secureSocketTransport(...)` are unaffected.
+- breaking: `AtConnection` no longer exposes a socket. `getSocket()` is gone —
+  read arriving bytes from `inbound`, write raw bytes with `add(List<int>)`,
+  and `write(String)` returns a `Future`. A connection is built over an
+  `AtTransport`, which an `AtTransportFactory` opens.
+- breaking: `AtLookupImpl`'s `secureSocketFactory` is now `transportFactory`
+  and takes an `AtTransportFactory`; `AtLookupSecureSocketListenerFactory` is
+  now `AtLookupMessageListenerFactory`. Anything constructing an
+  `OutboundConnectionImpl` itself changes with it, including code reaching
+  `src/connection/` through `implementation_imports`.
 
 ## 3.7.0-rc1
 
