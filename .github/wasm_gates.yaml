@@ -2,8 +2,8 @@
 #
 # Adding a package is one stanza — nothing in the package, nothing in CI. Gate a
 # package only once it is web-safe, so a gate holds a line rather than recording
-# a backlog: at_lookup and at_client own 6 and 7 offenders today, which is why
-# they are not here yet. at_utils joined below.
+# a backlog: at_client owns 7 offenders today, which is why it is not here yet.
+# at_utils and at_lookup joined below as each was ported.
 #
 # `ratchets` walk the import graph, `probe` compiles, `controls` keep the walk
 # honest. Baselines are one-way. See tools/wasm_shakedown/README.md for why.
@@ -88,3 +88,39 @@ at_utils:
       reaches_file: lib/src/networking/pseudo_server_socket.dart
       reaches_library: dart:io
       because: the native code it exists to quarantine
+
+at_lookup:
+  # Gated by the 4.0.0 transport split. at_lookup.dart holds AtLookUp, the
+  # AtConnection/AtTransport byte-channel seam and the address-finder interface;
+  # the TLS socket, the atDirectory lookup and the SecureSocketTransport that
+  # implements the seam moved to at_lookup_io.dart.
+  #
+  # Zero blocked packages on the first run. The neutral barrel reaches at_chops,
+  # at_commons, at_utils, meta and mutex, and the first two splits had already
+  # done the work: at_chops.dart and at_utils.dart are the neutral barrels of
+  # their own 4.0.0 majors, which is what keeps chalkdart off this graph.
+  # at_lookup stays in at_auth's blocked set above regardless -- at_auth imports
+  # at_lookup_io.dart at two sites.
+  ratchets:
+    - barrel: package:at_lookup/at_lookup.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      min_files_walked: 570
+  probe:
+    # at_lookup_io.dart is absent on purpose. dart compile wasm accepts dart:io
+    # and stubs it, so probing the io barrel would pass and prove nothing; the
+    # ratchet is what holds that line. The controls below assert the io barrel
+    # still holds what it isolates.
+    - package:at_lookup/at_lookup.dart
+  controls:
+    - barrel: package:at_lookup/at_lookup_io.dart
+      reaches_file: lib/src/io/secure_socket_util.dart
+      reaches_library: dart:io
+      because: the TLS socket construction it exists to quarantine
+
+    # A second island, not a duplicate of the first: the address path and the
+    # transport path are quarantined for different reasons, and one control on
+    # the socket util stays green with the finder gutted.
+    - barrel: package:at_lookup/at_lookup_io.dart
+      reaches_file: lib/src/io/cacheable_secondary_address_finder.dart
+      because: the raw-TLS atDirectory lookup, which has no browser equivalent
