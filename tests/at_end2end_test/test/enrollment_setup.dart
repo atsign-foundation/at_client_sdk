@@ -86,19 +86,15 @@ void main() {
   for (var currentAtSign in atSignList) {
     test('A test to submit and approve an enrollment for $currentAtSign',
         () async {
-      final _sw = Stopwatch()..start();
-      void _lap(String what) { print('PHASE $what ${_sw.elapsedMilliseconds}ms'); _sw.reset(); }
       // Set SPP at the start of enrollment tests to pass as OTP.
       await TestSuiteInitializer.getInstance().testInitializer(
           currentAtSign, namespace, 'pkam',
           enableInitialSync: false, posture: PqPosture.legacy);
-      _lap('initializer');
       // Switching back to an atSign restarts its sync, so stop it again.
       await _stopSync();
       // Set SPP into the Remote Secondary
       var atClient = AtClientManager.getInstance().atClient;
       var otp = (await atClient.getOTP()).response;
-      _lap('getOTP');
 
       // Submit an enrollment request with at_auth package
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
@@ -118,7 +114,6 @@ void main() {
           signingAlgo: SigningAlgoType.rsa2048);
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
-      _lap('submit');
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
@@ -129,7 +124,6 @@ void main() {
               auth: true);
       enrollmentFetchResponse =
           enrollmentFetchResponse?.replaceAll('data:', '');
-      _lap('enroll:fetch');
       Enrollment enrollment =
           Enrollment.fromJSON(jsonDecode(enrollmentFetchResponse!));
 
@@ -144,7 +138,6 @@ void main() {
       );
       expect(
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
-      _lap('approve');
 
       // Get AtChops from the AtAuthKeys
       AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
@@ -198,7 +191,6 @@ void main() {
           atClient.getPreferences()!.rootPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
-      _lap('authenticate');
       expect(atAuthResponse.isSuccessful, true);
       writeAtKeysToFile(currentAtSign, atAuthResponse.atAuthKeys!);
       print(
