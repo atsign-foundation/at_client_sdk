@@ -8,7 +8,7 @@ import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 

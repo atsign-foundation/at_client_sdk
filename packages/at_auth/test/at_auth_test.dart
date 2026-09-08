@@ -16,7 +16,7 @@ import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';

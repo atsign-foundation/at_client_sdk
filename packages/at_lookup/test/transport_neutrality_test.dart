@@ -5,12 +5,12 @@ import 'package:test/test.dart';
 /// `dart compile wasm` accepts `dart:io` and stubs it, so nothing in the
 /// toolchain fails when a native import lands in a library that claims to be
 /// web-safe. This walks the source instead. The `wasm_gates.yaml` stanza does
-/// it across the whole import graph; until at_lookup has one, this covers the
-/// directory the seam lives in.
+/// it across the whole import graph, including the packages `at_lookup.dart`
+/// pulls in; until at_lookup has one, this covers at_lookup's own sources.
 void main() {
   /// The `dart:` libraries that resolve on every platform. `dart:io` and
   /// `dart:ffi` are absent by construction; so are the web-only ones, because a
-  /// file under the seam has to compile both ways.
+  /// file outside `lib/src/io` has to compile both ways.
   const platformNeutral = {
     'dart:async',
     'dart:collection',
@@ -21,17 +21,20 @@ void main() {
     'dart:typed_data',
   };
 
-  test('lib/src/transport reaches only platform-neutral libraries', () {
-    final sources = Directory('lib/src/transport')
+  test('lib/src outside io reaches only platform-neutral libraries', () {
+    final sources = Directory('lib/src')
         .listSync(recursive: true)
         .whereType<File>()
-        .where((file) => file.path.endsWith('.dart'))
+        .where((file) =>
+            file.path.endsWith('.dart') &&
+            !file.path.contains('${Platform.pathSeparator}io'
+                '${Platform.pathSeparator}'))
         .toList();
 
     expect(sources, isNotEmpty,
-        reason: 'lib/src/transport holds no Dart sources — either the seam has '
-            'moved, or this suite is not running from the at_lookup package '
-            'root');
+        reason: 'lib/src holds no neutral Dart sources — either the package '
+            'has moved, or this suite is not running from the at_lookup '
+            'package root');
 
     final pattern = RegExp('''^\\s*(?:import|export)\\s+['"](dart:[a-z_]+)''');
     final offenders = [

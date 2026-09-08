@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:at_commons/at_commons.dart';
 
 import '../transport/at_transport.dart';
-import '../util/secure_socket_util.dart';
+import 'secure_socket_util.dart';
 
 /// TLS over TCP — the [AtTransport] `at_lookup` has always used, now behind the
 /// interface.

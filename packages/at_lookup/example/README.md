@@ -17,6 +17,8 @@ directory for usage of the at_lookup library.
 #### Initializing the atLookup Instance
 
 ```dart
+import 'package:at_lookup/at_lookup_io.dart';
+
 const root = AtRootDomain.atsignDomain;
 final atLookUp = AtLookUp.withSecureSocket(
   atSign: '@alice',

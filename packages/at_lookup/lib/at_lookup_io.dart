@@ -7,23 +7,26 @@
 /// asked for — which is the way a transport swap otherwise fails silently
 /// instead of failing to compile.
 ///
-/// ⚠️ **The connection path is transport-neutral; the atDirectory lookup is
-/// not yet.** `AtConnection` speaks `inbound`/`add` and no longer hands out a
-/// socket, so a WebSocket transport satisfies it. What still reaches
-/// `dart:io` from the neutral barrel is `CacheableSecondaryAddressFinder`,
-/// which resolves an atSign to a host over raw TLS. It moves here next; until
-/// it does, importing `at_lookup.dart` alone is not a web-safety claim.
+/// Both halves are here: the transport that carries the atServer session, and
+/// [CacheableSecondaryAddressFinder], which resolves an atSign to a host by
+/// asking the atDirectory over raw TLS. A caller that imports `at_lookup.dart`
+/// alone supplies both — its own [AtTransportFactory], and a
+/// [SecondaryAddressFinder] such as `ProxySecondaryAddressFinder`.
 library;
 
 import 'package:at_commons/at_commons.dart' show SecureSocketConfig;
 
 import 'at_lookup.dart';
+import 'src/io/cacheable_secondary_address_finder.dart'
+    show CacheableSecondaryAddressFinder;
 import 'src/io/secure_socket_transport.dart' show SecureSocketTransportFactory;
 
 export 'package:at_commons/at_commons.dart' show SecureSocketConfig;
 
 export 'at_lookup.dart';
+export 'src/io/cacheable_secondary_address_finder.dart';
 export 'src/io/secure_socket_transport.dart';
+export 'src/io/secure_socket_util.dart';
 
 /// TLS over TCP — the transport to pass to `AtLookUp.withSecureSocket` unless
 /// you are supplying your own.

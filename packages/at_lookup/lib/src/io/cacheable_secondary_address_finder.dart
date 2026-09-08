@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
-import 'package:at_lookup/src/util/lookup_util.dart';
 import 'package:at_utils/at_logger.dart';
+
+import '../cache/secondary_address_finder.dart';
+import '../util/lookup_util.dart';
+import 'secure_socket_util.dart';
 
 class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
   static const Duration defaultCacheDuration = Duration(hours: 1);

@@ -29,8 +29,14 @@ pub get
 #### Import in your application code
 
 ```dart
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 ```
+
+`at_lookup.dart` is the transport-neutral half: the verbs, `AtLookUp`,
+`AtConnection` and the `AtTransport` interfaces. `at_lookup_io.dart` adds the
+native TLS transport and the atDirectory lookup, and re-exports everything
+above, so it is the one to import unless you are supplying your own transport
+and address finder.
 
 ### Clone it from github
 
