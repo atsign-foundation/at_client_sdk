@@ -133,11 +133,13 @@ void main() {
         reason: 'the connection asking has proved possession of the atSign\'s '
             'own root credential and is unscoped, so there is nothing '
             'narrower to bound the first enrollment by');
-    expect(params['encryptedAPKAMSymmetricKey'], isNotNull,
-        reason: 'the atServer parks this request pending, so the client has to '
-            'approve it — and approving needs the encryption keys wrapped '
-            'under a symmetric key. An APKAM retrofit, which conveys nothing, '
-            'sends none');
+    expect(params['encryptedAPKAMSymmetricKey'], isNull,
+        reason: 'a retrofit conveys nothing — the keyfile already holds every '
+            'secret an approver would otherwise pass on — and the atServer '
+            'approves this request outright rather than parking it pending, '
+            'so there is no approval for a symmetric key to serve. It sent '
+            'one until 2026-09-08, purely so the client could approve its own '
+            'request against an atServer that parked it');
   }, timeout: Timeout(Duration(minutes: 2)));
 
   /// The control, and it can go red while the assertions above stay green: the

@@ -1,5 +1,15 @@
 ## 4.0.0-rc2
 
+- **BREAKING:** a self-enrollment no longer approves its own request, and no
+  longer sends `encryptedAPKAMSymmetricKey`. The atServer migrates a legacy
+  credential into an enrollment named `primary` and approves a retrofit of it
+  outright, so the `pending` answer the self-approval existed for no longer
+  comes back; measured live on 2026-09-08, where the server answered
+  `approved`. A `pending` answer is now denied and thrown whatever the session
+  names, which is what an atServer that does not auto-approve gets, and those
+  are not supported. The symmetric key existed only so the client could
+  approve itself, and the atServer requires one only for a request carrying an
+  otp.
 - **BREAKING:** `AtAuthRequest.enrollmentId` is removed. The keys decide which
   enrollment authenticates, through the new
   `AtKeys.enrollmentToAuthenticateAs()`: the one enrollment holding active

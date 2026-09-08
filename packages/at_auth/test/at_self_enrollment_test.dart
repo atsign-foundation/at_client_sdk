@@ -477,19 +477,18 @@ void main() {
   /// A PRE-ENROLLMENT atSign — one that holds no enrollment at all and
   /// authenticates with the flat `at_pkam_publickey`.
   ///
-  /// The atServer marks such a connection `pkamLegacy` and leaves its
-  /// enrollment id null, and its self-enrolment auto-approve is gated on an
-  /// APKAM-authenticated connection — so the request lands `pending` instead.
-  /// Measured against a live atServer, which then accepted an `enroll:approve`
-  /// for that id **on the same connection**, because it grants a connection
-  /// carrying no enrollment id full access.
+  /// The atServer migrates that credential into a real enrollment named
+  /// `primary` and answers a bare `pkam:` as it, so an `enroll:request` from
+  /// such a connection is a retrofit of `primary` and is approved outright.
+  /// The client therefore never approves its own request.
   ///
-  /// ⚠️ **`pending` has a second cause, and it must keep its old answer.** An
-  /// APKAM self-enrolment against an atServer too old to auto-approve it also
-  /// comes back `pending`, and that one is denied and thrown. The two arms
-  /// below differ in the session's enrollment id and in NOTHING else — same
-  /// keyfile shape, same request, same server responses.
-  group('a client holding no enrollment approves its own request', () {
+  /// ⚠️ **This group pinned the opposite until 2026-09-08**, when the
+  /// client's self-approval was removed after a live run showed the atServer
+  /// answering `approved`: it used to send a symmetric key wrapped to the
+  /// atSign's own encryption public key purely so it could approve itself
+  /// when the answer came back `pending`, and `pending` then had two causes
+  /// with two answers. It now has one answer whatever the session names.
+  group('a client holding no enrollment does not approve its own request', () {
     late final AtEncryptionKeyPair encryptionKeyPair;
     late final String selfEncryptionKey;
 
@@ -552,9 +551,22 @@ void main() {
         .captured
         .cast<String>();
 
-    test('it approves the enrollment it just created, over the same connection',
+    /// The session names no enrollment, and the atServer approves outright.
+    Future<(MockAtLookUp, AtAuthSession)> approvingFixture() async {
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write(atSign, keysFor());
+      return (
+        approvingLookUp(),
+        AtAuthSession(
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            atKeysIo: keysIo)
+      );
+    }
+
+    test('an approved answer is taken as it stands, with no second command',
         () async {
-      final (mock, session) = await fixture();
+      final (mock, session) = await approvingFixture();
 
       final response = await AtEnrollmentImpl().submit(
           AtSelfEnrollmentRequest(
@@ -564,21 +576,17 @@ void main() {
               namespaces: {'*': 'rw', '__manage': 'rw'}),
           mock);
 
-      expect(response.enrollStatus, EnrollmentStatus.approved,
-          reason: 'the atServer parked it pending because the auto-approve '
-              'branch needs an APKAM connection; approving it over the same '
-              'connection is what makes the retrofit land');
+      expect(response.enrollStatus, EnrollmentStatus.approved);
       final sent = commandsSent(mock);
-      expect(sent, hasLength(2));
-      expect(sent[0], startsWith('enroll:request:'));
-      expect(sent[1], startsWith('enroll:approve:'));
-      expect(jsonDecode(sent[1].substring('enroll:approve:'.length)),
-          containsPair('enrollmentId', 'new-123'));
+      expect(sent, hasLength(1),
+          reason: 'the atServer approves a retrofit of primary outright, so '
+              'there is nothing for the client to approve. A second command '
+              'here is the self-approval coming back');
+      expect(sent.single, startsWith('enroll:request:'));
     });
 
-    test('the request carries a wrapped symmetric key, because approving needs '
-        'one', () async {
-      final (mock, session) = await fixture();
+    test('the request carries no wrapped symmetric key', () async {
+      final (mock, session) = await approvingFixture();
 
       await AtEnrollmentImpl().submit(
           AtSelfEnrollmentRequest(
@@ -591,27 +599,19 @@ void main() {
       final params = jsonDecode(
               commandsSent(mock)[0].substring('enroll:request:'.length))
           as Map<String, dynamic>;
-      final wrapped = params['encryptedAPKAMSymmetricKey'] as String?;
-      expect(wrapped, isNotNull,
-          reason: 'enroll:approve requires the encryption private key and the '
-              'self-encryption key wrapped under a symmetric key, so there '
-              'has to be one — and an APKAM retrofit, which conveys nothing, '
-              'sends none');
-      // Wrapped to the atSign's OWN encryption public key, so the record keeps
-      // a copy this atSign can still recover. The approve leg unwrapping it
-      // successfully is what proves the wrap: a wrong key throws there.
-      expect(
-          utf8.decode((RsaEncryptionAlgo()
-                ..atPrivateKey = AtPrivateKey.fromString(
-                    encryptionKeyPair.atPrivateKey.privateKey))
-              .decrypt(base64Decode(wrapped!))),
-          isNotEmpty);
+      expect(params['encryptedAPKAMSymmetricKey'], isNull,
+          reason: 'a retrofit conveys nothing — the keyfile already holds '
+              'every secret an approver would pass on — and nothing approves '
+              'this request, so there is no approval for a symmetric key to '
+              'serve. The atServer requires one only for a request carrying '
+              'an otp');
     });
 
-    /// The control, and it can go red while every assertion above stays green:
-    /// same `pending` response, same keyfile shape, only the session's
-    /// enrollment id differs.
-    test('an APKAM retrofit meeting the same pending response is still denied',
+    /// A `pending` answer means an atServer that does not auto-approve, which
+    /// this client does not support. It is denied and thrown whatever the
+    /// session names — the two arms that used to differ here now do not,
+    /// which is what removing the self-approval means.
+    test('a pending answer is denied and thrown, whatever the session names',
         () async {
       final (mock, session) = await fixture(enrollmentId: 'legacy-1');
 
