@@ -1,6 +1,3 @@
-import 'dart:async';
-import 'dart:io';
-
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
@@ -8,43 +5,20 @@ import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'at_lookup_test_utils.dart';
-
-class MockOutboundConnectionImpl extends Mock
-    implements OutboundConnectionImpl {}
+import 'fake_at_server_transport.dart';
 
 void main() {
   group('test connection close and socket cleanup', () {
     late SecondaryAddressFinder finder;
-    late MockSecureSocketFactory mockSocketFactory;
+    late FakeAtServerTransportFactory transportFactory;
 
     setUp(() {
-      mockSocketNumber = 1;
-
       finder = MockSecondaryAddressFinder();
       when(() => finder.findSecondary(any())).thenAnswer((invocation) =>
           Future<SecondaryAddress>.value(
               SecondaryAddress('test.test.test', 12345)));
 
-      mockSocketFactory = MockSecureSocketFactory();
-      registerFallbackValue(SecureSocketConfig());
-      when(() =>
-              mockSocketFactory.createSocket('test.test.test', '12345', any()))
-          .thenAnswer((invocation) {
-        return Future<SecureSocket>.value(
-            createMockAtServerSocket('test.test.test', 12345));
-      });
-    });
-
-    test(
-        'test AtLookupImpl will use its default SecureSocketFactory if none is provided to it',
-        () async {
-      AtLookupImpl atLookup = AtLookupImpl('@alice', 'test.test.test', 64,
-          secondaryAddressFinder: finder, secureSocketFactory: null);
-
-      expect(atLookup.socketFactory.runtimeType.toString(),
-          "AtLookupSecureSocketFactory");
-      expect(() async => await atLookup.createConnection(),
-          throwsA(predicate((dynamic e) => e is SecondaryConnectException)));
+      transportFactory = FakeAtServerTransportFactory();
     });
 
     test('two callers racing through createConnection share one socket',
@@ -56,42 +30,35 @@ void main() {
         return SecondaryAddress('test.test.test', 12345);
       });
       AtLookupImpl atLookup = AtLookupImpl('@alice', 'test.test.test', 64,
-          secondaryAddressFinder: finder,
-          secureSocketFactory: mockSocketFactory);
+          secondaryAddressFinder: finder, transportFactory: transportFactory);
 
       await Future.wait([
         atLookup.createConnection(),
         atLookup.createConnection(),
       ]);
 
-      verify(() =>
-              mockSocketFactory.createSocket('test.test.test', '12345', any()))
-          .called(1);
-      expect(
-          (atLookup.connection!.getSocket() as MockSecureSocket).mockNumber, 1,
-          reason: 'the connection the lookup holds is the one socket opened; '
-              'a second would have replaced it while the first was the one '
-              'being authenticated');
+      expect(transportFactory.created, hasLength(1),
+          reason: 'the mutex serialises createConnection; a second racer '
+              'that opened its own transport would have replaced the '
+              'connection while the first was still the one being '
+              'authenticated');
     });
 
     test(
         'test AtLookupImpl closes invalid connections before creating new ones',
         () async {
       AtLookupImpl atLookup = AtLookupImpl('@alice', 'test.test.test', 64,
-          secondaryAddressFinder: finder,
-          secureSocketFactory: mockSocketFactory);
-      expect(atLookup.socketFactory.runtimeType.toString(),
-          "MockSecureSocketFactory");
+          secondaryAddressFinder: finder, transportFactory: transportFactory);
+      expect(atLookup.transportFactory.runtimeType.toString(),
+          "FakeAtServerTransportFactory");
 
       await atLookup.createConnection();
 
-      // let's get a handle to the first socket & connection
+      // let's get a handle to the first transport & connection
       OutboundConnection firstConnection = atLookup.connection!;
-      MockSecureSocket firstSocket =
-          firstConnection.getSocket() as MockSecureSocket;
+      FakeAtServerTransport firstTransport = transportFactory.created.single;
 
-      expect(firstSocket.mockNumber, 1);
-      expect(firstSocket.destroyed, false);
+      expect(firstTransport.destroyed, false);
       expect(firstConnection.metaData!.isClosed, false);
       expect(firstConnection.isInValid(), false);
 
@@ -105,17 +72,16 @@ void main() {
       // - create a new connection
       await atLookup.createConnection();
 
-      // has the first connection been closed, and its socket destroyed?
-      expect(firstSocket.destroyed, true);
+      // has the first connection been closed, and its transport destroyed?
+      expect(firstTransport.destroyed, true);
       expect(firstConnection.metaData!.isClosed, true);
 
-      // has a new connection been created, with a new socket?
+      // has a new connection been created, over a new transport?
       OutboundConnection secondConnection = atLookup.connection!;
-      MockSecureSocket secondSocket =
-          secondConnection.getSocket() as MockSecureSocket;
+      expect(transportFactory.created, hasLength(2));
+      FakeAtServerTransport secondTransport = transportFactory.last;
       expect(firstConnection.hashCode == secondConnection.hashCode, false);
-      expect(secondSocket.mockNumber, 2);
-      expect(secondSocket.destroyed, false);
+      expect(secondTransport.destroyed, false);
       expect(secondConnection.metaData!.isClosed, false);
       expect(secondConnection.isInValid(), false);
     });
@@ -123,54 +89,54 @@ void main() {
     test(
         'test message listener closes connection'
         ' when socket listener onDone is called', () async {
-      OutboundConnection oc = OutboundConnectionImpl(
-          createMockAtServerSocket('test.test.test', 12345));
+      FakeAtServerTransport transport = FakeAtServerTransport();
+      OutboundConnection oc = OutboundConnectionImpl(transport);
       OutboundMessageListener oml = OutboundMessageListener(oc);
-      expect((oc.getSocket() as MockSecureSocket).destroyed, false);
+      expect(transport.destroyed, false);
       expect(oc.metaData?.isClosed, false);
       oml.onSocketDone();
-      expect((oc.getSocket() as MockSecureSocket).destroyed, true);
+      expect(transport.destroyed, true);
       expect(oc.metaData?.isClosed, true);
     });
 
     test(
         'test message listener closes connection'
         ' when socket listener onError is called', () async {
-      OutboundConnection oc = OutboundConnectionImpl(
-          createMockAtServerSocket('test.test.test', 12345));
+      FakeAtServerTransport transport = FakeAtServerTransport();
+      OutboundConnection oc = OutboundConnectionImpl(transport);
       OutboundMessageListener oml = OutboundMessageListener(oc);
-      expect((oc.getSocket() as MockSecureSocket).destroyed, false);
+      expect(transport.destroyed, false);
       expect(oc.metaData?.isClosed, false);
       oml.onSocketError('test');
-      expect((oc.getSocket() as MockSecureSocket).destroyed, true);
+      expect(transport.destroyed, true);
       expect(oc.metaData?.isClosed, true);
     });
 
     test('test can safely call connection.close() repeatedly', () async {
-      OutboundConnection oc = OutboundConnectionImpl(
-          createMockAtServerSocket('test.test.test', 12345));
+      FakeAtServerTransport transport = FakeAtServerTransport();
+      OutboundConnection oc = OutboundConnectionImpl(transport);
       OutboundMessageListener oml = OutboundMessageListener(oc);
-      expect((oc.getSocket() as MockSecureSocket).destroyed, false);
+      expect(transport.destroyed, false);
       expect(oc.metaData?.isClosed, false);
       await oml.closeConnection();
-      expect((oc.getSocket() as MockSecureSocket).destroyed, true);
+      expect(transport.destroyed, true);
       expect(oc.metaData?.isClosed, true);
 
-      (oc.getSocket() as MockSecureSocket).destroyed = false;
+      transport.destroyed = false;
       await oml.closeConnection();
       // Since the connection was already closed above,
       // we don't expect destroy to be called on the socket again
-      expect((oc.getSocket() as MockSecureSocket).destroyed, false);
+      expect(transport.destroyed, false);
       expect(oc.metaData?.isClosed, true);
     });
 
     test(
         'test that OutboundMessageListener.closeConnection will call'
         ' connection.close if the connection is idle', () async {
-      OutboundConnection oc = OutboundConnectionImpl(
-          createMockAtServerSocket('test.test.test', 12345));
+      FakeAtServerTransport transport = FakeAtServerTransport();
+      OutboundConnection oc = OutboundConnectionImpl(transport);
       OutboundMessageListener oml = OutboundMessageListener(oc);
-      expect((oc.getSocket() as MockSecureSocket).destroyed, false);
+      expect(transport.destroyed, false);
       expect(oc.metaData?.isClosed, false);
 
       expect(oc.isInValid(), false);
@@ -181,48 +147,46 @@ void main() {
 
       await oml.closeConnection();
 
-      expect((oc.getSocket() as MockSecureSocket).destroyed, true);
+      expect(transport.destroyed, true);
       expect(oc.metaData?.isClosed, true);
     });
 
     test(
         'test that OutboundMessageListener.closeConnection will not call'
         ' connection.close if already marked closed', () async {
-      OutboundConnection oc = OutboundConnectionImpl(
-          createMockAtServerSocket('test.test.test', 12345));
+      FakeAtServerTransport transport = FakeAtServerTransport();
+      OutboundConnection oc = OutboundConnectionImpl(transport);
       OutboundMessageListener oml = OutboundMessageListener(oc);
-      expect((oc.getSocket() as MockSecureSocket).destroyed, false);
+      expect(transport.destroyed, false);
       oc.metaData!.isClosed = true;
 
       await oml.closeConnection();
 
       // socketDestroyed will be set in these tests only if socket.destroy() is called
-      expect((oc.getSocket() as MockSecureSocket).destroyed, false);
+      expect(transport.destroyed, false);
     });
 
     test(
         'test that OutboundMessageListener.closeConnection will call'
         ' connection.close even if the connection is marked stale', () async {
-      OutboundConnection oc = OutboundConnectionImpl(
-          createMockAtServerSocket('test.test.test', 12345));
+      FakeAtServerTransport transport = FakeAtServerTransport();
+      OutboundConnection oc = OutboundConnectionImpl(transport);
       OutboundMessageListener oml = OutboundMessageListener(oc);
-      expect((oc.getSocket() as MockSecureSocket).destroyed, false);
+      expect(transport.destroyed, false);
       expect(oc.metaData?.isClosed, false);
       oc.metaData!.isStale = true;
 
       await oml.closeConnection();
 
-      expect((oc.getSocket() as MockSecureSocket).destroyed, true);
+      expect(transport.destroyed, true);
       expect(oc.metaData?.isClosed, true);
     });
   });
 
   // In order to reduce duplicated test code, creating test functions which will be used in two ways. See test groups below.
   testOne(Duration? delayBeforeClose) async {
-    Socket mockSocket = MockSecureSocket();
-    when(() => mockSocket.setOption(SocketOption.tcpNoDelay, true))
-        .thenAnswer((_) => true);
-    OutboundConnection connection = OutboundConnectionImpl(mockSocket);
+    OutboundConnection connection =
+        OutboundConnectionImpl(FakeAtServerTransport());
     OutboundMessageListener outboundMessageListener =
         OutboundMessageListener(connection);
 
@@ -249,10 +213,8 @@ void main() {
   }
 
   testTwo(Duration? delayBeforeClose) async {
-    Socket mockSocket = MockSecureSocket();
-    when(() => mockSocket.setOption(SocketOption.tcpNoDelay, true))
-        .thenAnswer((_) => true);
-    OutboundConnection connection = OutboundConnectionImpl(mockSocket);
+    OutboundConnection connection =
+        OutboundConnectionImpl(FakeAtServerTransport());
     OutboundMessageListener outboundMessageListener =
         OutboundMessageListener(connection);
 
@@ -278,10 +240,8 @@ void main() {
   }
 
   testThree(Duration? delayBeforeClose) async {
-    Socket mockSocket = MockSecureSocket();
-    when(() => mockSocket.setOption(SocketOption.tcpNoDelay, true))
-        .thenAnswer((_) => true);
-    OutboundConnection connection = OutboundConnectionImpl(mockSocket);
+    OutboundConnection connection =
+        OutboundConnectionImpl(FakeAtServerTransport());
     OutboundMessageListener outboundMessageListener =
         OutboundMessageListener(connection);
 

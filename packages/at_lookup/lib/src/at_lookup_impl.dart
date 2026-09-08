@@ -2,7 +2,6 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -11,6 +10,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_lookup/src/util/tls_connect.dart' show Abandonment;
+import 'package:at_lookup/src/io/secure_socket_transport.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
 import 'package:mutex/mutex.dart';
@@ -131,9 +131,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   late SecureSocketConfig _secureSocketConfig;
 
-  late final AtLookupSecureSocketFactory socketFactory;
+  late final AtTransportFactory transportFactory;
 
-  late final AtLookupSecureSocketListenerFactory socketListenerFactory;
+  late final AtLookupMessageListenerFactory socketListenerFactory;
 
   late AtLookupOutboundConnectionFactory outboundConnectionFactory;
 
@@ -166,8 +166,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       SecondaryAddressFinder? secondaryAddressFinder,
       SecureSocketConfig? secureSocketConfig,
       Map<String, dynamic>? clientConfig,
-      AtLookupSecureSocketFactory? secureSocketFactory,
-      AtLookupSecureSocketListenerFactory? socketListenerFactory,
+      AtTransportFactory? transportFactory,
+      AtLookupMessageListenerFactory? socketListenerFactory,
       AtLookupOutboundConnectionFactory? outboundConnectionFactory,
       this.onConnect}) {
     _currentAtSign = atSign;
@@ -179,9 +179,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // Stores the client configurations.
     // If client configurations are not available, defaults to empty map
     _clientConfig = clientConfig ?? {};
-    socketFactory = secureSocketFactory ?? AtLookupSecureSocketFactory();
+    this.transportFactory = transportFactory ??
+        SecureSocketTransportFactory(secureSocketConfig: _secureSocketConfig);
     this.socketListenerFactory =
-        socketListenerFactory ?? AtLookupSecureSocketListenerFactory();
+        socketListenerFactory ?? AtLookupMessageListenerFactory();
     this.outboundConnectionFactory =
         outboundConnectionFactory ?? AtLookupOutboundConnectionFactory();
   }
@@ -384,8 +385,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         var host = secondaryAddress.host;
         var port = secondaryAddress.port;
         //2. create a connection to secondary server
-        await createOutBoundConnection(
-            host, port.toString(), _currentAtSign, _secureSocketConfig);
+        await createOutBoundConnection(host, port.toString(), _currentAtSign);
         if (_closed) {
           // NOTE: close() has already run and cannot see this socket, so it
           // is destroyed here or not at all. Unset first: it has no listener,
@@ -901,19 +901,18 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         !(_connection!.getMetaData()!.isAuthenticated);
   }
 
-  Future<bool> createOutBoundConnection(String host, String port,
-      String toAtSign, SecureSocketConfig secureSocketConfig) async {
+  Future<bool> createOutBoundConnection(
+      String host, String port, String toAtSign) async {
     try {
-      SecureSocket secureSocket =
-          await socketFactory.createSocket(host, port, secureSocketConfig);
-      _connection =
-          outboundConnectionFactory.createOutboundConnection(secureSocket);
+      _connection = outboundConnectionFactory
+          .createOutboundConnection(await transportFactory.connect(host, port));
       if (outboundConnectionTimeout != null) {
         _connection!.setIdleTime(outboundConnectionTimeout);
       }
-    } on SocketException {
-      throw SecondaryConnectException(
-          'unable to connect to atServer for $toAtSign on $host:$port');
+    } on SecondaryConnectException catch (e) {
+      // The factory reports what it could not reach; only the caller knows
+      // whose atServer that was.
+      throw SecondaryConnectException('$toAtSign: ${e.message}');
     }
     return true;
   }
@@ -1453,19 +1452,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   String? enrollmentId;
 }
 
-class AtLookupSecureSocketFactory {
-  const AtLookupSecureSocketFactory();
-
-  Future<SecureSocket> createSocket(
-      String host, String port, SecureSocketConfig socketConfig,
-      {Duration? timeout}) async {
-    return await SecureSocketUtil.createSecureSocket(host, port, socketConfig,
-        timeout: timeout);
-  }
-}
-
-class AtLookupSecureSocketListenerFactory {
-  const AtLookupSecureSocketListenerFactory();
+/// Builds the listener that reads an open connection.
+///
+/// Was `AtLookupSecureSocketListenerFactory`, which named a socket that
+/// appears nowhere in its signature - it takes a connection and returns a
+/// listener, both of which are transport-agnostic.
+class AtLookupMessageListenerFactory {
+  const AtLookupMessageListenerFactory();
 
   OutboundMessageListener createListener(
       OutboundConnection outboundConnection) {
@@ -1476,8 +1469,8 @@ class AtLookupSecureSocketListenerFactory {
 class AtLookupOutboundConnectionFactory {
   const AtLookupOutboundConnectionFactory();
 
-  OutboundConnection createOutboundConnection(SecureSocket secureSocket) {
-    return OutboundConnectionImpl(secureSocket);
+  OutboundConnection createOutboundConnection(AtTransport transport) {
+    return OutboundConnectionImpl(transport);
   }
 }
 

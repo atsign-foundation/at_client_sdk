@@ -5,7 +5,6 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
@@ -18,6 +17,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:at_utils/at_logger.dart';
 
 import 'at_lookup_test_utils.dart';
+import 'fake_at_server_transport.dart';
 
 class FakeAtSigningInput extends Fake implements AtSigningInput {}
 
@@ -26,12 +26,12 @@ void main() {
   late OutboundConnection mockOutBoundConnection;
   late SecondaryAddressFinder mockSecondaryAddressFinder;
   late OutboundMessageListener mockOutboundListener;
-  late AtLookupSecureSocketFactory mockSocketFactory;
-  late AtLookupSecureSocketListenerFactory mockSecureSocketListenerFactory;
+  late AtTransportFactory mockTransportFactory;
+  late AtLookupMessageListenerFactory mockSecureSocketListenerFactory;
   late AtLookupOutboundConnectionFactory mockOutboundConnectionFactory;
 
   late AtChops mockAtChops;
-  late SecureSocket mockSecureSocket;
+  late FakeAtServerTransport transport;
 
   String atServerHost = '127.0.0.1';
   int atServerPort = 12345;
@@ -40,23 +40,24 @@ void main() {
     mockOutBoundConnection = MockOutboundConnectionImpl();
     mockSecondaryAddressFinder = MockSecondaryAddressFinder();
     mockOutboundListener = MockOutboundMessageListener();
-    mockSocketFactory = MockSecureSocketFactory();
-    mockSecureSocketListenerFactory = MockSecureSocketListenerFactory();
+    mockTransportFactory = MockAtTransportFactory();
+    mockSecureSocketListenerFactory = MockMessageListenerFactory();
     mockOutboundConnectionFactory = MockOutboundConnectionFactory();
     mockAtChops = MockAtChops();
-    registerFallbackValue(SecureSocketConfig());
-    mockSecureSocket = createMockAtServerSocket(atServerHost, atServerPort);
+    transport =
+        FakeAtServerTransport(description: '$atServerHost:$atServerPort');
 
     when(() => mockSecondaryAddressFinder.findSecondary('@alice'))
         .thenAnswer((_) async {
       return SecondaryAddress(atServerHost, atServerPort);
     });
-    when(() => mockSocketFactory.createSocket(atServerHost, '12345', any()))
+    when(() => mockTransportFactory.connect(atServerHost, '12345'))
         .thenAnswer((invocation) {
-      return Future<SecureSocket>.value(mockSecureSocket);
+      return Future<AtTransport>.value(transport);
     });
-    when(() => mockOutboundConnectionFactory
-        .createOutboundConnection(mockSecureSocket)).thenAnswer((invocation) {
+    when(() =>
+            mockOutboundConnectionFactory.createOutboundConnection(transport))
+        .thenAnswer((invocation) {
       print('Creating mock outbound connection');
       return mockOutBoundConnection;
     });
@@ -67,7 +68,6 @@ void main() {
     });
     when(() => mockOutBoundConnection.write('from:@alice\n'))
         .thenAnswer((invocation) {
-      mockSecureSocket.write('from:@alice\n');
       return Future.value();
     });
   });
@@ -101,14 +101,12 @@ void main() {
       when(() => mockOutBoundConnection.write(
               'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:$pkamSignature\n'))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(
-            'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:$pkamSignature\n');
         return Future.value();
       });
 
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.atChops = mockAtChops;
@@ -137,14 +135,12 @@ void main() {
       when(() => mockOutBoundConnection.write(
               'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:$pkamSignature\n'))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(
-            'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:$pkamSignature\n');
         return Future.value();
       });
 
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.atChops = mockAtChops;
@@ -175,14 +171,12 @@ void main() {
       when(() => mockOutBoundConnection.write(
               'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:enrollmentId:$enrollmentIdFromServer:$pkamSignature\n'))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(
-            'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:enrollmentId:$enrollmentIdFromServer:$pkamSignature\n');
         return Future.value();
       });
 
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.atChops = mockAtChops;
@@ -212,14 +206,12 @@ void main() {
       when(() => mockOutBoundConnection.write(
               'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:enrollmentId:$enrollmentIdFromServer:$pkamSignature\n'))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(
-            'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:enrollmentId:$enrollmentIdFromServer:$pkamSignature\n');
         return Future.value();
       });
 
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.atChops = mockAtChops;
@@ -260,7 +252,6 @@ void main() {
           '$enrollmentClause$pkamSignature\n';
       when(() => mockOutBoundConnection.write(command))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(command);
         return Future.value();
       });
       return metaData;
@@ -269,7 +260,7 @@ void main() {
     AtLookupImpl newAtLookup() {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.atChops = mockAtChops;
@@ -329,7 +320,7 @@ void main() {
     test('executeCommand - from verb - auth false', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       final fromResponse =
@@ -344,7 +335,7 @@ void main() {
         () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       final fromResponse = 'data:1234';
@@ -359,7 +350,7 @@ void main() {
     test('executeCommand -llookup verb - auth true - at_chops set', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.atChops = mockAtChops;
@@ -367,7 +358,6 @@ void main() {
       final llookupResponse = 'data:1234';
       when(() => mockOutBoundConnection.write(llookupCommand))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(llookupCommand);
         return Future.value();
       });
       when(() => mockOutboundListener.read())
@@ -379,7 +369,7 @@ void main() {
     test('executeCommand - test non json error handling', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.atChops = mockAtChops;
@@ -387,7 +377,6 @@ void main() {
       final llookupResponse = 'error:AT0015-Exception: fubar';
       when(() => mockOutBoundConnection.write(llookupCommand))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(llookupCommand);
         return Future.value();
       });
       when(() => mockOutboundListener.read())
@@ -401,7 +390,7 @@ void main() {
     test('executeCommand - test json error handling', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.atChops = mockAtChops;
@@ -410,7 +399,6 @@ void main() {
           'error:{"errorCode":"AT0015","errorDescription":"Exception: fubar"}';
       when(() => mockOutBoundConnection.write(llookupCommand))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(llookupCommand);
         return Future.value();
       });
       when(() => mockOutboundListener.read())
@@ -426,7 +414,7 @@ void main() {
     test('validate EnrollVerbHandler behaviour - request', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
 
@@ -446,7 +434,6 @@ void main() {
 
       when(() => mockOutBoundConnection.write(enrollCommand))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(enrollCommand);
         return Future.value();
       });
       when(() => mockOutboundListener.read())
@@ -464,7 +451,7 @@ void main() {
     test('validate behaviour with EnrollVerbHandler - approve', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.atChops = mockAtChops;
@@ -485,7 +472,6 @@ void main() {
 
       when(() => mockOutBoundConnection.write(enrollCommand))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(enrollCommand);
         return Future.value();
       });
       when(() => mockOutboundListener.read())
@@ -502,7 +488,7 @@ void main() {
     test('validate behaviour with EnrollVerbHandler - revoke', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.atChops = mockAtChops;
@@ -517,7 +503,6 @@ void main() {
 
       when(() => mockOutBoundConnection.write(enrollCommand))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(enrollCommand);
         return Future.value();
       });
       when(() => mockOutboundListener.read())
@@ -534,7 +519,7 @@ void main() {
     test('validate behaviour with EnrollVerbHandler - deny', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,
           secondaryAddressFinder: mockSecondaryAddressFinder,
-          secureSocketFactory: mockSocketFactory,
+          transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
           outboundConnectionFactory: mockOutboundConnectionFactory);
       atLookup.atChops = mockAtChops;
@@ -549,7 +534,6 @@ void main() {
 
       when(() => mockOutBoundConnection.write(enrollCommand))
           .thenAnswer((invocation) {
-        mockSecureSocket.write(enrollCommand);
         return Future.value();
       });
       when(() => mockOutboundListener.read())

@@ -7,14 +7,12 @@
 /// asked for — which is the way a transport swap otherwise fails silently
 /// instead of failing to compile.
 ///
-/// ⚠️ **Importing this library is not yet the only thing standing between
-/// at_lookup and a non-socket transport, and it does not claim to be.**
-/// `AtConnection` still exposes `Socket getSocket()`, which the message
-/// listener calls and which every `implements AtConnection` would have to
-/// drop. Until that member goes, a transport built on anything other than a
-/// socket cannot satisfy the connection type this one produces. What this
-/// split buys is that the shape is already right when that change lands,
-/// rather than the change also having to remove a default.
+/// ⚠️ **The connection path is transport-neutral; the atDirectory lookup is
+/// not yet.** `AtConnection` speaks `inbound`/`add` and no longer hands out a
+/// socket, so a WebSocket transport satisfies it. What still reaches
+/// `dart:io` from the neutral barrel is `CacheableSecondaryAddressFinder`,
+/// which resolves an atSign to a host over raw TLS. It moves here next; until
+/// it does, importing `at_lookup.dart` alone is not a web-safety claim.
 library;
 
 import 'package:at_commons/at_commons.dart'
@@ -28,6 +26,7 @@ import 'src/at_lookup.dart'
         AtLookUpFactory,
         AtLookupTransport;
 import 'src/cache/secondary_address_finder.dart' show SecondaryAddressFinder;
+import 'src/io/secure_socket_transport.dart' show SecureSocketTransportFactory;
 
 export 'at_lookup.dart';
 export 'src/io/secure_socket_transport.dart';
@@ -41,7 +40,9 @@ export 'src/io/secure_socket_transport.dart';
 /// a site inherit settings its neighbour set deliberately.
 AtLookupTransport secureSocketTransport(
         SecureSocketConfig secureSocketConfig) =>
-    AtLookupTransport(secureSocketConfig: secureSocketConfig);
+    AtLookupTransport(
+        transportFactory: SecureSocketTransportFactory(
+            secureSocketConfig: secureSocketConfig));
 
 /// The default [AtLookUpFactory]: every connection over TLS on TCP, under
 /// [config] (the TLS defaults with none), through `AtLookUp.withSecureSocket`.

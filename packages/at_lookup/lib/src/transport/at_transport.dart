@@ -53,6 +53,10 @@ abstract interface class AtTransport {
 abstract interface class AtTransportFactory {
   /// Opens a channel to [host] on [port], giving up after [timeout].
   ///
-  /// Throws `SecondaryConnectException` if the far end cannot be reached.
+  /// Throws `SecondaryConnectException` if the far end cannot be reached. This
+  /// is part of the contract, not a description of one implementation: an
+  /// implementation that lets its own failure type escape — a `SocketException`,
+  /// a `WebSocketException` — escapes `AtLookupImpl.createOutBoundConnection`
+  /// uncaught and loses the atSign the connection was being opened for.
   Future<AtTransport> connect(String host, String port, {Duration? timeout});
 }

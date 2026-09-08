@@ -7,41 +7,30 @@ import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
 import 'at_lookup_test_utils.dart';
-import 'fake_at_server_socket.dart';
+import 'fake_at_server_transport.dart';
 import 'holds_none_of.dart';
 
 /// `cramAuthenticate` over a real connection and listener on a
-/// [FakeAtServerSocket] that answers `from:` and refuses the `cram:`.
+/// [FakeAtServerTransport] that answers `from:` and refuses the `cram:`.
 void main() {
   const atSign = '@alice';
   const host = '127.0.0.1';
   const port = 12345;
 
-  late List<FakeAtServerSocket> sockets;
+  late FakeAtServerTransportFactory transportFactory;
   late AtLookupMuxable atLookup;
 
   setUp(() {
-    sockets = [];
+    transportFactory = FakeAtServerTransportFactory();
     final addressFinder = MockSecondaryAddressFinder();
-    final socketFactory = MockSecureSocketFactory();
-    registerFallbackValue(SecureSocketConfig());
     when(() => addressFinder.findSecondary(atSign))
         .thenAnswer((_) async => SecondaryAddress(host, port));
-    when(() => socketFactory.createSocket(host, '$port', any()))
-        .thenAnswer((_) async {
-      final socket = FakeAtServerSocket();
-      sockets.add(socket);
-      return socket;
-    });
     atLookup = AtLookUp.withSecureSocket(
       atSign: atSign,
       rootDomain: const AtRootDomain(host, 64),
       authenticator: null,
       secondaryAddressFinder: addressFinder,
-      transport: AtLookupTransport(
-        secureSocketConfig: SecureSocketConfig(),
-        socketFactory: socketFactory,
-      ),
+      transport: AtLookupTransport(transportFactory: transportFactory),
     );
   });
 
@@ -51,7 +40,7 @@ void main() {
   Future<String> sent(String verb) async {
     final deadline = DateTime.now().add(const Duration(seconds: 5));
     while (true) {
-      for (final command in sockets.expand((s) => s.written)) {
+      for (final command in transportFactory.created.expand((t) => t.written)) {
         if (command.startsWith(verb)) return command;
       }
       if (DateTime.now().isAfter(deadline)) fail('no $verb was sent');
@@ -75,10 +64,10 @@ void main() {
           .cramAuthenticate(secret)
           .then<Object?>((_) => null, onError: (Object e) => e);
       await sent('from:');
-      await sockets.single.serverSends(
+      await transportFactory.created.single.serverSends(
           'data:_${const Uuid().v4()}$atSign:${const Uuid().v4()}\n');
       final digest = (await sent('cram:')).substring('cram:'.length).trim();
-      await sockets.single.serverSends('$reason\n');
+      await transportFactory.created.single.serverSends('$reason\n');
       final error = await thrown;
 
       expect('$error', holdsNoneOf(secret),
