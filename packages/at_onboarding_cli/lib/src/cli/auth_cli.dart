@@ -8,7 +8,6 @@ import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/util/home_directory_util.dart';

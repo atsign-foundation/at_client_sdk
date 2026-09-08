@@ -5,7 +5,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 
 /// Requests for an enrollment

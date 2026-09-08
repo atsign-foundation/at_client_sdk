@@ -1,4 +1,3 @@
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 
 void main(List<String> arguments) async {
