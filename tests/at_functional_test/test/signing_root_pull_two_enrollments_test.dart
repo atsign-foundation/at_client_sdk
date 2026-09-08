@@ -92,7 +92,13 @@ void main() {
         approver: approver,
         atSign: atSign,
         namespace: namespace,
-        preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+        // `legacyPlusPqProviders`, not `PqPosture.legacy`: these clients have to
+        // ANSWER and COLLECT over the envelope channel, and a posture configuring
+        // no post-quantum providers runs none of that startup. The authentication
+        // algorithm stays rsa2048 here, so no retrofit fires and the enrollment id
+        // is still stable — which is what `PqPosture.legacy` was being used for.
+        preference:
+            TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',

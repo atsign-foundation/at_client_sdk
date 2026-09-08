@@ -27,6 +27,10 @@ test/testData/rf2b-t5@*.atKeys
 test/testData/rf2d-posture@*.atKeys
 # FileAtKeysIo.flush keeps the previous state recoverable beside the keyfile.
 test/testData/*.atKeys.bak
+# The copy FileAtKeysIo keeps when a keyfile stops being the flat shape a
+# published build reads. Unlike the rolling .bak it is written once and never
+# overwritten, so a run leaves one per keyfile it upgraded.
+test/testData/*.atKeys.pre-v1
 
 # AtKeysFileLock leaves these beside a keyfile during a run. Untracked and
 # unignored, they are one `git add -A` away from being committed - which is
