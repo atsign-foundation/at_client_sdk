@@ -33,6 +33,23 @@ class AtKeysFileLock {
   /// How long to keep retrying before giving up with a [FileSystemException].
   /// Bounded, because an unbreakable wait inside key-material code turns a
   /// stuck sibling process into a hung app with no diagnosis.
+  ///
+  /// ⚠️ **The default stays BELOW [staleAfter], and that is deliberate: a
+  /// waiter that outlasts the staleness window breaks the lock of a holder
+  /// that is still alive.** Raising it to 35 seconds against a 30 second
+  /// staleness was tried on 2026-09-08 and reverted — `at_keys_update_test`'s
+  /// *update must not be called from inside another update* stopped throwing,
+  /// because the re-entrant acquire waited out the window and took the lock
+  /// its own caller was holding. Two writers in the critical section is the
+  /// one thing this class exists to prevent.
+  ///
+  /// ⚠️ **The cost of that ordering is real and unfixed.** An abandoned lock
+  /// fails every acquire for the whole staleness window rather than being
+  /// waited out, because no single acquire lives long enough to break it.
+  /// Measured on a CI run: one abandoned lock failed every keyfile write for
+  /// exactly thirty seconds, across five namespaces. Closing that needs the
+  /// staleness signal to distinguish a dead holder from a slow one — a
+  /// heartbeat that a live holder refreshes — rather than a longer wait.
   final Duration timeout;
 
   /// The age past which a held lock is presumed abandoned and broken.
