@@ -1,5 +1,8 @@
 ## 4.0.0-rc1
-
+- breaking: `CacheableSecondaryAddressFinder` and `SecureSocketUtil` now come
+  from `at_lookup_io.dart`, not `at_lookup.dart`.
+- feat: `ProxySecondaryAddressFinder` resolves every atSign to one fixed
+  address, for clients reaching an atServer through a reverse proxy.
 - breaking: `AtLookupImpl` requires `secondaryAddressFinder` and
   `transportFactory`, and no longer takes `secureSocketConfig` — that now
   belongs to the transport factory. `AtLookUp.withSecureSocket` requires
