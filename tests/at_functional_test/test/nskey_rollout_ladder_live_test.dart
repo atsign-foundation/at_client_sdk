@@ -145,7 +145,11 @@ void main() {
     // so a holder that is not listening never sees a request that arrives
     // after its own start. Without this the conveyance phases below cannot
     // pass however long they wait.
-    await AtClientSecretSharing.forClient(old.client).startListening();
+    // Only the rollout-1 install listens from here: it must receive the
+    // answers to its asks. The older install starts listening after state 1
+    // below. A listening holder answers a request in the first sweep that
+    // sees it, and on a slow runner that answer has landed inside the very
+    // read state 1 expects to miss.
     await AtClientSecretSharing.forClient(rolled.client).startListening();
     addTearDown(() {
       AtClientSecretSharing.forClient(old.client).stopListening();
@@ -269,8 +273,14 @@ void main() {
             'holder to answer — `privateHalf` broadcasts an ask and returns '
             'the miss, so the caller sees it now and retries later');
 
+    // The holder listens only from here. Its start-up sweep answers the
+    // requests its sync has pulled, and every ask so far — the rollout-1
+    // install's own start, its add to the generation, the miss above — is
+    // still in its store, unswept and so unanswered.
+    await AtClientSecretSharing.forClient(old.client).startListening();
+
     // ── state 2 of 3: CONVEYED, NOT FILED ──
-    // The ask fired by the miss above is answered by `old`, which holds it.
+    // The asks above are answered by `old`, which holds the private.
     // The answer lands in the transit store; nothing files it mid-session,
     // which is the gap a standing conveyance subscriber would close.
     Secret? conveyed;

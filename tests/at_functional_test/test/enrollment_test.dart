@@ -236,14 +236,23 @@ void main() {
       // 4. Assert that SPP is set successfully.
       var otp = (await atClientManager.atClient.getOTP()).response;
 
-      // 4.a Close open connection to start an unauthenticated connection.
-      atClientManager.atClient.getRemoteSecondary()?.atLookUp.close();
-      // 5. Send enrollment request
+      // 5. Send the enrollment request on a connection of the test's own.
+      // NOTE: the client's connection authenticates as the enrollment set in
+      // step 3 as soon as its background work needs the atServer (the first
+      // local write fetches that enrollment's record over it), and an
+      // enroll:request arriving on an enrolled connection is judged a
+      // self-enrollment rather than a new one.
       enrollRequest =
           'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${freshApkamPair().publicKey}", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
-      String? serverResponse = await atClientManager.atClient
-          .getRemoteSecondary()
-          ?.executeCommand(enrollRequest, auth: false);
+      final requestLookup =
+          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      String? serverResponse;
+      try {
+        serverResponse =
+            await requestLookup.executeCommand(enrollRequest, auth: false);
+      } finally {
+        await requestLookup.close();
+      }
       serverResponse = serverResponse?.replaceAll('data:', '');
       Map decodedServerResponse = jsonDecode(serverResponse!);
       expect(decodedServerResponse['status'], 'pending');
