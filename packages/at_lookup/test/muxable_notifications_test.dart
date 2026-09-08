@@ -68,7 +68,7 @@ void main() {
         rootDomain: const AtRootDomain(host, 64),
         authenticator: authenticator,
         secondaryAddressFinder: addressFinder,
-        transport: AtLookupTransport(
+        transport: AtLookupTransportFactories(
           secureSocketConfig: SecureSocketConfig(),
           socketFactory: socketFactory,
         ),

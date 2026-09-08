@@ -1,6 +1,8 @@
 ## 4.0.0-rc1
 
 - breaking: `MonitorClient` is removed. It has no replacement.
+- breaking: `AtLookupTransport` is now `AtLookupTransportFactories`. Callers
+  using `secureSocketTransport(...)` are unaffected.
 
 ## 3.7.0-rc1
 

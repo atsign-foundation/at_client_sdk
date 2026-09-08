@@ -78,7 +78,7 @@ abstract interface class AtLookUp {
     required String atSign,
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
-    required AtLookupTransport transport,
+    required AtLookupTransportFactories transport,
     Map<String, dynamic> clientConfig = const {},
     SecondaryAddressFinder? secondaryAddressFinder,
   }) {
@@ -399,7 +399,6 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   set heartbeatResponseTimeout(Duration value);
 }
 
-
 /// How an [AtLookupMuxable] makes connections: the three factories
 /// `AtLookupImpl` has always accepted, bundled into one value.
 ///
@@ -421,7 +420,7 @@ abstract interface class AtLookupMuxable implements AtLookUp {
 /// listener calls, so a WebSocket implementation needs that member gone —
 /// a breaking change for every `implements AtConnection`, and out of scope
 /// while this ships as an additive minor.
-class AtLookupTransport {
+class AtLookupTransportFactories {
   final AtLookupSecureSocketFactory socketFactory;
   final AtLookupOutboundConnectionFactory connectionFactory;
   final AtLookupSecureSocketListenerFactory listenerFactory;
@@ -435,7 +434,7 @@ class AtLookupTransport {
   /// leave the factory's signature alone.
   final SecureSocketConfig secureSocketConfig;
 
-  const AtLookupTransport({
+  const AtLookupTransportFactories({
     required this.secureSocketConfig,
     this.socketFactory = const AtLookupSecureSocketFactory(),
     this.connectionFactory = const AtLookupOutboundConnectionFactory(),
