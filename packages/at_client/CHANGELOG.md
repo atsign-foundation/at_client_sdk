@@ -1,5 +1,12 @@
 ## 3.15.0-rc1
 
+- perf: a sync round that a stats notification triggered reads the atServer's
+  commit id from the cache that notification promoted, instead of fetching
+  it again with a `stats` verb; app-triggered rounds, the warm start and the
+  periodic safety net still fetch. The atServer sends one notification per
+  write to every monitor on the atSign, so the fetch was a round trip per
+  write per live client.
+
 - fix: work parked on a network read when the client stops no longer touches
   the local store on resume: a sync round's in-sync check does not read the
   pull cursor, its pull does not persist it, a notification batch cut by

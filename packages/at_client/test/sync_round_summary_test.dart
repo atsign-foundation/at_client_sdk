@@ -21,10 +21,14 @@ class MockAtClient extends Mock implements AtClient {
 
 class MockNotificationServiceImpl extends Mock
     implements NotificationServiceImpl {
+  /// What the atServer sends over the monitor; a test pushes into it.
+  final notifications =
+      StreamController<at_notification.AtNotification>.broadcast();
+
   @override
   Stream<at_notification.AtNotification> subscribe(
       {String? regex, bool shouldDecrypt = false}) {
-    return StreamController<at_notification.AtNotification>().stream;
+    return notifications.stream;
   }
 }
 
@@ -35,6 +39,7 @@ void main() {
   late MockAtClient atClient;
   late MockRemoteSecondary remote;
   late MockLocalSecondary local;
+  late MockNotificationServiceImpl notifications;
   late SyncServiceImpl service;
 
   setUpAll(() {
@@ -59,8 +64,8 @@ void main() {
     atClient = MockAtClient();
     remote = MockRemoteSecondary();
     local = MockLocalSecondary();
-    when(() => atClient.notificationService)
-        .thenReturn(MockNotificationServiceImpl());
+    notifications = MockNotificationServiceImpl();
+    when(() => atClient.notificationService).thenReturn(notifications);
     when(() => atClient.getLocalSecondary()).thenReturn(local);
     when(() => atClient.get(any()))
         .thenAnswer((_) async => AtValue()..value = '$pulled');
@@ -120,6 +125,34 @@ void main() {
         logs.at('INFO').where((m) => m.contains('Pulling to local')), isEmpty,
         reason: 'a per-entry line at info makes the log grow with every key '
             'synced, which the summary line exists to prevent');
+    // An app-triggered round has no fresh commit id in hand, so it fetches
+    // one; the control for the stats-triggered arm below.
+    verify(() => remote.executeVerb(any(that: isA<StatsVerbBuilder>())))
+        .called(1);
+  });
+
+  test(
+      'a round a stats notification triggered pulls on the commit id it '
+      'carried, without fetching it again', () async {
+    await build(server: 5, pulled: 2);
+
+    notifications.notifications.add(at_notification.AtNotification.empty()
+      ..id = '-1'
+      ..key = 'statsNotification.@alice'
+      ..from = '@alice'
+      ..to = '@alice'
+      ..value = '5');
+    for (var i = 0; i < 100 && summaries().isEmpty; i++) {
+      await Future.delayed(const Duration(milliseconds: 20));
+    }
+
+    expect(summaries().single, contains('(system)'),
+        reason: 'the round that ran is the one the notification triggered');
+    verify(() => remote.executeVerb(any(that: isA<SyncVerbBuilder>())))
+        .called(greaterThanOrEqualTo(1));
+    // The notification carried the atServer's commit id; asking for it again
+    // is a round trip per notification, per live client on the atSign.
+    verifyNever(() => remote.executeVerb(any(that: isA<StatsVerbBuilder>())));
   });
 
   test('a round that found server and local in sync logs no summary', () async {

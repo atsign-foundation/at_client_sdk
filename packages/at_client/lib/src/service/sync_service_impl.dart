@@ -309,7 +309,7 @@ class SyncServiceImpl implements SyncService {
     _processInProgress = true;
     final syncRequest = _getSyncRequest();
     try {
-      final inSync = await _isInSync();
+      final inSync = await _isInSync(syncRequest);
       if (isStopped) {
         // stop() landed while _isInSync was parked on its network read.
         // Anything this run did from here would be sync activity after
@@ -1304,14 +1304,16 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  Future<bool> _isInSync() async {
+  Future<bool> _isInSync(SyncRequest syncRequest) async {
     if (_syncInProgress) {
       _logger.finest('*** isInSync..sync in progress');
       return true;
     }
-    // Force-fresh: see [_getServerCommitId] doc — we're deciding whether
-    // sync work is needed; a stale cache would skip the run.
-    var serverCommitId = await _getServerCommitId(forceFresh: true);
+    // A system request is a stats notification whose commit id has already
+    // promoted the cache, so it is read from there; an app request has no
+    // such value in hand and fetches one, see [_getServerCommitId].
+    var serverCommitId = await _getServerCommitId(
+        forceFresh: syncRequest.requestSource == SyncRequestSource.app);
     // stop() may have landed during that network read and closed the store
     // the next line reads.
     _bailIfStopped();
@@ -1352,11 +1354,14 @@ class SyncServiceImpl implements SyncService {
   /// (subject to the monotonic [_promoteServerCommitId] guard) so
   /// subsequent cached reads benefit from it.
   ///
-  /// `forceFresh: true` is used by the sync-decision points
-  /// ([isInSync] / [_isInSync]) — if a recent direct-to-server
-  /// modification happened and the corresponding stats notification
-  /// hasn't arrived yet, the cache is stale and would cause
-  /// `processSyncRequests` to wrongly conclude "no work needed".
+  /// `forceFresh: true` is used by the sync-decision points ([isInSync],
+  /// and [_isInSync] for an app-sourced request) — if a recent
+  /// direct-to-server modification happened and the corresponding stats
+  /// notification hasn't arrived yet, the cache is stale and would cause
+  /// `processSyncRequests` to wrongly conclude "no work needed". A
+  /// system-sourced request IS that notification, and its commit id has
+  /// already promoted the cache, so [_isInSync] reads the cache for it: a
+  /// fetch there is a round trip per notification, per live client.
   ///
   /// Throws [AtLookUpException] if the remote secondary is not
   /// reachable.
