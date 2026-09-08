@@ -7,7 +7,7 @@ import 'package:at_location_flutter/service/at_location_notification_listener.da
 import 'package:at_location_flutter/utils/constants/colors.dart';
 import 'package:at_location_flutter/utils/constants/text_strings.dart';
 import 'package:at_location_flutter/utils/constants/text_styles.dart';
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:flutter/material.dart';
 
 class RequestLocationSheet extends StatefulWidget {
