@@ -190,6 +190,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [130] | A revocation is discoverable per namespace                                                  | 2026-08-31 | LIVE               |
 | [131] | The protected header names the KEY, and the enrollment moves to `enid`                      | 2026-08-31 | LIVE               |
 | [132] | The keys name the enrollment, and `primary` names the atSign's own credential               | 2026-09-07 | LIVE               |
+| [133] | A revocation follows approval, and a replacement settles itself                             | 2026-09-08 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -324,3 +325,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [130]: detail/decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31
 [131]: detail/decisions.md#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31
 [132]: detail/decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07
+[133]: detail/decisions.md#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08

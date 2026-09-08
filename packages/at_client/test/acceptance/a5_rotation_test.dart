@@ -155,19 +155,24 @@ void main() {
 
     test('UC-A5.3 · enrollment revocation composes with keypair rotation', () {
       // GIVEN enrollment E2 compromised (it holds exactly one APKAM keypair),
-      //       and E2 has self-enrolled at least one successor.
+      //       and E2 has approved at least one enrollment beneath it.
       // WHEN  an enrollment holding rw on __manage calls
       //       revokeEnrollmentAndRotate(E2).
       // THEN  E2's APKAM keypair is cut at auth, paired with nskey-keypair
       //       rotation (UC-A5.1b) to deny new-data keys. Only that first arm is
       //       pinned here.
       //
-      // ⛔ The row's second clause - that revoking E2 revokes E2's whole
-      //    subtree, so the subtree leaves every roster and the client's
-      //    exclusion set stays the ONE id named - is RULED AND NOT YET BUILT,
-      //    and is unprovable from this repo at all: it is closed by an
-      //    at_server test asserting a descendant is revoked and absent from
-      //    enroll:listns. The cited test below exercises no self-enrolment.
+      // ⛔ The row's cascade clause - that revoking E2 revokes every enrollment
+      //    approved beneath it, so that subtree leaves every roster while the
+      //    client's exclusion set stays the ONE id named - is BUILT and
+      //    unpinned here: nothing in this repo revokes an approver with an
+      //    approval subtree beneath it. The cited test exercises no cascade.
+      //
+      // ⚠️ This comment said that clause was ruled and not yet built, and read
+      //    the cascade as reaching what an enrollment SELF-ENROLLED, until
+      //    2026-09-08. The atServer never follows the replacement edge: a
+      //    successor is its predecessor's sibling, and is settled at its own
+      //    first authentication instead.
       //
       // ⚠️ This comment required the EXCLUSION SET to be the whole subtree,
       //    walked client-side, until 2026-08-31. That was the wrong layer: an

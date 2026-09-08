@@ -13338,6 +13338,18 @@ walk one*
 
 1. **When an enrollment is revoked, all of its descendants are revoked too.**
    The cascade is the atServer's, on the revoke path.
+   ⚠️ **"Descendants" means BY APPROVAL, and this part said only "descendants"
+   until 2026-09-08** — which the row it governs, UC-A5.3 c2, read as including
+   what an enrollment self-enrolled. As built on at_server `origin/trunk`
+   (`66598e853`), `EnrollmentManager.descendantsOf` follows approver links and
+   its comment says it "never follows the replacement edge"; a successor copies
+   its predecessor's `parentEnrollmentId`, making the two siblings, and at the
+   successor's first authentication the predecessor's approval children are
+   moved onto the successor and an approved, not fully privileged predecessor is
+   revoked as `superseded`. So revoking an enrollment reaches neither what it
+   replaced itself with nor, after that move, what it had approved. Whether that
+   is the intended reading of a replacement is open; the ruling as written is
+   silent on the distinction rather than wrong about it.
 2. **The atServer must never allow un-revoking an enrollment whose predecessor
    EXISTS and is not currently `approved`.** Without that guard the cascade is
    one-way only: un-revoking a descendant while its predecessor stays revoked
@@ -13838,3 +13850,47 @@ keys win over a caller's id, and the client is filed under them). The
 submitter's self-approval branch keys on the atSign's own credential — null or
 `primary` — exactly as it keyed on null, so nothing about it moved; its removal
 is the separate item the plan carries.
+
+## 133. A revocation follows approval, and a replacement settles itself (2026-09-08)
+
+**In brief:** *the cascade never follows the replacement edge, and the
+acceptance catalogue follows the atServer rather than the other way round*
+
+**Ruled by gkc, 2026-09-08**, on reading what at_server `origin/trunk`
+(`66598e853`) actually does. Settles the question
+[at_server#2782](https://github.com/atsign-foundation/at_server/issues/2782)
+left when it was closed as completed the same day.
+
+**What the atServer does.** `EnrollmentManager.descendantsOf` collects every
+enrollment that reaches the target by following APPROVER links upward, to any
+depth, and its own comment says it never follows the replacement edge; the
+revoke path cascades over exactly that set, refusing a revoke that would remove
+the caller or leave no permanent fully privileged enrollment. A self-enrolled
+successor copies its predecessor's `parentEnrollmentId`, so the two are
+siblings. The replacement is settled in the other direction, once, at the
+successor's first authentication: `settlePredecessorOnFirstAuth` moves the
+predecessor's approval children onto the successor, and revokes an approved
+predecessor that is not fully privileged as `superseded`. A fully privileged
+predecessor keeps its life. A replacement may not itself be replaced without an
+approver, so a self-enrolment chain is at most one link long.
+
+**The ruling.** The successor IS the principal. An operator answering a
+compromised keyfile that has already been replaced revokes the SUCCESSOR;
+naming the predecessor revokes something the atServer has usually revoked
+already, and reaches nothing the successor holds. So
+[UC-A5.3](../acceptance.md#63-uc-a53--enrollment-revocation) c2 is rewritten to
+describe the approval cascade, and gains a second clause for the replacement
+path, rather than at_server being asked to cascade over the replacement edge.
+
+**What this corrects.** [Ruling 129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
+part 1 said "all of its descendants are revoked too" without saying by which
+edge, and the row it governed read that as including what an enrollment
+self-enrolled; 129 is amended in place with the distinction. UC-A5.3's Given
+asked for a two-deep self-enrolment chain, which is unconstructible. Two rules
+the catalogue recorded as not built — the caller refusal and the
+last-fully-privileged refusal — are built.
+
+**What survives, and it is not this ruling's to close.** Orphaning along
+APPROVER links: a severed link orphans everything behind it, because nothing
+records ancestry beyond an enrollment's immediate approver, and
+`descendantsOf` says so itself.

@@ -1182,51 +1182,85 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 ### 6.3 UC-A5.3 — Enrollment revocation
 
 - **Given:** enrollment E2 compromised (it holds exactly one APKAM keypair), and
-  E2 has self-enrolled at least one successor, which has itself self-enrolled
-  another — the shape a lost keyfile produces, and the one this row turns on.
+  E2 has approved at least one enrollment beneath it, which has itself approved
+  another — the shape this row turns on, and the deepest one the atServer's
+  cascade can be asked about. ⚠️ **This said "E2 has self-enrolled a successor,
+  which has itself self-enrolled another" until 2026-09-08**, which is
+  unconstructible: a replacement may not be replaced without an approver, so a
+  self-enrolment chain is at most one link long. What a lost keyfile produces is
+  covered by the second bullet below.
 - **When:** an enrollment holding `rw` on `__manage` calls
   `revokeEnrollmentAndRotate(E2)` — revoke, then rotate every namespace E2 could
   read.
 - **Then:**
   - E2's APKAM keypair is cut at auth; pair with `nskey`-keypair rotation
     excluding E2 (UC-A5.1(b)) to deny new-data keys;
-  - ⛔ **revoking E2 revokes E2's whole subtree**, transitively and to arbitrary
-    depth: every enrollment E2 self-enrolled, and every enrollment those
-    self-enrolled, **loses** `approved` in the same act. `enroll:listns` returns
-    approved enrollments only, so the subtree is off every roster at once — the
-    rotation's conveyance cannot reach it and no holder will serve it the
-    published generation. The client's exclusion set stays the **one** enrollment
-    named. The atServer refuses to un-revoke an enrollment whose predecessor
-    **exists and** is not currently `approved`; and it refuses a revoke whose
-    cascade would remove **the caller**. See
-    [`decisions.md` 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31).
+  - ⛔ **revoking E2 revokes every enrollment approved beneath E2**, transitively
+    and to arbitrary depth, all of them **losing** `approved` in the same act.
+    `enroll:listns` returns approved enrollments only, so that subtree is off
+    every roster at once — the rotation's conveyance cannot reach it and no
+    holder will serve it the published generation. The client's exclusion set
+    stays the **one** enrollment named. The atServer refuses to un-revoke an
+    enrollment whose predecessor **exists and** is not currently `approved`; it
+    refuses a revoke whose cascade would remove **the caller**; and it refuses
+    one that would leave no permanent fully privileged enrollment. See
+    [`decisions.md` 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
+    and [133](detail/decisions.md#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08).
+  - ⛔ **A self-enrolled successor is NOT in that set, and revoking a replaced
+    enrollment does nothing to what replaced it.** The successor copies its
+    predecessor's `parentEnrollmentId`, so the two are siblings, and the
+    replacement is settled in the other direction: at the successor's first
+    authentication the predecessor's approval children move onto the successor,
+    and an approved predecessor that is not fully privileged is revoked as
+    `superseded`. **So a compromised keyfile that has already been replaced is
+    answered by revoking the SUCCESSOR**, which is the live principal; naming
+    the predecessor revokes something the atServer has usually revoked already.
+    ⚠️ **This clause required the cascade to follow the replacement edge until
+    2026-09-08**, when gkc ruled it follows the built behaviour instead
+    ([133](detail/decisions.md#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08));
+    the rewritten wording is above and the reasoning is in that ruling.
 
-    ⛔ **RULED AND NOT YET BUILT, so this clause is unprovable from THIS repo
-    until at_server ships it** — it is closed by an at_server test asserting that
-    a descendant's status is `revoked` after its predecessor is revoked, and that
-    it is absent from `enroll:listns`.
+    ✅ **BUILT, and the clause now describes what is built** (gkc, 2026-09-08;
+    this paragraph said "ruled and not yet built", then briefly "contradicted").
+    at_server pins the approval cascade and the superseded-at-first-auth path in
+    `apkam_self_enrollment_test.dart`, in its unit tree and its functional pack.
+    What is owed HERE is a client-side pin of the first bullet: revoke an
+    approver with a two-deep approval subtree beneath it and assert every
+    member's status and its absence from `enroll:listns`.
 
-    ⛔ **AND THE CASCADE AS BUILT CANNOT REACH "arbitrary depth", so shipping the
-    at_server branch will NOT close this clause** (reported by the at_server
-    session 2026-08-31, filed as
-    [at_server#2782](https://github.com/atsign-foundation/at_server/issues/2782)).
-    The cascade climbs `parentEnrollmentId` and fetches each link **by key**,
-    which keeps a link traversable between expiring and being removed — but the
-    atServer runs a periodic `deleteExpiredKeys()` sweep
-    (`at_secondary_impl.dart`), so shortly after a link expires the record is
-    **gone** and the chain is severed exactly as a delete severs it. It is not an
-    edge case: each successor's ttl clock restarts at its own write, so under any
-    finite key-expiry posture the earlier links always expire first. Revoke the
-    root after the sweep has taken a middle link and the cascade stops at the
-    first live candidate, leaving a descendant of the revoked enrollment
-    `approved` and authenticating — with the operator having seen the revoke
-    succeed. ⚠️ **Closing this needs ancestry that OUTLIVES the enrollment
-    record**, which the branch does not have, so this clause is blocked on that
-    rather than on the branch merging. Until then the **enrollment tree** leaks:
-    a descendant keeps `approved`, stays on every roster, and is answered when it
-    asks a holder for the generation it can see published, so rotating while
-    excluding only E2 hands what E2 spawned the new key. ⚠️ **The fix for that is
-    not a wider exclusion set** — see below; it is the cascade.
+    ⛔ **THE BUILT CASCADE NEVER FOLLOWS THE REPLACEMENT EDGE**, read on
+    at_server `origin/trunk` `66598e853`, 2026-09-08.
+    `EnrollmentManager.descendantsOf` collects every enrollment that reaches the
+    target by following APPROVER links upward, and its own comment says it
+    "never follows the replacement edge"; the revoke path in
+    `enroll_verb_handler.dart` cascades over exactly that set. A self-enrolled
+    successor copies its predecessor's `parentEnrollmentId` rather than pointing
+    at it, so the two are siblings; and at the successor's first authentication
+    `settlePredecessorOnFirstAuth` moves the predecessor's approval children
+    onto the successor and revokes an approved, not fully privileged
+    predecessor as `superseded`. So revoking E2 reaches neither what E2
+    self-enrolled nor, after that adoption, what E2 had approved.
+    ⚠️ **The Given cannot be constructed either**: a replacement may not itself
+    be replaced without an approver (`enroll_verb_handler.dart`, pinned in
+    at_server's `apkam_self_enrollment_test.dart` and in its functional pack of
+    the same name), so a self-enrolment chain is at most one link long.
+
+    ⚠️ **This paragraph said the clause was blocked on ancestry that OUTLIVES
+    the enrollment record, filed as
+    [at_server#2782](https://github.com/atsign-foundation/at_server/issues/2782),
+    until 2026-09-08.** That issue is CLOSED as completed: the expiry-severed
+    chain it described needs a middle enrollment, chains are now capped at one
+    link, and the grace period that shortened a replaced enrollment's life —
+    which the issue called the bigger half of the cause — is gone. What survives
+    is orphaning along APPROVER links, which `descendantsOf` names itself: a
+    severed link orphans everything behind it, because nothing records ancestry
+    beyond an enrollment's immediate approver.
+
+    ⚠️ **The consequence, and it is the intended reading** (gkc, 2026-09-08):
+    rotating while excluding only E2 hands the new generation to an enrollment
+    E2 self-enrolled, because the successor is the principal and is what an
+    operator revokes. ⚠️ **The answer is not a wider exclusion set** — see
+    below; it is naming the live enrollment.
 
     ⚠️ **This clause required the EXCLUSION SET to be the subtree until
     2026-08-31, walked client-side over `parentEnrollmentId`. That was the wrong
@@ -1271,19 +1305,27 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   **Stranding, and the rule that was reasoned wrongly.** Three rules bear on it.
   ✅ **Built:** an enrollment may not revoke itself without `force`, and a revoker
   must be authorised for every namespace in the target's enrollment at the
-  target's access level. ⛔ **Not built:** the atServer refusing a self-revocation
-  by the last **fully privileged** enrollment — `rw` on `*` *and* `__manage`, as
-  [section 0](#0-purpose-scope--how-to-read-this-doc) defines it — and refusing a
-  revoke whose cascade would remove the caller.
+  target's access level. ✅ **Built, and this said "Not built" until
+  2026-09-08:** the revoke path refuses a revoke whose cascade would remove the
+  caller, naming it (*"descends from it by approval and would be revoked by the
+  same cascade"*), and refuses one that would remove the last **fully
+  privileged** enrollment — `rw` on `*` *and* `__manage`, as
+  [section 0](#0-purpose-scope--how-to-read-this-doc) defines it — unless a
+  permanent one survives. The second is asked of the ACT rather than of the
+  caller, over what survives the cascade, so it covers the self-revocation case
+  and more.
 
   ⚠️ **"A revoker is never inside the subtree it revokes" is FALSE, and this row
   asserted it on 2026-08-31.** Never being one's own descendant rules out being
-  in *one's own* subtree and says nothing about being in *the target's*. A
-  successor holds its predecessor's grants exactly, so it is authorised to revoke
-  its predecessor — and it is a descendant of it. E3 revokes E2, the cascade
-  takes E2's descendants, E3 is among them, and on a two-enrollment atSign that
-  strands **by cascade**, without anyone self-revoking. Hence the caller refusal
-  above.
+  in *one's own* subtree and says nothing about being in *the target's*. E3
+  revokes E2, the cascade takes E2's descendants, E3 is among them, and on a
+  two-enrollment atSign that strands **by cascade**, without anyone
+  self-revoking. Hence the caller refusal above. ⚠️ **The SUCCESSOR route to it
+  is gone, and this row read a successor as a descendant of its predecessor
+  until 2026-09-08.** A successor copies its predecessor's `parentEnrollmentId`,
+  so the two are siblings, and the cascade never follows the replacement edge; a
+  caller reaches the cascade by APPROVAL, having been approved somewhere beneath
+  the target.
 
 - **Cross-ref:** `detail/decisions.md`
   [129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
@@ -1300,9 +1342,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   by `tests/at_functional_test/test/nskey_rotation_live_test.dart`.
   ⚠️ **That test exercises no self-enrollment and no `parentEnrollmentId`.**
   UC-A5.2 still carries the withdrawn 2026-08-28 subtree clause and is unpinned;
-  A5.3's replacement clause asserts an atServer cascade and is unprovable from
-  this repo at all until at_server ships it — an at_server build gap, not an
-  at_client coverage gap.
+  A5.3's cascade clause is rewritten to the built behaviour (2026-09-08) and is
+  now an at_client coverage gap rather than a build or specification one: no
+  test here revokes an approver with an approval subtree beneath it.
   ⚠️ **UC-A5.2's Then still says E2 is excluded "at both discovery+push
   (`excludeEnrollmentIds` on `enroll:listns`/serve)". `enroll:listns` takes no
   such parameter** — checked on at_server `origin/trunk` — and the exclusion is
