@@ -22,6 +22,7 @@ import 'package:at_commons/at_commons.dart' show SecureSocketConfig;
 import 'src/at_lookup.dart' show AtLookupTransportFactories;
 
 export 'at_lookup.dart';
+export 'src/io/secure_socket_transport.dart';
 
 /// TLS over TCP — the transport to pass to `AtLookUp.withSecureSocket` unless
 /// you are supplying your own.
