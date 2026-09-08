@@ -13188,6 +13188,14 @@ keypair and the first mint strands it.
 
 ## 127. A client with no enrollment id still mints and publishes its own signing key (2026-08-30)
 
+⚠️ **SUPERSEDED 2026-09-08 by [134](#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08).**
+A credential with no enrollment id exists only at `PqPosture.legacy`, where the
+in-use set is empty and nothing mints; a client whose posture wants more
+retrofits into a real enrollment before its startup steps run. So the
+capability this ruling preserved is real code that nothing reaches. The body
+below stands as it was ruled, and the group pinning it in
+`signing_key_minting_test.dart` now says what it does and does not evidence.
+
 **Ruled by gkc, 2026-08-30.** The data-signing-key programme proposed skipping
 `SigningKeyMinting.reconcileSigningKeys` entirely when the client has no
 enrollment id, as a net under the pre-enrollment retrofit. **Both halves are

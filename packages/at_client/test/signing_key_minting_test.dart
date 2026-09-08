@@ -272,7 +272,21 @@ void main() {
     });
   });
 
-  group('a client with no enrollment', () {
+  /// A keyfile naming no enrollment authenticates as the credential the
+  /// atServer calls `primary`, and that credential exists only at
+  /// `PqPosture.legacy`: a client whose posture wants a stronger
+  /// authentication algorithm retrofits into a new enrollment before its
+  /// startup steps run, so it holds an enrollment id by the time anything
+  /// mints. `AtClientImpl.retrofitIsDue` is what decides that, and
+  /// `pre_enrollment_retrofit_drive_test.dart` pins it.
+  ///
+  /// ⚠️ **So this group characterises a code path no client reaches, and it
+  /// read as a product capability until 2026-09-08.** `reconcileSigningKeys`
+  /// selects the direct-put writer on the enrollment id alone and would still
+  /// take it if something called it this way; what stops that is upstream, not
+  /// here. Nothing below may be cited as evidence that a credential with no
+  /// enrollment id mints or publishes anything in production.
+  group('a client with no enrollment, which nothing reaches', () {
     late List<String> published;
 
     setUp(() {
@@ -292,7 +306,7 @@ void main() {
         () async {
       // The client can name no enrollment, so it can send no enroll:update
       // for the atServer to compose an _apsk from — which makes the client the
-      // only writer this record can have.
+      // only writer this record could have, if one ever got here.
       expect(await mint(), [SigningAlgoType.mldsa65]);
 
       expect(updates, isEmpty);
@@ -311,9 +325,10 @@ void main() {
 
       final keys = await keysIo.read(atSign);
       expect(keys.signingKeysFor('primary'), hasLength(1),
-          reason: 'a client with no enrollment reads and writes under '
-              '"primary" — two spellings would file material its own reader '
-              'skips');
+          reason: 'reader and writer agree on the one spelling — two would '
+              'file material its own reader skips. Which matters for reading '
+              'a keyfile written by an older build, not for minting: nothing '
+              'reaches this path any more');
     });
   });
 
