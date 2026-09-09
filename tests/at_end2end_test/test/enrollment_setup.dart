@@ -70,45 +70,6 @@ Future<void> _stopSync() async {
   }
 }
 
-/// TEMPORARY probe. Times `enroll:list` unfiltered against the same call
-/// filtered to one status each, and prints the count beside every timing.
-///
-/// `EnrollmentServiceImpl._enrollmentById` calls `fetchEnrollmentRequests()`
-/// with no params, which leaves the status filter null, and `approve` calls it
-/// twice. This prints what that costs and how many records it is carrying.
-///
-/// The unfiltered call sits in the MIDDLE of the filtered ones so that a
-/// server warming up, or a connection settling, cannot produce the difference
-/// on its own: a monotonic trend would show in the bracketing pair too.
-Future<void> _probeEnrollList(AtClient atClient, String atSign) async {
-  final service = atClient.enrollmentService;
-  if (service == null) return;
-
-  Future<void> time(String label, List<EnrollmentStatus>? filter) async {
-    final watch = Stopwatch()..start();
-    try {
-      final list = await service.fetchEnrollmentRequests(
-          enrollmentListParams: filter == null
-              ? null
-              : (EnrollmentListRequestParam()..enrollmentListFilter = filter));
-      watch.stop();
-      print('PROBE $atSign enroll:list filter=$label '
-          'count=${list.length} ms=${watch.elapsedMilliseconds}');
-    } catch (e) {
-      watch.stop();
-      print('PROBE $atSign enroll:list filter=$label '
-          'FAILED ms=${watch.elapsedMilliseconds} $e');
-    }
-  }
-
-  await time('approved', [EnrollmentStatus.approved]);
-  await time('revoked', [EnrollmentStatus.revoked]);
-  await time('NONE(as _enrollmentById calls it)', null);
-  await time('denied', [EnrollmentStatus.denied]);
-  await time('pending', [EnrollmentStatus.pending]);
-  await time('expired', [EnrollmentStatus.expired]);
-}
-
 void main() {
   List atSignList = ConfigUtil.getYaml()['enrollment']['atsignList'];
   String namespace = TestConstants.namespace;
@@ -150,7 +111,20 @@ void main() {
           deviceName: 'iphone',
           otp: otp,
           namespaces: {TestConstants.namespace: 'rw', '__config': 'rw'},
-          signingAlgo: SigningAlgoType.rsa2048);
+          signingAlgo: SigningAlgoType.rsa2048,
+          // These atSigns are never recycled, and the teardown REVOKES rather
+          // than deletes — a revoked record stays on the atSign for good. Left
+          // alone that backlog is the thing that makes this very step slow:
+          // measured 2026-09-09, @ce2e1 carried 2416 enrollments, 2414 of them
+          // revoked, and an unfiltered `enroll:list` over them took 46.6
+          // seconds against 132 milliseconds for a filtered one.
+          //
+          // An expiry lets the atServer retire each run's enrollment instead of
+          // stacking another revoked record up forever. Three hours is far
+          // longer than a run (the whole job is minutes) while still being the
+          // same day, so a run that hangs is not cut off mid-flight and nothing
+          // is left behind by the next morning.
+          apkamKeysExpiryDuration: const Duration(hours: 3));
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
@@ -166,10 +140,7 @@ void main() {
       Enrollment enrollment =
           Enrollment.fromJSON(jsonDecode(enrollmentFetchResponse!));
 
-      await _probeEnrollList(atClient, currentAtSign);
-
       // Approve enrollment
-      final approveWatch = Stopwatch()..start();
       AtEnrollmentResponse? approveEnrollmentResponse =
           await atClient.enrollmentService?.approve(
         EnrollmentRequestDecision.approved(
@@ -178,8 +149,6 @@ void main() {
                 AtBytes.fromString(enrollment.encryptedAPKAMSymmetricKey!),
             atSign: currentAtSign),
       );
-      approveWatch.stop();
-      print('PROBE $currentAtSign approve ms=${approveWatch.elapsedMilliseconds}');
       expect(
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
 
