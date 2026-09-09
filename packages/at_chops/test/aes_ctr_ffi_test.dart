@@ -9,6 +9,9 @@ import 'package:at_chops/at_chops_ffi.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
 import 'package:test/test.dart';
 
+String hexOf(Uint8List bytes) =>
+    bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
 void main() {
   group('AES-CTR FFI', () {
     final StringBuffer loadedPath = StringBuffer();
@@ -65,6 +68,37 @@ void main() {
         final Uint8List encrypted = await pureAlgo.encrypt(plain, iv: iv);
         final Uint8List decrypted = await ffiAlgo.decrypt(encrypted, iv: iv);
         expect(utf8.decode(decrypted), 'pure→ffi');
+      });
+
+      // The IV's low 8 bytes are all 0xFF, so block 1 encrypts with the
+      // counter at 2^64 - 1 and block 2 carries into the IV's high half. A
+      // backend that increments only the low 64 bits of the counter block
+      // encrypts block 2 differently, and the equality and hex pins below
+      // catch that on either side.
+      test('multi-block parity across the low64(IV) carry boundary', () async {
+        final AESKey key = AESKey(base64Encode(
+            Uint8List.fromList(List.generate(32, (i) => i))));
+        final InitialisationVector iv = InitialisationVector(
+            Uint8List.fromList([
+          0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        ]));
+        final Uint8List plain =
+            Uint8List.fromList(utf8.encode('low64 carry boundary'));
+
+        final AesCtrFfiAlgo ffiAlgo = makeAlgo(key);
+        final AESEncryptionAlgo pureAlgo = AESEncryptionAlgo(key);
+
+        final Uint8List ffiEncrypted = await ffiAlgo.encrypt(plain, iv: iv);
+        final Uint8List pureEncrypted = await pureAlgo.encrypt(plain, iv: iv);
+
+        expect(ffiEncrypted.length, 32);
+        expect(hexOf(ffiEncrypted),
+            '076fa7bcf8050ca8d06c0584d76a030c519db4dc61384e8bfae479c20bf02d80');
+        expect(hexOf(pureEncrypted),
+            '076fa7bcf8050ca8d06c0584d76a030c519db4dc61384e8bfae479c20bf02d80');
+        expect(await pureAlgo.decrypt(ffiEncrypted, iv: iv), plain);
+        expect(await ffiAlgo.decrypt(pureEncrypted, iv: iv), plain);
       });
     });
 
