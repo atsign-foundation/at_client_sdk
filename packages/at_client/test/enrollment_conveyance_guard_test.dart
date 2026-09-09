@@ -9,7 +9,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
-import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -67,22 +66,20 @@ void main() {
   /// and **no** `encryptedAPKAMSymmetricKey` — the shape that asks this
   /// approver to mint and convey.
   void stubPendingEnrollment(AtClient approver, Object keyPackage) {
-    final listCommand = (EnrollVerbBuilder()
-          ..operation = EnrollOperationEnum.list)
-        .buildCommand();
     final key = '$enrolleeId.new.enrollments.__manage$atSign';
     // Resolve the secondary first: nesting the call inside `when` would
     // register the stub against getRemoteSecondary itself.
     final secondary = approver.getRemoteSecondary()!;
-    when(() => secondary.executeCommand(listCommand, auth: true))
-        .thenAnswer((_) async => 'data:${jsonEncode({
-                  key: {
-                    'appName': 'buzz',
-                    'deviceName': 'pixel',
-                    'namespace': {'buzz': 'rw'},
-                    'metadata': {'keyPackage': keyPackage},
-                  }
-                })}');
+    stubApproveListReads(
+        secondary,
+        'data:${jsonEncode({
+              key: {
+                'appName': 'buzz',
+                'deviceName': 'pixel',
+                'namespace': {'buzz': 'rw'},
+                'metadata': {'keyPackage': keyPackage},
+              }
+            })}');
   }
 
   /// An enrollee that has registered, so its `_apsk` is published and the
@@ -132,19 +129,17 @@ void main() {
       // what such a client is for, so a refusal that caught this too would
       // take away its job rather than the job it cannot do.
       final approver = buildMockClient('approver-2', posture: PqPosture.legacy);
-      final listCommand = (EnrollVerbBuilder()
-            ..operation = EnrollOperationEnum.list)
-          .buildCommand();
       final secondary = approver.getRemoteSecondary()!;
-      when(() => secondary.executeCommand(listCommand, auth: true))
-          .thenAnswer((_) async => 'data:${jsonEncode({
-                    '$enrolleeId.new.enrollments.__manage$atSign': {
-                      'appName': 'buzz',
-                      'deviceName': 'pixel',
-                      'namespace': {'buzz': 'rw'},
-                      'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
-                    }
-                  })}');
+      stubApproveListReads(
+          secondary,
+          'data:${jsonEncode({
+                '$enrolleeId.new.enrollments.__manage$atSign': {
+                  'appName': 'buzz',
+                  'deviceName': 'pixel',
+                  'namespace': {'buzz': 'rw'},
+                  'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
+                }
+              })}');
 
       await expectLater(approveWith(approver), completes);
     });
@@ -265,25 +260,23 @@ void main() {
     Future<int> envelopeCountFor(Map<String, String> namespaces) async {
       remoteData.clear();
       final approver = await rootHoldingApprover();
-      final listCommand = (EnrollVerbBuilder()
-            ..operation = EnrollOperationEnum.list)
-          .buildCommand();
       final key = '$enrolleeId.new.enrollments.__manage$atSign';
       // Built once: `enroll:list` is read twice per approval, and registering
       // a fresh enrollee on each call would publish a different `_apsk` and
       // sign the package with a different key each time.
       final keyPackage = await advertisedKeyPackage();
       final secondary = approver.getRemoteSecondary()!;
-      when(() => secondary.executeCommand(listCommand, auth: true))
-          .thenAnswer((_) async => 'data:${jsonEncode({
-                    key: {
-                      'appName': 'buzz',
-                      'deviceName': 'pixel',
-                      'namespace': namespaces,
-                      'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
-                      'metadata': {'keyPackage': keyPackage},
-                    }
-                  })}');
+      stubApproveListReads(
+          secondary,
+          'data:${jsonEncode({
+                key: {
+                  'appName': 'buzz',
+                  'deviceName': 'pixel',
+                  'namespace': namespaces,
+                  'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
+                  'metadata': {'keyPackage': keyPackage},
+                }
+              })}');
 
       await EnrollmentServiceImpl(approver, _RecordingAtEnrollment()).approve(
           EnrollmentRequestDecision.approved(
@@ -352,20 +345,18 @@ void main() {
     final approver = buildMockClient('approver-1');
     // Same enrollment, except it wrapped its own key: the legacy path, where
     // this approver mints nothing and so needs no package of its own.
-    final listCommand = (EnrollVerbBuilder()
-          ..operation = EnrollOperationEnum.list)
-        .buildCommand();
     final key = '$enrolleeId.new.enrollments.__manage$atSign';
     final secondary = approver.getRemoteSecondary()!;
-    when(() => secondary.executeCommand(listCommand, auth: true))
-        .thenAnswer((_) async => 'data:${jsonEncode({
-                  key: {
-                    'appName': 'buzz',
-                    'deviceName': 'pixel',
-                    'namespace': {'buzz': 'rw'},
-                    'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
-                  }
-                })}');
+    stubApproveListReads(
+        secondary,
+        'data:${jsonEncode({
+              key: {
+                'appName': 'buzz',
+                'deviceName': 'pixel',
+                'namespace': {'buzz': 'rw'},
+                'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
+              }
+            })}');
 
     await expectLater(approveWith(approver), completes,
         reason: 'an unregistered approver must still be able to approve a '

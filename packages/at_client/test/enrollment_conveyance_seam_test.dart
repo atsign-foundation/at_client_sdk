@@ -9,7 +9,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
-import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -118,13 +117,9 @@ void main() {
       {String recordEnrollmentId = enrolleeId}) {
     final approver = buildRemoteBackedMockClient(
         atSign: atSign, enrollmentId: 'approver-1', remoteData: remoteData);
-    final listCommand = (EnrollVerbBuilder()
-          ..operation = EnrollOperationEnum.list)
-        .buildCommand();
     final key = '$recordEnrollmentId.new.enrollments.__manage$atSign';
     final secondary = approver.getRemoteSecondary()!;
-    when(() => secondary.executeCommand(listCommand, auth: true))
-        .thenAnswer((_) async => 'data:${jsonEncode({key: record})}');
+    stubApproveListReads(secondary, 'data:${jsonEncode({key: record})}');
     return approver;
   }
 

@@ -128,3 +128,37 @@ class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
 class FakeAtKey extends Fake implements AtKey {}
 
 class FakeAtSigningInput extends Fake implements AtSigningInput {}
+
+/// The two `enroll:list` command strings `EnrollmentServiceImpl.approve`
+/// issues, in the order it issues them: the pre-approval read, then the
+/// post-approval one.
+List<String> approveListCommands() => [
+      for (final statuses in const [
+        [EnrollmentStatus.pending, EnrollmentStatus.approved],
+        [EnrollmentStatus.approved],
+      ])
+        (EnrollVerbBuilder()
+              ..operation = EnrollOperationEnum.list
+              ..enrollmentStatusFilter = statuses)
+            .buildCommand()
+    ];
+
+/// Stubs both `enroll:list` reads that `EnrollmentServiceImpl.approve` makes,
+/// answering [answer] to each.
+///
+/// The two reads carry DIFFERENT status filters, and therefore different
+/// command strings, so a stub registered against one of them answers only that
+/// read. The other falls through to `noSuchMethod`, which returns null into a
+/// `Future<String?>` and surfaces as a TypeError naming neither the stub nor
+/// the filter — which is what makes this worth a helper rather than two
+/// `when` calls per test.
+///
+/// Answering both with one value says nothing about which read is which. A
+/// test whose subject IS the difference between them should register the two
+/// [approveListCommands] itself.
+void stubApproveListReads(RemoteSecondary secondary, String answer) {
+  for (final command in approveListCommands()) {
+    when(() => secondary.executeCommand(command, auth: true))
+        .thenAnswer((_) async => answer);
+  }
+}

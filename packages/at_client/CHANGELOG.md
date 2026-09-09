@@ -2964,6 +2964,21 @@ hunting for a constructor argument that never existed in a release. -->
   neither an enrollment id nor a signing algorithm, so every surviving
   construction now authenticates as a known enrollment. This was the package's
   only `dart:isolate` import.
+- perf: approving an enrollment no longer reads the atSign's entire enrollment
+  roster. `EnrollmentService.approve` reads the record twice — once before the
+  approval to decide whether it must mint a symmetric key, once after to find
+  the key package to seal to — and both reads asked `enroll:list` for every
+  enrollment in every state. A revoked enrollment is kept for good, so that
+  response grows over an atSign's whole life and the approval got slower with
+  it. Both reads are now narrowed by status, as is
+  `EnrollmentRecordPrivilegeResolver.isEnrollmentFullyPrivileged`, a third
+  unfiltered read on the same path. Measured against an atSign carrying 2416
+  enrollments, 2414 of them revoked: the unfiltered list took 46.6 seconds and
+  the narrowed one 132 milliseconds, and an approval went from 92.8 seconds to
+  the cost of the approval itself. The narrowing is also the more correct
+  question — privilege is a property of an enrollment that is currently
+  approved, so a revoked record answering it would grant authority the
+  atServer no longer honours.
 
 ## 3.14.0
 - feat (experimental): per-APKAM same-atSign secret-sharing substrate —

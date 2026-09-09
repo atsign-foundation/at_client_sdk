@@ -178,6 +178,9 @@ void main() {
       const enrollValue = '{"appName":"buzz","deviceName":"pixel",'
           '"namespace":{"buzz":"rw"},'
           '"metadata":{"keyPackage":{"opaqueToTheClient":true}}}';
+      // The UNFILTERED command, because this test calls
+      // `fetchEnrollmentRequests()` directly with no params — it is not going
+      // through `approve`, whose two reads each carry a status filter.
       final listCommand = (EnrollVerbBuilder()
             ..operation = EnrollOperationEnum.list)
           .buildCommand();
@@ -219,25 +222,28 @@ void main() {
     /// Drives `approve` against a pending record and returns the decision that
     /// reached at_auth.
     ///
-    /// The list stub answers twice with different records: the pending one on
+    /// The two reads are stubbed with different records: the pending one on
     /// the pre-approval read, and a metadata-less one afterwards, so
     /// conveyance short-circuits and the assertion is about the minting
     /// decision alone.
+    ///
+    /// Keyed on each read's own command string rather than on a call counter,
+    /// because the two carry different status filters. A counter would also
+    /// have made the fixture depend on the ORDER of the reads, which is not
+    /// what this test is about.
     Future<EnrollmentRequestDecision> decisionFor(
         String atSign, String pendingValue) async {
       final enrollKey =
           'abcdef01-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$atSign';
-      final listCommand = (EnrollVerbBuilder()
-            ..operation = EnrollOperationEnum.list)
-          .buildCommand();
+      final commands = approveListCommands();
       final secondary = MockRemoteSecondary();
       when(() => secondary.atLookUp).thenReturn(MockAtLookUp());
-      var calls = 0;
-      when(() => secondary.executeCommand(listCommand, auth: true))
-          .thenAnswer((_) async => calls++ == 0
-              ? 'data:{"$enrollKey":$pendingValue}'
-              : 'data:{"$enrollKey":{"appName":"buzz","deviceName":"pixel",'
-                  '"namespace":{"buzz":"rw"}}}');
+      when(() => secondary.executeCommand(commands.first, auth: true))
+          .thenAnswer((_) async => 'data:{"$enrollKey":$pendingValue}');
+      when(() => secondary.executeCommand(commands.last, auth: true))
+          .thenAnswer((_) async =>
+              'data:{"$enrollKey":{"appName":"buzz","deviceName":"pixel",'
+              '"namespace":{"buzz":"rw"}}}');
 
       // `pqReady`, named rather than defaulted. This helper serves both arms:
       // one where the request carries no wrapped key and the APPROVER must

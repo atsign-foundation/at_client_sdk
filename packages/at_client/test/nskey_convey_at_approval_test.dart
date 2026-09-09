@@ -9,7 +9,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
-import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -67,20 +66,18 @@ void main() {
   }
 
   void stubPendingEnrollment(AtClient approver, Object keyPackage) {
-    final listCommand = (EnrollVerbBuilder()
-          ..operation = EnrollOperationEnum.list)
-        .buildCommand();
     final key = '$enrolleeId.new.enrollments.__manage$atSign';
     final secondary = approver.getRemoteSecondary()!;
-    when(() => secondary.executeCommand(listCommand, auth: true))
-        .thenAnswer((_) async => 'data:${jsonEncode({
-                  key: {
-                    'appName': 'buzz',
-                    'deviceName': 'pixel',
-                    'namespace': {namespace: 'rw'},
-                    'metadata': {'keyPackage': keyPackage},
-                  }
-                })}');
+    stubApproveListReads(
+        secondary,
+        'data:${jsonEncode({
+              key: {
+                'appName': 'buzz',
+                'deviceName': 'pixel',
+                'namespace': {namespace: 'rw'},
+                'metadata': {'keyPackage': keyPackage},
+              }
+            })}');
   }
 
   test('an approver conveys its filed nskey privates to the new enrollment',

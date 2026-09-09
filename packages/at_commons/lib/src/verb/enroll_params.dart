@@ -107,9 +107,17 @@ class EnrollParams {
   String? apkamPublicKeySignature;
 
   /// Opaque, additive metadata the server stores verbatim on the enrollment
-  /// record and returns from discovery (`enroll:listns`). Carries the
-  /// enrollment's key package (`metadata.keyPackage`) for the secret-sharing
-  /// substrate; the server has no opinion on its contents.
+  /// record. Carries the enrollment's key package (`metadata.keyPackage`) for
+  /// the secret-sharing substrate; the server has no opinion on its contents.
+  ///
+  /// Which verbs return it is **not uniform, deliberately**. `enroll:listns`
+  /// and `enroll:list` return it, but `enroll:list` only to a caller whose own
+  /// `__manage` grant is writable — a read-only administrator is given the
+  /// roster projection, which omits it. `enroll:fetch` returns it to any
+  /// caller its own gate admits, which includes that read-only administrator.
+  /// So fetch is the more permissive of the two on this field, and the
+  /// atServer has a test pinning that disagreement so it is not "fixed" in
+  /// either direction.
   Map<String, dynamic>? metadata;
 
   List<EnrollmentStatus>? enrollmentStatusFilter;

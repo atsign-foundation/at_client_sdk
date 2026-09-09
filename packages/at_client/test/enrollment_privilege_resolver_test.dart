@@ -28,8 +28,12 @@ void main() {
   MockAtClient clientWithRoster() {
     final client = buildRemoteBackedMockClient(
         atSign: atSign, enrollmentId: 'me-1', remoteData: remoteData);
+    // Narrowed to `approved`, matching what the resolver asks for: privilege
+    // is a property of a currently-approved enrollment, and an unfiltered
+    // list would also drag in the atSign's whole revoked backlog.
     final listCommand = (EnrollVerbBuilder()
-          ..operation = EnrollOperationEnum.list)
+          ..operation = EnrollOperationEnum.list
+          ..enrollmentStatusFilter = const [EnrollmentStatus.approved])
         .buildCommand();
     final secondary = client.getRemoteSecondary()!;
     when(() => secondary.executeCommand(listCommand, auth: true))

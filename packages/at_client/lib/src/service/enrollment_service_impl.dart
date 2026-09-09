@@ -112,8 +112,14 @@ class EnrollmentServiceImpl implements EnrollmentService {
     // still the one the enrollee wrote. Its advertised key package alone would
     // not do: every mode may carry one, because a package is also how existing
     // secrets are sealed to a new device.
-    final pending =
-        await _enrollmentById(enrollmentRequestDecision.enrollmentId);
+    // `approved` as well as `pending`, so that this finds every record an
+    // unfiltered read would have found in a state this flow can actually
+    // reach — re-approving an already-approved enrollment still computes the
+    // same minting decision it computes today. What the filter excludes is
+    // the revoked backlog, which is the whole of the cost.
+    final pending = await _enrollmentById(
+        enrollmentRequestDecision.enrollmentId,
+        const [EnrollmentStatus.pending, EnrollmentStatus.approved]);
     final bool mintsSymmetricKey =
         (pending?.encryptedAPKAMSymmetricKey?.isEmpty ?? true) &&
             pending?.metadata?['keyPackage'] != null;
@@ -160,8 +166,9 @@ class EnrollmentServiceImpl implements EnrollmentService {
     // live on the enrollment the atServer just approved. Re-read *after*
     // approval specifically, because the atServer publishes the enrollment's
     // _apsk at that point and the package cannot be verified before it exists.
-    final enrollment =
-        await _enrollmentById(enrollmentRequestDecision.enrollmentId);
+    final enrollment = await _enrollmentById(
+        enrollmentRequestDecision.enrollmentId,
+        const [EnrollmentStatus.approved]);
     if (enrollment != null) {
       final KeyPackageStatus status;
       try {
@@ -196,8 +203,25 @@ class EnrollmentServiceImpl implements EnrollmentService {
     return response;
   }
 
-  Future<Enrollment?> _enrollmentById(String enrollmentId) async =>
-      (await fetchEnrollmentRequests())
+  /// The enrollment with [enrollmentId], from an `enroll:list` narrowed to
+  /// [statuses].
+  ///
+  /// ⚠️ **The filter is not a tuning detail, and passing none is a
+  /// performance bug.** An unfiltered `enroll:list` returns every enrollment
+  /// the atSign has ever held, and a revoked record is never removed — so the
+  /// response grows without bound over the atSign's life and this call gets
+  /// slower forever. Measured 2026-09-09 on a CI atSign carrying 2416
+  /// enrollments, 2414 of them revoked: unfiltered 46,614ms, the same call
+  /// narrowed to one status 132ms. The cost tracks the records RETURNED, not
+  /// the records scanned.
+  ///
+  /// The caller states the statuses because only the caller knows which state
+  /// the record it is looking for should be in.
+  Future<Enrollment?> _enrollmentById(
+          String enrollmentId, List<EnrollmentStatus> statuses) async =>
+      (await fetchEnrollmentRequests(
+              enrollmentListParams: EnrollmentListRequestParam()
+                ..enrollmentListFilter = statuses))
           .where((e) => e.enrollmentId == enrollmentId)
           .firstOrNull;
 
