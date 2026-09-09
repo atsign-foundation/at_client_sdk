@@ -44,9 +44,8 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: PqPosture.legacy);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: PqPosture.legacy);
     atClient = manager.atClient;
   });
 
@@ -56,7 +55,8 @@ void main() {
           .executeCommand(command, auth: true)) ??
       '';
 
-  test('the metadata the signing root is written with is mutable on the '
+  test(
+      'the metadata the signing root is written with is mutable on the '
       'atServer', () async {
     // ⚠️ Deliberately NOT the root record itself, and not a seeded one either.
     // With the record mutable a probe write LANDS, and a root published here
@@ -73,10 +73,9 @@ void main() {
       ..metadata = rootMetadata;
 
     for (final value in ['first', 'second']) {
-      await atClient.getRemoteSecondary()!.executeVerb(
-          UpdateVerbBuilder()
-            ..atKey = scratch
-            ..value = value);
+      await atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
+        ..atKey = scratch
+        ..value = value);
     }
 
     final stored = await remote('llookup:${scratch.toString()}\n');
@@ -105,17 +104,15 @@ void main() {
     expect(lockKey.key, pqSigningRootMintLockRecordName);
 
     Future<void> take() async =>
-        atClient.getRemoteSecondary()!.executeVerb(
-            UpdateVerbBuilder()
-              ..atKey = lockKey
-              ..value = DateTime.now().toUtc().toIso8601String());
+        atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
+          ..atKey = lockKey
+          ..value = DateTime.now().toUtc().toIso8601String());
 
     // A leftover from an earlier run of this file would make the FIRST take
     // the refused one and the test would pass for the wrong reason.
-    await atClient.getRemoteSecondary()!.executeVerb(
-        DeleteVerbBuilder()
-          ..atKey = lockKey
-          ..force = true);
+    await atClient.getRemoteSecondary()!.executeVerb(DeleteVerbBuilder()
+      ..atKey = lockKey
+      ..force = true);
 
     await take();
     try {
@@ -134,20 +131,18 @@ void main() {
     } finally {
       // Released, or this atSign cannot mint a root for the ttl — including
       // in any later file of the same run.
-      await atClient.getRemoteSecondary()!.executeVerb(
-          DeleteVerbBuilder()
-            ..atKey = lockKey
-            ..force = true);
+      await atClient.getRemoteSecondary()!.executeVerb(DeleteVerbBuilder()
+        ..atKey = lockKey
+        ..force = true);
     }
 
     // Control: the same client, the same verb, the same key, accepted once the
     // lock is released. Without it, the refusal above could be this client
     // being unable to write the record at all.
     await take();
-    await atClient.getRemoteSecondary()!.executeVerb(
-        DeleteVerbBuilder()
-          ..atKey = lockKey
-          ..force = true);
+    await atClient.getRemoteSecondary()!.executeVerb(DeleteVerbBuilder()
+      ..atKey = lockKey
+      ..force = true);
   });
 
   test('the published nskey is mutable, because rotation depends on it',
@@ -178,8 +173,8 @@ void main() {
     // The atServer's copy, not the shared local store: a fresh ring's
     // `currentPublic` reads local-first and a sync pull can regress that copy
     // to the superseded generation moments after the rotation.
-    final resolved =
-        await PublishedNskeyKeyRing(atClient).publishedAdvertisement(atSign, ns);
+    final resolved = await PublishedNskeyKeyRing(atClient)
+        .publishedAdvertisement(atSign, ns);
     expect(resolved?.nskeyKid, second.nskeyKid,
         reason: 'the advertisement must now name the new generation — an '
             'immutable nskey record would have pinned peers to the old key '

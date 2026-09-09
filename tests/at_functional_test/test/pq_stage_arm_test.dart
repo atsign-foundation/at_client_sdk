@@ -69,10 +69,9 @@ void main() {
     // half, so `register()` has nothing to write and `approve` refuses.
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final owner =
-        (await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: legacyPlusPqProviders))
-            .atClient;
+    final owner = (await TestUtils.initAtClient(atSign, namespace,
+            atKeysIo: keysIo, posture: legacyPlusPqProviders))
+        .atClient;
     await AtClientSecretSharing.forClient(owner).register();
 
     for (final entry in stages.entries) {
@@ -89,8 +88,8 @@ void main() {
         // the thing under test.
         deviceName: 'stagearm-${entry.key}-'
             '${DateTime.now().microsecondsSinceEpoch}',
-    storage: TestUtils.storage,
-  );
+        storage: TestUtils.storage,
+      );
     }
   });
 
@@ -119,7 +118,9 @@ void main() {
     // The cells must genuinely differ, or a comparison between them compares
     // one case with itself.
     expect(
-        stages.keys.map((s) => clientAt(s).getPreferences()!.disallowLegacyEncryption).toSet(),
+        stages.keys
+            .map((s) => clientAt(s).getPreferences()!.disallowLegacyEncryption)
+            .toSet(),
         {true, false},
         reason: 'the refusal flag must take both values across the three '
             'cells, or the differential below has only one arm');
@@ -261,17 +262,16 @@ void main() {
         PutRequestOptions()..cryptoProviderId = legacyCryptoProviderId;
 
     expect(
-        await clientAt('legacy')
-            .put(note(), 'written under the default stage',
-                putRequestOptions: legacyRequested()),
+        await clientAt('legacy').put(note(), 'written under the default stage',
+            putRequestOptions: legacyRequested()),
         true,
         reason: 'the control: the same call on the same atSign, differing '
             'only in the stage, has to succeed — otherwise the refusal below '
             'could be this key, this namespace or this atServer');
 
     await expectLater(
-        () => clientAt('pqActive').put(note(), 'refused',
-            putRequestOptions: legacyRequested()),
+        () => clientAt('pqActive')
+            .put(note(), 'refused', putRequestOptions: legacyRequested()),
         throwsA(isA<LegacyEncryptionRefusedException>()),
         reason: 'an explicit request is honoured over the default but not '
             'over the flag: the flag is the guarantee, and it holds wherever '

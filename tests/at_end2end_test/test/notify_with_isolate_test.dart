@@ -38,7 +38,7 @@ void main() {
         currentAtSign, TestConstants.namespace, authType,
         enableInitialSync: false,
         atClientPreference: getAtClientPreferences(currentAtSign),
-            posture: PqPosture.legacy);
+        posture: PqPosture.legacy);
 
     NotificationResult notificationResult = await AtClientManager.getInstance()
         .atClient
@@ -62,7 +62,7 @@ Future<void> initSharedAtSign(SendPort mainIsolateSendPort) async {
       sharedWithAtSign, TestConstants.namespace, authType,
       enableInitialSync: false,
       atClientPreference: getAtClientPreferences(sharedWithAtSign),
-          posture: PqPosture.legacy);
+      posture: PqPosture.legacy);
 
   AtClientManager.getInstance()
       .atClient
@@ -84,7 +84,8 @@ AtClientPreference getAtClientPreferences(String atSign) {
   atClientPreference.hiveStoragePath = 'test/hive/$atSign';
   atClientPreference.commitLogPath = 'test/hive/$atSign/commit/';
   atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
-  atClientPreference.rootPort = ConfigUtil.getYaml()['root_server']['port'] ?? 64;
+  atClientPreference.rootPort =
+      ConfigUtil.getYaml()['root_server']['port'] ?? 64;
   // NOTE: the one route in this pack that reaches a live client without going
   // through TestPreferences, so the guard is invoked by hand.
   TestPreferences.refuseDurableWritesToLongLivedAtSigns(

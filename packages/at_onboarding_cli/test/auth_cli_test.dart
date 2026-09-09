@@ -30,13 +30,14 @@ void main() {
       await directory.create(recursive: true);
       // Set permission to read only.
       await Process.run('chmod', ['444', baseDirPath]);
-      expect(() => AtFileUtil.ensureWritable(File(dirPath)), throwsA(isA<AtException>()));
+      expect(() => AtFileUtil.ensureWritable(File(dirPath)),
+          throwsA(isA<AtException>()));
     });
 
     test(
         'ensureWritable doesnt throw if directory does not have a file already',
         () {
-          expect(() => AtFileUtil.ensureWritable(File(dirPath)), returnsNormally);
+      expect(() => AtFileUtil.ensureWritable(File(dirPath)), returnsNormally);
     });
   });
 
@@ -270,8 +271,8 @@ void postureArgumentTests() {
         'deny': args.createDenyCommandParser(),
       };
       for (final entry in parsers.entries) {
-        expect(entry.value.options.containsKey(AuthCliArgs.argNamePosture),
-            isTrue,
+        expect(
+            entry.value.options.containsKey(AuthCliArgs.argNamePosture), isTrue,
             reason: '${entry.key} does not accept --posture, so a user who '
                 'passes it there is silently ignored - the exact shape #2161 '
                 'was filed for');
@@ -292,7 +293,8 @@ void postureArgumentTests() {
           same(AtOnboardingPreference().posture));
     });
 
-    test('a posture constant is named where the roles are decided, nowhere else',
+    test(
+        'a posture constant is named where the roles are decided, nowhere else',
         () {
       // NOTE: a `?? PqPosture.legacy` where a preference is built makes an
       // unset --posture stop meaning "no opinion", so only the file that
@@ -337,9 +339,8 @@ void postureArgumentTests() {
       // NOTE: read from source because driving each command needs an atServer
       // per row.
       final source = File('lib/src/cli/auth_cli.dart').readAsStringSync();
-      final calls = RegExp(r'(?<![A-Za-z_])createAtClient\(')
-          .allMatches(source)
-          .toList();
+      final calls =
+          RegExp(r'(?<![A-Za-z_])createAtClient\(').allMatches(source).toList();
       expect(calls, isNotEmpty,
           reason: 'if this finds nothing the rest of the row proves nothing');
 
@@ -347,7 +348,8 @@ void postureArgumentTests() {
       for (final call in calls) {
         final end = source.indexOf(');', call.start);
         if (!source.substring(call.start, end).contains('posture:')) {
-          without.add('\n'.allMatches(source.substring(0, call.start)).length + 1);
+          without
+              .add('\n'.allMatches(source.substring(0, call.start)).length + 1);
         }
       }
       expect(without, isEmpty,
@@ -458,9 +460,10 @@ void postureArgumentTests() {
 
     test('an unknown posture is refused by the parser', () {
       expect(
-          () => args.createStatusCommandParser().parse(['--posture', 'rollout2']),
-          throwsA(isA<ArgParserException>().having((e) => e.message, 'message',
-              contains('not an allowed value'))),
+          () =>
+              args.createStatusCommandParser().parse(['--posture', 'rollout2']),
+          throwsA(isA<ArgParserException>().having(
+              (e) => e.message, 'message', contains('not an allowed value'))),
           reason: 'the old stage names are exactly what a user would try, and '
               'a silently accepted one would run the default stage');
     });

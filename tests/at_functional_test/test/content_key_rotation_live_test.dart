@@ -35,13 +35,12 @@ void main() {
 
     // NOTE: the era default writes legacy, so the value this scenario rotates
     // needs the PQ providers named explicitly.
-    final preference = TestUtils.getPreference(atSign,
-        posture: legacyPlusPqProviders)
-      ..crypto = CryptoConfig.nskey(keyRing: ring);
+    final preference =
+        TestUtils.getPreference(atSign, posture: legacyPlusPqProviders)
+          ..crypto = CryptoConfig.nskey(keyRing: ring);
 
-    atClientManager =
-        await TestUtils.initAtClient(atSign, namespace, preference: preference,
-            posture: legacyPlusPqProviders);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        preference: preference, posture: legacyPlusPqProviders);
     atClient = atClientManager.atClient;
 
     // NOTE: the manager the providers were wired with, so the rotation runs

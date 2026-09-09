@@ -92,9 +92,9 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(atSign, namespace, ConfigUtil.getYaml()['authType'],
-            posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        atSign, namespace, ConfigUtil.getYaml()['authType'],
+        posture: PqPosture.legacy);
     owner = AtClientManager.getInstance().atClient;
     await AtClientSecretSharing.forClient(owner).register();
   });
@@ -168,8 +168,9 @@ void main() {
             'after the superseded one was refused: the route back is enrolling '
             'again, and nothing about the atSign itself is broken');
 
-    final scan =
-        await upgraded.getRemoteSecondary()!.executeCommand('scan\n', auth: true);
+    final scan = await upgraded
+        .getRemoteSecondary()!
+        .executeCommand('scan\n', auth: true);
     expect(scan, startsWith('data:'),
         reason: 'the PQ enrollment the retrofit created is unaffected by its '
             'parent\'s retirement — otherwise the upgrade would lock the '

@@ -51,9 +51,9 @@ void main() {
 
   setUpAll(() async {
     for (var atSign in atSignList) {
-      await TestSuiteInitializer.getInstance()
-          .testInitializer(atSign, namespace, 'pkam', enableInitialSync: false,
-              posture: PqPosture.legacy);
+      await TestSuiteInitializer.getInstance().testInitializer(
+          atSign, namespace, 'pkam',
+          enableInitialSync: false, posture: PqPosture.legacy);
       await _stopSync();
     }
   });

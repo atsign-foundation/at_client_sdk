@@ -33,9 +33,8 @@ void main() {
       () async {
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: PqPosture.legacy);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: PqPosture.legacy);
     final atClient = manager.atClient;
 
     final ring = PublishedNskeyKeyRing(atClient);

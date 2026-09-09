@@ -376,7 +376,7 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort,
       atChops: atChops,
-        storage: TestUtils.storageFor(currentAtSign));
+      storage: TestUtils.storageFor(currentAtSign));
   var infoResponse = await atClientManager.atClient
       .getRemoteSecondary()
       ?.executeCommand('info:brief\n');

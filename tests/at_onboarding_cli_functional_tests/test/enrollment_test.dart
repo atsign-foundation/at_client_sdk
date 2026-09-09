@@ -347,7 +347,8 @@ void main() {
       AtClientManager.getInstance().reset();
 
       // Fetch otp
-      EnrollmentOperations? enrollmentOperations = EnrollmentOperations(atSign6);
+      EnrollmentOperations? enrollmentOperations =
+          EnrollmentOperations(atSign6);
       String? otp = await enrollmentOperations.getOtp(masterKeysFilePath);
 
       // Create a new instance of OnboardingService that will be used to send an

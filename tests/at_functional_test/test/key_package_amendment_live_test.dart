@@ -37,9 +37,8 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: legacyPlusPqProviders);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
   });
 
@@ -59,13 +58,14 @@ void main() {
       atSign: atSign,
       namespace: namespace,
       preference: TestUtils.getPreference(atSign,
-          keyEstablishmentAlgorithms: algorithms, posture: legacyPlusPqProviders),
+          keyEstablishmentAlgorithms: algorithms,
+          posture: legacyPlusPqProviders),
       rootDomain: rootDomain,
       rootPort: TestUtils.rootServerPort,
       deviceName: '$device-$runId',
       atKeysIo: keysIo,
-    storage: TestUtils.storage,
-  );
+      storage: TestUtils.storage,
+    );
   }
 
   /// The key package the atServer is serving for [client], verified against
@@ -88,17 +88,16 @@ void main() {
     expect(metadata, isA<Map>(),
         reason: 'the enrollment advertises no metadata at all, so there is no '
             'key package to have amended');
-    final envelope = SignedEnvelope.fromJson(
-        (metadata as Map).cast<String, dynamic>()['keyPackage']
-            as Map<String, dynamic>);
+    final envelope = SignedEnvelope.fromJson((metadata as Map)
+        .cast<String, dynamic>()['keyPackage'] as Map<String, dynamic>);
     // NOTE: against the `_apsk` the atServer is SERVING, not a key this test
     // holds. A peer has only the record, and a locally remembered key would
     // still pass if the amendment published an advertisement that disagreed
     // with what it signed.
     final apskKey = 'public:_apsk.${client.enrollmentId}.'
         '${EnrollmentConstants.perEnrollmentApproved}$atSign';
-    final apsk = await lookupOf(client)
-        .executeCommand('llookup:$apskKey\n', auth: true);
+    final apsk =
+        await lookupOf(client).executeCommand('llookup:$apskKey\n', auth: true);
     expect(apsk, startsWith('data:'),
         reason: 'without the advertised signing key there is nothing to '
             'verify the package against, and this row would assert only that '
@@ -115,8 +114,7 @@ void main() {
     // fired unawaited by the client's init, so a "before" read can land either
     // side of the amendment. Each arm is read only once its startup has
     // completed, and the varied thing is the configured list alone.
-    final single =
-        await enrol('a25-single', const [SecretSharingAlgos.xWing]);
+    final single = await enrol('a25-single', const [SecretSharingAlgos.xWing]);
     final both = await enrol('a25-amend',
         const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
 
@@ -139,14 +137,14 @@ void main() {
 
     // An amendment that moved the enrollment would strand every secret already
     // sealed to the old kpid.
-    final original =
-        amended.keys.where((k) => k.kid == both.kpid).toList();
+    final original = amended.keys.where((k) => k.kid == both.kpid).toList();
     expect(original, hasLength(1),
         reason: 'the key the enrollment advertised at creation keeps its '
             'address — EnrolledClient.kpid is what secrets were sealed to');
     expect(original.single.status, KeyEntryStatus.active);
 
-    expect(amended.suites,
+    expect(
+        amended.suites,
         containsAll(SecretSharingAlgos.openableSuitesForAll(
             const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024])),
         reason: 'the suites list covers both KEMs, derived from the keys');
@@ -155,8 +153,7 @@ void main() {
     // amended package no longer verifies against this enrollment's _apsk.
   });
 
-  test('UC-A2.6 · only the enrollment itself may amend its metadata',
-      () async {
+  test('UC-A2.6 · only the enrollment itself may amend its metadata', () async {
     final mine = await enrol('a26-mine', const [SecretSharingAlgos.xWing]);
     final other = await enrol('a26-other', const [SecretSharingAlgos.xWing]);
 
@@ -184,8 +181,7 @@ void main() {
     await expectLater(
         AtEnrollment.create().update(
             EnrollmentUpdateRequest(
-                enrollmentId: other.enrollmentId,
-                metadata: amendment()),
+                enrollmentId: other.enrollmentId, metadata: amendment()),
             lookupOf(mine)),
         throwsA(isA<Object>()),
         reason: 'holding one enrollment grants nothing over another, and a '
@@ -199,8 +195,7 @@ void main() {
     await expectLater(
         AtEnrollment.create().update(
             EnrollmentUpdateRequest(
-                enrollmentId: mine.enrollmentId,
-                metadata: amendment()),
+                enrollmentId: mine.enrollmentId, metadata: amendment()),
             approver.getRemoteSecondary()!.atLookUp),
         throwsA(isA<Object>()),
         reason: 'an owner connection names no enrollment, so it cannot BE the '
@@ -212,8 +207,7 @@ void main() {
     // refuses everything.
     final ok = await AtEnrollment.create().update(
         EnrollmentUpdateRequest(
-            enrollmentId: mine.enrollmentId,
-            metadata: amendment()),
+            enrollmentId: mine.enrollmentId, metadata: amendment()),
         lookupOf(mine));
     expect(ok.enrollmentId, mine.enrollmentId);
   });
@@ -242,27 +236,26 @@ void main() {
 
     final pub = base64Encode(List<int>.filled(1216, 11));
     await AtEnrollment.create().update(
-        EnrollmentUpdateRequest(
-            enrollmentId: client.enrollmentId,
-            metadata: {
-              'keyPackage': KeyPackage.payloadFor(
-                createdAt: DateTime.now().toUtc(),
-                keys: [
-                  PackageKey(
-                      use: SecretSharingAlgos.useEnc,
-                      alg: SecretSharingAlgos.xWing,
-                      pub: pub)
-                ],
-              )
-            }),
+        EnrollmentUpdateRequest(enrollmentId: client.enrollmentId, metadata: {
+          'keyPackage': KeyPackage.payloadFor(
+            createdAt: DateTime.now().toUtc(),
+            keys: [
+              PackageKey(
+                  use: SecretSharingAlgos.useEnc,
+                  alg: SecretSharingAlgos.xWing,
+                  pub: pub)
+            ],
+          )
+        }),
         lookupOf(client));
 
     final raw = await lookupOf(client)
         .executeCommand('enroll:listns:$namespace\n', auth: true);
     final decoded =
         jsonDecode(raw!.replaceFirst(RegExp(r'^data:'), '')) as List;
-    final mine = decoded.cast<Map<String, dynamic>>().firstWhere(
-        (e) => e['enrollmentId'] == client.enrollmentId);
+    final mine = decoded
+        .cast<Map<String, dynamic>>()
+        .firstWhere((e) => e['enrollmentId'] == client.enrollmentId);
     final metadata = (mine['metadata'] as Map).cast<String, dynamic>();
 
     expect(metadata['somethingLaterBuildsAdded'], 'keep me',
@@ -396,7 +389,8 @@ void main() {
             'decrypt rather than a race with another consumer');
   }, timeout: Timeout(Duration(minutes: 4)));
 
-  test('UC-A2.5 · a sender picks by its own order and stamps the matching '
+  test(
+      'UC-A2.5 · a sender picks by its own order and stamps the matching '
       'version', () async {
     // A differential over one recipient: the only thing that varies between
     // the two arms is the SENDER's sealsToKeyAlgorithms order. Same package,
@@ -439,7 +433,8 @@ void main() {
       final storage = 'test/hive/amend/$runId-$device-sender';
       final preference = TestUtils.getPreference(atSign,
           keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
-          sealsToKeyAlgorithms: order, posture: legacyPlusPqProviders)
+          sealsToKeyAlgorithms: order,
+          posture: legacyPlusPqProviders)
         ..hiveStoragePath = storage
         ..commitLogPath = storage;
       final auth = AtAuth.create();
@@ -455,7 +450,7 @@ void main() {
           atChops: auth.atChops,
           atKeysIo: keyfiles[device]!,
           enrollmentId: client.enrollmentId,
-        storage: TestUtils.storageForPrincipal(atSign, client.enrollmentId));
+          storage: TestUtils.storageForPrincipal(atSign, client.enrollmentId));
 
       final party = AtClientSecretSharing(manager.atClient)
         ..sendWakeUpNotification = false;
@@ -482,8 +477,7 @@ void main() {
       // never sees.
       final now = await approver.getAtKeys(
           regex: '.*__ssenv.*', useRemoteAtServer: true);
-      final fresh =
-          now.where((k) => !before.contains(k.toString())).toList();
+      final fresh = now.where((k) => !before.contains(k.toString())).toList();
       expect(fresh, hasLength(1),
           reason: 'this arm must have written exactly one new envelope; '
               '${fresh.length} appeared, so the suite read below would not be '
@@ -491,10 +485,10 @@ void main() {
               '${now.map((k) => k.key).toList()}');
       final v = await approver.get(fresh.single,
           getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
-      final payload = (SignedEnvelope.fromJson(
-                  jsonDecode(v.value as String) as Map)
-              .payload as Map)
-          .cast<String, dynamic>();
+      final payload =
+          (SignedEnvelope.fromJson(jsonDecode(v.value as String) as Map).payload
+                  as Map)
+              .cast<String, dynamic>();
       return (
         suite: payload['suite'] as String,
         version: base64Decode(payload['sealed'] as String).first,
@@ -548,8 +542,7 @@ void main() {
     //     only connection that could pass the self-only check is gone; and
     //   - every other connection, the owner's included, is refused as not
     //     being that enrollment.
-    final victim =
-        await enrol('a26-revoked', const [SecretSharingAlgos.xWing]);
+    final victim = await enrol('a26-revoked', const [SecretSharingAlgos.xWing]);
     await (victim.client as AtClientImpl).pqBootstrap!.startupComplete;
 
     Map<String, dynamic> amendment(String marker) => {
@@ -559,7 +552,8 @@ void main() {
               PackageKey(
                   use: SecretSharingAlgos.useEnc,
                   alg: SecretSharingAlgos.xWing,
-                  pub: base64Encode(List<int>.filled(1216, marker.codeUnitAt(0))))
+                  pub: base64Encode(
+                      List<int>.filled(1216, marker.codeUnitAt(0))))
             ],
           )
         };
@@ -575,8 +569,8 @@ void main() {
         reason: 'the control arm did not take, so this test cannot tell a '
             'state gate from a request the atServer never liked');
 
-    final revoked = await approver.enrollmentService!.revoke(
-        EnrollmentRequestDecision.revoked(victim.enrollmentId, atSign));
+    final revoked = await approver.enrollmentService!
+        .revoke(EnrollmentRequestDecision.revoked(victim.enrollmentId, atSign));
     expect(revoked.enrollmentStatus, EnrollmentStatus.revoked,
         reason: 'the atServer ACKed the revoke without moving the record, so '
             'a refusal below would not be about revocation');
@@ -588,8 +582,8 @@ void main() {
             EnrollmentUpdateRequest(
                 enrollmentId: victim.enrollmentId, metadata: amendment('b')),
             lookupOf(victim)),
-        throwsA(predicate((e) => '$e'.contains('AT0027') &&
-            '$e'.contains('is revoked'))),
+        throwsA(predicate(
+            (e) => '$e'.contains('AT0027') && '$e'.contains('is revoked'))),
         reason: 'a revoked enrollment must not be able to re-advertise an '
             'encapsulation target. The assertion names AT0027 rather than '
             'accepting any throw, because a connection that failed for an '

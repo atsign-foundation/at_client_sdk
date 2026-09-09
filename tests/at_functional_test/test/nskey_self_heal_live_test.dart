@@ -43,9 +43,8 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: legacyPlusPqProviders);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
@@ -68,8 +67,8 @@ void main() {
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
         atKeysIo: atKeysIo,
-    storage: TestUtils.storage,
-  );
+        storage: TestUtils.storage,
+      );
 
   test('an enrollment that missed the mint pulls the private from a holder',
       () async {
@@ -186,9 +185,8 @@ void main() {
     await startIo.write(other, seeded);
 
     // NOTE: priming is a startup step a provider-less posture does not run.
-    final manager =
-        await TestUtils.initAtClient(other, namespace, atKeysIo: startIo,
-            posture: legacyPlusPqProviders);
+    final manager = await TestUtils.initAtClient(other, namespace,
+        atKeysIo: startIo, posture: legacyPlusPqProviders);
 
     final sharing = AtClientSecretSharing.forClient(manager.atClient);
     final wanted = '${NskeyPrivateFiling.secretNamePrefix}$kid';

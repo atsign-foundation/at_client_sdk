@@ -62,8 +62,8 @@ void main() {
   /// than one record.
   Future<Map<String, dynamic>> enrollmentsOf(String atSign) async {
     final atLookup = AtLookupImpl(atSign, rootDomain, virtualenvRootPort);
-    expect(await atLookup.authenticate(at_demos.pkamPrivateKeyMap[atSign]),
-        true,
+    expect(
+        await atLookup.authenticate(at_demos.pkamPrivateKeyMap[atSign]), true,
         reason: 'the flat credential must authenticate, or this reader is '
             'measuring its own failure rather than the roster');
     final response = await atLookup.executeCommand('enroll:list\n', auth: true);
@@ -127,7 +127,8 @@ void main() {
     if (storage.existsSync()) storage.deleteSync(recursive: true);
   });
 
-  test('a pre-enrollment atSign at a post-quantum posture gives itself its '
+  test(
+      'a pre-enrollment atSign at a post-quantum posture gives itself its '
       'first enrollment', () async {
     expect(await enrollmentsOf(retrofits), hasLength(1),
         reason: 'this file is about an atSign whose only credential is the '
@@ -151,10 +152,10 @@ void main() {
             'standing: primary is a root, so nothing caps or removes it, and '
             'a sibling clone of this keyfile must still be able to '
             'authenticate');
-    final key = roster.keys.singleWhere(
-        (k) => k.startsWith(client.enrollmentId!),
-        orElse: () => fail('the roster names no record for '
-            '${client.enrollmentId}; it holds ${roster.keys}'));
+    final key =
+        roster.keys.singleWhere((k) => k.startsWith(client.enrollmentId!),
+            orElse: () => fail('the roster names no record for '
+                '${client.enrollmentId}; it holds ${roster.keys}'));
     final record = roster[key] as Map<String, dynamic>;
     expect(record['approval']['state'], 'approved',
         reason: 'an enroll:request on a legacy connection is a retrofit of '

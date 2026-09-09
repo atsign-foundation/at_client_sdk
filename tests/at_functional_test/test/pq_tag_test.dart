@@ -33,10 +33,10 @@ import 'package:test/test.dart';
 /// they match also matching a mechanism symbol. They are here for the test
 /// whose *only* post-quantum signal is the era it runs at. Re-derive before
 /// removing them: find a file matching a posture clause and none of the others.
-final _pqSymbols = RegExp(
-    r'PqPosture\.pqReady|PqPosture\.pqActive|PqPosture\(|nskey|Nskey|'
-    r'pqSeal|pqOpen|SigningAlgoType|keyPackage|KeyPackage|__ssenv|_apsk|'
-    r'AtClientSecretSharing|signingRoot|SigningRoot|mldsa|enroll:');
+final _pqSymbols =
+    RegExp(r'PqPosture\.pqReady|PqPosture\.pqActive|PqPosture\(|nskey|Nskey|'
+        r'pqSeal|pqOpen|SigningAlgoType|keyPackage|KeyPackage|__ssenv|_apsk|'
+        r'AtClientSecretSharing|signingRoot|SigningRoot|mldsa|enroll:');
 
 bool _drivesPq(String source) => _pqSymbols.hasMatch(source);
 
@@ -52,7 +52,8 @@ bool _drivesPq(String source) => _pqSymbols.hasMatch(source);
 /// `library;` line must exist, and the tag must come first.
 bool _isTagged(String source) {
   final lines = source.split('\n');
-  final tag = lines.indexWhere((l) => RegExp(r"^@Tags\(\s*\[[^\]]*'pq'").hasMatch(l));
+  final tag =
+      lines.indexWhere((l) => RegExp(r"^@Tags\(\s*\[[^\]]*'pq'").hasMatch(l));
   final lib = lines.indexWhere((l) => l.trim() == 'library;');
   return tag >= 0 && lib >= 0 && tag < lib;
 }

@@ -25,8 +25,9 @@ void main(List<String> args) async {
 
     final atAuth = AtAuth.create();
     final atSign = argResults['atsign'];
-    final atOnboardingRequest = AtOnboardingRequest(atSign, signingAlgoType: SigningAlgoType.rsa2048)
-      ..rootDomain = argResults['rootDomain'];
+    final atOnboardingRequest =
+        AtOnboardingRequest(atSign, signingAlgoType: SigningAlgoType.rsa2048)
+          ..rootDomain = argResults['rootDomain'];
     final atOnboardingResponse =
         await atAuth.onboard(atOnboardingRequest, argResults['cramsecret']);
     print('atOnboardingResponse: $atOnboardingResponse');

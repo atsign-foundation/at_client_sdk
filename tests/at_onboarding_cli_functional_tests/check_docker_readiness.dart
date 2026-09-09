@@ -24,8 +24,8 @@ void main() {
     // virtualenv that never came up.
     const int maxTries = 40;
     int attempt = 0;
-    while ((response.isEmpty || response == 'data:null\n') &&
-        attempt < maxTries) {
+    while (
+        (response.isEmpty || response == 'data:null\n') && attempt < maxTries) {
       if (attempt > 0) await Future<void>.delayed(const Duration(seconds: 3));
       attempt++;
       _secureSocket.write('lookup:signing_publickey$atsign\n');

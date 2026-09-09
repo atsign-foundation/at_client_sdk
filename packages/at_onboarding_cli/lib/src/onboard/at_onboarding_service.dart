@@ -74,6 +74,7 @@ abstract class AtOnboardingService implements ProgressPublisher {
     Duration retryInterval = defaultApkamRetryInterval,
     int maxRetries = defaultMaxApkamRetries,
     Duration? apkamKeysExpiryDuration,
+
     /// The algorithm this enrollment's APKAM authentication keypair is minted
     /// under.
     ///
@@ -106,8 +107,10 @@ abstract class AtOnboardingService implements ProgressPublisher {
   Future<AtEnrollmentResponse> sendEnrollRequest(String appName,
       String deviceName, String otp, Map<String, String> namespaces,
       {Duration? apkamKeysExpiryDuration,
+
       /// See [enroll]'s `signingAlgo`.
       SigningAlgoType? signingAlgo,
+
       /// See [enroll]'s `keyExchangeMode`.
       EnrollmentKeyExchangeMode? keyExchangeMode});
 

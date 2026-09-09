@@ -105,8 +105,8 @@ void main() {
 
   test('A test to verify sync with regex when local is ahead', () async {
     // Specifying preference in order to set syncRegex
-    TestUtils.getPreference(atSign,
-        posture: PqPosture.legacy).syncRegex = namespace;
+    TestUtils.getPreference(atSign, posture: PqPosture.legacy).syncRegex =
+        namespace;
     var atClient = atClientManager.atClient;
     // Get server commit id before put operation
     var serverCommitId = await SyncUtil()

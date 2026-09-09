@@ -76,8 +76,8 @@ void main() {
 
     when(() => atAuth.progressStream).thenAnswer((_) => Stream.empty());
     when(() => atAuth.atChops).thenReturn(AtChopsImpl(AtChopsKeys()));
-    when(() => atAuth.authenticate(any())).thenAnswer(
-        (_) async => AtAuthResponse(atSign)
+    when(() => atAuth.authenticate(any()))
+        .thenAnswer((_) async => AtAuthResponse(atSign)
           ..isSuccessful = true
           ..atAuthKeys = (AtKeys()..enrollmentId = enrollmentId));
 
@@ -88,15 +88,20 @@ void main() {
       () async {
     const atSign = '@pq_adopted';
     const enrollmentId = 'pq-adopted-1';
-    final service = legacyPostureService(
-        atSign, await pqKeyfile(atSign, enrollmentId), enrollmentId,
-        _MockAtAuth());
+    final service = legacyPostureService(atSign,
+        await pqKeyfile(atSign, enrollmentId), enrollmentId, _MockAtAuth());
 
     expect(await service.authenticate(), isTrue);
 
     final adopted = service.atLookUp!;
-    expect(identical(adopted, AtClientManager.getInstance().atClient
-        .getRemoteSecondary()!.atLookUp), isTrue,
+    expect(
+        identical(
+            adopted,
+            AtClientManager.getInstance()
+                .atClient
+                .getRemoteSecondary()!
+                .atLookUp),
+        isTrue,
         reason: 'the flow under test is the one that adopts the client\'s '
             'lookup; if this service built its own, the assertion below is '
             'about the wrong object');
@@ -116,9 +121,8 @@ void main() {
     // path, once by the RemoteSecondary that wraps it and once here, and only
     // the last one decides.
     final own = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
-    final service = legacyPostureService(
-        atSign, await pqKeyfile(atSign, enrollmentId), enrollmentId,
-        _MockAtAuth())
+    final service = legacyPostureService(atSign,
+        await pqKeyfile(atSign, enrollmentId), enrollmentId, _MockAtAuth())
       ..atLookUp = own;
 
     expect(await service.authenticate(), isTrue);

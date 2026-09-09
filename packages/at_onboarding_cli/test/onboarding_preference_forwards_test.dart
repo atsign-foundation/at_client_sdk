@@ -18,8 +18,7 @@ void main() {
     });
 
     test('a posture given here reaches the client behaviour it implies', () {
-      final preference =
-          AtOnboardingPreference(posture: PqPosture.pqActive);
+      final preference = AtOnboardingPreference(posture: PqPosture.pqActive);
 
       expect(preference.posture.writesPqByDefault, isTrue);
       expect(preference.disallowLegacyEncryption, isTrue,

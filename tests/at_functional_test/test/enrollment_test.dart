@@ -201,9 +201,10 @@ void main() {
       // NOTE: a CRAM auto-approve that copies the enrolling key over
       // privatekey:at_pkam_publickey has just replaced the owner credential.
       expect(
-          await atClientManager.atClient.getRemoteSecondary()!.executeCommand(
-              'update:privatekey:at_pkam_publickey '
-              '${pkamPublicKeyMap[atSign]}\n'),
+          await atClientManager.atClient
+              .getRemoteSecondary()!
+              .executeCommand('update:privatekey:at_pkam_publickey '
+                  '${pkamPublicKeyMap[atSign]}\n'),
           'data:-1',
           reason: 'the owner credential must be the demo keypair again before '
               'anything else authenticates as this atSign');
@@ -476,8 +477,10 @@ void main() {
       // to perform put operation.
       await AtClientManager.getInstance().setCurrentAtSign(atSign, namespace,
           TestUtils.getPreference(atSign, posture: PqPosture.legacy),
-          storage: TestUtils.storageForPrincipal(atSign, atEnrollmentResponse.enrollmentId),
-          atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
+          storage: TestUtils.storageForPrincipal(
+              atSign, atEnrollmentResponse.enrollmentId),
+          atChops: atChops,
+          enrollmentId: atEnrollmentResponse.enrollmentId);
 
       // Insert key which has access to namespace authorized by enrollment.
       AtKey atKey =
@@ -693,8 +696,10 @@ void main() {
       // to perform put operation.
       await AtClientManager.getInstance().setCurrentAtSign(atSign, namespace,
           TestUtils.getPreference(atSign, posture: PqPosture.legacy),
-          storage: TestUtils.storageForPrincipal(atSign, atEnrollmentResponse.enrollmentId),
-          atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
+          storage: TestUtils.storageForPrincipal(
+              atSign, atEnrollmentResponse.enrollmentId),
+          atChops: atChops,
+          enrollmentId: atEnrollmentResponse.enrollmentId);
 
       // Insert key which has access to namespace authorized by enrollment.
       // Since the enrollment has only read access, should throw an exception.
@@ -943,8 +948,10 @@ void main() {
 
       await AtClientManager.getInstance().setCurrentAtSign(cramAtSign, 'buzz',
           TestUtils.getPreference(cramAtSign, posture: PqPosture.legacy),
-          storage: TestUtils.storageForPrincipal(cramAtSign, enrollResponse.enrollmentId),
-          atChops: enrolleeChops, enrollmentId: enrollResponse.enrollmentId);
+          storage: TestUtils.storageForPrincipal(
+              cramAtSign, enrollResponse.enrollmentId),
+          atChops: enrolleeChops,
+          enrollmentId: enrollResponse.enrollmentId);
       final enrolleeClient = AtClientManager.getInstance().atClient;
 
       // Granted namespace (buzz): write then read back.

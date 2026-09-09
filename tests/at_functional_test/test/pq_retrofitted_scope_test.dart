@@ -78,8 +78,8 @@ void main() {
       // carries the variance.
       deviceName: 'rs-$label-${uuid.v4().hashCode}',
       namespaces: {namespace: 'rw'},
-    storage: TestUtils.storage,
-  );
+      storage: TestUtils.storage,
+    );
 
     expect(enrolled.client.enrollmentId, isNot(enrolled.enrollmentId),
         reason: 'the precondition for every assertion in this file: the client '
@@ -186,8 +186,8 @@ void main() {
             'grants on BOTH records — leaving them equal and both empty — '
             'goes red rather than satisfying the comparison above');
 
-    final ownView = await enrolled.client.enrollmentService!
-        .fetchEnrollmentRequests();
+    final ownView =
+        await enrolled.client.enrollmentService!.fetchEnrollmentRequests();
     expect(ownView.map((e) => e.enrollmentId), [enrolled.client.enrollmentId],
         reason: 'a scoped enrollment holds no __manage, so enroll:list returns '
             'its own record and nothing else. Seeing the parent here would '
@@ -234,7 +234,8 @@ void main() {
   /// client was born from the enrolment session. Step 1 enrols scoped under
   /// `legacy`, so the keyfile it writes is genuinely pre-PQ; step 2 drops every
   /// cached client and builds a fresh one from that keyfile under `pqReady`.
-  test('a cold client that retrofits from a keyfile publishes its namespace '
+  test(
+      'a cold client that retrofits from a keyfile publishes its namespace '
       'key', () async {
     final keysFilePath = 'test/testData/rs-cold@$atSign.atKeys';
     final keyfile = File(keysFilePath);
@@ -253,8 +254,8 @@ void main() {
       deviceName: 'rs-cold-${uuid.v4().hashCode}',
       namespaces: {namespace: 'rw'},
       atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
-    storage: TestUtils.storage,
-  );
+      storage: TestUtils.storage,
+    );
 
     expect(enrolled.client.enrollmentId, enrolled.enrollmentId,
         reason: 'step 1 must NOT have retrofitted, or the keyfile the cold '
@@ -268,12 +269,10 @@ void main() {
     await enrolled.manager.atClient.getRemoteSecondary()?.atLookUp.close();
     AtClientImpl.atClientInstanceMap.clear();
 
-    final cold = await AtClientManager(atSign).setCurrentAtSign(
-      atSign,
-      namespace,
-      TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
-      atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
-      enrollmentId: enrolled.enrollmentId,
+    final cold = await AtClientManager(atSign).setCurrentAtSign(atSign,
+        namespace, TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
+        atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
+        enrollmentId: enrolled.enrollmentId,
         storage: TestUtils.storageForPrincipal(atSign, enrolled.enrollmentId));
     final client = cold.atClient;
 

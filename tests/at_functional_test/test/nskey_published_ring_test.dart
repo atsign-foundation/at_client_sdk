@@ -37,7 +37,8 @@ void main() {
 
     // A second ring over the same client: no in-memory state, exactly like a
     // fresh enrollment or a restart.
-    final fresh = await PublishedNskeyKeyRing(atClient).currentPublic(atSign, ns);
+    final fresh =
+        await PublishedNskeyKeyRing(atClient).currentPublic(atSign, ns);
 
     expect(fresh?.nskeyKid, minted.nskeyKid,
         reason: 'the advertisement is on the atServer; a client holding no '
@@ -104,8 +105,7 @@ void main() {
 
   test('a namespace nobody minted for resolves to nothing', () async {
     expect(
-        await PublishedNskeyKeyRing(atClient)
-            .currentPublic(atSign, uniqueNs()),
+        await PublishedNskeyKeyRing(atClient).currentPublic(atSign, uniqueNs()),
         isNull,
         reason: 'and that is cold start, which the provider turns into a named '
             'refusal');

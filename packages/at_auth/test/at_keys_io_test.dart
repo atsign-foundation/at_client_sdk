@@ -213,7 +213,8 @@ void main() {
           keys.addKey(symmetricKey('typed'));
           await flat.io.flush(atsign.toAtsign(), keys);
 
-          final backup = File('${flat.path}${FileAtKeysIo.legacyShapeBackupSuffix}');
+          final backup =
+              File('${flat.path}${FileAtKeysIo.legacyShapeBackupSuffix}');
           expect(backup.existsSync(), isTrue,
               reason: 'the rolling .bak is replaced by the next write, and a '
                   'client makes several within seconds of this one');

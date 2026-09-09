@@ -66,8 +66,7 @@ void main() {
             'about stopping, because a rig that cannot seed at all produces '
             'the same red. Three earlier reproduction attempts died exactly '
             'there');
-    expect(
-        DateTime.now().difference(startedAt),
+    expect(DateTime.now().difference(startedAt),
         lessThan(const Duration(seconds: 30)),
         reason: 'and it is prompt — measured at ~1s on 2026-08-27, so the '
             '15-second window the paired arm waits before concluding nothing '

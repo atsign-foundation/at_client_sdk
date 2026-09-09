@@ -50,9 +50,8 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: legacyPlusPqProviders);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
 
@@ -94,10 +93,10 @@ void main() {
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
-        namespaces: namespaces ??
-            {'*': 'rw', '__manage': 'rw', namespace: 'rw'},
-    storage: TestUtils.storage,
-  );
+        namespaces:
+            namespaces ?? {'*': 'rw', '__manage': 'rw', namespace: 'rw'},
+        storage: TestUtils.storage,
+      );
 
   test('a holder answers another enrollment and the private is filed',
       () async {
@@ -210,8 +209,8 @@ void main() {
     // The scoped enrollment asks anyway: the requester-side guard is a
     // courtesy a compromised or modified client simply omits, so what must
     // hold is that the HOLDER refuses.
-    await scopedSharing
-        .requestSecretsFromNamespace(namespace, names: [PqSigningRoot.secretName]);
+    await scopedSharing.requestSecretsFromNamespace(namespace,
+        names: [PqSigningRoot.secretName]);
     await holderSharing.sweepOnce(fromRemote: true);
     await scopedSharing.sweepOnce(fromRemote: true);
 

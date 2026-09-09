@@ -138,8 +138,8 @@ class TestSuiteInitializer {
             'the preference was built with, or build the preference at the '
             'posture you want.');
       }
-      atClientPreference ??= TestPreferences.getInstance()
-          .getPreference(atSign, posture: posture);
+      atClientPreference ??=
+          TestPreferences.getInstance().getPreference(atSign, posture: posture);
       // Checked here as well as inside getPreference: a caller may hand in a
       // preference it built itself, and this is the last point before
       // setCurrentAtSign that every route has in common.
@@ -161,9 +161,8 @@ class TestSuiteInitializer {
           .setEncryptionKeys(atClientManager.atClient, atSign);
 
       if (enableInitialSync) {
-        await E2ESyncService.getInstance().syncData(
-            atClientManager.atClient.syncService,
-            atSign: atSign);
+        await E2ESyncService.getInstance()
+            .syncData(atClientManager.atClient.syncService, atSign: atSign);
       }
 
       // verify if the public key is in the local secondary

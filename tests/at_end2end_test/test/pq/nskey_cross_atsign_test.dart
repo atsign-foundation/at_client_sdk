@@ -45,8 +45,7 @@ void main() {
   /// read live, so the config is set once both exist.
   Future<({AtClient client, PublishedNskeyKeyRing ring})> nskeyClient(
       String atSign) async {
-    final manager =
-        managers.putIfAbsent(atSign, () => AtClientManager(atSign));
+    final manager = managers.putIfAbsent(atSign, () => AtClientManager(atSign));
     await TestSuiteInitializer.getInstance().testInitializer(
         atSign, namespace, authType,
         posture: legacyPlusPqProviders, manager: manager);
@@ -368,7 +367,6 @@ void main() {
     final selfCk =
         (await aliceSide.client.get(selfKey)).metadata?.appMetadata?.additional;
 
-
     // Bob asks alice's atServer for the conveyance carrying her self CK. It is
     // a self key of alice's, so he is not a party to it at all.
     await expectLater(
@@ -397,13 +395,12 @@ void main() {
     // advertisement for a key bob never minted, carrying no signature. Written
     // straight to bob's atServer, which is where alice reads it from.
     final substituted = await XWingKeyPair.generate();
-    await bobSide.client.getRemoteSecondary()!.executeVerb(
-        UpdateVerbBuilder()
-          ..atKey = nskeyAdvertisementKey(bob, namespace)
-          ..value = jsonEncode({
-            'nskeyKid': nskeyKidOf(substituted.publicKeyBytes),
-            'publicKey': base64Encode(substituted.publicKeyBytes),
-          }));
+    await bobSide.client.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
+      ..atKey = nskeyAdvertisementKey(bob, namespace)
+      ..value = jsonEncode({
+        'nskeyKid': nskeyKidOf(substituted.publicKeyBytes),
+        'publicKey': base64Encode(substituted.publicKeyBytes),
+      }));
 
     final aliceSide = await nskeyClient(alice);
 
@@ -426,8 +423,8 @@ void main() {
       // every AtException through AtExceptionManager, so the thrown type says
       // nothing, and a write that failed for some unrelated reason would let
       // this pass while proving nothing about the verify.
-      throwsA(isA<AtClientException>().having((e) => e.message, 'message',
-          contains('carries no APKAM signature'))),
+      throwsA(isA<AtClientException>().having(
+          (e) => e.message, 'message', contains('carries no APKAM signature'))),
       reason: 'the write must fail rather than seal a content key to a key '
           'nobody proved bob minted',
     );

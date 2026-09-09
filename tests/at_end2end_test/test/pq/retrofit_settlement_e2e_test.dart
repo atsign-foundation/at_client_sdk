@@ -141,8 +141,8 @@ void main() {
       namespaces: {namespace: 'rw'},
       manager: AtClientManager(atSign),
     );
-    expect(AtClientImpl.signingAlgoOf(manager.atClient),
-        SigningAlgoType.mldsa65,
+    expect(
+        AtClientImpl.signingAlgoOf(manager.atClient), SigningAlgoType.mldsa65,
         reason: 'the retrofit itself must have succeeded, or the settlement '
             'is being attributed to a retrofit that never happened');
     expect(

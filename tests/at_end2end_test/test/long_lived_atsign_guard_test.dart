@@ -67,15 +67,13 @@ void main() {
     test('a legacy posture with a stronger authentication key still refuses',
         () {
       expect(
-          () => check(
-              protectedAtSign,
-              AtClientPreference(
-                  posture: PqPosture.legacy,
-                  authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
-                  // NOTE: must be non-empty, or the constructor rejects the
-                  // non-rsa2048 authentication key and this throws at
-                  // construction instead of reaching the guard.
-                  dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})),
+          () => check(protectedAtSign, AtClientPreference(
+              posture: PqPosture.legacy,
+              authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
+              // NOTE: must be non-empty, or the constructor rejects the
+              // non-rsa2048 authentication key and this throws at
+              // construction instead of reaching the guard.
+              dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})),
           throwsA(isA<StateError>()
               .having((e) => e.message, 'message', contains('RETROFIT'))),
           reason: 'retrofitIsDue reads authenticationKeyAlgorithm, not the '
@@ -158,8 +156,8 @@ void main() {
 
     final named = <String>{};
     for (final file in configs) {
-      for (final match
-          in RegExp(r"'(@[A-Za-z0-9_]+)'").allMatches(file.readAsStringSync())) {
+      for (final match in RegExp(r"'(@[A-Za-z0-9_]+)'")
+          .allMatches(file.readAsStringSync())) {
         named.add(match.group(1)!);
       }
     }

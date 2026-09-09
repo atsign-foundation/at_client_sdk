@@ -66,9 +66,8 @@ class FunctionalStorage {
   /// Succession does NOT come here: a retrofit replaces one enrollment with
   /// another over the same store, so it keeps [forAtSign]'s bundle and hands
   /// the store over.
-  AtClientStorage forPrincipal(String atSign, String label) =>
-      _byPrincipal.putIfAbsent(
-          '$atSign|$label', () => _build(atSign, label: label));
+  AtClientStorage forPrincipal(String atSign, String label) => _byPrincipal
+      .putIfAbsent('$atSign|$label', () => _build(atSign, label: label));
 
   /// Lets the next client attach under a different enrollment while keeping
   /// the data.

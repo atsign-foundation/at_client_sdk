@@ -427,7 +427,8 @@ void main() {
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
 
-      final atOnboardingRequest = AtOnboardingRequest('@aaron🛠', signingAlgoType: SigningAlgoType.rsa2048);
+      final atOnboardingRequest = AtOnboardingRequest('@aaron🛠',
+          signingAlgoType: SigningAlgoType.rsa2048);
 
       atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
       atAuth.probeSocket = (host, port) async {};
@@ -447,7 +448,8 @@ void main() {
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenThrow(
           AtEnrollmentException('server refused: enrollment quota exceeded'));
 
-      final atOnboardingRequest = AtOnboardingRequest('@ferris🛠', signingAlgoType: SigningAlgoType.rsa2048)
+      final atOnboardingRequest = AtOnboardingRequest('@ferris🛠',
+          signingAlgoType: SigningAlgoType.rsa2048)
         ..atKeysIo = fileAtKeysIo
         ..appName = 'wavi'
         ..deviceName = 'iphone';
@@ -484,7 +486,8 @@ void main() {
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
           .thenAnswer((_) => Future.value(mockEnrollmentResponse));
-      final atOnboardingRequest = AtOnboardingRequest('@bob🛠', signingAlgoType: SigningAlgoType.rsa2048)
+      final atOnboardingRequest = AtOnboardingRequest('@bob🛠',
+          signingAlgoType: SigningAlgoType.rsa2048)
         ..atKeysIo = fileAtKeysIo
         ..appName = 'wavi'
         ..deviceName = 'iphone';
@@ -522,7 +525,8 @@ void main() {
           Future.value(
               AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
 
-      final atOnboardingRequest = AtOnboardingRequest('@alice🛠', signingAlgoType: SigningAlgoType.rsa2048)
+      final atOnboardingRequest = AtOnboardingRequest('@alice🛠',
+          signingAlgoType: SigningAlgoType.rsa2048)
         ..atKeysIo = InMemoryAtKeysIo()
         ..appName = 'wavi'
         ..deviceName = 'iphone';
@@ -578,7 +582,8 @@ void main() {
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
           .thenAnswer((_) => Future.value(mockEnrollmentResponse));
-      final atOnboardingRequest = AtOnboardingRequest('@colin🛠', signingAlgoType: SigningAlgoType.rsa2048)
+      final atOnboardingRequest = AtOnboardingRequest('@colin🛠',
+          signingAlgoType: SigningAlgoType.rsa2048)
         ..atKeysIo = fileAtKeysIo;
 
       atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;

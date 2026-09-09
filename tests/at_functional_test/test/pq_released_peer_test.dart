@@ -32,8 +32,8 @@ void main() {
   final atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
   final namespace = 'wavi';
 
-  final publishedDir = Directory(
-      '${Directory.current.path}/../pq_matrix/published');
+  final publishedDir =
+      Directory('${Directory.current.path}/../pq_matrix/published');
 
   const stages = <String, PqPosture>{
     'legacy': PqPosture.legacy,
@@ -51,14 +51,22 @@ void main() {
       [
         'run',
         'bin/read_apsk.dart',
-        '--atsign', atSign,
-        '--peer', atSign,
-        '--peer-enrollment-id', cells[stage]!.client.enrollmentId!,
-        '--namespace', namespace,
-        '--root-domain', 'vip.ve.atsign.zone',
-        '--root-port', '${TestUtils.rootServerPort}',
-        '--storage', 'test/hive/relpeer/$stage-$runId',
-        '--run-id', runId,
+        '--atsign',
+        atSign,
+        '--peer',
+        atSign,
+        '--peer-enrollment-id',
+        cells[stage]!.client.enrollmentId!,
+        '--namespace',
+        namespace,
+        '--root-domain',
+        'vip.ve.atsign.zone',
+        '--root-port',
+        '${TestUtils.rootServerPort}',
+        '--storage',
+        'test/hive/relpeer/$stage-$runId',
+        '--run-id',
+        runId,
       ],
       workingDirectory: publishedDir.path,
     );
@@ -95,8 +103,9 @@ void main() {
     await keysIo.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
     final manager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign, namespace, TestUtils.getPreference(atSign,
-            posture: legacyPlusPqProviders),
+        atSign,
+        namespace,
+        TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
         atKeysIo: keysIo,
         atChops: loader.createAtChopsFromDemoKeys(atSign),
         storage: TestUtils.storageFor(atSign));
@@ -115,8 +124,8 @@ void main() {
         // against the same virtualenv must not collide with the first's.
         deviceName: 'relpeer-${entry.key}-'
             '${DateTime.now().microsecondsSinceEpoch}',
-    storage: TestUtils.storage,
-  );
+        storage: TestUtils.storage,
+      );
       // NOTE: the id the client RUNS as, not the one it was enrolled as — a pq
       // posture retrofits during construction and advertises its `_apsk` under
       // the new id.

@@ -43,9 +43,8 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: legacyPlusPqProviders);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     atClient = manager.atClient;
     await AtClientSecretSharing.forClient(atClient).register();
   });
@@ -92,7 +91,8 @@ void main() {
       apkamSymmetricKey: AtBytes.fromString(''),
     ));
 
-    final payload = SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
+    final payload =
+        SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
     return (
       enrollmentId: response.enrollmentId,
       kpid: ((payload['keys'] as List).single as Map)['kid'] as String,
@@ -128,10 +128,9 @@ void main() {
     final allowed = envelope(granted);
     final forbidden = envelope(withheld);
     for (final key in [allowed, forbidden]) {
-      await atClient.getRemoteSecondary()!.executeVerb(
-          UpdateVerbBuilder()
-            ..atKey = key
-            ..value = 'envelope-payload');
+      await atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
+        ..atKey = key
+        ..value = 'envelope-payload');
     }
 
     for (final key in [allowed, forbidden]) {

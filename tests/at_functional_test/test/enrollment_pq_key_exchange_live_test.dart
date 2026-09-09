@@ -9,11 +9,7 @@ import 'dart:convert' show base64Decode;
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart'
-    show
-        AtChopsImpl,
-        AtChopsKeys,
-        AtEncryptionKeyPair,
-        AtPkamKeyPair;
+    show AtChopsImpl, AtChopsKeys, AtEncryptionKeyPair, AtPkamKeyPair;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show SignedEnvelope;
@@ -76,7 +72,8 @@ void main() {
     );
     expect(response.enrollStatus, EnrollmentStatus.pending);
 
-    final payload = SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
+    final payload =
+        SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
     return (
       enrollmentId: response.enrollmentId,
       kpid: ((payload['keys'] as List).single as Map)['kid'] as String,
@@ -108,8 +105,8 @@ void main() {
 
     final enrolled = await enrolAsPq();
 
-    await atClient.enrollmentService!.approve(
-        EnrollmentRequestDecision.approved(
+    await atClient.enrollmentService!
+        .approve(EnrollmentRequestDecision.approved(
       atSign: atSign,
       enrollmentId: enrolled.enrollmentId,
       // What an approving app passes on the legacy path: the record says this
@@ -122,15 +119,15 @@ void main() {
     // namespace scan for and read the key. Its chops come from the APKAM
     // keypair alone — `AtKeys.toAtChops` would demand an encryption private
     // key this enrollment does not hold yet.
-    final enrolleeLookup = AtLookupImpl(
-        atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
-      ..enrollmentId = enrolled.enrollmentId
-      ..atChops = AtChopsImpl(AtChopsKeys.create(
-        AtEncryptionKeyPair.create(
-            enrolled.keys.defaultEncryptionPublicKey!.toString(), ''),
-        AtPkamKeyPair.create(enrolled.keys.apkamPublicKey!.toString(),
-            enrolled.keys.apkamPrivateKey!.toString()),
-      ));
+    final enrolleeLookup =
+        AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
+          ..enrollmentId = enrolled.enrollmentId
+          ..atChops = AtChopsImpl(AtChopsKeys.create(
+            AtEncryptionKeyPair.create(
+                enrolled.keys.defaultEncryptionPublicKey!.toString(), ''),
+            AtPkamKeyPair.create(enrolled.keys.apkamPublicKey!.toString(),
+                enrolled.keys.apkamPrivateKey!.toString()),
+          ));
 
     expect(
         await enrolleeLookup.pkamAuthenticate(

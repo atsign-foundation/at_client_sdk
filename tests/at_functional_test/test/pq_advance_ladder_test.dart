@@ -63,8 +63,9 @@ void main() {
     await approverKeys.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
     final approverManager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign, namespace, TestUtils.getPreference(atSign,
-            posture: legacyPlusPqProviders),
+        atSign,
+        namespace,
+        TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
         atKeysIo: approverKeys,
         atChops: loader.createAtChopsFromDemoKeys(atSign),
         storage: TestUtils.storageFor(atSign));
@@ -178,7 +179,8 @@ void main() {
     return key;
   }
 
-  test('one enrollment walks legacy to pqReady to pqActive, and nothing '
+  test(
+      'one enrollment walks legacy to pqReady to pqActive, and nothing '
       'written before a rung stops being readable after it', () async {
     // ---- rung 0: legacy ------------------------------------------------
     final atLegacy = await clientAt(PqPosture.legacy, legacyEnrollmentId);

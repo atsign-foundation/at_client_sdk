@@ -25,8 +25,7 @@ void main() {
 
   group('AtClient lifecycle tests', () {
     test('create, use, and stop AtClient successfully', () async {
-      var atClientManager = await TestUtils.initAtClient(
-          firstAtSign, namespace,
+      var atClientManager = await TestUtils.initAtClient(firstAtSign, namespace,
           posture: PqPosture.legacy);
       var atClient = atClientManager.atClient;
 
@@ -64,8 +63,7 @@ void main() {
     });
 
     test('stop with active notifications cleans up gracefully', () async {
-      var atClientManager = await TestUtils.initAtClient(
-          firstAtSign, namespace,
+      var atClientManager = await TestUtils.initAtClient(firstAtSign, namespace,
           posture: PqPosture.legacy);
       var atClient = atClientManager.atClient;
 

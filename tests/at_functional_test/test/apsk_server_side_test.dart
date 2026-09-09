@@ -32,9 +32,8 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: legacyPlusPqProviders);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
@@ -49,14 +48,15 @@ void main() {
         rootDomain: rootDomain,
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
-    storage: TestUtils.storage,
-  );
+        storage: TestUtils.storage,
+      );
 
   String apskKeyFor(String enrollmentId) =>
       'public:_apsk.$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
       '$atSign';
 
-  test('the atServer publishes _apsk itself, and refuses a cross-enrollment '
+  test(
+      'the atServer publishes _apsk itself, and refuses a cross-enrollment '
       'overwrite', () async {
     final victim = await enrol('apsk-victim');
     final attacker = await enrol('apsk-attacker');
@@ -68,10 +68,9 @@ void main() {
 
     // NOTE: nothing in this test wrote this record — the atServer did, at
     // approval.
-    final published = await approver
-        .getRemoteSecondary()!
-        .executeCommand('llookup:${apskKeyFor(victim.enrollmentId)}\n',
-            auth: true);
+    final published = await approver.getRemoteSecondary()!.executeCommand(
+        'llookup:${apskKeyFor(victim.enrollmentId)}\n',
+        auth: true);
     expect(published, isNotNull);
     expect(published, contains('data:'),
         reason: 'a verifier meeting a freshly approved enrollment must find '
@@ -134,10 +133,9 @@ void main() {
 
     // NOTE: a server that errored after writing would satisfy the refusal
     // above and still have handed the attacker the victim's identity.
-    final after = await approver
-        .getRemoteSecondary()!
-        .executeCommand('llookup:${apskKeyFor(victim.enrollmentId)}\n',
-            auth: true);
+    final after = await approver.getRemoteSecondary()!.executeCommand(
+        'llookup:${apskKeyFor(victim.enrollmentId)}\n',
+        auth: true);
     expect(after!.replaceFirst('data:', '').trim(), original,
         reason: 'the victim\'s signing key must be byte-identical to what the '
             'atServer published');
@@ -178,8 +176,8 @@ void main() {
       rootPort: TestUtils.rootServerPort,
       deviceName: 'apsk-heal-$runId',
       atKeysIo: keysIo,
-    storage: TestUtils.storage,
-  );
+      storage: TestUtils.storage,
+    );
 
     expect((await keysIo.read(atSign)).signingKeysFor(enrolled.enrollmentId),
         isEmpty,
@@ -191,8 +189,9 @@ void main() {
     expect(reconciled.minted, [SigningAlgoType.rsa2048]);
     expect(reconciled.retired, isEmpty);
 
-    final held =
-        (await keysIo.read(atSign)).signingKeysFor(enrolled.enrollmentId).single;
+    final held = (await keysIo.read(atSign))
+        .signingKeysFor(enrolled.enrollmentId)
+        .single;
     final published = await approver.getRemoteSecondary()!.executeCommand(
         'llookup:${apskKeyFor(enrolled.enrollmentId)}\n',
         auth: true);

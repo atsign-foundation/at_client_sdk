@@ -38,7 +38,8 @@ void main() {
     atClientManager.atClient.syncService.sync();
   });
 
-  test('a notification sent while the connection is down arrives after the '
+  test(
+      'a notification sent while the connection is down arrives after the '
       'reconnect', () async {
     final id = Uuid().v4();
     const sendNamespace = 'reconnectlive.wavi';

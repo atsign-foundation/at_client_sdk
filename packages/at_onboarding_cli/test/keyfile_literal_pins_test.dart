@@ -70,8 +70,7 @@ void main() {
       expect(json[atsign], selfEncryptionKey);
       expect(json['apkamSymmetricKey'], apkamSymmetricKey);
       expect(json['enrollmentId'], '123');
-      expect(json['aesPkamPublicKey'],
-          isNot(pkamPair.atPublicKey.publicKey),
+      expect(json['aesPkamPublicKey'], isNot(pkamPair.atPublicKey.publicKey),
           reason: 'the four aes* fields are AES-encrypted under the '
               'selfEncryptionKey, never plaintext');
       expect(json['aesEncryptPrivateKey'],
@@ -86,7 +85,8 @@ void main() {
       expect(json.containsKey('atsignKeys'), isFalse);
     });
 
-    test('typed material brings the version/atsign/enrollments document with it',
+    test(
+        'typed material brings the version/atsign/enrollments document with it',
         () async {
       const atsign = '@alice_typed_pins';
       final preference = AtOnboardingPreference()
@@ -166,8 +166,8 @@ void main() {
 
       // authenticate() reads through this same store, so a file this CLI
       // writes and cannot read is the failure mode that matters.
-      final readBack = await FileAtKeysIo(filePath: (_) => file.path)
-          .read(atsign);
+      final readBack =
+          await FileAtKeysIo(filePath: (_) => file.path).read(atsign);
       expect(readBack.apkamPrivateKey!.toString(),
           pkamPair.atPrivateKey.privateKey);
       expect(readBack.defaultEncryptionPrivateKey!.toString(),
@@ -185,8 +185,8 @@ void main() {
       expect(AuthKeyType.aesEncryptedPkamPrivateKey, 'aesPkamPrivateKey');
       expect(
           AuthKeyType.aesEncryptedEncryptionPublicKey, 'aesEncryptPublicKey');
-      expect(AuthKeyType.aesEncryptedEncryptionPrivateKey,
-          'aesEncryptPrivateKey');
+      expect(
+          AuthKeyType.aesEncryptedEncryptionPrivateKey, 'aesEncryptPrivateKey');
       expect(AuthKeyType.selfEncryptionKey, 'selfEncryptionKey');
       expect(AuthKeyType.apkamSymmetricKey, 'apkamSymmetricKey');
     });
@@ -206,8 +206,7 @@ void main() {
       addTearDown(() => file.deleteSync());
 
       expect(file.path, endsWith('.enrollment.checkpoint'));
-      final json =
-          jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+      final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
       expect(json.keys.toSet(),
           {'enrollmentId', 'enrollStatus', 'atAuthKeys', 'validTill'});
       expect(json.containsKey('atSign'), isFalse,

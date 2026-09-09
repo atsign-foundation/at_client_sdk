@@ -474,6 +474,7 @@ void main() {
               'republishing — orphaning the key this record already named');
     });
   });
+
   /// A PRE-ENROLLMENT atSign — one that holds no enrollment at all and
   /// authenticates with the flat `at_pkam_publickey`.
   ///
@@ -511,14 +512,14 @@ void main() {
       when(() => mock.atChops).thenReturn(AtChopsImpl(
           AtChopsKeys.create(encryptionKeyPair, null)
             ..selfEncryptionKey = AESKey(selfEncryptionKey)));
-      when(() => mock.executeCommand(any(that: startsWith('enroll:request:')),
-              auth: any(named: 'auth')))
-          .thenAnswer((_) async =>
-              'data:{"enrollmentId":"new-123","status":"pending"}');
-      when(() => mock.executeCommand(any(that: startsWith('enroll:approve:')),
-              auth: any(named: 'auth')))
-          .thenAnswer((_) async =>
-              'data:{"enrollmentId":"new-123","status":"approved"}');
+      when(() =>
+          mock.executeCommand(any(that: startsWith('enroll:request:')),
+              auth: any(named: 'auth'))).thenAnswer(
+          (_) async => 'data:{"enrollmentId":"new-123","status":"pending"}');
+      when(() =>
+          mock.executeCommand(any(that: startsWith('enroll:approve:')),
+              auth: any(named: 'auth'))).thenAnswer(
+          (_) async => 'data:{"enrollmentId":"new-123","status":"approved"}');
       // executeVerb is deliberately NOT stubbed: `deny` goes through it, and
       // the submitter's cleanup is best-effort and reports what happened, so
       // an unstubbed deny still leaves the control arm asserting the message
@@ -526,7 +527,8 @@ void main() {
       return mock;
     }
 
-    Future<(MockAtLookUp, AtAuthSession)> fixture({String? enrollmentId}) async {
+    Future<(MockAtLookUp, AtAuthSession)> fixture(
+        {String? enrollmentId}) async {
       final keysIo = InMemoryAtKeysIo();
       await keysIo.write(atSign, keysFor(enrollmentId: enrollmentId));
       return (
@@ -539,8 +541,8 @@ void main() {
       );
     }
 
-    List<String> commandsSent(MockAtLookUp mock) => verify(() =>
-            mock.executeCommand(captureAny(), auth: any(named: 'auth')))
+    List<String> commandsSent(MockAtLookUp mock) => verify(
+            () => mock.executeCommand(captureAny(), auth: any(named: 'auth')))
         .captured
         .cast<String>();
 
@@ -589,9 +591,9 @@ void main() {
               namespaces: {'*': 'rw'}),
           mock);
 
-      final params = jsonDecode(
-              commandsSent(mock)[0].substring('enroll:request:'.length))
-          as Map<String, dynamic>;
+      final params =
+          jsonDecode(commandsSent(mock)[0].substring('enroll:request:'.length))
+              as Map<String, dynamic>;
       expect(params['encryptedAPKAMSymmetricKey'], isNull,
           reason: 'a retrofit conveys nothing — the keyfile already holds '
               'every secret an approver would pass on — and nothing approves '
@@ -615,8 +617,10 @@ void main() {
                   deviceName: 'selfdevice',
                   namespaces: {'app_1': 'rw'}),
               mock),
-          throwsA(isA<AtEnrollmentException>().having((e) => e.message,
-              'message', contains('expected the self-enrollment to be '
+          throwsA(isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              contains('expected the self-enrollment to be '
                   'auto-approved'))),
           reason: 'a pending APKAM self-enrolment means an atServer without '
               'the auto-approve, which is a different situation and keeps its '

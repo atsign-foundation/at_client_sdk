@@ -85,10 +85,10 @@ void main() {
         useRemoteAtServer: true);
     final value = await atClient.get(remote.single,
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
-    final payload = (SignedEnvelope.fromJson(
-                jsonDecode(value.value as String) as Map)
-            .payload as Map)
-        .cast<String, dynamic>();
+    final payload =
+        (SignedEnvelope.fromJson(jsonDecode(value.value as String) as Map)
+                .payload as Map)
+            .cast<String, dynamic>();
 
     expect(payload['suite'], SecretSharingAlgos.xWingRfc9180,
         reason: 'both parties are this build, so both advertise the RFC 9180 '

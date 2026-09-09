@@ -123,8 +123,7 @@ void main() {
     final auth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
         atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)))
       ..namespace = namespace
-      ..rootDomain = AtRootDomain(
-          ConfigUtil.getYaml()['root_server']['url'],
+      ..rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'],
           ConfigUtil.getYaml()['root_server']['port'] ?? 64));
     expect(auth.isSuccessful, true,
         reason: 'the legacy enrollment must authenticate before it can '
@@ -138,9 +137,9 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(atSign, namespace, ConfigUtil.getYaml()['authType'],
-            posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        atSign, namespace, ConfigUtil.getYaml()['authType'],
+        posture: PqPosture.legacy);
     owner = AtClientManager.getInstance().atClient;
     // The approver seals each enrollee's symmetric key to its own key
     // package, so it needs one registered before it can approve anything.
@@ -202,8 +201,8 @@ void main() {
             'in-flow: it is auto-approved by the atServer with no approver '
             'client in the loop, so nothing else would ever convey it one');
 
-    final held =
-        await PqSigningRoot(client, keysIo: session.atKeysIo).privateHalf(atSign);
+    final held = await PqSigningRoot(client, keysIo: session.atKeysIo)
+        .privateHalf(atSign);
     expect(held, isNotNull,
         reason: 'the private is filed before the record is published — a '
             'published root whose private did not survive strands every '
@@ -338,11 +337,10 @@ void main() {
 
     expect(
         await PqSigningChain(clone).publishOwnRootLink(
-            isFullyPrivileged: () async => true,
-            keysIo: cloneSession.atKeysIo),
+            isFullyPrivileged: () async => true, keysIo: cloneSession.atKeysIo),
         isTrue);
-    final verdict = await PqSigningChain(clone).verifyChain(
-        cloneSharing, clone.enrollmentId!);
+    final verdict = await PqSigningChain(clone)
+        .verifyChain(cloneSharing, clone.enrollmentId!);
     expect(verdict.verdict, ChainVerdict.anchored,
         reason: 'Reason if not: ${verdict.reason}');
   }, timeout: const Timeout(Duration(minutes: 4)));
@@ -414,8 +412,8 @@ void main() {
             'that vouches for every enrollment on the atSign — asking would '
             'be refused, and asking anyway announces to every holder that '
             'something unentitled is looking for it');
-    expect(await PqSigningChain(scoped).readRootLink(scoped.enrollmentId!),
-        isNull,
+    expect(
+        await PqSigningChain(scoped).readRootLink(scoped.enrollmentId!), isNull,
         reason: 'it cannot anchor itself: its route to the chain is a link '
             'signed for it by a privileged enrollment');
   }, timeout: const Timeout(Duration(minutes: 3)));

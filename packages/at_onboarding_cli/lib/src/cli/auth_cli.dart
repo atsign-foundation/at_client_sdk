@@ -30,38 +30,52 @@ void _showPreOnboardingKeyWarning() {
   stdout.writeln();
   stdout.writeln(chalk.yellow('⚠️  IMPORTANT - READ CAREFULLY ⚠️'));
   stdout.writeln();
-  stdout.writeln(chalk.bold('You are about to onboard your atSign and generate a set of unique cryptographic keys.'));
-  stdout.writeln(chalk.bold('It is CRITICAL that you back up these keys to more than one place after onboarding.'));
+  stdout.writeln(chalk.bold(
+      'You are about to onboard your atSign and generate a set of unique cryptographic keys.'));
+  stdout.writeln(chalk.bold(
+      'It is CRITICAL that you back up these keys to more than one place after onboarding.'));
   stdout.writeln();
   stdout.writeln(chalk.red('LOSING ACCESS TO THESE KEYS WILL RESULT IN:'));
-  stdout.writeln('• Loss of ability to authenticate into your atSign\'s atServer');
-  stdout.writeln('• Loss of ability to decrypt any data on your atSign\'s atServer');
-  stdout.writeln('• Loss of data access to any applications/devices that use these keys');
+  stdout.writeln(
+      '• Loss of ability to authenticate into your atSign\'s atServer');
+  stdout.writeln(
+      '• Loss of ability to decrypt any data on your atSign\'s atServer');
+  stdout.writeln(
+      '• Loss of data access to any applications/devices that use these keys');
   stdout.writeln();
-  stdout.writeln(chalk.bold('If you lose these keys, you will NOT be able to recover your atSign or its data.'));
-  stdout.writeln(chalk.bold('NOT EVEN ATSIGN INC. CAN RECOVER THESE KEYS FOR YOU!'));
-  stdout.writeln(chalk.bold('You may reset your atSign\'s atServer by contacting support@atsign.com, if a new set of keys is required, but no data can be recovered.'));
+  stdout.writeln(chalk.bold(
+      'If you lose these keys, you will NOT be able to recover your atSign or its data.'));
+  stdout.writeln(
+      chalk.bold('NOT EVEN ATSIGN INC. CAN RECOVER THESE KEYS FOR YOU!'));
+  stdout.writeln(chalk.bold(
+      'You may reset your atSign\'s atServer by contacting support@atsign.com, if a new set of keys is required, but no data can be recovered.'));
   stdout.writeln();
   stdout.writeln(chalk.blue('IMPORTANT:'));
-  stdout.writeln('• After onboarding, you MUST back up your .atKeys file to a secure location');
-  stdout.writeln('• Store it in multiple secure locations (cloud storage, external drives, etc.)');
+  stdout.writeln(
+      '• After onboarding, you MUST back up your .atKeys file to a secure location');
+  stdout.writeln(
+      '• Store it in multiple secure locations (cloud storage, external drives, etc.)');
   stdout.writeln('• Keep it safe from unauthorized access');
   stdout.writeln();
-  
+
   while (true) {
-    stdout.write(chalk.blue('[Action Required] ') + chalk.bold('Do you understand that losing these keys means losing access to your atSign and all its data? (Y/N): '));
+    stdout.write(chalk.blue('[Action Required] ') +
+        chalk.bold(
+            'Do you understand that losing these keys means losing access to your atSign and all its data? (Y/N): '));
     String? response = stdin.readLineSync();
-    
+
     if (response != null) {
       String normalized = response.trim().toLowerCase();
       if (normalized == 'y' || normalized == 'yes') {
         stdout.writeln();
-        stdout.writeln(chalk.green('✓ Acknowledged. Please remember to back up your keys securely!'));
+        stdout.writeln(chalk.green(
+            '✓ Acknowledged. Please remember to back up your keys securely!'));
         stdout.writeln();
         break;
       } else if (normalized == 'n' || normalized == 'no') {
         stdout.writeln();
-        stdout.writeln(chalk.red('Onboarding cancelled. Please ensure you understand the importance of key backup before proceeding.'));
+        stdout.writeln(chalk.red(
+            'Onboarding cancelled. Please ensure you understand the importance of key backup before proceeding.'));
         exit(0);
       } else {
         stdout.writeln(chalk.yellow('Please enter Y (yes) or N (no).'));
@@ -119,7 +133,10 @@ Future<int> wrappedMain(List<String> arguments) async {
   }
 
   final first = arguments.first;
-  if (first.startsWith('-') && first != '-h' && first != '--help' && first != '--version') {
+  if (first.startsWith('-') &&
+      first != '-h' &&
+      first != '--help' &&
+      first != '--version') {
     stderr.writeln('Version: $packageVersion');
     stderr.writeln('No command was given. "$first" is an option, not a '
         'command — an invocation with no command used to be treated as '
@@ -225,8 +242,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
                 posture: AuthCliArgs.postureForApprover(commandArgResults)));
@@ -244,8 +260,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
                 posture: AuthCliArgs.postureForApprover(commandArgResults)));
@@ -259,8 +274,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
@@ -270,8 +284,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
@@ -281,8 +294,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
                 posture: AuthCliArgs.postureForApprover(commandArgResults)));
@@ -293,8 +305,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
@@ -304,8 +315,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
@@ -315,8 +325,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
                 posture: AuthCliArgs.postureForApprover(commandArgResults)));
@@ -327,8 +336,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
                 posture: AuthCliArgs.postureForApprover(commandArgResults)));
@@ -347,8 +355,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
                 posture: AuthCliArgs.postureForApprover(commandArgResults)));
@@ -359,8 +366,7 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
                 passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
                 waitForPqStartup: false,
                 posture: AuthCliArgs.postureForApprover(commandArgResults)));
@@ -467,7 +473,7 @@ Future<int> status(ArgResults ar) async {
 /// secret from the registrar.
 @visibleForTesting
 Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
-  if(argResults[AuthCliArgs.argNameVersion]) {
+  if (argResults[AuthCliArgs.argNameVersion]) {
     stdout.writeln('Version: $packageVersion');
     return false;
   }
@@ -488,7 +494,8 @@ Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
     }
     // if  -y flag is not used and --cramkey is not provided, show back up key warning message
     // --cramkey implies --yes for backwards compatibility with automation scripts
-    if (!argResults[AuthCliArgs.argNameYes] && !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
+    if (!argResults[AuthCliArgs.argNameYes] &&
+        !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
       _showPreOnboardingKeyWarning();
     }
     await svc.onboard(
@@ -551,8 +558,9 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     // NOTE: the minted key's algorithm has to agree with the posture the
     // enrolment is submitted under, or at_chops is handed a key of one
     // algorithm and a declaration of another.
-    signingAlgo:
-        AuthCliArgs.postureForEnroller(argResults).posture.authenticationKeyAlgorithm,
+    signingAlgo: AuthCliArgs.postureForEnroller(argResults)
+        .posture
+        .authenticationKeyAlgorithm,
     // NOTE: null means the posture decides. This is asked separately from the
     // posture because a pq request carries no wrapped key, so an approver that
     // cannot convey approves an enrollment that can decrypt nothing, and only
@@ -562,7 +570,6 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
 
   return true;
 }
-
 
 @visibleForTesting
 Future<void> setSpp(ArgResults argResults, AtClient atClient) async {
@@ -1095,7 +1102,7 @@ Future<void> passPhraseDecryptAtKeys(ArgResults ar) async {
     throw ArgumentError(
         'The --${AuthCliArgs.argNameAtKeys} option must not be empty');
   }
-  if (!File(atKeysFilePath).existsSync()){
+  if (!File(atKeysFilePath).existsSync()) {
     throw ArgumentError('Keys file does not exist at $atKeysFilePath');
   }
 
@@ -1111,7 +1118,8 @@ Future<void> passPhraseDecryptAtKeys(ArgResults ar) async {
 
   final writer = FileAtKeysIo(filePath: (_) => targetKeyFilePath);
   await writer.write(atSign, decryptedAtKeys);
-  stdout.writeln('${chalk.green('[Success]')} Decrypted atKeys file stored at $targetKeyFilePath');
+  stdout.writeln(
+      '${chalk.green('[Success]')} Decrypted atKeys file stored at $targetKeyFilePath');
 }
 
 @visibleForTesting

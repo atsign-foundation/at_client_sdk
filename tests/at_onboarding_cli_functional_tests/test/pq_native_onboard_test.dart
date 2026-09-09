@@ -113,8 +113,7 @@ void main() {
     final listns = await client
         .getRemoteSecondary()!
         .executeCommand('enroll:listns:wavi\n', auth: true);
-    final roster =
-        jsonDecode(listns!.replaceFirst('data:', '').trim()) as List;
+    final roster = jsonDecode(listns!.replaceFirst('data:', '').trim()) as List;
     final mine = roster
         .cast<Map<String, dynamic>>()
         .firstWhere((e) => e['enrollmentId'] == enrollmentId);
@@ -139,9 +138,8 @@ void main() {
         reason: 'the CLI mints the atSign-level signing root after activation, '
             'while it still holds the first enrollment — the one the atServer '
             'grants __manage, which is what entitles it to create the root');
-    final rootJson =
-        jsonDecode(root!.replaceFirst('data:', '').trim())
-            as Map<String, dynamic>;
+    final rootJson = jsonDecode(root!.replaceFirst('data:', '').trim())
+        as Map<String, dynamic>;
     // Not `.single`: the record is a list of signing keys precisely so a
     // successor can sit beside a retired predecessor, and a reader taking the
     // only element is what would stop that ever being adopted. One entry is

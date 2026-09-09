@@ -42,9 +42,8 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: legacyPlusPqProviders);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
@@ -60,14 +59,13 @@ void main() {
       // Unique per run: the atServer refuses a second enrollment carrying an
       // (appName, deviceName) pair that already has one approved.
       deviceName: 'pkamalgo-${DateTime.now().microsecondsSinceEpoch}',
-    storage: TestUtils.storage,
-  );
+      storage: TestUtils.storage,
+    );
 
     /// Authenticates on a fresh connection, signing RSA with the enrollment's
     /// real keypair while telling the atServer [claimedAlgo].
     Future<String?> authenticateClaiming(String claimedAlgo) async {
-      final lookup =
-          AtLookupImpl(atSign, rootDomain, TestUtils.rootServerPort);
+      final lookup = AtLookupImpl(atSign, rootDomain, TestUtils.rootServerPort);
       try {
         final challenge = (await lookup.executeCommand('from:$atSign\n'))!
             .trim()

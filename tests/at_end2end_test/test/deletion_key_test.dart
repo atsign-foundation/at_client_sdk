@@ -64,21 +64,21 @@ void main() {
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedByAtSign, namespace, authType,
-            posture: PqPosture.legacy);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType,
-            posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        sharedByAtSign, namespace, authType,
+        posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        sharedWithAtSign, namespace, authType,
+        posture: PqPosture.legacy);
     // Initialize sharedWithAtSign
     sharedWithAtClient = (await TestSuiteInitializer.getInstance()
             .switchToAtSign(sharedWithAtSign, namespace,
                 posture: PqPosture.legacy))
         .atClient;
     // Setting sharedByAtSign atClient instance to context.
-    sharedByAtClient = (await TestSuiteInitializer.getInstance()
-            .switchToAtSign(sharedByAtSign, namespace,
-                posture: PqPosture.legacy))
+    sharedByAtClient = (await TestSuiteInitializer.getInstance().switchToAtSign(
+            sharedByAtSign, namespace,
+            posture: PqPosture.legacy))
         .atClient;
     // Defensive: ensure auto-notify is on for the publisher atServer
     // before any TTR-using test runs.
@@ -100,9 +100,9 @@ void main() {
               ..cache(-1, true)
               ..timeToLive(5 * TestConstants.oneMinuteMillis))
             .build();
-    sharedByAtClient = (await TestSuiteInitializer.getInstance()
-            .switchToAtSign(sharedByAtSign, namespace,
-                posture: PqPosture.legacy))
+    sharedByAtClient = (await TestSuiteInitializer.getInstance().switchToAtSign(
+            sharedByAtSign, namespace,
+            posture: PqPosture.legacy))
         .atClient;
     final putResult = await sharedByAtClient.put(atKey, 'dummy_cached_value');
     assert(putResult == true);
@@ -134,9 +134,9 @@ void main() {
     expect(getResponse.value, 'dummy_cached_value');
 
     // Switch back to sharedBy AtSign and delete the key
-    sharedByAtClient = (await TestSuiteInitializer.getInstance()
-            .switchToAtSign(sharedByAtSign, namespace,
-                posture: PqPosture.legacy))
+    sharedByAtClient = (await TestSuiteInitializer.getInstance().switchToAtSign(
+            sharedByAtSign, namespace,
+            posture: PqPosture.legacy))
         .atClient;
     await sharedByAtClient.delete(atKey);
     await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);

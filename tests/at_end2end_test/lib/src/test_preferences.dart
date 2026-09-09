@@ -130,8 +130,7 @@ class TestPreferences {
     final existing = atClientPreferencesMap[atSign];
     if (existing != null) {
       if (existing.posture != posture) {
-        throw StateError(
-            '$atSign already has a preference built at '
+        throw StateError('$atSign already has a preference built at '
             '${_describe(existing.posture)}, and this asks for '
             '${_describe(posture)}. AtClientPreference.posture is final, so '
             'the two cannot be reconciled, and every test in this process '

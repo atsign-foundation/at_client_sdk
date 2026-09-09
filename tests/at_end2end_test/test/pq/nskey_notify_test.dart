@@ -47,9 +47,9 @@ void main() {
   test(
       'UC-A4.4: providerId travels on the frame and every bob enrollment decrypts by it',
       timeout: Timeout(Duration(minutes: 5)), () async {
-    final clients =
-        await ConcurrentClients.open(alice, bob, namespace, authType,
-            posture: legacyPlusPqProviders);
+    final clients = await ConcurrentClients.open(
+        alice, bob, namespace, authType,
+        posture: legacyPlusPqProviders);
     addTearDown(clients.close);
 
     // NOTE: bob first — alice's pre-pass discovers his published nskey by
@@ -85,8 +85,8 @@ void main() {
       approver: clients.second,
       atSign: bob,
       namespace: namespace,
-      preference: TestPreferences.getInstance()
-          .forCoLocatedClient(bob, posture: legacyPlusPqProviders, device: 'bob2-$id'),
+      preference: TestPreferences.getInstance().forCoLocatedClient(bob,
+          posture: legacyPlusPqProviders, device: 'bob2-$id'),
       rootDomain: bobPreference.rootDomain,
       rootPort: bobPreference.rootPort,
       deviceName: 'bob2-$id',
@@ -98,8 +98,8 @@ void main() {
 
     // NOTE: this enrollment only reads, so it mints nothing — @bob's
     // generation is published already and a second mint here would rotate it.
-    bobSecond.client.getPreferences()!.crypto = CryptoConfig.nskey(
-        keyRing: PublishedNskeyKeyRing(bobSecond.client));
+    bobSecond.client.getPreferences()!.crypto =
+        CryptoConfig.nskey(keyRing: PublishedNskeyKeyRing(bobSecond.client));
 
     final secondSeen = <String>[];
     final secondReceived = Completer<AtNotification>();
@@ -196,8 +196,8 @@ void main() {
     // no backlog, so the watch goes on before the close.
     final connectionEvents = <bool>[];
     final wentDown = Completer<void>();
-    final connectionWatch = secondNotifications.monitor.lookUp
-        .notificationConnectionUp
+    final connectionWatch = secondNotifications
+        .monitor.lookUp.notificationConnectionUp
         .listen((up) {
       connectionEvents.add(up);
       if (!up && !wentDown.isCompleted) wentDown.complete();
@@ -225,9 +225,8 @@ void main() {
     const queuedValue = 'sealed while bob had no monitor';
 
     expect(
-        (await clients.first.notificationService
-                .notify(NotificationParams.forUpdate(queuedKey,
-                    value: queuedValue)))
+        (await clients.first.notificationService.notify(
+                NotificationParams.forUpdate(queuedKey, value: queuedValue)))
             .notificationStatusEnum,
         NotificationStatusEnum.delivered,
         reason: 'the send must succeed while the receiving enrollment has no '

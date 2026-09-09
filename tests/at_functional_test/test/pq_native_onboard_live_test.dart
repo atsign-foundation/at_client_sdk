@@ -29,7 +29,8 @@ void main() {
   TestUtils.isolateStorage('pq_native_onboard_live_test');
   final atSign = ConfigUtil.getYaml()['atSign']['apkamThirdAtSign'] as String;
   final cramSecret = cramKeyMap[atSign]!;
-  final rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
+  final rootDomain =
+      AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
   final namespace = ConfigUtil.getYaml()['namespace'] as String? ?? 'wavi';
 
   String keysFilePath(String a) => 'test/testData/$a.atKeys';
@@ -44,11 +45,11 @@ void main() {
   test('UC-A1.1 · a CRAM activation is PQ-native, and still legacy-reachable',
       () async {
     final keysIo = FileAtKeysIo(filePath: keysFilePath);
-    final preference = TestUtils.getPreference(atSign,
-        posture: PqPosture.legacy)
-      ..rootDomain = rootDomain.rootDomain
-      ..rootPort = rootDomain.rootPort
-      ..namespace = namespace;
+    final preference =
+        TestUtils.getPreference(atSign, posture: PqPosture.legacy)
+          ..rootDomain = rootDomain.rootDomain
+          ..rootPort = rootDomain.rootPort
+          ..namespace = namespace;
 
     final manager = await pqNativeOnboard(
       atSign: atSign,
@@ -79,21 +80,19 @@ void main() {
             .length,
         1952);
 
-    final reauth = await AtAuth.create()
-        .authenticate(AtAuthRequest(atSign, atKeysIo: keysIo)
-          ..rootDomain = rootDomain);
+    final reauth = await AtAuth.create().authenticate(
+        AtAuthRequest(atSign, atKeysIo: keysIo)..rootDomain = rootDomain);
     expect(reauth.isSuccessful, true,
         reason: 'no RSA APKAM exists anywhere, so this can only have '
             'succeeded by ML-DSA');
     expect(reauth.session!.enrollmentId, enrollmentId,
         reason: 'the keyfile alone names the enrollment: nothing passed an id');
 
-    final rootValue = await client.getRemoteSecondary()!.executeCommand(
-        'plookup:pq_signing_root$atSign\n',
-        auth: true);
+    final rootValue = await client
+        .getRemoteSecondary()!
+        .executeCommand('plookup:pq_signing_root$atSign\n', auth: true);
     expect(rootValue, contains('mldsa65'));
-    final rootJson = jsonDecode(
-            rootValue!.replaceFirst('data:', '').trim())
+    final rootJson = jsonDecode(rootValue!.replaceFirst('data:', '').trim())
         as Map<String, dynamic>;
     expect(rootJson['v'], 1);
     expect(rootJson.containsKey('successor'), isFalse,
@@ -125,8 +124,7 @@ void main() {
     final listns = await client
         .getRemoteSecondary()!
         .executeCommand('enroll:listns:$namespace\n', auth: true);
-    final roster =
-        jsonDecode(listns!.replaceFirst('data:', '').trim()) as List;
+    final roster = jsonDecode(listns!.replaceFirst('data:', '').trim()) as List;
     final mine = roster
         .cast<Map<String, dynamic>>()
         .firstWhere((e) => e['enrollmentId'] == enrollmentId);
@@ -134,9 +132,13 @@ void main() {
         reason: 'metadata.keyPackage is written by the enroll:request that '
             'creates the record and never again, so if activation did not put '
             'it there nothing ever can');
-    expect(mine['apkamPubKey'],
-        keys.getKey(enrollmentId, 'auth:mldsa65:1',
-                CryptographicMaterialRole.publicAuthentication)!.bytes.toString());
+    expect(
+        mine['apkamPubKey'],
+        keys
+            .getKey(enrollmentId, 'auth:mldsa65:1',
+                CryptographicMaterialRole.publicAuthentication)!
+            .bytes
+            .toString());
 
     expect(keys.defaultEncryptionPublicKey, isNotNull);
     expect(keys.defaultSelfEncryptionKey, isNotNull,

@@ -25,17 +25,17 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
   });
 
-  test('a client that named no CryptoConfig gets the default posture\'s providers',
+  test(
+      'a client that named no CryptoConfig gets the default posture\'s providers',
       () async {
     // NOTE: read the SDK's default rather than naming a posture — a named
     // constant keeps passing while measuring a default the SDK has moved off.
     final manager = await TestUtils.initAtClient(atSign, namespace,
-        atKeysIo: InMemoryAtKeysIo(),
-        posture: TestUtils.sdkDefaultPosture);
+        atKeysIo: InMemoryAtKeysIo(), posture: TestUtils.sdkDefaultPosture);
     final client = manager.atClient;
 
-    expect(client.getPreferences()?.crypto,
-        same(const CryptoConfig.eraDefault()),
+    expect(
+        client.getPreferences()?.crypto, same(const CryptoConfig.eraDefault()),
         reason: 'this test is about what the SDK supplies when the app names '
             'nothing');
 

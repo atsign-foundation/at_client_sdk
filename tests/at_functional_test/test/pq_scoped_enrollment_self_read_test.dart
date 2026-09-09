@@ -123,8 +123,8 @@ void main() {
       namespaces: {granted: 'rw'},
       atKeysIo: enrolleeKeysIo,
       signingAlgo: SigningAlgoType.mldsa65,
-    storage: TestUtils.storage,
-  );
+      storage: TestUtils.storage,
+    );
 
     // NOTE: the PQ startup steps are fire-and-forget, and the sweep that files
     // an arriving nskey private out of the secret-sharing transit buffer is

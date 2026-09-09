@@ -128,6 +128,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
   required AtClientPreference preference,
   required String rootDomain,
   required int rootPort,
+
   /// This test file's storage. The enrolled client gets its OWN bundle from
   /// it, told apart by the device name below: the enrollee and the owner
   /// client that approves for it are two live principals on one atSign, and

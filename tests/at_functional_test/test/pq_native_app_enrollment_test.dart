@@ -39,8 +39,9 @@ void main() {
     await keysIo.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
     final manager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign, namespace, TestUtils.getPreference(atSign,
-            posture: legacyPlusPqProviders),
+        atSign,
+        namespace,
+        TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
         atKeysIo: keysIo,
         atChops: loader.createAtChopsFromDemoKeys(atSign),
         storage: TestUtils.storageFor(atSign));
@@ -67,8 +68,8 @@ void main() {
       deviceName: 'pqnat-$label-$runId',
       atKeysIo: keysIo,
       signingAlgo: signingAlgo,
-    storage: TestUtils.storage,
-  );
+      storage: TestUtils.storage,
+    );
     final runningAs = enrolled.client.enrollmentId!;
     stdout.writeln('##NATIVE## $label: enrolledAs=${enrolled.enrollmentId} '
         'runningAs=$runningAs');
@@ -79,7 +80,8 @@ void main() {
     );
   }
 
-  test('an mldsa65 app enrolment is post-quantum from birth and does not '
+  test(
+      'an mldsa65 app enrolment is post-quantum from birth and does not '
       'retrofit, where an rsa2048 one still does', () async {
     final native = await enrolAt(SigningAlgoType.mldsa65, 'mldsa65');
     final legacy = await enrolAt(SigningAlgoType.rsa2048, 'rsa2048');

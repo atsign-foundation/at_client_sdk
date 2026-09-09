@@ -38,9 +38,8 @@ void main() {
     // so a client built without one has nothing to convey.
     keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: legacyPlusPqProviders);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     atClient = manager.atClient;
     await AtClientSecretSharing.forClient(atClient).register();
   });
@@ -83,8 +82,7 @@ void main() {
 
   test('a live published link verifies against the key it names', () async {
     final sharing = AtClientSecretSharing.forClient(atClient);
-    final read =
-        await PqSigningChain(atClient).readLink(sharing.enrollmentId);
+    final read = await PqSigningChain(atClient).readLink(sharing.enrollmentId);
 
     await expectLater(
         sharing.verifyEnvelopeSignature(read!,
@@ -103,8 +101,8 @@ void main() {
         .mintIfAbsent(isFullyPrivileged: true);
 
     final sharing = AtClientSecretSharing.forClient(atClient);
-    await PqSigningChain(atClient)
-        .publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: keysIo);
+    await PqSigningChain(atClient).publishOwnRootLink(
+        isFullyPrivileged: () async => true, keysIo: keysIo);
 
     final link =
         await PqSigningChain(atClient).readRootLink(sharing.enrollmentId);
@@ -113,8 +111,8 @@ void main() {
             'writes, so that it survives is the property worth watching '
             'rather than assuming');
 
-    final result = await PqSigningChain(atClient).verifyChain(
-        sharing, sharing.enrollmentId);
+    final result = await PqSigningChain(atClient)
+        .verifyChain(sharing, sharing.enrollmentId);
 
     expect(result.verdict, ChainVerdict.anchored,
         reason: 'the walk fetches the published root and checks the ML-DSA '
@@ -182,19 +180,21 @@ void main() {
       AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
     );
 
-    await atClient.enrollmentService!.approve(
-        EnrollmentRequestDecision.approved(
+    await atClient.enrollmentService!
+        .approve(EnrollmentRequestDecision.approved(
       atSign: atSign,
       enrollmentId: response.enrollmentId,
       apkamSymmetricKey: AtBytes.fromString(''),
     ));
 
-    final payload = SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
+    final payload =
+        SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
     final kpid = ((payload['keys'] as List).single as Map)['kid'] as String;
-    final granted = (await atClient.enrollmentService!.fetchEnrollmentRequests())
-        .where((e) => e.enrollmentId == response.enrollmentId)
-        .firstOrNull
-        ?.namespace;
+    final granted =
+        (await atClient.enrollmentService!.fetchEnrollmentRequests())
+            .where((e) => e.enrollmentId == response.enrollmentId)
+            .firstOrNull
+            ?.namespace;
     final envelopes = await atClient.getAtKeys(
         regex: '.*\\.$kpid\\.__ssenv\\..*', useRemoteAtServer: true);
     return (kpid: kpid, envelopes: envelopes.length, granted: granted);
@@ -240,11 +240,12 @@ void main() {
       request,
       AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
     );
-    final payload = SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
+    final payload =
+        SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
     final kpid = ((payload['keys'] as List).single as Map)['kid'] as String;
 
-    await atClient.enrollmentService!.approve(
-        EnrollmentRequestDecision.approved(
+    await atClient.enrollmentService!
+        .approve(EnrollmentRequestDecision.approved(
       atSign: atSign,
       enrollmentId: response.enrollmentId,
       apkamSymmetricKey: AtBytes.fromString(''),

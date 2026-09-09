@@ -62,7 +62,8 @@ void main() {
     );
     expect(response.enrollStatus, EnrollmentStatus.pending);
 
-    final payload = SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
+    final payload =
+        SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
     return (
       enrollmentId: response.enrollmentId,
       kpid: ((payload['keys'] as List).single as Map)['kid'] as String,

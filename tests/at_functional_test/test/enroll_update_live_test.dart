@@ -45,9 +45,8 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: legacyPlusPqProviders);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
   });
 
@@ -66,8 +65,8 @@ void main() {
         rootDomain: rootDomain,
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
-    storage: TestUtils.storage,
-  );
+        storage: TestUtils.storage,
+      );
 
   /// The enrollment record as the atServer holds it, read back rather than
   /// remembered.
@@ -85,9 +84,9 @@ void main() {
 
   Future<String?> readApsk(EnrolledClient client) async {
     try {
-      final response = await lookupOf(client)
-          .executeCommand('llookup:${apskKeyFor(client.enrollmentId)}\n',
-              auth: true);
+      final response = await lookupOf(client).executeCommand(
+          'llookup:${apskKeyFor(client.enrollmentId)}\n',
+          auth: true);
       if (response == null || !response.startsWith('data:')) return null;
       return response.replaceFirst('data:', '').trim();
     } on Object {
@@ -100,7 +99,8 @@ void main() {
   /// never handed back with its public key in it. The enrolled client's own
   /// connection is already authenticated, so reusing it would answer about a
   /// past handshake.
-  Future<bool> authenticatesWith(EnrolledClient client, String privateKey) async {
+  Future<bool> authenticatesWith(
+      EnrolledClient client, String privateKey) async {
     final lookup = AtLookupImpl(atSign, rootDomain, TestUtils.rootServerPort);
     try {
       final challenge = (await lookup.executeCommand('from:$atSign\n'))!
@@ -212,7 +212,8 @@ void main() {
         ..apkamPublicKeySignature = signature;
       // NOTE: built by hand because EnrollmentUpdateRequest always composes a
       // valid signature, which neither arm below can use.
-      return lookupOf(client).executeCommand(builder.buildCommand(), auth: true);
+      return lookupOf(client)
+          .executeCommand(builder.buildCommand(), auth: true);
     }
 
     await expectLater(

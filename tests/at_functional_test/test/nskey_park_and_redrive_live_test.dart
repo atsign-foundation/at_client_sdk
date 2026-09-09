@@ -62,15 +62,17 @@ void main() {
         approver: approver,
         atSign: atSign,
         namespace: nsA,
-        preference: TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
+        preference:
+            TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw', nsA: 'rw', nsB: 'rw'},
-    storage: TestUtils.storage,
-  );
+        storage: TestUtils.storage,
+      );
 
-  test('a notification that outruns its key is parked, then delivered when it lands',
+  test(
+      'a notification that outruns its key is parked, then delivered when it lands',
       timeout: Timeout(Duration(minutes: 3)), () async {
     AtSignLogger.root_level = 'finest';
 
@@ -155,7 +157,8 @@ void main() {
         waitForFinalDeliveryStatus: false);
 
     final deadline = DateTime.now().add(Duration(seconds: 60));
-    while (notifications.parkedTotal == 0 && DateTime.now().isBefore(deadline)) {
+    while (
+        notifications.parkedTotal == 0 && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(Duration(milliseconds: 100));
     }
     expect(notifications.parkedTotal, greaterThan(0),

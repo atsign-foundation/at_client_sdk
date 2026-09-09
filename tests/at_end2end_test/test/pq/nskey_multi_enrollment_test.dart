@@ -52,14 +52,15 @@ void main() {
     alice = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     bob = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     final authType = ConfigUtil.getYaml()['authType'];
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(alice, namespace, authType, posture: legacyPlusPqProviders);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(bob, namespace, authType, posture: legacyPlusPqProviders);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        alice, namespace, authType,
+        posture: legacyPlusPqProviders);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        bob, namespace, authType,
+        posture: legacyPlusPqProviders);
   });
 
-  test(
-      'UC-A4.3: whichever alice enrollment writes, every bob enrollment reads',
+  test('UC-A4.3: whichever alice enrollment writes, every bob enrollment reads',
       () async {
     // Both atSigns live at once, each with its own AtClientManager. Through
     // the singleton, bringing alice up would tear bob's client down — his
@@ -67,7 +68,7 @@ void main() {
     // failure would surface far from its cause.
     final clients = await ConcurrentClients.open(
         alice, bob, sharedNamespace, ConfigUtil.getYaml()['authType'],
-            posture: legacyPlusPqProviders);
+        posture: legacyPlusPqProviders);
     final aliceClient = clients.first;
     final bobPrimary = clients.second;
 
@@ -224,8 +225,8 @@ void main() {
       ..sharedWith = bob
       ..sharedBy = alice;
 
-    expect(await aliceSecond.client.put(fromAliceSecond(), secondPlaintext),
-        true);
+    expect(
+        await aliceSecond.client.put(fromAliceSecond(), secondPlaintext), true);
     await E2ESyncService.getInstance()
         .syncData(aliceSecond.client.syncService, atSign: alice);
 

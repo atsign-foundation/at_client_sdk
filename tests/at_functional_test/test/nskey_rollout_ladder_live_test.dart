@@ -94,8 +94,8 @@ void main() {
         deviceName: '$device-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw', namespace: 'rw'},
         atKeysIo: keyfiles[device] = InMemoryAtKeysIo(),
-    storage: TestUtils.storage,
-  );
+        storage: TestUtils.storage,
+      );
 
   /// Points [client] at the atSign's published generation for the data path,
   /// sealing only to [sealsTo].
@@ -204,9 +204,10 @@ void main() {
       ..key = 'ladder_new_$runId'
       ..namespace = namespace
       ..sharedBy = atSign;
-    await rolled.client
-        .put(fromRolled, 'written by the rollout-1 install', putRequestOptions: remoteWrite);
-    expect((await old.client.get(fromRolled, getRequestOptions: remoteRead)).value,
+    await rolled.client.put(fromRolled, 'written by the rollout-1 install',
+        putRequestOptions: remoteWrite);
+    expect(
+        (await old.client.get(fromRolled, getRequestOptions: remoteRead)).value,
         'written by the rollout-1 install',
         reason: 'c1: the rollout-1 install added an algorithm without changing '
             'what it seals to, so the older install opens it with the private '
@@ -218,8 +219,8 @@ void main() {
     // leaves the rollout-1 install's earlier asks unanswered, which is what an
     // ask to an unprimed holder gets: nothing back, and nothing logged.
     expect(
-        await oldSeeding
-            .hydrateStoreFromFiling(AtClientSecretSharing.forClient(old.client)),
+        await oldSeeding.hydrateStoreFromFiling(
+            AtClientSecretSharing.forClient(old.client)),
         greaterThan(0),
         reason: 'the minted private must be in the older install\'s answer '
             'store, or no request for it is ever answered');
@@ -234,8 +235,8 @@ void main() {
       ..key = 'ladder_old_$runId'
       ..namespace = namespace
       ..sharedBy = atSign;
-    await old.client
-        .put(fromOld, 'written by the previous build', putRequestOptions: remoteWrite);
+    await old.client.put(fromOld, 'written by the previous build',
+        putRequestOptions: remoteWrite);
 
     final rolledKeys = keyfiles['ladder-new']!;
     final rolledFiling = NskeyPrivateFiling(keysIo: rolledKeys, atSign: atSign);
@@ -284,7 +285,8 @@ void main() {
     // files what it waits for. State 2 pins that material being ON the device
     // is not by itself enough for `privateHalf`, which looks only in memory and
     // in the keyfile.
-    expect(rolledSharing.secretStore.getSecret(namespace, secretName), isNotNull,
+    expect(
+        rolledSharing.secretStore.getSecret(namespace, secretName), isNotNull,
         reason: 'state 2: the conveyed private is on this device, in the '
             'transit store, whether or not anything has filed it');
 

@@ -113,7 +113,10 @@ void main() {
     // clears only @srie's. Without this the file passes in isolation and fails
     // in the suite on a leftover from an earlier run.
     for (final atSign in [legacyPeer, pqNative, pqOptOut]) {
-      for (final path in [keysFilePath(atSign), '${keysFilePath(atSign)}.bak']) {
+      for (final path in [
+        keysFilePath(atSign),
+        '${keysFilePath(atSign)}.bak'
+      ]) {
         final file = File(path);
         if (file.existsSync()) file.deleteSync();
       }
@@ -141,15 +144,16 @@ void main() {
         contains('mldsa65'),
         reason: 'the PQ-native activation creates the atSign-level signing '
             'root');
-    expect(await plookupOrNull(legacyClient, 'pq_signing_root$legacyPeer'),
-        isNull,
+    expect(
+        await plookupOrNull(legacyClient, 'pq_signing_root$legacyPeer'), isNull,
         reason: 'a default-algorithm activation creates no signing root, so '
             'this atSign is pre-PQ in the sense the row means');
 
     // And the difference is in the key material too: a PQ enrollment's APKAM
     // is typed material under its enrollment id and the flat fields stay
     // empty, where a legacy one fills them.
-    final legacyKeys = await FileAtKeysIo(filePath: keysFilePath).read(legacyPeer);
+    final legacyKeys =
+        await FileAtKeysIo(filePath: keysFilePath).read(legacyPeer);
     expect(legacyKeys.apkamPublicKey, isNotNull,
         reason: 'a legacy activation mints an RSA APKAM into the flat fields');
     final pqKeys = await FileAtKeysIo(filePath: keysFilePath).read(pqNative);
@@ -184,13 +188,15 @@ void main() {
     const plaintext = 'the treaty text';
 
     expect(
-        await legacyClient.put(shared, plaintext, putRequestOptions: remoteWrite),
+        await legacyClient.put(shared, plaintext,
+            putRequestOptions: remoteWrite),
         true);
 
     // Written under the legacy provider, not something else that happens to
     // work: the whole claim is that the OLD scheme still reaches a brand-new
     // atSign.
-    final asWritten = await legacyClient.get(shared, getRequestOptions: remoteRead);
+    final asWritten =
+        await legacyClient.get(shared, getRequestOptions: remoteRead);
     final providerId = asWritten.metadata?.appMetadata?.providerId;
     expect(providerId == null || providerId == legacyCryptoProviderId, true,
         reason: 'a legacy app writes legacy; anything else here means the '
@@ -251,7 +257,8 @@ void main() {
     pqClient.getPreferences()!.allowLegacyCryptoFallback = true;
     final shared = toAlice('memo');
     const plaintext = 'the treaty is signed';
-    expect(await pqClient.put(shared, plaintext, putRequestOptions: remoteWrite),
+    expect(
+        await pqClient.put(shared, plaintext, putRequestOptions: remoteWrite),
         true);
 
     final asWritten = await pqClient.get(shared, getRequestOptions: remoteRead);
@@ -274,7 +281,8 @@ void main() {
             'encrypt to');
   });
 
-  test('UC-B4.2 opt-out · an atSign that refused legacy material is not '
+  test(
+      'UC-B4.2 opt-out · an atSign that refused legacy material is not '
       'reachable by a legacy peer, and says so', () async {
     // GIVEN an atSign activated PQ-native with mintLegacyMaterial:false. The
     //       flag is spent at activation and cannot be taken back, which is why
@@ -292,7 +300,8 @@ void main() {
     ))
         .atClient;
 
-    final optOutKeys = await FileAtKeysIo(filePath: keysFilePath).read(pqOptOut);
+    final optOutKeys =
+        await FileAtKeysIo(filePath: keysFilePath).read(pqOptOut);
     expect(optOutKeys.defaultEncryptionPublicKey, isNull,
         reason: 'the opt-out is a decision not to mint the legacy keypair at '
             'all, not a decision to withhold it');

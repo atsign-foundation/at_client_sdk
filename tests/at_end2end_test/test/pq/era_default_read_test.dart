@@ -37,8 +37,7 @@ void main() {
   });
 
   Future<AtClient> clientFor(String atSign) async {
-    final manager =
-        managers.putIfAbsent(atSign, () => AtClientManager(atSign));
+    final manager = managers.putIfAbsent(atSign, () => AtClientManager(atSign));
     await TestSuiteInitializer.getInstance().testInitializer(
         atSign, namespace, authType,
         posture: legacyPlusPqProviders, manager: manager);

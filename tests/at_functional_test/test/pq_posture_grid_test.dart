@@ -161,7 +161,6 @@ void main() {
     namespaces: {nsUnready: 'rw'},
   );
 
-
   /// Keyed by cell name, so a failure says which cell produced it.
   final cells = <String, EnrolledClient>{};
 
@@ -281,8 +280,8 @@ void main() {
         // The cell's own keyfile. Without it there is nowhere to file a minted
         // namespace private, and the cell measures an inert client.
         atKeysIo: keysIo,
-    storage: TestUtils.storage,
-  );
+        storage: TestUtils.storage,
+      );
       stdout.writeln('##GRID## up: $name '
           'enrolledAs=${cells[name]!.enrollmentId} '
           'runningAs=${cells[name]!.client.enrollmentId}');
@@ -317,15 +316,15 @@ void main() {
         reason: 'one store per cell. Two enrollments of one atSign sharing a '
             "store hands one principal the other's records and pending "
             'writes, which is what D-13 and the claim guard exist to stop');
-    expect(
-        cells.values.map((c) => c.client.enrollmentId).toSet(),
+    expect(cells.values.map((c) => c.client.enrollmentId).toSet(),
         hasLength(cellSpec.length),
         reason: 'every client must run as its own enrollment. Reading '
             'EnrolledClient.enrollmentId here would compare the ids they were '
             'ENROLLED as, which for a pq posture is not the id it runs under');
   });
 
-  test('readiness is a property of (receiver, namespace), and the receiver '
+  test(
+      'readiness is a property of (receiver, namespace), and the receiver '
       'side of the unready namespace really is unseeded', () async {
     final deadline = DateTime.now().add(const Duration(seconds: 90));
     late ({bool present, String detail}) readyOnReceiver;
@@ -378,13 +377,13 @@ void main() {
   /// post-quantum scheme can address a recipient that advertises no key.
   bool mustRefuseUnready(PqPosture posture) => posture.writesPqByDefault;
 
-  test('a cross-atSign write is refused exactly when the sender writes PQ and '
+  test(
+      'a cross-atSign write is refused exactly when the sender writes PQ and '
       'the recipient has published no namespace key', () async {
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final wrote = <String, AtKey>{};
 
-    for (final entry
-        in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {
+    for (final entry in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {
       final name = entry.key;
       final posture = entry.value.posture;
       final client = cells[name]!.client;
@@ -427,7 +426,8 @@ void main() {
         '${cellSpec.keys.where((k) => k.startsWith("s-")).length * 2} cells');
   });
 
-  test('the recipient enrollment holding the namespace private reads what was '
+  test(
+      'the recipient enrollment holding the namespace private reads what was '
       'written, and its siblings are pending conveyance rather than broken',
       () async {
     // Three receiving enrollments share one namespace deliberately, and only
@@ -477,10 +477,9 @@ void main() {
         // Which refusal is itself a claim about the stage: a reader that
         // configures the providers can only be short of the key, and one that
         // does not can only be short of the provider.
-        final expected =
-            cellSpec[readerName]!.posture.configuresPqProviders
-                ? 'no nskey private held'
-                : 'is not registered';
+        final expected = cellSpec[readerName]!.posture.configuresPqProviders
+            ? 'no nskey private held'
+            : 'is not registered';
         expect('$e', contains(expected),
             reason: '$readerName failed for a reason that is neither a '
                 'pending conveyance nor the refusal its own stage implies, '
@@ -558,8 +557,7 @@ void main() {
     // null providerId, so the stamp is only observable on the writer's side.
     final stamp = DateTime.now().microsecondsSinceEpoch;
 
-    for (final entry
-        in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {
+    for (final entry in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {
       final name = entry.key;
       final posture = entry.value.posture;
       final client = cells[name]!.client;
@@ -590,7 +588,8 @@ void main() {
     }
   });
 
-  test('a notification crosses atSigns and its value decrypts, for every '
+  test(
+      'a notification crosses atSigns and its value decrypts, for every '
       'sender posture', () async {
     // Listener before trigger — and the listener that matters is the
     // atServer's, not this stream. `subscribe()` returns before the monitor's
@@ -612,8 +611,7 @@ void main() {
     final monitorProvenLive = Completer<void>();
     final arrived = <String, Completer<AtNotification>>{};
 
-    final subscription =
-        listener.subscribe(shouldDecrypt: true).listen((n) {
+    final subscription = listener.subscribe(shouldDecrypt: true).listen((n) {
       seen.add(n.key);
       if (!monitorProvenLive.isCompleted) monitorProvenLive.complete();
       for (final entry in arrived.entries) {
@@ -635,8 +633,7 @@ void main() {
     );
 
     final stamp = DateTime.now().microsecondsSinceEpoch;
-    for (final entry
-        in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {
+    for (final entry in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {
       final name = entry.key;
       // Lowercased: the atServer lowercases record names, so a marker carrying
       // an uppercase letter never matches what comes back, and the cell fails
@@ -653,8 +650,10 @@ void main() {
       final value = 'notified-by-$name';
 
       Future<void> send() async {
-        final result = await cells[name]!.client.notificationService.notify(
-            NotificationParams.forUpdate(key, value: value));
+        final result = await cells[name]!
+            .client
+            .notificationService
+            .notify(NotificationParams.forUpdate(key, value: value));
         expect(result.notificationStatusEnum, NotificationStatusEnum.delivered,
             reason: '$name could not deliver a notification to $receiver');
       }
@@ -666,22 +665,23 @@ void main() {
       // delivery in this pack drops notifications, so one a re-send recovers
       // is that flakiness. One that does NOT survive a re-send is a finding
       // about the posture, and fails below with both attempts named.
-      var notification = await arrived[marker]!.future
+      var notification = await arrived[marker]!
+          .future
           .timeout(const Duration(seconds: 60), onTimeout: () => _absent);
       if (identical(notification, _absent)) {
         stdout.writeln('##GRID## notify $name: first attempt did not arrive '
             'in 60s; re-sending once');
         await send();
         notification = await arrived[marker]!.future.timeout(
-          const Duration(seconds: 90),
-          onTimeout: () => throw StateError(
-              "$name's notification did not reach the receiver on EITHER of "
-              'two sends, 150s in total, and both notifies reported '
-              'delivered. Two independent drops is not the delivery '
-              'flakiness this retry exists to absorb.\n'
-              '  the monitor saw ${seen.length}: $seen\n'
-              '${seen.isNotEmpty ? "  It IS receiving, so this is not monitor readiness." : "  It received NOTHING, not even statsNotification, so the monitor is not up and this says nothing about delivery."}'),
-        );
+              const Duration(seconds: 90),
+              onTimeout: () => throw StateError(
+                  "$name's notification did not reach the receiver on EITHER of "
+                  'two sends, 150s in total, and both notifies reported '
+                  'delivered. Two independent drops is not the delivery '
+                  'flakiness this retry exists to absorb.\n'
+                  '  the monitor saw ${seen.length}: $seen\n'
+                  '${seen.isNotEmpty ? "  It IS receiving, so this is not monitor readiness." : "  It received NOTHING, not even statsNotification, so the monitor is not up and this says nothing about delivery."}'),
+            );
       }
 
       expect(notification.value, value,
@@ -698,7 +698,8 @@ void main() {
             'delivery above was measured by a listener that was never live');
   });
 
-  test('UC-G1.15 · every posture verifies every other posture\'s signed '
+  test(
+      'UC-G1.15 · every posture verifies every other posture\'s signed '
       'envelope, and the algorithms are what the stage names', () async {
     // The claim: the rollout ladder SWAPS signing algorithms rather than
     // overlapping them, so a pqActive sender emits an ML-DSA-65 signature
@@ -749,8 +750,8 @@ void main() {
         }
       }
 
-      final envelopeJson = await signer.wrapAndSignAndJsonEncode(
-          {'runId': '$stamp', 'from': senderName});
+      final envelopeJson = await signer
+          .wrapAndSignAndJsonEncode({'runId': '$stamp', 'from': senderName});
       final key = AtKey()
         ..key = 'env$stamp${slug(senderName)}'
         ..namespace = nsReady
@@ -790,8 +791,8 @@ void main() {
       // lost one of two on the way through the atServer would verify exactly
       // as well as one that did not, leaving every cell below green while the
       // receiver read something other than what the sender emitted.
-      expect([for (final sig in envelope.signatures) sig.alg],
-          emitted[senderName],
+      expect(
+          [for (final sig in envelope.signatures) sig.alg], emitted[senderName],
           reason: '$senderName: the algorithms the receiver reads back must '
               'be the ones the sender emitted');
 

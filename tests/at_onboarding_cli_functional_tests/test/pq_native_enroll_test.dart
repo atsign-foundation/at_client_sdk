@@ -62,8 +62,8 @@ void main() {
         String keysFilePath
       })> enrolAt(SigningAlgoType signingAlgo, String label) async {
     final apkamKeysFilePath = testKeysFile(atSign, suffix: label);
-    final service = AtOnboardingServiceImpl(
-        atSign, _preference(atSign, apkamKeysFilePath));
+    final service =
+        AtOnboardingServiceImpl(atSign, _preference(atSign, apkamKeysFilePath));
 
     final response = await service.sendEnrollRequest(
         'buzz', label, 'ABC123', {'e2etest': 'rw'},
@@ -110,7 +110,8 @@ void main() {
     );
   }
 
-  test('an enrolment submitted as ML-DSA-65 is recorded and authenticates as '
+  test(
+      'an enrolment submitted as ML-DSA-65 is recorded and authenticates as '
       'ML-DSA-65, while the RSA default still does what it always did',
       () async {
     final native = await enrolAt(
@@ -234,9 +235,8 @@ void main() {
     final nskey = await AtOnboardingServiceImpl(
         atSign, _preference(atSign, masterKeysFilePath));
     expect(await nskey.authenticate(), isTrue);
-    final record = await nskey.atLookUp!.executeCommand(
-        'llookup:public:__nskey.e2etest$atSign\n',
-        auth: true);
+    final record = await nskey.atLookUp!
+        .executeCommand('llookup:public:__nskey.e2etest$atSign\n', auth: true);
     stdout.writeln('##CLI## nskey after retrofit: '
         '${record?.substring(0, record.length.clamp(0, 80))}');
     expect(record, startsWith('data:'),

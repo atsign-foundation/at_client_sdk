@@ -25,8 +25,10 @@ void main() {
   });
 
   Future<AtClient> getAtClient(String atSign) async {
-    return (await AtClientManager.getInstance().setCurrentAtSign(atSign,
-            namespace, TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+    return (await AtClientManager.getInstance().setCurrentAtSign(
+            atSign,
+            namespace,
+            TestUtils.getPreference(atSign, posture: PqPosture.legacy),
             storage: TestUtils.storageFor(atSign)))
         .atClient;
   }

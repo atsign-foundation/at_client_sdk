@@ -44,9 +44,9 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(atSign, namespace, ConfigUtil.getYaml()['authType'],
-            posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        atSign, namespace, ConfigUtil.getYaml()['authType'],
+        posture: PqPosture.legacy);
     owner = AtClientManager.getInstance().atClient;
   });
 
@@ -104,7 +104,9 @@ void main() {
     final list = await owner.enrollmentService!.fetchEnrollmentRequests(
         enrollmentListParams: EnrollmentListRequestParam()
           ..enrollmentListFilter = [status]);
-    return list.where((e) => (e.deviceName ?? '').contains(deviceMarker)).length;
+    return list
+        .where((e) => (e.deviceName ?? '').contains(deviceMarker))
+        .length;
   }
 
   test(
@@ -165,7 +167,8 @@ void main() {
         reason: 'a root must not be left behind by a failed upgrade — every '
             'enrollment on the atSign would chain to it, and D1 builds no '
             'rotation able to replace it');
-    expect(await enrollmentsWithStatus(EnrollmentStatus.pending, 'b01-priv-rf-'),
+    expect(
+        await enrollmentsWithStatus(EnrollmentStatus.pending, 'b01-priv-rf-'),
         0,
         reason: 'the enrollment the abort created must not be left pending: '
             'nobody will ever act on it, and a client that retries leaves one '
@@ -176,8 +179,7 @@ void main() {
             'makes the abort observably clean');
   }, timeout: Timeout(Duration(minutes: 3)));
 
-  test(
-      'UC-B0.1: a scoped parent cannot tidy up, and the refusal says so',
+  test('UC-B0.1: a scoped parent cannot tidy up, and the refusal says so',
       () async {
     // Denying needs `__manage`; a scoped enrollment does not have it, so its
     // aborted request survives until it expires, and the caller is told so.

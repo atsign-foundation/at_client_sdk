@@ -64,8 +64,7 @@ void main() {
   test('a checkpoint round-trips typed key material', () async {
     final checkpoint = EnrollmentCheckpoint(atSign);
 
-    await checkpoint.save(
-        typedResponse(), appName, deviceName, namespaces);
+    await checkpoint.save(typedResponse(), appName, deviceName, namespaces);
 
     final loaded = checkpoint.load(appName, deviceName, namespaces);
     expect(loaded, isNotNull,
@@ -75,8 +74,7 @@ void main() {
     expect(loaded.atAuthKeys?.enrollmentIds, contains(enrollmentId),
         reason: 'the typed enrollment slot is the part that could not be '
             'serialized at all before, so it is the part to read back');
-    expect(
-        loaded.atAuthKeys?.authenticationAlgorithmFor(enrollmentId),
+    expect(loaded.atAuthKeys?.authenticationAlgorithmFor(enrollmentId),
         SigningAlgoType.mldsa65,
         reason: 'and it must come back as the algorithm it went in as, or a '
             'resumed enrolment authenticates with the wrong routine');
@@ -86,11 +84,12 @@ void main() {
     // The negative control: flat material takes AtKeys.toJson's legacy branch
     // and needs no atSign.
     final checkpoint = EnrollmentCheckpoint(atSign);
-    final response = AtEnrollmentResponse(enrollmentId, EnrollmentStatus.pending)
-      ..atAuthKeys = (AtKeys()
-        ..enrollmentId = enrollmentId
-        // AtBytes.fromString base64-decodes, so this is 'flat-public' encoded.
-        ..apkamPublicKey = AtBytes.fromString('ZmxhdC1wdWJsaWM='));
+    final response =
+        AtEnrollmentResponse(enrollmentId, EnrollmentStatus.pending)
+          ..atAuthKeys = (AtKeys()
+            ..enrollmentId = enrollmentId
+            // AtBytes.fromString base64-decodes, so this is 'flat-public' encoded.
+            ..apkamPublicKey = AtBytes.fromString('ZmxhdC1wdWJsaWM='));
 
     await checkpoint.save(response, appName, deviceName, namespaces);
 

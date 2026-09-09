@@ -86,7 +86,8 @@ void main() {
         value: base64Encode(privateBytes),
       );
 
-  test('a conveyed private is swept off the atServer and filed into the keyfile',
+  test(
+      'a conveyed private is swept off the atServer and filed into the keyfile',
       () async {
     final (io, advertised) = await keyfileWithPackage();
     final from = await sender();
@@ -101,13 +102,15 @@ void main() {
         reason: 'the receiver has to be listening on the address its keyfile '
             'advertises, or the rest of this test would be sending to one '
             'party and sweeping for another');
-    expect(await NskeyPrivateFiling(keysIo: io, atSign: atSign).read(
-            namespace, 'kid-live'),
+    expect(
+        await NskeyPrivateFiling(keysIo: io, atSign: atSign)
+            .read(namespace, 'kid-live'),
         isNull,
         reason: 'nothing has been conveyed yet, so a pass here would mean the '
             'assertion below is measuring leftover state');
 
-    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-live'), inReplyTo: EnvelopeAddressing.unsolicited);
+    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-live'),
+        inReplyTo: EnvelopeAddressing.unsolicited);
 
     expect(await collectConveyedKeyMaterial(atClient, io), 1);
 
@@ -128,9 +131,11 @@ void main() {
 
     // NOTE: both arms go through one collection, so a sweep that ran not at
     // all fails the positive arm rather than passing the negative one.
-    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-mine'), inReplyTo: EnvelopeAddressing.unsolicited);
+    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-mine'),
+        inReplyTo: EnvelopeAddressing.unsolicited);
     await from.shareSecretWith(
-        elsewhere.myKeyPackage, nskeySecret('kid-elsewhere'), inReplyTo: EnvelopeAddressing.unsolicited);
+        elsewhere.myKeyPackage, nskeySecret('kid-elsewhere'),
+        inReplyTo: EnvelopeAddressing.unsolicited);
 
     await collectConveyedKeyMaterial(atClient, io);
 

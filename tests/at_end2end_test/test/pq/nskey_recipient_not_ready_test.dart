@@ -46,13 +46,14 @@ void main() {
     authType = ConfigUtil.getYaml()['authType'];
   });
 
-  test('UC-A4.2: a share to a recipient with no namespace key fails, naming '
+  test(
+      'UC-A4.2: a share to a recipient with no namespace key fails, naming '
       'them', () async {
     // NOTE: both atSigns must be live at once — @bob mints for himself, and
     // under the singleton bringing him up would tear alice's client down.
-    final clients =
-        await ConcurrentClients.open(alice, bob, namespace, authType,
-            posture: legacyPlusPqProviders);
+    final clients = await ConcurrentClients.open(
+        alice, bob, namespace, authType,
+        posture: legacyPlusPqProviders);
     addTearDown(clients.close);
     final aliceClient = clients.first;
     final bobClient = clients.second;
@@ -81,8 +82,8 @@ void main() {
             'is about to answer the hard way — that is the whole point of it '
             'existing');
 
-    expect(await CryptoRuntime(aliceClient).isReadyFor(bob, warmNamespace),
-        isTrue,
+    expect(
+        await CryptoRuntime(aliceClient).isReadyFor(bob, warmNamespace), isTrue,
         reason: 'control: readiness must be able to say yes, or its "no" '
             'carries no information');
 
@@ -94,8 +95,8 @@ void main() {
 
     await expectLater(
         aliceClient.put(shared, 'an invitation bob cannot yet receive'),
-        throwsA(predicate((e) =>
-            '$e'.contains(bob) && '$e'.contains(coldNamespace))),
+        throwsA(predicate(
+            (e) => '$e'.contains(bob) && '$e'.contains(coldNamespace))),
         reason: 'the exception must name the recipient AND the namespace. '
             'Bob\'s signing root cannot stand in — it is a verification key '
             'and receives no encapsulation — so there is nothing to fall back '

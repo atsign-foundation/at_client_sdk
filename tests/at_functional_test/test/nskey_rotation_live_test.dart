@@ -44,9 +44,8 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: legacyPlusPqProviders);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
@@ -78,14 +77,15 @@ void main() {
         approver: approver,
         atSign: atSign,
         namespace: namespace,
-        preference: TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
+        preference:
+            TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
         atKeysIo: atKeysIo,
         namespaces: namespaces,
-    storage: TestUtils.storage,
-  );
+        storage: TestUtils.storage,
+      );
 
   /// What revocation needs, which is not what rotation needs: revoking is gated
   /// on `__manage`, and a client without it cannot even enumerate the atSign's
@@ -260,7 +260,8 @@ void main() {
     expect(await rotator.ring.privateHalf(atSign, namespace, first.nskeyKid),
         isNotNull);
 
-    final afterSealedTo = await sealedGeneration(rotator.enrolled.client, 'after$runId');
+    final afterSealedTo =
+        await sealedGeneration(rotator.enrolled.client, 'after$runId');
     expect(afterSealedTo, outcome.advertisement.nskeyKid,
         reason: 'a content key cut after the rotation is sealed to the '
             'SUCCESSOR, and its conveyance says which generation that is');
@@ -558,8 +559,7 @@ void main() {
     await owner.sharing.sweepOnce(fromRemote: true);
     await NskeyPrivateFiling(keysIo: target.io, atSign: atSign)
         .filePending(target.sharing.secretStore.listSecrets());
-    expect(await target.filing.read(ns, rotated.advertisement.nskeyKid),
-        isNull,
+    expect(await target.filing.read(ns, rotated.advertisement.nskeyKid), isNull,
         reason: 'the revoked enrollment keeps what it already held — the '
             'rotation denies it NEW data, and denying it the old data is the '
             'content-key lever\'s job, not this one\'s');

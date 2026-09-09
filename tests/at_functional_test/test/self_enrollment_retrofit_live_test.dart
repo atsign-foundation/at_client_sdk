@@ -17,7 +17,8 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, parseApskValue, verifyEnvelope;
-import 'package:at_demo_data/at_demo_data.dart' show aesKeyMap, encryptionPrivateKeyMap;
+import 'package:at_demo_data/at_demo_data.dart'
+    show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
@@ -40,7 +41,8 @@ void main() {
   late String atSign;
   late AtClient atClient;
   const namespace = 'buzz';
-  final rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
+  final rootDomain =
+      AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
   String keysFilePath(String a) => 'test/testData/rf2b-legacy$a.atKeys';
 
   /// Mints a fresh pre-PQ (RSA APKAM) enrollment and writes its keyfile at
@@ -95,11 +97,11 @@ void main() {
   /// authentication revokes the predecessor, and a keyfile is retrofitted once,
   /// so the first arm to retrofit it fixes its algorithm. The shared file
   /// serves the one arm that walks the full retrofit.
-  Future<AtAuthSession> legacySession([String Function(String)? pathFor]) async {
-    final auth = await AtAuth.create().authenticate(
-        AtAuthRequest(atSign,
-            atKeysIo: FileAtKeysIo(filePath: pathFor ?? keysFilePath))
-          ..rootDomain = rootDomain);
+  Future<AtAuthSession> legacySession(
+      [String Function(String)? pathFor]) async {
+    final auth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
+        atKeysIo: FileAtKeysIo(filePath: pathFor ?? keysFilePath))
+      ..rootDomain = rootDomain);
     expect(auth.isSuccessful, true);
     return auth.session!;
   }
@@ -134,9 +136,9 @@ void main() {
             'same algorithm as legacy, a new key object, its own enrollment '
             'id — and needs no ML-DSA anywhere');
 
-    final rsaAuth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
-        atKeysIo: FileAtKeysIo(filePath: t1Path))
-      ..rootDomain = rootDomain);
+    final rsaAuth = await AtAuth.create().authenticate(
+        AtAuthRequest(atSign, atKeysIo: FileAtKeysIo(filePath: t1Path))
+          ..rootDomain = rootDomain);
     expect(rsaAuth.isSuccessful, true,
         reason: 'the retrofit that carries the rollout window must be usable '
             'immediately, exactly as the PQ one is');
@@ -146,8 +148,7 @@ void main() {
 
   test(
       'the full retrofit: no-OTP submit auto-approves, the keyfile holds '
-      'both enrollments, and ML-DSA PKAM succeeds under the new id',
-      () async {
+      'both enrollments, and ML-DSA PKAM succeeds under the new id', () async {
     final session = await legacySession();
 
     Map<String, dynamic>? built;
@@ -181,8 +182,8 @@ void main() {
     final apskResponse = await session.atLookUp!.executeCommand(
         'llookup:public:_apsk.$newId.a.__e$atSign\n',
         auth: true);
-    final published = parseApskValue(
-        apskResponse!.replaceFirst('data:', '').trim());
+    final published =
+        parseApskValue(apskResponse!.replaceFirst('data:', '').trim());
     expect(published.signingAlgo, SigningAlgoType.mldsa65,
         reason: 'a bare value would be parsed as an RSA key by every '
             'verifier, and the ML-DSA enrollment could never verify');
@@ -194,8 +195,7 @@ void main() {
     final entry = (envelope['signatures'] as List).single as Map;
     final ok = await MlDsa65PureDartAlgo().verifyBytes(
         utf8.encode('${entry['protected']}.${envelope['payload']}'),
-        signature:
-            base64Decode(base64.normalize(entry['signature'] as String)),
+        signature: base64Decode(base64.normalize(entry['signature'] as String)),
         publicKey: base64Decode(published.publicKey));
     expect(ok, true,
         reason: 'signer and published verify key must be the same keypair on '
@@ -203,9 +203,9 @@ void main() {
 
     // PKAM is record-authoritative: this passes only with a genuine ML-DSA
     // signature, and an RSA one, whatever it claims, is refused.
-    final pqAuth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
-        atKeysIo: FileAtKeysIo(filePath: keysFilePath))
-      ..rootDomain = rootDomain);
+    final pqAuth = await AtAuth.create().authenticate(
+        AtAuthRequest(atSign, atKeysIo: FileAtKeysIo(filePath: keysFilePath))
+          ..rootDomain = rootDomain);
     expect(pqAuth.isSuccessful, true,
         reason: 'the retrofitted enrollment must be usable IMMEDIATELY: '
             'keyfile → AtChops → pkam dispatch, all genuinely ML-DSA');

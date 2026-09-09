@@ -27,7 +27,8 @@ void main() {
     if (keysCreatedMap.containsKey(atSign)) {
       return;
     }
-    var atLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', virtualenvRootPort);
+    var atLookup =
+        AtLookupImpl(atSign, 'vip.ve.atsign.zone', virtualenvRootPort);
     await atLookup.cramAuthenticate(at_demos.cramKeyMap[atSign]!);
     var command =
         'update:privatekey:at_pkam_publickey ${at_demos.pkamPublicKeyMap[atSign]}\n';
@@ -52,7 +53,8 @@ void main() {
         () async {
       String atSign = '@alice🛠';
       await _createKeys(atSign);
-      AtOnboardingPreference preference = getPreferences(atSign, posture: PqPosture.legacy);
+      AtOnboardingPreference preference =
+          getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
       AtOnboardingService atOnboardingService =
           AtOnboardingServiceImpl(atSign, preference);
@@ -65,7 +67,8 @@ void main() {
         () async {
       String atSign = '@alice🛠';
       await _createKeys(atSign);
-      AtOnboardingPreference preference = getPreferences(atSign, posture: PqPosture.legacy);
+      AtOnboardingPreference preference =
+          getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
       AtOnboardingService atOnboardingService =
           AtOnboardingServiceImpl(atSign, preference);
@@ -83,7 +86,8 @@ void main() {
         () async {
       String atSign = '@eve🛠';
       await _createKeys(atSign);
-      AtOnboardingPreference preference = getPreferences(atSign, posture: PqPosture.legacy);
+      AtOnboardingPreference preference =
+          getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
       AtOnboardingService onboardingService =
           AtOnboardingServiceImpl(atSign, preference);
@@ -100,7 +104,8 @@ void main() {
     test('A test to verify atKeysFilePath is set when null is provided',
         () async {
       String atSign = '@eve🛠';
-      AtOnboardingPreference preference = getPreferences(atSign, posture: PqPosture.legacy);
+      AtOnboardingPreference preference =
+          getPreferences(atSign, posture: PqPosture.legacy);
       preference.atKeysFilePath = null;
       AtOnboardingServiceImpl(atSign, preference);
       expect(
@@ -116,7 +121,8 @@ void main() {
       'A group of tests to assert encryption keys persist into local secondary',
       () {
     String atSign = '@eve🛠'.trim();
-    AtOnboardingPreference atOnboardingPreference = getPreferences(atSign, posture: PqPosture.legacy);
+    AtOnboardingPreference atOnboardingPreference =
+        getPreferences(atSign, posture: PqPosture.legacy);
     AtOnboardingService atOnboardingService =
         AtOnboardingServiceImpl(atSign, atOnboardingPreference);
     AtClient? atClient;

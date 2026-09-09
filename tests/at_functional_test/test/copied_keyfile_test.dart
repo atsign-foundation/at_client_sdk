@@ -34,9 +34,8 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
-    final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: legacyPlusPqProviders);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     atClient = manager.atClient;
     // The approver seals the enrollee's symmetric key to its own key package,
     // so it has to have one registered before it can approve anything.
@@ -78,9 +77,10 @@ void main() {
       apkamSymmetricKey: AtBytes.fromString(''),
     ));
 
-    final advertisedKpid = (((SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload
-            as Map)['keys'] as List)
-        .single as Map)['kid'] as String;
+    final advertisedKpid =
+        (((SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload
+                as Map)['keys'] as List)
+            .single as Map)['kid'] as String;
 
     // The copy: serialize and re-read, exactly as copying the file does. The
     // atsign is set first because the in-flight AtKeys handed to

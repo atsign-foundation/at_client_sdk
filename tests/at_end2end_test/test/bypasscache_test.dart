@@ -101,8 +101,10 @@ void main() async {
         ..ttr = 1000
         ..ttl = 5 * TestConstants.oneMinuteMillis);
 
-    String write(String value) =>
-        (UpdateVerbBuilder()..atKey = sharedKey..value = value).buildCommand();
+    String write(String value) => (UpdateVerbBuilder()
+          ..atKey = sharedKey
+          ..value = value)
+        .buildCommand();
 
     final String cachedKey = (AtKey()
           ..key = keyEntity

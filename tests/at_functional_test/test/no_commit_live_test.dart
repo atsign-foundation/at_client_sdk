@@ -23,13 +23,14 @@ void main() async {
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     atClient = (await TestUtils.initAtClient(currentAtSign, namespace,
-        posture: PqPosture.legacy)).atClient;
+            posture: PqPosture.legacy))
+        .atClient;
   });
 
   /// The atServer's own latest commit id, read fresh over the wire.
   Future<int> serverCommitId() async =>
-      await SyncUtil().getLatestServerCommitId(
-          atClient.getRemoteSecondary()!, '') ??
+      await SyncUtil()
+          .getLatestServerCommitId(atClient.getRemoteSecondary()!, '') ??
       -1;
 
   Future<int> putAndMeasure({required bool noCommit}) async {

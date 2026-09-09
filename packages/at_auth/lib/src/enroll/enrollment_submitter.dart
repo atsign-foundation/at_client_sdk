@@ -188,9 +188,9 @@ class EnrollmentSubmitter {
       switch (algorithm) {
         SigningAlgoType.mldsa65 => CryptographicMaterialAlgorithm.mlDsa65,
         SigningAlgoType.rsa2048 => CryptographicMaterialAlgorithm.rsa2048,
-        _ => throw AtEnrollmentException(
-            'an enrollment mints rsa2048 or mldsa65; '
-            '${algorithm.name} has no keyfile material spelling here'),
+        _ =>
+          throw AtEnrollmentException('an enrollment mints rsa2048 or mldsa65; '
+              '${algorithm.name} has no keyfile material spelling here'),
       };
 
   /// Runs [AtEnrollmentRequest.metadataBuilder], if the caller supplied one,

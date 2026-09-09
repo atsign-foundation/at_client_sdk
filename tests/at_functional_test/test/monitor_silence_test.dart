@@ -34,8 +34,8 @@ void main() {
     var wasListening = false;
     // Registered before anything can happen: the stream is broadcast and does
     // not replay.
-    final sub = atClient.notificationService.currentListenerStateStream
-        .listen((state) {
+    final sub =
+        atClient.notificationService.currentListenerStateStream.listen((state) {
       if (state == NotificationListenerState.listening) {
         if (wasListening) return;
         wasListening = true;
@@ -55,8 +55,7 @@ void main() {
     final atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     final manager = await TestUtils.initAtClient(atSign, 'wavi',
         posture: PqPosture.legacy,
-        preference: TestUtils.getPreference(atSign,
-            posture: PqPosture.legacy)
+        preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy)
           ..monitorSilenceTimeout = const Duration(seconds: 3));
 
     final rebuilds = await rebuildsDuring(manager.atClient, window);
@@ -78,8 +77,7 @@ void main() {
     final atSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     final manager = await TestUtils.initAtClient(atSign, 'wavi',
         posture: PqPosture.legacy,
-        preference: TestUtils.getPreference(atSign,
-            posture: PqPosture.legacy)
+        preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy)
           ..monitorSilenceTimeout = const Duration(seconds: 40));
 
     final rebuilds = await rebuildsDuring(manager.atClient, window);

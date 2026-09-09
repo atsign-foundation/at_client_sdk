@@ -71,8 +71,7 @@ class TestUtils {
           'has no storage of its own'));
 
   /// The bundle every client this file builds for [atSign] shares.
-  static AtClientStorage storageFor(String atSign) =>
-      storage.forAtSign(atSign);
+  static AtClientStorage storageFor(String atSign) => storage.forAtSign(atSign);
 
   /// A bundle for a second live principal on [atSign] — an enrolled client
   /// running beside the owner client that approved it. See

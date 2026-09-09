@@ -76,13 +76,12 @@ void main() {
       rootPort: TestUtils.rootServerPort,
       deviceName: '$device-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw', namespace: 'rw'},
-    storage: TestUtils.storage,
-  );
+      storage: TestUtils.storage,
+    );
   }
 
   test('a self notification reaches a second enrollment and decrypts',
-      timeout: Timeout(Duration(minutes: 3)),
-      () async {
+      timeout: Timeout(Duration(minutes: 3)), () async {
     // NOTE: raised HERE, not in `setUpAll`. `TestUtils.initAtClient` sets
     // `AtSignLogger.root_level` as its first statement, so a level set before
     // it is silently undone. `finest` is what this file needs: the monitor's
@@ -104,8 +103,7 @@ void main() {
     // holds.
     final approverRing = PublishedNskeyKeyRing(
       approver,
-      privateFiling:
-          NskeyPrivateFiling(keysIo: approverKeysIo, atSign: atSign),
+      privateFiling: NskeyPrivateFiling(keysIo: approverKeysIo, atSign: atSign),
     );
     approver.getPreferences()!.crypto =
         CryptoConfig.nskey(keyRing: approverRing);
@@ -214,8 +212,7 @@ void main() {
     // default already READS nskey, so only the write needs moving.
     final result = await sender.client.notificationService.notify(
         NotificationParams.forUpdate(key,
-            value: value,
-            cryptoProviderId: symmetricAesGcmCryptoProviderId));
+            value: value, cryptoProviderId: symmetricAesGcmCryptoProviderId));
     expect(result.notificationStatusEnum, NotificationStatusEnum.delivered);
 
     final notification = await received.future.timeout(

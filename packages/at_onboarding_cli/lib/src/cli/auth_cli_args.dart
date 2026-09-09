@@ -70,12 +70,11 @@ enum AuthCliCommand {
           ' the program which first onboarded; however it can also be an enrolled'
           ' program which has "rw" access to the "__manage" namespace.'),
   decrypt(
-      usage:
-          'Decrypts a passphrase-protected atKeys file and writes it to the '
-              'targetKeys file'),
+      usage: 'Decrypts a passphrase-protected atKeys file and writes it to the '
+          'targetKeys file'),
   version(
     usage: 'Print version. The version printed is the at_onboarding_cli '
-          'package version. It prints a format similar to "Version: x.xx.x"',
+        'package version. It prints a format similar to "Version: x.xx.x"',
   );
 
   const AuthCliCommand({this.usage = ''});
