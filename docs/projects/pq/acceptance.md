@@ -7,11 +7,10 @@ post-quantum work — the full use-case list **A1.x–A5.x** (PQ-native greenfie
 flags), each as **Given / When / Then** with
 concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
-> **Reconciled with the 2026-08-03 ruling.** `pqpublickey` is gone: the
-> atSign-level key is `public:pq_signing_root@<atSign>`, it signs and verifies
-> only, and no scenario encapsulates to it. Cold-start has no PQ target and fails,
-> so PQ sharing requires the recipient to have used or authorised the namespace.
-> See [decisions.md section 18](detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
+> The atSign-level key is `public:pq_signing_root@<atSign>`; it signs and
+> verifies only, and no scenario encapsulates to it. Cold-start has no PQ target
+> and fails, so PQ sharing requires the recipient to have used or authorised the
+> namespace.
 
 ## Table of contents
 
@@ -31,7 +30,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 - [12. B5 · Edge cases](#12-b5--edge-cases)
 - [13. Cross-cutting acceptance (applies to all flows)](#13-cross-cutting-acceptance-applies-to-all-flows)
 - [14. Test harness & impl/verify mapping](#14-test-harness--implverify-mapping)
-- [15. C1 · The rollout posture (capstone of `decisions.md` 56.4)](#15-c1--the-rollout-posture-capstone-of-decisionsmd-564)
+- [15. C1 · The rollout posture](#15-c1--the-rollout-posture)
 - [16. G1 · Signature agility and the rollout matrix](#16-g1--signature-agility-and-the-rollout-matrix)
 - [17. G2 · Crypto agility — add, never replace](#17-g2--crypto-agility--add-never-replace)
 - [18. G3 · The data signing key an enrollment owns from birth](#18-g3--the-data-signing-key-an-enrollment-owns-from-birth)
@@ -48,11 +47,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
   nothing pins; which clauses are pinned is the burn-down's question, and the
   answer is a measurement rather than a list — the acceptance suite prints it,
   and `clauseCoverageOf` in `packages/at_client/test/acceptance/manifest.dart`
-  answers it per row. ⚠️ **This named four G2 rows as "wholly unpinned" while
-  reading PROVEN, and by 2026-09-09 none of the four was** — UC-G2.5 and
-  UC-G2.6 pinned every clause, UC-G2.11 all three, UC-G2.9 two of three. A list
-  of rows here is a second home for a figure the tree already carries, and it
-  went stale without anything going red.
+  answers it per row.
 - **BLOCKED** — its scenario exists but is skipped against a named constant in
   `blockers.dart`, so something is recorded as owing it.
 - **WITHDRAWN** — the catalogue withdrew the row and kept the heading, so the
@@ -62,26 +57,6 @@ There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
 **97 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 98 use cases and 108 scenarios —
 several rows carry more than one.
-
-⚠️ **This sentence said `50 · 2 · 1` across 53 until 2026-08-18**, when a cold
-read counted the table under it. The 16 missing rows are exactly the `UC-G1.x`
-cluster, added the same day 14.17 landed: the table below is generated against
-the scenarios and cannot drift, and this line is prose that nothing checked. It
-is checked now — `docs_structure_test.dart` derives all four numbers from the
-table and from `manifest.dart`, and fails when they disagree.
-
-⛔ **No figures in this paragraph, and that is deliberate.** It carried a
-scenario count three times and the count was wrong three times — the last of
-them still saying 83 while the headline ten lines above said 94. **Read the
-headline; the rail parses only that sentence, so nothing catches a number
-written down here.**
-
-The lesson it is kept for, which needs no number: **a correction that infers a
-figure from the arithmetic of the sentence it is replacing repeats the original
-mistake in the other direction.** Measure instead — the figure comes from
-`scenarioCount()`, which counts every registered file including the cross-cutting
-rows whose test names carry no `UC-` at all, and that is exactly the term an
-inference from "use cases" will miss.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
 `manifest.dart` parses them, and `catalogue_test.dart` fails when they and the
@@ -208,13 +183,13 @@ is specified and built **before** Part B (retrofit / mixed,
 sections [7](#7-b0--prerequisite--atserver-upgrade)–[12](#12-b5--edge-cases)). [Section 13](#13-cross-cutting-acceptance-applies-to-all-flows)
 states invariants that hold across every flow; [section 14](#14-test-harness--implverify-mapping)
 maps each UC cluster to its test layer and owning project.
-[Section 15](#15-c1--the-rollout-posture-capstone-of-decisionsmd-564) (Part C)
+[Section 15](#15-c1--the-rollout-posture) (Part C)
 comes last because it asserts the *mechanism that drives* Parts A and B into
 production — each of the five rollout flag axes in isolation, and the grouped
 `PqPosture` — rather than any crypto behaviour of its own.
 
-**Naming a sealing construction: use its suite id, not its version byte**
-(gkc, 2026-08-27). Write `x-wing-rfc9180-v1` or `ml-kem-1024-rfc9180-v1` — those
+**Naming a sealing construction: use its suite id, not its version byte.**
+Write `x-wing-rfc9180-v1` or `ml-kem-1024-rfc9180-v1` — those
 are what an advertisement's `suites` field actually carries, and they say which
 KEM, KDF and AEAD are meant. `0x02` and `0x03` are shorthand for those whole
 suites and tell a reader nothing they have not memorised, so a bare byte belongs
@@ -224,17 +199,11 @@ precisely to freeze them.
 
 ⛔ **A retired construction is named in `seal-spec.md` and nowhere else.** It no
 longer exists in this tree, so a use case that mentions one is describing
-something no test can exercise in either direction. ⚠️ Two deliberate exceptions
-live outside that rule and should stay: the `decisions.md` ruling that retired
-`0x01` (a decision's title is its record, and a rail checks index-to-body
-correspondence), and [`implementation-plan.md` 14.44](implementation-plan.md#1444-residuals-from-the-at_chops-pr-review),
-which owes a consumer-facing CHANGELOG sentence about a real skew — **released
-at_chops 3.5.0 and older hardcode `0x01`**, so it is gone from this tree and
-present in the wild, and a consumer diagnosing it will search for the number.
+something no test can exercise in either direction.
 
 **A use case for `put` or `notify` — or for the receiving side, `get` or
-notification receipt — is about self→self *or* self→other, never both at once**
-(gkc, 2026-08-27), and where one direction has a row the other should too. It
+notification receipt — is about self→self *or* self→other, never both at once**,
+and where one direction has a row the other should too. It
 also does not assert the behaviour of **consumers** of this API: `AtCollection`
 writes a self copy of what it shares, by its own separate `put`, and that is
 AtCollection's row to have, not `AtClient.put`'s.
@@ -256,7 +225,7 @@ Substrate mechanics are cited to `design.md`; substrate-related rulings to
 drives a **real atServer**: `tests/at_functional_test`, `tests/at_end2end_test`
 or `tests/at_onboarding_cli_functional_tests`. A proof that runs in-process is
 acceptable **only where a live test would be prohibitively costly or
-impossible** (gkc, 2026-08-26), and the bar for that is "there is no atServer
+impossible**, and the bar for that is "there is no atServer
 in the loop at all" — parsing, format composition, provider selection, crypto
 over fixed vectors. Needing an enrollment dance does not clear it; the live
 packs do that routinely.
@@ -293,9 +262,8 @@ write when another sense is in scope.
 
 ⚠️ **`legacy` is the most overloaded word in this document set, and three of its
 senses are columns in the tables immediately below.** It is never one constant,
-so a bare `legacy` in a clause is ambiguous unless the axis is named. Each sense
-was checked against the tree on 2026-09-09; the right-hand column is the phrase
-to write instead of a bare `legacy`.
+so a bare `legacy` in a clause is ambiguous unless the axis is named. The
+right-hand column is the phrase to write instead of a bare `legacy`.
 
 | Sense | Where it lives | Write this |
 |-------|----------------|------------|
@@ -367,7 +335,7 @@ unit is the **APKAM keypair**, not a running client process: every process that
 shares a keyfile/keychain shares that one APKAM keypair. Likewise `bob1`, `bob2`.
 `aliceS` / `bobS` are the atServers.
 
-**1:1:1 cardinality** (decision #F — see `decisions.md`): each **enrollmentId**
+**1:1:1 cardinality**: each **enrollmentId**
 binds to exactly **one** APKAM keypair and exactly **one** key package; there is
 **never** more than one keypair under an enrollment. The atServer enrollment
 record stores a **single** `apkamPublicKey` + a `signingAlgo` (`rsa2048` |
@@ -395,7 +363,7 @@ per keyfile/install):
 | `publickey`   | legacy RSA encryption pubkey published?                                                               |
 | `pq_signing_root` | atSign-level user-owned **signing** root published (mutable, minted under `_rootlock@owner`)?     |
 | `nskey.ns`    | namespace `ns` nskey state: `—` (never used, so no nskey) · `<kid>` (minted and published at `public:__nskey.<ns>@owner`; the kid names the current generation) |
-| `stage`       | The **app's release stage** for the namespace ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)): `legacy` (pre-capability build) · `cap` (capability build — reads everything, writes with the legacy providers) · `active` (writes PQ). ⛔ This is the *legacy stage*, a third axis spelled `legacy` and a near-homonym of the posture ladder `legacy`/`pqReady`/`pqActive`, which it is **not** ([1.0](#10-overloaded-words--legacy-primary-owner)). Replaces the removed per-`(atSign, namespace)` readiness marker: there is no published readiness state, only what build each install runs. |
+| `stage`       | The **app's release stage** for the namespace: `legacy` (pre-capability build) · `cap` (capability build — reads everything, writes with the legacy providers) · `active` (writes PQ). ⛔ This is the *legacy stage*, a third axis spelled `legacy` and a near-homonym of the posture ladder `legacy`/`pqReady`/`pqActive`, which it is **not** ([1.0](#10-overloaded-words--legacy-primary-owner)). Replaces the removed per-`(atSign, namespace)` readiness marker: there is no published readiness state, only what build each install runs. |
 
 **Key objects** (shapes defined in `design.md`; named here for test wiring):
 
@@ -406,13 +374,11 @@ per keyfile/install):
   appears in a key-transport path. Value is
   `{"v": 1, "keys": [{"kid": "<hex>", "use": "sign", "alg": "mldsa65", "pub": "<base64>"}]}`
   — the `_apsk` advertisement vocabulary verbatim, because the root **is** an
-  ordinary signing key ([`decisions.md` 101](detail/decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
-  requirement 1). A retired entry carries `"status": "retired"`, which is what
+  ordinary signing key. A retired entry carries `"status": "retired"`, which is what
   keeps every root link it ever signed verifiable. Only an enrollment with `rw` on `*`
   and `__manage` may create it; the private rides that app's `.atKeys` and is
   conveyed to the other fully privileged enrollments over the substrate. Published
-  plain (not `_`-hidden) because it is meant to be found and audited. See
-  [`decisions.md` section 18](detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
+  plain (not `_`-hidden) because it is meant to be found and audited.
 - **PQ APKAM keypair** — ML-DSA (`mldsa65`) signing key for auth; one per
   enrollment; its public half is the enrollment record's single `apkamPublicKey`.
 - **Namespace key (`nskey`)** — **one** KEM keypair per
@@ -437,8 +403,7 @@ per keyfile/install):
   - The record is **mutable**: rotation overwrites it. Create and rotate serialise
     behind the short-ttl immutable lock `_nskeylock.<ns>@alice`. Earlier generations
     stay live on the private side, named by `nskeyKid` on each conveyance.
-  - There is no owner-only stage and no promotion step
-    ([`decisions.md`](decisions.md) section 13).
+  - There is no owner-only stage and no promotion step.
 - **Key package** — the per-enrollment KEM recipient key**s** a sender
   `pqSeal`s to: one for **every** algorithm
   `AtClientPreference.keyEstablishmentAlgorithms` names, minted beside the ones
@@ -450,8 +415,7 @@ per keyfile/install):
   discovered only via `enroll:listns`. Private half never leaves the
   keyfile.
 - **`appMetadata.providerId`** routes a reader to a provider; a value with **no**
-  `providerId` defaults to **legacy**. `appMetadata` **states its record's namespace**
-  ([decisions.md section 19](detail/decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)),
+  `providerId` defaults to **legacy**. `appMetadata` **states its record's namespace**,
   because `AtKey.fromString` splits at the last dot and a multi-segment namespace
   cannot be recovered from the wire string:
   - `at/nskey/XWING/AES/GCM` **or** `at/nskey/MLKEM1024/AES/GCM` →
@@ -518,9 +482,7 @@ once in `design.md`; UCs below reference them by name.
      ([UC-A2.4](#34-uc-a24--the-key-package-advertises-the-kem-the-deployment-configured)).
   5. Persist AtKeys (PQ APKAM private + signing-root private + key-package private).
   6. **Verify**: re-authenticate using the PQ APKAM key (proves the server accepts PQ auth).
-  7. **Legacy material is still cut and published, by default**
-     ([`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05),
-     reversing the original Decision #1 default): mint the legacy RSA encryption
+  7. **Legacy material is still cut and published, by default**: mint the legacy RSA encryption
      keypair + `selfEncryptionKey`, and publish `public:publickey@alice` — whether
      this atSign will need legacy is determined by the apps that adopt it, which is
      unknowable here. The legacy-interop flag is an early **opt-out** for a caller
@@ -546,9 +508,6 @@ once in `design.md`; UCs below reference them by name.
 |-----|-------|--------|---------|----|
 | E1  | pq    | ✓      | —       | ✓  |
 
-- **Cross-ref:** [`decisions.md` section 18](detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)
-  (the signing root, and why there is no cold-start KEM);
-  `decisions.md` ([Decision #1](detail/decisions.md#numbered-rulings-14), legacy-peer interop flag).
 - **Impl/verify:** project **ON-1** (see `implementation-plan.md`); harness
   `tests/at_functional_test` runLocal.sh (live CRAM onboard).
 
@@ -574,8 +533,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   3. `alice1` approves E2; the server records `alice2`'s single `apkamPublicKey` +
      `signingAlgo` + key package + metadata for E2, and populates E2's `_apsk` from
      the enrollment record, **unwrapped** — no signed envelope around it, because apps
-     parse the value
-     ([`decisions.md` 39](detail/decisions.md#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05)).
+     parse the value.
      Its *shape* follows what E2 advertises: a **bare** public key only when that is a
      single active `rsa2048` entry, and the `{v, keys:[…]}` **array** otherwise — which
      a pq-native E2 is, since it advertises `mldsa65`
@@ -626,8 +584,6 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - Both hosts share `pq_signing_root@alice⁻¹` and E1's namespace authorisations.
   - Revocation is per-enrollment (`enroll:revoke`), so revoking E1 cuts every host
     sharing the copy at once.
-- **Cross-ref:** `decisions.md` ([Decision #3](detail/decisions.md#numbered-rulings-14) PQ-APKAM copyable-keyfile placement,
-  Decision #F 1:1:1).
 
 ### 3.3 UC-A2.3 — Namespace-restricted enrollment
 
@@ -640,21 +596,17 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   deliver an `…__ssenv.app_2.my_apps` key to an enrollment lacking `r` on it), not by
   a client-side refusal alone. `alice3` can read/write `app_1.my_apps` but not `app_2.my_apps`.
 
-  ⚠️ **This read "`alice3` gets `pq_signing_root@alice⁻¹` (root — universal)" until
-  2026-08-27, and the tree says the opposite on both routes to that key.** The
+  ⚠️ **Both routes to the signing-root private are gated on full privilege.** The
   approval-time conveyance is gated on `isFullyPrivileged`
-  (`envelope_enrollment_conveyance.dart`), whose comment gives the reason — the root
-  vouches for every enrollment on the atSign, and a namespace-scoped one has no
-  business holding it. The pull is gated the same way
-  (`PqSigningRoot.requestPrivateIfAbsent`), and its dartdoc states it as a security
-  property: asking would be refused, and asking anyway would tell every holder that
-  something unentitled is looking for it. **"Universal" was the wrong word for a key
-  that is universal in what it VOUCHES FOR, not in who holds it.** A scoped
-  enrollment verifies against the root's public half, which is published; it never
-  holds the private. See also [UC-B1.3](#83-uc-b13--third-client-different-enrollment-alice3-e2),
-  which stated the same thing from the requesting side.
-- **Cross-ref:** `decisions.md` ([Decision #4](detail/decisions.md#numbered-rulings-14) push-at-approve + pull backstop);
-  `design.md` (the substrate enroll flow, `__ssenv` envelope, `shareAllSecretsWithEnrollment`).
+  (`envelope_enrollment_conveyance.dart`): the root vouches for every enrollment on
+  the atSign, and a namespace-scoped one has no business holding it. The pull is
+  gated the same way (`PqSigningRoot.requestPrivateIfAbsent`), as a security
+  property — asking would be refused, and asking anyway would tell every holder that
+  something unentitled is looking for it. A scoped enrollment verifies against the
+  root's public half, which is published; it never holds the private. See also
+  [UC-B1.3](#83-uc-b13--third-client-different-enrollment-alice3-e2), which states
+  the same thing from the requesting side.
+- **Cross-ref:** `design.md` (the substrate enroll flow, `__ssenv` envelope, `shareAllSecretsWithEnrollment`).
 
 ### 3.4 UC-A2.4 — The key package advertises the KEM the deployment configured
 
@@ -686,24 +638,18 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   by the `reconcileKeyPackage` startup step, and a sender negotiates to whichever
   construction both sides can open. The algorithm adopted from the keyfile is logged.
 
-  ⚠️ **Until 2026-08-27 this clause said the change "takes effect on the next
-  enrollment", and that moving the kpid takes "a deliberate `enroll:update` that no
-  client sends yet".** Both were falsified by `reconcileKeyPackage`, which is step 5 of
-  `PqClientBootstrap`'s startup, defaults to enabled, and sends exactly that verb. **Add
-  beside is the ruling** (gkc, 2026-08-27) rather than an accident of what got built:
-  the alternative — treating a configured KEM change as a rotation — moves the address
-  peers seal to, and that is a deliberate operation rather than something a preference
-  edit should trigger at the next start. ⚠️ The step runs inside the **unawaited startup
-  tail**, so a client that exits early abandons it; "at the next client start" means a
-  start that lives long enough.
+  ⚠️ **The rule is add beside**: the alternative — treating a
+  configured KEM change as a rotation — moves the address peers seal to, and that is a
+  deliberate operation rather than something a preference edit should trigger at the
+  next start. `reconcileKeyPackage` is step 5 of `PqClientBootstrap`'s startup,
+  defaults to enabled, and sends that verb. ⚠️ The step runs inside the **unawaited
+  startup tail**, so a client that exits early abandons it; "at the next client start"
+  means a start that lives long enough.
 - **Then (an unimplemented algorithm fails the mint):** it does not quietly mint the
   other one. This is the only moment an enrollment's encapsulation target can be set
   without the enrollment later sending `enroll:update` for itself.
-- **Cross-ref:** [`decisions.md` 50](detail/decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
-  (why the knob is a preference and not a `CryptoConfig` field);
-  [`implementation-plan.md` 14.6](detail/implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
-  (the door `enroll:update` opened; `AtEnrollment.update` can walk through it
-  as of 2026-08-13, but nothing re-advertises a key package yet).
+- **Cross-ref:** [`implementation-plan.md` 14.6](detail/implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
+  (the door `enroll:update` opened).
 
 ### 3.5 UC-A2.5 — An enrollment amends its own key package (`enroll:update`)
 
@@ -720,19 +666,16 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - the amended package still verifies against E4's `_apsk` — it is re-signed by the same
     APKAM private, and nothing about the update path relaxes the signature check;
   - a peer sealing to E4 now negotiates to whichever key its own `keyAlgos` order prefers,
-    and stamps the matching `pqSeal` version. ✅ **Proven live 2026-08-24** as a
-    differential over one recipient, two senders. The field is
+    and stamps the matching `pqSeal` version. The field is
     `AtClientPreference.sealsToKeyAlgorithms` — what a sender picks among the keys a
     recipient offers — and **not** `keyEstablishmentAlgorithms`, which is what an atSign
     mints; a test varying the second observes nothing;
   - **the pre-existing envelope at `kpidOld` still opens.** `alice4` retains the private
     half and keeps answering at the old address. This is the row that fails if a
     replaced kpid is treated as retired, and the failure would otherwise be a silent,
-    unattributable loss of a secret that was correctly sent. ✅ **Proven live 2026-08-24**
-    (`key_package_amendment_live_test.dart`). ⚠️ This said `alice4` retains the
-    **superseded** private half, and in this row nothing is superseded: an amendment
-    **joins** a key and the original stays `active`, which the test asserts. Supersession
-    is rotation's shape, not the amendment's — see the A5 rows;
+    unattributable loss of a secret that was correctly sent. ⚠️ Nothing here is
+    superseded: an amendment **joins** a key and the original stays `active`.
+    Supersession is rotation's shape, not the amendment's — see the A5 rows;
   - nothing already sealed is re-sealed, and no conveyance fires: the updater is an
     enrollment that already holds the plaintext and re-files it locally.
 - **Then (an unnamed metadata key survives):** setting `keyPackage` leaves any sibling
@@ -750,31 +693,24 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   `true`, so this arm is the one that goes green for the wrong reason if the self-only
   check is written as an authorization lookup rather than an identity test.
 - **Then (state gate):** the same request against a **revoked** E4 is refused, so a revoked
-  enrollment cannot re-advertise an encapsulation target. ✅ **Proven live 2026-08-24**,
-  and the mechanism is not what the name suggests: **there is no revocation check inside
+  enrollment cannot re-advertise an encapsulation target. The mechanism is not what the
+  name suggests: **there is no revocation check inside
   `enroll:update`.** Two things close it between them — the revoked enrollment can no
   longer authenticate at all (`AT0027 … is revoked`), and every other connection, the
   fully privileged id-less one included, is refused as not being that enrollment
   (`AT0011 … enroll:update is self-only`). Both arms are asserted on their error text,
   because a connection failing for any other reason satisfies a bare "it threw".
-  ⚠️ **One arm is NOT proven**: an enrollment revoked while it holds an already open,
-  already authenticated connection. The live arm reconnects, so it measures the
-  post-revocation handshake rather than a session that never re-handshakes.
 - **Then (the arms must differ):** the accepted arm — E4 updating E4 — has to run in the
   same session, or the two refusals prove only that the verb refuses everything.
-- **Cross-ref:** [`decisions.md` 68](detail/decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)
-  rulings 2, 3 and 6.
 
 - **Impl/verify (A2.x):** projects **SS-2 / SS-4** + **RF-2b**, and **KE-1** for
   UC-A2.4; **KE-2** for UC-A2.5 / UC-A2.6, which need the live verb and therefore
   `tests/at_functional_test` against the locally built virtualenv image; harness
   `tests/at_functional_test` runLocal.sh (enroll/approve round-trip, `__ssenv` delivery).
   UC-A2.4 is a unit row for its **shapes**, which are decided entirely client-side before
-  anything reaches an atServer. ⚠️ **It said "UC-A2.4 is a unit row" without that
-  qualifier until 2026-08-27**, and one clause is not: which construction a peer seals
-  under is a claim about what a *sender* stamps, which only a real peer and a real
-  atServer can show. It is now cited to
-  `key_package_amendment_live_test.dart`.
+  anything reaches an atServer. Which construction a peer seals under is not one of
+  them: it is a claim about what a *sender* stamps, which only a real peer and a real
+  atServer can show, and it is cited to `key_package_amendment_live_test.dart`.
 
 ## 4. A3 · E2EE within one atSign (self data) + self notification
 
@@ -804,15 +740,12 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 ### 4.2 UC-A3.2 — A client mints and publishes the nskey for each namespace it is authorised for
 
-> **Amended 2026-08-04.** This use case previously read *"first self write in a namespace mints
-> and publishes the nskey"*, with the mint triggered by `put`. That was never built and it
-> contradicted [UC-A3.3](#43-uc-a33--self-write-with-no-namespace-key-has-no-pq-fallback), which
-> requires a write to a keyless namespace to **fail** and is proven live. The ruling was that the
-> code is right and this text was wrong: minting inside a `put` would hide a distributed lock, a
-> keypair generation, a public record publish and a per-enrollment conveyance behind one write,
-> all on the latency path of a user action. Minting is therefore a **start-time** step, and the
-> write path stays honest about what it cannot do. See
-> [decisions 29](detail/decisions.md#29-uc-a32-describes-a-mint-trigger-that-was-never-built-2026-08-04).
+> **Minting is a start-time step, and never a `put` trigger.** Minting inside a `put`
+> would hide a distributed lock, a keypair generation, a public record publish and a
+> per-enrollment conveyance behind one write, all on the latency path of a user action.
+> The write path stays honest about what it cannot do:
+> [UC-A3.3](#43-uc-a33--self-write-with-no-namespace-key-has-no-pq-fallback) requires a
+> write to a keyless namespace to **fail**.
 
 - **Given:** `@alice` pq-native; no `app_1.my_apps` nskey exists;
   `alice1`, `alice2` PQ, both with registered key packages.
@@ -873,7 +806,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - In practice this case is rare, because a client mints for its preference namespace
     and its `rw` namespaces at init — so a namespace it writes to normally has a key
     before the first write.
-  - **Built, and green live** (spike branch): the exception is
+  - The mechanism: the exception is
     `NamespaceKeyUnavailableException(atSign, namespace)`, raised by the CK-manager
     pre-pass so nothing is in flight when it fires; the query is
     `CryptoRuntime.isReadyFor(atSign, namespace)`; the opt-in is
@@ -924,13 +857,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     there is no flag day;
   - an entry with **no `alg`** is **dropped, not defaulted**, and an advertisement left
     with no usable entry is **refused**. One naming an algorithm this build cannot
-    encapsulate to is refused the same way — not guessed at. ⚠️ **This clause said "no
-    `alg` reads as the hybrid — which is what every one published before the field
-    existed was" until 2026-08-27, and asserted the opposite of the tree.** The
-    absent-means-the-old-shape hatch was removed deliberately: `PackageKey.fromJson`
-    returns null unless `alg` is a string, and the reader refuses what is left. The old
-    reasoning only held while advertisements predating the field existed to be read, and
-    nothing PQ is released for one to have come from;
+    encapsulate to is refused the same way — not guessed at. ⛔ **There is no
+    absent-means-the-hybrid hatch**: `PackageKey.fromJson` returns null unless `alg` is
+    a string, and the reader refuses what is left;
   - the correspondence check on an arriving private re-derives the public half **through
     the advertised KEM** rather than assuming X-Wing. A seed arrives as bare bytes, and 32
     or 64 of them are valid for one KEM or the other, so the bytes alone cannot say which.
@@ -943,8 +872,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   An advertisement carrying **no** `suites` field is refused at the parse rather than
   defaulted: unlike a key package, an advertisement is fetched by *senders*, who act on
   the claim immediately, so nothing may be assumed on the owner's behalf.
-- **Cross-ref:** [`decisions.md` 50.3](detail/decisions.md#503-the-kem-is-configured-the-construction-is-negotiated);
-  [`seal-spec.md`](seal-spec.md) (the two remaining versions and what each is attested by).
+- **Cross-ref:** [`seal-spec.md`](seal-spec.md) (the two remaining versions and what each is attested by).
 
 - **Cross-ref:** `design.md` (nskey data path: 3 layers / 3 providers, CK model, the
   nskey + its eager publication).
@@ -975,23 +903,21 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      sealed to.
   3. Write the **data** value (`at/symmetric/AES/GCM`, citing `ckKid`); sync (delivered to `@bob`).
 
-  ⚠️ **A fourth step described a "self-copy" written into alice's own scope by this
-  same `put`, and it was removed on 2026-08-27.** `AtClient.put` writes one value and
+  ⛔ **This `put` writes no self-copy.** `AtClient.put` writes one value and
   one CK conveyance, and that conveyance is sealed to **bob** — `nskey_cross_atsign_test`
   asserts alice cannot open it, on the grounds that if she could, her own scope would
   have been handed bob's content key. Writing a second copy for the sender is
   **AtCollection's** behaviour, a separate earlier `put` to a plain self key, and
-  AtCollection is a *consumer* of this API whose behaviour these rows do not assert
-  (gkc, 2026-08-27). A row about `put` or `notify` is about **self→self or
+  AtCollection is a *consumer* of this API whose behaviour these rows do not
+  assert. A row about `put` or `notify` is about **self→self or
   self→other**, never both at once.
 - **Then:**
   - `bob1`, `bob2` decapsulate bob's CK record with bob's nskey private and read. The
     same nskey private opens every CK record sealed to that nskey, so which of bob's
     enrollments reads is immaterial — the reads differ by record-owner, not by key.
-    ⚠️ This clause also asserted that "alice's clients decapsulate the self-copy's CK"
-    until 2026-08-27; the self-copy is not this API's, and alice's own reading of her
-    own data is [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists),
-    the self→self mirror of this row.
+    ⚠️ There is no self-copy for alice to read here; alice's own reading of her own
+    data is [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists), the
+    self→self mirror of this row.
   - PQ end to end; data values `providerId = at/symmetric/AES/GCM`, CK conveyances
     `at/nskey`; no RSA on any path.
   - Every authorised reader on both atSigns decrypts; an unauthorised `@bob`
@@ -1017,9 +943,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **When:** `alice2` shares with `@bob`.
 - **Then:** all of bob's authorised enrollments read the shared record, whichever of
   alice's enrollments wrote it; no authorised enrollment on the receiving side is left
-  unable to decrypt. ⚠️ **This also required "all of alice's authorised enrollments read
-  the self-copy" until 2026-08-27** — a record `put` does not write. The self→self
-  mirror, alice's own enrollments reading alice's own data, is
+  unable to decrypt. There is no self-copy: the self→self mirror, alice's own
+  enrollments reading alice's own data, is
   [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists).
 
 | enr | APKAM | root⁻¹ | nskey⁻¹ | KP |
@@ -1085,29 +1010,18 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   of downgrade attacks)". What *is* negotiated is the construction over the chosen KEM —
   [UC-A4.6](#56-uc-a46--the-construction-is-negotiated-from-suites-and-no-shared-entry-is-a-refusal).
 
-  ⚠️ **Until 2026-08-27 this clause read "each atSign advertises one KEM per
-  generation, and rotation is the only moment that can change", and rested the SP 800-227
-  argument on it.** Both halves were false. `KeyPackageMinting` mints a keypair for every
-  configured algorithm and republishes the package by `enroll:update`, and the
+  ⚠️ **The property is not that only one KEM is on offer**, but that the offer is
+  authenticated and the order reading it is fixed. `KeyPackageMinting` mints a keypair
+  for every configured algorithm and republishes the package by `enroll:update`, and the
   `reconcileKeyPackage` startup step adds one after a preference edit with no rotation
-  involved. It also contradicted
-  [UC-A4.6](#56-uc-a46--the-construction-is-negotiated-from-suites-and-no-shared-entry-is-a-refusal),
-  whose clause on narrowing candidates says outright that a holder may advertise more than
-  one KEM — and that one is proven against a live atServer. The conclusion survives its
-  premise: the property was never that only one KEM is on offer, but that the offer is
-  authenticated and the order reading it is fixed.
+  involved.
 
-  ⚠️ **Rewritten AGAIN on 2026-08-27.** It then read *"while an nskey generation carries
-  the **first** of that list, because a mint writes one key"*, which was true of the tree
-  and is no longer the specification:
-  [decisions.md 119](detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27)
-  rules that a generation holds a key per configured algorithm. ⚠️ **This said that
-  made a KEM change need "one app rollout rather than two", until 2026-08-28; that
-  contradicted [section 17](#17-g2--crypto-agility--add-never-replace) in this same
-  file.** A migration is always two rollouts. What the array removes is not the
-  second rollout but the *unbounded wait with no signal* between them.
-  `PublishedNskeyKeyRing._prepareMint` still takes `.first`, so this half of the clause is
-  unproven until the mint changes.
+  ⚠️ **A migration is always two rollouts** ([section 17](#17-g2--crypto-agility--add-never-replace)).
+  What a key per algorithm removes is not the second rollout but the *unbounded wait
+  with no signal* between them. A generation holds a key per configured
+  algorithm;
+  `PublishedNskeyKeyRing._prepareMint` still takes `.first`, so a mint writes one key
+  and the generation gains the rest as each client adds its own missing algorithm.
 
 ### 5.6 UC-A4.6 — The construction is negotiated from `suites`, and no shared entry is a refusal
 
@@ -1141,26 +1055,14 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   recipient advertises it, with no fleet-wide flag day. That is the whole reason
   the field exists.
 
-  ⚠️ **This said the version byte is "chosen from the intersection at seal time
-  rather than from the sender's own build" until 2026-08-31, and the tree cannot
-  exhibit that distinction.** `openableSuitesFor` returns a one-element `const`
-  list per KEM, so the suite intersection has at most one member: a recipient can
-  **veto** a construction, never **select** between two over one KEM. The choice
-  that is real, and that the tests below exercise, is the choice of KEM *key*.
-  ⚠️ **The old clause also read "no readers-upgrade-first migration"**, dropping
-  the word that carries the point: `bestSuiteBetween` requires the recipient to
-  list the suite, so a reader does upgrade before its senders can reach it. What
-  the field removes is the **fleet-wide** migration, and the tree says so in its
-  own words — *"without it a second construction could only be introduced by
-  upgrading **every** reader first"*.
-
-  ⚠️ **This asserted a historical instance until 2026-08-27**, naming what two clients
-  "had exchanged" under a construction since retired and removed. **A clause about what
-  clients *had* exchanged is a claim about history, and no test of a tree that no longer
-  contains that construction can establish it** — which every instrument here reports as
-  a coverage gap rather than as an unprovable sentence. The mechanism it was
-  illustrating is intact and is what the clause now states. Retired constructions are
-  documented in `seal-spec.md` and nowhere else.
+  ⚠️ **A recipient can veto a construction, never select between two over one KEM.**
+  `openableSuitesFor` returns a one-element `const` list per KEM, so the suite
+  intersection has at most one member; the choice that is real, and that the tests
+  below exercise, is the choice of KEM *key*.
+  ⚠️ **The migration this removes is the fleet-wide one, not the readers-first one**:
+  `bestSuiteBetween` requires the recipient to list the suite, so a reader does upgrade
+  before its senders can reach it. Without the field a second construction could only be
+  introduced by upgrading **every** reader first.
 - **Verification note:** both arms must be asserted against the **same** key, so the only
   thing differing between them is what the record claims. Two arms that differ in key
   *and* claim prove nothing about the claim.
@@ -1182,9 +1084,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     advertisement must not cost the rest of the roster theirs.
 
 - **Cross-ref:** `design.md` (the nskey + its eager publication, bilateral
-  inbound forward-secrecy); `decisions.md` (forward-secrecy rationale, and
-  [50](detail/decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
-  for the KEM/construction split).
+  inbound forward-secrecy).
 - **Impl/verify (A4.x):** **B-1** + **SS-4**, and **KE-1** for UC-A4.5/A4.6/A4.7; harness
   `tests/at_end2end_test` (cross-atSign). The negotiation itself is unit-provable, but
   **that the negotiated version is the version on the wire is not** — a fixture backing
@@ -1196,8 +1096,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 ### 6.1 UC-A5.1 — Rotate a namespace key (post-compromise)
 
-- **Given:** the `app_1.my_apps@alice` nskey exists; `alice1` wants to rotate. **Two
-  distinct levers — do not conflate.**
+- **Given:** the `app_1.my_apps@alice` nskey exists; `alice1` wants to rotate.
 - **When (a) — coarse forward secrecy = rotate the symmetric CK:** `alice1` cuts a new
   CK, conveys it once (sealed to the nskey), and points new writes at it. For FS
   it then **deletes the old CK's `at/nskey` conveyance record** and every enrollment
@@ -1230,14 +1129,12 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   backstop for a joiner the push missed: on meeting a retained `__ck` naming an
   `nskeyKid` it does not hold, it pulls that generation and opens it.
 
-  ⚠️ **Until 2026-08-27 this clause said the joiner is pushed "the current generation
-  only", with the pull as the normal route to history.** The approval path has never
-  done that: `conveyHeldPrivatesTo` reads `NskeyPrivateFiling.readAllFor(namespace)` and
-  sends each entry. **The code is the specification here** (gkc, 2026-08-27) — forward
-  secrecy for a namespace's past is the **CK** lever in *When (a)* above, where deleting
-  the old conveyance record is what makes old-CK-era data unreadable. Once that record
-  is gone an old nskey private opens nothing, so withholding it from a joiner would cost
-  a round trip and buy no secrecy.
+  ⚠️ **Forward secrecy for a namespace's past is the CK lever in *When (a)* above**,
+  where deleting the old conveyance record is what makes old-CK-era
+  data unreadable. Once that record is gone an old nskey private opens nothing, so
+  withholding it from a joiner would cost a round trip and buy no secrecy;
+  `conveyHeldPrivatesTo` reads `NskeyPrivateFiling.readAllFor(namespace)` and sends
+  every entry.
 
 ### 6.2 UC-A5.2 — Per-enrollment auth revocation
 
@@ -1245,29 +1142,34 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **When:** operator runs `enroll:revoke` on E2.
 - **Then:**
   - E2's one APKAM keypair can no longer authenticate; `alice1` unaffected; E2
-    gets no new secrets — excluded at **both** discovery+push (`excludeEnrollmentIds` on
-    `enroll:listns`/serve) **and** the `requestSecret` pull serve (the
-    revocation guard). (Under 1:1:1 "revoke E2's APKAM key" == revoke its enrollment;
-    there is no per-pubkey delete.)
-  - ⛔ **"E2 gets no new secrets" holds for E2 and NOT for what E2 spawned**, and
-    this row's Given — *the keyfile holding E2's APKAM keypair is lost* — is
-    exactly the case that can self-enroll children. A descendant keeps
-    `approved`, so it stays on the roster `enroll:listns` returns and is answered
-    when it asks a holder for the published generation. The exclusion set is the
-    subtree; see
-    [UC-A5.3](#63-uc-a53--enrollment-revocation) and
-    [`decisions.md` 121](detail/decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28).
+    gets no new secrets — excluded at **both** the discovery+push roster, which
+    the client filters with `excludeEnrollmentIds` after the atServer answers
+    `enroll:listns:<namespace>`, **and** the `requestSecret` pull serve (the
+    revocation guard). ⚠️ `enroll:listns` carries no exclusion of its own: it
+    takes a namespace and nothing else, and answers with the approved
+    enrollments holding it. (Under 1:1:1 "revoke E2's APKAM key" == revoke its
+    enrollment; there is no per-pubkey delete.)
+  - ⛔ **"E2 gets no new secrets" holds for E2 and NOT for what E2
+    SELF-ENROLLED**, and this row's Given — *the keyfile holding E2's APKAM
+    keypair is lost* — is exactly the case that can self-enroll a successor. A
+    successor copies its predecessor's approver rather than pointing at it, so
+    the two are siblings and the revoke does not reach it: it keeps `approved`,
+    stays on the roster `enroll:listns` returns, and is answered when it asks a
+    holder for the published generation. What E2 **approved** is a different
+    matter — the revoke cascades to it, so it loses `approved` and leaves every
+    roster at once. The client's exclusion set stays the one enrollment named;
+    a compromised keyfile that has already been replaced is answered by
+    revoking the successor, which is the live principal. See
+    [UC-A5.3](#63-uc-a53--enrollment-revocation).
 
 ### 6.3 UC-A5.3 — Enrollment revocation
 
 - **Given:** enrollment E2 compromised (it holds exactly one APKAM keypair), and
   E2 has approved at least one enrollment beneath it, which has itself approved
   another — the shape this row turns on, and the deepest one the atServer's
-  cascade can be asked about. ⚠️ **This said "E2 has self-enrolled a successor,
-  which has itself self-enrolled another" until 2026-09-08**, which is
-  unconstructible: a replacement may not be replaced without an approver, so a
-  self-enrolment chain is at most one link long. What a lost keyfile produces is
-  covered by the second bullet below.
+  cascade can be asked about. ⚠️ **A replacement may not be replaced without an
+  approver**, so a self-enrolment chain is at most one link long; what a lost
+  keyfile produces is covered by the second bullet below.
 - **When:** an enrollment holding `rw` on `__manage` calls
   `revokeEnrollmentAndRotate(E2)` — revoke, then rotate every namespace E2 could
   read.
@@ -1282,14 +1184,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     un-revoke an enrollment whose predecessor **exists and** is not currently
     `approved`; it refuses a revoke whose cascade would remove **the caller**;
     and it refuses one that would leave no permanent fully privileged
-    enrollment. See
-    [`decisions.md` 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
-    and [133](detail/decisions.md#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08).
-    ⚠️ **Every sentence of this clause is the atServer's**, and its own suite
-    pins each by name in both tiers — which is why nothing here proves it and
-    the entry in `unprovableClauses` says so. The client half was a sentence in
-    this clause until 2026-09-09 and is now the one below, so that it can be
-    pinned rather than carried by a clause this side cannot establish.
+    enrollment.
+    ⚠️ **Every sentence of this clause is the atServer's**; the client half is
+    the clause below.
   - ⛔ **The client's exclusion set stays the ONE enrollment named**, whatever
     the atServer's cascade took with it. An exclusion set is advisory and
     per-caller: it binds the client that computes it and nothing else, and
@@ -1306,24 +1203,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     `superseded`. **So a compromised keyfile that has already been replaced is
     answered by revoking the SUCCESSOR**, which is the live principal; naming
     the predecessor revokes something the atServer has usually revoked already.
-    ⚠️ **This clause required the cascade to follow the replacement edge until
-    2026-09-08**, when gkc ruled it follows the built behaviour instead
-    ([133](detail/decisions.md#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08));
-    the rewritten wording is above and the reasoning is in that ruling.
 
-    ✅ **BUILT, and the clause now describes what is built** (gkc, 2026-09-08;
-    this paragraph said "ruled and not yet built", then briefly "contradicted").
-    at_server pins the approval cascade and the superseded-at-first-auth path in
-    `apkam_self_enrollment_test.dart`, in its unit tree and its functional pack.
-    What is owed HERE is a client-side pin of the first bullet: revoke an
-    approver with a two-deep approval subtree beneath it and assert every
-    member's status and its absence from `enroll:listns`.
-
-    ⛔ **THE BUILT CASCADE NEVER FOLLOWS THE REPLACEMENT EDGE**, read on
-    at_server `origin/trunk` `66598e853`, 2026-09-08.
+    ⛔ **The cascade never follows the replacement edge.**
     `EnrollmentManager.descendantsOf` collects every enrollment that reaches the
-    target by following APPROVER links upward, and its own comment says it
-    "never follows the replacement edge"; the revoke path in
+    target by following APPROVER links upward, and the revoke path in
     `enroll_verb_handler.dart` cascades over exactly that set. A self-enrolled
     successor copies its predecessor's `parentEnrollmentId` rather than pointing
     at it, so the two are siblings; and at the successor's first authentication
@@ -1331,45 +1214,25 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     onto the successor and revokes an approved, not fully privileged
     predecessor as `superseded`. So revoking E2 reaches neither what E2
     self-enrolled nor, after that adoption, what E2 had approved.
-    ⚠️ **The Given cannot be constructed either**: a replacement may not itself
-    be replaced without an approver (`enroll_verb_handler.dart`, pinned in
-    at_server's `apkam_self_enrollment_test.dart` and in its functional pack of
-    the same name), so a self-enrolment chain is at most one link long.
 
-    ⚠️ **This paragraph said the clause was blocked on ancestry that OUTLIVES
-    the enrollment record, filed as
-    [at_server#2782](https://github.com/atsign-foundation/at_server/issues/2782),
-    until 2026-09-08.** That issue is CLOSED as completed: the expiry-severed
-    chain it described needs a middle enrollment, chains are now capped at one
-    link, and the grace period that shortened a replaced enrollment's life —
-    which the issue called the bigger half of the cause — is gone. What survives
-    is orphaning along APPROVER links, which `descendantsOf` names itself: a
-    severed link orphans everything behind it, because nothing records ancestry
-    beyond an enrollment's immediate approver.
+    ⚠️ **Nothing records ancestry beyond an enrollment's immediate approver**,
+    so a severed APPROVER link orphans everything behind it.
 
-    ⚠️ **The consequence, and it is the intended reading** (gkc, 2026-09-08):
-    rotating while excluding only E2 hands the new generation to an enrollment
-    E2 self-enrolled, because the successor is the principal and is what an
-    operator revokes. ⚠️ **The answer is not a wider exclusion set** — see
-    below; it is naming the live enrollment.
+    ⚠️ **The consequence**: rotating while excluding only E2
+    hands the new generation to an enrollment E2 self-enrolled, because the
+    successor is the principal and is what an operator revokes. ⚠️ **The answer
+    is not a wider exclusion set** — see below; it is naming the live
+    enrollment.
 
-    ⚠️ **This clause required the EXCLUSION SET to be the subtree until
-    2026-08-31, walked client-side over `parentEnrollmentId`. That was the wrong
-    layer.** An exclusion set is advisory and per-caller: it binds the client
-    that computes it and nothing else, and cannot bind a holder that has only the
-    atServer's word to go on. Approval state is authoritative and consulted by
-    every roster query on every client, which is why `revokeEnrollmentAndRotate`
-    revokes first. Put the walk in the revoke and the roster does the rest, for
-    every client at once — including ones that never heard of the revocation.
+    ⚠️ **The walk belongs in the revoke, not in the exclusion set**: the roster
+    then does the rest, for every client at once — including ones that never
+    heard of the revocation.
 
-    ⚠️ **This warned of a PENDING descendant as a second route to the same
-    orphan until 2026-08-31. There is no such thing.** On at_server
-    `origin/trunk` the APKAM self-enrollment branch sets `approved` and writes
-    `parentEnrollmentId` in the same breath, and that branch is the field's only
-    writer — the ordinary request branch, which sets `pending`, never records a
-    predecessor. So no enrollment carrying a predecessor is ever pending. The
-    approve path gets the same predecessor test anyway, as belt-and-braces
-    making the invariant total rather than as a hole being closed.
+    ⚠️ **No enrollment carrying a predecessor is ever pending.** The APKAM
+    self-enrollment branch sets `approved` and writes `parentEnrollmentId` in
+    the same breath, and is the field's only writer — the ordinary request
+    branch, which sets `pending`, never records a predecessor. The approve path
+    carries the same predecessor test anyway, making the invariant total.
 
   **Why the pair, and not either half, denies an attacker NEW data keys.**
   Revoking the enrollment and all of its descendants, *followed by* the rotation,
@@ -1379,67 +1242,41 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   hands the next generation to whatever the compromised enrollment spawned,
   because those enrollments are still approved and still on the roster.
 
-  ⚠️ **This is post-compromise security, not forward secrecy, and
-  [UC-A5.1](#61-uc-a51--rotate-a-namespace-key-post-compromise) says not to
-  conflate the two.** Lever (b) — revoke plus nskey-keypair rotation — is what
-  this row composes. Forward secrecy for the namespace's **past** is the separate
-  CK lever, UC-A5.1(a): deleting the superseded content key's conveyance record,
-  which this row does not fire.
-
   ⚠️ **The cut is bounded, not instantaneous.** A peer keeps sealing content keys
   to the superseded generation until its next `ensureCurrent` sees the changed
   `nskeyKid`, and the revoked holder can still open those. The exposure is the
   advertisement's freshness window plus one content-key lifetime — UC-A5.1's
-  **Then (b)** calls that part of the case rather than an optimisation, and this
-  row used to drop it.
+  **Then (b)** calls that part of the case rather than an optimisation.
 
-  **Stranding, and the rule that was reasoned wrongly.** Three rules bear on it.
-  ✅ **Built:** an enrollment may not revoke itself without `force`, and a revoker
-  must be authorised for every namespace in the target's enrollment at the
-  target's access level. ✅ **Built, and this said "Not built" until
-  2026-09-08:** the revoke path refuses a revoke whose cascade would remove the
-  caller, naming it (*"descends from it by approval and would be revoked by the
-  same cascade"*), and refuses one that would remove the last **fully
-  privileged** enrollment — `rw` on `*` *and* `__manage`, as
+  **Stranding.** Three rules bear on it. An enrollment may not revoke itself
+  without `force`, and a revoker must be authorised for every namespace in the
+  target's enrollment at the target's access level. The revoke path refuses a
+  revoke whose cascade would remove the caller, naming it (*"descends from it by
+  approval and would be revoked by the same cascade"*), and refuses one that
+  would remove the last **fully privileged** enrollment — `rw` on `*` *and* `__manage`, as
   [section 0](#0-purpose-scope--how-to-read-this-doc) defines it — unless a
   permanent one survives. The second is asked of the ACT rather than of the
   caller, over what survives the cascade, so it covers the self-revocation case
   and more.
 
-  ⚠️ **"A revoker is never inside the subtree it revokes" is FALSE, and this row
-  asserted it on 2026-08-31.** Never being one's own descendant rules out being
-  in *one's own* subtree and says nothing about being in *the target's*. E3
-  revokes E2, the cascade takes E2's descendants, E3 is among them, and on a
-  two-enrollment atSign that strands **by cascade**, without anyone
-  self-revoking. Hence the caller refusal above. ⚠️ **The SUCCESSOR route to it
-  is gone, and this row read a successor as a descendant of its predecessor
-  until 2026-09-08.** A successor copies its predecessor's `parentEnrollmentId`,
-  so the two are siblings, and the cascade never follows the replacement edge; a
-  caller reaches the cascade by APPROVAL, having been approved somewhere beneath
-  the target.
+  ⚠️ **A revoker CAN be inside the subtree it revokes.** Never being one's own
+  descendant rules out being in *one's own* subtree and says nothing about being
+  in *the target's*. E3 revokes E2, the cascade takes E2's descendants, E3 is
+  among them, and on a two-enrollment atSign that strands **by cascade**,
+  without anyone self-revoking. Hence the caller refusal above. ⚠️ **There is no
+  successor route to it**: a successor copies its predecessor's
+  `parentEnrollmentId`, so the two are siblings, and the cascade never follows
+  the replacement edge; a caller reaches the cascade by APPROVAL, having been
+  approved somewhere beneath the target.
 
-- **Cross-ref:** `detail/decisions.md`
-  [129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
-  (the cascade and its guards),
-  [128](detail/decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)
-  (predecessor/successor, and why a successor may revoke its predecessor),
-  [121](detail/decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28)
-  (superseded subtree half; its durable-record half still stands);
-  `design.md` [§1.7](design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation) (CK rotation vs nskey-keypair rotation).
-- **Impl/verify (A5.x):** **B-2** — landed 2026-08-06
-  ([decisions 47](detail/decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)).
+- **Cross-ref:** `design.md` [§1.7](design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation) (CK rotation vs nskey-keypair rotation).
+- **Impl/verify (A5.x):** **B-2**.
   A5.1(a) is proven live by `tests/at_functional_test/test/content_key_rotation_live_test.dart`
   (both positions of the retention knob); A5.1(b), A5.2 and A5.3's first clause
   by `tests/at_functional_test/test/nskey_rotation_live_test.dart`.
-  ⚠️ **That test exercises no self-enrollment and no `parentEnrollmentId`.**
-  UC-A5.2 still carries the withdrawn 2026-08-28 subtree clause and is unpinned;
-  A5.3's cascade clause is rewritten to the built behaviour (2026-09-08) and is
-  now an at_client coverage gap rather than a build or specification one: no
-  test here revokes an approver with an approval subtree beneath it.
-  ⚠️ **UC-A5.2's Then still says E2 is excluded "at both discovery+push
-  (`excludeEnrollmentIds` on `enroll:listns`/serve)". `enroll:listns` takes no
-  such parameter** — checked on at_server `origin/trunk` — and the exclusion is
-  achieved by the revocation, as above. A5.2's wording is owed a fix.
+  ⚠️ **`enroll:listns` takes no `excludeEnrollmentIds` parameter**, and UC-A5.2's
+  Then says it does; the exclusion is achieved by the revocation, as above, and
+  that clause is owed a fix.
 
 ---
 
@@ -1447,14 +1284,13 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 ### 6.4 UC-A5.4 — The content-key lever is a policy the application supplies
 
-The two levers UC-A5.1 names are fired by *someone*, and since 2026-08-28 that
-someone is the application: `CryptoConfig` carries a `CkRotationPolicy` and an
+The two levers UC-A5.1 names are fired by *someone*, and that someone is the
+application: `CryptoConfig` carries a `CkRotationPolicy` and an
 `NskeyRotationPolicy`, both `@experimental` but public. The SDK asks rather than
 carrying a schedule, because a namespace holding a chat history and one holding
 a device's last-seen timestamp want different answers and only the application
 knows which is which. Design in
-[`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split);
-ruled in [`decisions.md` 122](detail/decisions.md#122-rotation-cadence-the-nskey-lever-fires-on-cause-the-ck-lever-asks-a-policy-2026-08-28).
+[`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
 
 - **Given:** an application that supplied a `CkRotationPolicy`, and a
   destination and namespace for which a content key is already current under the
@@ -1505,16 +1341,12 @@ ruled in [`decisions.md` 122](detail/decisions.md#122-rotation-cadence-the-nskey
   `askRotationPolicy: false`, so the question is put at the two points above and
   nowhere else.
 
-  ⚠️ **This said the route "cannot ask", because it returns `alreadyReachable`
-  in exactly the branch where a generation is published, until 2026-08-31 — and
-  that branch structure never held.** There are **two** reads of
-  `publishedAdvertisement`, separated by a remote round trip, on a read that
-  deliberately bypasses both caches precisely because a sibling may publish in
-  the window; a sibling doing so routed `seedNamespace` onto its `published !=
-  null` branch and put the question from a route specified never to ask. The
-  clause is true now because the caller says so explicitly, not because the
-  branch prevents it — and the second read stays, since the mint lock, not that
-  read, is what prevents a double mint.
+  ⚠️ **The route stays silent because the caller says so explicitly, not because
+  the branch prevents it.** There are **two** reads of `publishedAdvertisement`,
+  separated by a remote round trip, on a read that deliberately bypasses both
+  caches precisely because a sibling may publish in the window; a sibling doing
+  so routes `seedNamespace` onto its `published != null` branch. The second read
+  stays, since the mint lock, not that read, is what prevents a double mint.
 - **Then, what it is handed:** an `NskeyRotationContext` naming the namespace,
   the advertised generation's `nskeyKid`, the `createdAt` **the advertisement
   itself states** rather than a local record, and a `now` passed in.
@@ -1531,17 +1363,6 @@ ruled in [`decisions.md` 122](detail/decisions.md#122-rotation-cadence-the-nskey
 The conditions an application cannot infer from the policy signature, and the
 ones a clause written from the design alone would state wrongly. Each is a
 deliberate skip with a reason, not an oversight.
-
-⛔ **One condition was written here and removed, because it is unreachable.**
-`CkManager` returns early when the cache holds a current content key with no
-recorded `cutAt`, and its comment explains the absence as a cache entry
-predating cut-time recording. There is no such entry: `ContentKeyCache` is
-in-memory and constructed per client, `putAsCurrent` is the only writer of the
-three `current` maps and always records a cut-time (`cutAt ?? DateTime.now()`),
-`evict` removes all three together, and nothing in the workspace subclasses or
-reimplements the class or passes `cutAt: null`. So the guard cannot fire, and
-stating it as a clause would enshrine dead code as the specification. Measured
-2026-08-31; the guard itself is a `## TODO` row.
 
 - **Given:** an application that supplied both policies.
 - **Then, nothing published is a cold start:** the namespace-key policy is not
@@ -1575,25 +1396,21 @@ stating it as a clause would enshrine dead code as the specification. Measured
   server — for a parent that can deny its own aborted request.** ⚠️ A
   namespace-scoped parent holds no `__manage` and cannot, so it leaves its
   `pending` enrollment behind, one per retry; this row's second scenario asserts
-  that limit rather than hiding it. The clause read unqualified until
-  2026-08-26, when the citation audit read it against the scenario that
-  disproves it.
+  that limit rather than hiding it.
   (The atServer's immutable write is long-standing and present even here — it is
   **not** a PQ-only verb.) atServer upgrade is a hard prerequisite for Part B.
 - **Cross-ref:** `implementation-plan.md` (B0 depends on server projects SS-1b / RF-SRV).
-- **Impl/verify:** **green live 2026-08-08** —
+- **Impl/verify:**
   `tests/at_end2end_test/test/pq/legacy_server_abort_test.dart`, against a
   **pinned** pre-PQ atServer (`atsigncompany/virtualenv:vip-p3.15.0`). The pin
   is the point: `vip` gains post-quantum support and stops being a legacy
   atServer, so a row aimed at it would go quietly meaningless. Tagged
   `legacy-server` so the ordinary PQ job excludes it, and run by its own CI job.
   Verified in both directions — green against the pin, red against a PQ-capable
-  image, so it cannot rot into a no-op.
-  Writing it found a defect: the abort was clean but left the enrollment
-  request it had just created `pending`, one per retry. at_auth 4.0.0-rc1 denies it
-  on the way out; where it cannot (a scoped parent has no `__manage`) the
-  refusal says so, and the second test asserts that limit rather than hiding
-  it.
+  image, so it cannot rot into a no-op. The abort denies the enrollment request
+  it had just created on the way out; where it cannot (a scoped parent has no
+  `__manage`) the refusal says so, and the second test asserts that limit rather
+  than hiding it.
 
 ## 8. B1 · Upgrade an existing (pre-PQ) atSign — the retrofit scenarios
 
@@ -1643,8 +1460,7 @@ authenticated self-retrofit flow + settlement and the `enroll:request` metadata 
      other fully privileged enrollments. A namespace-scoped enrollment skips this step
      entirely and proceeds without a root ([UC-B5.3](#123-uc-b53--two-enrollments-race-to-create-pq_signing_root)).
   6. The enrollment now holds its key material. Writing PQ remains the **app's
-     release decision** — there is no readiness state to flip
-     ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
+     release decision** — there is no readiness state to flip.
 - **Then:**
   - `alice1.APKAM = pq` on the fresh auto-approved enrollment; PQ auth works.
   - `public:pq_signing_root@alice` created; `alice1.root⁻¹ = ✓`; `alice1` serves the private to other fully privileged enrollments on request.
@@ -1658,15 +1474,8 @@ authenticated self-retrofit flow + settlement and the `enroll:request` metadata 
     its own predecessor. **No enrollment is exempt from settling, the atSign's first
     included**; only a root predecessor is exempt from the revocation.
 
-    ⚠️ **Until 2026-09-07 these two clauses stated a cap** — the legacy enrollment capped
-    to `min(now + grace, its own remaining lifetime)`, armed by the successor's first
-    authentication and re-armed by each sibling's
-    ([ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)), built by at_server
-    [PR #2781](https://github.com/atsign-foundation/at_server/pull/2781). at_server [PR #2797](https://github.com/atsign-foundation/at_server/pull/2797) (merged 2026-09-05) replaced the
-    cap with the revocation above and deleted `apkamSelfEnrollmentGraceHours`; the stamp
-    became `predecessorSettledAt`. The pin moved with it: `retrofit_settlement_e2e_test.dart`
-    proves the revocation, the stamp and the untouched expiry, where
-    `retrofit_cap_value_e2e_test.dart` (the same file, renamed) proved the formula.
+    The pin for both clauses is `retrofit_settlement_e2e_test.dart`, which proves the
+    revocation, the stamp and the untouched expiry.
   - Legacy *encryption* key retained (history still readable). No re-onboarding.
 
 ### 8.2 UC-B1.2 — Second install on a copied keyfile (`alice1c`)
@@ -1687,31 +1496,16 @@ authenticated self-retrofit flow + settlement and the `enroll:request` metadata 
   package, self-spawns a fresh auto-approved enrollment) **except that a scoped E2 does
   not request the root at all** — `PqSigningRoot.requestPrivateIfAbsent` returns without
   asking when the enrollment is not fully privileged, logging that it is not entitled to
-  hold it. ⚠️ **This said it "requests root `pq_signing_root@alice⁻¹`" and that the
-  distinction appears "only for namespaced secrets", until 2026-08-27; both were false,
-  and the same sentence in [UC-A2.3](#33-uc-a23--namespace-restricted-enrollment) was
-  corrected in the same commit.** The root is the first distinction, not an exception to
-  it. The rest still holds: for **namespaced** secrets — a
-  restricted E2 receives only its authorised subset of `nskey` keys.
-
-⚠️ **That last clause is stated here and established by nothing.** The row's
-citation covers three things — a scoped parent cannot escalate to `*` and
-`__manage` on the way through, its retrofit succeeds and upgrades to ML-DSA, and
-the signing root is untouched — and the `nskey` subset is not among them. Found
-2026-08-26 by reading the `proves:` string against the `Then`, which is the
-audit this row's PROVEN status cannot see: the rail matches rows to citations,
-never clauses to evidence. The row stays PROVEN because the clauses that ARE
-cited are proven; what is owed is either evidence for this one or its removal.
-[UC-B1.7](#87-uc-b17--holds-the-parent-enrollments-grants-verbatim) proves the
-adjacent and weaker property — the grants themselves carry over verbatim.
+  hold it. The root is the first distinction, not an exception to it; and for
+  **namespaced** secrets, a restricted E2 receives only its authorised subset of `nskey`
+  keys.
 
 ### 8.4 UC-B1.4 — A retrofitted scoped enrollment runs an authenticated verb
 
-⛔ **B1.1 to B1.3 stop at "PQ auth works", and that clause was true in the field
-while the enrollment could not run a single verb.** These four rows exist
-because of it. Authentication is the one thing a mis-stamped connection does
-not break: at_auth authenticates on its own connection, before the client
-exists, and every verb afterwards runs over a different one.
+⛔ **"PQ auth works" is not "the enrollment can run a verb".** Authentication is
+the one thing a mis-stamped connection does not break: at_auth authenticates on
+its own connection, before the client exists, and every verb afterwards runs
+over a different one.
 
 ⚠️ **The property is per-ROUTE.** Two pieces of code retrofit a client, and a
 row that does not name which one can be proven for one and false for the other:
@@ -1721,8 +1515,7 @@ row that does not name which one can be proven for one and false for the other:
 | explicit | `selfRetrofit` | an SDK consumer that calls it by name |
 | startup | `AtClientImpl._settleEnrollmentIdentity` | `at_activate` and every client whose posture asks for a stronger key |
 
-Both are asserted. The startup route is the migration path itself, and it is the
-one that carried a defect for as long as it existed.
+Both are asserted. The startup route is the migration path itself.
 
 - **Given:** a namespace-scoped, OTP-provisioned enrollment holding an RSA-2048
   APKAM keypair — what the OTP path mints, since the request carries no
@@ -1771,22 +1564,17 @@ all, which is why this row asserts the boundary rather than the capability.
     because a scoped enrollment holds no `__manage`. Seeing the parent there
     would mean the retrofit acquired management rights nobody asked for.
 
-⚠️ **Verbatim carry-over is UNIVERSAL, ruled 2026-08-31.** This said it was
-"a property of the STARTUP route only" — true when written: `_settleEnrollmentIdentity`
-reads appName, deviceName and the namespace map off the enrollment record and
-passes them through unchanged, while `selfRetrofit` and `retrofitIdentity` took
-`namespaces` as a caller-supplied parameter and read no record at all, so on the
-explicit route the grants were whatever the caller passed and `verifyNoEscalation`
-stopped only a widening. [Ruling 128](detail/decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)
-closes that: a successor's grants are its predecessor's on every route, the
-atServer refusing any self-enrollment that states different ones. ⛔ **The client
-half is owed** — dropping the parameter from both functions — so until it lands,
-a caller can still send a narrowed map and will now be refused rather than
-obeyed.
+⚠️ **Verbatim carry-over is UNIVERSAL, on every route**:
+a successor's grants are its predecessor's, and the atServer refuses any
+self-enrollment that states different ones. `_settleEnrollmentIdentity` reads
+appName, deviceName and the namespace map off the enrollment record and passes
+them through unchanged. ⛔ **The client half is owed** — `selfRetrofit` and
+`retrofitIdentity` still take `namespaces` as a caller-supplied parameter and
+read no record, so until the parameter is dropped a caller can send a narrowed
+map and be refused rather than obeyed.
 
 - **Cross-ref:** `design.md` (authenticated self-retrofit flow + expiry copy/cap,
-  `enroll:request` metadata tail); `decisions.md` (Decision #F 1:1:1, the retrofit
-  ruling).
+  `enroll:request` metadata tail).
 - **Impl/verify (B1.x):** **RF-SRV** (server auto-approve), **RF-2b** (client
   mint+request), **RF-2c** (orchestration); harness `tests/at_end2end_test` runLocal.sh.
   B1.4–B1.7 are `tests/at_functional_test/test/pq_retrofitted_scope_test.dart`
@@ -1795,11 +1583,10 @@ obeyed.
   explicit `selfRetrofit` route) and
   `tests/at_onboarding_cli_functional_tests/test/pq_native_enroll_test.dart`
   (`at_activate list`, the shipped binary).
-  **All three green 2026-08-05** — `tests/at_end2end_test/test/pq/retrofit_e2e_test.dart`
+  `tests/at_end2end_test/test/pq/retrofit_e2e_test.dart`
   drives the signing-root step in-flow (privileged mint, clone request+verify,
   scoped skip) and the two clones reaching distinct enrollment ids; the submit
   half is `tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart`.
-  See [`decisions.md` 45](detail/decisions.md#45-the-retrofit-rows-and-the-five-defects-the-first-end-to-end-run-found-2026-08-05).
 
 ## 9. B2 · Legacy retirement & lockout
 
@@ -1827,30 +1614,20 @@ obeyed.
   atSign's first enrollment's keyfile may each retrofit in their own time
   ([UC-B1.2](#82-uc-b12--second-install-on-a-copied-keyfile-alice1c)).
 
-  ⚠️ **Until 2026-09-07 this row was the grace-period variant**: legacy auth survived
-  until `min(now + grace, its own remaining lifetime)`, the cap re-arming on each
-  sibling's first authentication ([ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27), built by at_server
-  [PR #2781](https://github.com/atsign-foundation/at_server/pull/2781)), so laggard devices kept the window open. at_server
-  [PR #2797](https://github.com/atsign-foundation/at_server/pull/2797) (merged 2026-09-05) deleted the cap and
-  `apkamSelfEnrollmentGraceHours` with it; the row now states that server's behaviour, and
-  the zero-grace atSign the e2e runner configured for the old row went with the setting.
-
-- **Cross-ref:** `decisions.md` (retirement ruling, and [118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27) for the cap this replaced); `design.md` (settlement).
-- **Impl/verify:** **RF-SRV** + **RF-2c**. **Both green 2026-08-05** —
-  `tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart`, on the one
-  atSign whose atServer `runLocal.sh` gives a zero-hour
-  `apkamSelfEnrollmentGraceHours` (720h is the ratified default, and a row
-  cannot wait a month). The un-upgraded copy is refused with `AT0028 …
-  expired or invalid`; a sibling legacy enrollment that never retrofitted
-  still authenticates in the same run, and the same test against the default
-  grace shows the copy authenticating normally — so the window is what
-  decides, not the retrofit alone.
+- **Cross-ref:** `design.md` (settlement).
+- **Impl/verify:** **RF-SRV** + **RF-2c**.
+  `tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart`. The
+  successor's first authentication revokes its predecessor as superseded, so
+  the un-upgraded copy is refused with `AT0027 … is revoked`. Both legacy
+  enrollments authenticate before the retrofit, which is what makes that
+  refusal mean something rather than an atServer that refuses everything; a
+  second legacy enrollment minted at the same moment, which no retrofit ever
+  parented, still authenticates afterwards, as do a freshly minted one and the
+  PQ enrollment the retrofit created.
 
 ## 10. B3 · Mixed-PQ within one atSign
 
-> **Rewritten 2026-08-05** around the app-decides model
-> ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)):
-> there is no readiness marker and no negotiation. "Mixed within one atSign" means
+> **The app-decides model**: there is no readiness marker and no negotiation. "Mixed within one atSign" means
 > different **apps** at different stages (which never interact — they cannot read
 > each other's namespaces) or one app's **installs** mid-rollout (the developer's
 > release-ordering discipline). What the SDK must guarantee is the two-release
@@ -1886,31 +1663,24 @@ obeyed.
 | E1      | active | legacy + nskey data path | nskey data path      |
 | E2      | cap    | legacy + nskey data path | legacy               |
 
-- **Cross-ref:**
-  [`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)
-  (the two-release model) and
-  [27](detail/decisions.md#27-the-era-default-read-the-new-scheme-everywhere-write-it-once-2026-08-04)
-  (the era default that *is* the capability stage);
-  `design.md` [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d).
+- **Cross-ref:** `design.md` [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d).
 - **Impl/verify:** the era default + data path (**built**; unit
   `crypto_era_default_test`, e2e `era_default_read_test`) + **RF-2c**.
 
 ## 11. B4 · Mixed-PQ across atSigns
 
-> **Rewritten 2026-08-05.** Within a namespace, cross-atSign traffic is between
+> Within a namespace, cross-atSign traffic is between
 > installs of the **same app** — there are no strangers — so "mixed across
 > atSigns" means the same app at different stages on the two sides. The SDK's
 > whole contribution is the **cold-start gate**: refuse by name when the
 > destination has no key, take legacy only on explicit opt-in, never substitute a
-> scheme silently
-> ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
+> scheme silently.
 
 ### 11.1 UC-B4.1 — Active-PQ `alice` shares toward a `bob` with no namespace key
 
 - **Given:** alice's install is at stage `active`; bob's install has never run the
   capability build, so `public:__nskey.app_1.my_apps@bob` does not exist. Bob's
-  atSign holds a `public:publickey` (the retained-by-default legacy material,
-  [`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
+  atSign holds a `public:publickey` (the retained-by-default legacy material).
 - **When:** `alice1` shares or notifies `@bob:<k>.app_1.my_apps@alice`.
 - **Then:** the write **fails cold start by name**
   (`NamespaceKeyUnavailableException(@bob, app_1.my_apps)`), unless the app opted
@@ -1918,9 +1688,8 @@ obeyed.
   `publickey` (per-value symmetric key RSA-wrapped inline, the monolithic legacy
   model), and the *first write after bob's key appears* is PQ with no flag to
   flip. Never a silent downgrade: the app chose the fallback or the app sees the
-  refusal. ⚠️ **This also said "a PQ self-copy for alice's own scope proceeds
-  independently either way" until 2026-08-27** — `put` writes no such record, and
-  whether alice can write in her own scope while bob is unreachable is
+  refusal. `put` writes no self-copy record; whether alice can write in her own scope
+  while bob is unreachable is
   [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists)'s question, not
   this row's.
 
@@ -1931,18 +1700,14 @@ obeyed.
 - **When:** `bob1`'s app shares with `@alice` (and, in the reverse direction, a
   legacy app on `@alice` shares with `@bob`).
 - **Then:** **interop works by default in both directions**, because legacy
-  material outlives the atSign's own migration
-  ([`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)):
+  material outlives the atSign's own migration:
   toward alice, bob's app uses the explicit legacy fallback to
   `public:publickey@alice`; toward bob, alice's legacy app finds
   `public:publickey@bob` because even a PQ-native onboard publishes it by
-  default. **Test outcome (reversed from the original Decision #1):** a
+  default. **Test outcome:** a
   legacy-peer send is **supported by default**; only an atSign that set the
   legacy-interop **opt-out** refuses it — deliberately, and loudly.
-- **Cross-ref:** [Decision #1](detail/decisions.md#numbered-rulings-14) (original ruling,
-  default reversed by
-  [37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
-- **Impl/verify:** **green live 2026-08-08** —
+- **Impl/verify:**
   `tests/at_functional_test/test/pq_legacy_interop_live_test.dart`, three atSigns
   the test CRAM-activates itself: a pre-PQ one (default signing algorithm, so no
   signing root — asserted against the PQ-native one as a control), a PQ-native
@@ -1950,9 +1715,8 @@ obeyed.
   outbound (refused by name, then opted-in and stamped legacy, then read by the
   peer) and the opt-out all covered. It is in the **functional** pack, not
   `tests/at_end2end_test`: that pack runs in CI against long-lived cicd atSigns
-  and can never CRAM-activate anything. Running it turned up
-  [plan 14.12](implementation-plan.md#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record)
-  — the opt-out is not yet a usable configuration.
+  and can never CRAM-activate anything. The opt-out is not yet a usable configuration
+  ([plan 14.12](implementation-plan.md#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record)).
 
 ### 11.3 UC-B4.3 — Mid-rollout `@alice` (one install active, one still old) shares with `@bob`
 
@@ -1960,14 +1724,12 @@ obeyed.
   an old pre-capability build; bob's side holds the namespace key.
 - **When:** `alice1` shares/notifies `@bob`.
 - **Then:** the write toward `@bob` takes the **nskey data path** — which `alice2`
-  cannot read. ⚠️ **This said "and alice's self-copy does too" until 2026-08-27**; `put`
-  writes no self-copy, and the point survives without it, since the record alice1 wrote
-  is on alice's own atServer where alice2 can see it and not open it. That is the
+  cannot read. `put` writes no self-copy; the record `alice1` wrote is on alice's own
+  atServer, where `alice2` can see it and not open it. That is the
   release-ordering discipline violated (`active` shipped before the capability
   build reached every install), and it is the **app developer's** failure mode,
   not the SDK's to detect: the remedy is updating `alice2`, and everything
-  written stays readable to it the moment it is
-  ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).2 item 4).
+  written stays readable to it the moment it is.
   What the SDK guarantees: `alice2`'s *own* writes still work (legacy), nothing
   it wrote becomes unreadable to anyone, and its upgrade is purely additive.
 
@@ -1975,7 +1737,7 @@ obeyed.
 
 - **Given:** bob's install runs the capability build for the first time: it
   mints/publishes `public:__nskey.app_1.my_apps@bob` (or pulls the private if the
-  key exists, [`decisions.md` 38](detail/decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)).
+  key exists).
   Alice's install is at stage `active`.
 - **When:** `alice1` next shares/notifies `@bob`.
 - **Then:** alice's next `ensureCurrent` re-`plookup` finds bob's advertisement,
@@ -2002,29 +1764,26 @@ obeyed.
   for `pq_signing_root@alice⁻¹` is the steady-state path** — answered by any
   online holder, and **re-asked at every start until one does**.
 
-  ⚠️ **The no-push half moved out of the clause on 2026-08-31** (gkc), and is
-  kept here because it is the *reason* the pull is the steady-state path rather
-  than a behaviour of this row. `pq_signing_root` holds no namespace, so there
-  is no namespace roster to push along: `pushSecretToNamespaceMembers` has
-  exactly two production callers, both on the nskey path, and `pq_signing_root`
-  names it nowhere. That absence is asserted by a source-shaped guard —
+  ⚠️ **There is no push for the signing root**, which is why the pull is the
+  steady-state path. `pq_signing_root` holds no namespace, so there is no
+  namespace roster to push along: `pushSecretToNamespaceMembers` has exactly two
+  production callers, both on the nskey path, and `pq_signing_root` names it
+  nowhere. That absence is asserted by a source-shaped guard —
   `architecture_guard_test.dart`'s *the signing root has no namespace push* —
   which also fails if any file outside the declaration and those two callers
   starts naming the capability, so a delegating wrapper cannot open the hole
-  quietly. It is a guard rather than a pin: a clause states what the system
-  does, and an absence of a code path is not something a run can witness.
+  quietly.
 
-  ⚠️ **This said "(persists until one answers)" until 2026-08-31, and the
-  request itself does not.** It travels as an envelope with an `envelopeTtl` of
+  ⚠️ **The request itself does not persist.** It travels as an envelope with an `envelopeTtl` of
   seven days, and production says unconsumed envelopes expire that way. What
   actually makes the asking persist is the every-start re-broadcast, whose only
   guard is that this enrollment already holds the private half — so an
   enrollment offline for longer than the ttl is not left with a standing request,
   it simply asks again when it next runs.
   Namespaced `nskey` privates `alice2` missed while offline arrive by **its own
-  pull at next start** ([`decisions.md` 38](detail/decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)
-  — an enrollment created or offline after the mint missed the push, so pulling
-  is its normal path, not a backstop), answered store-and-forward by any current
+  pull at next start** (an enrollment created or offline after the mint missed
+  the push, so pulling is its normal path, not a backstop), answered
+  store-and-forward by any current
   holder whenever that holder next runs. (Pull = `requestSecret` and push =
   `pushSecretToNamespaceMembers` are dual facets of one substrate — see `design.md`.)
 
@@ -2054,9 +1813,8 @@ obeyed.
 ### 12.4 UC-B5.4 — Two enrollments race to mint a namespace's nskey
 
 The nskey twin of [UC-B5.3](#123-uc-b53--two-enrollments-race-to-create-pq_signing_root),
-and the property [decisions 105](detail/decisions.md#105-the-nskey-mint-elects-a-winner-2026-08-16)
-exists to hold: *if enrollments A, B and C all decide they need to mint, only
-one of them eventually does.*
+holding the property *if enrollments A, B and C all decide they need to mint,
+only one of them eventually does.*
 
 - **Given:** `alice1` and `alice3` both decide namespace `n` needs an nskey.
   Each has already read and found none — **from the atServer**, not from local
@@ -2112,7 +1870,6 @@ absence are indistinguishable under mocks.
   than sleeping for the ttl inside a call that has already done the destructive
   half.
 
-- **Cross-ref:** [decisions 105.6](detail/decisions.md#1056-built-the-cooldown-binds-rotation-too).
 - **Impl/verify:** **SS-4** + **B-2** (revocation).
 
 ### 12.7 UC-B5.7 — A winner that overruns its lease publishes nothing
@@ -2190,7 +1947,6 @@ answer is the only thing standing between them.
   a generation nobody advertises is never selected, because selection is by the
   kid in the envelope being opened.
 
-- **Cross-ref:** [decisions 104.2](detail/decisions.md#1042-both-paths-already-heal-a-loser--by-different-moves).
 - **Impl/verify:** **SS-2** + **SS-4**.
 
 ### 12.12 UC-B5.12 — The owner verifies her own advertisement as a peer would
@@ -2216,29 +1972,21 @@ These invariants are testable against **every** UC above:
   any scheme its stage configures, and upgrading only ever **adds**
   read-capability — the legacy provider is a *built-in* fallback rather than an
   entry in `providers`, so no config can drop it by omission.
-  ⚠️ **This read "a client decrypts anything ever written to it" with no
-  qualification until 2026-08-29**, and that stopped being true when
-  `PqPosture.legacy` became a genuine pre-capability install: it configures no
-  post-quantum provider, so a record stamped with one is refused by name with
+  ⛔ **`PqPosture.legacy` is the carve-out**, and it is a deliberate
+  configuration and nothing more: it configures no post-quantum provider, so a
+  record stamped with one is refused by name with
   `CryptoProviderNotRegistered`, exactly as a build predating those providers
-  refuses it. The carve-out is a deliberate configuration and nothing more: the
-  stage runs none of the post-quantum startup at all: it collects nothing,
-  files nothing and publishes nothing, so it is not conveyed nskey privates
-  either. The enrollment RECORD still advertises a key package, because that
-  rides `enroll:request` rather than any client start.
-  ⚠️ **Two corrections, 2026-09-08.** This said such a client *advertises a key
-  package*, and it does not: the advertisement step is switched off wherever the
-  posture configures no post-quantum providers, and the encapsulation keypair its
-  startup mints is held in memory for the process and never filed. And the route
-  named below is wrong — what registers a package for a client holding none is
-  `KeyPackageRegistration.register()` on the conveyed-key collection step, which
-  is ungated; `reconcileKeyPackage` is the gated one.
-  ⚠️ **This paragraph argued until 2026-08-29 that a legacy key-exchange
-  enrollment advertises no key package and so could be conveyed nothing.** The
-  conveyance half was false: a key package rides every mode, and a package is
-  registered at every client start whatever the posture. No post-quantum key is
-  conveyed under RSA in any mode either — every conveyance is KEM-sealed with
-  no classical branch — so neither of the reasons once given here holds.
+  refuses it. The stage runs none of the post-quantum startup at all — it
+  collects nothing, files nothing and publishes nothing, so it is not conveyed
+  nskey privates either. The advertisement step is switched off wherever the
+  posture configures no post-quantum providers, and the encapsulation keypair
+  its startup mints is held in memory for the process and never filed.
+  ⚠️ **A key package rides every key-exchange mode**, and a package is
+  registered at every client start whatever the posture: what registers one for
+  a client holding none is `KeyPackageRegistration.register()` on the
+  conveyed-key collection step, which is ungated, while `reconcileKeyPackage`
+  is gated. No post-quantum key is conveyed under RSA in any mode — every
+  conveyance is KEM-sealed, with no classical branch.
 - **No silent scheme substitution, in either direction.** The SDK never chooses
   post-quantum behind the app's back (writing PQ is the app's release decision —
   a capability-stage client writes with the legacy provider however much it can read), and never
@@ -2247,14 +1995,12 @@ These invariants are testable against **every** UC above:
   `allowLegacyCryptoFallback` opt-in, an explicitly requested provider id is
   never substituted, and under `disallowLegacyEncryption = true` a legacy-only
   destination is **refused**, never quietly written with the legacy provider.
-  *(Replaces "writes gated by reader readiness", 2026-08-05 —
-  [`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).)*
 - **`appMetadata.providerId` is authoritative**, names every algorithm a reader needs
-  code for ([`decisions.md`](decisions.md) section 16), and is present on **stored keys,
+  code for, and is present on **stored keys,
   notification frames and `lookup` responses alike**. The lookup clause is not
-  redundant: it must survive every hop that *writes* a record to the atServer, and the
-  sync push silently dropped it, so every cross-atSign read fell back to `legacy` for
-  **every** provider ([`decisions.md`](decisions.md) section 17). Any hand-rolled
+  redundant: it must survive every hop that *writes* a record to the atServer, and a
+  sync push that drops it makes every cross-atSign read fall back to `legacy` for
+  **every** provider. Any hand-rolled
   serializer of the metadata wire fragment is a place this invariant can be lost without
   an error. Present on stored keys
   **and** notification frames (with the no-`ns` shapes: `at/nskey` →
@@ -2270,8 +2016,7 @@ These invariants are testable against **every** UC above:
 - **Immutability, and where it applies.** Neither key record is immutable, and both
   are minted behind one. `public:__nskey.<ns>@owner` is mutable because nskey-keypair
   rotation has to overwrite it; `public:pq_signing_root@owner` is mutable because
-  advertising a successor beside a retired predecessor is the same rewrite
-  ([`decisions.md` 101](detail/decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)).
+  advertising a successor beside a retired predecessor is the same rewrite.
   What stops two of the owner's enrollments racing is a short-ttl **immutable** lock
   key — `_nskeylock.<ns>@owner` and `_rootlock@owner` — and what stops substitution is
   the APKAM signature over the advertised envelope, not the write mode. A lock is a
@@ -2280,9 +2025,8 @@ These invariants are testable against **every** UC above:
 - **A second signing root is representable, publishable and verifiable.** A
   keyfile and the record each carry two root entries — one active, one retired
   — a link signed under the **retired** one still verifies, and signing selects
-  the active one. This is D1's boundary
-  ([`decisions.md` 101](detail/decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
-  requirement 5): D1 builds the root's rotat*ability* and not the rotation, so
+  the active one. This is D1's boundary: D1 builds the root's rotat*ability*
+  and not the rotation, so
   the two-entry state is written by hand rather than reached by rotating.
 - **Published nskeys are fetchable but not enumerable.** `public:__nskey.<ns>@owner`
   resolves on an exact `plookup`, cross-atSign, and appears in **no** scan — with or
@@ -2302,8 +2046,8 @@ These invariants are testable against **every** UC above:
   the live wire; and the **key package**, signed by
   `KeyPackageRegistration.signedKeyPackagePayload` and verified by
   `VerbEnrollmentDirectory` — unsigned, tampered, wrong-signer and forged-claim packages
-  are all rejected. **The atServer's `_apsk` guarantee is now proven live too** (2026-08-04,
-  `apsk_server_side_test.dart`): the record is fetchable without the enrolling client ever
+  are all rejected. **The atServer's `_apsk` guarantee is proven live** in
+  `apsk_server_side_test.dart`: the record is fetchable without the enrolling client ever
   publishing it, a cross-enrollment overwrite is refused as an authorization decision naming
   both enrollments and leaves the record byte-identical, and the same connection *can* write
   its own — so the restriction is per-enrollment rather than a blanket ban. `enroll:listns` is
@@ -2318,19 +2062,16 @@ These invariants are testable against **every** UC above:
   is **pinned when the harness lands**: a measured budget, not a guessed number.
 
 - **Cross-ref:** `design.md` (at_chops primitives: X-Wing, pqSeal/pqOpen, ML-DSA; the
-  record-authoritative `signingAlgo` verify); `decisions.md` (1:1:1 + verb-wire-shape rulings).
+  record-authoritative `signingAlgo` verify).
 
 ## 14. Test harness & impl/verify mapping
 
-How this catalogue gets proven, and where each row's proof lives. Ruled
-2026-08-23 as
-[decision 115](detail/decisions.md#115-the-acceptance-suite-is-4-arms-and-a-ledger-not-one-grid-2026-08-23).
+How this catalogue gets proven, and where each row's proof lives.
 
-gkc's framing, which is what the design answers: *"we have literally hundreds of
-functional and end to end tests which cover the acceptance tests together. But
-there is no definitive place where it is easy to see the entirety of the pq
-project's acceptance tests being proven. The posture matrix test is the logical
-place to build test out."* So the problem is legibility rather than coverage.
+The problem this answers: there are hundreds of functional and end-to-end tests
+covering the acceptance tests between them, and no definitive place where the
+entirety of the post-quantum project's acceptance tests can be seen being
+proven. The problem is legibility rather than coverage.
 
 ### The test layers, and the four live packs
 
@@ -2347,25 +2088,23 @@ place to build test out."* So the problem is legibility rather than coverage.
 
 The table above names *packs*; a row's actual proof is often a single unit
 file inside one, and the status table names only the acceptance scenario that
-cites it. So the file carrying the evidence appeared nowhere a reader looks,
-and two rails now refuse that — one over every `pq_*_test.dart` in either
-`tests/` or a package's own `test/` tree, one over every file a `provenIn`
-citation names. Measured 2026-08-28: 81 files cited, and these are the ones no
-document had named.
+cites it. Two rails require the file itself to be named in the doc set — one
+over every `pq_*_test.dart` in either `tests/` or a package's own `test/` tree,
+one over every file a `provenIn` citation names.
 
 | File | What it carries |
 |---|---|
-| `packages/at_client/test/published_nskey_key_ring_test.dart` | the nskey advertisement itself — cited by **six** rows (UC-A3.5, UC-A4.5, UC-G2.2, UC-G2.6, UC-G2.7 and the cross-cutting *advertised recipient keys are signed and verified*), and named nowhere until this line. |
+| `packages/at_client/test/published_nskey_key_ring_test.dart` | the nskey advertisement itself — cited by **six** rows (UC-A3.5, UC-A4.5, UC-G2.2, UC-G2.6, UC-G2.7 and the cross-cutting *advertised recipient keys are signed and verified*). |
 | `packages/at_client/test/key_package_minting_test.dart` | the key package's mint under a configured KEM, its `enroll:update` amendment, and the sender following the recipient (UC-A2.4, UC-A2.5, UC-A4.5). |
 | `packages/at_client/test/nskey_private_filing_test.dart` | how an nskey private is filed and read back, under UC-A3.5. |
 | `packages/at_client/test/at_client_impl_test.dart` | the era axis — a postured client writing PQ by default (UC-C1.1). |
-| `packages/at_auth/test/at_auth_test.dart` | the keyfile derivation being offered rather than applied (UC-G1.1). ⚠️ In **at_auth**, which neither rail's predecessor looked at. |
+| `packages/at_auth/test/at_auth_test.dart` | the keyfile derivation being offered rather than applied (UC-G1.1). ⚠️ In **at_auth**. |
 | `packages/at_auth/test/at_self_enrollment_test.dart` | a retrofit leaving one active auth key and touching nothing legacy (UC-G1.2). |
 | `tests/at_functional_test/test/pkam_record_authoritative_test.dart` | the cross-cutting invariant that ML-DSA APKAM auth is record-authoritative. |
 | `packages/at_client/test/pq_client_bootstrap_test.dart` | the PQ startup itself, and cited by nothing: the step order, what a `stop()` between steps halts, that an abandoned startup says so at WARNING naming what it skipped, that a gated-off step is skipped rather than waited on, and the enrollment snapshot's grant handling. |
-| `packages/at_client/test/signing_key_mint_test.dart` | the one home for minting the data signing keypair an enrollment owns from birth, shared by the self-retrofit, the PQ-native activation and the CLI enrolment: that the algorithm minted is the one the in-use set names — so the first start&#39;s reconciliation is a no-op and `_apsk` is not rewritten — and what it refuses rather than guessing. Cited by **UC-G3.2** since 2026-08-31; this row read *"cited by nothing yet; its clauses are owed"* until then. |
+| `packages/at_client/test/signing_key_mint_test.dart` | the one home for minting the data signing keypair an enrollment owns from birth, shared by the self-retrofit, the PQ-native activation and the CLI enrolment: that the algorithm minted is the one the in-use set names — so the first start&#39;s reconciliation is a no-op and `_apsk` is not rewritten — and what it refuses rather than guessing. Cited by **UC-G3.2**. |
 | `packages/at_client/test/enrollment_conveyance_guard_test.dart` | what a client configuring no post-quantum providers refuses and what it still does — the approval that throws before reaching the atServer so the enrolment stays pending, the sweep refusal, and both controls (a request carrying its own wrapped key is approved; a PQ-capable posture is refused neither). Cited by **UC-G3.10**. |
-| `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneWeek` with its period pinned as a raw literal and its boundary inclusive, and `neverRotateNskey` at any age — plus that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. ⚠️ **Named nowhere in this doc set except a `## TODO` row until 2026-08-31**, and named here because that row has now been discharged and deleted. ⚠️ **This said *&#34;neither nameability rail reaches the file&#34;* and was false in the same commit that wrote it** — the six citations above are exactly what brings it inside the citation rail (*every test a citation names is named in the doc set*), which is why this row had to be added at all. Only the `pq_*` FILENAME rail still misses it. |
+| `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneWeek` with its period pinned as a raw literal and its boundary inclusive, and `neverRotateNskey` at any age — plus that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. |
 | `packages/at_client/test/ck_manager_test.dart` | where the content-key rotation policy is ASKED — before the current key is returned, with the destination in its context — and where the namespace-key hook is asked only for this atSign&#39;s own key. Also the restart arm, where a resumed key takes its age from the conveyance record rather than this process&#39;s clock. Cited by **UC-A5.4** and **UC-A5.5**. |
 | `packages/at_client/test/legacy_client_refusal_test.dart` | that a legacy-only install — one whose posture registers no post-quantum providers at all — refuses a record stamped `at/symmetric/AES/GCM`, asserted on `CryptoProviderNotRegistered` and on its message naming the id, with the same install reading a `legacy`-stamped record as the control. Cited by **UC-B4.3**. |
 | `packages/at_client/test/nskey_ladder_refusal_test.dart` | one generation advertising both X-Wing and ML-KEM-1024, and two writers differing only in `sealsToKeyAlgorithms`: each stamps its own conveyance provider, and a sibling install holding only the X-Wing conveyance provider cannot open the ML-KEM-sealed record — refused with `CryptoProviderNotRegistered` naming the missing id and listing what it does hold, with the same sibling opening an X-Wing record as the control. Cited by **UC-G2.11** and **UC-G2.10**. |
@@ -2388,30 +2127,21 @@ SS-0 / SS-1b / S-1 / S-2 acceptance is against shipped code.
 ⚠️ **`tests/` holds 6 Dart packages, of which 4 are live test packs.** The
 other 2 are `tests/pq_matrix/{published,scenario}` — the child processes the pair
 grid spawns, which is why the `published` column can hold a released at_client
-this tree cannot. ⚠️ **This read "7 … `{current,published,scenario}`" until
-2026-08-26**; it was true when written and stopped being true when
-`tests/pq_matrix/current` was deleted, and it survived because its own warning
-was about a different miscount. Count them with `find tests -name pubspec.yaml`,
-never `tests/*/`: a depth-2 glob returns 4 and reads as the whole answer.
+this tree cannot. ⚠️ Count them with `find tests -name pubspec.yaml`, never
+`tests/*/`: a depth-2 glob returns 4 and reads as the whole answer.
 
 Three `provenIn` citations reach a CLI pack, over two rows: **UC-G3.11** cites
 `pq_pre_enrollment_retrofit_test.dart` twice, and **UC-B1.4** cites
 `pq_native_enroll_test.dart` once. None reaches the **proxy** pack.
 
-⚠️ **This sentence has been wrong twice, and the second time was the correction
-of the first.** It read *"No `provenIn` citation reaches either CLI pack"*, which
-had been false since UC-B1.4's citation landed on 2026-08-26; on 2026-08-31 it
-was corrected to *"exactly one — UC-G3.11"*, which counted the citation just
-added instead of searching for all of them. Re-derive rather than quoting:
+Re-derive rather than quoting:
 `git grep -c at_onboarding_cli_functional_tests -- packages/at_client/test/acceptance`.
-What both versions said next still holds — the CLI pack's two-arm posture
-differential, the best live evidence for UC-C1.6 and a second live proof of
-UC-A1.1, is still invisible from this catalogue. Counted 2026-08-23,
-the strict matcher gives **194** live `test()` declarations across all 4 and a
-multi-line-aware one **247**; the gap is entirely declarations whose name sits
-on the next line, since an any-position same-line matcher also returns 194.
-⚠️ **Earlier figures here were scoped to 2 packs**
-([why that matters](detail/acceptance.md#the-corpus-was-measured-over-2-packs-when-there-are-4)).
+The CLI pack's two-arm posture differential — the best live evidence for
+UC-C1.6 and a second live proof of UC-A1.1 — is still invisible from this
+catalogue. The strict matcher gives **194** live `test()` declarations across
+all 4 packs and a multi-line-aware one **247**; the gap is entirely
+declarations whose name sits on the next line, since an any-position same-line
+matcher also returns 194.
 
 ```bash
 grep -rhoE "^[[:space:]]*test\([[:space:]]*'" tests/ --include='*.dart' | wc -l   # 194
@@ -2423,37 +2153,11 @@ All **three** `runLocal.sh` harnesses take an image override,
 `VIRTUALENV_IMAGE`, each defaulting to the locally built `at_virtual_env:local`;
 CI runs against `atsigncompany/virtualenv:dev_env`. ⚠️ **A green local run does
 not imply CI parity** — check which image produced a result before citing it.
-⚠️ This said "Both", and `find tests -name runLocal.sh` returns three: the CLI
-pack has had one since 2026-08-19, and it defaulted to the published `vip`
-until 2026-08-23, which cannot verify ML-DSA PKAM — so a bare run there failed
-the one test in the corpus that activates a post-quantum atSign.
 
 ### Where the catalogue actually stands
 
-Coverage was never the gap. ⛔ **The figures below are a SNAPSHOT taken on
-2026-08-23 against the 68 live rows there were then, and the catalogue has grown
-since** — they are kept because the *shape* is the point, not the totals. Of
-those 68, 59 had live proof of some kind and 9 had none:
-
-| Verdict | Rows | Means |
-|-----------------|-----:|--------------------------------------------------|
-| LIVE_DIRECT | 12 | a live test's assertions establish the row |
-| LIVE_PARTIAL | 43 | some clauses established, others not |
-| LIVE_INCIDENTAL | 4 | the mechanism runs, nothing asserts the row |
-| NO_LIVE_PROOF | 9 | nothing live exercises it |
-
-⚠️ **They have not been re-measured, and the row count has moved twice since**
-— re-derive it rather than reading one here. They are also a
-*coverage* judgement — one agent per family searching the packs — and must not
-be restated as a citation figure. The two answer different questions and
-diverge widely: on 2026-08-27 the citation figure for rows with no live proof
-*cited* was **25**, against this table's 9 with no live proof *at all*. The
-difference is rows exercised live by a test their scenario never names.
-
-What is missing is the ability to address that proof. ⚠️ **This said "135
-`provenIn(...)` citations, splitting 68 into a live pack and 67 at in-package
-unit tests" when measured 2026-08-23.** Re-derived 2026-08-27: **161
-citations, 81 into a live pack and 80 in-process**, over 73 rows. Half of this
+Coverage was never the gap. What is missing is the ability to address that
+proof: **161 citations, 81 into a live pack and 80 in-process**, over 73 rows. Half of this
 catalogue's PROVEN rows still rest on mocks, and the status table does not
 distinguish the two — which is what the [evidence standard](#0-purpose-scope--how-to-read-this-doc)
 and the burn-down below now do.
@@ -2467,7 +2171,7 @@ BURN-DOWN  clauses proven: <N> of <T>   server-proven: <M> of <T>
 
 A row-level verdict cannot express what *done* means here, because a row reads
 `PROVEN` on one citation however many separate things its THEN states. The two
-columns are the definition (gkc, 2026-08-26): **proven** is a clause some
+columns are the definition: **proven** is a clause some
 citation pins, **server-proven** is a clause pinned by a citation into a live
 pack. `manifest.dart` records both as exact figures and `catalogue_test.dart`
 fails **in both directions**, so landing a pin and raising the count happen in
@@ -2491,8 +2195,6 @@ reports 62 citations over 18 files — wrong, and it does not look wrong.
 A citation also cannot be told from prose: `proven_elsewhere.dart:40` is
 `expect(source.contains("'$testName"), isTrue)`, a bare substring anywhere in
 the file, so a comment, a `group(` name or a line of doc text satisfies one.
-Nothing has rotted through this yet — all 68 live citations currently
-prefix-match a real test.
 
 ### Why a posture grid is the wrong default
 
@@ -2508,25 +2210,18 @@ while configuring the post-quantum providers, and then sets
 `..crypto = CryptoConfig.nskey(...)`. Every clause it asserts is already proven
 with no writing axis moved and is identical at the other two stages.
 
-⚠️ **Two things in this paragraph were wrong and are corrected above.** It said
-the test builds "a bare `AtClientPreference` — therefore `PqPosture.legacy`".
-⚠️ **That inference is sound again, and was not in between**: a bare preference
-was `PqPosture.pqReady` from 2026-08-26 until the ladder moved back a stage on
-2026-09-08, and is `legacy` either side of that window. The test does not rely
-on it — it names its posture — so this is a note about the reasoning, not about
-the test. And on 2026-08-29 `PqPosture.legacy` stopped configuring
-the post-quantum providers at all, which makes `legacy` + `CryptoConfig.nskey`
-a combination `AtClientPreference.crypto` now refuses outright — so the
-construction the argument rested on can no longer be built. **Whether the
-"3 of 5 do not vary" classification still holds is therefore open**: it was
-derived from a posture-invariance that one axis no longer has. Left as it was
-rather than re-ruled here.
+⚠️ **`PqPosture.legacy` configures no post-quantum providers**, which makes
+`legacy` + `CryptoConfig.nskey` a combination `AtClientPreference.crypto`
+refuses outright — so the construction the invariance argument rested on cannot
+be built. **Whether the "3 of 5 do not vary" classification still holds is
+therefore open**: it was derived from a posture-invariance that one axis no
+longer has.
  What the posture decides is not what the data path guarantees, but
 whether an app that configures nothing enters it. 3 of the 5 A3 rows do not vary
 at all; the 2 that do are [UC-A3.2](#42-uc-a32--a-client-mints-and-publishes-the-nskey-for-each-namespace-it-is-authorised-for),
 because `seedNamespaceKeys` is false at legacy so whether the mint fires is a
-stage decision — and since 2026-09-08 the whole startup is off at that stage, so
-the mint is one of several things that do not happen rather than the only one —
+stage decision — and the whole startup is off at that stage, so the mint is one
+of several things that do not happen rather than the only one —
 and [UC-A3.3](#43-uc-a33--self-write-with-no-namespace-key-has-no-pq-fallback),
 whose legacy escape hatch pqActive closes.
 
@@ -2546,9 +2241,8 @@ below, and 4 rows are assigned to both arms.** Read [which rows arm 1
 owes](#which-rows-arm-1-owes) before building against any figure in this table.
 
 The existing 4×4 serves the 3 cross-stage rows and cannot express a transition.
-Its own dartdoc says why: *"Minting happens ONCE, at enrolment time, never in
-the cells"* (the rollout matrix's own dartdoc, deleted 2026-08-24 with the
-matrix), because a per-cell re-mint churns
+The rollout matrix's own dartdoc said why: *"Minting happens ONCE, at
+enrolment time, never in the cells"*, because a per-cell re-mint churns
 the advertisement into a shape [UC-G1.14](#uc-g114--pqready-is-invisible-to-a-deployed-peer)'s
 released reader cannot take. Growing the grid to carry the catalogue would run
 38 rows as 16 identical copies of one assertion, and 3 more would pass vacuously
@@ -2574,24 +2268,14 @@ encryption time so the guarantee does not rest on which call path a write took.
 [UC-C1.2](#152-uc-c12--the-refusal-axis-the-posture-disallows-legacy-writes)
 has never executed.
 
-⚠️ **This paragraph cited the refusal as `at_client_impl.dart:753`, and that
-line throws nothing.** It is `_announceLegacyEncryptionPosture`, which logs the
-posture at every client creation — and it has never been anything else, which
-`git log -L750,760:packages/at_client/lib/src/client/at_client_impl.dart` shows
-by returning the commit that added the flag. The nearest refusal in that file is
-`mayFallBackToLegacy` (`:1806`), the predicate that rethrows a cold start rather
-than routing it legacy. Recorded rather than silently repaired because of how it
-read: a precise-looking `file:line` beside a measured `0`, so the figure carries
-the citation's credibility and nobody opens the line.
-
-**Arm 2, the posture grid.** ✅ **BUILT 2026-08-24** —
+**Arm 2, the posture grid.**
 `tests/at_functional_test/test/pq_posture_grid_test.dart`, 7 `test()` calls over
 9 enrollments on 2 atSigns. Sender posture × receiver **readiness**, in **one
 process** in `tests/at_functional_test`, exercising self and cross-atSign puts,
-gets, and notification send and receive. ⚠️ **This read "Sender posture ×
-receiver posture"** for the data path, and that axis cannot express the case
-the grid exists for — see [how the postures are
-provisioned](#how-the-postures-are-provisioned). The *envelope* grid is still
+gets, and notification send and receive. The data-path axis is receiver
+*readiness* rather than receiver posture, because a posture axis cannot express
+the case the grid exists for — see [how the postures are
+provisioned](#how-the-postures-are-provisioned). The *envelope* grid is
 posture × posture. Cells carry **per-cell expected
 outcomes**: some pairs must refuse, and a cell that succeeds where it should
 refuse is the finding. It also carries the signed-envelope exchange that
@@ -2611,16 +2295,11 @@ nothing else in the tree compares this tree's legacy posture against a released
 at_client, and that row's two positive controls both run *through* the released
 build.
 
-⚠️ **The 4×4's sixteen cells were never posture-faithful, and all sixteen
-encrypted legacy.** `tests/pq_matrix/current/lib/arm.dart` took two of the nine
-axes, so `AtClientPreference`'s default posture left every cell at
-`PqPosture.legacy` on the era-default, seeding and refusal axes. The narrowing's
-stated reason named three axes it would disturb and one of them was wrong:
-`keyExchangeMode` has no behavioural consumer in at_client at all — every
-mention is a declaration, a constant or a comparison — which `PqPosture`'s own
-dartdoc says, calling it an at_auth value at_client only *carries*.
+⚠️ **`keyExchangeMode` has no behavioural consumer in at_client at all** —
+every mention is a declaration, a constant or a comparison — which `PqPosture`'s
+own dartdoc says, calling it an at_auth value at_client only *carries*.
 
-**Arm 3, the advance ladder.** ✅ **BUILT 2026-08-24** —
+**Arm 3, the advance ladder.**
 `tests/at_functional_test/test/pq_advance_ladder_test.dart`, one phased test.
 Kept separate from the grid, because re-running
 the grid after each advance adds **no posture pair a static grid does not
@@ -2635,9 +2314,8 @@ Its two rungs are different mechanisms, and neither is a call:
   stronger authentication algorithm than its key material holds is retrofitted
   by `AtClientImpl._settleEnrollmentIdentity` *during construction*, and comes
   up on a **new** enrollment id. This is not hypothetical: 2 of arm 1's 3 cells
-  do it on every run. ⚠️ **It still needs the client cache evicted first**, and
-  this section said it did not, "because the enrollment id changes". The id
-  does change — but *inside* `create`, after the cache has already been checked
+  do it on every run. ⚠️ **It still needs the client cache evicted first.** The
+  enrollment id does change — but *inside* `create`, after the cache has already been checked
   against the id the caller asked with, so a rung reusing one keyfile is
   refused by `refuseChangedRolloutAxes` before the retrofit can run.
 - **pqReady → pqActive keeps the enrollment.** Both authenticate with ML-DSA-65,
@@ -2648,7 +2326,7 @@ Its two rungs are different mechanisms, and neither is a call:
   refuses — so the rung evicts `AtClientImpl.atClientInstanceMap` first, as
   several at_client unit tests already do.
 
-⛔ **Arm 4 is cancelled** (gkc, 2026-08-23). The atServer-version axis is out of
+⛔ **Arm 4 is cancelled.** The atServer-version axis is out of
 scope for this project: the hosted fleet will run the version a release
 requires, and atServers hosted elsewhere are not this project's concern.
 [UC-B0.1](#uc-b01--a-pq-capable-client-cannot-pq-upgrade-against-a-legacy-atserver)
@@ -2657,13 +2335,11 @@ home, and the `legacy-server` tag stays.
 
 ### How the postures are provisioned
 
-⚠️ **This section described one namespace per posture on both atSigns, and that
-provisioning cannot express the case the grid exists for.** It is corrected
-below rather than patched, because the error was structural: the nskey for a
-write to `@bob:k.<ns>@alice` is resolved at `(owner: bob, namespace: ns)`, and
-`ns` is the **sender's** namespace — so if every posture owns its namespace on
-both sides, every sender finds its peer seeded. Measured 2026-08-24 under the
-old layout: **all seven cross-atSign writes succeeded and none refused.**
+⚠️ **One namespace per posture on both atSigns cannot express the case the grid
+exists for.** The nskey for a write to `@bob:k.<ns>@alice` is resolved at
+`(owner: bob, namespace: ns)`, and `ns` is the **sender's** namespace — so if
+every posture owns its namespace on both sides, every sender finds its peer
+seeded and no cell can refuse.
 
 **The receiver's posture is not the second axis for a WRITE.** What decides
 whether a write toward a receiver succeeds is whether that receiver published a
@@ -2671,13 +2347,10 @@ namespace key — a property of `(receiver, namespace)` rather than of the
 receiver's stage. The axis is **readiness**, and it is expressed by which
 namespace the write targets.
 
-⚠️ **The reason given here was that "verification and decryption are maximal
-under every posture and not settable at all", quoting `PqPosture`, until
-2026-08-29.** That is no longer true: `PqPosture.legacy` configures no
-post-quantum provider, so a receiver's stage does decide what it can READ. The
-conclusion survives because it was always a claim about the write — a sender is
-refused for a missing advertised key, never for the recipient's stage — and the
-read side is now exercised separately by the grid's readback row, where
+⚠️ **A receiver's stage does decide what it can READ**: `PqPosture.legacy`
+configures no post-quantum provider. That leaves the write claim untouched — a
+sender is refused for a missing advertised key, never for the recipient's
+stage — and the read side is exercised separately by the grid's readback row, where
 `r-legacy` is refused on the crypto path and `r-pqReading` on the
 key-acquisition path.
 
@@ -2734,18 +2407,17 @@ in, which is why it cannot simply be trusted and edited down.
 **Neither reading is ruled here.** They differ in what arm 1 *is*: under the
 count, an arm-1 cell has to drive a retrofit, so the arm stops being three
 static clients; under the prose, a retrofit is a move and belongs to arm 3.
-That is gkc's call, and the two readings are stated rather than resolved so the
-choice is visible.
+The two readings are stated rather than resolved, so the choice is visible.
 
 **What arm 1 builds against in the meantime: the 14 rows both readings agree
 on.** A row here is an arm-1 row whichever way the disagreement goes, so a test
-written against it cannot be invalidated by the ruling:
+written against it cannot be invalidated when the disagreement is settled:
 
 ⚠️ **The ids below are backticked deliberately.** `docs_structure_test.dart:345`
 reads any line shaped `| UC-… | … | word |` as a row of the use-case **status**
 table, so a plain-id table here is counted as 14 more use cases and the
-catalogue's own summary sentence goes red against a total it never claimed.
-That is the rail working; the fix is to not look like the thing it parses.
+catalogue's own summary sentence goes red against a total it never claimed. The
+fix is to not look like the thing it parses.
 
 | Row | Kind | Live proof before arm 1 |
 |------------|-------------|-------------------------|
@@ -2770,19 +2442,17 @@ reading calls them transition or stage-invariant), and UC-A4.2 and UC-B4.3 (the
 reverse — the table calls them cross-stage or invariant, a second reading calls
 them arm 1).
 
-⚠️ **The membership above was derived twice, independently, and is the first
-time it has been written down at all** — the counts were published without it,
-and the per-row list lived only in the working notes of the session that
-produced ruling 115. Two derivations agreeing is weak evidence, so treat a row
-in the agreed set as *safe to build against*, not as *settled*.
+⚠️ **The membership above was derived twice, independently**, and two
+derivations agreeing is weak evidence — so treat a row in the agreed set as
+*safe to build against*, not as *settled*.
 
 ### The generated ledger
 
 38 rows will never sit in a matrix and still have to be visible, so the
 definitive place is a generated page rather than a directory.
 
-✅ **The row-level ledger is built** (2026-08-23) and needs no change to any of
-the 194 live tests. Three pieces:
+The row-level ledger needs no change to any of the 194 live tests. Three
+pieces:
 
 - `provenIn` records each citation it makes — the use-case id, the cited file
   and test name — when `ACCEPTANCE_LEDGER=<path>` is set. Unset, it is inert
@@ -2804,19 +2474,14 @@ the 194 live tests. Three pieces:
 lost their proof matters most. In `at_client_sdk.yaml`: `unit_at_client` (which
 also records the citations), `functional_tests`, `pqe2e_tests` and
 `legacy_server_tests`. In `at_libraries.yaml`: `build_and_test`, the matrix that
-runs **at_auth**. ✅ Exercised by dispatch `32643853854`, which found two things
-offline validation could not
-([what](detail/acceptance.md#what-the-first-ci-run-showed-that-offline-validation-could-not)).
+runs **at_auth**.
 
-⚠️ **The second workflow was added 2026-08-23, and its absence was invisible.**
-This paragraph said "four jobs", all in one workflow — but at_auth's suite runs
-only in `at_libraries.yaml` (`grep -c at_auth .github/workflows/at_client_sdk.yaml`
-→ 0), which emitted nothing. So the **12** citations pointing at at_auth could
-never be covered by CI artefacts, and a ledger rendered from a green CI run
-reported those rows `NOT-EXERCISED` permanently — indistinguishable from rows
-nothing tests. Found by rendering the ledger from a real run's artefacts rather
-than from a local one; the local driver had been masking it by running at_auth
-itself. The matrix emits for **all eight** of its packages rather than only
+⚠️ **at_auth's suite runs only in `at_libraries.yaml`**
+(`grep -c at_auth .github/workflows/at_client_sdk.yaml` → 0), so if that
+workflow emits nothing the **12** citations pointing at at_auth can never be
+covered by CI artefacts, and a ledger rendered from a green CI run reports
+those rows `NOT-EXERCISED` permanently — indistinguishable from rows nothing
+tests. The matrix emits for **all eight** of its packages rather than only
 at_auth, so a citation added to a sibling later is covered without anyone
 remembering to widen a condition.
 
@@ -2827,10 +2492,6 @@ or in at_server. So CI publishes the inputs, and rendering is a local step.
 
 **Locally that step is one command**: `tools/acceptance_ledger.sh` runs the
 unit sources and renders, or `--with-live` runs the three live packs as well.
-⚠️ This section said "the page is rendered on demand" while **nothing in the
-tree invoked the renderer** — the only `dart run … acceptance_ledger` was the
-usage comment inside the tool, so on demand meant reassembling four commands by
-hand and every published ledger figure came from a scratch directory.
 
 **And the emitting is guarded**, by
 `packages/at_client/test/acceptance_ledger_wiring_test.dart`, across **both**
@@ -2841,11 +2502,8 @@ still sets `ACCEPTANCE_LEDGER`, every emitter still uploads with
 runner still gates the reporter on `ACCEPTANCE_REPORT`.
 ⚠️ **The rail's predicates read the workflow with comments stripped**, which is
 not a detail: an upload step is preceded by a comment explaining it, that
-comment names the very strings the predicates look for, and removing
-`if: ${{ always() }}` left the rail green because the prose above it said
-"`if: always()` on purpose". That is this section's own `provenIn` weakness — a
-mention satisfying a check — reproduced one layer up, and twice in one day. That last one is the
-point of the rail rather than a detail — every upload uses
+comment names the very strings the predicates look for — this section's own
+`provenIn` weakness, a mention satisfying a check, one layer up. Every upload uses
 `if-no-files-found: warn`, so a job that stops emitting stays green and the
 ledger simply reports fewer rows as exercised, which reads as missing coverage
 rather than as missing wiring.
@@ -2865,35 +2523,24 @@ citations), `functional_tests` (186/186), `pqe2e_tests` (17/17),
 **63 PROVEN · 0 NOT-EXERCISED · 6 NO-LIVE-CITATION** over 69 rows, and **6 of
 6** cross-cutting invariants PROVEN.
 
-⚠️ **Read that against the earlier figure rather than replacing it in your
-head.** This said "**62 PROVEN · 1 NOT-EXERCISED**", measured over four sources
-run **locally**. Both are correct about the runs they were given, and neither
-is a coverage statement: the local set could not reach UC-B0.1, which needs
-CI's pinned pre-PQ atServer, and the CI set could not reach at_auth's 12
-citations until `build_and_test` began emitting. Only the two together reach
-every row that cites anything live, which is the point of the verdicts being
-about runs rather than about code.
+⚠️ **A verdict table is not a coverage statement** — it is correct about the
+runs it was given, and no more. A local set cannot reach UC-B0.1, which needs
+CI's pinned pre-PQ atServer; a CI set reaches at_auth's 12 citations only
+because `build_and_test` emits. Only the two together reach every row that
+cites anything live, which is the point of the verdicts being about runs rather
+than about code.
 
-⚠️ **The two runs are one commit apart** (`at_client_sdk` on `f7661ab26`,
-`at_libraries` on `4e176f91b`), and the join is still sound because the later
-commit changed no `provenIn` call — `git show 4e176f91b -- packages/at_client/test/acceptance/ | grep -c provenIn`
-→ 0. Check that before joining artefacts from different runs; a citation added
-between them would silently go unmatched.
+⚠️ **Check the commits before joining artefacts from different runs**
+(`git show <sha> -- packages/at_client/test/acceptance/ | grep -c provenIn`): a
+citation added between them would silently go unmatched.
 
 The 6 are the 5 rows that prove themselves against mocks plus withdrawn
-UC-C1.3. **UC-B0.1 is PROVEN here and was the `1 NOT-EXERCISED` in the local
-figure**, which is the result worth trusting the tool over: nobody told the
-ledger about that row's special case, and it reported the gap anyway. It needs
-a pinned pre-PQ atServer and runs in its own `legacy_server_tests` job under
-the `legacy-server` tag — which a local e2e run excludes and CI runs, so each
-figure is right about the runs it was handed. That is the residue [this section
-already records](#the-build-order-and-what-it-leaves), now closed by rendering
-from CI rather than by changing any test.
+UC-C1.3. UC-B0.1 needs a pinned pre-PQ atServer and runs in its own
+`legacy_server_tests` job under the `legacy-server` tag — which a local e2e run
+excludes and CI runs, so each figure is right about the runs it was handed.
 
 ⚠️ **Re-derive this table rather than quoting it, and treat a low PROVEN count
-as a question about the matcher before it is a question about coverage.** The
-first version scored 28 rather than 62 and looked entirely plausible
-([how](detail/acceptance.md#the-ledgers-first-version-scored-28-instead-of-62)).
+as a question about the matcher before it is a question about coverage.**
 `packages/at_client/test/acceptance_ledger_test.dart` pins that join in both
 directions, mutation-proven, because a defect in it does not look like a defect
 — it looks like a coverage report.
@@ -2906,17 +2553,12 @@ rather than forced into the use-case table or given invented ids — a reader
 asking "is this row proven" and one asking "does this invariant still hold" are
 asking different questions. Only 6 of the 10 appear, because the other 4
 assert in-process and cite nothing live; over all four report sources all
-**6 of 6** are PROVEN. ⚠️ This line read "2 PROVEN · 4 NOT-EXERCISED **on the
-same run**" while the headline above it said 6 of 6 — two figures from
-different runs, sitting four paragraphs apart and contradicting each other.
+**6 of 6** are PROVEN.
 
-✅ **The clause level is BUILT (2026-08-24).** ⚠️ **This read "Still owed: the
-clause level".** A citation now pins which of its row's THEN clauses it claims,
-with `clauses:` on `provenIn`, and the ledger renders a per-row checklist and a
-catalogue total. "UC-A2.5 has 3 unproven clauses" is computed rather than found
-by reading. Measured on the first render: **129 clauses across the 68 live
-rows**, with UC-A2.4 one clause short. ⚠️ Both figures are that first render and
-neither is current — run the suite for today's. That clause was pinned 2026-08-27.
+A citation pins which of its row's THEN clauses it claims, with `clauses:` on
+`provenIn`, and the ledger renders a per-row checklist and a catalogue total.
+"UC-A2.5 has 3 unproven clauses" is computed rather than found by reading.
+⚠️ Run the suite for today's figures rather than quoting one here.
 
 A pin is a distinctive fragment of the clause, never its index, so inserting a
 clause does not re-point the pins after it — and editing a clause's wording
@@ -2930,32 +2572,25 @@ while reading as coverage.
 anything matches against it, so a fragment copied verbatim out of the Markdown
 across a line break matches nothing, however exactly it reproduces what is on
 the page. Rewording a clause that wraps therefore needs the pin rewritten to
-span the join, not re-copied. Measured 2026-08-27: two of four pins moved in one
-commit broke this way, and the ratchet named both and refused the count — which
-is what it is for, and why the count and the pins have to move in the same
-diff.
+span the join, not re-copied. The ratchet refuses the count when a pin breaks
+this way, which is why the count and the pins have to move in the same diff.
 
-⛔ **It did NOT need `manifest.dart` moved to `lib/`**, which this paragraph
-gave as its prerequisite. `tool/acceptance_ledger.dart` imports
-`../test/acceptance/manifest.dart` directly, so the parser has one home and
-the tool, `provenIn` and the docs rail all read the same one. The move is still
-wanted by the *in-pack rails* idea — a rail running in the package that owns
-the evidence, for which `tests/at_end2end_test/test/suite_manifest_test.dart`
-is the precedent — and that is a different thing.
+⛔ **The clause level does NOT need `manifest.dart` moved to `lib/`.**
+`tool/acceptance_ledger.dart` imports `../test/acceptance/manifest.dart`
+directly, so the parser has one home and the tool, `provenIn` and the docs rail
+all read the same one. The move is wanted by the *in-pack rails* idea — a rail
+running in the package that owns the evidence, for which
+`tests/at_end2end_test/test/suite_manifest_test.dart` is the precedent — which
+is a different thing.
 
 ### The two environments: VE and EE
 
-gkc ruled 2026-08-23 that the suite is not constrained to the virtual
-environment.
+The suite is not constrained to the virtual environment.
 
-⚠️ **This section read "arm 3 is blocked on the VE for a structural reason
-rather than an effort one", and that is now measured false.** The reasoning was:
-a transition has to re-mint, `(appName, deviceName)` is one-shot server state,
-and CRAM activation is one-shot per atSign per virtualenv. The first clause is
-the error — it generalises the matrix's rule against re-minting *in a cell* to
-an advance, which is a self-enrollment and was never tested against it. Across
-five live runs on one never-restarted virtualenv, 24 retrofits completed with no
-collision. **Arm 3 runs in the VE**, and neither it nor arm 2 needs the EE.
+**Arm 3 runs in the VE**, and neither it nor arm 2 needs the EE: across five
+live runs on one never-restarted virtualenv, 24 retrofits completed with no
+collision. An advance is a self-enrollment, so the matrix's rule against
+re-minting *in a cell* does not reach it.
 
 That leaves the EE with no arm asking for it, because the one that did — arm 4,
 the server-version axis — is cancelled. It is described here so a later reader
@@ -2990,29 +2625,27 @@ existing functional pack.
 Four were named, each verified against the tree rather than assumed. **Two are
 discharged:**
 
-- ✅ **Test selection**, built 2026-08-23. The functional pack declares the `pq`
+- ✅ **Test selection.** The functional pack declares the `pq`
   tag and **34** of the 55 test files it weighs carry it, chosen by the
   mechanisms they drive rather than their names — `copied_keyfile_test` and
   `crypto_era_default_test` have no `pq` in their filenames and both needed it.
   ⛔ No `paths:` allowlist, deliberately, and `test/pq_tag_test.dart` keeps the
   set honest instead
   ([why](detail/acceptance.md#why-the-functional-pack-has-no-paths-allowlist)).
-- ✅ **The pqActive monitor**, measured 2026-08-23. The failure is real but is
+- ✅ **The pqActive monitor.** The failure is real but is
   **not posture-dependent** — pqActive **16 of 18** monitors received against a
   control's **18 of 20**, both arms failing alike with `AT0014` "the connection
   went away", which is monitor-readiness flakiness of
   [14.34](detail/implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s
   family rather than an algorithm problem. A pqActive cell is no worse off than
-  a legacy one. ⚠️ The rate is the rig's, and two earlier figures were wrong
-  before this one
-  ([the sequence](detail/acceptance.md#the-pqactive-monitor-blocker-and-two-wrong-figures-before-the-right-one)).
+  a legacy one. ⚠️ The rate is the rig's.
 
 **Two remain:**
 
 - **`manifest.dart` cannot be imported by the packs.** It lives under
   `packages/at_client/test/`, which no other package can reach, so the in-pack
-  rails need it moved to `lib/` first. ⛔ It was *not* a prerequisite for the
-  ledger, which both this section and ruling 115 once said it was.
+  rails need it moved to `lib/` first. ⛔ It is not a prerequisite for the
+  ledger.
 - **`provenIn`'s matcher needs to require a `test(` token**, and that cannot be
   a naive substring check: 53 declarations put `test(` and the name on separate
   lines, so a naive tightening would falsely redden about a fifth of the
@@ -3020,37 +2653,27 @@ discharged:**
 
 ### The build order, and what it leaves
 
-Not ruled — this is the measured recommendation, and the decision is gkc's.
-
-⛔ **This paragraph's two original orderings are both dead** — they gated on the
-ledger being unbuilt and on the monitor breakage being undiagnosed, and neither
-is true
-([how it survived](detail/acceptance.md#the-build-order-outlived-both-its-reasons)).
+This is the measured recommendation rather than a decision.
 
 **What remains, in order:**
 
-1. ~~**Arm 1**, the 3-cell stage arm, on the VE.~~ ✅ **BUILT 2026-08-23** —
+1. ✅ **Arm 1**, the 3-cell stage arm, on the VE —
    `tests/at_functional_test/test/pq_stage_arm_test.dart`, three enrollments of
-   one atSign at one posture each. **UC-C1.2 executed for the first time**, and
-   the ledger now names that file in the proof for UC-C1.1 and UC-C1.2. Full
-   pack 186/186. ⚠️ It covers the rows both derivations agree on, not the
-   contested 21 — see [which rows arm 1 owes](#which-rows-arm-1-owes) — and it
-   does **not** measure UC-C1.4: `enrolAndAuthenticate` builds pq-mode
+   one atSign at one posture each, and the ledger names that file in the proof
+   for UC-C1.1 and UC-C1.2. ⚠️ It covers the rows both derivations agree on, not
+   the contested 21 — see [which rows arm 1 owes](#which-rows-arm-1-owes) — and
+   it does **not** measure UC-C1.4: `enrolAndAuthenticate` builds pq-mode
    enrollments only, so all three cells hold `keyExchangeMode` constant and
    that axis is a constant here rather than a variable.
-2. ✅ **Arm 3 is BUILT** (`pq_advance_ladder_test.dart`) and **arm 4 is
-   cancelled**. ⚠️ This read "Arms 3 and 4, which need the EE built from a
-   named `at_server` ref"; neither needed the EE, and 24 retrofits across five
-   live runs on one virtualenv are why.
-3. ✅ **The clause level is BUILT** — `clauses:` on `provenIn`, rendered by
-   `tool/acceptance_ledger.dart`. ⚠️ This said it "wants `manifest.dart` moved
-   to `lib/`"; it did not, and nothing was moved.
+2. ✅ **Arm 3** (`pq_advance_ladder_test.dart`); **arm 4 is cancelled**. Neither
+   needs the EE.
+3. ✅ **The clause level** — `clauses:` on `provenIn`, rendered by
+   `tool/acceptance_ledger.dart`.
 4. **The CI combining job**, once somebody picks an `actions/download-artifact`
    pin. CI uploads the inputs today; only the rendering is manual.
 
-⚠️ **This ordering is a claim with a short shelf life, like the one it
-replaced.** Check each entry against the tree before working it, rather than
-against this list.
+⚠️ **Check each entry against the tree before working it**, rather than against
+this list.
 
 Four residues this catalogue states rather than hides:
 
@@ -3059,17 +2682,12 @@ Four residues this catalogue states rather than hides:
 - **UC-B2.2** needs the grace-0 secondary that only
   `tests/at_end2end_test/runLocal.sh` provisions, so the functional pack cannot
   host it.
-- **UC-C1.4**'s Given is unprovable live by an existing ruling.
+- **UC-C1.4**'s Given is unprovable live.
 - **The 3 vacuous-at-legacy rows** — UC-A4.3, UC-B5.4 and UC-B1.3 — have an
-  invariant Then and a Given that legacy cannot satisfy. ⚠️ **The reason given
-  here was narrower than the mechanism, and became wrong on 2026-09-08.** It
-  said `seedNamespaceKeys: false` means there is no nskey to convey, which named
-  one axis; a posture configuring no post-quantum providers now runs **none** of
-  the startup, so nothing is minted, nothing is collected and nothing is
-  conveyed — the Given is unsatisfiable for the whole mechanism rather than for
-  the seeding step alone. A legacy cell
-  would pass while measuring nothing, which is the failure a matrix is worst at
-  showing.
+  invariant Then and a Given that legacy cannot satisfy: a posture configuring
+  no post-quantum providers runs **none** of the startup, so nothing is minted,
+  nothing is collected and nothing is conveyed. A legacy cell would pass while
+  measuring nothing, which is the failure a matrix is worst at showing.
 
 One thing remains open: the transition arm re-mints, and the matrix's recorded
 constraint against re-minting was written for a shared-atSign world. A fresh
@@ -3082,12 +2700,12 @@ restates project IDs, and only as a coverage map):
 
 | UC cluster                                                                      | Project(s)                      |
 |---------------------------------------------------------------------------------|---------------------------------|
-| A1.1 (PQ-native onboard, [Decision #1](detail/decisions.md#numbered-rulings-14), B4.2) | **ON-1**                        |
+| A1.1 (PQ-native onboard, B4.2) | **ON-1**                        |
 | A2.x / A3.x / A4.x / A5.x                                                       | **SS-2, SS-4, B-1, B-2, RF-2b** |
 | A2.4 / A3.5 / A4.5 / A4.6 / A4.7 (KEM selection + construction negotiation)      | **KE-1**                        |
-| B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **RF-SRV** (server self-enroll — on the GA critical path per [`decisions.md` 40](detail/decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)); the B3.x/B4.x data-path halves are built (B-1 + the decisions-36 ladder; R-1's surviving scope is the `disallowLegacyEncryption` flag) |
+| B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **RF-SRV** (server self-enroll — on the GA critical path); the B3.x/B4.x data-path halves are built (B-1 + the two-release ladder; R-1's surviving scope is the `disallowLegacyEncryption` flag) |
 
-| C1.x (the rollout driven by flags: era, refusal, envelope, key exchange, retrofit, grouped posture) | **Workstream A** (the rollout-posture capstone, [`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)) — landed; the default-flip these rows will then guard is **R-2** |
+| C1.x (the rollout driven by flags: era, refusal, envelope, key exchange, retrofit, grouped posture) | **Workstream A** (the rollout-posture capstone) — landed; the default-flip these rows will then guard is **R-2** |
 
 Project names follow the `implementation-plan.md` scheme (RF-SRV / RF-2b /
 RF-2c); Workstreams A and B are the cross-cutting strands of the "make it
@@ -3099,7 +2717,7 @@ right" pass rather than numbered projects.
 
 # Part C — The rollout, driven by flags
 
-## 15. C1 · The rollout posture (capstone of `decisions.md` 56.4)
+## 15. C1 · The rollout posture
 
 From the PQ project's view, at_client 4.0 is final-3.x code with different flag
 defaults, so every stage of the rollout must be reachable from this codebase by
@@ -3134,8 +2752,8 @@ and B already own.
 
 ### 15.3 UC-C1.3 — WITHDRAWN: there is no envelope axis
 
-**Withdrawn 2026-08-12** by [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
-ruling 1. Do not write this test: it asserts a mechanism that is being deleted.
+**Withdrawn.** Do not write this test: it asserts a mechanism that is being
+deleted.
 
 It read: *given a client whose preference carries
 `PqPosture.pqActive`, when any signer wraps a payload with no
@@ -3144,8 +2762,7 @@ Every clause of it is void — `envelopeVersion` stops being a `PqPosture`
 axis, there is one envelope shape rather than a postured choice between two,
 and the trailing claim that a key package "freezes the threaded version in the
 write-once `metadata.keyPackage`" was already false once `enroll:update`
-reached `metadata` ([91](detail/decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
-ruling 13).
+reached `metadata`.
 
 What replaces it belongs to the multi-signature rows in section 16, not here:
 one shape, one or more signatures, strongest-understood verified and a refusal
@@ -3176,13 +2793,10 @@ on failure.
   supplies that preference when nothing else does, so a run that named no
   algorithm and came back ML-DSA can only have got it from the posture.
 
-  ⚠️ **This said the two postures "resolve into different per-algorithm idempotence
-  pools, which is what tells them apart live" until 2026-08-27.** The pools are real
-  — the retrofit is idempotent per keyfile *per algorithm*, so a keyfile already
+  ⚠️ **The per-algorithm idempotence pools are not what tells the postures apart.**
+  The retrofit is idempotent per keyfile *per algorithm*, so a keyfile already
   carrying an enrollment of the requested algorithm reuses it rather than minting —
-  but that is what stops two retrofits colliding, not what distinguishes the
-  postures. A false *reason* beside a true assertion is the harder half to notice,
-  because the behaviour it describes is correct.
+  which is what stops two retrofits colliding, and nothing more.
 
 ### 15.6 UC-C1.6 — The grouped posture: one value sets every axis
 
@@ -3191,41 +2805,27 @@ on failure.
 - **When:** a client, its signers, its enrollment submissions and its
   retrofits are built from that one preference.
 - **Then:** every axis runs the last stage's values — the pinned columns of the
-  `decisions.md` 56.4 table — and each remains individually overridable
+  rollout table — and each remains individually overridable
   **except `disallowLegacyEncryption` and `configuresPqProviders`, which the
   posture alone moves**
   (UC-C1.1, C1.2, C1.4, C1.5 and C1.7 prove the arms; C1.3 is withdrawn and
-  its axis no longer exists). ⚠️ **This said "each remains individually
-  overridable" until 2026-08-27 and overstated the tree**, which asserts the
-  opposite for that one axis: there is no constructor argument for it, naming
-  the other axes explicitly does not move it, and the posture is the only
-  thing that does. The asymmetry is deliberate
-  ([113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18))
-  — the algorithm lists keep an escape hatch and a safety flag does not,
+  its axis no longer exists). ⛔ For those two there is no constructor argument,
+  naming the other axes explicitly does not move them, and the posture is the
+  only thing that does. The asymmetry is deliberate — the algorithm lists keep
+  an escape hatch and a safety flag does not,
   because an override that defeats the flag's purpose is not the same kind of
   thing as deployment policy.
 
-⚠️ **This row said "all seven axes" until 2026-08-26, in four places, and the
-number was never re-derived after it stopped being true.** It was correct when
-written (`f22ec76e7`) and falsified hours later by `824508719`, which added
-`sealsToKeyAlgorithms` as an eighth. Today `PqPosture` carries **10** final
-fields, its own dartdoc enumerates **9** under "The axes", and only **7** differ
-between `legacy` and `pqActive` — so "seven" was not any of the three readings.
-⚠️ **And these three moved again on 2026-08-29** when `configuresPqProviders`
-landed, which is the second time this paragraph has gone stale. Re-derive the
-first with `grep -c '^  final ' packages/at_client/lib/src/preference/pq_posture.dart`.
-Re-derive rather than restating a number:
-`grep -c '^  final ' packages/at_client/lib/src/preference/pq_posture.dart`.
+⚠️ **Re-derive the axis count rather than restating one.** The number of
+`final` fields on `PqPosture`
+(`grep -c '^  final ' packages/at_client/lib/src/preference/pq_posture.dart`),
+the number its own dartdoc enumerates under "The axes", and the number that
+differs between `legacy` and `pqActive` are three different figures.
 
-⚠️ **And this said "a bare preference runs the legacy posture, byte-identical
-to the pre-posture SDK".** ⚠️ **That claim is TRUE again, and this note records
-a round trip rather than a correction.** It held until the default moved to
-`PqPosture.pqReady` on 2026-08-26, when a bare preference began running ML-DSA
-PKAM, namespace-key seeding and pq key exchange, retrofitting itself at startup
-with no opt-out. The ladder moved back a stage on 2026-09-08 — 3.x legacy, 4.x
-pqReady, 5.x pqActive — so a bare preference runs `legacy` once more, and now
-runs no post-quantum startup at all. An app that wants a later stage names one;
-an app that must stay put no longer has to name anything.
+⚠️ **A bare preference runs the `legacy` posture**, byte-identical to the
+pre-posture SDK, and runs no post-quantum startup at all. The ladder is 3.x
+`legacy`, 4.x `pqReady`, 5.x `pqActive`: an app that wants a later stage names
+one; an app that must stay put names nothing.
 
 ### 15.7 UC-C1.7 — The signing-set axis: which keys an enrollment holds
 
@@ -3250,15 +2850,11 @@ Covered by `packages/at_client/test/pq_posture_test.dart`.
 
 ## 16. G1 · Signature agility and the rollout matrix
 
-⚠️ **The stages were redefined 2026-08-14 — [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14).**
 The middle stage moves the **authentication** key to ML-DSA-65 and mints a
 fresh **RSA-2048 signing key** to be advertised in its place, because only the
 atServer verifies the authentication key while every peer verifies the signing
-key. Rows below written before that ruling may still describe it as "reader
-capability only"; where they do, the ruling governs. The stages were renamed
-`legacy`/`pqReady`/`pqActive` by
-[ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18),
-which also split the one enum that named them into two posture axes.
+key. The stages are named `legacy`/`pqReady`/`pqActive`, and they are two
+posture axes rather than one enum.
 
 ⚠️ The `legacy` in this table is the **posture** — a client's own configured
 era. It is not the atSign, atServer or app-stage axis of the notation table,
@@ -3272,8 +2868,7 @@ ladder `legacy`/`cap`/`active` it rhymes with. See
 | `pqReady`  | `mldsa65` | `rsa2048` | bare RSA (the signing key) |
 | `pqActive` | `mldsa65` | `mldsa65` active, `rsa2048` retired | the array |
 
-Acceptance for [`decisions.md` 91](detail/decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11);
-design in [`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
+Design in [`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
 
 The rows below run in `tests/at_functional_test` against the locally built
 `at_virtual_env:local`, using dedicated atSigns and run-unique
@@ -3286,8 +2881,7 @@ Two stage-parameterised executables, a sender and a receiver, each taking
 `--stage published|legacy|pqReady|pqActive`, plus a driver that runs the
 matrix.
 
-**What the pair exercises** (ruled [`decisions.md` 93](detail/decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
-ruling 3) — the whole story, not the shapes:
+**What the pair exercises** — the whole story, not the shapes:
 
 - the signed-envelope exchange;
 - a real notification and data path;
@@ -3297,18 +2891,16 @@ ruling 3) — the whole story, not the shapes:
   record-authoritative path is proven to survive a rotation in every posture.
 
 **The `published` arm runs the last released at_client**, not a `--stage now`
-build of this tree. This closes what was previously recorded here as an
-un-mitigated known limit. One build simulating `legacy` exercises the stage logic
+build of this tree. One build simulating `legacy` exercises the stage logic
 and nothing else: both arms run the same code, so a bug in what a build
 predating this work does with a v1 envelope stays invisible to it. Simulating
 both sides of a compatibility claim inside one build proves nothing about the
 side nobody wrote — the published arm is the only thing that measures
 "`legacy` behaves identically to current legacy" rather than asserting it.
 
-It earned that keep before a single cell ran. The arm exists to answer
-questions about the released build with a measurement, and the first one it
-answered contradicted this document: 3.14.0 ships an envelope reader and writer
-after all, and neither build can read the other's envelope
+The arm exists to answer questions about the released build with a
+measurement: 3.14.0 ships an envelope reader and writer, and neither build can
+read the other's envelope
 ([16.5](#165-the-rollout-matrix)). **What the published arm proves is therefore
 the data path** — a real notification, multiple puts and gets — which is what a
 released peer and this tree genuinely share. The signed-envelope exchange is a
@@ -3330,16 +2922,8 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   `enrollmentId` passed beside it that disagrees is logged at shout level and
   ignored.
 
-  ⚠️ **This row read "the derivation is offered, not applied" from 2026-08-18
-  to 2026-09-07**, and asserted that `authenticate` used the flat stored id —
-  on a retrofitted file deliberately the legacy enrollment — unless the
-  request named another. That left every keyfile-only caller, the onboarding
-  CLI's `authenticate()` and every `CLIBase` app among them, running as the
-  legacy enrollment after a retrofit, and naming the successor was each
-  caller's job. Ruled the other way in
-  [`decisions.md` 132](detail/decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07):
-  `AtAuthRequest.enrollmentId` is removed, the keys decide, and `primary` is a
-  name the client carries.
+  ⚠️ **The keys decide, and `AtAuthRequest.enrollmentId` does not exist.**
+  `primary` is a name the client carries, not one a caller passes.
 
 #### UC-G1.2 — a retrofit leaves exactly one active authentication key, and touches nothing legacy
   *Given* a legacy keyfile that then retrofits.
@@ -3349,17 +2933,14 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   keypair is left in the flat fields **byte-identical and statusless**; and
   UC-G1.1's resolver returns the new enrollment id.
 
-  ⚠️ **This row said "the legacy APKAM material is `retired`", and there is no
-  such material to retire.** The legacy keypair lives in the flat
-  `apkamPublicKey`/`apkamPrivateKey` fields, which are `AtBytes?` with no
-  status field at all; the retrofit leaves them untouched so the capped legacy
-  enrollment goes on authenticating, and the legacy enrollment is capped by the
-  atServer rather than by the client. The file-wide invariant does hold, but
-  **vacuously** — `refuseSecondLiveEnrollment` only ever sees typed materials,
-  so the flat key is invisible to it. A scenario written to the old wording
-  would have gone red, or worse prompted someone to clear those fields, which
-  is exactly what the byte-identical legacy round-trip forbids. Corrected
-  2026-08-18.
+  ⛔ **There is no legacy APKAM material to retire.** The legacy keypair lives
+  in the flat `apkamPublicKey`/`apkamPrivateKey` fields, which are `AtBytes?`
+  with no status field at all; the retrofit leaves them untouched so the capped
+  legacy enrollment goes on authenticating, and it is capped by the atServer
+  rather than by the client. The file-wide invariant holds **vacuously** —
+  `refuseSecondLiveEnrollment` only ever sees typed materials, so the flat key
+  is invisible to it. Clearing those fields is exactly what the byte-identical
+  legacy round-trip forbids.
 
 #### UC-G1.3 — retirement frees the slot
   *Given* an active `privateAuthentication` for enrollment E.
@@ -3368,12 +2949,6 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   count only `active` material. A replacement re-using the retired key's keyId
   is still refused — that check is status-blind. Contrast arm: without the
   retire, the add throws from `AtKeysAssurance.refuseSecondLiveEnrollment`.
-
-  ⚠️ **This row said "— the arm that throws today", and that clause was false
-  92 minutes after it was written**: `c7e2ccef4` made both invariants
-  status-aware the same evening. [`decisions.md` 91](detail/decisions.md#913-the-rulings)
-  ruling 4 still carried the same stale probe result and is amended in place.
-  Corrected 2026-08-18.
 
 #### UC-G1.4 — opening a legacy keyfile does not upgrade it
   *Given* a `.atKeys` file in the pure legacy shape.
@@ -3386,23 +2961,15 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   read as legacy; an **empty** one is accepted and dropped, because that is the
   only shape any released build ever wrote.
 
-  ⚠️ **This row promised the file comes back *byte-identical*, which a
-  foreign-ordered legacy file does not** — the guarantee is field-for-field.
-  Corrected 2026-08-18.
+  ⚠️ **The guarantee is field-for-field, not byte-identical** — a
+  foreign-ordered legacy file comes back in the emitter's fixed order.
 
-  ⚠️ **And the empty `keys` array went round twice.** The row originally said a
-  `version: 1` file holding `keys: []` comes back as pure legacy; the
-  2026-08-18 correction replaced that with a blanket refusal, because
-  `cb3848b4d` (2026-08-14) threw on `containsKey('keys')` with no regard to
-  what the array held. `262b5f597` (2026-08-22) narrowed the throw to a
-  *non-empty* array and the blanket wording became false in the other
-  direction. What settled it is a measurement rather than an argument: a
-  keyfile CRAM-onboarded with the published at_auth that introduced `keys`
-  carries `"keys": []` — that build never populated the array, since `addKey`
-  has no caller outside `AtKeys` itself there — so refusing the empty shape
-  stranded every keyfile a release had written, to guard an array carrying
-  nothing. The scenario and its citations were rewritten on 2026-08-22 and
-  **this row was not**, which is what the citation audit found on 2026-08-26.
+  ⚠️ **The empty `keys` array is accepted deliberately.** A keyfile
+  CRAM-onboarded with the published at_auth that introduced `keys` carries
+  `"keys": []` — that build never populated the array, since `addKey` has no
+  caller outside `AtKeys` itself there — so refusing the empty shape would
+  strand every keyfile a release had written, to guard an array carrying
+  nothing.
 
 ### 16.3 The wire rows
 
@@ -3413,16 +2980,8 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   *Then* it succeeds, reading the record as a single `rsa2048` entry. The
   writer arm must show the current build **still emits** that shape:
   `bareApskValueOf` spells a single active `rsa2048` entry as the bare string,
-  which is what keeps `legacy` and `pqReady` readable by un-upgraded peers
-  ([`decisions.md` 98.1](detail/decisions.md#981-the-stages)); only a second
-  key, or a non-`rsa2048` key, forces the array.
-
-  ⚠️ **The writer sentence read "never emits that shape" and was inverted.**
-  The current build emits it deliberately, under the default posture, and
-  ruling 98.1 requires it. A writer arm written to the old wording would have
-  asserted the opposite of a property the rollout depends on. Corrected
-  2026-08-18; the sentence it was copied from, in ruling 91.4's release table,
-  is amended in the same sweep.
+  which is what keeps `legacy` and `pqReady` readable by un-upgraded peers; only
+  a second key, or a non-`rsa2048` key, forces the array.
 
 #### UC-G1.6 — an unversioned envelope is refused, and the refusal names why
   *Given* (a) the released 3.14.0 flat envelope — a bare `signature` sibling of
@@ -3432,13 +2991,12 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   *Then* (a) is refused at parse, and (b) is refused at verify naming the
   version it read. There is deliberately no tolerant reading.
 
-  ⚠️ **This row said an unversioned envelope "still verifies", and the code
-  refuses it twice over.** [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
-  deleted the predecessor shapes rather than carrying them, so
+  ⚠️ **The refusal is twice over.** The predecessor shapes are deleted rather
+  than carried, so
   `SignedEnvelope.fromJson` requires a non-empty top-level `signatures` array
   and a document whose signature is a flat sibling of the payload never
-  parses. The tree already pins this row's exact opposite as an accepted break,
-  in `released_envelope_incompatibility_test.dart`. Corrected 2026-08-18.
+  parses. `released_envelope_incompatibility_test.dart` pins that break as
+  accepted.
 
 #### UC-G1.7 — the verifier takes the strongest and does not fall back
   *Given* an envelope carrying valid `rsa2048` and **corrupted** `mldsa65`
@@ -3447,13 +3005,13 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   *Then* it **refuses**, naming the ML-DSA failure — it must not fall through
   to the valid RSA signature. The control arm, both signatures valid, passes.
 
-  ✅ **Covered 2026-08-13** — `test/jws_envelope_test.dart`, group `UC-G1.7`.
+  Covered by `test/jws_envelope_test.dart`, group `UC-G1.7`.
   Four rows: the control arm, the corrupt-ML-DSA refusal (asserted on a message
   naming `mldsa65`, since one naming RSA would mean the weaker entry was
   checked), the same verdict under either listing order — RSA is listed first,
   so a reader taking the last entry would pass a one-order pin — and an
   envelope whose entries claim two different signers, refused at parse. That
-  last one is not in the row as written and belongs with it: without it the
+  last one belongs with the row: without it the
   entry that verifies and the entry a caller reads `signerEnrollmentId` from
   can differ, so appending a signature under a stronger algorithm carrying
   another kid makes a caller act on a signer whose signature was never checked.
@@ -3473,18 +3031,15 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   `packages/at_client/test/jws_envelope_test.dart`, test "an envelope signed by
   the retained key still verifies".
 
-  ⚠️ **This row named the APKAM authentication key, and no code path can put
-  that key in `_apsk` as `retired`.** `apskEntries` adds the authentication key
-  on exactly one condition — the entry list being empty — and adds it
-  **active**; the only thing that carries a withdrawn status is fed from
-  `AtKeys.withdrawnSigningKeysFor` (named `retiredSigningKeysFor` until
-  2026-08-22), which selects `sign:` keyIds while the APKAM keypair is filed
-  under `auth:`. The Given was impossible too: at rollout 1
-  the enrollment holds its own signing key from birth, so the auth key never
-  signs and there is no envelope of its to preserve — [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
-  ruling 2 reversed the retention this row was written against. The cited group
-  was real but proved something else: two **ML-DSA signing** keys sharing an
-  algorithm, not the auth key. Corrected 2026-08-18.
+  ⛔ **No code path can put the APKAM authentication key in `_apsk` as
+  `retired`.** `apskEntries` adds the authentication key on exactly one
+  condition — the entry list being empty — and adds it **active**; the only
+  thing that carries a withdrawn status is fed from
+  `AtKeys.withdrawnSigningKeysFor`, which selects `sign:` keyIds while the
+  APKAM keypair is filed under `auth:`. At rollout 1 the enrollment holds its
+  own signing key from birth, so the auth key never signs and there is no
+  envelope of its to preserve. What the cited group proves is two **ML-DSA
+  signing** keys sharing an algorithm.
 
 #### UC-G1.9 — a retired algorithm still verifies history
   *Given* an algorithm dropped from the in-use set.
@@ -3492,7 +3047,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   `status: retired`, and an envelope signed with it before the drop still
   verifies.
 
-  ✅ **Covered 2026-08-14** — `packages/at_client/test/signing_key_minting_test.dart`,
+  Covered by `packages/at_client/test/signing_key_minting_test.dart`,
   group "a stage transition". Eight rows, of which the last is this one: an
   envelope signed while the in-use set was `{rsa2048}`, verified again after
   the move to `{mldsa65}` against the `_apsk` value the client published on
@@ -3500,9 +3055,8 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   the path where this client composes the `_apsk` *value* — on the enrolled
   path it hands entries to the atServer, and a test there would have to
   reconstruct the wire form and would then be pinning the reconstruction.
-  The stage transition itself was covered nowhere before this: the rollout
-  matrix copies a fresh keyfile per cell, so every cell measures a client born
-  at its stage and none moves between two.
+  The rollout matrix copies a fresh keyfile per cell, so every cell measures a
+  client born at its stage and none moves between two.
 
 #### UC-G1.9a — the client mints what the in-use set names, advertising before filing
   *Given* an enrollment holding no signing key of its own and a preference
@@ -3515,21 +3069,19 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   second start mints nothing, and an empty in-use set mints nothing at all.
   Covered by `packages/at_client/test/signing_key_minting_test.dart`.
 
-  ⚠️ **This row said "so no envelope is **ever** signed under a key the
-  advertisement does not name", and the absolute is wrong.** Publishing before
-  filing, with `serialiseApskWrite` holding both writes, closes that window
-  against another **writer** — one composing `_apsk` from a keyfile that does
-  not yet hold the key just advertised. It does not close it against a
-  **reader**: a signer calling `ApkamSigning.signingKeys` inside the window, on
-  an enrollment holding no signing key of its own, takes the
-  authentication-key fallback at the moment the advertisement stops naming
-  that key, and the envelope it produces verifies against nothing. A barrier
-  used to make every such reader wait for the mint;
-  [`decisions.md` 126](detail/decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30) deleted it, accepting the
-  window on the grounds that no enrollment outside this tree is in that state,
-  and recording it on `signingKeys` so a reader meets it there. The citation
-  below proves the writer half, which is what "publishes BEFORE filing"
-  asserts and the whole of what it can assert. Corrected 2026-08-31.
+  ⚠️ **The window is closed against another WRITER, not against a READER.**
+  Publishing before filing, with `serialiseApskWrite` holding both writes,
+  closes it against a writer composing `_apsk` from a keyfile that does not yet
+  hold the key just advertised. It does not close it against a reader: a signer
+  calling `ApkamSigning.signingKeys` inside the window, on an enrollment
+  holding no signing key of its own, takes the authentication-key fallback at
+  the moment the advertisement stops naming that key, and the envelope it
+  produces verifies against nothing. There is no barrier making every such
+  reader wait for the mint: the window is accepted, on the grounds that no
+  enrollment outside this tree is in that
+  state, and recording it on `signingKeys` so a reader meets it there. The
+  citation below proves the writer half, which is the whole of what "publishes
+  BEFORE filing" asserts.
 
 ### 16.4 `enroll:update` rows
 
@@ -3543,9 +3095,8 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   names `apkamPublicKey`, `signingAlgo` and the possession proof, the client
   sends no `apsk`, and the atServer leaves the record's own value alone.
 
-  ⚠️ **That second clause said `_apsk` "is not rewritten", full stop, until
-  2026-08-28 — a claim about the RECORD where only the claim about the
-  EXCHANGE is true.** `publishPublicSigningKey` republishes `_apsk` whenever
+  ⚠️ **The clause is about the EXCHANGE, not about the RECORD.**
+  `publishPublicSigningKey` republishes `_apsk` whenever
   what is published differs from what the client holds, and for an enrollment
   that holds no signing key of its own `heldSigningKeys` falls back to the
   APKAM **authentication** keypair while `apskEntries` advertises exactly that.
@@ -3555,11 +3106,6 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   enrollment does hold its own signing key the advertised key is unaffected,
   which is the case the live test runs and why it compares *which key* is
   advertised rather than the value.
-
-  ⚠️ **This row claimed "`_apsk` is rewritten from the request's `apsk`"**,
-  which its own *When* forbids — a rotation sends `apkamPublicKey`,
-  `signingAlgo` and `apkamPublicKeySignature`, and nothing else. Corrected
-  2026-08-18.
 
 #### UC-G1.11 — proof of possession is required
   *Given* the same request with `apkamPublicKeySignature` absent, or signed by
@@ -3575,33 +3121,21 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   *And* the client cannot name either one: the update request carries no field
   for namespaces or approval state at all.
 
-  ⚠️ **This row paired the two as though they were the same guard.** They are
-  not: there is **no approval-state field anywhere on the request**, so no
-  request can name one and nothing refuses one. A scenario written literally
-  against the old wording would have looked for a refusal that cannot exist.
-  Corrected 2026-08-18.
-
 #### UC-G1.13 — self-only
   *Given* an `enroll:update` for enrollment E sent on a connection
   authenticated as a different enrollment, and separately on one carrying no
   enrollment id at all.
   *Then* each is refused, by the self-only check.
 
-  ⚠️ **This row promised two guards and its *Given* can only ever reach one.**
-  The self-only check runs **before the target record is fetched**, so the
-  target's approval state is never read on any path the row describes — the
-  four repeats over pending, denied, revoked and expired targets are the same
-  measurement four times, and none of them exercises an approved-only guard.
-  Corrected 2026-08-18; the approved-only property belongs to the *caller's*
-  own enrollment and is a different row.
+  ⚠️ **The self-only check runs before the target record is fetched**, so the
+  target's approval state is never read on any path this row describes —
+  repeats over pending, denied, revoked and expired targets are the same
+  measurement four times.
 
 ### 16.5 The rollout matrix
 
-Sender stage × receiver stage. Every cell runs. **No cell fails**, and the
-sentence that used to stand here — "the failing cells are asserted by their
-specific error" — described two cells that were measured out of existence; see
-the note at the end of this section. The principle it states still governs the
-incompatibility pins below, which is where the specific errors now live.
+Sender stage × receiver stage. Every cell runs and **no cell fails**; the
+specific errors live in the incompatibility pins below.
 
 The matrix is over the **data path** — a real notification, multiple puts and
 gets, the records a peer actually exchanges. All sixteen cells pass, and that
@@ -3654,44 +3188,24 @@ Both errors are pinned as raw literals, in both directions, in
 incompatibility that is accepted has to stay *visible*, and a break nobody
 asserts is indistinguishable from a break that quietly changed shape.
 
-⚠️ That sentence stood here for a day before the tests existed, asserting a
-guard nothing provided. It was caught by a context-free reader auditing the
-handoff, who grepped for the two literals and found them in prose only. A
-"pinned" claim is checkable in one grep, and this one was false — which is
-worth more as a recorded near-miss than as a silently corrected line, because
-the accepted-break ruling in
-[`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
-rests on exactly this visibility.
-
-**The `legacy`/`pqReady`/`pqActive` envelope grid is built** — UC-G1.15 below,
-2026-08-18. ⚠️ **This paragraph read "is not built … owed rather than done"
-until then**, and its reasoning was half wrong as well: it said the three
-stages emit byte-identical envelopes because "nothing files per-algorithm
-signing material until rollout 2 mints it". Rollout 2 *does* mint it, on this
-harness, because the `current/` arm attaches with an `AtKeysIo` — which is the
-one difference the README calls out as the reason the arms are not
-interchangeable. Measured: a `pqActive` sender's envelope carries `ML-DSA-65`
-and a `legacy` sender's carries `RS256`.
+**The `legacy`/`pqReady`/`pqActive` envelope grid is built** — UC-G1.15 below.
+The three stages do not emit byte-identical envelopes: rollout 2 mints
+per-algorithm signing material on this harness, because the `current/` arm
+attaches with an `AtKeysIo` — the one difference the README calls out as the
+reason the arms are not interchangeable. Measured: a `pqActive` sender's
+envelope carries `ML-DSA-65` and a `legacy` sender's carries `RS256`.
 
 The grid rides the nine cells where both halves are this tree, and its value is
-indeed in the rollout-2 row: under
-[`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
-the ladder swaps algorithms rather than overlapping them, so `pqActive →
-pqReady` — strongest signer, weakest verifier — is the cell an overlapping
-ladder would have existed to rescue. It passes, which is what makes 108 a
-measurement rather than a ruling.
+indeed in the rollout-2 row: the ladder swaps algorithms rather than overlapping
+them, so `pqActive → pqReady` — strongest signer, weakest verifier — is the cell
+an overlapping ladder would have existed to rescue. It passes, which is what
+makes the swap a measurement rather than an assertion.
 
-⚠️ This section previously showed two failing cells,
-`rollout 2 → published` and `rollout 2 → now`, both attributed to
-`IllegalStateException`, `_apsk` value is not a String, with the note that they
-were "the whole argument for capability-before-active". Both the cells and the
-error were wrong: `apskValueOf` publishes the array as a JSON **string**, so
+⚠️ **This matrix does not demonstrate capability-before-active.**
+`apskValueOf` publishes the array as a JSON **string**, so
 `getApkamPublicKey`'s `av.value is! String` guard never fires on it, and this
-tree's reader is ungated (step 19: "the reader half needs no gate"), so a `legacy`
-receiver reads the array as readily as a `pqReady` one. The argument for
-capability-before-active is unaffected and lives in
-[`decisions.md` 93](detail/decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11);
-what is gone is the claim that this matrix demonstrates it.
+tree's reader is ungated — a `legacy` receiver reads the array as readily as a
+`pqReady` one.
 
 #### UC-G1.15 — every rollout stage verifies every other stage's envelope
   *Given* a sender and a receiver, each at one of `legacy`, `pqReady`,
@@ -3703,9 +3217,8 @@ what is gone is the claim that this matrix demonstrates it.
   the sender emitted.
 
   **The cell this exists for is `pqActive → pqReady`**: an ML-DSA-65 signature
-  read by a client that signs RSA-2048. It passes, which is what
-  [`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
-  rests on — a swap is safe precisely because verification is not staged.
+  read by a client that signs RSA-2048. It passes — a swap is safe precisely
+  because verification is not staged.
 
   ⚠️ **Nine green cells do not on their own prove anything about the stages**,
   and that is not hypothetical here: mutating `pqActive` to resolve as
@@ -3716,9 +3229,7 @@ what is gone is the claim that this matrix demonstrates it.
   not contain it. Measured 2026-08-18, both arms in one session: the mutation
   reddens on that assertion naming `['RS256']`, and the revert is green.
   Proven in `tests/at_functional_test/test/pq_posture_grid_test.dart`, test
-  `UC-G1.15`. ⚠️ It was in `pq_rollout_matrix_test.dart` until 2026-08-24;
-  that file and the two-process programme pair it drove are deleted, and the
-  envelope grid runs in one process in the posture grid instead.
+  `UC-G1.15`.
 
 #### UC-G1.14 — pqReady is invisible to a deployed peer
   *Given* a sender at rollout 1 — an ML-DSA-65 authentication key and a freshly
@@ -3734,22 +3245,15 @@ what is gone is the claim that this matrix demonstrates it.
   takes the record out of the bare form permanently — it becomes the JSON array
   form, which the released reader cannot parse. From then on the stage is
   fail-closed visible: the deployed peer gets an error rather than a key it can
-  misread. Observed when a per-cell-minting draft of the live matrix
-  (`pq_rollout_matrix_test.dart`) failed this row's own cell; the fail-closed
-  half rests on that observation and is not separately proven as a row.
+  misread.
 
-  ⚠️ **This row used to read "rollout 1 changes nothing on the wire", asserting
-  the envelopes and the `_apsk` were byte-identical to the `legacy`/`legacy` cell.**
-  That is false under [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14):
-  rollout 1 publishes a *different key* from `legacy` — its own signing key rather
-  than its authentication key — so the bytes differ by design. What must hold
-  is the **form**, and only a released reader can settle that. Byte-identity
-  was a claim about our own writer; this is a measurement against the reader
-  that actually matters.
+  ⚠️ **What must hold is the FORM, not byte-identity.** Rollout 1 publishes a
+  *different key* from `legacy` — its own signing key rather than its
+  authentication key — so the bytes differ by design.
+  Only a released reader can settle the form; byte-identity would be a claim
+  about our own writer.
 
 ## 17. G2 · Crypto agility — add, never replace
-
-Acceptance for [`decisions.md` 119](detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27).
 
 **The property.** All three advertisements — an enrollment's **key package**, a
 namespace's **nskey** generation, and an enrollment's **`_apsk`** — are arrays so
@@ -3757,7 +3261,7 @@ that an algorithm upgrade is an **ADD by the advertiser**. Nobody coordinates a
 flag day. The rows here assert that property once, across all three, rather than
 three times in three clusters.
 
-**What the arrays buy: agility in SDK terms** (gkc, 2026-08-28). Adding an
+**What the arrays buy: agility in SDK terms.** Adding an
 algorithm stops being an architectural change and becomes a configuration one —
 no new record shape, no new verb, no coordinated flag day, and nothing for an
 application to re-plumb. Every advertisement is already a list, every reader
@@ -3766,11 +3270,9 @@ already walks it, and a new algorithm is one more entry in it.
 **A migration's cost is fixed, and small.** It does not grow with the number of
 algorithms, the size of the fleet, or how many peers an atSign has: what an
 application developer changes is one or two configuration fields, moved in
-different releases. ⚠️ **It is not the same count for both substrates, and this
-said it was** — *"two rollouts… the same ladder, in the same order, for
-encryption and for signing alike"*, until 2026-08-28. **Encryption takes two
-releases and signing takes three**, for a reason that is not a quirk of the
-levers; the table and the paragraphs below give both.
+different releases. ⚠️ **The count is not the same for both substrates**:
+**encryption takes two releases and signing takes three**, for a reason that is
+not a quirk of the levers; the table and the paragraphs below give both.
 
 ⚠️ **What it replaces, and why the arrays earn their place.** With a singular
 advertisement *every* change is a switch — the new value replaces the old — so a
@@ -3781,7 +3283,7 @@ bounded, ordered pair of releases that can be explained in two lines.
 
 ⛔ **A MIGRATION is never one release, and the rule behind it is one line: a
 release may RELAX what it accepts, or TIGHTEN what it produces — but tightening
-what it ACCEPTS must be its own release** (gkc, 2026-08-27 and 2026-08-28).
+what it ACCEPTS must be its own release.**
 Encryption needs two steps; **signing needs three**, and the difference is not a
 quirk of the levers.
 
@@ -3796,11 +3298,8 @@ the new, seal only to the new*. Two configuration levers,
 releases — and that is the whole recipe.
 
 For **signing** it reads *ship a build that verifies both, sign only the old*,
-then *sign only the new*, then *verify only the new* —
-[`decisions.md` 120](detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28).
-⚠️ **This passage claimed *"mint both and verify both, sign only with the old"*
-and that signing had two levers of the same shape, until 2026-08-28. Both were
-false.** **A signing key cannot be minted without being signed with**: an
+then *sign only the new*, then *verify only the new*.
+⛔ **A signing key cannot be minted without being signed with**: an
 envelope carries one signature per *active* signing key, and
 `reconcileSigningKeys` mints exactly what `dataSigningKeyAlgorithms` names — so
 there is no state "holds `mldsa65`, signs `rsa2048` only". Signing's *can handle*
@@ -3825,10 +3324,10 @@ For encryption the *sender* picks from the recipient's advertised set, so an
 advertiser offering two costs nobody anything and no escape hatch is needed. For
 a signature the *signer* picks and the verifier must cope with whatever arrives,
 so offering two in the advertisement protects no verifier that lacks the
-algorithm used. ⚠️ **A plural signature was offered here as the answer for a
-fleet that cannot be sequenced, until 2026-08-28 — and it is not one.** An
-attacker strips the stronger signature and the verifier accepts the weaker,
-because nothing lets it insist. Signing's answer is the **third** release, and
+algorithm used. ⛔ **A plural signature is not the answer for a fleet that
+cannot be sequenced.** An attacker strips the stronger signature and the
+verifier accepts the weaker, because nothing lets it insist. Signing's answer is
+the **third** release, and
 [UC-G2.9](#179-uc-g29--step-3-has-no-lever-so-a-retired-signing-key-verifies-forever)
 is where its missing lever lives.
 
@@ -3930,13 +3429,11 @@ is where its missing lever lives.
   (whatever it decides on; the SDK carries no clock and no cadence for this
   lever), or because a revocation touched an enrollment granted this namespace
   after the namespace's advertisement was last rotated.
-  ⚠️ **Not "the generation's age"** — [`decisions.md` 122](detail/decisions.md#122-rotation-cadence-the-nskey-lever-fires-on-cause-the-ck-lever-asks-a-policy-2026-08-28)
-  ruled age is not an nskey trigger; an age-shaped *application* policy stays
-  expressible, an age-shaped SDK trigger does not.
+  ⚠️ **Not "the generation's age"** — age is not an nskey trigger; an age-shaped
+  *application* policy stays expressible, an age-shaped SDK trigger does not.
   ⚠️ **And not "created before a revocation"** — the generation's payload
   `createdAt` is the minting client's own clock, and comparing it to a
-  server-stamped moment is the trap [130](detail/decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31)
-  forbids.
+  server-stamped moment is the trap.
 - **When:** a client asks whether a rotation is due, and — if it is, and if it
   wins the mint lock — rotates.
 - **Then:**
@@ -3949,14 +3446,10 @@ is where its missing lever lives.
     remove one at all;
   - a revoked enrollment gains nothing from the rotation: it holds privates for
     the previous generation only, and no key in the new one is one it has ever
-    held — so it cannot **derive** the successor. ⚠️ **What stops it being
-    HANDED one is separate, and is not this clause's**: the roster, which
-    `enroll:listns` builds from approved enrollments only, and
-    `excludeEnrollmentIds`. Fresh-only and the exclusion are both required and
-    neither alone denies an attacker new data keys — crediting the minting
-    property with the revocation property is the conflation
-    [129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
-    part 3 exists to correct;
+    held — so it cannot **derive** the successor. What stops it being HANDED one
+    is the roster, which `enroll:listns` builds from approved enrollments only,
+    and `excludeEnrollmentIds`: fresh-only and the exclusion are both required,
+    and neither alone denies an attacker new data keys;
   - every peer's cached content key is superseded **at that peer's next
     `ensureCurrent`**, because every `kid` in the advertisement has changed. That
     is how a peer learns a rotation happened at all — a sender never sees a
@@ -3976,10 +3469,9 @@ is where its missing lever lives.
     beside `enroll:listns` taking the same authorisation and returning a map
     whose `lastRevokedAt` is always present, null when there has been none.
     `enroll:listns` is unchanged — its returning approved enrollments only is
-    what ruling 129's safety rests on. This clause first said listns would carry
-    the value as a field on every roster row; that was reported infeasible, and
-    the reason is that a roster is a list of members while the last revocation
-    affecting a namespace is not a fact about any member. Such a rotation is
+    what the cascade's safety rests on, and a roster is a list of members while
+    the last revocation affecting a namespace is not a fact about any member.
+    Such a rotation is
     **unconditional** — it does not ask `NskeyRotationPolicy`. The application
     asking is the other cause, and that one is the policy's;
 
@@ -3994,36 +3486,28 @@ is where its missing lever lives.
     was returned, it rotates.** A client that cannot read the namespace answer at
     all rotates **nothing**: it has established no cause.
 
-    ⛔ **BUILT on both sides, 2026-09-09.** The atServer writes a durable
-    revocation event per enrollment a revoke touches, and derives from the log
-    the per-namespace moment `enroll:infons` serves. On this side
-    `Enrollment.fromJSON` keeps `status`, an `add` asserts the advertisement
-    record's own `updatedAt` back while a rotation takes a fresh one, and
-    `NskeySeeding.rotateIfRevoked` puts the comparison at every client start.
-    ⚠️ **This said "RULED AND NOT YET BUILT on the at_client side; BUILT on the
-    atServer's, on a branch that is not on the remote" until 2026-09-09.** The
-    atServer's half reached `origin/trunk` in `105aff94` on 2026-08-31.
-    ⚠️ **This said the atServer stamps `revokedAt` on the enrollment, and that
-    the derived scalar was unbuilt, until 2026-08-31.** The field was removed in
-    favour of the event log — an enrollment record's ttl IS the APKAM
-    key-expiry posture, so a stamp living on it is reaped with the record — and
-    the moment is served by `enroll:infons`, not `enroll:listns`, and is built. See [`decisions.md` 130](detail/decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31).
-    ⚠️ **`EnrollDataStoreValue` carries no *timestamp*** — its one time-shaped
-    field is `apkamKeysExpiryDuration`, a duration.
+    The atServer writes a durable revocation event per enrollment a revoke
+    touches, and derives from the log the per-namespace moment `enroll:infons`
+    serves. On this side `Enrollment.fromJSON` keeps `status`, an `add` asserts
+    the advertisement record's own `updatedAt` back while a rotation takes a
+    fresh one, and `NskeySeeding.rotateIfRevoked` puts the comparison at every
+    client start.
+    ⛔ **There is no `revokedAt` stamp on the enrollment record.** An enrollment
+    record's ttl IS the APKAM key-expiry posture, so a stamp living on it is
+    reaped with the record; `EnrollDataStoreValue`'s one time-shaped field is
+    `apkamKeysExpiryDuration`, a duration.
 
     ⛔ **The roster is not widened to carry this.** `enroll:listns` goes on
     returning approved enrollments only and gains one field. Returning every
-    enrollment with its status would move [129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)'s
-    safety out of the atServer's filter and into every caller — and a caller that
+    enrollment with its status would move that safety out of the atServer's
+    filter and into every caller — and a caller that
     forgot a status check would hand a revoked enrollment key material, silently.
 
-    ⚠️ **This clause was designed around `enroll:list` until 2026-08-31, and
-    could never have fired.** That verb returns other enrollments only to a
-    caller holding `__manage`; every other caller gets its own record alone. An
-    ordinary app enrollment — the client `seed()` runs on, and the only client
-    this backstop is for — would have seen one enrollment, itself, `approved`,
-    making the test vacuously false forever. at_client's own `nskey_rotation.dart`
-    says so in as many words.
+    ⛔ **`enroll:list` cannot serve this.** It returns other enrollments only
+    to a caller holding `__manage`; every other caller gets its own record
+    alone, so an ordinary app enrollment — the client `seed()` runs on, and the
+    only client this backstop is for — would see one enrollment, itself,
+    `approved`, making the test vacuously false forever.
 
     ⚠️ **Why the rotation ignores the policy.** `NskeyRotationPolicy` governs
     *discretionary* rotation, and its shipped default is `neverRotateNskey`,
@@ -4032,16 +3516,9 @@ is where its missing lever lives.
     rotation is the only thing that cuts a revoked enrollment off from data
     sealed to the generation it already holds.
 
-    ⚠️ **This said a client settles it from "the durable record the revoker
-    wrote" until 2026-08-31** — ruling 121's design, reversed by
-    [130](detail/decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31)
-    for the reason set out beneath this row.
-    ⚠️ **And it carried an *age* half until 2026-08-28**, settled from the
-    advertisement's `createdAt` against an application policy; [`decisions.md`
-    122](detail/decisions.md#122-rotation-cadence-the-nskey-lever-fires-on-cause-the-ck-lever-asks-a-policy-2026-08-28)
-    ruled that **age is not an nskey trigger at all** — the SDK carries no clock
-    for this lever, and an application deciding it is time is a *cause* rather
-    than a schedule;
+    ⚠️ **Age is not an nskey trigger at all** — the SDK carries no clock for
+    this lever, and an application deciding it is time is a *cause* rather than
+    a schedule;
   - **a client that fails to take the mint lock does not queue and does not retry
     blindly.** It publishes nothing, and the question is put again at its next
     start or at the next content key it conveys to a namespace key **this
@@ -4050,8 +3527,7 @@ is where its missing lever lives.
     needed or that it still must. That is what makes several clients converge
     rather than storm.
 
-    ⚠️ **This said it "backs off, re-reads after the cooldown" until 2026-08-31,
-    and nothing on this path waits out a cooldown.** There is no sleep and no
+    ⚠️ **Nothing on this path waits out a cooldown**: there is no sleep and no
     backoff on it. ⚠️ **`withLock` does read the lock key's ttl** — it refuses a
     lock that has none and sizes the winner's lease from it, before the take, so
     on the loser path too; what it never does is wait for one to expire. The
@@ -4063,29 +3539,15 @@ is where its missing lever lives.
     for the same key on the same instance, and that one does await before
     declining.
 
-  ⛔ **A clause was WITHDRAWN here on 2026-08-31** (gkc), and is kept as prose
-  because the reasoning is worth having. It required the rotation to exclude the
-  revoked enrollment's whole **subtree**, walked client-side over
-  `parentEnrollmentId`, and said the same was owed by the `add`.
-  [Ruling 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
-  puts that walk in the atServer's revoke instead: once revocation cascades, a
+  ⛔ **The client's exclusion set stays one element.** The subtree walk is in
+  the atServer's revoke: once revocation cascades, a
   descendant loses `approved`, `enroll:listns` returns approved enrollments only,
   and the subtree is off every roster — so the one-element
-  `excludeEnrollmentIds: {enrollmentId}` this client already passes is correct as
-  it stands, and an `add` conveying with no exclusion set at all is right rather
-  than a gap. The behaviour the clause wanted is asserted by
-  [UC-A5.3](#63-uc-a53--enrollment-revocation), which is where a cascade belongs;
+  `excludeEnrollmentIds: {enrollmentId}` this client passes is correct as it
+  stands, and an `add` conveying with no exclusion set at all is right rather
+  than a gap. The cascade itself is asserted by
+  [UC-A5.3](#63-uc-a53--enrollment-revocation), which is where it belongs;
   restating it here would claim one behaviour under two rows.
-
-  ⚠️ **Until the atServer ships the cascade this row's leak is real**, and the
-  withdrawn clause described it correctly: a descendant keeps `approved`, keeps
-  authenticating and keeps its grants, so a rotation excluding only the named id
-  conveys the new private to what the compromised enrollment spawned, and an
-  `add` reaches it by the same route — `NskeySeeding` calls
-  `pushSecretToNamespaceMembers` with no exclusion set. ⚠️ [UC-G2.6](#176-uc-g26--a-client-adds-its-own-missing-algorithm-to-the-current-generation)
-  carried a clause refusing an `add` for that reason and it was dropped on
-  2026-08-28 as the wrong home for it; 129 says the same of this one, one layer
-  further down.
 
   ⚠️ **Why the atServer stamps the revocation rather than the revoker publishing
   a record.** The fact has to outlive the actor. A record the revoker publishes is
@@ -4093,30 +3555,9 @@ is where its missing lever lives.
   record exists for, since a rotation that completed needs no record at all. The
   atServer already writes the enrollment, so a field on it costs no new record
   and no new verb; what the client needs is then derived from that field and
-  reported per namespace.
-  ⚠️ **This paragraph argued the opposite until 2026-08-31, on TWO grounds, and
-  only one of them was answered.** The first — that nothing server-side carries a
-  revocation timestamp — was true, and an argument for adding one. The second was
-  that a per-namespace work record beats *"a global instant every client compares
-  everything against"*. That cost is **accepted rather than rebutted**: every
-  client now re-derives the same comparison per namespace at every start.
-  Reporting the moment per namespace narrows it; it does not remove it.
-
-  ⛔ **Nothing is owed here now.** at_server: the revocation event log, and the
-  per-namespace moment derived from it and served by `enroll:infons` — **both
-  built**, on `origin/trunk`. at_client: `status` on the `Enrollment` model, the
-  discipline that an `add` preserves the advertisement's `updatedAt` while a
-  rotation does not, and the check in `seed()` — **all three built 2026-09-09**.
-  ⚠️ **This said at_server owed the `revokedAt` field, and that the derived
-  moment on `enroll:listns` was not built, until 2026-08-31.** The field is
-  gone, the moment is served by `enroll:infons`, and both server halves are
-  built.
-  ⚠️ **It then said none of the at_client half was built, and that "built" of
-  the atServer meant its working branch rather than `origin/trunk`, until
-  2026-09-09.** Both are `origin/trunk` statements now.
-  The subtree walk this row used to ask for is neither owed nor unbuilt — it is
-  **retired**, by [ruling 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31),
-  which moves it into the atServer's revoke.
+  reported per namespace. ⚠️ **The cost is accepted rather than removed**: every
+  client re-derives the same comparison per namespace at every start, and
+  reporting the moment per namespace narrows that without removing it.
 
   ⚠️ **A client that starts and then runs for weeks does not notice until it
   restarts**, and two clients get no check at all: one running as the atSign's
@@ -4124,13 +3565,10 @@ is where its missing lever lives.
   discards the list.
   That is accepted rather than overlooked — the revoker rotates immediately, and
   this path is the backstop for when it could not.
-  ⚠️ **The first exclusion is now a REFUSAL rather than a consequence, and the
-  reason it was accepted has moved.** It was accepted because such a client
-  "returns before fetching anything", so there was no fetch for the check to
-  ride; the check as built makes its own `enroll:infons` call, and a
-  legacy-PKAM connection to a migrated atServer authenticates as `primary`, so
-  the verb would answer one. `NskeySeeding.rotateIfRevoked` skips it anyway, to
-  keep this clause true. Whether it should is [an open
+  ⚠️ **The first exclusion is a REFUSAL rather than a consequence.** The check
+  makes its own `enroll:infons` call, and a legacy-PKAM connection to a migrated
+  atServer authenticates as `primary`, so the verb would answer one;
+  `NskeySeeding.rotateIfRevoked` skips it anyway, to keep this clause true. Whether it should is [an open
   question](implementation-plan.md#p2--should-be-done-if-there-is-time).
 
 ### 17.6 UC-G2.6 — A client adds its own missing algorithm to the current generation
@@ -4147,10 +3585,9 @@ is where its missing lever lives.
     the revocation's rotation never fires and the revoked enrollment goes on
     opening everything;
 
-    ⛔ **That protection now guards the wrong field, and repairing it is OWED.**
-    The argument above was sound while the rotation trigger compared against the
-    payload's `createdAt`. [Ruling 130](detail/decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31)
-    moved the trigger onto the advertisement **record's** server-stamped
+    ⛔ **That protection guards the wrong field, and repairing it is OWED.**
+    The argument above holds only where the rotation trigger compares against the
+    payload's `createdAt`. The trigger is on the advertisement **record's** server-stamped
     `updatedAt`, because the payload value is the minting client's own clock —
     and `updatedAt` is exactly the field an add *does* move, since an add
     rewrites that record. So the clause guards a field the trigger no longer
@@ -4176,16 +3613,14 @@ is where its missing lever lives.
     document rather than of the generation. *Which* enrollments may write it at
     all is the atServer's gate on the record, never the reader's;
 
-  ⚠️ **A clause refusing an add on a generation already due for rotation was
-  dropped on 2026-08-28** ([`decisions.md`
-  122](detail/decisions.md#122-rotation-cadence-the-nskey-lever-fires-on-cause-the-ck-lever-asks-a-policy-2026-08-28)).
-  With age retired as a trigger it could only have meant *created before a
-  revocation*, and the hazard it named is covered twice over: the **mint lock**
-  orders a rotation and an add that overlap, and **c2's `createdAt`** keeps the
+  ⚠️ **There is no refusal of an add on a generation already due for rotation.**
+  With age retired as a trigger such a clause could only mean *created before a
+  revocation*, and that hazard is covered twice over: the **mint lock** orders a
+  rotation and an add that overlap, and **c2's `createdAt`** keeps the
   revocation trigger correct when they do not. What neither covers — an add
   conveying to a revoked enrollment's surviving child — belongs to
   [UC-G2.5](#175-uc-g25--an-nskey-rotation-mints-fresh-material-and-carries-nothing-forward)
-  c4, which now names the add as well as the rotation.
+  c4, which names the add as well as the rotation.
 
 ### 17.7 UC-G2.7 — A retired entry stops being offered and still opens history
 
@@ -4200,33 +3635,28 @@ is where its missing lever lives.
     a later mint does not lose it, because an entry withdrawn outright would
     destroy the ability to read what it produced;
 
-    ⚠️ **This read "removal is therefore a two-step, never one" until
-    2026-08-31, and the APKAM authentication key is the counterexample the tree
-    ships deliberately.** `apskEntries` adds it only while the enrollment holds
-    no signing key of its own and never adds it to the withdrawn loop, so the
-    moment a signing key exists the authentication key leaves the advertisement
-    **outright, in one step** — and a test pins that as correct. The composer
-    states the reason: a key is retained for what it signed, and the premise is
-    that the authentication key signed nothing that outlives the transition, so
-    retaining it would advertise a key with nothing to verify. ⚠️ **The
-    composer's "an enrollment that holds signing keys held them from birth" is
-    false in general and stood here as the reason until 2026-09-08**: an
-    enrollment created without a data signing key has an auth-key-signed key
-    package, and a first mint strands it until the next start re-signs it. The
-    premise holds because a posture move **replaces** the enrollment: reaching a
+    ⚠️ **The APKAM authentication key is the deliberate exception.**
+    `apskEntries` adds it only while the enrollment holds no signing key of its
+    own and never adds it to the withdrawn loop, so the moment a signing key
+    exists the authentication key leaves the advertisement **outright, in one
+    step**. A key is retained for what it signed, and the authentication key
+    signed nothing that outlives the transition, so retaining it would advertise
+    a key with nothing to verify. ⚠️ **"An enrollment that holds signing keys
+    held them from birth" is false in general**: an enrollment created without a
+    data signing key has an auth-key-signed key package, and a first mint
+    strands it until the next start re-signs it. The premise holds because a
+    posture move **replaces** the enrollment: reaching a
     PQ posture retrofits an rsa2048 credential into a new enrollment owning a
     signing key from birth, and the superseded enrollment keeps its own `_apsk`
     record — published with no TTL and deleted by nothing — so what its
-    authentication key signed goes on verifying
-    ([`decisions.md` 134](detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08));
+    authentication key signed goes on verifying;
   - ⚠️ **an nskey entry is never retired in place, and its retirement is
     GENERATIONAL.** A rotation simply does not mint that algorithm again, and
     what opens history is the previous generation's private, still held — not a
     retired entry in the current advertisement. The nskey reader handles a
     retired entry and **no writer produces one**: the two that do are the key
-    package's mint and the signing key's mint. ⚠️ **This named a third — the
-    signing root's — until 2026-08-29, and that was false.** The root's only
-    writer is `PqSigningRoot._publish`, which writes a single-entry `keys: […]`
+    package's mint and the signing key's mint. The signing root is not a third:
+    its only writer is `PqSigningRoot._publish`, which writes a single-entry `keys: […]`
     list carrying no `status` at all, and production says why beside it: *"no
     rotation exists to repair it with"*. Its reader and its `_apsk` vocabulary
     are both ready for a retired entry — `publishedPublicKeys` takes
@@ -4236,18 +3666,6 @@ is where its missing lever lives.
     publishes nothing. So the two substrates reach the same guarantee by
     different mechanisms, and a reader generalising from one to the other is
     wrong.
-
-⚠️ **The sentence below was a THEN clause until 2026-08-29 and is deliberately
-no longer one** (gkc). It scopes the row rather than asserting a behaviour of
-its own, so nothing could close it: after a retirement and after a compromise
-the key material is in the same state, and the two differ only in the status
-token — of which there is one today. Pinning it against an unknown token would
-prove UC-G2.3's clause under this row's name, which is the conflation the
-sentence exists to forbid. It stays here as guidance: a **retirement** is not a
-**compromise**, and only the first is what this row is about — an entry
-withdrawn from verifying history too is
-[UC-G2.3](#173-uc-g23--an-_apsk-reader-tolerates-an-unknown-algorithm-and-distrusts-an-unknown-status)'s
-unknown-status clause, and the two must not be conflated.
 
 ### 17.8 UC-G2.8 — A verifier resolves the algorithm by name, then the key by `kid`
 
@@ -4267,28 +3685,18 @@ unknown-status clause, and the two must not be conflated.
     `enid`. A verifier selects in one step rather than trying candidates, and
     since a kid is `SHA256(publicKey)` truncated it can be checked against the
     key it names: a tampered one narrows to the wrong key or to none, and the
-    signature then fails on its own.
-    ⚠️ **This said `kid` was already SPENT on the enrollment, so the key needed a
-    second field beside `alg`, until 2026-08-31.** [Ruling 131](detail/decisions.md#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31) moved
-    the enrollment to `enid` instead, no released verifier holding the old shape;
+    signature then fails on its own. The enrollment rides `enid` so that `kid`
+    names the key, no released verifier holding the old shape;
   - **a header claiming a version this build does not know is refused**, rather
     than read as a shape it may not be — the mismatch is a refusal, not a
     tolerated difference. `envelopeVersion` stays at **1** across the
     key-identifier change, because nothing outside this tree holds the old header:
     there is no verifier for a bump to strand, and none for an unbumped change to
-    confuse.
-    ⚠️ **This clause asserted the compatibility argument itself until
-    2026-08-31** — that an older verifier ignores the new field and walks
-    instead, both behaviours correct at once. [Ruling 131](detail/decisions.md#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31) deleted the
-    walk and measured the population that argument protected: published
-    `at_client` 3.14.0 carries no `lib/src/signing` at all;
+    confuse: published `at_client` 3.14.0 carries no `lib/src/signing` at all;
   - a signature naming a key the advertisement does not carry is **refused,
     naming that key** — a better diagnosis than a count, which cannot
-    distinguish a wrong key from a bad signature.
-    ⚠️ **This also carried the walk's counted refusal — *names how many were
-    tried* — until 2026-08-31, and that was the only half anything pinned**, so
-    the clause read PROVEN while the naming half was unbuilt. [Ruling 131](detail/decisions.md#131-the-protected-header-names-the-key-and-the-enrollment-moves-to-enid-2026-08-31)
-    deletes the walk, so there is no count left to name;
+    distinguish a wrong key from a bad signature. There is no candidate walk to
+    count;
   - **this is the ordinary case, not the overlap case.** An app that signs only
     once still changes *what* it signs with over time, so its `_apsk` accumulates
     advertised keys by rotation alone. A plural **advertisement** is what every
@@ -4308,9 +3716,8 @@ unknown-status clause, and the two must not be conflated.
     resolves `strongestOf(shared)` over the intersection of the advertised keys
     and the signatures the envelope carries, and applies no floor to the result.
 
-    ⚠️ **The three absences that are the REASON moved out of the clause on
-    2026-08-31** (gkc), for the same reason UC-B5.1's did: they say why the
-    verifier cannot decline, rather than stating a behaviour of their own. There
+    ⚠️ **Three absences are the reason the verifier cannot decline**, rather
+    than behaviours of their own, which is why they are not clauses. There
     is **no minimum-algorithm check, no signature-count check, and no
     accepted-algorithms field for signatures anywhere in `AtClientPreference`** —
     asserted by `architecture_guard_test.dart`'s *the verifier has no accept
@@ -4321,9 +3728,8 @@ unknown-status clause, and the two must not be conflated.
     since the lever cannot ship default-deny without refusing every stored
     envelope in the fleet.
 
-    ⚠️ **This said the encryption side "has one" — `keyEstablishmentAlgorithms`
-    — until 2026-08-31, and that field is not an accept lever.** Its own dartdoc
-    says so four lines below the phrase quoted: *"This does not restrict who
+    ⛔ **`keyEstablishmentAlgorithms` is not an accept lever** on the encryption
+    side either. Its own dartdoc says so: *"This does not restrict who
     this client can talk to. It decides what this atSign publishes"*, and it
     goes on to concede *"the same exposure a retained retired key already
     carries"*. Every consumer of it outside the preference file is on the mint
@@ -4333,12 +3739,11 @@ unknown-status clause, and the two must not be conflated.
     old-algorithm signature. Encryption's protection is an **advertise** lever
     held by the party at risk. Signing has none, because the advertisement
     belongs to the **signer**, not to the verifier;
-  ⛔ **A clause was WITHDRAWN here on 2026-08-31** (gkc). It read: *"so a
-  retired signing key is a standing forgery surface"*, and its only assertable
-  behaviour — that a retired entry stays advertised so history verifies — is
-  already pinned under two other rows, so stating it again here would count one
-  behaviour three times. The analysis is kept, because it is the reason this row
-  matters and it is recorded nowhere else:
+  ⛔ **A retired signing key is a standing forgery surface**, and that is the
+  reason this row matters. It is not a THEN clause of its own: the only
+  assertable behaviour in it — that a retired entry stays advertised so history
+  verifies — is pinned under two other rows, and stating it again here would
+  count one behaviour three times.
 
   A retired key stays advertised precisely so history verifies —
   `vouchesForPastOperations` is what a verifier narrows on, or every superseded
@@ -4353,11 +3758,10 @@ unknown-status clause, and the two must not be conflated.
   timestamp. Outside that binding a verifier has nothing, and should treat a
   retired-key signature as suspect.
 
-  ⚠️ **The clause said "nothing dates an envelope" until 2026-08-31, and things
-  do** — `KeyPackage` and `NskeyAdvertisement` both put `createdAt` inside the
-  **signed payload**, and `NskeyRotationContext` turns one into an `age`. The
-  absences that matter are narrower: no date in the protected header, and no
-  freshness check at verification.
+  ⚠️ **Some things are dated**: `KeyPackage` and `NskeyAdvertisement` both put
+  `createdAt` inside the **signed payload**, and `NskeyRotationContext` turns one
+  into an `age`. The absences that matter are narrower: no date in the protected
+  header, and no freshness check at verification.
   ⚠️ **And a record's `createdAt` is a CALLER ASSERTION the atServer honours,
   not a server attestation.** The verb grammar carries `:cAt`/`:uAt`/`:eAt`/
   `:aAt` and the handler calls them exactly that — asserted timestamps — so a
@@ -4370,19 +3774,12 @@ unknown-status clause, and the two must not be conflated.
     never a fallback to a key derived some other way;
   - **step 3 closes this and needs a lever that does not exist**: a set the
     verifier will accept a signature under, narrowing `shared` before
-    `strongestOf`. ⚠️ **Not every caller may be narrowed** — verifying one's own
-    advertisement is not the same act as verifying a peer's data.
+    `strongestOf`.
 
-  ⚠️ **This row asserted the opposite until 2026-08-28.** It was *"a verifier gap
-  is covered by two signatures, and the developer chooses"* — sign twice for a
-  release, or sequence the rollouts. Double-signing covers nothing verifiable:
-  an attacker strips the stronger signature, `shared` collapses to the weaker
-  algorithm, and the verifier accepts, because it has no way to insist. A
-  verifier that *could* insist has done step 3 and needs no overlap.
-
-- **Cross-ref:** [`decisions.md` 120](detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28);
-  [108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18),
-  whose swap is specific to a transition with no verifier gap.
+  ⛔ **Double-signing does not cover a verifier gap.** An attacker strips the
+  stronger signature, `shared` collapses to the weaker algorithm, and the
+  verifier accepts, because it has no way to insist. A verifier that *could*
+  insist has done step 3 and needs no overlap.
 
 ### 17.10 UC-G2.10 — The ladder across atSigns: safe through rollout 1, refused after rollout 2
 
@@ -4409,35 +3806,25 @@ unknown-status clause, and the two must not be conflated.
     writer put it there — so no refusal fires, and the failure surfaces later,
     at a sibling install, on a record already written;
 
-    ⚠️ **This clause opened "that is the better of the two failures, and the
-    contrast with UC-G2.11 is the point" until 2026-08-31.** Ranking two
-    failures is not something a test can establish, and the cross-atSign half it
-    also carried is a restatement of the refusal clause above, which is already
-    pinned — so stating it here again would count one behaviour twice. The
-    comparison stays as prose: across atSigns the sender holds the policy and
-    reads the recipient's advertisement, so a mis-sequenced rollout 2 fails
-    loudly, at the party that got it wrong, before any record exists;
+    ⚠️ **The comparison with UC-G2.11 is prose rather than a clause**, because
+    ranking two failures is not something a test can establish: across atSigns
+    the sender holds the policy and reads the recipient's advertisement, so a
+    mis-sequenced rollout 2 fails loudly, at the party that got it wrong, before
+    any record exists;
   The two ends move independently, and that is the whole of what "one rollout"
   means.
 
-  ⛔ **A sixth clause was WITHDRAWN here on 2026-08-31** (gkc), and is kept as
-  prose because the shape recurs. It read: *"a sender that OMITS an algorithm
-  and a sender that cannot IMPLEMENT one reach the same refusal by different
-  routes, and only the first is exercised anywhere."* It was false three ways.
-  The two routes reach **four** refusals across three exception branches —
-  `AtEncryptionException` from the resolver (*"Widen
-  AtClientPreference.sealsToKeyAlgorithms"*), `AtSigningVerificationException`
-  from the advertisement check, an `ArgumentError` at preference construction,
-  and `CryptoProviderNotRegistered` from the provider registry (*"Add it to
-  AtClientPreference.crypto.providers"*) — and the last two give **opposite
-  advice for the same symptom**. Its coverage claim was stale: an advertisement
-  of only unusable entries is already refused in `published_nskey_key_ring_test`
-  against a fictional algorithm id. And its closing sentence was a claim about
-  the **test suite**, not about a behaviour, which is not what a THEN clause
-  states. ⚠️ `AtSigningVerificationException` extends `AtException` rather than
+  ⚠️ **A sender that OMITS an algorithm and one that cannot IMPLEMENT one reach
+  four refusals across three exception branches** — `AtEncryptionException` from
+  the resolver (*"Widen AtClientPreference.sealsToKeyAlgorithms"*),
+  `AtSigningVerificationException` from the advertisement check, an
+  `ArgumentError` at preference construction, and `CryptoProviderNotRegistered`
+  from the provider registry (*"Add it to AtClientPreference.crypto.providers"*)
+  — and the last two give **opposite advice for the same symptom**.
+  ⚠️ `AtSigningVerificationException` extends `AtException` rather than
   `AtClientException`, so an application catching `AtClientException` around a
-  write catches three of the four and misses that one — recorded as owed work
-  rather than fixed here.
+  write catches three of the four and misses that one — owed work rather than
+  fixed here.
 
 ### 17.11 UC-G2.11 — The ladder within one atSign: safe through rollout 1, broken after rollout 2
 
@@ -4456,8 +3843,8 @@ unknown-status clause, and the two must not be conflated.
     ahead of sending;
   - ⛔ **after rollout 2 this stops being true, and correctly so.** An `alice1`
     that mints only the new algorithm and seals only to it writes records
-    `alice2` cannot open. **The two-rollout dance is the only safe way** (gkc,
-    2026-08-28): rollout 1 moves the receive capability, rollout 2 moves the send
+    `alice2` cannot open. **The two-rollout dance is the only safe way**:
+    rollout 1 moves the receive capability, rollout 2 moves the send
     posture, and nothing in the SDK removes the need to do them in that order on
     every install. A refusal after rollout 2 is the ladder working, not a defect.
 
@@ -4470,35 +3857,28 @@ unknown-status clause, and the two must not be conflated.
 
 ## 18. G3 · The data signing key an enrollment owns from birth
 
-Acceptance for [`decisions.md` 126](detail/decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30)
-and [127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30);
-design in [`design.md` 9.8](design.md#98-the-data-signing-key-an-enrollment-owns-from-birth).
+Design in [`design.md` 9.8](design.md#98-the-data-signing-key-an-enrollment-owns-from-birth).
 
 Section 16 covers what an `_apsk` record *means* to a reader. This cluster
 covers the key it names: where it comes from, what has to agree about its
 spelling, and what breaks when the record changes under a signature that
 vouched for it.
 
-**The design settled 2026-08-30 and the code landed with it.** Every row below
-was written against the production path rather than the design, because a
-clause can be **false** rather than untested and both read the same way from
-outside. Three of the eleven came out narrower than the work item that asked
-for them, and each says so where it happened.
+Every row below is written against the production path rather than the design,
+because a clause can be **false** rather than untested and both read the same
+way from outside.
 
-⛔ **One item the work list carried is withdrawn rather than written here.** It
-asked for "no mint at all when there is no enrollment id";
-[ruling 127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30)
-dropped the commit that would have created that behaviour, because publishing
-`_apsk` directly under `primary`, with no enrollment record to route it
-through, is a working, pinned capability that the guard would have deleted. There is no mechanism to write a row about.
+⛔ **There is no "no mint at all when there is no enrollment id" row**, because
+there is no such mechanism: the commit that would have created it was dropped,
+since publishing `_apsk`
+directly under `primary`, with no enrollment record to route it through, is a
+working, pinned capability that the guard would have deleted.
 
-So ten of the work item's eleven map to a row here, and the eleventh row is
-[UC-G3.3](#uc-g33--the-form-_apsk-takes-follows-the-algorithm-and-nothing-else-may-decide-it),
-which the item did not list at all: it comes from
+[UC-G3.3](#uc-g33--the-form-_apsk-takes-follows-the-algorithm-and-nothing-else-may-decide-it)
+comes from
 [`design.md` 9.8.2](design.md#982-the-form-_apsk-takes-follows-the-algorithm-and-nothing-else),
-and it is the rule the two composers were breaking. The `_apsk`-mismatch
-refusal cluster the item raised separately is not a twelfth row — it is the
-five comparisons inside
+and is the rule the two composers were breaking. The `_apsk`-mismatch refusals
+are not a row of their own — they are the five comparisons inside
 [UC-G3.4](#uc-g34--a-link-is-bound-to-the-exact-_apsk-string-and-a-republish-breaks-it),
 which is the same mechanism stated once.
 
@@ -4555,15 +3935,14 @@ which is the same mechanism stated once.
   client republishes on any difference, so a disagreement rewrites the record
   and discards whatever was bound to its old value.
 
-  ⚠️ **This row exists because the two composers disagreed until 2026-08-31.**
-  at_auth also forced the array whenever a key package was present, on the
-  grounds that a bare value cannot state the algorithm of whatever signed the
-  package. Where that signer is rsa2048 the bare value states exactly it, and
-  where it is not, the algorithm had already chosen the array — so the extra
-  condition fired only on the case it was wrong about: an rsa2048-advertising
-  enrollment in pq key-exchange mode, which `--posture legacy --key-exchange pq`
-  reaches. The client then rewrote `_apsk` at its first start and discarded the
-  chain link the approver had just conveyed.
+  ⚠️ **A second condition fires only on the case it is wrong about.** Forcing
+  the array whenever a key package is present, on the grounds that a bare value
+  cannot state the algorithm of whatever signed the package, is wrong where that
+  signer is rsa2048 — the bare value states exactly it — and redundant where it
+  is not, the algorithm having already chosen the array. What is left is an
+  rsa2048-advertising enrollment in pq key-exchange mode, which
+  `--posture legacy --key-exchange pq` reaches: the client rewrites `_apsk` at
+  its first start and discards the chain link the approver just conveyed.
 
 ### 18.2 The chain over the record
 
@@ -4587,9 +3966,8 @@ which is the same mechanism stated once.
 
   ⚠️ **`apkamPublicKey` is a misleading name and a remnant**, accurate only when
   `_apsk` held the APKAM public key alone. It is a member of the signed preimage,
-  so renaming it changes what verifies. ⚠️ **The work item that asked for this
-  row said there were three refusal messages; there are four, plus a fifth
-  comparison that refuses silently.**
+  so renaming it changes what verifies. Four of the five comparisons refuse with
+  a message; the fifth refuses silently.
 
 #### UC-G3.5 — what an approver conveys is decided by possession as well as privilege
   *Given* an approver servicing an enrolment whose key package verifies.
@@ -4598,9 +3976,8 @@ which is the same mechanism stated once.
   posture-invariant.
   *And* a fully privileged approver with **no** root private that holds a data
   signing key of its own conveys a **chain** link signed with that key — which
-  overturns [`decisions.md` 67](detail/decisions.md#67-workstream-bi-the-sweep-anchors-to-the-root-2026-08-10)'s
-  "root link or nothing" for that arm, because nothing re-attempts a link for an
-  enrolment approved while its approver was unpossessed.
+  is not "root link or nothing" for that arm, because nothing re-attempts a link
+  for an enrolment approved while its approver was unpossessed.
   *And* a fully privileged approver holding **neither** conveys **no link at
   all**, and everything else still flows — signing with the APKAM
   authentication key would produce a link that is *dropped* rather than
@@ -4654,13 +4031,12 @@ which is the same mechanism stated once.
   returns the filed key once one is there — the control that makes the fallback
   attributable.
 
-  ⚠️ **This replaces a process-wide barrier, and the barrier is what the row is
-  really about.** Everything that signs used to wait on the mint step, while two
-  earlier startup steps answer an inbound request by sealing and signing a reply
-  — so the startup waited on a step that could not begin until it returned.
-  `at_activate approve` did not exit within its two-minute bound in eight
-  separate runs, with nothing in the log to say why. ⛔ **The window the barrier
-  covered is accepted, not closed** — see
+  ⚠️ **A process-wide barrier here deadlocks the startup.** Two startup steps
+  answer an inbound request by sealing and signing a reply, so making everything
+  that signs wait on the mint step makes the startup wait on a step that cannot
+  begin until it returns — `at_activate approve` then does not exit within its
+  two-minute bound, with nothing in the log to say why. ⛔ **The window a
+  barrier would cover is accepted, not closed** — see
   [UC-G1.9a](#uc-g19a--the-client-mints-what-the-in-use-set-names-advertising-before-filing)
   and `design.md` 9.8.8: a reader calling `signingKeys` between a mint's publish
   and its file, on an enrollment holding no signing key of its own, takes the
@@ -4679,10 +4055,10 @@ which is the same mechanism stated once.
   names is refused**: a posture is a floor, and an app that must not move names
   `PqPosture.legacy` rather than weakening an axis of a stronger posture.
 
-  ⚠️ **The floor rule reads ONE axis, and the work item that asked for this row
-  said "any axis".** A `dataSigningKeyAlgorithms` weaker than the posture names
+  ⚠️ **The floor rule reads ONE axis.** A `dataSigningKeyAlgorithms` weaker
+  than the posture names
   is deliberately still legal — it mints rsa2048 and keeps `_apsk` bare, which
-  is coherent — and widening the rule to cover it needs a ruling, not a test.
+  is coherent — and widening the rule to cover it is a decision, not a test.
 
 #### UC-G3.10 — a client configuring no post-quantum providers refuses the work and leaves the enrolment repairable
   *Given* a client whose posture sets `configuresPqProviders` false, meeting a
@@ -4728,7 +4104,7 @@ which is the same mechanism stated once.
   clones that have not upgraded are not locked out.
 
   ⚠️ **There is no guard skipping the mint when the enrollment id is null**, and
-  one was proposed. [Ruling 127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30)
-  dropped it: publishing `_apsk` directly with no enrollment id is a working,
+  the one proposed was dropped: publishing `_apsk` directly with no enrollment
+  id is a working,
   pinned capability, and this row is about the retrofit running **first**, not
   about the mint being skipped.
