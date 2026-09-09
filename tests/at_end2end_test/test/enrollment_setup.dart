@@ -70,6 +70,45 @@ Future<void> _stopSync() async {
   }
 }
 
+/// TEMPORARY probe. Times `enroll:list` unfiltered against the same call
+/// filtered to one status each, and prints the count beside every timing.
+///
+/// `EnrollmentServiceImpl._enrollmentById` calls `fetchEnrollmentRequests()`
+/// with no params, which leaves the status filter null, and `approve` calls it
+/// twice. This prints what that costs and how many records it is carrying.
+///
+/// The unfiltered call sits in the MIDDLE of the filtered ones so that a
+/// server warming up, or a connection settling, cannot produce the difference
+/// on its own: a monotonic trend would show in the bracketing pair too.
+Future<void> _probeEnrollList(AtClient atClient, String atSign) async {
+  final service = atClient.enrollmentService;
+  if (service == null) return;
+
+  Future<void> time(String label, List<EnrollmentStatus>? filter) async {
+    final watch = Stopwatch()..start();
+    try {
+      final list = await service.fetchEnrollmentRequests(
+          enrollmentListParams: filter == null
+              ? null
+              : (EnrollmentListRequestParam()..enrollmentListFilter = filter));
+      watch.stop();
+      print('PROBE $atSign enroll:list filter=$label '
+          'count=${list.length} ms=${watch.elapsedMilliseconds}');
+    } catch (e) {
+      watch.stop();
+      print('PROBE $atSign enroll:list filter=$label '
+          'FAILED ms=${watch.elapsedMilliseconds} $e');
+    }
+  }
+
+  await time('approved', [EnrollmentStatus.approved]);
+  await time('revoked', [EnrollmentStatus.revoked]);
+  await time('NONE(as _enrollmentById calls it)', null);
+  await time('denied', [EnrollmentStatus.denied]);
+  await time('pending', [EnrollmentStatus.pending]);
+  await time('expired', [EnrollmentStatus.expired]);
+}
+
 void main() {
   List atSignList = ConfigUtil.getYaml()['enrollment']['atsignList'];
   String namespace = TestConstants.namespace;
@@ -127,7 +166,10 @@ void main() {
       Enrollment enrollment =
           Enrollment.fromJSON(jsonDecode(enrollmentFetchResponse!));
 
+      await _probeEnrollList(atClient, currentAtSign);
+
       // Approve enrollment
+      final approveWatch = Stopwatch()..start();
       AtEnrollmentResponse? approveEnrollmentResponse =
           await atClient.enrollmentService?.approve(
         EnrollmentRequestDecision.approved(
@@ -136,6 +178,8 @@ void main() {
                 AtBytes.fromString(enrollment.encryptedAPKAMSymmetricKey!),
             atSign: currentAtSign),
       );
+      approveWatch.stop();
+      print('PROBE $currentAtSign approve ms=${approveWatch.elapsedMilliseconds}');
       expect(
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
 
