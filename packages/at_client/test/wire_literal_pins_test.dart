@@ -240,8 +240,8 @@ void main() {
   group('FROZEN FOREVER: provider ids', () {
     test('the four ids, as raw strings', () {
       expect(legacyCryptoProviderId, 'legacy');
-      expect(nskeyCryptoProviderId, 'at/nskey/XWING/AES/GCM');
-      expect(mlKemNskeyCryptoProviderId, 'at/nskey/MLKEM1024/AES/GCM');
+      expect(nskeyCryptoProviderId, 'at/nskey/XWING');
+      expect(mlKemNskeyCryptoProviderId, 'at/nskey/MLKEM1024');
       expect(symmetricAesGcmCryptoProviderId, 'at/symmetric/AES/GCM');
       expect(nskeyProviderFamily, 'at/nskey');
     });
@@ -252,8 +252,8 @@ void main() {
     });
 
     test('keyAlgo → provider id, pinned with literals on both sides', () {
-      expect(nskeyProviderIdFor('x-wing'), 'at/nskey/XWING/AES/GCM');
-      expect(nskeyProviderIdFor('ml-kem-1024'), 'at/nskey/MLKEM1024/AES/GCM');
+      expect(nskeyProviderIdFor('x-wing'), 'at/nskey/XWING');
+      expect(nskeyProviderIdFor('ml-kem-1024'), 'at/nskey/MLKEM1024');
       expect(nskeyProviderIdFor('kyber-1024-v9'), isNull);
     });
   });
@@ -271,8 +271,7 @@ void main() {
       ..namespace = 'myapp'
       ..sharedBy = '@alice';
 
-    test('a conveyance binds info "at/nskey/XWING/AES/GCM:<owner>:<ns>"',
-        () async {
+    test('a conveyance binds info "at/nskey:<sharedBy>:<ns>"', () async {
       final kem = XWingPureDartAlgo.instance;
       final pair = await kem.keyPairFromSeed(kem.newSeed());
       final ring = InMemoryNskeyKeyRing()
@@ -287,14 +286,12 @@ void main() {
           CryptoContext(atClient: atClient), selfConveyance(), ck.toBase64());
 
       final opened = await pqOpen(kem, pair.secretKey, base64Decode(wire),
-          info: Uint8List.fromList(
-              utf8.encode('at/nskey/XWING/AES/GCM:@alice:myapp')));
+          info: Uint8List.fromList(utf8.encode('at/nskey:@alice:myapp')));
       expect(opened, ck.bytes);
 
       await expectLater(
           pqOpen(kem, pair.secretKey, base64Decode(wire),
-              info: Uint8List.fromList(
-                  utf8.encode('at/nskey/XWING/AES/GCM:@alice:other'))),
+              info: Uint8List.fromList(utf8.encode('at/nskey:@alice:other'))),
           throwsA(isA<PqOpenException>()),
           reason: 'the negative control — without it a pqOpen that ignored '
               'info would pass the arm above');
@@ -314,11 +311,11 @@ void main() {
               'is not');
     });
 
-    test('an ML-KEM conveyance carries the SAME XWING-prefixed info', () async {
-      // NskeyProvider._info is static and names the XWING constant, so the
-      // string is baked into every stored ML-KEM conveyance's key schedule.
-      // A cleanup to `$id:...` reads better and silently strands them all —
-      // this pin is what makes that cleanup fail loudly instead.
+    test('an ML-KEM conveyance carries the SAME role-only info', () async {
+      // NOTE: both KEMs bind one role-only label, and a per-provider binding
+      // would strand every conveyance already sealed under this one. RFC 9180
+      // folds `suite_id` — KEM, KDF and AEAD — into every label the schedule
+      // derives, so the two suites are separated without the label's help.
       final kem = MlKem1024PureDartAlgo.instance;
       final pair = await kem.keyPairFromSeed(kem.newSeed());
       final ring = InMemoryNskeyKeyRing()
@@ -334,16 +331,16 @@ void main() {
           CryptoContext(atClient: atClient), selfConveyance(), ck.toBase64());
 
       final opened = await pqOpen(kem, pair.secretKey, base64Decode(wire),
-          info: Uint8List.fromList(
-              utf8.encode('at/nskey/XWING/AES/GCM:@alice:myapp')));
+          info: Uint8List.fromList(utf8.encode('at/nskey:@alice:myapp')));
       expect(opened, ck.bytes);
 
       await expectLater(
           pqOpen(kem, pair.secretKey, base64Decode(wire),
               info: Uint8List.fromList(
-                  utf8.encode('at/nskey/MLKEM1024/AES/GCM:@alice:myapp'))),
+                  utf8.encode('at/nskey/MLKEM1024:@alice:myapp'))),
           throwsA(isA<PqOpenException>()),
-          reason: 'the "obvious" per-provider binding must NOT open it');
+          reason: 'a per-provider binding must NOT open it — the separation '
+              'comes from RFC 9180 suite_id, not from the label');
 
       // The cross-substrate control on the ML-KEM path, for the same reason as
       // the X-Wing one above.
@@ -429,7 +426,7 @@ void main() {
       final json = atKey.metadata.appMetadata!.toJson();
       expect(json.keys.toList(),
           ['providerId', 'recipientKind', 'ckKid', 'nskeyKid', 'ns']);
-      expect(json['providerId'], 'at/nskey/XWING/AES/GCM');
+      expect(json['providerId'], 'at/nskey/XWING');
       expect(json['recipientKind'], 'nskey');
       expect(json['ckKid'], ck.ckKid);
       expect(json['ns'], 'myapp');

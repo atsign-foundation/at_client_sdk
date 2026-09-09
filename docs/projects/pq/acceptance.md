@@ -418,7 +418,7 @@ per keyfile/install):
   `providerId` defaults to **legacy**. `appMetadata` **states its record's namespace**,
   because `AtKey.fromString` splits at the last dot and a multi-segment namespace
   cannot be recovered from the wire string:
-  - `at/nskey/XWING/AES/GCM` **or** `at/nskey/MLKEM1024/AES/GCM` →
+  - `at/nskey/XWING` **or** `at/nskey/MLKEM1024` →
     `{providerId, recipientKind, ckKid, nskeyKid, ns}` — a CK-conveyance record: a CK
     sealed to the nskey under the KEM that nskey's advertisement names, the id naming
     which. **Both are registered on every client**
@@ -723,8 +723,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   1. Cut a symmetric **content key (CK)**; encrypt the value with it (AES-256-GCM under the CK).
   2. **Convey the CK once** (`at/nskey`): seal the CK to @alice's **nskey** under the
      KEM that nskey's own advertisement names, and write it as its own CK-conveyance
-     record, stamping `appMetadata = {providerId: at/nskey/XWING/AES/GCM, recipientKind:
-     nskey, ckKid, nskeyKid}` — or `at/nskey/MLKEM1024/AES/GCM` where the advertised
+     record, stamping `appMetadata = {providerId: at/nskey/XWING, recipientKind:
+     nskey, ckKid, nskeyKid}` — or `at/nskey/MLKEM1024` where the advertised
      `alg` is `ml-kem-1024`.
      (Skip if the CK is already conveyed to that generation.)
   3. Write the **data** value (`at/symmetric/AES/GCM`): stamp
@@ -849,8 +849,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     encapsulation key from an ML-KEM one by looking — both are opaque byte strings — and
     encapsulating under the wrong KEM produces a conveyance the owner can never open;
   - a CK conveyance into that namespace is sealed under the KEM `alg` names and stamped
-    with the matching provider id, `at/nskey/XWING/AES/GCM` or
-    `at/nskey/MLKEM1024/AES/GCM`. **Both providers are registered on every client**
+    with the matching provider id, `at/nskey/XWING` or
+    `at/nskey/MLKEM1024`. **Both providers are registered on every client**
     whatever this atSign itself mints, because a *recipient's* KEM is the recipient's
     choice; writes route by the destination's advertised algorithm and reads route by the
     id the record already carries, so conveyances written under either keep opening and
@@ -1995,8 +1995,8 @@ These invariants are testable against **every** UC above:
   `allowLegacyCryptoFallback` opt-in, an explicitly requested provider id is
   never substituted, and under `disallowLegacyEncryption = true` a legacy-only
   destination is **refused**, never quietly written with the legacy provider.
-- **`appMetadata.providerId` is authoritative**, names every algorithm a reader needs
-  code for, and is present on **stored keys,
+- **`appMetadata.providerId` is authoritative**, names the scheme a reader must
+  route to, and is present on **stored keys,
   notification frames and `lookup` responses alike**. The lookup clause is not
   redundant: it must survive every hop that *writes* a record to the atServer, and a
   sync push that drops it makes every cross-atSign read fall back to `legacy` for

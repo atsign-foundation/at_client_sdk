@@ -276,7 +276,7 @@ void main() {
               'follows the advertisement and not the configuration. Mutating '
               'CkManager to pass the sender\'s own algorithm reddens it, and the '
               'failure is the production symptom — "@bob:myapp advertises a '
-              'x-wing nskey, which at/nskey/MLKEM1024/AES/GCM cannot seal to", '
+              'x-wing nskey, which at/nskey/MLKEM1024 cannot seal to", '
               'i.e. exactly the "refusing would protect nothing" outcome this '
               'row rejects.',
           clauses: [

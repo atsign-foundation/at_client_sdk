@@ -882,7 +882,7 @@ proceeds against a test fixture that supplies the nskey private directly (see th
   `appMetadata{providerId, ckKid, iv, ns, ckNs}`; binary-safe; CK cache keyed
   `(owner, ckNs, ckKid)`. `ns` is the value's own namespace and is what the AAD binds; `ckNs` is where
   the CK lives ([decisions.md 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)).
-- **Layer 2 — `at/nskey/XWING/AES/GCM`:** `pqSeal` the CK to the recipient's nskey public half, written once as
+- **Layer 2 — `at/nskey/XWING`:** `pqSeal` the CK to the recipient's nskey public half, written once as
   `<ckKid>.__ck.<ckNs>@<owner>`; `appMetadata{providerId, recipientKind, ckKid, nskeyKid, ns}`.
   Self data seals to the owner's own nskey; sharing seals to the recipient's nskey (fetched via
   `plookup` on `public:__nskey.<ns>@<recipient>`) — one keypair, same provider, uniform self/cross flow.
@@ -1379,7 +1379,7 @@ barrel**; `AtClientPreference.keyEstablishmentAlgorithms` (singular `keyEstablis
 this shipped; a list since KE-2) is read by `KeyPackageRegistration` and
 `enrollmentKeyPackageBuilder`; `sendEnvelope` seals under the **recipient's** `alg` at the strongest
 suite both sides list; `NskeyAdvertisement`/`ResolvedNskey` carry `alg` **and** `suites` and
-`PublishedNskeyKeyRing` mints under the preference; `at/nskey/MLKEM1024/AES/GCM` is the second
+`PublishedNskeyKeyRing` mints under the preference; `at/nskey/MLKEM1024` is the second
 conveyance provider id, registered on every client whatever this atSign mints. `at_auth` gains
 `CryptographicMaterialAlgorithm.mlKem1024` (additive — that enum's documented contract is never to reject an unknown
 value). Rails: at_client **1012** unit, at_chops **465**, functional **138**, e2e **50**.
@@ -5176,7 +5176,7 @@ that "it arrived" cannot be mistaken for "it was parked and released".
 
 ✅ **THE PARK IS PROVEN LIVE**, in
 `tests/at_functional_test/test/nskey_park_and_redrive_live_test.dart`. A real
-notification, sealed `at/nskey/XWING/AES/GCM` to a generation the receiver
+notification, sealed `at/nskey/XWING` to a generation the receiver
 genuinely does not hold, is **held rather than dropped**:
 
 ```

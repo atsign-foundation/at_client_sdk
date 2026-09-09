@@ -92,9 +92,9 @@ void main() {
       final md = Metadata();
       pull(md, {
         AtConstants.appMetadata: Metadata.encodeAppMetadata(
-            AppMetadata(providerId: 'at/nskey/XWING/AES/GCM')),
+            AppMetadata(providerId: 'at/nskey/XWING')),
       });
-      expect(md.appMetadata?.providerId, 'at/nskey/XWING/AES/GCM');
+      expect(md.appMetadata?.providerId, 'at/nskey/XWING');
     });
 
     test('leaves immutable alone when the server does not send it', () {

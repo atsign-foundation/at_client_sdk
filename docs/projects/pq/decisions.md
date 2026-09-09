@@ -72,7 +72,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [13]  | The nskey is published eagerly, mutable, and generation-addressed                           | 2026-08-02 | AMENDED 2026-08-02        |
 | [14]  | Content keys are scoped per recipient                                                       | 2026-08-02 | LIVE                      |
 | [15]  | The record owner and the nskey owner are different atSigns                                  | 2026-08-02 | LIVE                      |
-| [16]  | A provider id names every algorithm a reader needs code for                                 | 2026-08-02 | LIVE                      |
+| [16]  | A provider id names every algorithm a reader needs code for                                 | 2026-08-02 | PARTLY SUPERSEDED by [139] |
 | [17]  | The sync push dropped `appMetadata`                                                         | 2026-08-02 | LIVE                      |
 | [18]  | `pqpublickey` becomes the user-owned signing root                                           | 2026-08-03 | AMENDED 2026-08-15        |
 | [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | LIVE                      |
@@ -196,6 +196,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [136] | at_auth stays posture-blind, and both doors demand the algorithm                            | 2026-09-08 | LIVE               |
 | [137] | auth_cli has two roles, and they take opposite postures                                     | 2026-09-08 | LIVE               |
 | [138] | The posture ladder moves back a stage                                                       | 2026-09-08 | LIVE               |
+| [139] | A provider id names the role, and the algorithm only where the value cannot                 | 2026-09-09 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -336,3 +337,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [136]: detail/decisions.md#136-at_auth-stays-posture-blind-and-both-its-doors-demand-the-algorithm-2026-09-08
 [137]: detail/decisions.md#137-auth_cli-has-two-roles-and-they-take-opposite-postures-2026-09-08
 [138]: detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08
+[139]: detail/decisions.md#139-a-provider-id-names-the-role-and-the-algorithm-only-where-the-value-cannot-2026-09-09

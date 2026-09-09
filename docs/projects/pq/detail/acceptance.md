@@ -425,13 +425,13 @@ and UC-A4.5 now cites it first. One sender, configured for `ml-kem-1024`
 throughout, sealing to two destinations that differ **only** in what they
 advertise; the observable is the `cryptoProviderId` `CkManager` stamps on the
 conveyance write. It reads
-`[at/nskey/XWING/AES/GCM, at/nskey/MLKEM1024/AES/GCM]`.
+`[at/nskey/XWING, at/nskey/MLKEM1024]`.
 
 **Two mutations, because the arm has two lines of defence.** Routing
 `CkManager` by `context.atClient.getPreferences()!.keyEstablishmentAlgorithms
 .first` instead of `advertised.alg` reddens it through the provider guard, and
 the failure text is the production symptom itself: *"@bob:myapp advertises a
-x-wing nskey, which at/nskey/MLKEM1024/AES/GCM cannot seal to"* — the "refusing
+x-wing nskey, which at/nskey/MLKEM1024 cannot seal to"* — the "refusing
 would protect nothing" outcome the row rejects. Separately, mutating the
 **expectation** to `[mlKem, mlKem]` fails quoting the reason string, which
 proves the assertion itself discriminates rather than being carried by the
@@ -1308,7 +1308,7 @@ advertisement carrying an ML-KEM entry and an X-Wing one:
 advertisement.alg = x-wing        keys = [ml-kem-1024/dfeab4…, x-wing/02f6b4…]
 x-wing      : SEALED and OPENED ok
 ml-kem-1024 : REFUSED -> @alice:myapp advertises a x-wing nskey,
-                         which at/nskey/MLKEM1024/AES/GCM cannot seal to
+                         which at/nskey/MLKEM1024 cannot seal to
 ```
 
 **The two layers disagree about which entry is in play.** `NskeyResolver` was

@@ -78,7 +78,7 @@ void main() {
     /// Every field is populated, so a new one added out of order fails here.
     test('a fully-populated fragment parses as a valid update command', () {
       final appMetadata = AppMetadata(
-          providerId: 'at/nskey/XWING/AES/GCM',
+          providerId: 'at/nskey/XWING',
           additional: {'ckKid': 'k1', 'nskeyKid': 'n1'});
       final metadata = AtMetaData()
         ..ttl = 1000
@@ -122,7 +122,7 @@ void main() {
 
       final decoded =
           Metadata.decodeAppMetadata(match.namedGroup('appMetadata'));
-      expect(decoded?.providerId, 'at/nskey/XWING/AES/GCM');
+      expect(decoded?.providerId, 'at/nskey/XWING');
       expect(decoded?.additional?['ckKid'], 'k1');
     });
   });

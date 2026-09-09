@@ -130,11 +130,11 @@ void main() {
     test('appMetadata.providerId is authoritative on keys and frames',
         () async {
       // Present on BOTH stored keys and notification frames, with the no-ns
-      // shapes: at/nskey/XWING/AES/GCM ->
+      // shapes: at/nskey/XWING ->
       //   {providerId, recipientKind, ckKid, nskeyKid};
       // at/symmetric/AES/GCM -> {providerId, ckKid, iv}. A providerId names
-      // every algorithm a reader needs code for, so a scheme change is
-      // rollable rather than a flag day.
+      // the scheme a reader routes to, so a scheme change is rollable rather
+      // than a flag day.
       //
       // NOTE: appMetadata must also survive every hop that WRITES a record to
       // the atServer, so the round-trip through the metadata fragment is

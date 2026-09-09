@@ -1,5 +1,19 @@
 ## 3.15.0-rc1
 
+- **BREAKING (within this unpublished rc):** the CK-conveyance provider ids
+  drop their AEAD segments — `at/nskey/XWING/AES/GCM` becomes `at/nskey/XWING`,
+  and `at/nskey/MLKEM1024/AES/GCM` becomes `at/nskey/MLKEM1024`. X-Wing seals
+  under ChaCha20-Poly1305 rather than AES-GCM, and a reader takes the AEAD from
+  the `pqSeal` envelope's version byte and never from the id, so the segment
+  named an algorithm nothing consulted and could not be kept true: an id is
+  derived from the KEM, while the AEAD comes from the suite negotiated per
+  call. `at/symmetric/AES/GCM` keeps its algorithm, because its value carries
+  no version byte and the id is the only thing naming the cipher.
+- the HPKE `info` binding no longer derives from a provider id: it is
+  `at/nskey:<sharedBy>:<namespace>`, a constant of its own, so renaming a
+  routing string cannot silently rewrite a key schedule. Both KEMs share the
+  one binding — RFC 9180 folds `suite_id` into every label it derives, so two
+  suites are domain-separated whatever the label says.
 - **BREAKING:** the default `PqPosture` is `legacy` again. It moved to
   `pqReady` earlier in this same **unpublished** release candidate; the ladder
   is now 3.x `legacy`, 4.x `pqReady`, 5.x `pqActive`. A client that names no
@@ -490,7 +504,7 @@
   it was, and `NskeyAdvertisement.alg`, `.publicKey` and `.nskeyKid` all answer
   for the single entry a sender with no preference would take. So on an
   advertisement carrying two, a sender routed to the other one was refused
-  outright — *"advertises a x-wing nskey, which at/nskey/MLKEM1024/AES/GCM
+  outright — *"advertises a x-wing nskey, which at/nskey/MLKEM1024
   cannot seal to"* — and a seal that got past that guard would have
   encapsulated to the wrong key and stamped the wrong `nskeyKid`, producing a
   record the owner never looks for. The provider now selects the entry under
@@ -2081,7 +2095,7 @@ hunting for a constructor argument that never existed in a release. -->
   build cannot encapsulate to is **refused rather than guessed at**: a sender
   cannot tell an X-Wing encapsulation key from an ML-KEM one by looking, and
   getting it wrong produces a conveyance the owner can never open.
-- feat: a second conveyance provider id, `at/nskey/MLKEM1024/AES/GCM`, exactly
+- feat: a second conveyance provider id, `at/nskey/MLKEM1024`, exactly
   as `nskeyCryptoProviderId`'s own documentation anticipated. Both are
   registered on every client regardless of what this atSign mints, because a
   *recipient's* KEM is the recipient's choice; `CkManager` routes a write by
@@ -2936,10 +2950,10 @@ hunting for a constructor argument that never existed in a release. -->
   which a caller can distinguish from a hard decryption failure and retry.
   `NskeyKeyRing` is the seam the secret-sharing substrate lands behind — an
   experimental surface, not yet routed by `CryptoRuntime` (#2089, #2090).
-- feat: crypto agility on both layers. A `providerId` now names the role and then
-  every algorithm a reader needs code for, so the CK-conveyance provider is
-  `at/nskey/XWING/AES/GCM` rather than the bare `at/nskey` (`at/nskey` remains the
-  family prefix). Reads stay universal; what the id adds is that a writer can decide
+- feat: crypto agility on both layers. A `providerId` now names the role, and an
+  algorithm only where the value cannot describe itself, so the CK-conveyance
+  provider is `at/nskey/XWING` rather than the bare `at/nskey` (`at/nskey`
+  remains the family prefix). Reads stay universal; what the id adds is that a writer can decide
   whether a recipient can read a scheme, which makes an algorithm change rollable.
 - feat: `nskey` generations. `public:__nskey.<ns>@<owner>` is published at mint and
   overwritten on rotation, so a client holds several nskey privates at once; every

@@ -26,8 +26,8 @@ void main() {
   // NOTE: raw literals rather than the SDK constants that define them. All
   // three are at-rest values, so comparing them against their own constants
   // would pin nothing; an intended change edits these three lines.
-  const xWingConveyanceId = 'at/nskey/XWING/AES/GCM';
-  const mlKemConveyanceId = 'at/nskey/MLKEM1024/AES/GCM';
+  const xWingConveyanceId = 'at/nskey/XWING';
+  const mlKemConveyanceId = 'at/nskey/MLKEM1024';
   const dataProviderId = 'at/symmetric/AES/GCM';
 
   const mlKemPlaintext = 'written after this install moved what it sends';

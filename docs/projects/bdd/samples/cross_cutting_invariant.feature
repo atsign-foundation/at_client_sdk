@@ -4,8 +4,8 @@
 # friction each row exposed are in ../analysis.md section 6.
 
 Feature: Every record says which scheme opens it
-  A record's provider id is authoritative: it names every algorithm a reader
-  needs code for, so a scheme change rolls out rather than needing a flag day.
+  A record's provider id is authoritative: it names the scheme a reader must
+  route to, so a scheme change rolls out rather than needing a flag day.
   It must be present on stored records, on notification frames and on lookup
   responses, and it must survive every hop that writes a record to the
   atServer — the sync push once dropped it, and every cross-atSign read fell
@@ -22,7 +22,7 @@ Feature: Every record says which scheme opens it
     Examples:
       | record                     | provider                | fields                                     |
       | the value "treaty"         | at/symmetric/AES/GCM    | providerId, ckKid, iv                      |
-      | the content-key conveyance | at/nskey/XWING/AES/GCM  | providerId, recipientKind, ckKid, nskeyKid |
+      | the content-key conveyance | at/nskey/XWING  | providerId, recipientKind, ckKid, nskeyKid |
 
   @invariant @live @security
   Scenario: A notification frame names its provider too

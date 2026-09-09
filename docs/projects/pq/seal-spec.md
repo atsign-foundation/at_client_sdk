@@ -95,8 +95,8 @@ Three outcomes, and a caller told to catch one must never receive another:
 
 `ver` is the first byte and is checked before anything else, so a future
 construction arrives as a typed refusal rather than a garbled decrypt. Above
-it, `appMetadata.providerId` names every algorithm a reader needs code for, so
-a different construction can coexist per value with reads staying universal.
+it, `appMetadata.providerId` names the scheme a reader routes to, so a
+different construction can coexist per value with reads staying universal.
 
 **Which version a sender emits is negotiated, not fixed.** `pqSeal` takes the
 version from its caller, and every advertised recipient key in the Atsign

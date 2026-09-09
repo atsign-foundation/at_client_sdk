@@ -144,16 +144,17 @@ Layer 3 per data write.
 | `providerId` | Tags a value that is… | Mechanism | Recipient (kid in metadata) |
 |---|---|---|---|
 | `legacy` | legacy data + inline-wrapped key (modern values never inline a key) | RSA-2048 + AES (monolithic) | RSA keypair. **Bare-name default** for an *absent* `providerId` (pre-convention data) |
-| `at/nskey/XWING/AES/GCM` | a **CK-conveyance record** (a sealed content key, cited by `ckKid`) | `X-Wing-seal` (the CK encapsulated to an nskey public half) — via `pqSeal`/`pqOpen` ([§3](#3-subsystem-c--at_chops-pq-primitives)) | the recipient's **nskey** — the owner's own nskey (self data) or another atSign's nskey (shared) |
+| `at/nskey/XWING` | a **CK-conveyance record** (a sealed content key, cited by `ckKid`) | `X-Wing-seal` (the CK encapsulated to an nskey public half) — via `pqSeal`/`pqOpen` ([§3](#3-subsystem-c--at_chops-pq-primitives)) | the recipient's **nskey** — the owner's own nskey (self data) or another atSign's nskey (shared) |
 | `at/symmetric/AES/GCM` | **application data** | AES-256-GCM under a CK | n/a (symmetric); the CK is cited by `ckKid` and resolved from cache (populated by `at/nskey` when its conveyance record synced) |
 
 Notes:
 
-- **A provider id names the role, then every algorithm a reader needs code for**
-  ([`decisions.md`](decisions.md) section 16): `at/<role>/<algorithms…>`. Anything a
+- **A provider id names the role, and an algorithm only where the value cannot**
+  ([`decisions.md`](decisions.md) section 139): `at/<role>[/<algorithm…>]`. Anything a
   reader can discover from the value — the envelope version, `iv`, `ckKid`,
   `nskeyKid` — stays out. So the conveyance provider is
-  `at/nskey/XWING/AES/GCM` (KEM + envelope AEAD) and the data provider is
+  `at/nskey/XWING` and `at/nskey/MLKEM1024`, naming the KEM alone because the
+  `pqSeal` envelope's version byte names the whole suite; the data provider is
   `at/symmetric/AES/GCM`. `at/nskey` remains the **family prefix**: prose about "an
   `at/nskey` record" means `at/nskey/*`.
 - **This is what makes an algorithm change rollable.** Reads stay universal — a
@@ -162,7 +163,7 @@ Notes:
   (*Which* scheme is written is the app's release decision — the SDK never
   chooses one per destination,
   [`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).)
-  `at/nskey/MLKEM1024/AES/GCM` and
+  `at/nskey/MLKEM1024` and
   `at/symmetric/AES/SIV` each coexist with today's; old values keep their tag.
 - The same X-Wing sealing also conveys nskey *privates* in Layer 1, but those ride
   the substrate as transport and are **not** value-level `at/nskey/*` records
@@ -395,7 +396,7 @@ unrecoverable from the wire. Every record therefore states its own. This is not 
 disclosure — the namespace is already plaintext in the key name.
 
 - On an `at/nskey/*` **CK-conveyance record**:
-  `{ providerId: "at/nskey/XWING/AES/GCM", recipientKind, ckKid, nskeyKid, ns }` where
+  `{ providerId: "at/nskey/XWING", recipientKind, ckKid, nskeyKid, ns }` where
   `recipientKind` has one member, `"nskey"`, and `ns` is the resolved namespace the
   conveyance lives at. `nskeyKid` names the
   **generation** the CK was sealed to, so a reader holding several after a rotation

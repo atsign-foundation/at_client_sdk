@@ -1235,12 +1235,19 @@ the two derivations coincide; it is what makes **B-1d** possible at all.
 
 ## 16. A provider id names every algorithm a reader needs code for (2026-08-02)
 
+> **Partly superseded (2026-09-09).** The rule holds wherever a value cannot
+> describe itself: `at/symmetric/AES/GCM` names its cipher because nothing in
+> the value does. For `at/nskey/*` it is superseded by
+> [section 139](#139-a-provider-id-names-the-role-and-the-algorithm-only-where-the-value-cannot-2026-09-09),
+> which applies this ruling's own *stays out of the id* test to the envelope's
+> AEAD.
+
 **Decision.** A `providerId` is `at/<role>/<algorithms…>`. It names the role, then
 **every algorithm a reader needs an implementation of**. Anything a reader can
 discover from the value itself — the `pqSeal` envelope version, `iv`, `ckKid`,
 `nskeyKid` — stays out of the id.
 
-Concretely the CK-conveyance provider becomes **`at/nskey/XWING/AES/GCM`**, not the
+Concretely the CK-conveyance provider becomes **`at/nskey/XWING`**, not the
 bare `at/nskey`. `at/symmetric/AES/GCM` was already compliant and is unchanged.
 `at/nskey` survives as the **family prefix**, so prose about "an `at/nskey` record"
 still means the family and `at/nskey/*` is the set.
@@ -1257,8 +1264,8 @@ already has the code to parse the envelope — too late to be a routing decision
 ever supported and values route by their own id, so records written under a retired
 scheme keep opening forever. What the id adds is that a **writer can decide** whether
 a recipient can read a scheme rather than guessing — which is what turns an algorithm
-change from a flag day into a rollable migration. `at/nskey/MLKEM1024/AES/GCM` can
-coexist with `at/nskey/XWING/AES/GCM` indefinitely.
+change from a flag day into a rollable migration. `at/nskey/MLKEM1024` can
+coexist with `at/nskey/XWING` indefinitely.
 
 **Granularity, and why it is deliberately slightly over-specified.** `pqSeal` versions
 KEM, KDF and AEAD together as one suite, so naming both the KEM and the envelope AEAD
@@ -2964,8 +2971,8 @@ again at encryption, with legacy reads and `shouldEncrypt=false` untouched.
 **Supersedes:** Decision #2 (readiness marked per `(atSign, namespace)`) and
 [16](#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02)'s
 "the capability marker becomes a set" consequence (the *provider-id* ruling in 16
-stands — ids still name every algorithm a reader needs code for, and records still
-route by their stamped id forever). Design.md §1.8's C1/C2/C3 are rewritten
+stands for a value that cannot describe itself — narrowed by 139 — and records
+still route by their stamped id forever). Design.md §1.8's C1/C2/C3 are rewritten
 accordingly; D1-D stands, built.
 
 ### 36.3 What the build was worth (kept as lessons, not code)
@@ -3933,8 +3940,8 @@ checked before anything else, and an unknown value raises a typed
 `versionMismatch` rather than a garbled decrypt; `_suiteLabelFor(version)` then
 domain-separates the key schedule per version, so a `0x02` construction cannot
 be confused with a `0x01` one even if the dispatch were wrong. Above that,
-`appMetadata.providerId` names every algorithm a reader needs code for
-([16](#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02)),
+`appMetadata.providerId` names the scheme a reader routes to
+([139](#139-a-provider-id-names-the-role-and-the-algorithm-only-where-the-value-cannot-2026-09-09)),
 so a different construction can arrive as a different provider id and coexist
 per value, with reads staying universal.
 
@@ -5371,8 +5378,8 @@ flagged entry rather than inside a pure-motion commit.
 
 ### 57.2 The provider ids join the registry; `legacy` stays with CryptoConfig
 
-The three `at/*` provider ids — `at/nskey/XWING/AES/GCM`,
-`at/nskey/MLKEM1024/AES/GCM`, `at/symmetric/AES/GCM` — and the `at/nskey`
+The three `at/*` provider ids — `at/nskey/XWING`,
+`at/nskey/MLKEM1024`, `at/symmetric/AES/GCM` — and the `at/nskey`
 family prefix move from the two provider files into `nskey_records.dart`,
 each keeping its rationale dartdoc. They are `appMetadata.providerId` wire
 vocabulary: a stored record cites its id forever, which is the same freeze
@@ -8393,7 +8400,7 @@ the first in common.
 
 **6. The seal/open helper takes `info` as a parameter, and the two values stay
 different.** `at_client/secret_sharing/v1` versus
-`at/nskey/…:<owner>:<namespace>`. Domain separation is what stops an envelope
+`at/nskey:<sharedBy>:<namespace>`. Domain separation is what stops an envelope
 from one substrate being replayed into the other, so a *shared* `info` would be
 the one bug this consolidation could plausibly introduce. Shared code, distinct
 binding.
@@ -14209,3 +14216,47 @@ The intervening stage is what stops this being worse: 4.x at `pqReady` seeds and
 reads while still **writing legacy**, so by the time 5.x switches writes on the
 keys are already out there, and the dark 3.x period strands nobody in the
 meantime.
+
+## 139. A provider id names the role, and the algorithm only where the value cannot (2026-09-09)
+
+**Decision.** The CK-conveyance ids lose their AEAD segments:
+`at/nskey/XWING/AES/GCM` becomes `at/nskey/XWING`, and
+`at/nskey/MLKEM1024/AES/GCM` becomes `at/nskey/MLKEM1024`. The HPKE `info`
+binding stops deriving from a provider id and becomes its own constant,
+`at/nskey:<sharedBy>:<namespace>`.
+
+**The AEAD segment was false, and maintenance could not keep it true.**
+X-Wing's only openable suite is `pqSeal` version `0x02` — RFC 9180 at
+`xWingHkdfSha256ChaCha20Poly1305`, whose AEAD is ChaCha20-Poly1305, chosen
+because it is the only AEAD the HPKE working group publishes `0x647A` vectors
+for. The name was accurate while version `0x01` existed, which sealed X-Wing
+under the homegrown `atPQv1-base` schedule and AES-256-GCM; ruling 110 retired
+it. The durable problem is structural: an id is derived from `keyAlgo`, while
+the AEAD comes from the suite `_sealVersionFor` negotiates against the
+recipient's advertised list. One id therefore spans two AEADs the moment a KEM
+gains a second suite.
+
+**No reader ever consulted it.** `pqOpen` takes the AEAD from
+`_versions[ver].aead`, selected by the envelope's first byte. The segment was a
+second, non-authoritative copy of what the value already carries — which is
+what ruling 16 already excluded when it put the `pqSeal` envelope version out
+of the id.
+
+**Why ruling 16 still holds for `at/symmetric/AES/GCM`.** That value is not
+self-describing: bare base64 ciphertext, with `ckKid` and `iv` in `appMetadata`
+and no version byte anywhere. Its provider id is the only thing in the record
+naming the cipher, and naming it there is what lets a future
+`at/symmetric/AES/SIV` coexist with it. Ruling 16 is partly superseded, not
+retired.
+
+**The `info` binding is decoupled, not merely renamed.** `NskeyProvider._info`
+built its label from `nskeyCryptoProviderId`, so renaming a routing string
+would silently have rewritten the key schedule for both KEMs — an ML-KEM
+conveyance bound the X-Wing id too. It is now a private constant naming the
+role alone. RFC 9180 folds `suite_id` — KEM, KDF and AEAD — into every label
+`labeledExtract` and `labeledExpand` derive, so two suites stay separated
+whether or not the label mentions them.
+
+**Free to do now.** Neither id has reached trunk, nothing is published, and no
+persistent test atSign holds a live `__ck` conveyance: the e2e packs default to
+the legacy posture, which is what that default is for.

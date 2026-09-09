@@ -412,8 +412,7 @@ void main() {
     /// constants would follow one of them being changed into the other.
     final pairwiseInfo =
         Uint8List.fromList(utf8.encode('at_client/secret_sharing/v1'));
-    final nskeyInfo =
-        Uint8List.fromList(utf8.encode('at/nskey/XWING/AES/GCM:@alice:myapp'));
+    final nskeyInfo = Uint8List.fromList(utf8.encode('at/nskey:@alice:myapp'));
 
     /// The `sealed` bytes off the envelope A actually wrote to B.
     Uint8List sentSealed(String kpid) {

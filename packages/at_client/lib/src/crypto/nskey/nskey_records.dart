@@ -253,18 +253,14 @@ String nskeyKeyfileIdFor(String namespace, String nskeyKid) =>
 // record names above: a stored record cites its id forever.
 // ---------------------------------------------------------------------------
 
-/// Wire id of the CK-conveyance provider.
+/// Wire id of the CK-conveyance provider that seals to an X-Wing nskey.
 ///
-/// The id names the **role** (`at/nskey`) and then every algorithm a reader
-/// needs code for: the KEM the content key is encapsulated under, and the AEAD
-/// wrapping it inside the `pqSeal` envelope. Anything a reader can discover from
-/// the value itself — the envelope version, `ckKid`, `nskeyKid` — stays out.
-///
-/// That is what makes an algorithm change graceful rather than a flag day: a
-/// reader registers every scheme it supports, values route by their own id so
-/// old ones never stop opening, and a writer can *decide* whether a recipient
-/// can read a scheme instead of guessing.
-const String nskeyCryptoProviderId = 'at/nskey/XWING/AES/GCM';
+/// Names the **role** (`at/nskey`) and the KEM, and no more: the KEM selects
+/// the provider instance a record routes back to and is what a writer
+/// negotiates on, while the AEAD comes from the `pqSeal` envelope's version
+/// byte, which every reader consults anyway. Anything else a reader can
+/// discover from the value — `ckKid`, `nskeyKid` — stays out too.
+const String nskeyCryptoProviderId = 'at/nskey/XWING';
 
 /// Wire id of the CK-conveyance provider for the **no-hybrid** KEM.
 ///
@@ -272,7 +268,7 @@ const String nskeyCryptoProviderId = 'at/nskey/XWING/AES/GCM';
 /// back to its provider by this string on every read, so a conveyance sealed
 /// under either KEM keeps opening for as long as its id resolves — no flag
 /// day, and no reader that has to guess.
-const String mlKemNskeyCryptoProviderId = 'at/nskey/MLKEM1024/AES/GCM';
+const String mlKemNskeyCryptoProviderId = 'at/nskey/MLKEM1024';
 
 /// The role prefix every CK-conveyance scheme shares, whatever its algorithms.
 const String nskeyProviderFamily = 'at/nskey';

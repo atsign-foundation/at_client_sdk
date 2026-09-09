@@ -125,10 +125,19 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     return suite == null ? null : SecretSharingAlgos.sealVersionFor(suite);
   }
 
-  /// Binds the HPKE key schedule to the conveyance's owner and namespace, so an
+  /// The label the conveyance's HPKE key schedule binds, ahead of the record's
+  /// sender and namespace.
+  ///
+  /// Names the role and nothing else — RFC 9180 folds `suite_id` (KEM, KDF and
+  /// AEAD) into every label the schedule derives, so suites stay separated
+  /// without help — and it is its own constant rather than a provider id, so
+  /// that renaming a routing string cannot rewrite a key schedule.
+  static const String _infoLabel = 'at/nskey';
+
+  /// Binds the HPKE key schedule to the record's sender and namespace, so an
   /// envelope sealed for one namespace cannot be opened as another's.
-  static Uint8List _info(String owner, String namespace) => Uint8List.fromList(
-      utf8.encode('$nskeyCryptoProviderId:$owner:$namespace'));
+  static Uint8List _info(String sharedBy, String namespace) =>
+      Uint8List.fromList(utf8.encode('$_infoLabel:$sharedBy:$namespace'));
 
   @override
   Future<String> encrypt(
