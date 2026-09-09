@@ -146,8 +146,9 @@ confirmation deadline has to sit inside the expiration window; a poll that
 starts too late cannot tell you anything. When you intend to confirm, set
 `expiration` deliberately rather than inheriting the default.
 
-Note that the older `notify(NotificationParams...)` path defaults to 24 hours
-instead, via `NotificationParams`. Do not carry that number over to `send()`.
+Note that the older `notify(NotificationParams...)` path carries its own,
+much longer default, set on `NotificationParams` rather than here. Do not
+assume an expiration you read on one path applies to the other.
 
 ---
 

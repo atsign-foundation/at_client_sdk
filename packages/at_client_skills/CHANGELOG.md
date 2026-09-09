@@ -7,6 +7,10 @@
 - Document notification delivery confirmation — `send()` → `getStatus(id)` /
   `fetch(id)`, the two-value status enum, and the expiration window
   (`references/15-notifications.md`).
+- Document programmatic APKAM enrolment for headless clients —
+  `AtOnboardingService.enroll` and the `enrollmentService` approver side
+  (`references/16-apkam-enrolment.md`). Adds `at_onboarding_cli` to the
+  package map.
 
 ## 1.3.0 — 2026-07-31
 

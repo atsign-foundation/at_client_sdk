@@ -61,6 +61,20 @@ transitive dependency — you may not need to add it explicitly.
 
 ---
 
+### Headless enrolment / CLIs and daemons
+
+```sh
+dart pub add at_onboarding_cli
+```
+
+`at_onboarding_cli` provides `AtOnboardingService` / `AtOnboardingServiceImpl`
+and `AtOnboardingPreference` — the enrolment path for a client with no screen
+to show a dialog on. **Not re-exported by `at_client`**, so it must be added
+explicitly. See
+[16-apkam-enrolment.md](16-apkam-enrolment.md).
+
+---
+
 ### Raw cryptographic operations
 
 ```sh

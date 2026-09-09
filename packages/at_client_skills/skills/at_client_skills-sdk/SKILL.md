@@ -4,7 +4,8 @@ description: >
   Use this skill when a developer is building a Dart or Flutter app that
   depends on at_client or at_client_flutter from pub.dev, stores or shares
   data via the Atsign Protocol, needs onboarding (CRAM new-atsign, atKeys
-  file, keychain, APKAM) or APKAM enrollment, or asks about AtCollection<T>,
+  file, keychain, APKAM) or APKAM enrollment — including headless enrolment
+  from a CLI or daemon via at_onboarding_cli — or asks about AtCollection<T>,
   CItem<T>, Query<T>, sub-collections, event streams, read receipts, wherePath
   typed predicates, or watchWithTree deep hierarchies. Also use when the
   developer asks how to send or receive notifications via NotificationService,
@@ -22,7 +23,7 @@ compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
   version: "1.4.0"
-  last_modified: "Tue, 08 Sep 2026 00:00:00 GMT"
+  last_modified: "Wed, 09 Sep 2026 00:00:00 GMT"
 ---
 
 # atsign-dart-sdk Skill
@@ -348,6 +349,14 @@ AtClientManager.getInstance().reset();  // logout
 Read [references/05-flutter-auth.md](references/05-flutter-auth.md) for all 4
 flows (including Flow 1: CRAM new-atsign and Flow 4: APKAM enrollment) with
 complete code.
+
+A **headless** client — CLI, daemon, agent on a box with no screen — has no
+dialog to drive Flow 4, and enrols through `at_onboarding_cli`'s
+`AtOnboardingService.enroll(...)` instead. Set its retry budget explicitly —
+the defaults are far too short for a human approver — and note that approval
+requires a separate app holding `__manage`. Read
+[references/16-apkam-enrolment.md](references/16-apkam-enrolment.md) for both
+sides of the flow.
 
 > **Sync setup:** set `AtClientPreference.syncRegex = '<your namespace>'` —
 > without it, sync covers the atsign's whole keystore and can wedge, so shares
