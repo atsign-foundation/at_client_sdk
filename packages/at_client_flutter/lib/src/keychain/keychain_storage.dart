@@ -52,8 +52,15 @@ class KeychainStorage {
     return null;
   }
 
-  // Falls back to the pre-1.1.6 `_`-delimited store name and migrates it
-  // forward, so upgrading doesn't orphan already-stored Atsign keys.
+  // Agreed migration sequencing (PR #2200):
+  //
+  // 1.x.x (current):
+  //   if `:` is absent and `_` is present, copy `_` to `:` but leave `_`.
+  //
+  // TODO(2.0.0): copy `_` to `:` then remove `_`.
+  //
+  // Since each app version runs in its own sandbox, there is no risk of an
+  // older and newer version running simultaneously.
   Future<String?> _readAtKeysDataRaw() async {
     // 1. Read the current `:`-delimited store. If it exists, it is the
     // authoritative store and no migration is needed.
@@ -63,14 +70,8 @@ class KeychainStorage {
       return data;
     }
 
-    // -----------------------------
-    // MIGRATION FLOW
-    // people on < 1.1.6 used the `_` delimiter, when apps have historically always used `:`
-    // this was a mistake, so >= 1.1.6 introduced the fix and migration path.
-    // >= 1.1.6 means `:` delimiter is now used for all future keys saved in keychain.
-    // Only when `:` is absent, look for `_` and copy its contents to `:`.
-    // for the time being as of 1.1.6, we are not deleting keys in `_` just in case.
-    // -----------------------------
+    // See migration sequencing comment above.
+    // 1.x.x: only copy `_` to `:`, leave `_` in place.
 
     // it's called "improper" because it used the wrong delimiter `_`
     final keychainStorageImproperName = await _getImproperAtKeysStoreName();
@@ -200,6 +201,8 @@ class KeychainStorage {
 
   /// Delete all persisted Atsign key data from the keychain, including any
   /// data still held under the legacy pre-1.1.6 `_` delimited store name.
+  /// TODO(2.0.0): remove the `_` cleanup once `_` stores are deleted during
+  /// migration (see [_readAtKeysDataRaw] sequencing comment).
   Future<void> deleteAllAtKeysData() async {
     try {
       await _delete(keychainStoreName: await AtKeysStore.getName());
