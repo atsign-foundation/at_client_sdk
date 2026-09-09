@@ -282,6 +282,35 @@ This is the shared vocabulary every UC below draws on. It is deliberately thin �
 for the authoritative key-shape / provider / substrate mechanics see `design.md`;
 here these objects exist only as test vocabulary.
 
+### 1.0 `legacy` names eight different things — say which one
+
+⚠️ **`legacy` is the most overloaded word in this document set, and three of its
+senses are columns in the tables immediately below.** It is never one constant,
+so a bare `legacy` in a clause is ambiguous unless the axis is named. Each sense
+was checked against the tree on 2026-09-09; the right-hand column is the phrase
+to write instead of a bare `legacy`.
+
+| Sense | Where it lives | Write this |
+|-------|----------------|------------|
+| the client **posture** | `PqPosture.legacy`, on `AtClientPreference.posture`; the ladder in [section 16](#16-g1--signature-agility-and-the-rollout-matrix) | *legacy posture* |
+| the **atSign** axis | the per-atSign table below: `legacy` · `pq-native` · `mixed` | *a legacy atSign* |
+| the **atServer** axis (`aS`) | the per-atSign table below: `pq` · `legacy` | *a legacy atServer* |
+| the app **stage** axis | the per-atSign table below; the ladder `legacy` · `cap` · `active` | *the legacy stage* |
+| the **key-exchange mode** | `EnrollmentKeyExchangeMode.legacy`, on the enrollment | *legacy key exchange* |
+| the **auth algorithm** | `rsa2048`, glossed *(legacy)* in the `APKAM` column below | `rsa2048` |
+| the **at-rest keyfile shape** | the flat, pre-`version: 1` `.atKeys` document | *the flat keyfile* |
+| the **test tag** | `legacy-server` in `tests/at_end2end_test/dart_test.yaml`, selecting the pinned-image CI arm | *the `legacy-server` tag* |
+
+⛔ **The two ladders are near-homonyms and are NOT the same thing.** The app
+stage ladder is `legacy` · `cap` · `active`; the posture ladder is `legacy` ·
+`pqReady` · `pqActive`. They share their first name and nothing else — an app at
+the `cap` stage is not a client at `pqReady`, and neither ladder's position
+implies the other's.
+
+⚠️ **Two axes on `PqPosture` carry the word without being the posture**:
+`disallowLegacyEncryption` and `mintLegacyMaterial` are independently settable,
+so a client at a non-`legacy` posture may still have either set. Name the axis.
+
 **Actors.** `@alice`, `@bob` are atSigns. `alice1`, `alice2`, `alice3` are
 **APKAM keypairs** of `@alice` (one per keyfile/install) — the recipient/identity
 unit is the **APKAM keypair**, not a running client process: every process that
@@ -311,12 +340,12 @@ per keyfile/install):
 
 | Col           | Meaning                                                                                              |
 |---------------|------------------------------------------------------------------------------------------------------|
-| atSign        | `legacy` · `pq-native` · `mixed`                                                                      |
-| `aS`          | atServer: `pq` (new verbs) · `legacy`                                                                 |
+| atSign        | `legacy` · `pq-native` · `mixed` — a *legacy atSign*, one of three unrelated axes spelled `legacy` ([1.0](#10-legacy-names-eight-different-things--say-which-one)) |
+| `aS`          | atServer: `pq` (new verbs) · `legacy` — a *legacy atServer*, and not the atSign axis above ([1.0](#10-legacy-names-eight-different-things--say-which-one)) |
 | `publickey`   | legacy RSA encryption pubkey published?                                                               |
 | `pq_signing_root` | atSign-level user-owned **signing** root published (mutable, minted under `_rootlock@owner`)?     |
 | `nskey.ns`    | namespace `ns` nskey state: `—` (never used, so no nskey) · `<kid>` (minted and published at `public:__nskey.<ns>@owner`; the kid names the current generation) |
-| `stage`       | The **app's release stage** for the namespace ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)): `legacy` (pre-capability build) · `cap` (capability build — reads everything, writes legacy) · `active` (writes PQ). Replaces the removed per-`(atSign, namespace)` readiness marker: there is no published readiness state, only what build each install runs. |
+| `stage`       | The **app's release stage** for the namespace ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)): `legacy` (pre-capability build) · `cap` (capability build — reads everything, writes with the legacy providers) · `active` (writes PQ). ⛔ This is the *legacy stage*, a third axis spelled `legacy` and a near-homonym of the posture ladder `legacy`/`pqReady`/`pqActive`, which it is **not** ([1.0](#10-legacy-names-eight-different-things--say-which-one)). Replaces the removed per-`(atSign, namespace)` readiness marker: there is no published readiness state, only what build each install runs. |
 
 **Key objects** (shapes defined in `design.md`; named here for test wiring):
 
@@ -3168,6 +3197,12 @@ capability only"; where they do, the ruling governs. The stages were renamed
 `legacy`/`pqReady`/`pqActive` by
 [ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18),
 which also split the one enum that named them into two posture axes.
+
+⚠️ The `legacy` in this table is the **posture** — a client's own configured
+era. It is not the atSign, atServer or app-stage axis of the notation table,
+each of which also has a value spelled `legacy`, and it is not the app stage
+ladder `legacy`/`cap`/`active` it rhymes with. See
+[1.0](#10-legacy-names-eight-different-things--say-which-one).
 
 | | auth key | signing key | `_apsk` |
 |---|---|---|---|
