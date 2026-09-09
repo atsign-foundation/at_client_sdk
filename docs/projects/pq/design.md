@@ -681,7 +681,7 @@ unless asked.
 
 **D1-D — the `disallowLegacyEncryption` flag** *(built, 2026-08-05 — the surviving
 strict-mode control, and the app-decides model's own voice: it is how an app states
-"never write legacy")*. A flag on `AtClientPreference`:
+"never write with the legacy provider")*. A flag on `AtClientPreference`:
 - **Final at `AtClient` construction (immutable)** — no mid-run flipping, no setter.
 - **Default `false` in 3.x → `true` in 4.0** (the cutover is `R-2`).
 - Means literally: **never write *new* data using the legacy provider for
@@ -695,7 +695,7 @@ strict-mode control, and the app-decides model's own voice: it is how an app sta
 - The **cold-start legacy fallback** (`AtClientPreference.allowLegacyCryptoFallback`,
   [§1.4](#14-the-nskey-and-the-signing-root)) *is* a legacy write and **does** trip the
   `=true` refusal — that is the point of both switches: one says "reach this recipient
-  however you can", the other says "never write legacy", and the second wins.
+  however you can", the other says "never write with the legacy provider", and the second wins.
 
 All additive within `at_client` 3.x; the legacy provider itself **stays** — it is
 needed for reads forever.
@@ -1314,11 +1314,11 @@ ferrying the request tail.
 
 ### 3.1 What the standards check established
 
-Established by a full check against primary sources on 2026-08-06, and recorded
+Established by a full check against original sources on 2026-08-06, and recorded
 here rather than in the decisions ledger because these are **standing facts
 about the standards landscape**, not rulings — they constrain what any future
 construction here may claim, and several of them corrected entries that had
-been written from assumption. Re-derive none of this without a primary source:
+been written from assumption. Re-derive none of this without an original source:
 
 - **No finalized standard specifies any PQ KEM inside HPKE.** Confirmed by a
   full RFC-index search with a positive control: one HPKE RFC (9180, DHKEM
@@ -2379,7 +2379,7 @@ files it**. A signing keypair can be minted unilaterally because it needs no
 server approval and no enrollment-record change — which is the practical payoff
 of the split.
 
-This start-time mint is the **heal path**, not the primary producer: an
+This start-time mint is the **heal path**, not the chief producer: an
 enrollment created by a current build already holds its signing key before it
 is approved. What reaches it is an enrollment created before that, or a client
 whose in-use set has changed since its last start. It is also the second writer

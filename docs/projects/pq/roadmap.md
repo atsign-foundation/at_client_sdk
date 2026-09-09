@@ -234,7 +234,7 @@ read-capability; the risk is writing too *new*, never reading too *old*.
   3.x client is PQ-*capable* but stays legacy-*compatible*; which scheme it
   writes is its app's release decision, and the cold-start refusal (plus the
   explicit fallback) is the only per-destination gate;
-- **default `true` in 4.0** = "PQ — refuse rather than write legacy";
+- **default `true` in 4.0** = "PQ — refuse rather than write with the legacy provider";
 - **final at construction** (no mid-run flipping), and the SDK **SHOUTs at
   startup when it is `false`** so a client permitting legacy writes is never
   silent about it;
@@ -265,7 +265,7 @@ model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migr
    fallback); the peer's key appearing is what ends that, with no action on the
    sender's side.
 3. **Both ends capable ⇒ end-to-end D1** — the pair runs the `nskey` data path
-   both directions; a mixed pair stays legacy *in that direction only*, by the
+   both directions; a mixed pair stays on the legacy provider *in that direction only*, by the
    app's own choice of fallback.
 4. **Retire legacy, then the v4 default flip** — lazy re-encrypt on touch, then
    `at_client 4.0` flips its default posture from `PqPosture.pqReady`
@@ -285,7 +285,7 @@ model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migr
    ([`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
 
 In short: **3.x defaults to "PQ when it can, legacy when it must"; 4.x defaults
-to "PQ — refuse rather than write legacy" — overridable either way, but never
+to "PQ — refuse rather than write with the legacy provider" — overridable either way, but never
 silently.**
 
 ## Usability & crypto-agility constraints

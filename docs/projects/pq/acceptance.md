@@ -131,7 +131,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-B1.7  | ...holds the parent enrollment's grants, verbatim                                   | PROVEN    | `b1_retrofit_test.dart`      |
 | UC-B2.1  | Un-upgraded copy is locked out after retirement                                     | PROVEN    | `b2_retirement_test.dart`    |
 | UC-B2.2  | No grace: the window closes at the successor's first authentication                | PROVEN    | `b2_retirement_test.dart`    |
-| UC-B3.1  | A capability-stage enrollment reads PQ but still writes legacy                      | PROVEN    | `b3_mixed_intra_test.dart`   |
+| UC-B3.1  | A capability-stage enrollment reads PQ but writes with the legacy provider                      | PROVEN    | `b3_mixed_intra_test.dart`   |
 | UC-B3.2  | The app's active release flips self data to the nskey path                          | PROVEN    | `b3_mixed_intra_test.dart`   |
 | UC-B4.1  | Active-PQ `alice` shares toward a `bob` with no namespace key                       | PROVEN    | `b4_mixed_cross_test.dart`   |
 | UC-B4.2  | Legacy `@alice` receives from PQ `@bob` (the interop question)                      | PROVEN    | `b4_mixed_cross_test.dart`   |
@@ -282,7 +282,7 @@ This is the shared vocabulary every UC below draws on. It is deliberately thin �
 for the authoritative key-shape / provider / substrate mechanics see `design.md`;
 here these objects exist only as test vocabulary.
 
-### 1.0 `legacy` names eight different things — say which one
+### 1.0 Overloaded words — `legacy`, `primary`, `owner`
 
 ⚠️ **`legacy` is the most overloaded word in this document set, and three of its
 senses are columns in the tables immediately below.** It is never one constant,
@@ -297,6 +297,7 @@ to write instead of a bare `legacy`.
 | the **atServer** axis (`aS`) | the per-atSign table below: `pq` · `legacy` | *a legacy atServer* |
 | the app **stage** axis | the per-atSign table below; the ladder `legacy` · `cap` · `active` | *the legacy stage* |
 | the **key-exchange mode** | `EnrollmentKeyExchangeMode.legacy`, on the enrollment | *legacy key exchange* |
+| the **app and device name** of `primary` | `EnrollmentManager.primaryEnrollmentName`, which is the string `legacy` | *`primary`'s recorded name* |
 | the **auth algorithm** | `rsa2048`, glossed *(legacy)* in the `APKAM` column below | `rsa2048` |
 | the **at-rest keyfile shape** | the flat, pre-`version: 1` `.atKeys` document | *the flat keyfile* |
 | the **test tag** | `legacy-server` in `tests/at_end2end_test/dart_test.yaml`, selecting the pinned-image CI arm | *the `legacy-server` tag* |
@@ -310,6 +311,48 @@ implies the other's.
 ⚠️ **Two axes on `PqPosture` carry the word without being the posture**:
 `disallowLegacyEncryption` and `mintLegacyMaterial` are independently settable,
 so a client at a non-`legacy` posture may still have either set. Name the axis.
+
+**`legacy enrollment` is a settled compound, and means one thing**: an
+enrollment created before the authentication/signing split, holding a single
+`rsa2048` keypair that serves *both* roles, with a flat keyfile rather than
+typed per-enrollment material ([`design.md` 9.8.7](design.md#987-a-legacy-enrollments-one-keypair-and-how-the-rules-compose)).
+It is a property of the enrollment, not of the client reading it — a legacy
+enrollment at `pqActive` is an ordinary combination.
+
+⛔ **It does NOT mean `primary`**, defined below; nor is it the right name for
+*the enrollment a retrofit replaced*. That one is the **predecessor**, and its
+replacement the **successor** — say those, because a retrofit has two
+enrollments and "the legacy one" picks out neither reliably once the successor
+exists.
+
+### `primary` is an enrollment id, and never an adjective
+
+**`primary` is the root enrollment the atServer constructs**, so that the auth
+credentials an atSign held *before enrollments existed* have a consistent name
+like every other enrollment. It is a wire literal — at_server's
+`EnrollmentManager.primaryEnrollmentId`, the string `primary`, *"the id of the
+enrollment the atSign's flat legacy credential migrates into"*, minted by the
+atServer rather than requested by any client.
+
+⛔ **So never write `primary` as the ordinary adjective in this doc set** —
+not *the primary key*, not *the primary reason*, not as the replacement for
+"load-bearing". In a set where the word is a wire literal, an adjectival use
+reads as a reference to that enrollment. Say *main*, *chief*, *first* or
+*governing* instead.
+
+### `owner` is a person, not a credential and not a connection
+
+**The atSign owner is whoever owns the atSign — a person or an entity.** That
+is the only thing the bare word means here.
+
+⛔ **It is not the name for a connection carrying no enrollment id.** Such a
+connection has no owner-hood about it; say *a connection with no enrollment id*,
+or name the enrollment it authenticated as. The credential behind it now has a
+name of its own — `primary`, above.
+
+⚠️ **`@owner` inside a key pattern is a different thing again**: a placeholder
+standing for the atSign the record belongs to, as in
+`public:__nskey.<ns>@owner`. That is a shape, not a person, and it stays.
 
 **Actors.** `@alice`, `@bob` are atSigns. `alice1`, `alice2`, `alice3` are
 **APKAM keypairs** of `@alice` (one per keyfile/install) — the recipient/identity
@@ -340,12 +383,12 @@ per keyfile/install):
 
 | Col           | Meaning                                                                                              |
 |---------------|------------------------------------------------------------------------------------------------------|
-| atSign        | `legacy` · `pq-native` · `mixed` — a *legacy atSign*, one of three unrelated axes spelled `legacy` ([1.0](#10-legacy-names-eight-different-things--say-which-one)) |
-| `aS`          | atServer: `pq` (new verbs) · `legacy` — a *legacy atServer*, and not the atSign axis above ([1.0](#10-legacy-names-eight-different-things--say-which-one)) |
+| atSign        | `legacy` · `pq-native` · `mixed` — a *legacy atSign*, one of three unrelated axes spelled `legacy` ([1.0](#10-overloaded-words--legacy-primary-owner)) |
+| `aS`          | atServer: `pq` (new verbs) · `legacy` — a *legacy atServer*, and not the atSign axis above ([1.0](#10-overloaded-words--legacy-primary-owner)) |
 | `publickey`   | legacy RSA encryption pubkey published?                                                               |
 | `pq_signing_root` | atSign-level user-owned **signing** root published (mutable, minted under `_rootlock@owner`)?     |
 | `nskey.ns`    | namespace `ns` nskey state: `—` (never used, so no nskey) · `<kid>` (minted and published at `public:__nskey.<ns>@owner`; the kid names the current generation) |
-| `stage`       | The **app's release stage** for the namespace ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)): `legacy` (pre-capability build) · `cap` (capability build — reads everything, writes with the legacy providers) · `active` (writes PQ). ⛔ This is the *legacy stage*, a third axis spelled `legacy` and a near-homonym of the posture ladder `legacy`/`pqReady`/`pqActive`, which it is **not** ([1.0](#10-legacy-names-eight-different-things--say-which-one)). Replaces the removed per-`(atSign, namespace)` readiness marker: there is no published readiness state, only what build each install runs. |
+| `stage`       | The **app's release stage** for the namespace ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)): `legacy` (pre-capability build) · `cap` (capability build — reads everything, writes with the legacy providers) · `active` (writes PQ). ⛔ This is the *legacy stage*, a third axis spelled `legacy` and a near-homonym of the posture ladder `legacy`/`pqReady`/`pqActive`, which it is **not** ([1.0](#10-overloaded-words--legacy-primary-owner)). Replaces the removed per-`(atSign, namespace)` readiness marker: there is no published readiness state, only what build each install runs. |
 
 **Key objects** (shapes defined in `design.md`; named here for test wiring):
 
@@ -693,8 +736,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Given:** `@alice` pq-native; `alice1` (E1, fully privileged, `*`) and `alice4` (E4,
   namespace-scoped) both enrolled and online.
-- **When:** E1 sends `enroll:update` naming **E4**; separately, a legacy-PKAM /
-  owner connection (no enrollmentId) sends the same request.
+- **When:** E1 sends `enroll:update` naming **E4**; separately, a legacy-PKAM
+  connection carrying no enrollment id sends the same request.
 - **Then:** both are refused — the second one **despite** carrying full permissions
   everywhere else. `isAuthorized` short-circuits a connection with no enrollment id to
   `true`, so this arm is the one that goes green for the wrong reason if the self-only
@@ -704,7 +747,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   and the mechanism is not what the name suggests: **there is no revocation check inside
   `enroll:update`.** Two things close it between them — the revoked enrollment can no
   longer authenticate at all (`AT0027 … is revoked`), and every other connection, the
-  fully privileged owner included, is refused as not being that enrollment
+  fully privileged id-less one included, is refused as not being that enrollment
   (`AT0011 … enroll:update is self-only`). Both arms are asserted on their error text,
   because a connection failing for any other reason satisfies a bare "it threw".
   ⚠️ **One arm is NOT proven**: an enrollment revoked while it holds an already open,
@@ -818,7 +861,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   namespace, not a generic encryption error.
   - With the legacy fallback opted in (final 3.x only), the write proceeds under
     `legacy` instead, and once the namespace's nskey exists every **subsequent**
-    write uses it. Records already written under the fallback stay legacy; re-encrypting
+    write uses it. Records already written under the fallback stay legacy-encrypted; re-encrypting
     them is an explicit migration (B-3's lazy re-encrypt), never a side effect of a `put`.
   - In practice this case is rare, because a client mints for its preference namespace
     and its `rw` namespaces at init — so a namespace it writes to normally has a key
@@ -1509,7 +1552,7 @@ stating it as a clause would enshrine dead code as the specification. Measured
 - **Then:** the new PQ surface — PQ-APKAM (ML-DSA) auth, the flattened
   `enroll:listns`, `EnrollParams.metadata` on `enroll:request`, the
   authenticated self-retrofit auto-approve — is unavailable → `alice1` **aborts
-  cleanly, stays legacy**, mints no PQ keys, logs why. **No partial state on the
+  cleanly, stays on the legacy provider**, mints no PQ keys, logs why. **No partial state on the
   server — for a parent that can deny its own aborted request.** ⚠️ A
   namespace-scoped parent holds no `__manage` and cannot, so it leaves its
   `pending` enrollment behind, one per retry; this row's second scenario asserts
@@ -1744,11 +1787,11 @@ obeyed.
 ### 9.1 UC-B2.1 — Un-upgraded copy is locked out after retirement
 
 - **Given:** E1's pre-PQ keyfile was copied to a second host `alice1b` (against advice) —
-  the **same** legacy APKAM keypair on two hosts; `alice1` retrofitted, and its successor's
-  first authentication **revoked** E1's legacy enrollment as superseded; `alice1b` has not
+  the **same** RSA APKAM keypair on two hosts; `alice1` retrofitted, and its successor's
+  first authentication **revoked** E1, the predecessor enrollment, as superseded; `alice1b` has not
   retrofitted.
-- **When:** `alice1b` tries to authenticate (legacy) afterwards.
-- **Then:** auth **fails** with `AT0027` — the legacy enrollment was revoked as superseded
+- **When:** `alice1b` tries to authenticate with that RSA APKAM keypair afterwards.
+- **Then:** auth **fails** with `AT0027` — the predecessor enrollment was revoked as superseded
   (or explicitly `enroll:revoke`d), and `alice1b` never minted its own PQ keypair; `alice1b`
   must re-enroll. The lockout is the **supersession**, **not** an explicit per-pubkey
   delete.
@@ -1758,7 +1801,7 @@ obeyed.
 - **Given:** `alice1` retrofitted; a sibling clone of the same pre-PQ keyfile has not.
 - **When:** `alice1`'s successor first authenticates on a connection it opened itself, and
   the clone tries to authenticate or retrofit afterwards.
-- **Then:** legacy auth survives exactly until that first authentication and no longer —
+- **Then:** authentication as the predecessor survives exactly until that first one and no longer —
   there is no grace window and nothing re-arms; the clone is refused with `AT0027` and
   must re-enroll ([UC-B2.1](#91-uc-b21--un-upgraded-copy-is-locked-out-after-retirement)).
   A root predecessor is the one exception: supersession never revokes it, so clones of the
@@ -1792,16 +1835,16 @@ obeyed.
 > different **apps** at different stages (which never interact — they cannot read
 > each other's namespaces) or one app's **installs** mid-rollout (the developer's
 > release-ordering discipline). What the SDK must guarantee is the two-release
-> ladder itself: the capability build reads everything and writes legacy; the
+> ladder itself: the capability build reads everything and writes with the legacy provider; the
 > active build writes PQ; nothing ever changes scheme silently.
 
-### 10.1 UC-B3.1 — A capability-stage enrollment reads PQ but still writes legacy
+### 10.1 UC-B3.1 — A capability-stage enrollment reads PQ but writes with the legacy provider
 
 - **Given:** `alice1` runs the app's **capability** build (era default: registered
   PQ providers, holds/mints the nskey, `defaultProviderId` legacy); a sibling
   install may still be on the previous build.
 - **When:** `alice1` puts or notifies a self key both must read.
-- **Then:** `alice1` writes/notifies **legacy**. Writing PQ is the *active*
+- **Then:** `alice1` writes/notifies **with the legacy provider**. Writing PQ is the *active*
   release's decision, never the capability build's — which is exactly what makes
   the capability build safe to roll out everywhere first. (Applies to **put and
   notify** alike; a notification an old install cannot decrypt is as lost as a
@@ -1968,7 +2011,7 @@ obeyed.
 
 ### 12.2 UC-B5.2 — Reading legacy history after retrofit
 
-- **Given:** `alice1` retrofitted; the old legacy enrollment aged out; the legacy
+- **Given:** `alice1` retrofitted; the predecessor enrollment aged out; the legacy
   *encryption* key is retained (the legacy APKAM is not separately deleted — there is
   no per-key delete).
 - **When:** `alice1` reads pre-PQ data.
@@ -2179,12 +2222,12 @@ These invariants are testable against **every** UC above:
   no classical branch — so neither of the reasons once given here holds.
 - **No silent scheme substitution, in either direction.** The SDK never chooses
   post-quantum behind the app's back (writing PQ is the app's release decision —
-  a capability-stage client writes legacy however much it can read), and never
+  a capability-stage client writes with the legacy provider however much it can read), and never
   downgrades behind its back either: a PQ write to a keyless destination is
   refused **by name**, legacy is reachable only via the explicit
   `allowLegacyCryptoFallback` opt-in, an explicitly requested provider id is
   never substituted, and under `disallowLegacyEncryption = true` a legacy-only
-  destination is **refused**, never quietly written legacy.
+  destination is **refused**, never quietly written with the legacy provider.
   *(Replaces "writes gated by reader readiness", 2026-08-05 —
   [`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).)*
 - **`appMetadata.providerId` is authoritative**, names every algorithm a reader needs
@@ -3053,7 +3096,7 @@ and B already own.
   app-named `crypto` config.
 - **When:** its era `CryptoConfig` is adopted at construction.
 - **Then:** new writes default to the nskey data path (the AES-GCM provider),
-  while a migration-postured client's stay legacy; an app-named config beats
+  while a migration-postured client's stay legacy-encrypted; an app-named config beats
   both.
 
 ### 15.2 UC-C1.2 — The refusal axis: the posture disallows legacy writes
@@ -3202,7 +3245,7 @@ which also split the one enum that named them into two posture axes.
 era. It is not the atSign, atServer or app-stage axis of the notation table,
 each of which also has a value spelled `legacy`, and it is not the app stage
 ladder `legacy`/`cap`/`active` it rhymes with. See
-[1.0](#10-legacy-names-eight-different-things--say-which-one).
+[1.0](#10-overloaded-words--legacy-primary-owner).
 
 | | auth key | signing key | `_apsk` |
 |---|---|---|---|
