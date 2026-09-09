@@ -39,14 +39,11 @@ class EnrollmentRecordPrivilegeResolver implements EnrollmentPrivilegeResolver {
     return isEnrollmentFullyPrivileged(id);
   }
 
-  /// ⚠️ **Narrowed to `approved` deliberately, and not only for speed.** An
-  /// unfiltered `enroll:list` returns every enrollment the atSign has ever
-  /// held — a revoked record is never removed — so it grows without bound and
-  /// costs proportionally: measured 2026-09-09 against an atSign carrying 2416
-  /// enrollments, 46.6 seconds unfiltered against 132 milliseconds narrowed.
-  /// It is also the right question: privilege is a property of an enrollment
-  /// that is currently approved, so a revoked or denied record answering here
-  /// would grant authority the atServer no longer honours.
+  /// Narrowed to `approved` because privilege is a property of an
+  /// enrollment that currently holds it: a revoked or denied record
+  /// answering here would grant authority the atServer no longer honours.
+  /// An unfiltered `enroll:list` would also return every enrollment the
+  /// atSign has ever held.
   @override
   Future<bool> isEnrollmentFullyPrivileged(String enrollmentId) async {
     final theirs = (await _listEnrollments(

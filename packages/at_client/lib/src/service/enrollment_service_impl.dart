@@ -112,11 +112,8 @@ class EnrollmentServiceImpl implements EnrollmentService {
     // still the one the enrollee wrote. Its advertised key package alone would
     // not do: every mode may carry one, because a package is also how existing
     // secrets are sealed to a new device.
-    // `approved` as well as `pending`, so that this finds every record an
-    // unfiltered read would have found in a state this flow can actually
-    // reach — re-approving an already-approved enrollment still computes the
-    // same minting decision it computes today. What the filter excludes is
-    // the revoked backlog, which is the whole of the cost.
+    // `approved` as well as `pending`: re-approving an already-approved
+    // enrollment must compute the same minting decision.
     final pending = await _enrollmentById(
         enrollmentRequestDecision.enrollmentId,
         const [EnrollmentStatus.pending, EnrollmentStatus.approved]);
@@ -206,17 +203,9 @@ class EnrollmentServiceImpl implements EnrollmentService {
   /// The enrollment with [enrollmentId], from an `enroll:list` narrowed to
   /// [statuses].
   ///
-  /// ⚠️ **The filter is not a tuning detail, and passing none is a
-  /// performance bug.** An unfiltered `enroll:list` returns every enrollment
-  /// the atSign has ever held, and a revoked record is never removed — so the
-  /// response grows without bound over the atSign's life and this call gets
-  /// slower forever. Measured 2026-09-09 on a CI atSign carrying 2416
-  /// enrollments, 2414 of them revoked: unfiltered 46,614ms, the same call
-  /// narrowed to one status 132ms. The cost tracks the records RETURNED, not
-  /// the records scanned.
-  ///
-  /// The caller states the statuses because only the caller knows which state
-  /// the record it is looking for should be in.
+  /// The filter is required rather than optional: an unfiltered
+  /// `enroll:list` returns every enrollment the atSign has ever held,
+  /// revoked ones included, and the cost tracks the records returned.
   Future<Enrollment?> _enrollmentById(
           String enrollmentId, List<EnrollmentStatus> statuses) async =>
       (await fetchEnrollmentRequests(

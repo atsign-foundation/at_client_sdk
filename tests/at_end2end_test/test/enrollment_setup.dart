@@ -112,18 +112,10 @@ void main() {
           otp: otp,
           namespaces: {TestConstants.namespace: 'rw', '__config': 'rw'},
           signingAlgo: SigningAlgoType.rsa2048,
-          // These atSigns are never recycled, and the teardown REVOKES rather
-          // than deletes — a revoked record stays on the atSign for good. Left
-          // alone that backlog is the thing that makes this very step slow:
-          // measured 2026-09-09, @ce2e1 carried 2416 enrollments, 2414 of them
-          // revoked, and an unfiltered `enroll:list` over them took 46.6
-          // seconds against 132 milliseconds for a filtered one.
-          //
-          // An expiry lets the atServer retire each run's enrollment instead of
-          // stacking another revoked record up forever. Three hours is far
-          // longer than a run (the whole job is minutes) while still being the
-          // same day, so a run that hangs is not cut off mid-flight and nothing
-          // is left behind by the next morning.
+          // These atSigns are never recycled and the teardown revokes rather
+          // than deletes, so without an expiry every run leaves another
+          // revoked record behind for good. Three hours outlasts a run by a
+          // wide margin while still retiring it the same day.
           apkamKeysExpiryDuration: const Duration(hours: 3));
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);

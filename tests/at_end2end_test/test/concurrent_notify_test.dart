@@ -1,11 +1,6 @@
-/// ⚠️ **Without this the file ran at the 30-second default, and the 60-second
-/// `onTimeout` below could never fire** — so the diagnostic it carries, which
-/// names the two things worth checking, had never once been printed. A test
-/// whose own timeout exceeds its budget reports "timed out after 30 seconds"
-/// and nothing else, which is what made the 2026-09-09 failure opaque.
-///
-/// Five minutes is chosen to be uninteresting: the inner timeouts decide, and
-/// this only has to be longer than all of them put together.
+/// Longer than every inner timeout in this file put together, so those
+/// decide and their diagnostics can print. At the 30-second default the
+/// 60-second `onTimeout` below can never fire.
 @Timeout(Duration(minutes: 5))
 library;
 
@@ -84,23 +79,16 @@ void main() {
     });
     addTearDown(subscription.cancel);
 
-    // ⚠️ **Subscribing is not the listener being ready, and that distinction is
-    // the whole of this test.** `subscribe()` returns its stream at once, but
-    // the monitor attaches to the atServer asynchronously — measured 2026-09-09,
-    // 424ms after the send had already begun. A notification the atServer
-    // accepts while no monitor is attached is not delivered to one that
-    // attaches later, and this pack does not set `fetchOfflineNotifications`,
-    // so nothing goes back for it. The send reports `delivered` either way.
+    // Subscribing is not the listener being ready: `subscribe()` returns its
+    // stream at once, while the monitor attaches to the atServer
+    // asynchronously. A notification the atServer accepts before it attaches
+    // is reported `delivered` and is not handed to a monitor that attaches
+    // afterwards; only `fetchOfflineNotifications` goes back for it, and this
+    // pack does not set it.
     //
-    // This test passed for two months without the wait, on slack it never asked
-    // for: the enrollment approval took ten minutes, so these clients had been
-    // live for five before the test ran and the monitor was long attached.
-    // Making the approval fast removed the slack and the race surfaced at once
-    // — it was never the approval's to hide.
-    //
-    // Polled rather than awaited on `currentListenerStateStream`: that stream
-    // does not replay, so a monitor attaching between the flag check and the
-    // subscription would be missed. A test about a race should not open one.
+    // Polled rather than awaited on `currentListenerStateStream`, which does
+    // not replay: a monitor attaching between the flag check and the
+    // subscription would be missed.
     final notifications = clients.second.notificationService;
     final attachDeadline = DateTime.now().add(Duration(seconds: 30));
     while (!notifications.listening) {
