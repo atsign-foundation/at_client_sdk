@@ -99,8 +99,10 @@ class LocalSecondary implements Secondary {
   LocalSecondary(
     this._atClient, {
     this.keyStore,
+    AtSyncQueue? syncQueue,
     void Function(DataEvent)? onEvent,
-  }) : _onEvent = onEvent {
+  })  : _syncQueue = syncQueue,
+        _onEvent = onEvent {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
     keyStore ??= _atClient.persistenceBundle?.keyValueStore;
   }
@@ -109,12 +111,12 @@ class LocalSecondary implements Secondary {
   /// the open; concurrent callers await the same in-flight future so
   /// we never call `Hive.openBox` twice for the same atSign.
   ///
-  /// Must run AFTER the at_persistence_secondary_server's
-  /// `HiveAtPersistenceFactory.initialize(...)` has called
-  /// `Hive.init(...)`, which is guaranteed by the
-  /// [StorageManager] init ordering during AtClient init. We
-  /// intentionally do not call `Hive.init` here — rerunning it with a
-  /// different path would silently misroute the box.
+  /// The queue opens on the instance owning the client's
+  /// `hiveStoragePath` — the same one the keystore uses — so a client's two
+  /// halves cannot land in different places. A client configuring no path
+  /// falls back to the package-global instance, which is why this must still
+  /// run after the keystore's initialisation has called `Hive.init(...)`; we
+  /// never call it here ourselves.
   Future<AtSyncQueue> _ensureSyncQueueOpen() {
     final existing = _syncQueue;
     if (existing != null) return Future.value(existing);
@@ -126,7 +128,9 @@ class LocalSecondary implements Secondary {
           'set; AtClientManager.setCurrentAtSign must run first',
         );
       }
-      final q = AtSyncQueue(atSign: atSign);
+      final q = AtSyncQueue(
+          atSign: atSign,
+          storagePath: _atClient.getPreferences()?.hiveStoragePath);
       await q.open();
       _syncQueue = q;
       return q;
@@ -142,14 +146,18 @@ class LocalSecondary implements Secondary {
   }
 
   /// Synchronous, side-effect-free snapshot of the current queue
-  /// size. Returns `null` when the queue hasn't been opened yet
+  /// size. Returns `null` when the queue hasn't been opened yet, or has
+  /// been closed
   /// (the caller hasn't done any sync-eligible writes). Used by
   /// `SyncServiceImpl._informSyncProgress` to attach
   /// `pendingPushCount` to events without awaiting (which would
   /// change the relative ordering of progress emission and the
   /// sync round it describes). Production callers that don't mind
   /// the lazy-open should use [syncQueueSize] instead.
-  int? get syncQueueSyncSnapshot => _syncQueue?.size;
+  int? get syncQueueSyncSnapshot {
+    final q = _syncQueue;
+    return q != null && q.isOpen ? q.size : null;
+  }
 
   /// Returns up to [limit] atKey strings from the front of the
   /// pending-write queue in FIFO order. Does NOT remove them; the
@@ -169,11 +177,19 @@ class LocalSecondary implements Secondary {
     return q.readEntry(atKey);
   }
 
+  /// Removes [atKey]'s queue entry only while it is still the version
+  /// stamped [seq]; returns whether it removed. The drain's success-path
+  /// removal — see [AtSyncQueue.removeIfUnchanged] for why unconditional
+  /// removal there loses whichever write replaced the entry mid-flight.
+  Future<bool> removeFromSyncQueueIfUnchanged(String atKey, int seq) async {
+    final q = await _ensureSyncQueueOpen();
+    return q.removeIfUnchanged(atKey, seq);
+  }
+
   /// Removes [atKey] from both the in-memory queue and the persisted
-  /// box. Called after a successful server-side push, OR when a
-  /// drain attempt finds the underlying keystore value missing
-  /// (race-tolerated removal: a queue write may have committed
-  /// without the keystore write landing, e.g. across a crash).
+  /// box. Called when a drain attempt finds the underlying keystore
+  /// value missing (race-tolerated removal: a queue write may have
+  /// committed without the keystore write landing, e.g. across a crash).
   Future<void> removeFromSyncQueue(String atKey) async {
     final q = await _ensureSyncQueueOpen();
     await q.remove(atKey);

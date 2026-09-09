@@ -221,7 +221,11 @@ changes and are accepted as such — [`decisions.md`](decisions.md) D-3.
 `at_auth`'s WASM split is **owned by the PQ program**, not by this project:
 projects **S-5** (at_auth 4.0.0 — the `at_auth_io.dart` barrel, dropping the
 `FileAtKeysIo` default, registrar onto `package:http`) and **S-6** (consumer bumps),
-at [`../pq/implementation-plan.md`](../pq/implementation-plan.md) lines 312–339. That
+at [`../pq/implementation-plan.md`](../pq/implementation-plan.md) — ⚠️ this cited
+**lines 312–339**, and a line number is not an address: that plan was restructured
+on 2026-08-26 and the range now lands on unrelated prose. Find S-5 and S-6 by name
+in [`../pq/detail/implementation-plan.md`](../pq/detail/implementation-plan.md).
+That
 plan explicitly names *this* effort as the separate "wasm-port" that owns
 `at_lookup` and `at_chops`.
 

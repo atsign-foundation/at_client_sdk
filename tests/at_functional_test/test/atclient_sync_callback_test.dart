@@ -14,6 +14,7 @@ import 'package:uuid/uuid.dart';
 import 'test_utils.dart';
 
 void main() {
+  TestUtils.isolateStorage('atclient_sync_callback_test');
   late AtClientManager atClientManager;
   late String atSign;
   var uniqueId = Uuid().v4();

@@ -2,7 +2,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
-import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
@@ -25,8 +24,8 @@ void main() async {
 
   Future<void> setAtSignOneAutoNotify(bool autoNotify) async {
     //  reset the autoNotify to true
-    await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
-        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(sharedByAtSign, namespace);
 
     var configResult = await AtClientManager.getInstance()
         .atClient
@@ -88,8 +87,8 @@ void main() async {
     await setAtSignOneAutoNotify(true);
 
     // Set sharedBy atSign as currentAtSign and Put the initial value
-    await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
-        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(sharedByAtSign, namespace);
 
     // Per-key gate: register the listener BEFORE the put so the
     // push event for this key can't fire before the listener is in
@@ -116,10 +115,8 @@ void main() async {
     await Future.delayed(Duration(seconds: 5));
 
     // Switch to sharedWithAtSign
-    await AtClientManager.getInstance().setCurrentAtSign(
-        sharedWithAtSign,
-        namespace,
-        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(sharedWithAtSign, namespace);
 
     await E2ESyncService.getInstance()
         .syncData(AtClientManager.getInstance().atClient.syncService);
@@ -135,8 +132,8 @@ void main() async {
     expect(getResult.metadata!.isCached, true);
 
     // Switch back to sharedByAtSign to update the value of the key.
-    await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
-        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(sharedByAtSign, namespace);
 
     // Set autoNotify to false so that the update doesn't propagate to sharedWith AtSign automatically
     await setAtSignOneAutoNotify(false);
@@ -162,10 +159,8 @@ void main() async {
     await pushedUpdatedValue;
 
     // As atSignTwo
-    await AtClientManager.getInstance().setCurrentAtSign(
-        sharedWithAtSign,
-        namespace,
-        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(sharedWithAtSign, namespace);
 
     // Sync - after this we still should have the old value
     await E2ESyncService.getInstance()

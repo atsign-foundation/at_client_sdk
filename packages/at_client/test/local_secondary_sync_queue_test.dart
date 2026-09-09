@@ -39,6 +39,7 @@ void main() {
     try {
       // Close every Hive box (including the sync-queue box) so the next
       // setUp doesn't reattach to leftover in-memory state.
+      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
       await Hive.close();
       AtClientImpl.atClientInstanceMap.remove(atSign);
       final dir = Directory(storageDir);

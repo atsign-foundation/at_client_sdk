@@ -8,6 +8,7 @@ import 'test_utils.dart';
 const notificationIdKey = '_latestNotificationIdv2';
 
 void main() {
+  TestUtils.isolateStorage('stats_notification_sync_test');
   late String atSign;
   late String atSign2;
   late AtClientManager atClientManager;

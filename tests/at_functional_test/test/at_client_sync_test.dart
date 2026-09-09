@@ -14,6 +14,7 @@ import 'test_utils.dart';
 import 'package:at_functional_test/src/config_util.dart';
 
 void main() {
+  TestUtils.isolateStorage('at_client_sync_test');
   late String atSign;
   late String sharedWithAtSign;
   final namespace = 'wavi';
