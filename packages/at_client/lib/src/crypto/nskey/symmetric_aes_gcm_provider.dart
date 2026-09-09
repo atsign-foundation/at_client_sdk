@@ -16,11 +16,9 @@ final _logger = AtSignLogger('SymmetricAesGcmProvider');
 
 /// The value cites a CK this client cannot resolve *yet*.
 ///
-/// Distinct from a hard decryption failure on purpose: sync is unordered, so a
-/// data value routinely arrives before the conveyance record carrying its CK.
-/// A caller seeing this should re-attempt the read once the conveyance syncs —
-/// where a plain [AtDecryptionException] means give up. A CK deleted for
-/// forward secrecy also surfaces here, and stays unresolvable by design.
+/// Retry the read once the conveyance record syncs, where a plain
+/// [AtDecryptionException] means give up; a CK deleted for forward secrecy
+/// surfaces here too and never resolves.
 class ContentKeyUnavailableException extends AtDecryptionException {
   /// The kid the value cited, as it appears in `appMetadata`.
   final String ckKid;
@@ -31,10 +29,10 @@ class ContentKeyUnavailableException extends AtDecryptionException {
 /// Layer 3 of the nskey data path: application data, AES-256-GCM under a
 /// content key.
 ///
-/// Purely symmetric — it never touches asymmetric crypto. A value carries its
-/// ciphertext and *cites* a CK by `ckKid`; no sealed key is inline. The CK is
-/// resolved from the [ContentKeyCache], which the `at/nskey` provider populates
-/// when the matching conveyance record syncs.
+/// A value carries its ciphertext and *cites* a CK by `ckKid` rather than
+/// carrying a sealed key inline; the CK is resolved from the [ContentKeyCache],
+/// which the `at/nskey` provider populates when the matching conveyance record
+/// syncs.
 class SymmetricAesGcmProvider
     implements
         CryptoProvider,
@@ -45,21 +43,17 @@ class SymmetricAesGcmProvider
 
   /// Mints and conveys a content key when a destination has none, or when the
   /// one in hand was sealed to a generation the destination has rotated away
-  /// from. Null leaves the caller responsible for conveying a CK first, which
-  /// is the shape the tests drive the providers in.
+  /// from. Null leaves the caller responsible for conveying a CK first.
   final CkManager? ckManager;
 
   SymmetricAesGcmProvider({required this.cache, this.ckManager});
 
-  /// The nskey data path is scoped to `(owner, namespace)` throughout — the key
-  /// ring, the CK cache and the HPKE binding all take a namespace — so a key
-  /// without one cannot be served here at all.
+  /// Serves a namespaced key that is not `local:`.
   ///
-  /// A `local:` key is declined too, for a different reason: it never syncs and
-  /// is never shared, so encrypting it under a content key that is itself
-  /// conveyed by a *synced* record would make device-local state depend on a
-  /// mechanism built for data that leaves the device. Local state stays on the
-  /// self-encryption path.
+  /// The nskey data path is scoped to `(owner, namespace)` throughout, and a
+  /// `local:` key never syncs — encrypting it under a content key that is
+  /// itself conveyed by a synced record would make device-local state depend on
+  /// a mechanism built for data that leaves the device.
   @override
   bool canHandle(AtKey atKey) =>
       !atKey.isLocal && atKey.namespace != null && atKey.namespace!.isNotEmpty;
@@ -79,15 +73,8 @@ class SymmetricAesGcmProvider
   /// [atSign] published an nskey for [namespace]?
   ///
   /// The lookup is the same one a write makes and shares its cache, so asking
-  /// before writing costs nothing extra.
-  ///
-  /// ⚠️ This said the shared cache meant a "yes" here was "as current as the
-  /// write's own would be". That was true and read as a freshness guarantee,
-  /// when in fact both were stale together: until 2026-08-27 a remembered miss
-  /// could make this answer **false** for the rest of its window after the
-  /// recipient had published. `NskeyResolver.resolve` no longer answers null on
-  /// the strength of a remembered miss, so a "no" here means one this client
-  /// has just confirmed — and so does the write's.
+  /// before writing costs nothing extra, and a "no" is one this client has just
+  /// confirmed rather than a remembered miss.
   ///
   /// Without a [ckManager] this provider does not resolve keys at all; the
   /// caller conveys content keys itself and is the one that knows.
@@ -102,9 +89,6 @@ class SymmetricAesGcmProvider
       CryptoContext context, AtKey atKey, String plaintext) async {
     final owner = _nskeyOwnerOf(atKey);
     final namespace = _namespaceOf(atKey);
-    // Where the nskey — and therefore the content key — actually lives. For a
-    // flat namespace this is `namespace` itself; for a composed one it is
-    // whichever level the walk landed on.
     final ckNs = await _ckNamespaceOf(owner, namespace);
 
     final ck = cache.current(owner, ckNs);
@@ -114,27 +98,22 @@ class SymmetricAesGcmProvider
           'an $nskeyCryptoProviderId record before writing data');
     }
 
-    // A fresh 12-byte nonce per value — never reuse a (key, nonce) pair.
+    // NOTE: a fresh nonce per value — never reuse a (key, nonce) pair.
     final iv = InitialisationVector.random(AesGcm256EncryptionAlgo.nonceLength);
     final ciphertext = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64()))
         .encrypt(_toBytes(atKey, plaintext), iv: iv, aad: _aad(atKey));
 
-    // The runtime re-stamps providerId after this returns; setting it here just
-    // keeps the record self-describing for callers that drive the provider
-    // directly. `additional` is the part only this provider can supply.
     atKey.metadata.appMetadata = AppMetadata(
       providerId: id,
       additional: {
         'ckKid': ck.ckKid,
         'iv': base64Encode(iv.ivBytes),
-        // The record's own namespace, which no reader can recover from the
-        // wire string: AtKey.fromString splits at the last dot, so a
-        // multi-segment namespace is unrecoverable. Already plaintext in the
-        // key name, so this discloses nothing new.
+        // NOTE: AtKey.fromString splits at the last dot, so a multi-segment
+        // namespace cannot be recovered from the wire string.
         'ns': namespace,
-        // And where its content key lives, which differs whenever resolution
-        // walked up. Without it a reader would hunt for the conveyance at the
-        // wrong level and report "not yet synced" for an intact record.
+        // NOTE: without this a reader would hunt for the conveyance at the
+        // wrong level whenever resolution walked up, and report "not yet
+        // synced" for an intact record.
         'ckNs': ckNs,
       },
     );
@@ -162,8 +141,6 @@ class SymmetricAesGcmProvider
     final owner = _nskeyOwnerOf(atKey);
     final additional = atKey.metadata.appMetadata?.additional ?? const {};
 
-    // The record says where its content key lives; falling back to the key's
-    // own namespace keeps a flat record readable if the field is absent.
     final namespace = additional['ckNs'] as String? ?? _namespaceOf(atKey);
 
     final ckKid = additional['ckKid'];
@@ -193,28 +170,13 @@ class SymmetricAesGcmProvider
 
   /// Binds a value's ciphertext to the record it was written under.
   ///
-  /// A content key is scoped to `(nskey owner, namespace)` and covers many
-  /// records, so the key alone says nothing about *which* record a ciphertext
-  /// belongs to. Without this, anyone who can write the store — an atServer
-  /// operator, or a sync path — can move a valid ciphertext from one record to
-  /// another in the same scope and it still authenticates: yesterday's `no`
-  /// reappears as today's `yes`, with the AEAD tag intact.
-  ///
-  /// The HPKE `info` at layer 2 binds the *conveyance* to its owner and
-  /// namespace; it does not reach the values. This is the equivalent binding
-  /// one layer down, over the record's full address.
-  ///
-  /// Composed from the AtKey's fields rather than `toString()` deliberately:
-  /// the writer and the reader must derive byte-identical AAD or nothing
-  /// decrypts, and the field accessors are stable where the string form varies
-  /// with `cached:`/`public:` prefixes and metadata state.
-  ///
-  /// The name and namespace are joined back together rather than bound as two
-  /// fields, because *where* they split is not stable: `AtKey.fromString` cuts
-  /// at the last dot, so a reader that parsed the key from the wire sees
-  /// `someid.d.c.b` + `a` where the writer had `someid` + `d.c.b.a`. Two fields
-  /// would disagree; the joined name is identical either way, and it is the
-  /// record's actual address — which is what this is binding.
+  /// A content key covers every record in an `(nskey owner, namespace)` scope,
+  /// so without this anyone who can write the store can move a valid ciphertext
+  /// between records in that scope and it still authenticates, AEAD tag intact.
+  /// Writer and reader must derive byte-identical AAD, so it is composed from
+  /// the AtKey's fields rather than `toString()`, with the name and namespace
+  /// rejoined: `AtKey.fromString` cuts at the last dot, so the two sides
+  /// disagree on where they split but agree on the joined name.
   static List<int> _aad(AtKey atKey) => utf8.encode([
         symmetricAesGcmCryptoProviderId,
         atKey.sharedBy ?? '',
@@ -234,7 +196,7 @@ class SymmetricAesGcmProvider
   ///
   /// Without a [ckManager] this provider does no resolution — the caller
   /// conveys content keys itself and addresses them at the value's own
-  /// namespace, which is the shape the provider-level tests drive.
+  /// namespace.
   Future<String> _ckNamespaceOf(String owner, String namespace) async =>
       (await ckManager?.resolver.resolve(owner, namespace))?.namespace ??
       namespace;
@@ -244,29 +206,18 @@ class SymmetricAesGcmProvider
   /// look the CK up again rather than taking it from the read.
   ///
   /// **Local storage first, then the atServer.** The remote leg is not an
-  /// optimisation and not a fallback for exotic cases: a value delivered
-  /// remote-only — which every notification is — cites a conveyance its sender
-  /// wrote *remote-first* for exactly that reason, so the record is on the
-  /// atServer before the value arrives and may not reach local storage until
-  /// sync gets round to it. Reading only locally leaves the value
-  /// undecryptable for that whole window.
-  ///
-  /// ⚠️ That window ends in data loss, not a retry. This doc used to say "the
-  /// caller retries"; one caller is `NotificationServiceImpl`, which **drops**
-  /// a notification it cannot transform and never re-delivers it. So a
+  /// optimisation: a value delivered remote-only — which every notification is
+  /// — cites a conveyance its sender wrote remote-first, so the record is on
+  /// the atServer before the value arrives and may not reach local storage
+  /// until sync gets round to it. `NotificationServiceImpl` **drops** a
+  /// notification it cannot transform and never re-delivers it, so a
   /// local-only read here is not a slow path, it is a lost value.
   ///
-  /// Measured in `nskey_self_notify_live_test.dart`, one delivery: local read
-  /// attempted and missed, the remote leg answered 0.2 ms later, and sync
-  /// pulled the same record into local storage **23 ms after** the value had
-  /// already needed it.
-  ///
-  /// A record that is nowhere is not an error: the caller reports the key as
-  /// unavailable. A record that *is* there and will not open is the opposite
-  /// and is re-thrown from either leg — a failed AEAD, a malformed envelope or
-  /// a kid collision means tampering or corruption, and this is the only place
-  /// the key layer can raise that alarm. Reporting it as "not yet synced"
-  /// would hide it behind advice to keep polling.
+  /// A record that is nowhere is not an error and yields null. A record that
+  /// *is* there and will not open is re-thrown from either leg — a failed AEAD,
+  /// a malformed envelope or a kid collision means tampering or corruption, and
+  /// reporting it as "not yet synced" would hide it behind advice to keep
+  /// polling.
   Future<ContentKey?> _resolveFromConveyance(
     CryptoContext context,
     AtKey value,
@@ -291,16 +242,12 @@ class SymmetricAesGcmProvider
         // ContentKeyCache.put refuses two distinct CKs claiming one kid.
         rethrow;
       } on CryptoProviderNotRegistered {
-        // The record is there and will not open: this client has no provider
-        // for the scheme the conveyance was written under. Reporting that as
-        // an absent record would send the caller away to wait for a sync that
-        // has already happened.
+        // NOTE: the record is there and will not open — reporting it as absent
+        // would send the caller to wait for a sync that has already happened.
         rethrow;
       } catch (e) {
-        // Everything else is treated as "no such record", which is the common
-        // case and not an error. It is logged because an unexpected failure
-        // arrives here too, and the caller turns both into the same "content
-        // key unavailable" advice to retry later.
+        // NOTE: an unexpected failure lands here as well and is reported to
+        // the caller as "no such record", so the log is its only trace.
         _logger.warning('Could not read the conveyance $conveyance '
             '(remote: $remote), so its content key stays unresolved: $e');
         return false;
@@ -311,8 +258,6 @@ class SymmetricAesGcmProvider
       final local = cache.get(owner, namespace, ckKid);
       if (local != null) return local;
     }
-    // Not local, or local but for a different kid: ask the atServer, where the
-    // sender's remote-first write put it.
     if (await read(remote: true)) {
       return cache.get(owner, namespace, ckKid);
     }

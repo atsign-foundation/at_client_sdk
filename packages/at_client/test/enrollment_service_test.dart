@@ -49,13 +49,6 @@ void main() {
         remoteSecondary: mockRemoteSecondary);
     atClient.syncService = MockSyncService();
 
-    // The `enroll:fetch` this client makes the first time something asks what
-    // it is authorized for.
-    //
-    // ⚠️ This used to seed a keystore entry at `local:<enrollmentId><atSign>`
-    // instead. Nothing in production writes that key, so the seed stood for a
-    // state the SDK never reaches and the fetch-and-parse path below was never
-    // exercised. Stubbing the command drives the real one.
     when(() => mockRemoteSecondary
         .executeCommand('enroll:fetch:{"enrollmentId":"$enrollmentId"}\n',
             auth: true)).thenAnswer((_) async => 'data:${jsonEncode({
@@ -164,9 +157,6 @@ void main() {
     });
 
     test('fetchEnrollmentRequests carries the enrollment\'s status', () async {
-      // The atServer serves it on every roster row and the model was dropping
-      // it, so a caller reading a roster could not tell an approved enrollment
-      // from a revoked one without asking again.
       const currentAtsign = '@apkamstatus';
       const enrollKey =
           'abcdef02-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$currentAtsign';
@@ -200,22 +190,18 @@ void main() {
 
     test('fetchEnrollmentRequests carries the advertised key package',
         () async {
-      // The metadata the enrolling app put on its enroll:request, stored
-      // verbatim by the atServer. It was being dropped on the floor here,
-      // which is why conveyance used to re-discover the package over
-      // enroll:listns instead of reading the request it was approving.
-      // A distinct atSign: AtClientImpl.create caches per atSign, so reusing
-      // one another test already built would hand back that test's client and
-      // its mock secondary, and this stub would never fire.
+      // NOTE: a distinct atSign — AtClientImpl.create caches per atSign, so
+      // reusing one another test already built would hand back that test's
+      // client and its mock secondary, and this stub would never fire.
       const currentAtsign = '@apkammeta';
       const enrollKey =
           'abcdef01-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$currentAtsign';
       const enrollValue = '{"appName":"buzz","deviceName":"pixel",'
           '"namespace":{"buzz":"rw"},'
           '"metadata":{"keyPackage":{"opaqueToTheClient":true}}}';
-      // The UNFILTERED command, because this test calls
-      // `fetchEnrollmentRequests()` directly with no params — it is not going
-      // through `approve`, whose two reads each carry a status filter.
+      // The unfiltered command: this test calls `fetchEnrollmentRequests()`
+      // directly with no params, not through `approve`, whose two reads each
+      // carry a status filter.
       final listCommand = (EnrollVerbBuilder()
             ..operation = EnrollOperationEnum.list)
           .buildCommand();
@@ -240,12 +226,9 @@ void main() {
           reason: 'an approver reads the encapsulation target from here — the '
               'metadata is only ever written by the request that creates the '
               'record, so there is nowhere else to read it from');
-      // The stub's contents are deliberately not shaped like a real key
-      // package. What this asserts is pass-through of an opaque map, and a
-      // stub that mimicked the envelope would read as documentation of its
-      // shape — which is how this line came to describe a flat `signature`
-      // field that the envelope has not had since it went to a signatures
-      // list.
+      // NOTE: the stub is deliberately not shaped like a real key package —
+      // this asserts pass-through of an opaque map, and a stub that mimicked
+      // the envelope would read as documentation of its shape.
       expect((request.metadata!['keyPackage'] as Map)['opaqueToTheClient'],
           isTrue);
     });
@@ -261,11 +244,6 @@ void main() {
     /// the pre-approval read, and a metadata-less one afterwards, so
     /// conveyance short-circuits and the assertion is about the minting
     /// decision alone.
-    ///
-    /// Keyed on each read's own command string rather than on a call counter,
-    /// because the two carry different status filters. A counter would also
-    /// have made the fixture depend on the ORDER of the reads, which is not
-    /// what this test is about.
     Future<EnrollmentRequestDecision> decisionFor(
         String atSign, String pendingValue) async {
       final enrollKey =
@@ -280,13 +258,9 @@ void main() {
               'data:{"$enrollKey":{"appName":"buzz","deviceName":"pixel",'
               '"namespace":{"buzz":"rw"}}}');
 
-      // `pqReady`, named rather than defaulted. This helper serves both arms:
-      // one where the request carries no wrapped key and the APPROVER must
-      // mint and seal one, which a posture configuring no post-quantum
-      // providers refuses outright — and one where the request carries its own,
-      // which such an approver handles either way. Naming the stage keeps the
-      // second arm as the control it is: a post-quantum approver serving a
-      // legacy request normally.
+      // NOTE: the posture is named rather than defaulted — the arm where the
+      // approver mints and seals a key needs post-quantum providers, which a
+      // posture configuring none refuses outright.
       final client = await AtClientImpl.create(
           atSign,
           'buzz',

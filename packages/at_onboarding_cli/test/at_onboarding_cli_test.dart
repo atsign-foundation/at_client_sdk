@@ -32,10 +32,10 @@ class MockEnrollmentRequest extends Mock implements EnrollmentRequest {}
 
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 
-/// The approval handshake is at_auth's (`waitForApproval`); tests whose
-/// subject is the CLI's own behaviour stub it at that seam. [body] runs in
-/// place of the handshake — a test that needs "during approval" side effects
-/// (or a denial) expresses them there.
+/// Stubs at_auth's approval handshake (`waitForApproval`) on [mock].
+///
+/// [body] runs in place of the handshake, so a test expresses its
+/// "during approval" side effects, or a denial, there.
 void stubHandshake(MockEnrollmentBase mock, {Future<void> Function()? body}) {
   registerFallbackValue(
       AtEnrollmentResponse('fallback', EnrollmentStatus.pending));
@@ -74,10 +74,9 @@ void main() {
     test('A test to check atOnboardingService.authenticate() returns true',
         () async {
       final atSign = '@alice🛠';
-      // Era named, not inherited: these two are about at_chops creation, and
-      // authenticate() builds a client from THIS preference — under a posture
-      // wanting a stronger authentication key that start reaches the retrofit,
-      // which mockAtLookup does not model.
+      // NOTE: the posture is named, not inherited — under a posture wanting a
+      // stronger authentication key, client start reaches the retrofit, which
+      // mockAtLookup does not model.
       AtOnboardingPreference onboardingPreference =
           AtOnboardingPreference(posture: PqPosture.legacy)
             ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
@@ -110,10 +109,9 @@ void main() {
 
     test('authenticate hands the key source across to the client', () async {
       final atSign = '@alice🛠';
-      // Era named, not inherited: these two are about at_chops creation, and
-      // authenticate() builds a client from THIS preference — under a posture
-      // wanting a stronger authentication key that start reaches the retrofit,
-      // which mockAtLookup does not model.
+      // NOTE: the posture is named, not inherited — under a posture wanting a
+      // stronger authentication key, client start reaches the retrofit, which
+      // mockAtLookup does not model.
       AtOnboardingPreference onboardingPreference =
           AtOnboardingPreference(posture: PqPosture.legacy)
             ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
@@ -141,11 +139,6 @@ void main() {
 
       await onboardingService.authenticate();
 
-      // The FileAtKeysIo authenticate() builds for AtAuth must reach the
-      // client too. Without it the client has no key-material source at all —
-      // it cannot resolve its PKAM algorithm from the keyfile, file conveyed
-      // privates, or source per-algorithm signing keys — and every
-      // at_cli_commons consumer inherits that.
       expect(AtClientManager.getInstance().atClient.atKeysIo, isNotNull);
     });
     // TODO: add more tests
@@ -212,8 +205,6 @@ void main() {
       // setup mock behaviour
       when(() => mockEnrollmentBase.submit(any(), any()))
           .thenAnswer((_) => Future.value(enrollmentResponse));
-      // The handshake would decrypt the keys the wire stubs below serve;
-      // this response's atAuthKeys already hold them, so a no-op stands in.
       stubHandshake(mockEnrollmentBase);
       when(() => mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId))
           .thenAnswer((_) => Future.value(true));
@@ -480,8 +471,6 @@ void main() {
       // setup mock behaviour
       when(() => mockEnrollmentBase.submit(any(), any()))
           .thenAnswer((_) => Future.value(enrollmentResponse));
-      // The checkpoint's atAuthKeys already hold the decrypted keys the
-      // handshake would produce, so a no-op stands in for it.
       stubHandshake(mockEnrollmentBase);
       when(() => mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId))
           .thenAnswer((_) => Future.value(true));
@@ -595,9 +584,8 @@ void main() {
             .getFile('myApp', 'myDevice', {'test': 'rw'}).existsSync();
         throw UnAuthenticatedException('error:AT0025');
       });
-      // The stubbed handshake still authenticates on the lookup, so the
-      // probe above observes the checkpoint mid-approval; the denial keeps
-      // the real handshake's contract of throwing AtEnrollmentException.
+      // NOTE: the denial has to keep the real handshake's contract of
+      // throwing AtEnrollmentException.
       stubHandshake(mockEnrollmentBase, body: () async {
         try {
           await mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId);
@@ -849,13 +837,10 @@ Future<void> tearDownFunc() async {
 }
 
 AtClientPreference getAtClientPreferenceAlice() {
-  // The era is named, not inherited. These tests are about at_chops creation,
-  // and under a posture asking for a stronger authentication key the client
-  // start reaches the retrofit instead — a call MockAtLookupImpl does not
-  // model, so the failure arrives as a type error a long way from its cause.
-  // What the CLI does under a bare preference belongs to
-  // onboarding_preference_forwards_test, which compares against the SDK's own
-  // defaults and so follows them.
+  // NOTE: the posture is named, not inherited — under a posture asking for a
+  // stronger authentication key, client start reaches the retrofit instead, a
+  // call MockAtLookupImpl does not model, and the failure arrives as a type
+  // error a long way from its cause.
   var preference = AtClientPreference(posture: PqPosture.legacy);
   preference.hiveStoragePath = 'test/storage/hive/client';
   preference.commitLogPath = 'test/storage/hive/client/commit';

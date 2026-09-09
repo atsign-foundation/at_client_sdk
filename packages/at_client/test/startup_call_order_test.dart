@@ -1,5 +1,3 @@
-// The substrate is deliberately marked @experimental and will be reshaped as
-// the group surface matures.
 // ignore_for_file: experimental_member_use
 
 /// Records the ORDER of `_fileConveyedKeysAndAnchor`'s startup steps.
@@ -18,20 +16,17 @@
 ///   enrollments' broadcasts on bytes their own check rejects, and holding it
 ///   blocks this enrollment's own pull forever.
 ///
-/// The steps deliberately have no injection seams (extracting them is the
-/// refactor's business), so order is recorded through their observable
-/// effects — keyfile reads/writes and wire operations on a mocked
-/// RemoteSecondary — which is exactly the level that must survive the
-/// extraction unchanged. The filer is fire-and-forget with no completion
+/// The steps have no injection seams, so order is recorded through their
+/// observable effects — keyfile reads and writes, and wire operations on a
+/// mocked RemoteSecondary. The filer is fire-and-forget with no completion
 /// handle, so the test waits for the last step's wire marker.
 ///
-/// One ordering is NOT yet recorded here: anchor-before-pending-link. The
-/// pending-link step emits nothing unless a conveyed chain link is already
-/// in the secret store, which takes a genuinely sealed envelope from a peer
-/// fixture — hand-building the sealed form would re-describe the wire
-/// construction this suite exists to protect. That arm must exist before the
-/// bootstrap extraction lands; until then the anchor-before-sweep assertion
-/// bounds the anchor's position from the other side.
+/// One ordering is NOT recorded here: anchor-before-pending-link. The
+/// pending-link step emits nothing unless a conveyed chain link is already in
+/// the secret store, which takes a genuinely sealed envelope from a peer
+/// fixture, and hand-building the sealed form would re-describe the wire
+/// construction this suite exists to protect. The anchor-before-sweep
+/// assertion bounds the anchor's position from the other side.
 library;
 
 import 'dart:convert';
@@ -138,16 +133,13 @@ void main() {
       AtClientImpl.create(
         atSign,
         'buzz',
-        // `pqReady`, named rather than defaulted: the 3.x default is `legacy`, which
-        // runs no post-quantum startup at all, and this exercises exactly that
-        // startup. The stage is the fixture here, not the thing under test.
+        // NOTE: named rather than defaulted — the default posture runs no
+        // post-quantum startup at all, and this exercises exactly that startup.
         AtClientPreference(posture: PqPosture.pqReady)
           ..hiveStoragePath = storageDir
           ..commitLogPath = '$storageDir/commit',
         remoteSecondary: buildRecordingRemote(
             events: events, remoteData: remoteData, remoteMeta: remoteMeta),
-        // A full keypair set: the put pipeline signs public records with the
-        // encryption private key, served from atChops when it holds one.
         atChops: AtChopsImpl(AtChopsKeys.create(
             AtChopsUtil.generateAtEncryptionKeyPair(),
             AtChopsUtil.generateAtPkamKeyPair())),
@@ -157,15 +149,13 @@ void main() {
   test(
       'the start hydrates before it sweeps, files before it anchors, and '
       'anchors before the privileged sweep', () async {
-    // A keyfile holding the root private whose public half IS the published
-    // root, so every step has work: hydrate offers it, collection runs its
-    // sweep, and anchoring self-signs a root link.
+    // NOTE: the held root private's public half IS the published root, which
+    // is what gives every step work.
     final inner = InMemoryAtKeysIo();
     await inner.write(atSign, AtKeys());
     final pair = await MlDsa65PureDartAlgo().generateKeyPair();
     await PqSigningRoot(MockAtClient(), keysIo: inner)
         .store(atSign, pair.secretKey);
-    // The published record, in the fixture shape pq_signing_root_test pins.
     remoteData['public:pq_signing_root$atSign'] =
         jsonEncode(apskAdvertisement(keys: [
       ApskSigningKey.forPublicKey(
@@ -176,11 +166,10 @@ void main() {
     await startClient(keysIo);
     await untilEvent('cmd:enroll:list');
 
-    // Hydrate before sweep. The marker must be hydrate-SPECIFIC: collection
-    // also reads the keyfile, so a bare keys-read-before-scan assert stays
-    // green with the steps swapped. Reconciliation's read of the published
-    // root runs inside hydrate and nothing earlier touches that record, so
-    // the FIRST root-record get is hydrate's own.
+    // NOTE: the marker must be hydrate-SPECIFIC — collection also reads the
+    // keyfile, so a bare keys-read-before-scan assertion stays green with the
+    // steps swapped. Nothing before hydrate touches the published root record,
+    // so the FIRST root-record get is hydrate's own.
     final hydrateReconcile = firstIndex('get:public:pq_signing_root');
     final sweepScan = events.indexWhere((e) =>
         e.startsWith('scan:') && e.contains('__ssenv') ||
@@ -193,10 +182,9 @@ void main() {
             'them from a store hydrate primes — swept-then-hydrated destroys '
             'every waiting request while holding nothing to answer with');
 
-    // Root filed before anchor: collection (the sweep) completes before the
-    // anchor's root-link publish starts. register() also rewrites the _apsk
-    // (its initial bare publish, inside collection) — the anchor is the
-    // rewrite that carries apskRootLink, so match the tag, not the key.
+    // NOTE: register() also rewrites the _apsk inside collection, so the anchor
+    // is matched by the apskRootLink tag rather than by the key — matching the
+    // key finds that earlier bare publish instead.
     final anchorPublish = events.indexWhere((e) => e.endsWith(':rootlink'));
     expect(anchorPublish, isNot(-1),
         reason: 'no _apsk rewrite carried apskRootLink — the start never '
@@ -205,14 +193,10 @@ void main() {
         reason: 'anchoring signs with the root private that collection files '
             '— anchored-then-filed needs a second start to anchor at all');
 
-    // Anchor before the privileged chain sweep.
-    //
-    // The trailing colon is what makes this the SWEEP. `firstIndex` matches a
-    // prefix, and `enroll:listns:<ns>` — the roster read that seeding drives —
-    // starts with `cmd:enroll:list` too. Under a posture that does not seed it
-    // never appeared, so the loose prefix found the sweep by luck; under one
-    // that does, it matched the roster read four events earlier and the
-    // assertion read a correct startup as an inverted one.
+    // NOTE: the trailing colon is what makes this the SWEEP. `firstIndex`
+    // matches a prefix, and the roster read `enroll:listns:<ns>` starts with
+    // `cmd:enroll:list` too, so a looser prefix matches that instead and reads
+    // a correct startup as an inverted one.
     final sweepCommand = firstIndex('cmd:enroll:list:');
     expect(anchorPublish, lessThan(sweepCommand),
         reason: 'the sweep signs links for OTHER enrollments; a sweeper that '
@@ -222,9 +206,6 @@ void main() {
   test(
       'reconciliation gates the offer: an orphaned private is retired, '
       'never offered or anchored', () async {
-    // The differential arm: the held private corresponds to NOTHING published
-    // (a lost create's residue). Reconcile must retire it — a keyfile write —
-    // and neither the offer nor the anchor may run on it.
     final inner = InMemoryAtKeysIo();
     await inner.write(atSign, AtKeys());
     final held = await MlDsa65PureDartAlgo().generateKeyPair();
@@ -241,13 +222,12 @@ void main() {
 
     final keysIo = _RecordingAtKeysIo(inner, events);
     final client = await startClient(keysIo);
-    // Not untilEvent('cmd:enroll:list'): with the orphaned private retired,
-    // the sweep has nothing to sign root links with and correctly never
-    // fetches the roster — so the completion signal must not depend on
-    // which way the last step went.
+    // NOTE: the completion signal must not depend on which way the last step
+    // went — with the orphaned private retired the sweep has nothing to sign
+    // root links with and correctly never fetches the roster, so waiting on a
+    // roster event would hang.
     await (client as AtClientImpl).pqBootstrap!.startupComplete;
 
-    // Retired: the active private is gone from the keyfile...
     final keysAfter = await inner.read(atSign);
     final active = keysAfter
         .atSignKeysForKeyId(rootSlot1)
@@ -257,7 +237,6 @@ void main() {
             'own repair forever and gets offered to enrollments whose '
             'correspondence check rejects it after their broadcast is spent');
 
-    // ...and nothing anchored with it: no _apsk rewrite carries a root link.
     expect(events.where((e) => e.endsWith(':rootlink')), isEmpty,
         reason: 'a link signed by a retired private verifies against nothing');
   });

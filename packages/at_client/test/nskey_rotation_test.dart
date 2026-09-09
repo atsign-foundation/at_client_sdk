@@ -27,8 +27,7 @@ class FakeSecret extends Fake implements Secret {}
 class FakeEnrollmentRequestDecision extends Fake
     implements EnrollmentRequestDecision {}
 
-/// The nskey-keypair rotation lever (design.md §1.7 B5b) and the revocation it
-/// composes with (B6).
+/// The nskey-keypair rotation lever and the revocation it composes with.
 void main() {
   const atSign = '@alice';
   const namespace = 'app_1.my_apps';
@@ -44,16 +43,12 @@ void main() {
   });
 
   /// A client whose remote verbs succeed, recording an ordered trace of what
-  /// it was asked to do, and serving back whatever has been published.
-  /// [lockAlreadyHeld] makes the mint lock's immutable create fail, which is
-  /// how the atServer reports that another enrollment holds it.
-  /// `holdTheMintLock` and `releaseTheMintLock` move that same switch after
-  /// construction, so one test can watch a client meet the refusal and then
-  /// watch what it does once the holder is gone.
+  /// it was asked to do and serving back whatever has been published.
   ///
-  /// The mint and rotate paths read the atServer rather than this client's
-  /// caches — a sibling enrollment's publication is not in local storage until
-  /// sync catches up — so the fixture has to hold the record for them to find.
+  /// [lockAlreadyHeld] makes the mint lock's immutable create fail, which is
+  /// how the atServer reports that another enrollment holds it;
+  /// `holdTheMintLock` and `releaseTheMintLock` move that same switch after
+  /// construction.
   ({
     MockAtClient client,
     List<String> trace,
@@ -67,11 +62,10 @@ void main() {
       List<String>? keyEstablishmentAlgorithms}) {
     var lockHeld = lockAlreadyHeld;
     final atClient = MockAtClient();
-    // Swappable within one fixture, because two fixtures cannot stand in for
-    // two builds of the same atSign: each has its own APKAM keypair, so the
-    // second serves its own `_apsk` and the first's signed advertisement fails
-    // verification. Same atSign, same key, different configuration is what a
-    // rollout actually looks like.
+    // NOTE: a second fixture cannot stand in for a second build of the same
+    // atSign — it has its own APKAM keypair, so it serves its own `_apsk` and
+    // the first's signed advertisement fails verification. That is why this is
+    // swappable in place.
     var preference = keyEstablishmentAlgorithms == null
         ? null
         : AtClientPreference(
@@ -98,9 +92,8 @@ void main() {
             getRequestOptions: any(named: 'getRequestOptions')))
         .thenAnswer((inv) async {
       final key = inv.positionalArguments[0] as AtKey;
-      // Anything else is the `_apsk` an advertisement's signature is checked
-      // against; one key serves every enrollment of this atSign here, since
-      // authenticity is pinned in published_nskey_key_ring_test.
+      // Anything but `__nskey` is the `_apsk` an advertisement's signature is
+      // checked against.
       if (key.key != '__nskey') {
         return AtValue()
           ..value = chops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
@@ -137,10 +130,6 @@ void main() {
       configure: (List<String> algorithms) => preference =
           AtClientPreference(keyEstablishmentAlgorithms: algorithms),
       holdTheMintLock: () => lockHeld = true,
-      // The counterpart, because expiry is the only thing that releases a real
-      // one and a test cannot wait the ttl out: an enrollment that lost an
-      // election has to be able to reach the state it reaches once the
-      // cooldown is over.
       releaseTheMintLock: () => lockHeld = false,
     );
   }
@@ -155,12 +144,9 @@ void main() {
   ({MockSharing sharing, List<(Secret, Set<String>)> pushes}) sharing() {
     final mock = MockSharing();
     final pushes = <(Secret, Set<String>)>[];
-    // A real store, because conveyance now writes the minted private into it
-    // before pushing: the minter has to be able to ANSWER a later pull for
-    // what it just minted, and the answering path reads this store. Left as a
-    // bare mock, the getter returns null through noSuchMethod into a
-    // non-nullable type and the push below never happens — with `dart analyze`
-    // perfectly clean.
+    // NOTE: a real store, not a bare mock — the getter would return null
+    // through noSuchMethod into a non-nullable type and the push below would
+    // never happen, with `dart analyze` clean.
     when(() => mock.secretStore).thenReturn(SecretStore());
     when(() => mock.pushSecretToNamespaceMembers(any(),
             excludeEnrollmentIds: any(named: 'excludeEnrollmentIds')))
@@ -175,16 +161,11 @@ void main() {
   }
 
   /// Puts a generation on the fixture's atServer — a real keypair, signed, so
-  /// it survives the same verify a peer's advertisement gets — and returns it.
-  ///
-  /// This stands for another of @alice's enrollments having published. Seeding
-  /// the ring's own memory instead would be the wrong precondition: the whole
-  /// point of the mint path's read is that it does not trust this client's
-  /// caches to know what a sibling has done.
+  /// it survives the same verify a peer's advertisement gets — standing for
+  /// another of this atSign's enrollments having published, and returns it.
   ///
   /// [createdAt] back-dates the generation, which is what an age-shaped
-  /// rotation policy decides on. It defaults to now, so a caller that does not
-  /// care gets a freshly minted one.
+  /// rotation policy decides on; it defaults to now.
   Future<NskeyAdvertisement> publishedByAnother(
       MockAtClient client, Map<String, String> advertised,
       {DateTime? createdAt}) async {
@@ -203,9 +184,9 @@ void main() {
 
   group('the rotation lever', () {
     test('the published advertisement carries a payload version', () async {
-      // The reader accepts a payload with no `v` as the pre-2026-08-06 shape,
-      // so nothing would notice the writer dropping it — which is precisely
-      // why the writer needs its own assertion rather than a round trip.
+      // The reader accepts a payload with no `v`, so nothing would notice the
+      // writer dropping it — hence an assertion on the writer rather than a
+      // round trip.
       final c = client();
       final ring =
           PublishedNskeyKeyRing(c.client, privateFiling: await filing());
@@ -224,8 +205,6 @@ void main() {
       final filer = await filing();
       final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
 
-      // A first generation this client actually holds the private for, so the
-      // retention claim is about a key it could otherwise have dropped.
       final first = await ring.mintAndPublish(namespace);
       final second = (await ring.rotate(namespace)).rotated;
 
@@ -241,11 +220,6 @@ void main() {
               .having((a) => a.nskeyKid, 'nskeyKid', second.nskeyKid),
           reason: 'and new writes must seal to the successor');
 
-      // Fresh MATERIAL, not merely a fresh id. Differing kids already follow
-      // from differing keys, because a kid is derived from the key it names —
-      // so the kid assertion above says something about that derivation
-      // rather than about what an enrollment cut out of the rotation ends up
-      // holding. This compares the advertised keys themselves.
       expect(
           second.keys
               .map((k) => k.pub)
@@ -272,11 +246,6 @@ void main() {
       final first = await ring.mintAndPublish(namespace);
       final second = (await ring.rotate(namespace)).rotated;
 
-      // The claim, and it is an ABSENCE. The `_apsk` substrate retires an
-      // entry IN PLACE, leaving it advertised so what it produced still
-      // verifies; this one does not. It mints a fresh generation and leaves
-      // the old private in the keyfile, so a reader generalising from the
-      // signing side would look for a retired entry here and find none.
       expect(second.keys, isNotEmpty, reason: 'the positive control');
       for (final entry in second.keys) {
         expect(KeyEntryStatus.offersNewOperations(entry.status), isTrue,
@@ -287,9 +256,6 @@ void main() {
                 'ones');
       }
 
-      // What DOES open history is the previous generation's private, still
-      // held. Without this the absence above would be equally satisfied by a
-      // rotation that simply dropped the past.
       expect(await filer.read(namespace, first.nskeyKid), isNotNull,
           reason: 'the superseded private is what opens a retained __ck sealed '
               'to it; on this substrate that is the whole of retirement');
@@ -310,8 +276,6 @@ void main() {
               'is done; a rotation that adopts what it finds has rotated '
               'nothing while reporting success, leaving the enrollment it was '
               'excluding holding the live generation');
-      // The contrast that makes the point: the same loss on the mint path is a
-      // resolution, not a failure.
       expect((await ring.mintAndPublish(namespace)).nskeyKid, current.nskeyKid);
       expect(c.trace, isEmpty, reason: 'and the loser publishes nothing');
     });
@@ -329,31 +293,12 @@ void main() {
     });
   });
 
-  // A client that fails to take the mint lock does not queue behind the holder
-  // and does not retry blindly. It publishes nothing, and the question is put
-  // again — against a fresh read of what is published — so it either finds
-  // that another client has done what was needed or finds that it still must.
-  // That is what makes several clients converge on one generation rather than
-  // each publishing another over the top of it.
-  //
-  // ⚠️ Nothing on this path is timer-driven, and an assertion that it were
-  // would be false: nothing here sleeps, backs off, or reads the lock's ttl.
-  // The question is re-put by the next client start and by the next content
-  // key conveyed to a namespace this atSign owns, so a re-ask can land while
-  // the lock is still held and be refused again. What these arms pin is
-  // therefore the re-read and the re-decide, not any interval between them.
-  //
-  // The loser here is the one the atServer refused. `MintLock.withLock` has a
-  // second and different loser — a mint already in flight for the same key on
-  // the same instance — and that one does await it before declining, so "does
-  // not queue" is a claim about this loser rather than about the lock.
-  //
-  // What both arms discriminate against: giving `NskeySeeding` a set of
-  // namespaces whose rotation was refused and short-circuiting
-  // `rotateIfPolicyAsks` for anything already in it. The first refusal would
-  // become permanent for the session and the second pass would never re-ask,
-  // reddening both arms below while every other arm in this file — none of
-  // which asks twice — stayed green.
+  // NOTE: nothing on this path is timer-driven — it neither sleeps, backs off
+  // nor reads the lock's ttl. The question is re-put by the next client start
+  // and by the next content key conveyed to a namespace this atSign owns, so a
+  // re-ask can land while the lock is still held and be refused again. What
+  // these arms pin is the re-read and the re-decide, not any interval between
+  // them.
   group('the lock loser re-decides rather than queueing', () {
     test('a lock loser publishes nothing and still rotates at the next ask',
         () async {
@@ -375,8 +320,6 @@ void main() {
         },
       );
 
-      // Another enrollment takes the lock before this one gets there — the
-      // race the lock exists for.
       c.holdTheMintLock();
 
       expect(await seeding.rotateIfPolicyAsks(atSign, namespace), isFalse,
@@ -415,9 +358,7 @@ void main() {
           createdAt: DateTime.now().toUtc().subtract(const Duration(days: 30)));
       final s = sharing();
       final asks = <NskeyRotationContext>[];
-      // Age-shaped, which is the shape that can change its mind: one closure
-      // that answers yes about the generation this client found and no about
-      // the one that replaced it, so the difference between the two answers is
+      // One age-shaped closure, so the difference between the two answers is
       // the input and not the policy.
       final seeding = NskeySeeding(
         atClient: c.client,
@@ -440,8 +381,6 @@ void main() {
               'satisfy every assertion below with no contention anywhere');
       expect(c.trace, isEmpty);
 
-      // What the holder was doing, done: a fresh generation at this atSign's
-      // own address, published by whichever enrollment won the election.
       final fresh = await publishedByAnother(c.client, c.advertised);
       c.releaseTheMintLock();
 
@@ -471,17 +410,9 @@ void main() {
   group('rotation-time conveyance', () {
     test('seeding puts the minted private in the store it answers pulls from',
         () async {
-      // The minter has to be able to SERVE what it just minted. The answering
-      // path reads the secret store, and the store is filled from the keyfile
-      // only by hydrateStoreFromFiling — which runs at bootstrap, before the
-      // mint. Without the store write, the one enrollment guaranteed to hold
-      // the generation offered an empty candidate list to every pull for it
-      // and answered nothing until the process restarted, writing no envelope
-      // and logging nothing.
       final c = client();
-      // The legacy-PKAM shape, as the sibling test below uses: no enrollment,
-      // namespaces named by the preference — the path seed() takes without a
-      // roster round trip.
+      // The legacy-PKAM shape: no enrollment, namespaces named by the
+      // preference — the path seed() takes without a roster round trip.
       final lookUp = c.client.getRemoteSecondary()!.atLookUp;
       when(() => lookUp.enrollmentId).thenReturn(null);
       when(() => c.client.getPreferences())
@@ -519,11 +450,6 @@ void main() {
 
     test('rotation puts the successor in the store it answers pulls from',
         () async {
-      // The sibling of the mint-time case above, on the other path into
-      // _mint. The rotating enrollment is the one certain to hold the
-      // successor and, without this, the only one that cannot serve it — the
-      // answering path reads the secret store, and hydrateStoreFromFiling has
-      // already run by the time anything rotates.
       final c = client();
       final filer = await filing();
       final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
@@ -587,9 +513,6 @@ void main() {
       expect(outcome.supersededKid, isNot(outcome.advertisement.nskeyKid));
     });
 
-    // The mint-time push (NskeySeeding.seed -> _convey) shares the
-    // conveyance discipline this file pins for rotation, and this rig is
-    // the one that can actually mint — which is why the arm lives here.
     test('the mint-time push conveys the SEED too, under ML-KEM', () async {
       final c = client();
       // The legacy-PKAM shape: no enrollment, namespaces named by the
@@ -711,9 +634,6 @@ void main() {
 
   group('a generation holds a key per configured algorithm', () {
     test('a mint writes one key for each, and files each private', () async {
-      // ⚠️ The mint wrote ONE key until 2026-08-28, under
-      // keyEstablishmentAlgorithms.first — so an atSign configured for two
-      // advertised one, and a peer that could only use the other was refused.
       final c = client(keyEstablishmentAlgorithms: const [
         SecretSharingAlgos.xWing,
         SecretSharingAlgos.mlKem1024,
@@ -764,31 +684,11 @@ void main() {
     });
 
     test('a rotation drops an algorithm this client no longer mints', () async {
-      // The removal half of fresh-only. Everywhere else in this file the
-      // configured set either stays constant — the arm above rotates under
-      // two algorithms and asserts the successor names the same two — or
-      // widens, which is what the add lever does. Neither can tell a rotation
-      // that rebuilds the advertisement from the preference apart from one
-      // that rebuilds it from the generation it is superseding.
-      //
-      // Nothing decides to remove an entry: `rotate` prepares its mint with
-      // nothing retained, so the successor is exactly what this client's
-      // configured set produced, and an algorithm that set no longer names is
-      // simply not in it.
-      //
-      // ⚠️ The drop is decided by THIS client's configuration alone. A sibling
-      // still configured for ml-kem-1024 puts it straight back through the add
-      // lever, which its startup seeding reaches for any namespace already
-      // published — so what this asserts is the removal, not that the fleet
+      // NOTE: the drop is decided by THIS client's configuration alone. A
+      // sibling still configured for ml-kem-1024 puts it straight back through
+      // the add lever, which its startup seeding reaches for any namespace
+      // already published — so this asserts the removal, not that the fleet
       // has finished with the algorithm.
-      //
-      // What it discriminates against: preparing the rotation's mint with
-      // `retaining: superseded.keys.where((k) =>
-      // !wantedKeyAlgorithms().contains(k.alg)).toList()` — a plausible "do
-      // not strand a peer mid-rollout" feature — carries the dropped entry
-      // into the successor. It reddens this arm and the one below it, while
-      // every rotation arm here that holds the algorithm set constant stays
-      // green.
       final c = client(keyEstablishmentAlgorithms: const [
         SecretSharingAlgos.xWing,
         SecretSharingAlgos.mlKem1024,
@@ -819,16 +719,6 @@ void main() {
     });
 
     test('an algorithm a rotation dropped is not added back', () async {
-      // The other half of the same lever. What puts an algorithm into a
-      // generation is `add`, and the set it works from is
-      // `wantedKeyAlgorithms()` — this client's own preference — so an
-      // algorithm the preference no longer names is not missing from the
-      // generation, it is gone from it.
-      //
-      // What it discriminates against: computing the missing set from the
-      // union of the preference and whatever the superseded generation named,
-      // which would re-mint ml-kem-1024 on the first add after the rotation
-      // and undo the removal with nothing having asked for it.
       final c = client(keyEstablishmentAlgorithms: const [
         SecretSharingAlgos.xWing,
         SecretSharingAlgos.mlKem1024,
@@ -861,10 +751,6 @@ void main() {
 
     test('an unmintable set never reaches the mint — the preference refuses it',
         () {
-      // Where the guard lives, asserted so the ring's absence of one is a
-      // decision rather than an oversight. A ring that re-checked would be
-      // making a claim about this class rather than a check of its own, and
-      // the branch would be unreachable.
       expect(
           () => AtClientPreference(
               keyEstablishmentAlgorithms: const ['kem-from-the-future']),
@@ -885,9 +771,9 @@ void main() {
 
     test('joins the current generation in place, keeping its identity',
         () async {
-      // The rollout-1 case: a generation minted by a build configured for one
-      // algorithm, and the same install upgraded to a build configured for two
-      // finding its own missing.
+      // A generation minted by a build configured for one algorithm, and the
+      // same install upgraded to a build configured for two finding its own
+      // missing.
       final c =
           client(keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing]);
       final filer = await filing();
@@ -950,8 +836,6 @@ void main() {
       await ring.mintAndPublish(namespace);
       c.trace.clear();
 
-      // Another enrollment takes the lock between this client deciding to add
-      // and getting there — the race the lock exists for.
       c.holdTheMintLock();
       c.configure(both());
 
@@ -963,6 +847,8 @@ void main() {
   });
 
   group('the revocation composition', () {
+    /// An enrollment service holding the caller's own record and `enroll-b`,
+    /// recording each revoke into the returned trace.
     ({MockEnrollmentService service, List<String> order}) enrollmentService(
         MockAtClient atClient,
         {Map<String, dynamic>? grants,
@@ -977,8 +863,8 @@ void main() {
       when(() => service.fetchEnrollmentRequests(
               enrollmentListParams: any(named: 'enrollmentListParams')))
           .thenAnswer((_) async => [
-                // The caller's own record. The atServer always returns it, and
-                // it is what says whether this client may revoke at all.
+                // The caller's own record: the atServer always returns it, and
+                // it says whether this client may revoke at all.
                 Enrollment()
                   ..enrollmentId = 'enroll-a'
                   ..namespace = callerGrants,
@@ -1068,14 +954,6 @@ void main() {
               'would leave the atSign with an enrollment cut off from the '
               'server but still holding every live namespace key it had');
 
-      // The control, and it is deliberately NOT drawn from the property under
-      // test: this line is emitted by the same call whatever the rotations
-      // do. It stays green when the severe record below is downgraded — the
-      // failure that assertion exists to catch — and goes red when the
-      // handler never bound, which is the failure that would otherwise let an
-      // empty recorder satisfy every level assertion by matching nothing.
-      // First, so an unbound recorder is reported as an unbound recorder
-      // rather than as a missing SEVERE record.
       expect(
           logs
               .at('INFO')
@@ -1084,13 +962,6 @@ void main() {
           reason: 'if this is empty the recorder is not bound and the SEVERE '
               'assertion below measured nothing');
 
-      // The LEVEL is the contract here, not decoration. A namespace that
-      // failed to rotate is simply absent from `outcomes` — indistinguishable
-      // from one that needed nothing — so this record is the only thing that
-      // tells an operator an enrollment they just revoked still holds a live
-      // generation and can open data written under it. Logged at `finer` it
-      // would not reach a default deployment's log at all, and the omission
-      // would read as success.
       expect(logs.at('SEVERE').where((m) => m.contains(unminted)), hasLength(1),
           reason: 'the namespace this call could not rotate has to be named, '
               'at a level an operator sees, or the caller is told nothing at '

@@ -10,18 +10,11 @@ import 'test_utils.dart';
 
 /// `PublishedNskeyKeyRing` against a live atServer, same-atSign.
 ///
-/// The rest of the nskey coverage seeds an `InMemoryNskeyKeyRing`, so nothing
-/// drives the real publish-and-discover path within one atSign. That left two
-/// things unproven:
-///
-/// - A client that has minted **nothing** — another enrollment, or this one
-///   after a restart — has to find the advertisement its atSign already
-///   published. Reporting that as cold start would be wrong twice: the namespace
-///   is published, and "fixing" it by minting would rotate the key out from
-///   under every peer that had already fetched it.
-/// - The design claims **one** verify path, same-atSign and cross-atSign. The
-///   cross-atSign half is covered in `at_end2end_test`; this is the other half,
-///   and until it ran the claim was aspirational.
+/// A client that has minted nothing — another enrollment, or this one after a
+/// restart — must find the advertisement its atSign already published, and the
+/// owner verifies it by the same path a peer would. Reporting a published
+/// namespace as cold start and minting again would rotate the key out from
+/// under every peer that had already fetched it.
 void main() {
   TestUtils.isolateStorage('nskey_published_ring_test');
   late AtClient atClient;
@@ -54,9 +47,6 @@ void main() {
 
   test('the owner verifies her own advertisement the same way a peer would',
       () async {
-    // Substitute an unsigned advertisement at the owner's own address. If the
-    // same-atSign path skipped verification this would be accepted, and the
-    // design's single-verify-path claim would be false.
     final ns = uniqueNs();
     await PublishedNskeyKeyRing(atClient).mintAndPublish(ns);
 
@@ -64,9 +54,9 @@ void main() {
     final unsigned = '{"v":1,"keys":[{"kid":'
         '"${nskeyKidOf(substitute.publicKeyBytes)}","use":"enc",'
         '"alg":"x-wing","pub":"unsigned"}]}';
-    // Local-first, deliberately: `currentPublic` reads through `atClient.get`,
-    // so substituting only on the atServer would leave the genuine local copy
-    // answering and the test would pass without proving anything.
+    // NOTE: local-first, deliberately. `currentPublic` reads through
+    // `atClient.get`, so substituting only on the atServer would leave the
+    // genuine local copy answering and the test would prove nothing.
     await atClient.put(nskeyAdvertisementKey(atSign, ns), unsigned);
 
     await expectLater(
@@ -80,18 +70,15 @@ void main() {
   test('a rotation publishes a new generation and keeps the old private',
       () async {
     final ns = uniqueNs();
-    // A short cooldown, because nothing releases a mint lock but its ttl: the
-    // cold-start mint below holds it, and the rotation that follows is refused
-    // until it lapses. At the production `mintLockTtl` this test would sit for
-    // two minutes. The refusal itself is asserted in nskey_rotation_live_test.
+    // NOTE: a short cooldown, because nothing releases a mint lock but its
+    // ttl. The cold-start mint below holds it and the rotation that follows is
+    // refused until it lapses; at the production `mintLockTtl` this test would
+    // sit for two minutes.
     const lockTtl = Duration(seconds: 5);
     final ring = PublishedNskeyKeyRing(atClient, lockTtl: lockTtl);
-    // Seed with the cold-start mint, then rotate with the rotation lever —
-    // the sequence production runs. Minting twice also reaches a second
-    // generation, but it is not what rotation does: on a lost mint lock it
-    // adopts the winner and reports success, so a test driving it that way
-    // asserts rotation's contract against a method that cannot fail the way
-    // rotation fails.
+    // NOTE: the second generation comes from the rotation lever, not a second
+    // mint — a mint that loses the lock adopts the winner and reports success,
+    // so it cannot fail the way rotation fails.
     final first = await ring.mintAndPublish(ns);
     // A second past the ttl: the atServer starts counting when it stores the
     // record, after this client sent it.
@@ -101,19 +88,15 @@ void main() {
     expect(second.nskeyKid, isNot(first.nskeyKid),
         reason: 'a rotation is a new generation, not an edit of the old one');
 
-    // The advertisement is mutable by design, so the atServer now serves only
-    // the new generation — that is what a sender re-plookups and picks up.
-    // Read the atServer's copy: a fresh ring's `currentPublic` still reads
-    // local-first for its own atSign, and a sync pull can regress that copy
-    // to the superseded generation moments after the rotation.
+    // NOTE: read the atServer's copy. A fresh ring's `currentPublic` still
+    // reads local-first for its own atSign, and a sync pull can regress that
+    // copy to the superseded generation moments after the rotation.
     expect(
         (await PublishedNskeyKeyRing(atClient)
                 .publishedAdvertisement(atSign, ns))
             ?.nskeyKid,
         second.nskeyKid);
 
-    // But the ring keeps the superseded private, or every conveyance sealed to
-    // it before the rotation would become unreadable.
     expect(await ring.privateHalf(atSign, ns, first.nskeyKid), isNotNull,
         reason: 'rotation must not retire data written under the old key');
     expect(await ring.privateHalf(atSign, ns, second.nskeyKid), isNotNull);

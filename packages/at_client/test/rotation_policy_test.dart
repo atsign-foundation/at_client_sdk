@@ -1,13 +1,8 @@
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
-/// The two policies the SDK ships, and the shape every application-supplied one
-/// is written against.
-///
-/// Both are pinned as **values**, not as behaviour observed through a manager:
-/// they are what an application inherits by saying nothing, so a change to
-/// either is a change to what every deployment does, and it should have to be
-/// made here.
+/// The two rotation policies the SDK ships, pinned as the values an
+/// application inherits by saying nothing.
 void main() {
   const destination = '@alice';
   const namespace = 'app_1.my_apps';
@@ -37,10 +32,8 @@ void main() {
     });
 
     test('the period is SEVEN days, pinned as a literal', () {
-      // Not derived from a constant the policy also reads: the two would move
-      // together and the assertion would say nothing. Every replacement writes
-      // a conveyance record that is then retained, so this number decides how
-      // fast records accumulate for every deployment that says nothing.
+      // NOTE: the seven is a literal on purpose — sharing the constant the
+      // policy reads would move both together and assert nothing.
       expect(
           rotateCkAfterOneWeek(ckAged(
               const Duration(days: 7) - const Duration(microseconds: 1))),
@@ -49,8 +42,6 @@ void main() {
     });
 
     test('age is measured against the now it is given, not the clock', () {
-      // A policy that read DateTime.now() would answer differently every run,
-      // and an application could not test its own.
       final ctx = CkRotationContext(
         destination: destination,
         namespace: namespace,
@@ -84,8 +75,6 @@ void main() {
     });
 
     test('it is a policy rather than an absent one', () {
-      // A null would put a check at every call site, and a call site that
-      // forgot it would silently never ask.
       const NskeyRotationPolicy configured = neverRotateNskey;
       expect(configured, isNotNull);
     });

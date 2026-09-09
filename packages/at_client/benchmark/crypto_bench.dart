@@ -1,8 +1,6 @@
 // Run: dart run benchmark/crypto_bench.dart [--iterations N] [--json]
 //
-// The durable artefact behind acceptance.md's "performance is measured, not
-// assumed". Re-run it on every key-shape change; it is the instrument that
-// pins the budget, not a one-off number.
+// Re-run on every key-shape change.
 
 import 'dart:convert';
 import 'dart:io';
@@ -27,6 +25,7 @@ class Timing {
     return sorted[min(sorted.length - 1, (sorted.length * p) ~/ 100)];
   }
 
+  /// This timing as a JSON-encodable map, with durations in microseconds.
   Map<String, Object?> toJson() => {
         'name': name,
         'basis': basis,
@@ -36,16 +35,11 @@ class Timing {
       };
 }
 
-/// Runs [body] [iterations] times after [warmup] untimed rounds.
+/// Runs [body] [iterations] times after [warmup] untimed rounds, timing each
+/// iteration separately.
 ///
-/// Each iteration is timed separately and the median reported, because a total
-/// divided by a count hides the distribution — and the pure-Dart PQ primitives
-/// have a wide one.
-///
-/// [warmup] is deliberately generous. At 5 rounds the first measurement in the
-/// process carried JIT cost into its samples, and the symptom was a legacy
-/// encrypt that came out *slower* at 256B than at 4096B — an impossible
-/// ordering, and the instrument saying so.
+/// [warmup] is generous on purpose: too few rounds leave JIT cost in the
+/// samples.
 Future<Timing> measure(
   String name,
   String basis,
@@ -67,10 +61,6 @@ Future<Timing> measure(
 }
 
 /// The cost of the harness itself — an empty timed body.
-///
-/// Reported rather than subtracted. A measurement whose background is not
-/// stated cannot be checked, and if this is ever a large share of a headline
-/// number then that number is measuring the instrument.
 Future<Timing> measureOverhead(int iterations) => measure(
       'harness loop (empty body)',
       'per iteration',
@@ -81,10 +71,7 @@ Future<Timing> measureOverhead(int iterations) => measure(
 /// Exercises every primitive once before anything is timed.
 ///
 /// Per-measurement warmup is not enough on its own: it warms only its own
-/// body, so whichever group runs first still absorbs process-level JIT cost.
-/// The symptom was a legacy encrypt reading slower at 256B than at 4096B, and
-/// the elevated figure moving to whichever size was measured first — an
-/// ordering that cannot be a property of the code.
+/// body, so whichever group runs first absorbs process-level JIT cost.
 Future<void> prewarm() async {
   final data = payload(4096);
   final gcm = AesGcm256EncryptionAlgo(aesKey());
@@ -124,25 +111,25 @@ Future<void> prewarm() async {
   }
 }
 
+/// A payload of [bytes] bytes, identical on every call so no run measures a
+/// different input.
 Uint8List payload(int bytes) =>
     Uint8List.fromList(List<int>.generate(bytes, (i) => i % 256));
 
+/// An AES-256 key, identical on every call so key material is never a variable.
 AESKey aesKey() => AESKey(base64Encode(payload(32)));
 
 /// The key-schedule binding a CK conveyance is sealed under.
 ///
-/// `pqSeal` requires `info` and deliberately offers no default, so a bench has
-/// to choose one. This mirrors the shape production seals under —
-/// `<providerId>:<owner>:<namespace>`, built by `NskeyProvider._info` — rather
-/// than the empty binding, because `info` is an HKDF input and an empty one
-/// would measure a shorter key schedule than any real conveyance pays for.
+/// Mirrors the `<providerId>:<owner>:<namespace>` shape a real conveyance uses:
+/// `info` is an HKDF input, so an empty binding would measure a shorter key
+/// schedule than anything in production pays for.
 final Uint8List conveyanceInfo =
     Uint8List.fromList(utf8.encode('nskey:@benchmark:bench'));
 
+/// Times the symmetric work every put and get pays once a content key exists.
 Future<List<Timing>> perRecord(int iterations) async {
   final results = <Timing>[];
-  // A content key is already established at this point — these are the costs
-  // every put and get actually pays in steady state.
   final gcm = AesGcm256EncryptionAlgo(aesKey());
   final ctr = AESEncryptionAlgo(aesKey());
   final iv = InitialisationVector(payload(16));
@@ -169,15 +156,13 @@ Future<List<Timing>> perRecord(int iterations) async {
   return results;
 }
 
+/// Times conveying a content key, which is paid once per (owner, namespace)
+/// rather than per record.
 Future<List<Timing>> perConveyance(int iterations) async {
   final results = <Timing>[];
-  // This is where PQ actually costs something, and it is paid ONCE per
-  // (owner, namespace) — not per record. Charging it per put, which a naive
-  // end-to-end latency delta does, overstates it by the number of records in
-  // the scope.
   final xwing = XWingPureDartAlgo.instance;
   final pair = await xwing.generateKeyPair();
-  final ck = payload(32); // a content key is what actually gets conveyed
+  final ck = payload(32);
   final envelope =
       await pqSeal(xwing, pair.publicKey, ck, info: conveyanceInfo);
 
@@ -207,11 +192,10 @@ Future<List<Timing>> perConveyance(int iterations) async {
   return results;
 }
 
+/// Times signing and verifying one PKAM challenge, the whole of what an
+/// authentication costs.
 Future<List<Timing>> perAuth(int iterations) async {
   final results = <Timing>[];
-  // The PKAM signature swap. Auth needs a signature only — the per-connection
-  // challenge gives freshness and TLS gives the channel — so this is the whole
-  // of what PQ costs an authentication.
   final challenge = payload(64);
 
   final mldsa = MlDsa65PureDartAlgo();
@@ -245,6 +229,8 @@ Future<List<Timing>> perAuth(int iterations) async {
   return results;
 }
 
+/// Prints [timings] as a table under [heading], with [basisNote] naming the
+/// denominator the figures are quoted against.
 void report(String heading, String basisNote, List<Timing> timings) {
   stdout.writeln('');
   stdout.writeln(heading);
@@ -261,6 +247,7 @@ void report(String heading, String basisNote, List<Timing> timings) {
 String _us(int micros) =>
     micros >= 1000 ? '${(micros / 1000).toStringAsFixed(2)} ms' : '$micros us';
 
+/// Runs every group and prints a table, or a JSON document when given `--json`.
 Future<void> main(List<String> args) async {
   final iterations = args.contains('--iterations')
       ? int.parse(args[args.indexOf('--iterations') + 1])

@@ -29,12 +29,6 @@ class MockAtClient extends Mock implements AtClient {}
 class MockAtEnrollment extends Mock implements AtEnrollment {}
 
 /// Giving an enrollment signing keys of its own, per the in-use set.
-///
-/// The ordering assertion is the one that matters most here. Publishing after
-/// filing would leave the client signing with a key its `_apsk` does not name,
-/// and envelopes are stored durably — so every envelope written in that window
-/// is permanently unverifiable, with nothing to retry it: the next start finds
-/// the key already held and mints nothing.
 void main() {
   const atSign = '@alice';
   const enrollmentId = 'enroll-a';
@@ -106,20 +100,11 @@ void main() {
   /// ML-DSA-65, so the authentication and data signing keys are two different
   /// keys and the enrollment genuinely lacks any rsa2048 signing key until one
   /// is minted.
-  ///
-  /// Without this the fixture is a **legacy** enrollment — an rsa2048 APKAM
-  /// and no typed signing material — where the one keypair does both jobs, so
-  /// the enrollment already holds the rsa2048 signing key the in-use set names
-  /// and the mint is correctly a no-op.
   void asRetrofittedEnrollment() =>
       recordResolvedSigningAlgo(atClient, SigningAlgoType.mldsa65);
 
   /// One reconciliation, returning what it minted and asserting it retired
   /// nothing.
-  ///
-  /// Every row below this line is about the minting half, so the retirement
-  /// assertion belongs in all of them rather than in none: a change that
-  /// withdrew a key on an ordinary start would otherwise pass every one.
   Future<List<SigningAlgoType>> mint() async {
     final reconciled = await minter().reconcileSigningKeys();
     expect(reconciled.retired, isEmpty,
@@ -131,10 +116,8 @@ void main() {
 
   group('what it does not do', () {
     test('an empty in-use set mints nothing', () async {
-      // The set is named rather than taken from the default. It used to be
-      // the default — this test read "the 3.x default" — and the shipped
-      // default is now pqReady, which keeps one classical signing key. The
-      // property being pinned is the set's, not the default's, so it says so.
+      // NOTE: the property pinned is the set's, not the default's, so the set
+      // is named here rather than left to whatever the default carries.
       when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
           posture: PqPosture.legacy, dataSigningKeyAlgorithms: const {}));
 
@@ -144,9 +127,6 @@ void main() {
     });
 
     test('a client with no key source mints nothing', () async {
-      // A minted key that cannot be filed is one this client signs with until
-      // it restarts and never again, having already published it. The
-      // source-less client is a deliberate, tested property elsewhere.
       when(() => atClient.atKeysIo).thenReturn(null);
 
       expect(await mint(), isEmpty);
@@ -227,12 +207,9 @@ void main() {
     });
 
     test('a single rsa2048 key is advertised in the bare form', () async {
-      // A retrofitted enrollment minting the rsa2048 signing key its stage
-      // names. Every deployed `_apsk` consumer base64-decodes the value as an
-      // RSA key, so a one-entry JSON array here is fail-closed but
-      // service-breaking for anything already running — the breakage rollout 1
-      // exists to prevent, arriving from the heal path instead of the request
-      // path.
+      // NOTE: every deployed `_apsk` consumer base64-decodes the value as an
+      // RSA key, so a one-entry JSON array here would break anything already
+      // running.
       asRetrofittedEnrollment();
       when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
           dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048}));
@@ -277,15 +254,14 @@ void main() {
   /// `PqPosture.legacy`: a client whose posture wants a stronger
   /// authentication algorithm retrofits into a new enrollment before its
   /// startup steps run, so it holds an enrollment id by the time anything
-  /// mints. `AtClientImpl.retrofitIsDue` is what decides that, and
-  /// `pre_enrollment_retrofit_drive_test.dart` pins it.
+  /// mints.
   ///
-  /// ⚠️ **So this group characterises a code path no client reaches, and it
-  /// read as a product capability until 2026-09-08.** `reconcileSigningKeys`
-  /// selects the direct-put writer on the enrollment id alone and would still
-  /// take it if something called it this way; what stops that is upstream, not
-  /// here. Nothing below may be cited as evidence that a credential with no
-  /// enrollment id mints or publishes anything in production.
+  /// ⚠️ So this group characterises a code path no client reaches.
+  /// `reconcileSigningKeys` selects the direct-put writer on the enrollment id
+  /// alone and would still take it if something called it this way, but what
+  /// stops that is upstream. Nothing below may be cited as evidence that a
+  /// credential with no enrollment id mints or publishes anything in
+  /// production.
   group('a client with no enrollment, which nothing reaches', () {
     late List<String> published;
 
@@ -304,9 +280,6 @@ void main() {
 
     test('publishes the record itself rather than sending enroll:update',
         () async {
-      // The client can name no enrollment, so it can send no enroll:update
-      // for the atServer to compose an _apsk from — which makes the client the
-      // only writer this record could have, if one ever got here.
       expect(await mint(), [SigningAlgoType.mldsa65]);
 
       expect(updates, isEmpty);
@@ -332,18 +305,13 @@ void main() {
     });
   });
 
-  /// A stage transition — the one thing no rail in this project covers.
-  ///
-  /// The rollout matrix copies a **fresh keyfile per cell**, so it never moves
-  /// one client from one stage to the next; every cell measures a client born
-  /// at its stage. The move from an in-use set of `{rsa2048}` to `{mldsa65}`
-  /// is where a signing key is actually withdrawn, and until this group
-  /// existed nothing exercised it at any layer.
+  /// A stage transition: the move from an in-use set of `{rsa2048}` to
+  /// `{mldsa65}`, which is where a signing key is actually withdrawn.
   ///
   /// What must hold across the move: the old key stops signing, stays
   /// advertised as `retired`, and what it signed still verifies. The last of
-  /// those is the point of retaining it at all, and it is asserted here
-  /// against real published values rather than a reconstruction of them.
+  /// those is the point of retaining it at all, and it is asserted against
+  /// real published values rather than a reconstruction of them.
   group('a stage transition', () {
     void inUse(Set<SigningAlgoType> algorithms) {
       when(() => atClient.getPreferences())
@@ -352,12 +320,9 @@ void main() {
 
     Future<AtKeys> keyfile() async => keysIo.read(atSign);
 
-    /// The rollout-1 starting position: this enrollment holds an RSA-2048
-    /// signing key of its own and advertises it.
+    /// The starting position: this enrollment holds an RSA-2048 signing key of
+    /// its own and advertises it.
     Future<void> atRollout1() async {
-      // A retrofitted enrollment, which is what this group is about: the move
-      // from {rsa2048} to {mldsa65} is a transition an enrollment makes after
-      // its authentication key has already gone post-quantum.
       asRetrofittedEnrollment();
       inUse({SigningAlgoType.rsa2048});
       expect((await minter().reconcileSigningKeys()).minted,
@@ -437,9 +402,7 @@ void main() {
     });
 
     test('retires even when there is nothing left to mint', () async {
-      // The state a client reaches by crashing between the two writes, or by
-      // upgrading to a build that retires. Returning early on an empty
-      // *missing* set — which is what this used to do — leaves the stale key
+      // NOTE: returning early on an empty *missing* set leaves the stale key
       // active for good, because a start with nothing to mint never looks.
       await atRollout1();
       inUse({SigningAlgoType.rsa2048, SigningAlgoType.mldsa65});
@@ -475,11 +438,10 @@ void main() {
     });
 
     test('an empty in-use set withdraws nothing', () async {
-      // The released posture. Every algorithm is out of the set, and this is
-      // deliberately NOT read as "retire everything": a client there goes on
-      // signing with the key it holds and advertising it bare, which is what
-      // that posture publishes. Retiring would drop it to signing with its
-      // authentication key and turn the advertisement into an array.
+      // NOTE: an empty set is deliberately NOT read as "retire everything" — a
+      // client there goes on signing with the key it holds and advertising it
+      // bare. Retiring would drop it to signing with its authentication key and
+      // turn the advertisement into an array.
       await atRollout1();
       final settled = updates.length;
 
@@ -530,23 +492,15 @@ void main() {
 
     /// UC-G1.9 — the reason a retired key is retained at all.
     ///
-    /// Runs on the no-enrollment arm because that is the path where this
-    /// client composes the `_apsk` **value**: the enrolled path hands entries
-    /// to the atServer, so a test there would have to reconstruct the wire
-    /// form, and a pin fed a reconstruction proves what the test can build
-    /// rather than what the client published.
+    /// Runs on the no-enrollment arm because that is the path where this client
+    /// composes the `_apsk` **value**, so the pin reads what the client
+    /// published rather than a reconstruction of the wire form.
     test('an envelope written AFTER the withdrawal carries no signature of it',
         () async {
-      // The row's first clause is "new envelopes carry no signature of it".
-      // Every arm asserting it read the held key SET — what this client COULD
-      // sign with — which is a proxy for what a composed envelope actually
-      // carries. This composes one, from what the production selector offers
-      // rather than from a key picked by hand.
       await atRollout1();
 
-      // The control, taken BEFORE the move: an envelope built the same way
-      // does carry the RSA signature. Without it, "no RS256 entry" would be
-      // satisfied by an envelope carrying no entries at all.
+      // NOTE: the control has to be taken before the move — without it, "no
+      // RS256 entry" is satisfied by an envelope carrying no entries at all.
       final atRollout1Envelope = signEnvelope('written at rollout 1',
           keys: await minter().signingKeys, type: EnvelopeType.app);
       expect(
@@ -570,9 +524,6 @@ void main() {
               'retired algorithm — so a future build that emitted several '
               'entries would still have to leave this one out');
 
-      // The row's other two clauses, so the three are read together: the key
-      // is retired rather than dropped, which is what keeps the envelope
-      // above's predecessor verifiable.
       final withdrawn =
           (await keyfile()).withdrawnSigningKeysFor(enrollmentId).single;
       expect(withdrawn.algorithm, SigningAlgoType.rsa2048,
@@ -583,11 +534,6 @@ void main() {
     });
 
     test('an envelope signed before the withdrawal still verifies', () async {
-      // A retrofitted enrollment, as everywhere in this group. The null
-      // enrollment id is only how this row reaches the simpler publish path
-      // (a direct put rather than an `enroll:update`); the claim below is
-      // about what a withdrawal does to an envelope, not about enrollment
-      // identity.
       asRetrofittedEnrollment();
       when(() => atLookUp.enrollmentId).thenReturn(null);
       final published = <String>[];
@@ -629,26 +575,13 @@ void main() {
     });
 
     /// UC-G2.9 — the overlap a migration with a verifier gap was thought to
-    /// need. ⛔ RETIRED by decisions.md 120 on 2026-08-28: an attacker strips
-    /// the stronger signature and the verifier accepts the weaker, because
-    /// nothing lets it insist. This test is KEPT so it goes red the day the
-    /// multi-signature writer is removed.
-    ///
-    /// The gap this closes: a two-member `dataSigningKeyAlgorithms` is set in
-    /// exactly two tests elsewhere and NEITHER reaches an envelope — one
-    /// asserts mint order, the other set equality. So nothing established that
-    /// the PREFERENCE, rather than hand-supplied key material, is what produces
-    /// a two-signature envelope. And the direction the overlap exists for — a
-    /// verifier implementing one of the two ACCEPTING such an envelope — was
-    /// asserted nowhere; only the refusal was.
+    /// need. ⛔ RETIRED as a requirement: an attacker strips the stronger
+    /// signature and the verifier accepts the weaker, because nothing lets it
+    /// insist. Kept so it goes red the day the multi-signature writer is
+    /// removed.
     test(
         'a two-member in-use set signs twice, and a one-algorithm verifier '
         'still verifies', () async {
-      // A retrofitted enrollment, as everywhere in this group. The null
-      // enrollment id is only how this row reaches the simpler publish path
-      // (a direct put rather than an `enroll:update`); the claim below is
-      // about what a withdrawal does to an envelope, not about enrollment
-      // identity.
       asRetrofittedEnrollment();
       when(() => atLookUp.enrollmentId).thenReturn(null);
       final published = <String>[];
@@ -663,9 +596,6 @@ void main() {
         return Future.value(true);
       });
 
-      // The control, and it has to come first: without it "two signatures"
-      // would be satisfied by a build that emits every key it holds whatever
-      // the set says.
       inUse({SigningAlgoType.rsa2048});
       await minter().reconcileSigningKeys();
       final one = signEnvelope('one member',
@@ -685,14 +615,9 @@ void main() {
               'and reached through the PREFERENCE and the production selector, '
               'not from key material handed to signEnvelope by the test');
 
-      // The direction the overlap exists for. `rsaOnlyApsk` is the record as
-      // it stood before the second algorithm was minted, which is exactly what
-      // a verifier that has not upgraded would have been served.
       await verifyEnvelope(two,
           signerPublicKey: rsaOnlyApsk, expecting: EnvelopeType.app);
 
-      // And a verifier served the current record takes the STRONGEST shared
-      // rather than the first entry, so the upgrade takes effect for it.
       await verifyEnvelope(two,
           signerPublicKey: published.last, expecting: EnvelopeType.app);
     });
@@ -701,12 +626,11 @@ void main() {
   /// A legacy enrollment's authentication keypair IS its data signing keypair
   /// — one rsa2048 key doing both jobs. `AtKeys.signingKeysFor` cannot see it,
   /// because it reads typed per-enrollment material and a legacy keyfile
-  /// carries flat fields, so the mint used to conclude the enrollment held no
-  /// signing key, generate a SECOND rsa2048 keypair and publish it — dropping
-  /// the original from `_apsk` and leaving whatever it signed unverifiable.
+  /// carries flat fields.
   ///
-  /// The whole value of the fix is its SCOPE, so the discriminating cases are
-  /// here beside it.
+  /// Minting a SECOND rsa2048 keypair here would drop the original from `_apsk`
+  /// and leave whatever it signed unverifiable, so the cases below fix the
+  /// scope of the exclusion that prevents it.
   group('a legacy enrollment already holds its data signing key', () {
     void inUse(Set<SigningAlgoType> algorithms) {
       when(() => atClient.getPreferences())
@@ -714,8 +638,8 @@ void main() {
     }
 
     test('so an in-use set naming rsa2048 mints nothing', () async {
-      // The fixture is legacy by construction: an rsa2048 APKAM keypair and a
-      // keyfile with no typed signing material.
+      // NOTE: the shared fixture is legacy by construction — an rsa2048 APKAM
+      // keypair and a keyfile with no typed signing material.
       inUse({SigningAlgoType.rsa2048});
 
       final reconciled = await minter().reconcileSigningKeys();
@@ -733,18 +657,11 @@ void main() {
 
     test('an ML-DSA-authenticating enrollment holding none still mints one',
         () async {
-      // ⛔ **The control that makes the scope mean something, and the only
-      // state that discriminates the two forms.** ML-DSA authentication key,
-      // no typed signing material, in-use set naming ML-DSA:
-      //
-      // - excluding **rsa2048** leaves mldsa65 missing, so it is minted;
-      // - excluding **whatever the authentication keypair reports** empties
-      //   `missing`, nothing is ever minted, and `_apsk` advertises the
-      //   authentication key as its sole active entry — the auth/signing split
-      //   collapsing on the posture that exists to create it, silently.
-      //
-      // Reachable today: an enrollment created at pqActive before the enrolment
-      // path minted a signing key of its own is in exactly this state.
+      // NOTE: the only state that discriminates the two forms of the
+      // exclusion. Excluding whatever the authentication keypair reports,
+      // rather than rsa2048 specifically, would empty `missing` here and leave
+      // `_apsk` advertising the ML-DSA authentication key as its sole active
+      // signing entry — the auth/signing split collapsing silently.
       asRetrofittedEnrollment();
       inUse({SigningAlgoType.mldsa65});
 
@@ -754,8 +671,6 @@ void main() {
     });
 
     test('and a legacy enrollment at pqActive mints ML-DSA too', () async {
-      // rsa2048 authentication, ML-DSA wanted: the exclusion cannot fire,
-      // because it names rsa2048 and rsa2048 is not what the set wants.
       inUse({SigningAlgoType.mldsa65});
 
       expect((await minter().reconcileSigningKeys()).minted,
@@ -763,9 +678,6 @@ void main() {
     });
 
     test('and a RETROFITTED enrollment still mints rsa2048', () async {
-      // The other half of the scope: once the authentication key is ML-DSA the
-      // two keys are genuinely different, so the enrollment really does lack
-      // an rsa2048 signing key and really must mint one.
       asRetrofittedEnrollment();
       inUse({SigningAlgoType.rsa2048});
 

@@ -12,35 +12,32 @@ final _logger = AtSignLogger('CurrentCkPointer');
 
 /// Which content key a sender is currently writing under, for one destination.
 ///
-/// Only the `ckKid` and the nskey generation it was cut for — never key
-/// material. A `ckKid` is a truncated hash of nothing secret, so this needs no
-/// protection at rest and can live in ordinary storage.
+/// Only the `ckKid` and the nskey generation it was cut for, never key
+/// material, so this needs no protection at rest.
 @experimental
 typedef CurrentCk = ({String ckKid, String nskeyKid});
 
 /// Remembers the current CK per `(owner, ckNs)` so a restart resumes it
 /// instead of cutting another.
 ///
-/// Without this, a cold write path finds an empty cache and mints. The CK is
-/// still *correct* — readers recover any CK from its conveyance record — but
-/// every restart leaves one more permanent `<ckKid>.__ck.<ckNs>@<owner>`
-/// record, each protecting only the values written between two restarts.
-/// Those records can never be cleaned up, because old data still needs them.
-///
-/// Stored as an ordinary **self key**, so it syncs to this atSign's other
-/// devices and they converge on one CK per destination rather than one each —
-/// which is what a CK is scoped to in the first place. Concurrent mints stay
-/// benign: both CKs are valid and a reader opens either.
+/// Stored as an ordinary self key, so it syncs to this atSign's other devices
+/// and they converge on one CK per destination rather than one each.
+/// Concurrent mints stay benign: both CKs are valid and a reader opens either.
 @experimental
 class CurrentCkPointer {
   const CurrentCkPointer();
 
+  /// The self key holding the pointer for `(owner, ckNs)`.
   AtKey keyFor(AtClient atClient, String owner, String ckNs) =>
       currentCkPointerKey(
           sharedBy: atClient.getCurrentAtSign(),
           destination: owner,
           ckNs: ckNs);
 
+  /// The CK this sender last recorded for `(owner, ckNs)`, read locally.
+  ///
+  /// Null when nothing is recorded or the record cannot be read: forgetting the
+  /// pointer costs an extra CK, never data.
   Future<CurrentCk?> read(AtClient atClient, String owner, String ckNs) async {
     try {
       final value = await atClient.get(keyFor(atClient, owner, ckNs),
@@ -51,21 +48,22 @@ class CurrentCkPointer {
       if (ckKid is! String || nskeyKid is! String) return null;
       return (ckKid: ckKid, nskeyKid: nskeyKid);
     } catch (e) {
-      // Absent is the ordinary first-write case. Anything else is equally
-      // survivable: forgetting the pointer costs an extra CK, never data.
       _logger.finer('No current-CK pointer for $owner:$ckNs ($e)');
       return null;
     }
   }
 
+  /// Records [ckKid] as the CK this sender is writing under for
+  /// `(owner, ckNs)`.
+  ///
+  /// A failure is logged and swallowed; the CK has already been conveyed and
+  /// promoted by the time this runs, so a restart just cuts a fresh one.
   Future<void> write(AtClient atClient, String owner, String ckNs, String ckKid,
       String nskeyKid) async {
     try {
       await atClient.put(keyFor(atClient, owner, ckNs),
           jsonEncode({'ckKid': ckKid, 'nskeyKid': nskeyKid}));
     } catch (e) {
-      // The CK has already been conveyed and promoted by the time this runs,
-      // so a failure here is a lost optimisation, not a lost key.
       _logger.warning('Could not record the current CK for $owner:$ckNs, so a '
           'restart will cut a fresh one: $e');
     }

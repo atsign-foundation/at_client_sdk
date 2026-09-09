@@ -23,21 +23,12 @@ void main() {
   group('cross-cutting invariants', () {
     test('reads are universal', () async {
       // A client decrypts anything ever written to it under any scheme its
-      // stage configures, and upgrading only ever ADDS read-capability. This
-      // test names its own CryptoConfig, so it is about provider RESOLUTION
-      // rather than about which providers a posture configures — see the
-      // legacy arm in at_client_impl_test.dart for that half.
+      // stage configures, and upgrading only ever ADDS read-capability.
       //
-      // The mechanism is that `legacy` is a *built-in* fallback rather than an
-      // entry in `providers` — so it survives a config that lists only the PQ
-      // set, and no upgrade can drop it by omission. That is asserted here as a
-      // differential: the only thing that varies between the two arms is the
-      // provider id stamped on the record, so a green result cannot come from
-      // both arms failing the same way.
+      // NOTE: `legacy` is a built-in fallback rather than an entry in
+      // `providers`, so it survives a config that lists only the PQ set and no
+      // upgrade can drop it by omission.
       final client = MockAtClient();
-      // The 4.x shape — PQ registered AND the write default. The most
-      // aggressive config a client will ever hold, and legacy reads must still
-      // route under it.
       client.getPreferences().crypto =
           CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing());
       final runtime = CryptoRuntime(client);
@@ -49,9 +40,8 @@ void main() {
           ..appMetadata =
               providerId == null ? null : AppMetadata(providerId: providerId));
 
-      // Arm 1: a legacy record. Routing must find the built-in provider. It
-      // then fails inside that provider on this bare mock, which is a
-      // *different* failure — the point is only that resolution succeeded.
+      // The assertion is only that resolution succeeded: the call then fails
+      // inside the provider on this bare mock, which is a different failure.
       await expectLater(
           () => runtime.decryptForGet(stamped(legacyCryptoProviderId), 'c'),
           throwsA(isNot(isA<CryptoProviderNotRegistered>())),
@@ -59,23 +49,17 @@ void main() {
               'this is CryptoProviderNotRegistered then upgrading silently '
               'dropped the ability to read everything written before it');
 
-      // Same, for a record predating appMetadata entirely.
       await expectLater(() => runtime.decryptForGet(stamped(null), 'c'),
           throwsA(isNot(isA<CryptoProviderNotRegistered>())),
           reason: 'an unstamped record is legacy by definition and must route '
               'the same way');
 
-      // Arm 2 — the control. An id genuinely absent resolves to nothing, so
-      // arm 1 above is a real resolution rather than a router that never
-      // rejects anything.
       await expectLater(
           () => runtime.decryptForGet(stamped('at/some/scheme/from/2030'), 'c'),
           throwsA(isA<CryptoProviderNotRegistered>()),
           reason: 'control: an unregistered id must fail loudly, or arm 1 '
               'proves nothing about resolution');
 
-      // And the failure names what to add, because "reads are universal" is
-      // only true if a client meeting a newer scheme can be told which one.
       await expectLater(
           () => runtime.decryptForGet(stamped('at/some/scheme/from/2030'), 'c'),
           throwsA(predicate((e) =>
@@ -85,8 +69,6 @@ void main() {
           reason: 'the error must name the missing id AND the registered set, '
               'so an operator can see what this client is short of');
 
-      // The additive half, stated directly: the PQ config resolves the PQ ids,
-      // and resolving them did not cost it the legacy one above.
       final config = CryptoConfig.forClient(client);
       expect(config.lookup(nskeyCryptoProviderId), isNotNull);
       expect(config.lookup(symmetricAesGcmCryptoProviderId), isNotNull);
@@ -97,9 +79,8 @@ void main() {
       // is the app's release decision — and never downgrades behind its back
       // either: an explicit provider id is honoured or thrown, never
       // substituted, and under disallowLegacyEncryption a legacy-only path is
-      // REFUSED, never quietly written legacy. (Replaces "writes gated by
-      // reader readiness" — decisions.md 36; the cold-start refusal's own rows
-      // are UC-A3.3/UC-A4.2.)
+      // REFUSED, never quietly written legacy. The cold-start refusal's own
+      // rows are UC-A3.3/UC-A4.2.
       const bob = '@bob';
       const namespace = 'app_1.my_apps';
 
@@ -109,8 +90,6 @@ void main() {
         ..sharedBy = '@alice'
         ..sharedWith = bob;
 
-      // Arm 1 — never promoted: the capability build writes legacy however
-      // much it can read, whatever any destination has published.
       final capability = MockAtClient();
       capability.getPreferences()
         ..namespace = namespace
@@ -121,8 +100,6 @@ void main() {
           reason: 'this client resolves both PQ providers — the ladder, not a '
               'missing capability, is what keeps its writes legacy');
 
-      // Arm 2 — never demoted: the active build writes the data path, and no
-      // external state is consulted that could quietly say otherwise.
       final active = MockAtClient();
       active.getPreferences()
         ..namespace = namespace
@@ -130,8 +107,8 @@ void main() {
       expect(CryptoRuntime.providerIdFor(active, null, atKey: toBob()),
           symmetricAesGcmCryptoProviderId);
 
-      // Arm 3 — an explicit request is honoured or thrown, never substituted:
-      // the nskey path cannot serve a namespace-less key, and quietly writing
+      // An explicit request is honoured or thrown, never substituted: the
+      // nskey path cannot serve a namespace-less key, and quietly writing
       // legacy instead is how data gets believed PQ when it is not.
       final internalKey = AtKey()
         ..key = 'shared_key.bob'
@@ -142,8 +119,6 @@ void main() {
               atKey: internalKey),
           throwsA(isA<AtEncryptionException>()));
 
-      // Arm 4 — refused, not downgraded: a client that said "never write
-      // legacy" gets the refusal, not a quiet legacy write.
       final strict = StrictMockAtClient();
       strict.getPreferences()
         ..namespace = namespace
@@ -161,14 +136,11 @@ void main() {
       // every algorithm a reader needs code for, so a scheme change is
       // rollable rather than a flag day.
       //
-      // "and frames" is not the whole story: it must also survive every hop
-      // that WRITES a record to the atServer. The sync push silently dropped
-      // appMetadata — a hand-rolled metadata serializer in SyncServiceImpl that
-      // had fallen behind Metadata.toAtProtocolFragment — so every cross-atSign
-      // read fell back to legacy, for every provider, not just the PQ ones
-      // (decisions.md section 17). Assert the round-trip through sync, not just
-      // the in-memory stamp: an out-of-order or missing field in that fragment
-      // is dropped without an error.
+      // NOTE: appMetadata must also survive every hop that WRITES a record to
+      // the atServer, so the round-trip through the metadata fragment is
+      // asserted rather than the in-memory stamp alone — a field the fragment
+      // drops is dropped without an error, and every reader then falls back to
+      // legacy.
       const owner = '@alice';
       const namespace = 'app_1.my_apps';
       final context = CryptoContext(atClient: MockAtClient());
@@ -191,8 +163,7 @@ void main() {
           ContentKey(Uint8List.fromList(base64Decode(AESKey.generate(32).key)));
 
       // The conveyance: at/nskey -> {providerId, recipientKind, ckKid,
-      // nskeyKid}. Read back off the key the provider stamped, not off a
-      // literal — a shape that drifts must fail here.
+      // nskeyKid}.
       final conveyance = key('${ck.ckKid}.__ck');
       await nskey.encrypt(context, conveyance, ck.toBase64());
       cache.putAsCurrent(owner, namespace, ck, nskeyKid);
@@ -215,15 +186,10 @@ void main() {
           reason: 'AES-GCM is unsafe under IV reuse, so the IV is per-record '
               'and has to travel with the record');
 
-      // The round-trip that actually broke: appMetadata must survive the
-      // serializer on the way OUT to the atServer. A field the fragment drops
-      // is dropped silently, and every reader then falls back to legacy.
       for (final stamped in [conveyance, value]) {
         final fragment = stamped.metadata.toAtProtocolFragment();
         // appMetadata rides the fragment base64-encoded, so decode it rather
-        // than substring-matching: a match on the raw fragment would pass on
-        // an accidental collision and fail on a legal re-encoding, and neither
-        // outcome says anything about what the reader will get.
+        // than substring-matching the raw fragment.
         final encoded =
             RegExp(r'appMetadata:([A-Za-z0-9+/=]+)').firstMatch(fragment);
         expect(encoded, isNotNull,
@@ -241,30 +207,21 @@ void main() {
                 'routes to the right provider and still cannot find the key');
       }
 
-      // "and frames" is the other half: one serializer serves both the stored
-      // key and the notification frame. That neither call site has grown a
-      // private serializer again is a property of the source rather than of a
-      // run, so it is asserted by `architecture_guard_test.dart` — where a
-      // rename breaking the grep reports a broken guard rather than a failed
-      // scenario.
+      // One serializer serves both the stored key and the notification frame;
+      // that neither call site has a private serializer is a property of the
+      // source, asserted by `architecture_guard_test.dart`.
     });
 
     test('no RSA in any confidentiality path for a fully-PQ interaction',
         () async {
       // Auth, enrollment conveyance, self, shared, and notification paths.
       //
-      // Read precisely: this row is about **confidentiality**, and auth has no
-      // confidentiality component to have. A prove-possession handshake needs a
-      // signature only — the per-connection challenge supplies freshness and
-      // TLS supplies the channel — so the PQ move there is a signature swap,
-      // not a KEM. RSA still being used to SIGN a PKAM challenge is therefore
-      // not an RSA confidentiality path, and swapping it is RF-2b's PQ-APKAM
-      // mint rather than this row's business. What auth does guarantee is
-      // covered by the record-authoritative row above.
-      //
-      // That leaves the paths that genuinely carry secrets, and the assertion
-      // is that the provider set the SDK assembles for them contains nothing
-      // RSA at all.
+      // This row is about confidentiality, and auth has none to have: a
+      // prove-possession handshake needs a signature only — the per-connection
+      // challenge supplies freshness and TLS supplies the channel — so RSA
+      // signing a PKAM challenge is not an RSA confidentiality path. The
+      // assertion is that the provider set the SDK assembles for the paths
+      // that do carry secrets contains nothing RSA at all.
       final config = CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing());
 
       final nskey = config.lookup(nskeyCryptoProviderId);
@@ -275,8 +232,6 @@ void main() {
       expect(data, isA<SymmetricAesGcmProvider>(),
           reason: 'and the value itself under AES-256-GCM');
 
-      // The ids are the wire contract, and each names every algorithm a reader
-      // needs code for. Neither may name RSA, on any casing.
       for (final id in [
         nskeyCryptoProviderId,
         symmetricAesGcmCryptoProviderId
@@ -289,9 +244,9 @@ void main() {
           reason: 'and a fully-PQ interaction WRITES that path — otherwise the '
               'set is merely registered and the interaction is not PQ at all');
 
-      // Self, shared and notification all route through those two providers —
-      // proven live rather than asserted here, since a unit test cannot see
-      // which providers a real write actually reached.
+      // Self, shared and notification route through those two providers,
+      // proven live because a unit test cannot see which providers a real
+      // write reached.
       provenIn(
         'tests/at_functional_test/test/nskey_data_path_live_test.dart',
         'a self value round-trips through the nskey data path',
@@ -373,14 +328,11 @@ void main() {
 
     test('a second signing root is representable, publishable and verifiable',
         () {
-      // D1's own claim about itself, and the only thing that makes it
-      // falsifiable rather than an intention
-      // (`decisions.md` 101 requirement 5): D1 builds the root's
-      // ROTATABILITY, not the rotation. A keyfile and a record each carrying
-      // two root entries — one active, one retired — with a link signed under
-      // the RETIRED one still verifying, and no rotation machinery anywhere.
-      // Once that holds, rotation is a later operation over a structure that
-      // already works.
+      // The root's ROTATABILITY, not the rotation: a keyfile and a record each
+      // carrying two root entries — one active, one retired — with a link
+      // signed under the RETIRED one still verifying, and no rotation
+      // machinery anywhere. Once that holds, rotation is a later operation
+      // over a structure that already works.
       provenIn(
         'packages/at_client/test/pq_signing_chain_test.dart',
         'D1 boundary: a keyfile and a record both carrying two root entries',
@@ -399,10 +351,6 @@ void main() {
       // appears in NO scan — with or without showhidden, authenticated or not.
       // A guaranteed protocol property (_apsk already relies on it); this is a
       // regression guard against a server change retiring it.
-      //
-      // Two citations because the claim has two halves and no single test
-      // holds both: enumerability is an atServer property provable against one
-      // atSign, while "cross-atSign" needs a second one to do the fetching.
       provenIn(
         'tests/at_functional_test/test/underscore_public_key_hiding_test.dart',
         'a public:__ key syncs, is served by plookup, and is not enumerable',
@@ -429,17 +377,6 @@ void main() {
       // publish) and write-restricted (a cross-enrollment overwrite is
       // refused). The signing root is not on this list: it is a verification
       // key, so nothing is ever encapsulated to it.
-      //
-      // The rejection half is cited below rather than described. It was
-      // described until 2026-08-26 — this comment said the two unit files
-      // "cover the rejections" and named neither test, so the one clause here
-      // that is a security guarantee was the one clause with no citation at
-      // all, and a reader counting evidence for it found nothing. The tests
-      // were there the whole time; the ledger could not see them.
-      //
-      // Three shapes, each on both halves, because an advertised key can be
-      // substituted three ways and a reader that catches two of them is not a
-      // reader that catches the third.
       provenIn(
         'packages/at_client/test/published_nskey_key_ring_test.dart',
         'an advertisement signed by another atSign is rejected',
@@ -485,9 +422,7 @@ void main() {
 
       // The atServer side is the half no unit test can reach: the _apsk
       // present without a client publish, the cross-enrollment overwrite
-      // refused, and a live enroll:listns. All three need two genuine APKAM
-      // enrollments, since the interesting case is one enrollment reaching
-      // for another's record.
+      // refused, and a live enroll:listns.
       provenIn(
         'tests/at_functional_test/test/apsk_server_side_test.dart',
         'the atServer publishes _apsk itself, and refuses a cross-enrollment',
@@ -515,18 +450,13 @@ void main() {
 
     test('performance is measured, not assumed',
         timeout: const Timeout(Duration(minutes: 2)), () {
-      // PKAM-auth and put/get latency deltas vs the legacy RSA/AES path are
-      // measured on one reference low-end device by a bench harness landed WITH
-      // B-1. The harness is the durable artefact, re-run on every later
-      // key-shape change. The ceiling is pinned when the harness lands — a
-      // measured budget, not a guessed number.
-      //
-      // What this asserts is the *instrument and the record*, not a threshold.
-      // A ceiling pinned to one machine's numbers would fail on somebody
-      // else's laptop for no defensible reason, and a benchmark that fails for
-      // an indefensible reason gets deleted. So: the harness must exist and
-      // still expose its measurement primitives, and the budget must be
-      // written down with the basis it was measured on.
+      // PKAM-auth and put/get latency deltas vs the legacy RSA/AES path come
+      // from a bench harness run on one reference low-end device. This asserts
+      // the instrument and the record, not a threshold: a ceiling pinned to
+      // one machine's numbers would fail on somebody else's laptop for no
+      // defensible reason. So the harness must exist and still expose its
+      // measurement primitives, and the budget must be written down with the
+      // basis it was taken on.
       final harness = File(
           '${repoRoot().path}/packages/at_client/benchmark/crypto_bench.dart');
       expect(harness.existsSync(), isTrue,
@@ -542,13 +472,10 @@ void main() {
                 'than a 4096 B one');
       }
 
-      // Existence plus four identifiers cannot tell a working harness from a
-      // broken one, and this row's claim is that the instrument WORKS. So the
-      // instrument has to build. `pqSeal`/`pqOpen` made `info` required on
-      // 2026-08-12 without updating the bench, and every assertion above
-      // stayed green for six days while the harness had five
-      // missing_required_argument errors — because the routine local command
-      // is `dart analyze lib test`, which never looks in `benchmark/`.
+      // NOTE: the instrument has to BUILD, not merely contain the right
+      // identifiers — the routine local `dart analyze lib test` never looks in
+      // `benchmark/`, so nothing else catches a harness that stopped
+      // compiling.
       final analyze = Process.runSync(
         Platform.resolvedExecutable,
         const ['analyze', 'benchmark'],
@@ -559,9 +486,6 @@ void main() {
               'identifiers — a bench nobody can run pins nothing. '
               '`dart analyze benchmark` said:\n${analyze.stdout}');
 
-      // The bodies, not the index. `decisions.md` is one row per ruling; the
-      // measured figures this guard exists for live under the ruling's own
-      // heading in the detail file.
       final decisions =
           File('${repoRoot().path}/docs/projects/pq/detail/decisions.md')
               .readAsStringSync();

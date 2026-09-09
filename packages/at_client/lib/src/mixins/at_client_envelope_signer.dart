@@ -5,17 +5,13 @@ import 'package:at_client/src/mixins/envelope_signing.dart'
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
-/// The signing and verifying half of the secret-sharing substrate, on its own.
+/// The signing and verifying half of the secret-sharing substrate, on its own:
+/// [ApkamSigning] and [EnvelopeSigning] sign a payload with this client's APKAM
+/// keypair and verify another client's signature against the `_apsk` its
+/// enrollment published, without pulling in a whole secret-sharing instance.
 ///
-/// [ApkamSigning] + [EnvelopeSigning] are the two mixins that sign a payload
-/// with this client's APKAM keypair and verify another client's signature
-/// against the `_apsk` its enrollment published. Everything that advertises a
-/// recipient key needs exactly that pair and nothing else — no X-Wing keypair,
-/// no [SecretStore], no envelope listener — so composing them here keeps a
-/// signature check from dragging in a whole secret-sharing instance.
-///
-/// Use `AtClientSecretSharing.forClient` instead when the caller also wants to
-/// send or receive secrets; it mixes these in too.
+/// Use `AtClientSecretSharing.forClient` instead when the caller also sends or
+/// receives secrets; it mixes these in too.
 @experimental
 class AtClientEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   @override

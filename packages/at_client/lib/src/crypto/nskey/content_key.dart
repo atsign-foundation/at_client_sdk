@@ -5,21 +5,19 @@ import 'package:crypto/crypto.dart' show sha256;
 
 /// A symmetric content key (CK) and its id.
 ///
-/// Application data is AES-256-GCM encrypted under a CK; the CK itself is
-/// KEM-sealed once to an nskey and written as a discrete conveyance record.
-/// Data values cite the CK by [ckKid] and never carry a sealed key inline.
+/// Application data is AES-256-GCM encrypted under a CK; the CK is KEM-sealed
+/// once to an nskey and written as a discrete conveyance record, which values
+/// cite by [ckKid] rather than carrying a sealed key inline.
 class ContentKey {
   /// Raw 32 bytes of AES-256 key material.
   final Uint8List bytes;
 
   /// The content key's id — a SHA-256 prefix of the key material, so identical
-  /// keys dedupe. Must be unique within `(owner, namespace)`;
-  /// [ContentKeyCache.put] refuses a second CK claiming a kid already held.
+  /// keys dedupe. Must be unique within `(owner, namespace)`.
   ///
-  /// The id is public — it rides plaintext `appMetadata` and the conveyance
-  /// record's name — so it is only safe while CKs are high-entropy: publishing
-  /// 64 bits of a hash turns any guessable CK into an offline check. Mint CKs
-  /// from a CSPRNG, never derive them from a label, counter or passphrase.
+  /// The id is public, riding plaintext `appMetadata` and the conveyance
+  /// record's name, so it is only safe while CKs are high-entropy: mint them
+  /// from a CSPRNG, never from a label, counter or passphrase.
   final String ckKid;
 
   ContentKey._(this.bytes, this.ckKid);
@@ -38,15 +36,15 @@ class ContentKey {
   factory ContentKey.fromBase64(String b64) =>
       ContentKey(Uint8List.fromList(base64Decode(b64)));
 
+  /// The base64 form written into an `at/nskey` conveyance record.
   String toBase64() => base64Encode(bytes);
 }
 
 /// Cache of decapsulated content keys, keyed by `(owner, namespace, ckKid)`.
 ///
-/// Never key by `ckKid` alone — ids are unique within a namespace, not across
-/// them, which is the same `(owner, id)` identity discipline used elsewhere in
-/// the SDK. A value in a namespace for which the client holds no nskey private
-/// is left undecryptable rather than silently mis-resolved.
+/// Never key by `ckKid` alone: ids are unique within a namespace, not across
+/// them, so a value whose namespace this client cannot open must stay
+/// undecryptable rather than resolve to another namespace's key.
 class ContentKeyCache {
   final Map<String, ContentKey> _byKid = {};
   final Map<String, String> _currentKidByNamespace = {};
@@ -60,17 +58,16 @@ class ContentKeyCache {
 
   /// Cache [ck] for `(owner, namespace)` so values citing its `ckKid` resolve.
   ///
-  /// This does **not** make it the namespace's current key. Conveyance records
-  /// arrive in sync order, which is no order at all, so a CK opened now may be
-  /// older than the one already in use — letting an arriving record set the
-  /// write key would silently roll new writes back onto a superseded CK.
-  /// Only the client that cut the CK calls [putAsCurrent].
+  /// Does not make it the namespace's current key: conveyance records arrive
+  /// in sync order, so a CK opened now may be older than the one already in
+  /// use. Only the client that cut a CK calls [putAsCurrent].
   void put(String owner, String namespace, ContentKey ck) {
     final slot = _key(owner, namespace, ck.ckKid);
     final existing = _byKid[slot];
     if (existing != null && !_sameKey(existing.bytes, ck.bytes)) {
-      // A kid is a truncated hash, so this is a collision, not a re-delivery.
-      // Overwriting would make the displaced CK's data silently undecryptable.
+      // NOTE: a kid is a truncated hash, so this is a collision, not a
+      // re-delivery — overwriting would silently orphan the displaced CK's
+      // data.
       throw StateError(
           'content key ${ck.ckKid} in $owner:$namespace already holds different '
           'key material — two distinct CKs share one kid');
@@ -79,18 +76,14 @@ class ContentKeyCache {
   }
 
   /// Cache [ck] and make it the key new writes in `(owner, namespace)` encrypt
-  /// under, recording the nskey generation it was conveyed to. Called by the
-  /// writer that cut the CK and conveyed it.
+  /// under, recording the nskey generation it was conveyed to.
   ///
-  /// [nskeyKid] is what lets a sender notice a rotation: when the recipient's
-  /// advertised generation no longer matches, the current CK is stale and a
-  /// fresh one must be cut, or the sender keeps sealing to a generation a
-  /// revoked enrollment can still open.
-  /// [cutAt] is when this CK came into being, which is what a rotation policy
-  /// is measured against. The caller that **cut** it passes nothing and gets
-  /// this device's clock; the caller that **read it back** passes the
-  /// conveyance record's own `createdAt`, which is the atServer's date and the
-  /// only one two devices can agree on.
+  /// [nskeyKid] is what lets a sender notice a rotation: once the recipient's
+  /// advertised generation no longer matches, the current CK is stale.
+  /// [cutAt] is when the CK came into being, which a rotation policy judges it
+  /// against: the caller that cut it passes nothing and gets this device's
+  /// clock, while one that read it back passes the conveyance record's
+  /// `createdAt`, the only date two devices can agree on.
   void putAsCurrent(
       String owner, String namespace, ContentKey ck, String nskeyKid,
       {DateTime? cutAt}) {
@@ -103,11 +96,6 @@ class ContentKeyCache {
 
   /// When the current CK for `(owner, namespace)` was cut, or null if there is
   /// no current CK.
-  ///
-  /// Held here rather than read per write: the record carries the authoritative
-  /// date and is already read on the one path that recovers a CK this process
-  /// did not cut, so keeping it beside the key costs no lookup on the write
-  /// path.
   DateTime? currentCutAt(String owner, String namespace) =>
       _currentCutAtByNamespace[_scope(owner, namespace)];
 
@@ -127,7 +115,7 @@ class ContentKeyCache {
   /// The CK cited by [ckKid], or null on a cache miss.
   ///
   /// A miss is the ordinary out-of-order-sync case: a data value can arrive
-  /// before its conveyance record. The caller defers rather than failing hard.
+  /// before its conveyance record, so callers defer rather than fail hard.
   ContentKey? get(String owner, String namespace, String ckKid) =>
       _byKid[_key(owner, namespace, ckKid)];
 
@@ -138,9 +126,8 @@ class ContentKeyCache {
     return kid == null ? null : get(owner, namespace, kid);
   }
 
-  /// Drop a superseded CK. Deleting the conveyance record and evicting here is
-  /// the coarse forward-secrecy lever — data written under an evicted CK
-  /// becomes undecryptable by design.
+  /// Drop a superseded CK, after which data written under it can no longer be
+  /// read here.
   void evict(String owner, String namespace, String ckKid) {
     _byKid.remove(_key(owner, namespace, ckKid));
     final scope = _scope(owner, namespace);

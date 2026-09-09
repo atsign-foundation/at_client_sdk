@@ -1,26 +1,8 @@
-/// Guards the citations in `docs/knowledge/`.
+/// Guards the citations in `docs/knowledge/`: every nugget cites a pattern,
+/// and this asserts each pattern still matches.
 ///
-/// A nugget is a fact somebody paid for once, written down so nobody pays
-/// again. Its value is entirely in the `Evidence` line, and evidence rots
-/// silently: the code moves, the citation goes on looking authoritative, and a
-/// reader spends the hour the nugget existed to save.
-///
-/// So the format cites a **pattern**, not a line number, and this file asserts
-/// the pattern still matches. The reason is asymmetric failure rather than
-/// decay rates — a path that rots stops resolving and says so, while a line
-/// number that rots usually keeps resolving and points at something unrelated,
-/// which reads as verified while being wrong. A pattern has nothing to drift
-/// to: it re-derives the location on every run and goes empty when the code
-/// changes.
-///
-/// ⚠️ **This cannot tell whether a nugget is TRUE.** It checks that the
-/// evidence still says what it said. A nugget whose claim the tree falsified
-/// stays green here, exactly as `docs_structure_test.dart` stays green for a
-/// false paragraph.
-///
-/// ⛔ **Every count below is asserted non-empty before it is used.** An empty
-/// corpus reports "0 broken citations" and reads precisely like a clean pass;
-/// a stray path or a changed heading is all it takes.
+/// It checks that the evidence still says what it said, never that the nugget's
+/// claim is still true.
 library;
 
 import 'dart:io';
@@ -33,8 +15,8 @@ Directory _knowledge() => Directory('${repoRoot().path}/docs/knowledge');
 
 /// `- \`repo\` -> \`path\` -> \`pattern\`` with an optional trailing `xN`.
 ///
-/// The pattern is a literal substring. It is captured lazily up to the last
-/// backtick on the line so a pattern may itself contain `->`.
+/// The pattern is a literal substring, captured up to the last backtick on the
+/// line so that it may itself contain `->`.
 final RegExp _citation = RegExp(
   r'^-\s+`([^`]+)`\s*->\s*`([^`]+)`\s*->\s*`(.+)`(?:\s+x(\d+))?\s*$',
 );
@@ -86,9 +68,8 @@ List<_Citation> _citationsOf(File f) {
 
 /// The file's contents, or null when it cannot be read.
 ///
-/// A sibling is read at the ref the nugget NAMES, never from its working tree
-/// — a sibling checkout is usually on its own branch, so reading the file on
-/// disk would answer a question nobody asked.
+/// A sibling is read at the ref the nugget NAMES, never from its working tree,
+/// which is usually on some unrelated branch.
 String? _contents(_Citation c) {
   if (c.isLocal) {
     final f = File('${repoRoot().path}/${c.path}');
@@ -190,8 +171,7 @@ void main() {
               'matched $n time(s), the nugget says x$want');
         }
       }
-      // Printed rather than swallowed: a skip is a gap in coverage, and a
-      // silent one is indistinguishable from a pass.
+      // NOTE: a silent skip is indistinguishable from a pass.
       if (skipped.isNotEmpty) {
         printOnFailure('skipped ${skipped.length} sibling citation(s) — '
             'checkout absent or ref unavailable:\n  ${skipped.join('\n  ')}');

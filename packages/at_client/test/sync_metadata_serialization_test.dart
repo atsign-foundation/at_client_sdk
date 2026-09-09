@@ -4,16 +4,15 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
     show AtMetaData;
 import 'package:test/test.dart';
 
-/// Regression: the client→server sync push must serialize metadata through the
-/// single canonical serializer.
+/// The client→server sync push must serialize metadata through the single
+/// canonical serializer.
 ///
-/// `SyncServiceImpl.metadataToString` used to be a hand-rolled serializer
-/// parallel to `Metadata.toAtProtocolFragment`; it had drifted and silently
-/// dropped `appMetadata` (and `immutable`), so a synced record reached the
-/// server without them and a cross-atSign `lookup:all` returned a null
-/// `providerId` — CryptoRuntime then fell back to legacy and hunted a
-/// shared_key a PQ write never created. It now delegates to
-/// `toAtProtocolFragment`, so it cannot drift again.
+/// `SyncServiceImpl.metadataToString` delegates to
+/// `Metadata.toAtProtocolFragment` so it cannot drift from the direct-write
+/// path. A parallel serializer that dropped `appMetadata` sends a synced record
+/// to the atServer without it, a cross-atSign `lookup:all` then returns a null
+/// `providerId`, and CryptoRuntime falls back to legacy and hunts a shared_key
+/// a PQ write never created.
 void main() {
   group('SyncServiceImpl.metadataToString', () {
     test('delegates to Metadata.toAtProtocolFragment — cannot re-drift', () {
@@ -23,8 +22,6 @@ void main() {
         ..isEncrypted = true
         ..immutable = true
         ..appMetadata = AppMetadata(providerId: 'at/symmetric/AES/GCM');
-      // The sync push must serialize identically to the direct-write path
-      // (UpdateVerbBuilder also uses toAtProtocolFragment), byte-for-byte.
       expect(SyncServiceImpl.metadataToString(metadata),
           metadata.toCommonsMetadata().toAtProtocolFragment());
     });
@@ -37,7 +34,8 @@ void main() {
       final expected =
           ':${AtConstants.appMetadata}:${Metadata.encodeAppMetadata(appMetadata)}';
       expect(result, contains(expected));
-      // appMetadata is the final group in VerbSyntax.update, so it must be last.
+      // NOTE: appMetadata is the final group in VerbSyntax.update, so it must
+      // be emitted last.
       expect(result.endsWith(expected), isTrue);
     });
 
@@ -73,12 +71,11 @@ void main() {
     /// `VerbSyntax.metadataFragment` is a sequence of OPTIONAL groups, so a
     /// field emitted in the wrong order does not error — the regex stops
     /// matching at that point and the atServer silently drops everything after
-    /// it. Neither a `contains` assertion nor comparing against
-    /// `toAtProtocolFragment` can see that: the latter agrees with the canonical
-    /// builder even if the canonical builder itself is the one out of order.
-    /// Only parsing the built command with the verb the atServer actually uses
-    /// closes it. Every field is populated so a new one added out of order here
-    /// fails.
+    /// it. Neither a `contains` assertion nor a comparison against
+    /// `toAtProtocolFragment` can see that, because the latter agrees with the
+    /// canonical builder even when the builder itself is out of order; only
+    /// parsing the built command with the verb the atServer uses closes it.
+    /// Every field is populated, so a new one added out of order fails here.
     test('a fully-populated fragment parses as a valid update command', () {
       final appMetadata = AppMetadata(
           providerId: 'at/nskey/XWING/AES/GCM',
@@ -113,8 +110,8 @@ void main() {
               'and a fragment it cannot match is truncated rather than '
               'rejected. Command was: $command');
 
-      // Assert through to the tail: those are the groups a mis-ordered field
-      // strands, and the key/value pair is what silently goes missing.
+      // NOTE: assert through to the tail — those are the groups a mis-ordered
+      // field strands, and the key/value pair is what silently goes missing.
       expect(match!.namedGroup('atKey'), 'test.unit');
       expect(match.namedGroup('forAtSign'), 'bob');
       expect(match.namedGroup('atSign'), 'alice');

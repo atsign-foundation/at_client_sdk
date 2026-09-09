@@ -14,34 +14,24 @@ import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// The signing-root pull, as far as this harness can reach it.
+/// The signing-root pull, as far as a single client can reach it.
 ///
 /// The pull is the only route left to an enrollment that was offline when it
-/// was approved: the root is atSign-level and carries no namespace, so it
-/// never rides the `enroll:listns` fan-out, and nothing re-mints a root that
-/// is already published. `requestPrivateIfAbsent` is the
-/// initiator that was missing — before it, `requestSecret` had zero call sites
-/// in `lib/`.
+/// was approved: the root is atSign-level and carries no namespace, so it never
+/// rides the `enroll:listns` fan-out, and nothing re-mints a root that is
+/// already published.
 ///
-/// **What is NOT proven here, and why.** The full round trip — seeker asks,
-/// holder answers, private reaches the keyfile — cannot be driven from this
-/// harness, and the reason was established on the wire rather than guessed.
-///
-/// The pull needs APKAM authentication on **both** sides. The requester needs
-/// it to enumerate holders, and the responder needs it to authorize the
-/// requester before answering — that authorization resolves the sender's kpid
-/// against the key packages registered for the namespace, which is deliberate
-/// defence in depth over the atServer's own delivery gate. Both go through
-/// `enroll:listns`, and the atServer refuses it for a client authenticating
-/// with the atSign's own keys, which is what this harness does. Under FINEST
-/// logging the holder is seen picking the request up and failing with
-/// *"Client authentication failed : enroll:listns requires APKAM
-/// authentication"*, leaving the envelope unconsumed.
-///
-/// So proving the round trip needs a fixture with two real approved APKAM
-/// enrollments, each with its own authenticated client. That does not exist in
-/// this package yet; UC-B5.1 stays blocked on it, and decisions.md 30-31 carry
-/// the detail.
+/// The full round trip — seeker asks, holder answers, private reaches the
+/// keyfile — is not driven here. It needs APKAM authentication on **both**
+/// sides: the requester to enumerate holders, the responder to authorize the
+/// requester before answering, an authorization that resolves the sender's kpid
+/// against the key packages registered for the namespace as defence in depth
+/// over the atServer's own delivery gate. Both go through `enroll:listns`,
+/// which the atServer refuses for a client authenticating with the atSign's own
+/// keys — what this file does — so the holder picks the request up, fails
+/// authentication and leaves the envelope unconsumed. Proving the round trip
+/// (UC-B5.1) needs two real approved APKAM enrollments, each with its own
+/// authenticated client.
 ///
 /// What this file does prove live is the entitlement guard below.
 void main() {
@@ -72,9 +62,8 @@ void main() {
     final seekerKeys = InMemoryAtKeysIo();
     await seekerKeys.write(atSign, AtKeys());
 
-    // The control for the test above, on the same live wire: the only thing
-    // that changes is the privilege answer, so a broadcast happening anyway
-    // would show the guard is decorative.
+    // The only thing that changes is the privilege answer: a broadcast
+    // happening anyway would show the guard is decorative.
     expect(
         await PqSigningRoot(atClient, keysIo: seekerKeys)
             .requestPrivateIfAbsent(

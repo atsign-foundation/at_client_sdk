@@ -23,21 +23,8 @@ final _logger = AtSignLogger('KeyPackagePersistence');
 /// authenticates from, so a running client's key package is the one its
 /// enrollment advertised.
 ///
-/// Without this the mixin generates a fresh enc keypair on every
-/// construction, which gives the client a different `kpid` each process. Since
-/// a sender addresses an envelope to the kpid it read from the enrollment
-/// record, a client whose kpid moves can never be sent anything it can find:
-/// it scans for an address nobody writes to. The private half of the
-/// advertised package is already in `AtKeys` — `enrollmentKeyPackageBuilder`
-/// files both halves there under `keyId == kpid` at enrollment — so this
-/// reunites the running client with material it has held all along.
+/// Adoption only — nothing is written back.
 ///
-/// Adoption only — nothing is written back. A keyfile with no key package
-/// belongs to a client no sender can address anyway: a package is discovered
-/// from the enrollment record, it rides `enroll:request`, and reaching the
-/// record afterwards takes a deliberate `enroll:update`. Generating one and
-/// filing it would mutate the user's keyfile at startup to produce an address
-/// nobody can learn.
 /// [enrollmentId] scopes the adoption to this client's own enrollment: a
 /// retrofitted keyfile serves two principals, and each must adopt its OWN
 /// package, never its co-tenant's — see [keyPackageMaterial].
@@ -56,24 +43,13 @@ void bindKeyPackageToAtKeys(
 /// if it holds none.
 ///
 /// A superseded package is adopted alongside the live one, carrying whatever
-/// status the keyfile gives it. That is what lets a client restarting after a
-/// rotation open envelopes a peer addressed before it — up to `envelopeTtl`,
-/// seven days, of traffic that a client holding only its current key could not
-/// even look for.
+/// status the keyfile gives it, so a client restarting after a rotation can
+/// still open envelopes a peer addressed before it.
 ///
-/// The status token crosses **verbatim**. Both vocabularies are open and they
-/// agree on `active` and `retired`, so there is nothing to translate; a third
-/// value a newer build wrote says something narrower than either, and mapping
-/// it onto one of the two would hand this client a key its own keyfile says
-/// more about than that. Only [KeyEntryStatus.active] is offered for new
-/// traffic, so an unknown token is never the advertised address.
-///
-/// The status is the keyfile's own [CryptographicMaterialStatus], not a guess from age.
-/// `AtKeys.retireKey` is how a rotation records the transition, and
-/// `AtKeysAssurance` enforces at most one **active** `publicEncapsulation`
-/// material per (enrollment, algorithm) — so the file already answers which
-/// key is current, and inferring it from `createdAt` would be a second,
-/// disagreeable opinion about a question the format settles.
+/// The status token crosses **verbatim**, and it is the keyfile's own
+/// [CryptographicMaterialStatus] rather than a guess from age. Only
+/// [KeyEntryStatus.active] is offered for new traffic, so an unknown token is
+/// never the advertised address.
 Future<PersistedApkamKeys?> _load(
     AtKeysIo keysIo, Atsign atSign, String? enrollmentId) async {
   final AtKeys keys;
@@ -91,15 +67,13 @@ Future<PersistedApkamKeys?> _load(
     for (final material in materials)
       PersistedEncKey(
         encSeed: base64Encode(material.bytes.bytes),
-        // Non-null by construction: keyPackageMaterials only returns material
-        // whose algorithm token this build recognises.
+        // NOTE: non-null by construction — keyPackageMaterials only returns
+        // material whose algorithm token this build recognises.
         keyAlgo: SecretSharingAlgos.keyAlgoForMaterial(material.algorithm)!,
-        // The keyfile's own token, carried across rather than collapsed to
-        // one of the two this build knows. Both vocabularies are open and they
-        // agree on `active`/`retired`; a third value written by a newer client
-        // says something narrower about the key than either, and flattening it
-        // to `retired` here would hand this client a key its own keyfile says
-        // more about than that.
+        // NOTE: the keyfile's own token, carried across rather than collapsed
+        // to one of the two this build knows — flattening a newer client's
+        // third value to `retired` would say less about the key than its own
+        // keyfile does.
         status: KeyEntryStatus.of(material.status),
       ),
   ];
@@ -123,50 +97,36 @@ CryptographicMaterial? keyPackageMaterial(AtKeys keys,
 /// enrollment, **active first, then retired, newest first within each**.
 ///
 /// An nskey private is also filed as `privateDecapsulation`, so the part type
-/// alone does not identify a key package — a client that had filed one would
-/// otherwise adopt it as its recipient identity and lose the ability to open
-/// anything addressed to it. What distinguishes the package is that both
-/// halves are filed under one `keyId`: nskey privates arrive alone, their
-/// public half being published on the atServer rather than kept here.
+/// alone does not identify a key package. What distinguishes the package is
+/// that both halves are filed under one `keyId`: nskey privates arrive alone,
+/// their public half being published on the atServer rather than kept here.
 ///
 /// A list because rotating an enc key leaves the superseded one openable but no
 /// longer advertised, and a client that dropped it on restart would strand
-/// every envelope still in flight to it. 1:1:1 still says one enrollment
-/// advertises one address at a time, which `AtKeysAssurance` enforces directly:
-/// at most one **active** `publicEncapsulation` material per (enrollment,
-/// algorithm). So the first entry is the live one rather than merely the newest.
+/// every envelope still in flight to it. The first entry is the live one rather
+/// than merely the newest: at most one **active** `publicEncapsulation`
+/// material exists per (enrollment, algorithm).
 ///
-/// [CryptographicMaterialStatus.dead] material is left out entirely. Retirement is as close
-/// to deletion as a keyfile gets — status only ever moves forward, and dead is
-/// the end of that road — so a dead key is not something to advertise to peers
-/// or to keep answering on. Nothing in at_client marks one dead today; this
-/// decides what happens when something does.
+/// [CryptographicMaterialStatus.dead] material is left out entirely — a dead
+/// key is not something to advertise to peers or to keep answering on.
 ///
 /// [enrollmentId] scopes the selection, and the tagged and untagged sets do not
-/// mix: a retrofitted keyfile carries the legacy enrollment's package (untagged
-/// — filed before materials carried enrollment ids) alongside the new
-/// enrollment's (tagged with its id). A client takes its own tagged packages if
-/// it has any, falls back to the untagged ones, and NEVER takes one tagged for
-/// a different enrollment. Merging the two sets, or newest-wins across the
-/// whole file, would hand a legacy client restarting on the shared keyfile the
-/// PQ enrollment's kpid — an address its own enrollment record never
-/// advertised.
+/// mix: a retrofitted keyfile carries an untagged package alongside a tagged
+/// one. A client takes its own tagged packages if it has any, falls back to the
+/// untagged ones, and NEVER takes one tagged for a different enrollment.
+/// Merging the two sets, or newest-wins across the whole file, would hand a
+/// client restarting on a shared keyfile an address its own enrollment record
+/// never advertised.
 @experimental
 List<CryptographicMaterial> keyPackageMaterials(AtKeys keys,
     {String? enrollmentId}) {
-  // Any key-establishment algorithm this build implements, not X-Wing alone:
-  // an atSign configured for ML-KEM-1024 files its package under that token,
-  // and an X-Wing-only filter would make it invisible — the client would then
-  // mint a fresh key and answer at a kpid its enrollment never advertised, so
-  // nothing addressed to it could ever arrive.
   bool isKeyEstablishment(CryptographicMaterial m) =>
       SecretSharingAlgos.keyAlgoForMaterial(m.algorithm) != null;
 
-  // Paired by `(owner, keyId)`, not by keyId alone. A keyId is unique within
-  // its enrollment and not across the document, so a keyId-only set would let
-  // one enrollment's published address vouch for another enrollment's private
-  // half — and this function's whole job is to never hand a client a key its
-  // own enrollment record never advertised.
+  // NOTE: paired by `(owner, keyId)`, not by keyId alone — a keyId is unique
+  // within its enrollment and not across the document, so a keyId-only set
+  // would let one enrollment's published address vouch for another
+  // enrollment's private half.
   final publicIds = {
     for (final m in keys.keys)
       if (m.role == CryptographicMaterialRole.publicEncapsulation &&

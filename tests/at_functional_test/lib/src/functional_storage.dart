@@ -57,20 +57,15 @@ class FunctionalStorage {
 
   /// A bundle for a SECOND live principal on [atSign], told apart by [label].
   ///
-  /// Two enrollments of one atSign that are live at the same moment are two
-  /// principals and get separate stores: each holds key material the other
-  /// cannot read, and the claim guard refuses to let one attach to the other's.
-  /// The common shape is an enrolled client running alongside the owner client
-  /// that approved it.
+  /// Two enrollments of one atSign that are live at the same moment get
+  /// separate stores: each holds key material the other cannot read, and the
+  /// claim guard refuses to let one attach to the other's.
   ///
-  /// [label] is supplied by the test rather than derived from the enrollment
-  /// id, which does not exist until the enrollment does. It must be stable for
-  /// one logical principal across the file, since a client stopped and rebuilt
-  /// under the same label reads back what it wrote.
-  ///
-  /// Succession is the other case and does NOT come here: a retrofit replaces
-  /// one enrollment with another over the same store, so it keeps [forAtSign]'s
-  /// bundle and hands the store over.
+  /// [label] must be stable for one logical principal across the file, since a
+  /// client stopped and rebuilt under the same label reads back what it wrote.
+  /// Succession does NOT come here: a retrofit replaces one enrollment with
+  /// another over the same store, so it keeps [forAtSign]'s bundle and hands
+  /// the store over.
   AtClientStorage forPrincipal(String atSign, String label) =>
       _byPrincipal.putIfAbsent(
           '$atSign|$label', () => _build(atSign, label: label));

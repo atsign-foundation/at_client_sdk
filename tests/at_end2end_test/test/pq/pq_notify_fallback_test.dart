@@ -22,14 +22,6 @@ import 'package:test/test.dart';
 /// client and therefore the first test's app namespace — and every notify in it
 /// is silently redirected there.
 ///
-/// That is not hypothetical: living beside `pq_cold_start_recovery_test.dart`,
-/// this row's notification was folded into that file's first namespace, which
-/// is the one that file makes the recipient PUBLISH a key for. The notify then
-/// resolved against a namespace the recipient could be reached at, went out
-/// post-quantum, and the row failed asserting `legacy` — in CI only, because
-/// the arm passes when run alone. Measured 2026-08-27: the client's namespace
-/// was `recover…` while the key's was `nfb…`.
-///
 /// A separate file is a separate isolate and therefore a fresh singleton, so
 /// the client's app namespace is this file's own.
 void main() {
@@ -61,17 +53,8 @@ void main() {
 
   test('UC-A4.4: the opted-in fallback governs a NOTIFY as well as a put',
       () async {
-    // The scheme decision is the sending app's, "exactly as a put's" — and
-    // until 2026-08-27 that was false. The fallback was implemented on `put`
-    // and nowhere else: the tree's only catch of NamespaceKeyUnavailableException
-    // was in _putInternal, and both notify entry points called prepareWrite
-    // with none. Measured live before the fix, on one client with one
-    // preference: the put went out stamped legacy while the notify came back
-    // `undelivered`, carrying an exception that told the app to opt into the
-    // legacy path it had already opted into.
-    //
     // ⚠️ The run-unique namespace is the CLIENT's own app namespace, not a
-    // child of the shared one. Two reasons, and the second cost a CI red:
+    // child of the shared one. Two reasons:
     //  - notify's `_resolveNamespace` folds a key outside the app namespace
     //    into the key name and substitutes the client's, so a key under some
     //    unrelated namespace would make the two arms differ in the namespace
@@ -105,20 +88,14 @@ void main() {
       ..sharedBy = writer;
 
     // CONTROL — the put path, same client, same preference, same recipient,
-    // same namespace. It can stay green while the assertion below goes red,
-    // which is what makes the comparison about the VERB and nothing else.
+    // same namespace, so the comparison is about the VERB and nothing else.
     //
-    // ⚠️ It asserts the put SUCCEEDS and deliberately does not read it back.
-    // Without the fallback this put throws, so success alone discriminates;
-    // and that the fallback stamps the record legacy is already established by
-    // the UC-B4.1 arm above. The read-back that used to be here cost a CI red
-    // on 2026-08-27 and earned nothing: a legacy shared write resolves a
-    // `shared_key` scoped to `(sender, recipient)` — NOT to the namespace — so
-    // it is the one piece of state this file's three tests and their
-    // successive clients all share, and reading it back races whichever client
-    // last synced one. The failure was `AES-256-GCM authentication failed`, in
-    // the control rather than the assertion, which is the control saying it
-    // was entangled with something.
+    // ⚠️ It asserts the put SUCCEEDS and deliberately does not read it back: a
+    // legacy shared write resolves a `shared_key` scoped to
+    // `(sender, recipient)` and NOT to the namespace, so that key is shared
+    // with every other client in this file and a read-back races whichever one
+    // last synced it. Success alone discriminates, since without the fallback
+    // this put throws.
     expect(await writerClient.put(toRecipient('viaPut'), 'v'), isTrue,
         reason: 'control: the fallback reaches a put with this exact fixture — '
             'without it this call throws rather than returning false');
@@ -137,11 +114,9 @@ void main() {
         reason: 'and it went out under legacy explicitly, stamped on the key '
             'the notification carried — never a silent downgrade');
 
-    // The other half of the clause's "fails cold start OR takes the explicit
-    // legacy fallback", and the sharpest control available: the same verb, the
-    // same recipient, the same namespace, with only the preference changed.
-    // A build that had simply stopped refusing would pass everything above and
-    // fail here.
+    // The differential: same verb, same recipient, same namespace, only the
+    // preference changed. A build that had simply stopped refusing would pass
+    // everything above and fail here.
     writerClient.getPreferences()!.allowLegacyCryptoFallback = false;
     final refused = await writerClient.notificationService.notify(
         NotificationParams.forUpdate(toRecipient('viaNotifyShut'), value: 'v'));

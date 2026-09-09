@@ -14,31 +14,24 @@ final _logger = AtSignLogger('VerbEnrollmentDirectory');
 
 /// Why a [NamespaceMember] has no usable key package — or that it has one.
 ///
-/// A null `keyPackage` on its own cannot be acted on, because these outcomes
-/// call for opposite responses and only one of them is a problem anybody can
-/// fix. Distinguishing them is what lets a caller carry on quietly in the
-/// ordinary cases and refuse loudly in the one that matters.
+/// A null `keyPackage` on its own cannot be acted on: these outcomes call for
+/// opposite responses, and only one of them is a problem anybody can fix.
 @experimental
 enum KeyPackageStatus {
   /// Present and verified — safe to seal to.
   present,
 
-  /// The enrollment advertised none. Expected: an older client, or the
-  /// self-retrofit path, which needs no conveyance at all. Not an error.
+  /// The enrollment advertised none, which is not an error.
   absent,
 
   /// Advertised and **refused** — not a map, signed by a different enrollment
   /// than the record it appears on, or a signature that does not verify
-  /// against that enrollment's `_apsk`. Either a bug or an attempt to make
-  /// this atSign's secrets readable by the wrong key, and in both cases
-  /// something a caller should refuse rather than skip.
+  /// against that enrollment's `_apsk`. A caller refuses rather than skips.
   rejected,
 
   /// Signed, and genuinely this enrollment's, but shaped in a way this version
-  /// cannot read — almost always a package written by a **newer** client.
-  /// Nothing is wrong and nobody can fix it from here, so it behaves like
-  /// [absent] rather than [rejected]: refusing would block work purely because
-  /// the other end is ahead of us.
+  /// cannot read. Behaves like [absent] rather than [rejected]: nobody here
+  /// can fix it.
   unsupported,
 }
 
@@ -63,7 +56,6 @@ class NamespaceMember {
   /// (1:1:1). [keyPackageStatus] says why.
   final KeyPackage? keyPackage;
 
-  /// Whether this member has a usable key package, and if not, why not.
   final KeyPackageStatus keyPackageStatus;
 
   NamespaceMember({
@@ -103,15 +95,12 @@ abstract class EnrollmentDirectory {
   /// The latest moment a revocation touched an enrollment granted [namespace],
   /// null when none ever has.
   ///
-  /// A fact about the namespace rather than about any member, which is why it
-  /// is not a field on a roster row. It is stamped by the atServer, so it is
-  /// comparable with the atServer's stamp on a record and with nothing a client
-  /// computed. It can move **backwards**: an un-revoke withdraws its own
-  /// enrollment's revocation, so a caller holding a previous value asks whether
-  /// this one CHANGED, never whether it grew.
-  ///
-  /// Throws when the answer cannot be read, which a caller must not read as
-  /// "nothing was revoked" — the two lead opposite ways.
+  /// Stamped by the atServer, so it is comparable with the atServer's stamp on
+  /// a record and with nothing a client computed. It can move **backwards** —
+  /// an un-revoke withdraws its own enrollment's revocation — so a caller
+  /// holding a previous value asks whether this one changed, never whether it
+  /// grew. Throws when the answer cannot be read, which is not the same as
+  /// "nothing was revoked".
   Future<DateTime?> lastRevokedAt(String namespace);
 }
 
@@ -128,11 +117,11 @@ abstract class EnrollmentDirectory {
 ///
 /// **The key package is an APKAM-signed envelope**, so `metadata.keyPackage`
 /// holds `{payload, signature, signingAlgo, hashingAlgo, enrollmentId}` and the
-/// package itself is the `payload`. It is verified here, against the advertising
-/// enrollment's `_apsk`, before the key inside is ever treated as that
-/// enrollment's — a key package *is* an encapsulation target, so accepting one
-/// on the server's word alone would let whoever served the enrollment record
-/// choose who can read the atSign's secrets.
+/// package itself is the `payload`. It is verified against the advertising
+/// enrollment's `_apsk` before the key inside is treated as that enrollment's:
+/// a key package is an encapsulation target, so accepting one on the server's
+/// word would let whoever served the record choose who reads the atSign's
+/// secrets.
 ///
 ///     enroll:listns:<ns>
 ///       -> data:[{"enrollmentId":..,"access":"rw","apkamPubKey":..,
@@ -159,18 +148,12 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
         ?.executeCommand('enroll:listns:$namespace\n', auth: true);
     final decoded = _data(raw);
     if (decoded is! List) {
-      // An unrecognised shape and an empty namespace are NOT the same outcome,
-      // and returning the empty list for both makes them indistinguishable to
-      // every caller. The roster decides who a secret is conveyed to and who a
-      // holder will serve, so an empty one silently withholds key material from
-      // everyone rather than failing. Logged at severe because nothing retries
-      // this and nothing else will notice.
       _logger.severe('enroll:listns for $namespace returned a shape this build '
           'does not understand (${decoded.runtimeType}), so no member could be '
           'read. Treating it as an empty roster would withhold key material '
           'from every member of the namespace');
-      // AtValueException rather than AtEnrollmentException: the latter extends
-      // AtException rather than AtClientException, so an application catching
+      // NOTE: AtValueException rather than AtEnrollmentException, which extends
+      // AtException rather than AtClientException — an application catching
       // AtClientException around a read would miss it.
       throw AtValueException('enroll:listns for $namespace returned a '
           '${decoded.runtimeType} where a list of members was expected');
@@ -208,9 +191,6 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
         ?.executeCommand('enroll:infons:$namespace\n', auth: true);
     final decoded = _data(raw);
     if (decoded is! Map) {
-      // Thrown rather than answered with null, for the reason the interface
-      // gives: null is "nothing has been revoked", which is the answer that
-      // says do nothing, and an unreadable one must not be mistaken for it.
       throw AtValueException('enroll:infons for $namespace returned a '
           '${decoded.runtimeType} where a map of namespace facts was expected');
     }
@@ -226,19 +206,6 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
 
   /// The key package inside [advertised], if its APKAM signature checks out as
   /// [enrollmentId]'s; null otherwise.
-  ///
-  /// A rejection drops **this member only**, rather than failing the whole
-  /// listing. The member is then simply never sealed to — fail-closed for the
-  /// enrollment whose advertisement is bad, and no worse for anyone else. The
-  /// alternative, throwing, would let a single unparseable record deny every
-  /// other enrollment its secrets.
-  ///
-  /// The distinction that matters is between an enrollment that advertised
-  /// **nothing** — ordinary, it has not registered — and one whose
-  /// advertisement is present but will not verify. The first is silent; the
-  /// second is shouted about, because it is either an attack on the
-  /// encapsulation target or a bug, and neither should be inferred from a
-  /// member that quietly stops receiving secrets.
   Future<(KeyPackage?, KeyPackageStatus)> _verifiedKeyPackage(
     Object? advertised, {
     required String enrollmentId,
@@ -256,15 +223,9 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
 /// Verifies an advertised key package against the `_apsk` of the enrollment
 /// whose record carries it, and says why if it is unusable.
 ///
-/// Shared by the discovery verb and the approval path, which see the same
-/// advertisement from different directions — the roster, and the enrollment
-/// request being approved. One copy, because two would be two chances to
-/// disagree about which key is authoritative.
-///
-/// A rejection concerns **this advertisement only** and never throws, so a
-/// caller listing a roster can drop one member and keep the rest: the
-/// alternative would let a single bad record deny every other enrollment its
-/// secrets.
+/// Never throws: a rejection concerns **this advertisement only**, so a caller
+/// listing a roster can drop one member and keep the rest rather than let a
+/// single bad record deny every other enrollment its secrets.
 @experimental
 Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
   Object? advertised, {
@@ -288,19 +249,10 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
     return (null, KeyPackageStatus.rejected);
   }
 
-  // The record names whose enrollment this is, and that is what the _apsk
-  // lookup goes on. A package may also name its own signer; if it does and
-  // the two disagree, one enrollment is offering a key package as another's
-  // — which would hand it every secret meant for that other enrollment.
-  //
-  // A package that names nobody is not suspicious: one riding
-  // `enroll:request` is signed before the atServer has assigned an id, so
-  // there is nothing truthful to stamp. Its authority is the signature
-  // checking out against this record's own _apsk, plus the record binding
-  // the package to the request that created it.
-  // Named `claimedSigner`, not `signer`: that is the AtClientEnvelopeSigner
-  // parameter, and a Map lookup is dynamic, so shadowing it compiles happily
-  // and then fails at runtime on every verification.
+  // NOTE: a package naming no signer is not suspicious — one riding
+  // `enroll:request` is signed before the atServer has assigned an id — so
+  // only a disagreement is refused, which would be one enrollment offering a
+  // key package as another's.
   final String? claimedSigner = envelope.signerEnrollmentId;
   if (claimedSigner != null && claimedSigner != enrollmentId) {
     _logger.severe('enrollment $enrollmentId advertised a key package signed '
@@ -330,9 +282,6 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
       KeyPackageStatus.present
     );
   } catch (e) {
-    // Signed, so genuinely this enrollment's, but shaped in a way this
-    // version cannot read — most likely written by a newer client. Nobody
-    // here can fix that, so it is not a refusal.
     _logger.info('enrollment $enrollmentId advertised a signed key package '
         'this version cannot parse: $e');
     return (null, KeyPackageStatus.unsupported);

@@ -258,7 +258,7 @@ void main() {
   /// A `local:` record is never synced to the atServer, so there is no peer to
   /// decrypt it and nothing an adversary can capture; the keystore already
   /// encrypts it at rest. Routing one through the shared-data crypto path also
-  /// made it unwritable under `disallowLegacyEncryption`, because every
+  /// makes it unwritable under `disallowLegacyEncryption`, because every
   /// post-quantum provider declines a local key and the fallback is legacy.
   group('local: keys are not encrypted', () {
     late PutRequestTransformer transformer;

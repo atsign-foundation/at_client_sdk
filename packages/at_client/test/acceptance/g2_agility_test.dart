@@ -1,15 +1,5 @@
-/// G2 · Crypto agility — add, never replace.
-///
-/// All three advertisements — an enrollment's key package, a namespace's nskey
-/// generation, and an enrollment's `_apsk` — are arrays so that an algorithm
-/// upgrade is an ADD by the advertiser rather than a coordinated flag day.
-///
-/// The signature case is not the encryption case: for encryption the SENDER
-/// picks from the recipient's advertised set, so offering two costs the
-/// advertiser nothing; for a signature the SIGNER picks and the verifier must
-/// cope with whatever arrives, so only a plural signature covers a verifier gap.
-///
-/// Catalogue: `docs/projects/pq/acceptance.md` section 17.
+/// G2 · Crypto agility — the rows that keep an algorithm upgrade an ADD by the
+/// advertiser rather than a coordinated flag day.
 library;
 
 import 'package:test/test.dart';
@@ -19,12 +9,6 @@ import 'proven_elsewhere.dart';
 void main() {
   group('G2 · crypto agility', () {
     test('UC-G2.1 · a key package reader keeps the entry it cannot use', () {
-      // GIVEN a key package advertising two keys, one under an alg this build
-      //       does not implement, beside a malformed and a non-map entry.
-      // WHEN  this build reads it and picks a key to seal to.
-      // THEN  the known key is selected under the CALLER's order; the unknown
-      //       entry is kept; malformed entries are skipped; a package naming no
-      //       suites is refused.
       provenIn(
         'packages/at_client/test/key_package_registration_test.dart',
         'unknown-alg entries are kept, malformed entries skipped, bestKeyFor ',
@@ -67,11 +51,6 @@ void main() {
     });
 
     test('UC-G2.2 · an nskey advertisement reader walks the list', () {
-      // GIVEN a signed nskey advertisement whose keys list carries an unusable
-      //       entry FIRST.
-      // WHEN  a sender resolves it to seal to.
-      // THEN  the usable entry is found; an advertisement of only unusable
-      //       entries is refused; one that retires every key it names is too.
       provenIn(
         'packages/at_client/test/published_nskey_key_ring_test.dart',
         'an entry this build cannot use is skipped, not fatal',
@@ -124,12 +103,6 @@ void main() {
     test(
         'UC-G2.3 · an _apsk reader tolerates an unknown alg and distrusts an unknown status',
         () {
-      // GIVEN an _apsk array carrying an unknown-alg entry beside an rsa2048
-      //       one; and separately an entry with an unknown status token.
-      // WHEN  a verifier parses it.
-      // THEN  the known entry is used; an array of nothing understood is
-      //       refused; an unknown STATUS is not a verification candidate, which
-      //       is the opposite of how an unknown ALG is treated.
       provenIn(
         'packages/at_client/test/apsk_formats_test.dart',
         'an array skips what it cannot use and reads what it can',
@@ -185,11 +158,6 @@ void main() {
     });
 
     test('UC-G2.4 · an add moves nothing peers already address', () {
-      // GIVEN an advertiser whose peers already seal or verify against its one
-      //       existing entry; a second algorithm is configured.
-      // WHEN  the advertiser adds a key for it.
-      // THEN  the existing entry keeps its kid and stays active, what was
-      //       already sealed to it still opens, and `suites` widens.
       provenIn(
         'tests/at_functional_test/test/key_package_amendment_live_test.dart',
         'UC-A2.5 · an enrollment amends its own key package',
@@ -257,26 +225,6 @@ void main() {
               'the narrowed preference returns the generation unchanged, with '
               'no further publish in the trace',
           clauses: ['never added back']);
-      // GIVEN a generation holding keys for one or more algorithms, and a
-      //       rotation due because the application asked, or because a
-      //       revocation touched an enrollment granted this namespace after
-      //       the advertisement was last rotated.
-      // WHEN  a client asks whether a rotation is due and, if it wins the mint
-      //       lock, rotates.
-      // THEN  the new generation holds only material minted now; an algorithm
-      //       nobody still runs never returns; a revoked enrollment cannot
-      //       DERIVE the successor, while what stops it being handed one is the
-      //       roster and the exclusion set; every kid changes, which is how
-      //       peers learn, at each peer's next ensureCurrent; a client decides
-      //       without coordinating; and a lock loser re-decides rather than
-      //       queueing.
-      //
-      // ⚠️ This comment said the trigger was AGE or "predates a revocation",
-      //    and that the row was WHOLLY UNPINNED because the mint produced one
-      //    key. All three are stale: age was retired as a trigger, the
-      //    revocation comparison is not against the generation's creation, the
-      //    mint went plural on 2026-08-28, and this body now carries several
-      //    clause pins.
       provenIn(
         'tests/at_functional_test/test/nskey_rotation_live_test.dart',
         'UC-G2.5 · a revocation whose rotation did not happen is rotated at '
@@ -373,17 +321,6 @@ void main() {
 
     test('UC-G2.6 · a client adds its own missing algorithm to the generation',
         () {
-      // GIVEN a current generation lacking an algorithm this client needs.
-      // WHEN  this client mints that material and adds it.
-      // THEN  it joins the CURRENT generation in place, under the same mint
-      //       lock; nothing already there moves; only the new private is
-      //       conveyed.
-      //
-      // ⚠️ This block said "there is no add operation at all, not even behind
-      // a flag" until 2026-08-28, when PublishedNskeyKeyRing.add landed. Three
-      // clauses are pinned below; what stays unpinned is c4 (only the new
-      // private is conveyed) and c6 (the added document is re-signed by the
-      // adding enrollment), neither of which any assertion reaches yet.
       provenIn(
         'packages/at_client/test/nskey_rotation_test.dart',
         'joins the current generation in place, keeping its identity',
@@ -492,11 +429,6 @@ void main() {
     test(
         'UC-G2.7 · a retired entry stops being offered and still opens history',
         () {
-      // GIVEN an advertiser that has retired an entry — the _apsk swap at
-      //       pqActive, or a rotated nskey generation.
-      // WHEN  a new operation runs, and separately an old record is read.
-      // THEN  the retired entry is not selected for anything new, stays
-      //       advertised, and what it produced still verifies or opens.
       provenIn('packages/at_client/test/signing_key_minting_test.dart',
           'a re-minted algorithm is advertised beside the key it replaced',
           proves: 'the clause as written, on the shape that discriminates: a '
@@ -575,20 +507,6 @@ void main() {
 
     test('UC-G2.8 · a verifier resolves the algorithm, then the key by kid',
         () {
-      // GIVEN an _apsk advertising more than one key under the algorithm an
-      //       envelope is signed with - the ordinary state of any enrollment
-      //       that has ever rotated its signing key.
-      // WHEN  a verifier checks the envelope.
-      // THEN  it resolves the algorithm from what the two documents share, and
-      //       the key from the signature's own kid.
-      //
-      // ⛔ The key-identifier clauses are UNPINNED because the field does not
-      // exist yet: `kid` names the signing ENROLLMENT in the header this build
-      // writes, and the enrollment has not yet moved to `enid`. The walk that
-      // stands in for the field is being deleted rather than kept as a
-      // fallback - nothing outside this tree holds an envelope that names no
-      // key - so the citation below no longer pins a clause: its counted
-      // refusal is the behaviour going away, not a behaviour the row asserts.
       provenIn(
         'packages/at_client/test/signing_key_minting_test.dart',
         'an envelope signed before the withdrawal still verifies',
@@ -654,21 +572,12 @@ void main() {
 
     test('UC-G2.9 · step 3 has no lever, so a retired key verifies forever',
         () {
-      // GIVEN an _apsk advertising a retired key beside its active one.
-      // WHEN  a verifier checks an envelope, and separately an attacker who has
-      //       broken the retired algorithm presents one signed under it.
-      // THEN  the verifier cannot decline an algorithm it implements, so the
-      //       retired key is a standing forgery surface; step 3 would close it
-      //       and has no lever.
       provenIn(
         'packages/at_client/test/apkam_signing_keys_test.dart',
         'one signature per held key, all naming this enrollment',
         proves: 'the count, from held key material: an enrollment holding two '
             'signing keys emits two signatures, under ML-DSA-65 and RS256. '
             'This is the mechanism the overlap would use',
-        // ⛔ Clause fragment WITHDRAWN 2026-08-28 with the overlap it
-        // described - see decisions.md 120. The arm still pins the count from
-        // held material, which is what the removal will change.
       );
       provenIn(
         'packages/at_client/test/signing_key_minting_test.dart',
@@ -689,12 +598,6 @@ void main() {
             'strongestOf over the intersection with no floor applied - a '
             'verifier declining what it implements would refuse it',
         clauses: ['applies no floor to the result'],
-        // ⛔ Clause fragments WITHDRAWN 2026-08-28. This pinned two clauses
-        // about the two-signature overlap, and decisions.md 120 retired the
-        // overlap: the three-step ladder replaces it, because double-signing
-        // covers nothing a verifier can insist on. The test is KEPT and
-        // untouched - it pins the multi-signature writer as it stands, so it
-        // goes red the day that writer is removed, which is the signal.
       );
       provenIn(
         'packages/at_client/test/jws_envelope_test.dart',
@@ -722,20 +625,6 @@ void main() {
           'a verifier sharing **no** algorithm with the envelope is refused',
         ],
       );
-      // ⛔ The step-3 clause is UNPINNED because the lever it describes
-      // does not exist: there is no accepted-algorithms set anywhere in
-      // AtClientPreference, so there is no behaviour to assert. Naming the
-      // clause rather than its index is deliberate - a withdrawal earlier in
-      // the row renumbers everything after it. See decisions.md 120.
-      //
-      // ⚠️ That used to be said of c1 as well, and it was wrong: c1 states what
-      // the verifier DOES today - strongestOf over the intersection, no floor -
-      // which is why the two-signature citation above now pins it. The three
-      // absences that explain WHY it cannot decline moved to prose beneath the
-      // row, asserted by architecture_guard_test.dart's 'the verifier has no
-      // accept lever for signatures'. That guard is cited below WITHOUT a
-      // clauses list: it is a tripwire for the day the lever lands, not proof
-      // of a behaviour.
       provenIn(
           'packages/at_client/test/acceptance/architecture_guard_test.dart',
           'the verifier has no accept lever for signatures',
@@ -748,16 +637,6 @@ void main() {
               'reddens it quoting its own reason. Deliberately NOT behavioural: '
               'an assertion that the weaker algorithm is accepted would stay '
               'green on the day the lever landed');
-      //
-      // The citations above are kept deliberately. They pin the multi-signature
-      // WRITER as it stands, so they go red the day it is removed — which
-      // decisions.md 120 makes possible and a separate plan row tracks.
-      //
-      // ⚠️ This block used to say the row's central claim "rests on nothing"
-      // because no test drove a two-member preference through to an envelope.
-      // One was written on 2026-08-28 and then the row changed underneath it:
-      // the overlap it proved is retired, so the test now pins behaviour the
-      // design has moved away from rather than behaviour it relies on.
     });
 
     test('UC-G2.10 · the ladder across atSigns: safe through rollout 1', () {
@@ -790,12 +669,6 @@ void main() {
               'cold manager over the same pointer resumes the same CK, '
               'failing by a different route from the already-current guard',
           clauses: ['the recipient does nothing further']);
-      // GIVEN @bob upgrades and publishes a widened advertisement; @alice is
-      //       still on the old build.
-      // WHEN  alice1 shares toward @bob, and @bob reads it.
-      // THEN  the old alice seals under the entry it understands and bob opens
-      //       it; an upgraded alice seals under the new entry immediately, with
-      //       no further release on bob's side.
       provenIn(
         'tests/at_functional_test/test/key_package_amendment_live_test.dart',
         'UC-A2.5 · a sender picks by its own order and stamps the matching ',
@@ -861,11 +734,6 @@ void main() {
           'seals under the entry it understands',
         ],
       );
-      // ⛔ One clause is UNPINNED. "The recipient does nothing further" is an
-      // absence - no re-seal, no conveyance fired - and the amendment test
-      // proves only the consequence, that an envelope sealed BEFORE still
-      // opens after. An absence needs its own arm, and a test that merely
-      // succeeds at reading is satisfied either way.
     });
 
     test('UC-G2.11 · the ladder within one atSign: safe through rollout 1', () {
@@ -893,13 +761,6 @@ void main() {
               'sealed to the entry it does hold. Without it an install that '
               'failed at everything would satisfy the arm above',
           clauses: ['is the ladder working']);
-      // GIVEN @alice has two enrollments sharing a namespace. alice1 runs the
-      //       app's ROLLOUT 1 build - mints both algorithms, seals only to the
-      //       old. alice2 is still on the previous build.
-      // WHEN  alice1 writes a self record alice2 reads, and then the reverse.
-      // THEN  both directions succeed, so rollout 1 can be taken one install at
-      //       a time; and after ROLLOUT 2 an install that never took rollout 1
-      //       is refused, which is the ladder working rather than a defect.
       provenIn(
         'packages/at_client/test/nskey_resolver_test.dart',
         'the default reaches an owner advertising either KEM',
@@ -909,14 +770,6 @@ void main() {
             'that a NARROWED list refuses with a message naming both sides — so '
             'the refusal is attributable rather than a silent miss',
       );
-      // ⚠️ This said the row was otherwise UNPINNED because "nothing in any
-      // pack runs two enrollments of one atSign at different algorithm
-      // configurations". That stopped being true on 2026-08-28 — the citation
-      // below is exactly that, and the reason it mattered is unchanged: with
-      // one atSign the configured keyEstablishmentAlgorithms and the published
-      // advertisement both belong to it, so a client consulting its own
-      // configuration where it should consult the advertisement is invisible
-      // in every other row.
       provenIn(
         'tests/at_functional_test/test/nskey_rollout_ladder_live_test.dart',
         'rollout 1 goes one install at a time, and both directions keep working',

@@ -14,30 +14,12 @@ import 'utils/at_client_cache.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
 
-/// An app enrolling through `at_onboarding_cli` can be post-quantum from
-/// birth — asserted against a real atServer, not against the client's own
-/// belief.
+/// Proves that an app enrolling through `at_onboarding_cli` can be
+/// post-quantum from birth, against a real atServer rather than against the
+/// client's own belief.
 ///
-/// Until `AtEnrollmentRequest` carried a `signingAlgo`, it could not. The OTP
-/// enrolment path minted RSA-2048 unconditionally, so on an atSign whose
-/// deployment had moved to post-quantum every install created an
-/// RSA-authenticating enrollment which the client then retrofitted away on its
-/// first start: a discarded enrollment per install, and an RSA credential live
-/// for the atServer's grace window on an atSign that believed it had left RSA
-/// behind. `--posture` was accepted by `enroll` the whole time and changed
-/// nothing about the key that was minted.
-///
-/// **The load-bearing assertion is the authentication, not the keyfile.** PKAM
-/// is record-authoritative: the atServer judges a signature against the
-/// algorithm on the enrollment record, and the record is written from what the
-/// enrol request carried. A client holding ML-DSA-65 material that
-/// authenticates successfully has therefore proved the algorithm reached the
-/// server — which reading its own keyfile back could never show.
-///
-/// ⚠️ **One-shot server state.** CRAM activation works once per atSign per
-/// virtualenv, so `@curtly` is this file's alone. It is claimed by nothing else
-/// in the repo — checked before it was chosen — and borrowing an atSign another
-/// file onboards makes that file fail rather than this one.
+/// ⚠️ One-shot server state: CRAM activation works once per atSign per
+/// virtualenv, so `@curtly` is this file's alone.
 void main() {
   final String atSign = AtUtils.fixAtSign('@curtly');
   final String masterKeysFilePath = testKeysFile(atSign);
@@ -53,17 +35,14 @@ void main() {
             'virtualenv, so if this is not the first run against this VE, '
             'recycle it before reading anything into the failure');
 
-    // The onboard above left a client for this atSign in the static cache, at
-    // the path its own preference chose. Every CLI command below builds one
-    // through `createAtClient`, which mints a fresh
-    // `.../at_activate/<millisecondsSinceEpoch>` per call — a path the cache
-    // can never honour — and each enrolment builds its own service for the same
-    // atSign too. Evict, or they all run against the onboard's client and its
-    // store.
+    // NOTE: every CLI command below builds its own client through
+    // `createAtClient`, which mints a fresh storage path per call, and each
+    // enrolment builds its own service for the same atSign. Without this
+    // eviction they all run against the client the onboard left in the cache.
     await evictCachedAtClients();
 
     // A semi-permanent passcode, so each enrolment below does not need its own
-    // freshly fetched OTP — the same shape the other CLI command tests use.
+    // freshly fetched OTP.
     expect(
         await runCliCommand([
           'spp', '-s', 'ABC123', //
@@ -112,12 +91,10 @@ void main() {
 
     // A FRESH service: an AtOnboardingService binds to the enrollment it last
     // authenticated as, so reusing one across enrolments fetches keys it is
-    // not authorized to read.
-    // At the legacy posture, deliberately: authenticate() builds a client,
-    // and at the SDK default posture that client retrofits an rsa2048
-    // enrolment on the spot — the retrofit the arm below wants the shipped
-    // command to perform, and one that revokes the enrolment this helper
-    // hands back.
+    // not authorized to read. At the legacy posture deliberately —
+    // authenticate() builds a client, and at the SDK default that client
+    // retrofits an rsa2048 enrolment on the spot, revoking the enrolment this
+    // helper hands back.
     final authenticated = await AtOnboardingServiceImpl(atSign,
             _preference(atSign, apkamKeysFilePath, posture: PqPosture.legacy))
         .authenticate();
@@ -180,25 +157,18 @@ void main() {
             'measuring a broken enrolment path rather than an algorithm');
   }, timeout: Timeout(Duration(minutes: 6)));
 
-  /// ⛔ **The arm that was missing, and its absence is why the defect shipped.**
-  ///
-  /// The test above ends at `authenticated == true`, and that is at_auth's own
-  /// connection reporting success — a connection built before the client
-  /// exists. The client is built afterwards, retrofits itself, and every verb
-  /// runs over a DIFFERENT connection. So a legacy enrolment could authenticate
-  /// and then be unable to do anything, with nothing in this pack noticing.
-  ///
-  /// `at_activate list` is the reported reproduction, run here as the shipped
-  /// binary path rather than as a hand-built call: it builds its own client
-  /// through `createAtClient`, which names no posture and so runs at the SDK
-  /// default, and then sends `enroll:list` with `auth: true`.
-  ///
-  /// **The retrofit is asserted, not assumed.** A green from a run where the
-  /// retrofit never happened would say nothing at all, so the keyfile is read
-  /// on both sides: legacy shape before, and typed ML-DSA material under a
-  /// second enrolment id after. That second read is this test's positive
-  /// control, and it is the thing that fails first if the atServer stops
-  /// auto-approving self-enrolments.
+  // `authenticated == true` is at_auth's own connection, built before the
+  // client exists; the client is built afterwards, retrofits itself, and runs
+  // every verb over a different connection — so a legacy enrolment can
+  // authenticate and still be unable to do anything. `at_activate list` runs
+  // the shipped binary path: it builds its own client through `createAtClient`,
+  // which names no posture and so runs at the SDK default, then sends
+  // `enroll:list` with `auth: true`.
+  //
+  // The retrofit is asserted rather than assumed — the keyfile is read on both
+  // sides, legacy shape before and typed ML-DSA material under a second
+  // enrolment id after. That second read is the positive control, and it fails
+  // first if the atServer stops auto-approving self-enrolments.
   test('a legacy enrolment that retrofits at start can still run a verb',
       () async {
     final legacy = await enrolAt(SigningAlgoType.rsa2048, 'retrofitverb');
@@ -213,7 +183,7 @@ void main() {
             'material. Typed material here means the retrofit already ran and '
             'the comparison below has nothing left to vary');
 
-    // The reported command, on the retrofitted keyfile.
+    // The verb, run on the retrofitted keyfile.
     expect(
         await runCliCommand([
           'list', '-a', atSign, //
@@ -247,14 +217,10 @@ void main() {
               'enrolment it created has to hold ML-DSA-65 material');
     }
 
-    // ⚠️ **Reported 2026-08-26 from a live ephemeral environment**: a
-    // retrofitted atSign never publishes its own namespace advertisement, so
-    // it can SEND post-quantum and cannot RECEIVE. It does not reproduce on
-    // at_client's own routes — `pq_retrofitted_scope_test.dart` in the
-    // functional pack retrofits both in-process and cold from a keyfile, at
-    // pqReady and at pqActive, and publishes one every time, with the negative
-    // control proven. The CLI route is the difference that is left, and this
-    // is where it can be observed.
+    // ⚠️ A retrofitted atSign that never publishes its own namespace
+    // advertisement can SEND post-quantum and cannot RECEIVE. at_client's own
+    // routes publish one every time, so the CLI route is where the failure can
+    // be observed.
     //
     // Read off the atServer with the master keys rather than through the
     // retrofitted client: the question is what the atSign PUBLISHED, and a

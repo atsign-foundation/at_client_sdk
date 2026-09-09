@@ -65,16 +65,13 @@ void main() {
       final conveyanceKey = key('${ck.ckKid}.__ck');
       final sealedCk =
           await alice1.nskey.encrypt(context, conveyanceKey, ck.toBase64());
-      // Sealing a CK does not promote it — CkManager does that once the
-      // conveyance write lands. Driving the providers directly means saying so.
+      // NOTE: driving the providers directly skips CK promotion, so the
+      // content key has to be promoted by hand here.
       alice1.cache.putAsCurrent(owner, namespace, ck, alice1.nskeyKid);
       final valueKey = key('treaty');
       final ciphertext =
           await alice1.data.encrypt(context, valueKey, plaintext);
 
-      // Both records reach alice2 carrying the appMetadata alice1 stamped —
-      // for the conveyance that is what names the nskey generation it was
-      // sealed to, and for the value it is the ckKid and iv.
       final alice2 = client();
       final syncedConveyance = key('${ck.ckKid}.__ck')
         ..metadata.appMetadata = conveyanceKey.metadata.appMetadata;
@@ -127,13 +124,6 @@ void main() {
       //       the __ssenv push and reads; an app_2-only client is refused the
       //       app_1 private (server-gated); requestSecret is the pull backstop;
       //       and seeding is idempotent across starts.
-      //
-      // The catalogue used to trigger this on the first put. That was never
-      // built and contradicted UC-A3.3 above, which requires a write to a
-      // keyless namespace to FAIL and is proven live. Ruled 2026-08-04 that the
-      // code was right — a put that minted would hide a lock, a keygen, a
-      // publish and a conveyance behind one write — and acceptance.md 4.2 was
-      // amended. See decisions.md 29.
       provenIn('tests/at_functional_test/test/nskey_seeding_live_test.dart',
           'seeding publishes an advertisement the owner can then resolve',
           proves: 'against a namespace nothing has minted for, seed() reports '
@@ -228,8 +218,7 @@ void main() {
       //       error. With the legacy fallback opted in (final 3.x only) the
       //       write proceeds under legacy, and every SUBSEQUENT write uses the
       //       nskey once it exists; records already written stay legacy, and
-      //       re-encrypting them is an explicit migration (B-3's lazy
-      //       re-encrypt; R-1 delivered no migration machinery). Rare in practice:
+      //       re-encrypting them is an explicit migration. Rare in practice:
       //       a client mints for its preference namespace and its rw namespaces
       //       at init.
       provenIn(
@@ -293,11 +282,6 @@ void main() {
       //       not only on stored keys; an offline alice2 still decrypts the
       //       queued notification on later delivery; a signal-only notification
       //       needs no decryption and is unaffected.
-      //
-      // The frame is the whole point of this row. A stored key carries its
-      // appMetadata in the record; a notification has to carry it in the
-      // notification itself, and if it does not, the receiver has no way to
-      // know which scheme opened the value it was just handed.
       const providerId = symmetricAesGcmCryptoProviderId;
       final provider = _RecordingProvider(providerId);
       final client = MockAtClient();
@@ -309,9 +293,8 @@ void main() {
             'key': '@alice:treaty.app_1.my_apps@alice',
             'from': '@alice',
             'to': '@alice',
-            // Well in the past: an alice2 that was offline receives exactly
-            // this frame later, so a transform that consulted arrival time
-            // would be the thing that broke queued delivery.
+            // NOTE: deliberately well in the past — an offline alice2 receives
+            // this frame later, so arrival time must not steer the transform.
             'epochMillis': 1600000000000,
             'messageType': 'MessageType.key',
             'isEncrypted': value != null,
@@ -325,8 +308,6 @@ void main() {
             },
           };
 
-      // 1. providerId travels ON THE FRAME — decoded off the notification's
-      //    own metadata, not looked up from any stored record.
       final parsed = AtNotification.fromJson(frame(value: 'ciphertext'));
       expect(parsed.metadata?.appMetadata?.providerId, providerId,
           reason: 'without this the receiver holds a value and no idea which '
@@ -337,7 +318,6 @@ void main() {
           reason: 'the per-record entries have to ride along too; a providerId '
               'with no ckKid names a scheme that then cannot find its key');
 
-      // 2. Routed by that id, the same way a put is.
       final delivered =
           await NotificationResponseTransformer(client).transform(Tuple()
             ..one = parsed
@@ -350,9 +330,6 @@ void main() {
               'names, not the client\'s default and not legacy');
       expect(delivered.value, '$providerId decrypted ciphertext');
 
-      // 3. A signal-only notification carries no value, so there is nothing to
-      //    decrypt and the provider must not be troubled. This is the control:
-      //    it shows the call count above tracks the value, not the transform.
       final signal = AtNotification.fromJson(frame());
       await NotificationResponseTransformer(client).transform(Tuple()
         ..one = signal
@@ -365,10 +342,6 @@ void main() {
               '2, every signal notification is attempting a decryption of '
               'nothing');
 
-      // The four clauses above are established against a hand-built frame, so
-      // they show what the receive path does with a frame rather than that a
-      // real atServer produces one. The live test carries the two clauses that
-      // difference matters for.
       provenIn('tests/at_functional_test/test/nskey_self_notify_live_test.dart',
           'a self notification reaches a second enrollment and decrypts',
           proves: 'three clauses against a real atServer and a genuinely '

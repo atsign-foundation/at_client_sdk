@@ -6,6 +6,8 @@ import 'package:test/test.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
+/// How a client's PKAM signing algorithm resolves: the recorded key-material
+/// resolution first, then the preference, then rsa2048.
 void main() {
   group('the resolved-signing-algo record', () {
     test('answers with the recorded resolution', () {
@@ -18,7 +20,6 @@ void main() {
     test('falls back to the preference when nothing was recorded', () {
       final client = MockAtClient();
       when(() => client.getPreferences()).thenReturn(AtClientPreference()
-        // The documented legacy fallback for untyped key material.
         // ignore: deprecated_member_use
         ..signingAlgoType = SigningAlgoType.ecc_secp256r1);
       expect(signingAlgoOf(client), SigningAlgoType.ecc_secp256r1);

@@ -45,11 +45,7 @@ Future<bool> _pollUntilCachedExistsMatches(
 
 /// Forces `autoNotify=true` on the publisher (sharedBy) atServer.
 /// Defensive: the cicd atSigns are long-lived, so a `false` written by an
-/// older build persists across runs.
-/// ⚠️ This named bypasscache_test as the writer until 2026-09-08; that test
-/// no longer turns auto-notify off at all, so nothing in this pack writes
-/// `false` today. The guard stays for what earlier runs may have left
-/// behind. Without auto-notify, a
+/// older build persists across runs. Without auto-notify, a
 /// publisher's put-with-TTR doesn't trigger the cross-server notify
 /// to the receiver atServer, the receiver's cached entry is never
 /// created, and these tests hang forever waiting for it.

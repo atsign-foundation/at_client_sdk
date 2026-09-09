@@ -20,15 +20,9 @@ import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// Arm 3 — the advance ladder: one enrollment walked legacy → pqReady →
-/// pqActive, asserting what changes at each rung and that nothing written
-/// before a rung stops being readable after it.
-///
-/// **Why this is separate from the posture grid.** Re-running a static grid
-/// after an advance adds no posture pair the grid does not already have —
-/// advancing the legacy row to pqReady leaves four distinct pairs, all of them
-/// already cells. What a ladder buys is what a re-run cannot: the shape of the
-/// keyfile at each rung, and durability across the change.
+/// The advance ladder: one enrollment walked legacy → pqReady → pqActive,
+/// asserting what changes at each rung and that nothing written before a rung
+/// stops being readable after it.
 ///
 /// **Neither rung is a call, and they are different mechanisms.**
 ///
@@ -42,8 +36,8 @@ import 'test_utils.dart';
 ///   through `SigningKeyMinting.reconcileSigningKeys`, which reads a FINAL
 ///   preference field — so it needs a second client object for the same
 ///   `(atSign, enrollmentId)`, which `AtClientImpl.refuseChangedRolloutAxes`
-///   refuses. The rung evicts the client cache first, which is what a process
-///   restart would do for free.
+///   refuses. The rung evicts the client cache first, as a process restart
+///   would.
 ///
 /// One test rather than three: a rung in its own `test()` would depend on the
 /// previous one having run, so the file would pass or fail on declaration
@@ -77,9 +71,8 @@ void main() {
     await loader.setEncryptionKeys(approverManager.atClient, atSign);
     await AtClientSecretSharing.forClient(approverManager.atClient).register();
 
-    // The rung-0 enrollment. `enrolAndAuthenticate` submits over OTP, and that
-    // path mints RSA-2048 unconditionally — which is exactly the starting
-    // state this ladder needs, and is why rung 1 has something to advance
+    // The rung-0 enrollment: `enrolAndAuthenticate` submits over OTP, and that
+    // path mints RSA-2048 unconditionally — the starting state rung 1 advances
     // FROM. An enrollment born ML-DSA would make rung 1 a no-op.
     keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
@@ -108,8 +101,8 @@ void main() {
   });
 
   /// Builds a client from the keyfile the ladder has been walking, under
-  /// [posture] — which is what an advance IS. The same restart path a
-  /// production app walks when it ships a new stage.
+  /// [posture] — the restart path an app walks when it ships a new stage, which
+  /// is what an advance IS.
   Future<AtClient> clientAt(PqPosture posture, String enrollmentId) async {
     // The keyfile names the enrollment: once a rung has retrofitted, the
     // successor's typed material is the one active authentication key, so
@@ -126,15 +119,14 @@ void main() {
     expect(response.session!.enrollmentId, enrollmentId,
         reason: 'the ladder keyfile must resolve to the rung being asked for');
 
-    // ⚠️ ONE store for the whole ladder, and that is the point of the row: an
-    // install does not move its storage on every upgrade, and the durability
-    // assertions below only mean something if the later rung reads the SAME
-    // store the earlier one wrote to. A rung is a restart of the one install:
-    // the manager stops the previous rung's client, which unfiles it and
-    // releases the store, and the next client attaches to it as the principal
-    // that last held it — rung 1 retrofits itself only after attaching. A
-    // fresh manager per rung left the previous client holding the store, and
-    // the next was refused as a second holder.
+    // NOTE: ONE store for the whole ladder. An install does not move its
+    // storage on every upgrade, and the durability assertions below only mean
+    // something if the later rung reads the SAME store the earlier one wrote
+    // to. A rung is a restart of the one install: the manager stops the
+    // previous rung's client, which unfiles it and releases the store, and the
+    // next client attaches to it as the principal that last held it. A fresh
+    // manager per rung leaves the previous client holding the store, and the
+    // next is refused as a second holder.
     final manager = await ladderManager.setCurrentAtSign(
         atSign, namespace, TestUtils.getPreference(atSign, posture: posture),
         atChops: auth.atChops,

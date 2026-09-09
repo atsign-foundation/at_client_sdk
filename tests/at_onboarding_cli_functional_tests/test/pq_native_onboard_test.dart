@@ -14,34 +14,11 @@ import 'package:test/test.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
 
-/// ON-1's consumer half: `at_onboarding_cli` can activate an atSign
-/// **PQ-native**, so the capability is one an end user can actually reach.
+/// Proves that `at_onboarding_cli` can activate an atSign PQ-native, so the
+/// capability is one an end user can reach.
 ///
-/// The three things a PQ-native activation must produce are all-or-nothing,
-/// which is why they are asserted together. An ML-DSA APKAM with no key package
-/// is not a partial success — `metadata.keyPackage` is written by the
-/// `enroll:request` that creates the enrollment record and never again, so an
-/// atSign activated that way could never be repaired, only abandoned. This test
-/// exists to fail if the CLI ever mints one of the three without the others.
-///
-/// Both tests here drive their remote commands on a client from a fresh
-/// `authenticate()` under a **bare** preference, never on the activation
-/// client. That is what `at_activate`'s `otp`, `list` and `spp` do — they build
-/// their client through `createAtClient`, which names no posture — and it is
-/// the only arrangement in which the preference and the key material can
-/// disagree. A test driven on the activation client agrees with itself.
-///
-/// The two tests are one comparison: the *only* thing varied between them is
-/// the posture at activation, so an outcome that differs can only come from
-/// the key material each activation minted. Each states its own resolved
-/// algorithm, so a run in which they silently converged fails rather than
-/// passing while measuring nothing.
-///
-/// One-shot server state: CRAM activation works once per atSign per virtualenv,
-/// so `@denise` and `@egbiometric🛠` are this file's alone — every other atSign
-/// in this package is already spent by an `onboard()` or has its PKAM key
-/// installed by hand for the authenticate tests, and either makes an
-/// activation here fail.
+/// ⚠️ One-shot server state: CRAM activation works once per atSign per
+/// virtualenv, so `@denise` and `@egbiometric🛠` are this file's alone.
 void main() {
   AtSignLogger.root_level = 'WARNING';
 
@@ -51,9 +28,7 @@ void main() {
 
   // The posture rides the constructor, which is the whole point: an app
   // becomes post-quantum by naming a stage, not by setting an algorithm on a
-  // preference the activation path may or may not read. Setting the old
-  // deprecated field here made this test pass whether or not the resolution
-  // worked, because the value it asserted was the one it had written.
+  // preference the activation path may or may not read.
   AtOnboardingPreference preference() =>
       AtOnboardingPreference(posture: PqPosture.pqReady)
         ..rootDomain = 'vip.ve.atsign.zone'
@@ -95,33 +70,29 @@ void main() {
     // A fresh connection authenticating from the keyfile alone. No RSA APKAM
     // exists anywhere, so this can only succeed by ML-DSA.
     //
-    // Under a **bare** preference, deliberately: that is what `at_activate`
-    // hands `createAtClient` for `otp`, `list` and `spp`, so its posture is
-    // `legacy` and its `authenticationKeyAlgorithm` is `rsa2048`. Everything
-    // below then runs on this client rather than on the activation client,
-    // because the activation client was built under `pqReady` and so cannot
-    // tell a working resolution from a posture that happens to agree with it.
-    // A client that reads its algorithm off the preference here signs an
-    // ML-DSA key with the RSA routine and every command below throws.
-    // `at_activate` is its own process, and in one process the activation
-    // client is still cached under `(atSign, enrollmentId)` holding the
-    // `pqReady` axes — which `AtClientImpl.create` refuses to hand to a caller
-    // naming different ones. That refusal is a real guard, so what this does
-    // is what process exit does, rather than working around it.
+    // Under a bare preference, deliberately: that is what `at_activate` hands
+    // `createAtClient`, so its posture is `legacy` and its
+    // `authenticationKeyAlgorithm` is `rsa2048`. Everything below runs on this
+    // client rather than the activation client, which was built under
+    // `pqReady` and so cannot tell a working resolution from a posture that
+    // agrees with it. A client reading its algorithm off the preference signs
+    // an ML-DSA key with the RSA routine and every command below throws.
+    //
+    // In one process the activation client is still cached under
+    // `(atSign, enrollmentId)` holding the `pqReady` axes, which
+    // `AtClientImpl.create` refuses to hand to a caller naming different ones.
+    // Dropping it here is what process exit does for `at_activate`.
     await service.atClient!.stop();
     AtClientImpl.atClientInstanceMap
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
 
     final reader = AtOnboardingServiceImpl(
         atSign,
-        // Named, not inherited, and identically in both arms. The reader's
+        // Named, not inherited, and identically in both arms: the reader's
         // preference is the FALLBACK for how this client authenticates, and
-        // this comparison needs that fallback to be rsa2048: in the PQ arm so
-        // that mldsa65 proves the keyfile won, and in the legacy arm so that
-        // there is anything to contrast with. When it rode the SDK default it
-        // did say rsa2048 — until the default moved to pqReady, at which point
-        // the legacy arm's rig check went red and this arm quietly stopped
-        // discriminating.
+        // the comparison needs that fallback to be rsa2048 — in the PQ arm so
+        // that mldsa65 proves the keyfile won, in the legacy arm so that there
+        // is anything to contrast with.
         AtOnboardingPreference(posture: PqPosture.legacy)
           ..rootDomain = 'vip.ve.atsign.zone'
           ..rootPort = virtualenvRootPort
@@ -198,10 +169,9 @@ void main() {
 
   test('a legacy activation is the rsa2048 arm of the same comparison',
       () async {
-    // `@egbiometric🛠` is this test's alone. A CRAM activation is one-shot per
-    // atSign per virtualenv, and every other demo atSign this package touches
-    // is already spent by an `onboard()` or has its PKAM key installed by
-    // hand — either makes an activation here fail.
+    // `@egbiometric🛠` is this test's alone: a CRAM activation is one-shot per
+    // atSign per virtualenv, and an atSign another test spends makes an
+    // activation here fail.
     final legacyAtSign = AtUtils.fixAtSign('@egbiometric🛠');
     final legacyKeysFile = testKeysFile(legacyAtSign);
     for (final path in [legacyKeysFile, '$legacyKeysFile.bak']) {
@@ -235,14 +205,11 @@ void main() {
 
     final reader = AtOnboardingServiceImpl(
         legacyAtSign,
-        // Named, not inherited, and identically in both arms. The reader's
+        // Named, not inherited, and identically in both arms: the reader's
         // preference is the FALLBACK for how this client authenticates, and
-        // this comparison needs that fallback to be rsa2048: in the PQ arm so
-        // that mldsa65 proves the keyfile won, and in the legacy arm so that
-        // there is anything to contrast with. When it rode the SDK default it
-        // did say rsa2048 — until the default moved to pqReady, at which point
-        // the legacy arm's rig check went red and this arm quietly stopped
-        // discriminating.
+        // the comparison needs that fallback to be rsa2048 — in the PQ arm so
+        // that mldsa65 proves the keyfile won, in the legacy arm so that there
+        // is anything to contrast with.
         AtOnboardingPreference(posture: PqPosture.legacy)
           ..rootDomain = 'vip.ve.atsign.zone'
           ..rootPort = virtualenvRootPort
@@ -253,8 +220,8 @@ void main() {
     expect(await reader.authenticate(), true);
     final AtClient client = reader.atClient!;
 
-    // The rig check the plan asks for: the two arms must actually differ, or
-    // the comparison is of a case with itself.
+    // The rig check: the two arms must actually differ, or the comparison is
+    // of a case with itself.
     expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.rsa2048,
         reason: 'this arm has no typed material, so the preference fallback '
             'stands — and it must not be the mldsa65 the other arm resolves');

@@ -34,30 +34,6 @@ import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// Arm 2, the posture grid — its provisioning, and the assertions that keep it
-/// meaningful.
-///
-/// Two things it settles, neither of which any run had observed before:
-///
-/// 1. **Six clients in one process.** `AtClientImpl` keys its cache by
-///    `(atSign, enrollmentId)` and `AtClientManager` has a public constructor
-///    holding its own client, so six should be six cache entries. Three has
-///    been run (`pq_stage_arm_test.dart`); six across two atSigns has not.
-///
-/// 2. **The nskey advertisement is per-namespace.** It is published at
-///    `public:__nskey.<ns>@<owner>` and resolved by `(owner, namespace)` with
-///    no atSign-level fallback, so three postures on ONE atSign should be able
-///    to hold disjoint seeding state provided each has its own namespace. If
-///    that holds, the grid needs two atSigns rather than six.
-///
-/// Storage is isolated **per client**, not per atSign: `TestUtils.getPreference`
-/// keys `hiveStoragePath` on the atSign alone, so the three enrollments of one
-/// atSign would otherwise share one Hive box and one commit log.
-///
-/// Every client is built through `AtClientManager`'s public constructor.
-/// `getInstance().setCurrentAtSign` calls `previousAtClient?.stop()`
-/// (`at_client_manager.dart:165`), so the singleton route would stop each
-/// client as the next one came up.
 /// A distinguishable "nothing arrived" for the notification cell's first
 /// attempt — a distinct instance rather than null, because null is a value a
 /// notification could legitimately carry.
@@ -65,9 +41,8 @@ final AtNotification _absent = AtNotification.empty();
 
 /// The smallest thing that can hold [EnvelopeSigning].
 ///
-/// Signing and verifying share one class because they share one `_apsk`
-/// address: a verifier resolving the record differently from the signer would
-/// be testing two spellings rather than one exchange.
+/// Signing and verifying share one class so both resolve the same `_apsk`
+/// address.
 class _GridEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   _GridEnvelopeSigner(this.atClient);
 
@@ -77,14 +52,16 @@ class _GridEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   @override
   final AtSignLogger logger = AtSignLogger('pqGridEnvelope');
 
-  /// Null: a cached public key would let one cell verify against a key a
-  /// previous cell published, which is exactly the confusion a grid over
-  /// postures exists to expose.
+  /// Null: a cached public key would let one cell verify against a key another
+  /// cell published.
   @override
   final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings =
       null;
 }
 
+/// Stands every rollout posture up as its own live enrollment across two
+/// atSigns, then exercises each one's writes, reads, notifications and signed
+/// envelopes against the others.
 void main() {
   TestUtils.isolateStorage('pq_posture_grid_test');
   final atSigns = <String>[
@@ -94,11 +71,6 @@ void main() {
 
   /// The stage no named constant expresses: post-quantum writes with the
   /// legacy fallback still permitted.
-  ///
-  /// `disallowLegacyEncryption` is settable only through a posture, and every
-  /// named stage either writes legacy or refuses it — so the rows about an
-  /// opted-in fallback are unreachable from the three constants. The unnamed
-  /// constructor exists for exactly this.
   final pqFallback = PqPosture(
     authenticationKeyAlgorithm: PqPosture.pqActive.authenticationKeyAlgorithm,
     dataSigningKeyAlgorithms: PqPosture.pqActive.dataSigningKeyAlgorithms,
@@ -115,18 +87,11 @@ void main() {
   /// Namespaces are RUN-UNIQUE, and that is a correctness requirement rather
   /// than hygiene.
   ///
-  /// A namespace key is minted once and then adopted: a client starting into a
-  /// namespace that already advertises one takes the published advertisement
-  /// rather than re-minting, because re-minting would rotate the key out from
-  /// under every peer that had already fetched it. Adopting conveys no
-  /// private half.
-  ///
-  /// So against a virtualenv that outlives one run — which is every local run
-  /// after the first — a fixed namespace means this run's enrollments adopt a
-  /// generation whose private belongs to a previous run's clients, and every
-  /// reader fails with "no nskey private held". Measured: with fixed
-  /// namespaces, ZERO of three authorised readers could read, including the
-  /// one that appeared to have seeded.
+  /// A client starting into a namespace that already advertises a key adopts
+  /// it rather than re-minting, and adopting conveys no private half — so
+  /// against a virtualenv that outlives one run, a fixed namespace leaves this
+  /// run's enrollments holding a generation whose private they never had, and
+  /// every reader fails with "no nskey private held".
   final runId = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
 
   /// The namespace every peer has a namespace key for.
@@ -134,26 +99,15 @@ void main() {
 
   /// The namespace the RECEIVER has never seeded.
   ///
-  /// The receiver's posture is not the second axis of a data-path grid, and
-  /// this namespace is why. What a receiver's posture changes for a write
-  /// *toward* it is only whether it published a
-  /// namespace key. That is a property of `(receiver, namespace)`, not of
-  /// which enrollment eventually reads — so the axis is **readiness**, and it
-  /// is expressed by which namespace the write targets.
-  ///
-  /// Seeded on the sender and not on the receiver, which is what makes it
-  /// asymmetric: an enrollment seeds every namespace it is authorised for, so
-  /// a sender able to write here necessarily seeds it on its own atSign. Only
-  /// the receiver's side is asserted absent.
+  /// An enrollment seeds every namespace it is authorised for, so the sender's
+  /// side of this one IS seeded; only the receiver's is asserted absent.
   final nsUnready = 'pqgn$runId';
 
   /// One cell of the provisioning: which atSign, which posture, and which
   /// namespaces the enrollment is authorised for.
   ///
-  /// The senders hold both namespaces so the same client can be offered a
-  /// ready peer and an unready one, which is the whole differential. The
-  /// receivers are what decide readiness: [nsReady] carries seeding postures
-  /// on both sides, [nsUnready] carries a legacy receiver alone.
+  /// The senders hold both namespaces so one client can be offered a ready
+  /// peer and an unready one, which is the differential.
   final cellSpec = <String,
       ({String atSign, PqPosture posture, Map<String, String> namespaces})>{};
 
@@ -174,25 +128,19 @@ void main() {
     );
   }
   // A second enrollment at one posture, so the rows asserting that EVERY
-  // authorised enrollment reads are not measuring n = 1, where they pass
-  // whether or not the mechanism works.
+  // authorised enrollment reads are not measuring n = 1.
   cellSpec['s-pqActive2'] = (
     atSign: sender,
     posture: PqPosture.pqActive,
     namespaces: {nsReady: 'rw', nsUnready: 'rw'},
   );
 
-  // The receiver side. Four postures in ONE namespace is deliberate: it is
-  // both what makes [nsReady] seeded and the two-installs-of-one-app shape,
-  // and the second enrollment to start must ADOPT the published key rather
-  // than mint a rival generation.
-  //
-  // `legacy` and `pqReading` fail to read for DIFFERENT reasons, and keeping
-  // both is what stops one masking the other: `legacy` configures no
-  // post-quantum provider, so it is refused on the crypto path before any key
-  // is looked for; `pqReading` configures them and never seeds, so it is
-  // refused on the key-acquisition path. With only the first, nothing here
-  // would exercise the second at all.
+  // The receiver side. Four postures in ONE namespace is deliberate: it both
+  // makes [nsReady] seeded and forces the second enrollment to start to ADOPT
+  // the published key rather than mint a rival generation. `legacy` and
+  // `pqReading` fail to read for DIFFERENT reasons — no post-quantum provider
+  // versus providers but no seeding — and keeping both stops one masking the
+  // other.
   for (final entry in <String, PqPosture>{
     'legacy': PqPosture.legacy,
     'pqReading': legacyPlusPqProviders,
@@ -219,12 +167,10 @@ void main() {
 
   /// One keyfile per cell, and it is not optional.
   ///
-  /// `AtClient.atKeysIo` is where a minted nskey private is FILED. Without
-  /// one it is null, the mint publishes an advertisement whose private half
-  /// nothing kept, and every reader — the minter included — then fails with
-  /// "no nskey private held". Measured: with no `atKeysIo`, ZERO of three
-  /// authorised readers could read a record sealed to their own atSign's
-  /// published key.
+  /// `AtClient.atKeysIo` is where a minted nskey private is FILED. Without one
+  /// the mint publishes an advertisement whose private half nothing kept, and
+  /// every reader — the minter included — then fails with "no nskey private
+  /// held".
   final keyfiles = <String, InMemoryAtKeysIo>{};
 
   /// A path safe on disk — the demo atSigns carry an emoji.
@@ -232,8 +178,8 @@ void main() {
 
   AtClientPreference preferenceFor(String name, String atSign,
       {required String role, required PqPosture posture}) {
-    // No storage path: a bundle decides the location now, and `hiveStoragePath`
-    // would be ignored beside one.
+    // No storage path: a bundle decides the location, and `hiveStoragePath` is
+    // ignored beside one.
     return TestUtils.getPreference(atSign, posture: posture);
   }
 
@@ -244,20 +190,11 @@ void main() {
   /// `(atSign, enrollmentId)`, so the second call for an atSign gets the first
   /// call's client whatever preference it is handed — the public
   /// `AtClientManager` constructor separates the managers, not the clients.
-  /// Memoised here so that is explicit rather than accidental.
-  ///
-  /// This said "one per cell rather than one per atSign" until 2026-08-29 and
-  /// asked for a per-cell `hiveStoragePath` that was silently dropped: every
-  /// approver after the first ran on the first cell's store. It surfaced when
-  /// `AtClientImpl` briefly refused exactly that,
-  /// and nothing else in the suite would have shown it — the grid was green
-  /// throughout.
   ///
   /// `register()` takes no namespace and files into the client's own, and is
-  /// idempotent (it logs "have already published"), so one registration for
-  /// the atSign is what the cells need and all they ever got.
+  /// idempotent, so one registration per atSign is what the cells need.
   ///
-  /// Built through `AtClientManager`'s PUBLIC constructor. The singleton's
+  /// Built through `AtClientManager`'s PUBLIC constructor: the singleton's
   /// `setCurrentAtSign` stops the outgoing client, so the singleton route
   /// would stop each of these as the next one came up.
   final approvers = <String, AtClient>{};
@@ -273,10 +210,8 @@ void main() {
         // ⚠️ legacy, and this is the grid's readiness axis. Seeding is the
         // only posture-gated step in the PQ bootstrap, so an approver at any
         // other posture publishes `public:__nskey.<ns>@<atSign>` before a
-        // single cell runs — minting the namespace key the grid is measuring
-        // and moving its private into the approver's keyfile. Every readback
-        // assertion would then pass for the wrong reason, and nothing would
-        // go red.
+        // single cell runs, and every readback assertion then passes for the
+        // wrong reason.
         preferenceFor(slug(atSign), atSign,
             role: 'approver', posture: legacyPlusPqProviders),
         atKeysIo: keysIo,
@@ -291,7 +226,7 @@ void main() {
   /// Whether `public:__nskey.<namespace>@<atSign>` exists, read over the wire.
   ///
   /// Tri-state rather than a bool: a lookup that fails for a reason other than
-  /// absence must not read as "unseeded", which is the verdict this rests on.
+  /// absence must not read as "unseeded".
   Future<({bool present, String detail})> advertisement(
       AtClient reader, String atSign, String namespace) async {
     try {
@@ -313,9 +248,8 @@ void main() {
     for (final entry in cellSpec.entries) {
       final name = entry.key;
       final spec = entry.value;
-      // The approver rides the first authorised namespace; the conveyance
-      // path is namespace-scoped and this is where the enrollee's package is
-      // registered.
+      // The approver rides the first authorised namespace: the conveyance path
+      // is namespace-scoped, and this is where the enrollee's package lands.
       final approverNamespace = spec.namespaces.keys.first;
       stdout.writeln('##GRID## building $name on ${spec.atSign} '
           'in ${spec.namespaces.keys.join("+")}');
@@ -331,18 +265,15 @@ void main() {
             role: 'cell', posture: spec.posture),
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
-        // Authorised for exactly these namespaces. `{'*': 'rw'}` would be
-        // fully privileged AND would seed nothing: `NskeySeeding` skips the
-        // wildcard, so such an enrollment publishes no namespace key and then
-        // refuses every write it makes.
+        // Authorised for exactly these namespaces: `NskeySeeding` skips the
+        // wildcard, so a `{'*': 'rw'}` enrollment publishes no namespace key
+        // and then refuses every write it makes.
         namespaces: spec.namespaces,
-        // The enrollment mode follows the cell's own posture, which is the
-        // one axis of it this harness can apply: a legacy cell submits a
-        // legacy request and so is not sealed to at approval time. ⚠️ That
-        // does NOT make it an un-upgraded install — the client still registers
-        // a key package at startup — so read a legacy cell here as "an app
-        // that asked for the legacy stage", never as "a peer without the
-        // capability". The faithful peer is `pq_released_peer_test.dart`.
+        // The enrollment mode follows the cell's own posture: a legacy cell
+        // submits a legacy request and so is not sealed to at approval time.
+        // ⚠️ Read a legacy cell as "an app that asked for the legacy stage",
+        // never as "a peer without the capability" — it still registers a key
+        // package at startup.
         keyExchangeMode: spec.posture.keyExchangeMode,
         // `(appName, deviceName)` is one-shot server state.
         deviceName: 'pqgrid-$name-'
@@ -360,18 +291,12 @@ void main() {
 
   test('every client stands up together, each with its own store', () async {
     expect(cells, hasLength(cellSpec.length));
-    // ⚠️ A DIRECTORY IS NOT A STORE, and this row was named for something it
-    // did not check until 2026-08-29: `hiveStoragePath` was ignored for the
-    // second client of an atSign, every client attached to the first one's
-    // box, and each named directory still appeared because the `<sha>.hash`
-    // secret is written where a client asks even when its box opens elsewhere.
-    // So "each with its own store" was green while all six shared one.
-    //
-    // Storage is a bundle now, not a path, so the check is against the bundle
-    // and not against a naming scheme: a distinct location per cell, each one
-    // actually held by its own client. That is the property the model
-    // enforces — `AtClientStorageBase` refuses a second holder at a location —
-    // rather than something this test has to reconstruct from directories.
+    // ⚠️ A DIRECTORY IS NOT A STORE: the `<sha>.hash` secret is written where
+    // a client asks even when its box opens elsewhere, so a check over named
+    // directories stays green while every cell shares one box. The check is
+    // against the bundle instead — a distinct location per cell, each actually
+    // held by its own client, which is what `AtClientStorageBase` enforces by
+    // refusing a second holder at a location.
     final stores = {
       for (final entry in cells.entries)
         entry.key: (entry.value.client as AtClientImpl).storage
@@ -385,10 +310,9 @@ void main() {
               'the two share one and this cell reads the other one\'s '
               'records');
     }
-    // By identity: `location` is declared on `AtClientStorageBase`, not on the
-    // `AtClientStorage` interface. It costs nothing here — the base keys its
-    // open storages BY location and refuses a second at one, so distinct
-    // objects that are all open are distinct locations.
+    // By identity: the base keys its open storages BY location and refuses a
+    // second at one, so distinct objects that are all open are distinct
+    // locations.
     expect(stores.values.toSet(), hasLength(cellSpec.length),
         reason: 'one store per cell. Two enrollments of one atSign sharing a '
             "store hands one principal the other's records and pending "
@@ -438,8 +362,6 @@ void main() {
         reason: '$receiver holds only a legacy enrollment in $nsUnready, so '
             'it must advertise nothing there. If it does, readiness is not '
             'separable from posture and the differential below has one arm');
-    // The asymmetry, asserted rather than assumed: the sender seeds what it is
-    // authorised for, and that is why readiness is directional.
     expect(unreadyOnSender.present, isTrue,
         reason: '$sender is authorised for $nsUnready and holds seeding '
             'postures, so it seeds its OWN side. A cell refusing a write into '
@@ -451,15 +373,9 @@ void main() {
   /// has published no namespace key.
   ///
   /// Derived from the posture rather than tabulated, so a new posture needs no
-  /// new row here — and so the expectation is the product's own statement
-  /// rather than a transcription of a run. A client that writes post-quantum
-  /// by default has no legacy path to fall back to unless the fallback is
-  /// separately opted into, and no post-quantum scheme can address a
-  /// recipient that advertises no key.
-  ///
-  /// It still discriminates: were the wiring to break so that a pqActive
-  /// client wrote legacy, the cell would succeed while this predicate — read
-  /// from the constant — still demanded a refusal.
+  /// new row: a client that writes post-quantum by default has no legacy path
+  /// to fall back to unless the fallback is separately opted into, and no
+  /// post-quantum scheme can address a recipient that advertises no key.
   bool mustRefuseUnready(PqPosture posture) => posture.writesPqByDefault;
 
   test('a cross-atSign write is refused exactly when the sender writes PQ and '
@@ -504,10 +420,6 @@ void main() {
       }
     }
 
-    // The refusals are only meaningful beside writes that went through: an
-    // arm where everything failed would satisfy the throwsA above just as
-    // well, and would mean the harness was broken rather than the posture
-    // working.
     expect(wrote, isNotEmpty,
         reason: 'every cell refused, so the refusing cells prove nothing '
             'about the posture — this is a broken harness, not a passing grid');
@@ -532,10 +444,9 @@ void main() {
     // ask, and no answer can arrive.
     //
     // So "every authorised enrollment reads" is not a static property and
-    // cannot be a cell of this grid — it needs a restart, which is arm 3's.
-    // What this asserts is the pair arm 3 needs an after-state for: exactly
-    // one reader reads, and the others fail for the conveyance-pending reason
-    // SPECIFICALLY rather than for any reason at all.
+    // cannot be a cell of this grid — it needs a restart. What is asserted
+    // here is exactly one reader reading, and the others failing for the
+    // conveyance-pending reason SPECIFICALLY rather than for any reason.
     final readers = ['r-legacy', 'r-pqReading', 'r-pqReady', 'r-pqActive'];
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final senderName = 's-pqActive';
@@ -563,11 +474,9 @@ void main() {
                 'written, which is neither a read nor a pending conveyance');
         read.add(readerName);
       } on Object catch (e) {
-        // Which refusal is itself a claim about the stage, so it is asserted
-        // rather than accepted: a reader that configures the providers can
-        // only be short of the key, and one that does not can only be short
-        // of the provider. Accepting either message for either reader would
-        // pass for a client failing on the wrong layer.
+        // Which refusal is itself a claim about the stage: a reader that
+        // configures the providers can only be short of the key, and one that
+        // does not can only be short of the provider.
         final expected =
             cellSpec[readerName]!.posture.configuresPqProviders
                 ? 'no nskey private held'
@@ -594,7 +503,7 @@ void main() {
     // one reader for each — the crypto path, where a stage configuring no
     // post-quantum provider is refused before any key is sought, and the
     // key-acquisition path, where a stage that configures them never acquired
-    // the namespace private. Nothing else in the suite exercises the second.
+    // the namespace private.
     final shouldRead = [
       for (final r in readers)
         if (cellSpec[r]!.posture.seedNamespaceKeys) r
@@ -606,12 +515,9 @@ void main() {
     // adopts the published advertisement — correct, since re-minting rotates
     // the key out from under peers that already fetched it — and then has to
     // be CONVEYED the private, which is served off a holder's start-time
-    // sweep. Whether that lands inside one run is a race.
-    //
-    // Measured: consecutive runs of this file gave read=[r-pqReady, r-pqActive]
-    // and read=[r-pqReady]. Asserting both would be asserting a rate. What is
-    // invariant is the pair below, and the sibling's acquisition belongs to
-    // arm 3, where a restart makes it deterministic.
+    // sweep. Whether that lands inside one run is a race, so naming which
+    // siblings read would be asserting a rate; only the pair below is
+    // invariant.
     expect(read, isNotEmpty,
         reason: 'no enrollment of $receiver could read a record sealed to its '
             'own atSign. Seeding published an advertisement whose private half '
@@ -643,10 +549,10 @@ void main() {
       () async {
     // The cross-atSign cells assert an OUTCOME - written or refused. This one
     // asserts the MECHANISM: which crypto provider actually encrypted the
-    // value, read back off the record's own `appMetadata`. A grid that only
-    // checked outcomes would pass for a build where every posture wrote the
-    // same way, because a legacy write to a seeded peer succeeds exactly as a
-    // post-quantum one does.
+    // value, read back off the record's own `appMetadata`. A legacy write to a
+    // seeded peer succeeds exactly as a post-quantum one does, so an
+    // outcome-only grid would pass for a build where every posture wrote the
+    // same way.
     //
     // Self rather than cross deliberately: a cross-atSign lookup returns a
     // null providerId, so the stamp is only observable on the writer's side.
@@ -691,14 +597,14 @@ void main() {
     // socket has connected, PKAMed and written `monitor:`, and the atServer's
     // inbound stream is a BROADCAST stream with no backlog, so a notification
     // enqueued in that window is never delivered to that connection at all.
-    // Waiting on a notification actually arriving is the only sufficient
-    // gate; `currentListenerState == listening` is set straight after writing
-    // the command and says nothing about the atServer having processed it.
+    // Waiting on a notification actually arriving is the only sufficient gate;
+    // `currentListenerState == listening` is set straight after writing the
+    // command and says nothing about the atServer having processed it.
     //
-    // The atServer emits `statsNotification` every ~11s to every listening
-    // monitor, which makes it both the readiness signal and the positive
-    // control: seeing it and not ours distinguishes a monitor that receives
-    // nothing from one that receives everything except the thing under test.
+    // The atServer's periodic `statsNotification` is both that readiness
+    // signal and the positive control: seeing it and not ours distinguishes a
+    // monitor that receives nothing from one that receives everything except
+    // the thing under test.
     final listener = cells['r-pqActive']!.client.notificationService
         as NotificationServiceImpl;
 
@@ -732,9 +638,9 @@ void main() {
     for (final entry
         in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {
       final name = entry.key;
-      // Lowercased: the atServer lowercases record names, so a marker
-      // carrying an uppercase letter never matches what comes back — and it
-      // fails as 'never arrived' while the monitor's own log shows it did.
+      // Lowercased: the atServer lowercases record names, so a marker carrying
+      // an uppercase letter never matches what comes back, and the cell fails
+      // as 'never arrived' while the monitor's own log shows it did.
       final marker = 'ntfy$stamp${slug(name)}'.toLowerCase();
       arrived[marker] = Completer<AtNotification>();
 
@@ -756,10 +662,9 @@ void main() {
       await send();
 
       // ONE re-send if the first does not arrive, and the retry is the
-      // discriminator rather than a way of making the test pass. Monitor
-      // delivery in this pack drops notifications at a measurable rate — the
-      // family 14.34 tracks — so a notification that a re-send recovers is
-      // that flakiness. One that does NOT survive a re-send is a finding
+      // discriminator rather than a way of making the test pass: monitor
+      // delivery in this pack drops notifications, so one a re-send recovers
+      // is that flakiness. One that does NOT survive a re-send is a finding
       // about the posture, and fails below with both attempts named.
       var notification = await arrived[marker]!.future
           .timeout(const Duration(seconds: 60), onTimeout: () => _absent);
@@ -788,7 +693,6 @@ void main() {
       stdout.writeln('##GRID## notify $name: delivered and decrypted');
     }
 
-    // The positive control, asserted rather than assumed.
     expect(seen, isNotEmpty,
         reason: 'the monitor recorded no notification at all, so every '
             'delivery above was measured by a listener that was never live');
@@ -799,26 +703,23 @@ void main() {
     // The claim: the rollout ladder SWAPS signing algorithms rather than
     // overlapping them, so a pqActive sender emits an ML-DSA-65 signature
     // alone and a pqReady receiver — which signs RSA-2048 — must still verify
-    // it. That is a claim about an ungated verifier, and this is what settles
     // it. Verification fetches the signer's `_apsk` from the atServer, so the
     // sender's advertisement, the receiver's reader and the algorithm both
     // ends agree on are all exercised.
     //
-    // ⚠️ The nine cells are NOT what proves the stages differ. Mutating
-    // pqActive to resolve as pqReady leaves all nine passing, because a sender
-    // signing RSA-2048 verifies everywhere too. The algorithm pins at the end
-    // are the only thing that discriminates, and a change dropping them would
-    // leave a grid that passes for an inert harness.
+    // ⚠️ The nine cells are NOT what proves the stages differ: a sender
+    // signing RSA-2048 verifies everywhere too, so pqActive resolving as
+    // pqReady would leave all nine passing. The algorithm pins at the end are
+    // the only thing that discriminates.
     const senders = ['s-legacy', 's-pqReady', 's-pqActive'];
     const receivers = ['r-legacy', 'r-pqReady', 'r-pqActive'];
-    // Whichever receiving enrollment seeded first holds the namespace private;
-    // the read below only needs one of them, and a sibling that has not been
-    // conveyed it yet is arm 3's subject rather than this row's.
+    // Whichever receiving enrollment seeded first holds the namespace private,
+    // and the read below needs only one of them.
     const envelopeReader = 'r-pqReady';
     final stamp = DateTime.now().microsecondsSinceEpoch;
-    // Nullable elements deliberately: `alg` is String? and a null would mean
-    // an envelope whose header names no algorithm at all. Filtering it out
-    // here would turn that finding into a shorter list.
+    // Nullable elements deliberately: a null `alg` means an envelope whose
+    // header names no algorithm at all, and filtering it out here would turn
+    // that finding into a shorter list.
     final emitted = <String, List<String?>>{};
 
     for (final senderName in senders) {
@@ -827,10 +728,9 @@ void main() {
 
       // The startup mint is fire-and-forget, and the sign path falls back to
       // the APKAM authentication key while the keyfile holds no signing key —
-      // so signing before the mint has FILED produces an envelope carrying a
-      // key the freshly published advertisement just withdrew, and the cell
-      // fails on a race rather than on anything the stage means. Bounded and
-      // loud: a mint that never settles is a finding, not a wait.
+      // so signing before the mint has FILED measures a race rather than
+      // anything the stage means. Bounded and loud: a mint that never settles
+      // is a finding, not a wait.
       final wanted = client.getPreferences()!.dataSigningKeyAlgorithms;
       if (wanted.isNotEmpty) {
         final deadline = DateTime.now().add(const Duration(seconds: 60));
@@ -872,25 +772,24 @@ void main() {
 
       // Read from the atServer ONCE, by the enrollment that holds the
       // namespace private. The record is sealed to the receiver's namespace
-      // key, so re-reading it per receiver measures whether that private has
-      // been CONVEYED to each sibling — a start-time-sweep race that has
-      // nothing to do with this row. Measured: requiring all three to read
-      // made this file fail 1 run in 5 on "no nskey private held".
+      // key, so re-reading it per receiver would measure whether that private
+      // has been CONVEYED to each sibling — a start-time-sweep race that has
+      // nothing to do with this row, and that makes the file fail
+      // intermittently on "no nskey private held".
       //
       // What UC-G1.15 claims is about the VERIFIER, and verification fetches
       // the signer's `_apsk`, which is public. So the wire read happens once
-      // and every posture's verifier is then run against the same bytes —
-      // which is the claim, and is now independent of the conveyance.
+      // and every posture's verifier runs against the same bytes, independent
+      // of the conveyance.
       final raw = (await cells[envelopeReader]!.client.get(key,
               getRequestOptions: GetRequestOptions()..useRemoteAtServer = true))
           .value as String;
       final envelope = SignedEnvelope.fromJson(jsonDecode(raw) as Map);
 
-      // The round trip itself, asserted rather than printed. Verification
-      // takes the STRONGEST shared signature, so an envelope that lost one of
-      // two on the way through the atServer would verify exactly as well as
-      // one that did not — every cell below would stay green while the
-      // receiver was reading something other than what the sender emitted.
+      // Verification takes the STRONGEST shared signature, so an envelope that
+      // lost one of two on the way through the atServer would verify exactly
+      // as well as one that did not, leaving every cell below green while the
+      // receiver read something other than what the sender emitted.
       expect([for (final sig in envelope.signatures) sig.alg],
           emitted[senderName],
           reason: '$senderName: the algorithms the receiver reads back must '

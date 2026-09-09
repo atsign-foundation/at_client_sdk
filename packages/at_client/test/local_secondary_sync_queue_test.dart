@@ -38,20 +38,18 @@ void main() {
 
   Future<void> tearDownLocalSecondary() async {
     try {
-      // Every client for this atSign, not just the bare-keyed one: the map is
-      // keyed (atSign, enrollmentId), so an enrolled client is filed under
-      // '$atSign|<id>' and would be left holding its storage location.
+      // NOTE: the instance map is keyed (atSign, enrollmentId), so an enrolled
+      // client is filed separately and holds its storage location until it is
+      // stopped.
       for (final client
           in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
         await (client as AtClientImpl).stop();
       }
       // Close every Hive box (including the sync-queue box) so the next
       // setUp doesn't reattach to leftover in-memory state.
-      //
-      // BOTH registries. The keystore's boxes and the sync queue's now live on
-      // the instance owning `storageDir`, which `Hive.close()` does not reach
-      // — they would stay open over the directory deleted below, and the next
-      // test would find the previous one's queue entries still in memory.
+      // `Hive.close()` reaches only the package-global instance; the keystore
+      // and sync-queue boxes live on the instance owning `storageDir`, so both
+      // registries have to close before the directory goes.
       await HiveInstances.closeAll();
       await Hive.close();
       AtClientImpl.atClientInstanceMap.remove(atSign);

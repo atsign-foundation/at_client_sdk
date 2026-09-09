@@ -1,5 +1,3 @@
-// The substrate is deliberately marked @experimental and will be reshaped as
-// the group surface matures.
 // ignore_for_file: experimental_member_use
 
 import 'dart:convert';
@@ -28,9 +26,8 @@ void main() {
   MockAtClient clientWithRoster() {
     final client = buildRemoteBackedMockClient(
         atSign: atSign, enrollmentId: 'me-1', remoteData: remoteData);
-    // Narrowed to `approved`, matching what the resolver asks for: privilege
-    // is a property of a currently-approved enrollment, and an unfiltered
-    // list would also drag in the atSign's whole revoked backlog.
+    // NOTE: the stub answers this exact command only, so the status filter
+    // has to be the one the resolver asks for.
     final listCommand = (EnrollVerbBuilder()
           ..operation = EnrollOperationEnum.list
           ..enrollmentStatusFilter = const [EnrollmentStatus.approved])

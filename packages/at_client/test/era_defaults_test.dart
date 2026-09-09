@@ -5,6 +5,7 @@ import 'package:test/test.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
+/// The registry that holds an SDK-chosen era default per client instance.
 void main() {
   group('the per-client era-default registry', () {
     test('adopt-if-absent keeps the first value', () {

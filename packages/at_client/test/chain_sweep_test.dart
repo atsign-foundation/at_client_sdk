@@ -1,5 +1,4 @@
-// The substrate is deliberately marked @experimental and will be reshaped as
-// the group surface matures.
+// The substrate this exercises is marked @experimental.
 // ignore_for_file: experimental_member_use
 
 import 'dart:convert';
@@ -31,15 +30,7 @@ import 'test_utils/remote_backed_client.dart';
 final rootSlot1 =
     '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
 
-/// The sweep anchors enrollments to the signing root.
-///
-/// The sweeper only runs when fully privileged (`rw` on `*` and `__manage`),
-/// and that class signs **root** links — one hop, verified against the
-/// published signing root — never chain links attributed to itself. The
-/// population it exists for: a scoped enrollment approved by the legacy
-/// parent (which could sign nothing), and any enrollment carrying only a
-/// provisional chain link — root-anchored is the terminal state, and the
-/// sweep is what makes it every enrollment's state.
+/// The sweep anchors every approved enrollment to the atSign's signing root.
 void main() {
   const atSign = '@alice';
   const enrolleeId = 'scoped-1';
@@ -76,10 +67,8 @@ void main() {
     return atClient;
   }
 
-  /// Gives [client] the atSign's signing root — the private in its keys and
-  /// the record published — the state a fully privileged enrollment is
-  /// entitled to reach. Built directly rather than through `mintIfAbsent`,
-  /// whose publish rides `executeVerb`, which this fixture does not model.
+  /// Gives [client] the atSign's signing root: the private key in its keyfile
+  /// and the matching public record published.
   Future<void> giveRoot(MockAtClient client) async {
     final pair = await MlDsa65PureDartAlgo().generateKeyPair();
     final io = InMemoryAtKeysIo();
@@ -123,16 +112,13 @@ void main() {
   test(
       'the sweep anchors an unanchored enrollment to the root, and stops '
       'once it has stamped', () async {
-    // The scoped enrollment: registered (its _apsk is published), approved,
-    // no links — the state a legacy-parent approval leaves it in.
     final enrolleeClient = buildMockClient(enrolleeId);
     final enrollee = AtClientSecretSharing.forClient(enrolleeClient);
     await enrollee.register();
     final advertised = await enrollee.signedKeyPackagePayload();
 
-    // The sweeper: a distinct, registered enrollment holding the root
-    // private. Privilege is the caller's gate (the bootstrap checks it); the
-    // sweep itself is exercised directly here.
+    // NOTE: privilege is the caller's gate, so the sweep is exercised here
+    // unguarded — nothing below covers that check.
     final sweeperClient = buildMockClient('sweeper-1');
     await AtClientSecretSharing.forClient(sweeperClient).register();
     await giveRoot(sweeperClient);
@@ -143,9 +129,8 @@ void main() {
         reason: 'one approved enrollment lacks a root link, so exactly one '
             'is signed and conveyed');
 
-    // The enrollee receives the link and stamps its own _apsk — the sweep
-    // cannot stamp it directly, because _apsk accepts writes only from its
-    // own enrollment's connection.
+    // NOTE: the sweep cannot stamp _apsk directly — that record accepts
+    // writes only over its own enrollment's connection.
     expect(await enrollee.sweepOnce(), greaterThan(0));
     await PqSigningChain(enrolleeClient).publishPendingLink();
 
@@ -176,9 +161,6 @@ void main() {
     await enrollee.register();
     final advertised = await enrollee.signedKeyPackagePayload();
 
-    // A provisional chain link from a parent enrollment, already stamped on
-    // the record — the state an approve by a non-fully-privileged approver
-    // leaves behind.
     final parentClient = buildMockClient('parent-1');
     final parent = AtClientSecretSharing.forClient(parentClient);
     await parent.register();
@@ -218,7 +200,7 @@ void main() {
 
     final sweeperClient = buildMockClient('sweeper-1');
     await AtClientSecretSharing.forClient(sweeperClient).register();
-    // Deliberately no giveRoot: entitled but not yet holding.
+    // NOTE: deliberately no giveRoot — entitled but not holding the root.
     stubApprovedList(sweeperClient, advertised);
 
     final envelopesBefore =
@@ -244,8 +226,8 @@ void main() {
     final enrollee = AtClientSecretSharing.forClient(enrolleeClient);
     final enrolleePackage = await enrollee.register();
 
-    // A genuine published root, so the refusal below is attributable to the
-    // bad signature rather than to there being nothing to verify against.
+    // NOTE: a genuine published root, so the refusal below is attributable to
+    // the bad signature and not to an absent verification target.
     final minterClient = buildMockClient('minter-1');
     await AtClientSecretSharing.forClient(minterClient).register();
     await giveRoot(minterClient);
@@ -285,8 +267,8 @@ void main() {
   test('an enrollment with no key package is skipped, not failed', () async {
     final sweeperClient = buildMockClient('sweeper-2');
     await AtClientSecretSharing.forClient(sweeperClient).register();
-    // The sweeper holds the root, so the skip below is attributable to the
-    // missing package rather than to having nothing to sign with.
+    // NOTE: the sweeper holds the root, so the skip below is attributable to
+    // the missing key package and not to having nothing to sign with.
     await giveRoot(sweeperClient);
     final listCommand = (EnrollVerbBuilder()
           ..operation = EnrollOperationEnum.list

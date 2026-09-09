@@ -12,25 +12,15 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/pipeline_backed_client.dart';
 
-/// The read pipeline itself, driven end to end.
+/// The read pipeline driven end to end, through `GetResponseTransformer` —
+/// where a response becomes an [AtValue], picks a crypto provider from the
+/// record's own `appMetadata`, and decrypts.
 ///
-/// Every other unit test reaches `AtClient.get` through a fixture that stubs
-/// it, so `GetResponseTransformer` — where a response becomes an [AtValue],
-/// picks a crypto provider from the record's own `appMetadata`, and decrypts —
-/// has never run under test.
-///
-/// It was written while a wrong-value read measured against a live atServer in
-/// 2026-08 was unexplained and this layer was the obvious suspect. It was not
-/// the cause — that read turned out to be an atServer answering two concurrent
-/// cross-atSign lookups with each other's responses, below at_client
-/// entirely — but the coverage gap is real on its own account, and this is the
-/// only test that closes it.
-///
-/// The case here is the one that failed live: a value whose content key is not
-/// cached, so decrypting it makes a **nested** `get` for the `<ckKid>.__ck`
-/// conveyance record from inside the outer read's own decrypt. The outer
-/// [AtValue] must come back holding the value's plaintext and the value
-/// record's metadata — not the conveyance record's.
+/// The case is a value whose content key is not cached, so decrypting it makes
+/// a nested `get` for the `<ckKid>.__ck` conveyance record from inside the
+/// outer read's own decrypt: the outer [AtValue] must come back holding the
+/// value's plaintext and the value record's metadata, not the conveyance
+/// record's.
 void main() {
   const atSign = '@alice';
   const namespace = 'app_1.my_apps';
@@ -58,28 +48,13 @@ void main() {
     }
   });
 
-  // Both assertions below are mutation-proven, one mutation each, because a
-  // green that cannot fail is worth nothing:
-  //
-  //  - the VALUE assertion: make `SymmetricAesGcmProvider.decrypt` return
-  //    `ck.toBase64()`. Red, quoting the plaintext against a 44-character
-  //    base64 — the live failure's shape.
-  //  - the METADATA assertion: have that same decrypt stamp
-  //    `atKey.metadata.appMetadata` with the nskey provider. Red, quoting
-  //    `at/symmetric/AES/GCM` against `at/nskey/XWING/AES/GCM` — the live
-  //    values exactly.
-  //
-  // ⚠️ The second works because `GetResponseTransformer` assigns
-  // `atValue.metadata` and `tuple.one.metadata` **the same object**, so an
-  // in-place `appMetadata` mutation on the AtKey during a read is visible on
-  // the returned `AtValue`. That aliasing is a live hazard, not a quirk of the
-  // mutation: any code holding the caller's AtKey can change what a completed
-  // read appears to have returned.
+  // NOTE: `GetResponseTransformer` assigns `atValue.metadata` and
+  // `tuple.one.metadata` the same object, so any code holding the caller's
+  // AtKey can change what a completed read appears to have returned.
   test('a value whose CK needs a nested conveyance read returns the VALUE',
       () async {
     const plaintext = 'the treaty text';
 
-    // --- what the writer put on the atServer ---------------------------
     final writerCache = ContentKeyCache();
     final writerRing = InMemoryNskeyKeyRing();
     final writerKid = writerRing.seedKeypair(atSign, namespace,
@@ -111,9 +86,9 @@ void main() {
     final ciphertext =
         await writerData.encrypt(writerContext, valueKey, plaintext);
 
-    // The two records, as the atServer serves them. `metaData` is built the
-    // way the wire carries it — appMetadata base64 of its JSON — so the
-    // fixture pins the bytes rather than a Dart object's shape.
+    // NOTE: the metadata is built the way the wire carries it — appMetadata
+    // base64 of its JSON — so the fixture pins the bytes rather than a Dart
+    // object's shape.
     Map<String, dynamic> wireMeta(AtKey key) => {
           'isEncrypted': true,
           'appMetadata': Metadata.encodeAppMetadata(key.metadata.appMetadata!),
@@ -123,7 +98,6 @@ void main() {
       conveyanceKey.toString(): WireRecord(sealedCk, wireMeta(conveyanceKey)),
     };
 
-    // --- a reader that has never seen the content key -------------------
     final readerCache = ContentKeyCache();
     final readerRing = InMemoryNskeyKeyRing();
     readerRing.seedKeypair(atSign, namespace,

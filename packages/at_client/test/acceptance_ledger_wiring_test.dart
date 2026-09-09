@@ -1,21 +1,14 @@
-/// Guards the wiring that **populates** the acceptance ledger.
+/// Guards the wiring that **populates** the acceptance ledger: whether the CI
+/// jobs and the local runners still emit and upload the reports it joins
+/// against.
 ///
-/// `acceptance_ledger_test.dart` guards the join — what the renderer does with
-/// the citations and the reports once it has them. The step before that was
-/// unguarded: whether the suites still *emit* those inputs at all.
+/// A job that quietly stops emitting leaves the build **green** — every upload
+/// carries `if-no-files-found: warn` — and the ledger simply reports fewer rows
+/// as exercised, which reads as missing coverage rather than as missing wiring.
 ///
-/// Why that matters more than it looks. Each emitting job carries an
-/// environment variable or a reporter flag, and each uploads its artefact with
-/// `if-no-files-found: warn`. So a job that quietly stops emitting leaves the
-/// build **green**, the upload merely warns, and the ledger reports fewer rows
-/// as exercised. That failure does not look like a failure — it looks like a
-/// coverage report, which is the same reason the join underneath it is pinned.
-///
-/// This reads the workflow and the runner scripts as text rather than parsing
-/// YAML, matching the other rails here, and it checks what the jobs
-/// **declare**. That is the right question: the declaration *is* the
-/// mechanism — an absent `--file-reporter` writes no report however the job
-/// otherwise behaves.
+/// The workflows and runner scripts are read as text rather than parsed, and
+/// what is checked is what a job **declares**: an absent `--file-reporter`
+/// writes no report however the job otherwise behaves.
 library;
 
 import 'dart:io';
@@ -43,8 +36,7 @@ Directory repoRoot() {
 /// A job is a 2-space-indented key **under `jobs:`**, and the qualifier is the
 /// whole difficulty: `on:` has 2-space-indented keys too, so a matcher that
 /// only knows the indentation returns `workflow_dispatch`, `push` and
-/// `pull_request` as though they were jobs. The negative control below is
-/// exactly that case.
+/// `pull_request` as though they were jobs.
 Map<String, String> jobsOf(String workflow) {
   final lines = workflow.split('\n');
   final start = lines.indexWhere((l) => l.trimRight() == 'jobs:');
@@ -62,7 +54,6 @@ Map<String, String> jobsOf(String workflow) {
   }
 
   for (final line in lines.skip(start + 1)) {
-    // A non-indented, non-blank line ends the jobs mapping entirely.
     if (line.isNotEmpty && !line.startsWith(' ') && !line.startsWith('#')) {
       break;
     }
@@ -78,18 +69,12 @@ Map<String, String> jobsOf(String workflow) {
   return jobs;
 }
 
-/// [block] with whole-line comments removed.
+/// [block] with whole-line comments removed, keeping trailing ones so the
+/// SHA-pinned `uses:` lines do not lose the version they carry that way.
 ///
-/// ⚠️ **Every predicate below must run on this, not on the raw block.** A
-/// workflow step is routinely preceded by a comment explaining it, and that
-/// comment names the very strings the predicates look for — so a guard reading
-/// the raw text is satisfied by prose *about* the wiring while the wiring
-/// itself is gone. Measured: removing `if: ${{ always() }}` from an upload step
-/// left this rail green, because the comment three lines above it said
-/// "`if: always()` on purpose".
-///
-/// Trailing comments are kept, because the SHA-pinned `uses:` lines carry their
-/// version that way and dropping the line would lose the directive with it.
+/// ⚠️ **Every predicate below must run on this, not the raw block**: a step
+/// is routinely preceded by a comment naming the very strings the predicates
+/// look for, so prose *about* the wiring satisfies a guard reading raw text.
 String codeOnly(String block) =>
     block.split('\n').where((l) => !l.trimLeft().startsWith('#')).join('\n');
 
@@ -100,12 +85,9 @@ bool emitsReport(String block) =>
 
 /// Whether [block] uploads what it emitted, unconditionally.
 ///
-/// `if: always()` is part of the contract rather than a nicety: a suite that
-/// **failed** is when knowing which rows lost their proof matters most, and an
-/// upload skipped on failure loses exactly that run.
-///
-/// Matched as the directive `if: ${{ always() }}` rather than the bare token,
-/// so prose quoting it cannot stand in for it.
+/// `if: always()` is part of the contract — a suite that **failed** is when
+/// knowing which rows lost their proof matters most — and it is matched as the
+/// whole directive, so prose quoting the bare token cannot stand in for it.
 bool uploadsReport(String block) =>
     codeOnly(block).contains('acceptance-report-') &&
     codeOnly(block).contains(r'if: ${{ always() }}');
@@ -143,18 +125,13 @@ void main() {
             'assertions below would all pass against an empty string');
     workflow = file.readAsStringSync();
     jobs = jobsOf(workflow);
-    // ⚠️ The ledger's inputs are split across TWO workflows, and this rail
-    // knew only about the first until 2026-08-23. `at_auth`'s unit suite runs
-    // in at_libraries.yaml and nothing there emitted a report, so the 12
-    // citations pointing at it could never be covered by CI artefacts — a
-    // CI-rendered ledger reported those rows NOT-EXERCISED for ever, which
-    // reads as missing coverage rather than as missing wiring.
+    // NOTE: the ledger's inputs are split across TWO workflows. `at_auth`'s
+    // unit suite runs in at_libraries.yaml, so the citations pointing at it
+    // are only reachable from there.
     libJobs = load('at_libraries.yaml');
   });
 
   group('the job matcher', () {
-    // Both controls, drawn from the file rather than invented: without them a
-    // broken extractor and a correctly-wired workflow print the same nothing.
     test('finds real jobs and rejects the keys under `on:`', () {
       expect(jobs.keys, contains('unit_at_client'),
           reason: 'positive control: a job that is definitely there');
@@ -201,9 +178,6 @@ void main() {
     });
 
     test('prose about the wiring does not stand in for the wiring', () {
-      // The exact shape that fooled this rail: a step whose wiring has been
-      // removed, preceded by the comment that explains why it was there. Every
-      // token the predicates look for is present — in the comment.
       const commentedOut = '''
       # Feeds the acceptance ledger. `if: always()` on purpose, and the run
       # below passes `--file-reporter json:acceptance-report.json`.
@@ -267,10 +241,6 @@ void main() {
   });
 
   group('at_libraries.yaml feeds the ledger too', () {
-    // The other half of the inputs. at_client's 55 citations are covered by
-    // at_client_sdk.yaml's unit_at_client; at_auth's 12 are only reachable
-    // from here, because at_auth's suite runs in this workflow and nowhere
-    // else (`grep -c at_auth .github/workflows/at_client_sdk.yaml` → 0).
     test('the matcher sees this workflow\'s jobs', () {
       expect(libJobs.keys, contains('build_and_test'),
           reason: 'positive control: the matrix job that runs at_auth');
@@ -296,12 +266,9 @@ void main() {
     test('its artifact name is per-leg, or eight legs overwrite each other',
         () {
       final block = libJobs['build_and_test']!;
-      // The job is a matrix over 8 packages sharing one upload step, so the
-      // artifact name MUST vary with the leg. A fixed name is not a cosmetic
-      // problem: seven of the eight reports are silently replaced, and the
-      // ledger then reports rows as unexercised because their package's
-      // report lost a race. The identical collision already happened once in
-      // at_client_sdk.yaml across its stable/beta legs.
+      // NOTE: the job is a matrix over packages sharing one upload step, so a
+      // constant artifact name means every leg but the last is silently
+      // replaced and the rows its report covered read as unexercised.
       expect(block, contains(r'acceptance-report-lib-${{ matrix.package }}'),
           reason: 'the upload name must carry matrix.package. A constant name '
               'across a matrix means the last leg to finish is the only one '
@@ -323,8 +290,6 @@ void main() {
   });
 
   group('the local runners honour ACCEPTANCE_REPORT', () {
-    // The live packs are how a ledger gets rendered off a developer's machine,
-    // and each is a separate script that opted in separately.
     const runners = [
       'tests/at_functional_test/runLocal.sh',
       'tests/at_end2end_test/runLocal.sh',
@@ -339,14 +304,10 @@ void main() {
                 'moved or gone; either way the ledger lost an input');
         final source = file.readAsStringSync();
 
-        // ⚠️ Pin the COUPLING, not the two ends of it. This read
-        //   expect(source, contains('ACCEPTANCE_REPORT'))
-        //   expect(source, contains('--file-reporter json:'))
-        // and a mutation that made the guard test a *different* variable left
-        // both satisfied — the flag line and the echo still name
-        // ACCEPTANCE_REPORT, so the strings were all present while nothing
-        // read the opt-in any more. Two independent substrings can both hold
-        // while the wire between them is cut.
+        // NOTE: pin the COUPLING, not the two ends of it. A runner that gates
+        // its reporter on some other variable still names ACCEPTANCE_REPORT on
+        // the flag line and in its echo, so two independent substring checks
+        // both hold while the wire between them is cut.
         expect(source, contains(r'-n "${ACCEPTANCE_REPORT:-}"'),
             reason: 'the opt-in has to be what GATES the reporter. A runner '
                 'that gates on something else emits no report however many '

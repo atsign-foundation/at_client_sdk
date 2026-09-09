@@ -29,20 +29,11 @@ import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// `enroll:update` against a live atServer — UC-G1.10 to UC-G1.13
-/// (`docs/projects/pq/acceptance.md` section 16.4).
+/// `enroll:update` against a live atServer — UC-G1.10 to UC-G1.13.
 ///
-/// **These rows cannot be proven anywhere else.** Every one of them is the
-/// atServer saying no, and a mocked `AtLookUp` that accepts whatever it is
-/// handed makes the refusal's presence and its absence indistinguishable — the
-/// at_auth unit suite stubs `executeCommand` to succeed, so the guards below
-/// are invisible there. What is asserted here is the other side's behaviour,
-/// so the other side has to be running.
-///
-/// Every enrollment is created with a run-unique device name. Enrollment state
-/// is one-shot: an `(appName, deviceName)` pair that is already approved is
-/// refused, so a file that hard-codes one passes on a fresh virtualenv and
-/// fails on the second run against the same one.
+/// Every enrollment is created with a run-unique device name: enrollment state
+/// is one-shot, so an `(appName, deviceName)` pair that is already approved is
+/// refused on a second run against the same virtualenv.
 void main() {
   TestUtils.isolateStorage('enroll_update_live_test');
   late AtClient approver;
@@ -62,9 +53,8 @@ void main() {
 
   final runId = DateTime.now().microsecondsSinceEpoch;
 
-  /// The enrolled client's own authenticated connection. `EnrolledClient`
-  /// exposes the AtClient rather than a lookup, and the lookup is what carries
-  /// the enrollment id the atServer judges self-only against.
+  /// The enrolled client's own authenticated connection, which carries the
+  /// enrollment id the atServer judges self-only against.
   AtLookUp lookupOf(EnrolledClient c) =>
       c.client.getRemoteSecondary()!.atLookUp;
 
@@ -80,8 +70,7 @@ void main() {
   );
 
   /// The enrollment record as the atServer holds it, read back rather than
-  /// remembered: what these rows assert is what the record says afterwards,
-  /// and a client's idea of what it sent is not that.
+  /// remembered.
   Future<Map<String, dynamic>> fetch(EnrolledClient client) async {
     final response = await lookupOf(client).executeCommand(
         'enroll:fetch:{"enrollmentId":"${client.enrollmentId}"}\n',
@@ -108,10 +97,9 @@ void main() {
 
   /// Whether [privateKey] can authenticate as this enrollment on a FRESH
   /// connection — the only place a rotation is observable, since the record is
-  /// never handed back with its public key in it.
-  ///
-  /// A fresh connection every time: the enrolled client's own is already
-  /// authenticated, so reusing it would answer about a past handshake.
+  /// never handed back with its public key in it. The enrolled client's own
+  /// connection is already authenticated, so reusing it would answer about a
+  /// past handshake.
   Future<bool> authenticatesWith(EnrolledClient client, String privateKey) async {
     final lookup = AtLookupImpl(atSign, rootDomain, TestUtils.rootServerPort);
     try {
@@ -137,8 +125,6 @@ void main() {
           .buildCommand());
       return response != null && response.contains('success');
     } on Object {
-      // A refusal arrives as an exception on some paths and as a non-success
-      // string on others; both mean the same thing here.
       return false;
     } finally {
       await lookup.close();
@@ -147,11 +133,6 @@ void main() {
 
   /// The public keys an `_apsk` value advertises, whichever of its two shapes
   /// it is in — the bare RSA string, or the JSON array.
-  ///
-  /// Normalising here rather than pinning one spelling: both are legitimate
-  /// forms of the same record and the writer picks between them by what the
-  /// entry list holds, so a test that pinned the spelling would be asserting a
-  /// property of the publisher's timing.
   Set<String> advertisedKeys(String? value) {
     if (value == null || value.isEmpty) return const {};
     if (!value.startsWith('{')) return {value};
@@ -192,14 +173,8 @@ void main() {
 
     final after = await fetch(client);
 
-    // The key moved — asserted where it SHOWS rather than where it is stored.
-    //
-    // `enroll:fetch` returns exactly five fields (appName, deviceName,
-    // namespace, encryptedAPKAMSymmetricKey, status) and `apkamPublicKey` is
-    // not among them, so the record cannot be read back for it. What the
-    // rotation is FOR is which key authenticates, so that is what this checks:
-    // the new private half signs a `from:` challenge the atServer accepts, and
-    // the old one no longer does.
+    // NOTE: `enroll:fetch` never returns apkamPublicKey, so a rotation is only
+    // observable through which key authenticates.
     expect(await authenticatesWith(client, fresh.privateKey), isTrue,
         reason: 'the request must actually have installed the new key — '
             'without this the row passes for a server that accepted it and '
@@ -208,7 +183,6 @@ void main() {
         reason: 'and the old key must stop working, or the rotation added a '
             'second valid credential rather than replacing one');
 
-    // And nothing else moved.
     for (final field in ['appName', 'deviceName', 'namespace', 'status']) {
       expect(after[field], before[field],
           reason: '$field must survive a rekey untouched — a rotation that '
@@ -216,20 +190,9 @@ void main() {
               'a signature on it');
     }
 
-    // The corrected clause. This row claimed "_apsk is rewritten from the
-    // request's apsk" until 2026-08-18, which its own When forbids: a rotation
-    // names three fields and apsk is not one of them, so the client sends none
-    // and the record keeps advertising the key it already did.
-    //
-    // Compared by KEY rather than by the value's spelling, deliberately. The
-    // record has a second writer: this client's own start-time heal path
-    // republishes a lone active rsa2048 signing key in the BARE form that
-    // every deployed consumer parses, so an advertisement written as the array
-    // at approval becomes the bare string shortly afterwards — same key, two
-    // spellings, and which one is on the record at any instant is a race with
-    // the client's startup rather than anything the rekey did. What the row
-    // actually promises is that the rekey does not unpublish the signing key
-    // peers verify against, and that is what this asserts.
+    // NOTE: compared by key rather than by the value's spelling — the client's
+    // own start-time heal path rewrites the same key from the JSON array into
+    // the bare form, so the spelling on the record races with startup.
     expect(advertisedKeys(await readApsk(client)), advertisedKeys(apskBefore),
         reason: 'a request that named no apsk must not change WHICH key is '
             'advertised, or a rekey would silently unpublish the signing key '
@@ -247,13 +210,11 @@ void main() {
         ..apkamPublicKey = fresh.publicKey
         ..signingAlgo = SigningAlgoType.rsa2048.name
         ..apkamPublicKeySignature = signature;
-      // Built by hand rather than through EnrollmentUpdateRequest, because the
-      // request composes a correct signature and cannot express the two arms
-      // this row exists to check.
+      // NOTE: built by hand because EnrollmentUpdateRequest always composes a
+      // valid signature, which neither arm below can use.
       return lookupOf(client).executeCommand(builder.buildCommand(), auth: true);
     }
 
-    // Arm 1: no proof at all.
     await expectLater(
         sendWith(null),
         throwsA(isA<AtLookUpException>().having((e) => e.errorMessage,
@@ -266,14 +227,7 @@ void main() {
             'too, and a bare isA<Object>() cannot tell the guard firing from '
             'the call failing');
 
-    // Arm 2: a proof, but by the wrong key. This is the arm that discriminates
-    // — a server that merely checked the field was present would pass arm 1's
-    // fix and fail here.
     final other = freshApkamPair();
-    // Signed by the production helper, with the WRONG private key: a proof
-    // over the right bytes that the key being installed did not make. Rolling
-    // the signature by hand here would test this file's crypto rather than
-    // the atServer's check.
     final wrong = apkamPossessionSignature(
       enrollmentId: client.enrollmentId,
       apkamPublicKey: fresh.publicKey,
@@ -293,14 +247,7 @@ void main() {
             'message differs from arm 1\'s, so the two arms are distinguished '
             'by which check refused them rather than only by both throwing');
 
-    // The record is unchanged. Checked where it SHOWS: enroll:fetch returns
-    // five fields and apkamPublicKey is not among them, so "unchanged" means
-    // the key that authenticated before still does, and neither refused
-    // request installed the one it carried. A server that refused AFTER
-    // writing would pass without this, and that outcome installs a key whose
-    // private half the caller may not hold.
-    //
-    // ⚠️ It has to sit HERE, before the valid-proof control below, which
+    // NOTE: these two must stay above the valid-proof control below, which
     // rewrites the record deliberately.
     expect(
         await authenticatesWith(
@@ -312,9 +259,6 @@ void main() {
         reason: 'and the key both refusals tried to install must not work — a '
             'refusal that had already written is worse than no guard');
 
-    // The control. Without it both refusals above are satisfied by a server
-    // that refuses every update, and this row would prove nothing about the
-    // proof specifically.
     final ok = await AtEnrollment.create().update(
         EnrollmentUpdateRequest(
           enrollmentId: client.enrollmentId,
@@ -333,34 +277,9 @@ void main() {
     final client = await enrol('g112-ns');
     final before = await fetch(client);
 
-    // ⚠️ The client half is NOT asserted here, and it used to be — by
-    // building an `EnrollVerbBuilder` that named no namespaces and observing
-    // that its command carried none. That builder does carry a `namespaces`
-    // field, because `enroll:request` needs one, so the assertion said only
-    // that this test had not set it: it would have stayed green for a
-    // production composer that filled it in. It is asserted properly in
-    // at_auth's `enrollment_update_test.dart`, over the command
-    // `AtEnrollmentImpl().update` actually emits for a request naming every
-    // field it has, as a closed set of keys.
-    //
-    // The server half: the privilege-escalation guard, refused by its own
-    // named error rather than by a generic failure.
-    //
-    // ⛔ **The request must name a VALID field alongside `namespaces`, or it
-    // never reaches that guard**, so do not simplify it down to the illegal
-    // field alone. A request naming nothing the verb recognises is refused by
-    // an EARLIER well-formedness check:
-    //
-    //   AT0022 · enroll:update must name at least one of apkamPublicKey,
-    //            signingAlgo, apsk, apskLegacy or metadata
-    //
-    // which says nothing about namespaces. Stripped that far, the arm varies
-    // two things at once — it adds `namespaces` AND omits every field the verb
-    // knows — so it cannot tell "namespaces is refused" from "namespaces is
-    // ignored and the command was empty", and removing the escalation guard
-    // altogether leaves it green. The `metadata` entry below is what keeps the
-    // request well-formed, so the namespaces entry is the only thing left that
-    // can refuse it.
+    // NOTE: the request must name a field the verb accepts — the `metadata`
+    // entry — alongside `namespaces`, or an earlier well-formedness check
+    // (AT0022) refuses it and the escalation guard is never reached.
     final raw = 'enroll:update:${jsonEncode({
           'enrollmentId': client.enrollmentId,
           'metadata': {'note': 'g112'},
@@ -375,9 +294,6 @@ void main() {
             'field the verb accepts, so the request is well-formed and only '
             'the namespaces entry can be what refuses it');
 
-    // And the earlier check, pinned as its own arm so the two refusals stay
-    // distinguishable. Without it, a change that collapsed both into one
-    // message would go unnoticed.
     final bare = 'enroll:update:${jsonEncode({
           'enrollmentId': client.enrollmentId,
           'namespaces': {'__manage': 'rw'},
@@ -399,10 +315,6 @@ void main() {
     final mine = await enrol('g113-self');
     final other = await enrol('g113-other');
 
-    // Arm 1: one approved enrollment reaching for another's record. The
-    // self-only check runs BEFORE the target record is fetched, which is why
-    // this row promises only self-only: the target's approval state is never
-    // read on this path, so no approved-only guard can fire here.
     final fresh = freshApkamPair();
     await expectLater(
         AtEnrollment.create().update(
@@ -424,23 +336,8 @@ void main() {
             'one it reached for — so a refusal for any other reason, or one '
             'about the wrong pair, cannot satisfy it');
 
-    // Arm 2: a legacy PKAM connection. It carries the housekeeping enrollment
-    // `primary` — an atServer creates that record on the first legacy
-    // authentication — so it is refused as a NAMED enrollment rather than as
-    // an anonymous owner. That naming is what having an enrollment record
-    // buys a legacy connection, and it is only observable end to end.
-    //
-    // ⚠️ This arm used to reach a connection carrying NO enrollment id, and
-    // that state is no longer reachable over legacy PKAM. It still exists —
-    // CRAM produces it, and the self-only refusal is an explicit exception to
-    // `isAuthorized` treating an absent enrollment id as full permissions, so
-    // an id-less connection is the one that default would wave through.
-    // It is pinned in at_server rather than here, in
-    // `at_secondary_server/test/enroll_verb_test.dart`, by the test named
-    // "an ID-LESS connection is refused, not waved through" — look in that
-    // file if the name has moved. Not pinned live because CRAM authentication
-    // DELETES the atSign's stored secret on success, so reaching it costs a
-    // dedicated atSign that nothing else in this pack may ever CRAM.
+    // A legacy PKAM connection carries the housekeeping enrollment `primary`,
+    // so it is refused as a named enrollment rather than as an anonymous owner.
     await expectLater(
         AtEnrollment.create().update(
             EnrollmentUpdateRequest(
@@ -461,9 +358,6 @@ void main() {
             'read — and it pins that a legacy connection now HAS one, which '
             'is the thing that changed');
 
-    // The control: the same request on its OWN connection succeeds, so both
-    // refusals are about who asked rather than about the request being
-    // malformed.
     final ok = await AtEnrollment.create().update(
         EnrollmentUpdateRequest(
           enrollmentId: mine.enrollmentId,

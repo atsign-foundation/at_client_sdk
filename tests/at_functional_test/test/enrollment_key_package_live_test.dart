@@ -1,6 +1,5 @@
-// The substrate is deliberately marked @experimental and will be reshaped as
-// the group surface matures. Exercising it from another package is the point
-// of this file.
+// The substrate is deliberately marked @experimental; exercising it from
+// another package is the point of this file.
 // ignore_for_file: experimental_member_use
 
 @Tags(['pq'])
@@ -21,17 +20,10 @@ import 'test_utils.dart';
 
 /// The whole key-package chain against a live atServer.
 ///
-/// Every link has unit coverage, but each end was mocked against the other:
-/// the builder's tests supply their own `AtKeys`, and the directory's tests
-/// seed advertisements signed by an already-enrolled client. Nothing had ever
-/// run the two together, which is exactly where the defects were — a package
-/// stamped with an enrollment id its signer could not know would have been
-/// refused by every verifier, and no unit test could see it.
-///
-/// So this drives the real thing: the package rides `enroll:request`, the
-/// atServer stores it verbatim, the approver reads it back off the record it
-/// is approving, verifies it against the `_apsk` the atServer publishes on
-/// approval, and seals this atSign's secrets to it.
+/// The package rides `enroll:request`, the atServer stores it verbatim, the
+/// approver reads it back off the record it is approving, verifies it against
+/// the `_apsk` the atServer publishes on approval, and seals this atSign's
+/// secrets to it.
 void main() {
   TestUtils.isolateStorage('enrollment_key_package_live_test');
   late AtClient atClient;
@@ -93,7 +85,6 @@ void main() {
 
   test('approving seals this atSign\'s secrets to the advertised key package',
       () async {
-    // Something worth conveying, in a namespace the new enrollment will hold.
     final sharing = AtClientSecretSharing.forClient(atClient);
     await sharing.register();
     await sharing.secretStore.putSecret(Secret(
@@ -115,9 +106,7 @@ void main() {
           AtBytes.fromString(request.encryptedAPKAMSymmetricKey!),
     ));
 
-    // The observable result: an envelope addressed to the kpid the enrolling
-    // app advertised, sitting on the atServer for it to collect. Read remote
-    // deliberately — a local-only check would pass with nothing having left
+    // NOTE: read remote — a local-only check passes with nothing having left
     // this device.
     final envelopes = await atClient.getAtKeys(
         regex: '.*\\.${enrolled.kpid}\\.__ssenv\\..*', useRemoteAtServer: true);
@@ -144,8 +133,8 @@ void main() {
           AtBytes.fromString(request.encryptedAPKAMSymmetricKey!),
     ));
 
-    // _apsk exists only once the enrollment is approved, which is why
-    // conveyance runs after the approval rather than before it.
+    // NOTE: `_apsk` exists only once the enrollment is approved, so the
+    // verification has to run after the approval.
     final (keyPackage, status) = await verifyAdvertisedKeyPackage(
       request.metadata!['keyPackage'],
       signer: AtClientEnvelopeSigner(atClient),

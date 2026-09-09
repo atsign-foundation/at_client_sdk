@@ -6,15 +6,8 @@ import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/util/enroll_list_request_param.dart';
 import 'package:at_commons/at_commons.dart' show EnrollmentStatus;
 
-/// The production [EnrollmentPrivilegeResolver]: reads the enrollment
-/// record off the atServer.
-///
-/// Read off the enrollment record rather than anything this client asserts
-/// about itself, so an enrollment cannot anchor itself to the signing root
-/// by claiming a privilege it was never granted.
-///
-/// Costs a round trip, which is why callers only consult it once they hold
-/// something that makes the answer matter — almost no client reaches it.
+/// The production [EnrollmentPrivilegeResolver]: reads the enrollment record
+/// off the atServer, at the cost of a round trip.
 ///
 /// A client with no enrollment id is authenticating with the atSign's own
 /// keys, which is full privilege by construction rather than by grant.
@@ -39,11 +32,8 @@ class EnrollmentRecordPrivilegeResolver implements EnrollmentPrivilegeResolver {
     return isEnrollmentFullyPrivileged(id);
   }
 
-  /// Narrowed to `approved` because privilege is a property of an
-  /// enrollment that currently holds it: a revoked or denied record
-  /// answering here would grant authority the atServer no longer honours.
-  /// An unfiltered `enroll:list` would also return every enrollment the
-  /// atSign has ever held.
+  /// Narrowed to `approved`: a revoked or denied record answering here would
+  /// grant authority the atServer no longer honours.
   @override
   Future<bool> isEnrollmentFullyPrivileged(String enrollmentId) async {
     final theirs = (await _listEnrollments(

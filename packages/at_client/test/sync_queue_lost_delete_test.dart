@@ -1,17 +1,14 @@
 // Pins that a local write racing an in-flight push cannot be lost.
 //
-// The shape, measured live in a functional pack before the fix: put(k) is
-// being pushed by a sync round; delete(k) lands while the batch is in
-// flight, replacing k's per-key queue entry; the round's success path then
-// removed the entry BY KEY — discarding the delete with nothing left to
-// retry it. The server kept the update, the queue read empty, and the
-// client reported itself in sync: an awaited delete() that silently never
-// synced.
+// The shape: put(k) is being pushed by a sync round; delete(k) lands while the
+// batch is in flight, replacing k's per-key queue entry. A success path that
+// removes the entry BY KEY discards the delete with nothing left to retry it —
+// the server keeps the update, the queue reads empty, and the client reports
+// itself in sync, so an awaited delete() silently never syncs.
 //
 // Driven with a REAL LocalSecondary and sync queue (the race lives in the
-// store), a mocked RemoteSecondary (the batch stub itself performs the
-// racing delete — the only way the interleaving is deterministic), and the
-// real SyncServiceImpl push loop.
+// store), a mocked RemoteSecondary whose batch stub performs the racing delete
+// so the interleaving is deterministic, and the real SyncServiceImpl push loop.
 
 import 'dart:async';
 import 'dart:io';
@@ -134,8 +131,6 @@ void main() {
 
     service.sync();
     await Future.delayed(Duration.zero);
-    // Let the round run to completion: batch sent, race performed,
-    // success path executed.
     await Future.delayed(const Duration(milliseconds: 300));
 
     expect(batchCommands, hasLength(1),
@@ -144,16 +139,12 @@ void main() {
         reason: 'positive control: the first push was the update the race '
             'supersedes');
 
-    // THE fix's arm: the delete must still be queued. Before the fix the
-    // success path removed the entry by key, and this read came back null —
-    // the delete was gone with the server still holding v1.
     final survivor = await local.readSyncQueueEntry(key.toString());
     expect(survivor, isNotNull,
         reason: 'the delete that landed mid-push was discarded by the '
             'push round\'s success path — the lost-delete defect');
     expect(survivor!.op, SyncQueueOp.delete);
 
-    // And the next round actually pushes it: outcome AND mechanism.
     service.sync();
     await Future.delayed(Duration.zero);
     await Future.delayed(const Duration(milliseconds: 300));

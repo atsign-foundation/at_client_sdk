@@ -113,27 +113,16 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
 
   /// Whether this client runs sync (default true).
   ///
-  /// It decides where [startListening]'s initial and periodic sweeps read
-  /// from, and it is not cosmetic: envelopes reach the local store *only* via
-  /// sync, so on a client that does not sync, a local sweep is guaranteed to
-  /// find nothing every time it runs. Such a client would be left with the
-  /// wake-up notification as its only automatic path to an envelope — and a
-  /// wake-up missed past its expiry would strand a message that is still
-  /// sitting on the atServer, readable, for the rest of [envelopeTtl].
-  ///
-  /// Set false and the periodic sweep reads the atServer instead, which is the
-  /// lazy-fetch path for those clients. Leave it true when sync is running:
-  /// sync already delivers envelopes locally, so remote sweeps would be
-  /// traffic for nothing.
+  /// Envelopes reach the local store only via sync, so when this is false
+  /// [startListening]'s initial and periodic sweeps read the atServer instead.
   bool clientRunsSync = true;
 
   /// Whether [sendEnvelope] also fires a best-effort wake-up notification
   /// (default on) after the put. Clients that run sync receive envelopes via
   /// sync without it; sync-less clients rely on it (their [startListening]
   /// monitors for it and does a remote sweep). It is best-effort: the
-  /// envelope is already on the atServer when this fires — [sendEnvelope]
-  /// writes it remote-first for exactly that reason — so a failed wake-up
-  /// never fails the send, and a wake-up that arrives never points at a value
+  /// envelope is already on the atServer when this fires, so a failed wake-up
+  /// never fails the send and a wake-up that arrives never points at a value
   /// that has not landed. A future atServer enhancement will emit this
   /// notification itself on a put to an `__ssenv` key, at which point senders
   /// can leave it off.
@@ -166,19 +155,12 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   SecretRequestPolicy? answerSecretRequests;
 
   /// Decides whether the enrollment behind a request may be handed a
-  /// per-enrollment (`__en.`-prefixed) secret — the class that includes the
-  /// signing-root private, the key that vouches for every enrollment on the
-  /// atSign.
-  ///
-  /// Namespace authorization, which is all the answer path otherwise checks,
-  /// is the wrong bar for these: any enrollment approved for the namespace
-  /// clears it, and per-enrollment material must not go to "any enrollment".
+  /// per-enrollment (`__en.`-prefixed) secret.
   ///
   /// Null — the default — **fails closed**: per-enrollment secrets are never
-  /// served on request. `AtClientSecretSharing` wires the production
-  /// resolver, which reads the requester's enrollment record off the
-  /// atServer and requires full privilege (`rw` on `*` and `__manage`) —
-  /// the record, not anything the requester asserts about itself.
+  /// served on request. Namespace authorization, which is all the answer path
+  /// otherwise checks, is the wrong bar for these — every enrollment approved
+  /// for the namespace clears it.
   Future<bool> Function(String requesterEnrollmentId)?
       perEnrollmentSecretRequestGate;
 
@@ -195,12 +177,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// before answering a pull request.
   ///
   /// Every authorised holder sees the same request and would otherwise answer
-  /// at once: N holders, N seals, N writes, for one secret the requester only
-  /// needs once. [requestAnswerMinInterval] does not help — it is per
-  /// responder, so it stops one holder repeating itself and says nothing about
-  /// the crowd. The wait spreads them out so that
-  /// [_envelopesSuggestingAnAnswer] has something to observe. Set to
-  /// [Duration.zero] to answer immediately.
+  /// at once; the wait spreads them out so that a holder can observe that
+  /// another has already answered. [Duration.zero] answers immediately.
   Duration requestAnswerJitter = const Duration(seconds: 2);
 
   /// Source of the jitter, injectable so a test can make it deterministic.
@@ -240,19 +218,12 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// algorithm.
   /// [inReplyTo] correlates this envelope with the request it answers, and is
   /// [EnvelopeAddressing.unsolicited] for a request or an unsolicited push.
-  /// This is the ONE place it is defaulted: a caller sending an arbitrary
-  /// payload has no basis to choose, and the default is the safe direction —
-  /// an envelope that claims to answer nothing suppresses nothing.
   Future<void> sendEnvelope(
     KeyPackage to,
     String appNamespace,
     Map<String, dynamic> payload, {
     String inReplyTo = EnvelopeAddressing.unsolicited,
   }) async {
-    // What this client is willing to seal to, not merely what it can: a
-    // deployment that narrowed the list is refusing on purpose, and the
-    // message names the list so the refusal is not read as the recipient's
-    // fault.
     final sealsTo = atClient.getPreferences()?.sealsToKeyAlgorithms ??
         SecretSharingAlgos.keyAlgos;
     final PackageKey? recipientKey = to.bestKeyFor(sealsTo);
@@ -264,35 +235,20 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           'to ${sealsTo.join(', ')})');
     }
 
-    // Everything about the construction comes from the RECIPIENT, not from
-    // this client's own configuration. Which KEM this atSign mints is its own
-    // business; what it seals to is decided by the key the recipient published
-    // and the suites that recipient says it can open.
-    //
-    // The candidate list is narrowed to the chosen key's own KEM first, so a
-    // suite can never be picked that the key cannot decapsulate — the two are
-    // separate fields in the key package and a holder may advertise more than
-    // one KEM.
+    // NOTE: candidates are narrowed to the chosen key's own KEM, so a suite
+    // the recipient's key cannot decapsulate can never be picked.
     final AtKemAlgorithm? kem = SecretSharingAlgos.kemFor(recipientKey.alg);
     final String? suite =
         to.bestSuiteFor(SecretSharingAlgos.openableSuitesFor(recipientKey.alg));
     final int? version =
         suite == null ? null : SecretSharingAlgos.sealVersionFor(suite);
     if (kem == null || suite == null || version == null) {
-      // Refused rather than sealed under this client's own preference: the
-      // recipient would get an envelope it cannot unwrap, and the failure
-      // would surface on their side as an opaque AEAD error with nothing to
-      // point at.
       throw StateError('No mutually supported construction for key package '
           '${to.enrollmentId}/${to.apkamId}: it advertises a '
           '${recipientKey.alg} key opening ${to.suites}, and this client '
           'produces ${SecretSharingAlgos.suites}');
     }
 
-    // Encapsulates to the recipient's published key and wraps the payload
-    // (AEAD over the suite's key schedule) into one envelope — nothing secret
-    // travels except that sealed envelope. [sealInfo] is this substrate's own
-    // binding and must stay distinct from the nskey provider's.
     final String sealed = await pqSealToBase64(
       kem,
       base64Decode(recipientKey.pub),
@@ -328,15 +284,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     // our own ciphertext. The value is raw JSON (never whole-value base64) so
     // that pre-fix readers' legacy decrypt fallback also returns it untouched.
     //
-    // useRemoteAtServer=true: the envelope is a remote-only value — every
-    // reader but the writer fetches it from the atServer, and the writer never
-    // reads its own. A local-first put would also let the wake-up below
-    // outrun it: the notify is a direct remote call while a local-first value
-    // waits for a sync cycle, so a sync-less recipient would remote-sweep an
-    // atServer that does not hold the envelope yet, and the wake-up is
-    // one-shot. Writing remote-first makes the ordering correct by
-    // construction. The cost is that an offline sender fails here rather than
-    // queueing; the pull path (requestSecret) is the backstop for that.
+    // useRemoteAtServer=true: the wake-up below is a direct remote call, so a
+    // local-first put would let it outrun the envelope and spend a one-shot
+    // wake-up on an atServer that does not hold the value yet.
     await atClient.put(
       atKey,
       signedJson,
@@ -393,8 +343,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
     // Throws StateError if not registered. Every address this client holds,
     // not just the active one: a sender that read the key package before a
-    // rotation addresses the superseded key, and its envelope is openable but
-    // only if it is looked for.
+    // rotation addresses the superseded key.
     final Set<String> addresses = heldKpids;
     if (addresses.isEmpty) {
       logger.finer('Not listening for envelopes: this client holds no key '
@@ -410,16 +359,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     });
     _listeningFor = addresses;
     attachToServices();
-    // Envelopes only reach the local store via sync, so a client that does
-    // not sync must sweep the atServer or its periodic sweep can never find
-    // anything — leaving a missed wake-up as an unrecoverable loss of a
-    // message that is still sitting on the atServer.
     final bool sweepRemote = !clientRunsSync;
     _sweepTimer = Timer.periodic(
         sweepInterval, (_) => _sweepInBackground(fromRemote: sweepRemote));
-    // Awaited, and so NOT routed through the helper: this one is the caller's
-    // own start-up sweep, and a caller that asked to start watching should
-    // hear about it failing rather than read it in a log line.
+    // Awaited, not routed through _sweepInBackground: a start-up sweep that
+    // fails belongs to the caller, not to a log line.
     await sweepOnce(fromRemote: sweepRemote);
   }
 
@@ -495,24 +439,13 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// [sweepOnce] for the three callers that cannot await it — the sync-progress
   /// listener, the wake-up subscription and the periodic timer.
   ///
-  /// ⚠️ **They used to call `unawaited(sweepOnce(...))` directly, and that
-  /// discards the future along with any error it carries — so a throw became
-  /// an unhandled async error in whatever zone the timer happened to fire in.
-  /// In a test that fails the test, from a stack naming no assertion; in an
-  /// app it depends entirely on the zone, and can take the isolate down.**
-  ///
-  /// A sweep can fail for reasons that have nothing to do with this client
-  /// being wrong: `sweepOnce` opens with a `getAtKeys` over the wire, so a
-  /// transient network failure throws — and so does a **revoked** enrollment,
-  /// on every one of these three triggers, for as long as the client runs.
-  /// That is how this was found: after a revocation the doomed client's
-  /// background sweep threw `AT0027 … is revoked` into a test that had not
-  /// called it.
-  ///
-  /// Logged at `warning` and swallowed. A background sweep finding nothing is
-  /// indistinguishable from one that could not look, so the log line is the
-  /// only account of it there will be — and losing a sweep is not losing an
-  /// envelope, because the next trigger sweeps the same addresses again.
+  /// ⚠️ A sweep opens with a `getAtKeys` over the wire, so it throws on a
+  /// transient network failure and on every trigger of a **revoked**
+  /// enrollment for as long as the client runs. Bare `unawaited` would turn
+  /// that into an unhandled async error in whichever zone the trigger fired
+  /// in, which can take the isolate down, so failures are logged at `warning`
+  /// and swallowed — losing a sweep is not losing an envelope, because the
+  /// next trigger sweeps the same addresses again.
   void _sweepInBackground({bool fromRemote = false}) {
     unawaited(sweepOnce(fromRemote: fromRemote).catchError((Object e) {
       logger.warning(
@@ -525,7 +458,6 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   }
 
   /// Scans for envelopes addressed to this client; verifies, decrypts, emits
-  /// and deletes each.  /// Scans for envelopes addressed to this client; verifies, decrypts, emits
   /// and deletes each. Returns how many envelopes were consumed. Safe to call
   /// concurrently with the periodic sweep, a sync-triggered sweep, and a
   /// wake-up sweep — each envelope key is claimed synchronously before any
@@ -570,10 +502,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         await _handleSecretPayload(received); // no-op unless kind=='secret'
         await _handleRequestPayload(received); // no-op unless kind=='request'
       } catch (e) {
-        // The envelope has been EMITTED: releasing the claim here would hand
-        // it to the next sweep for a second emission. Keep the claim and keep
-        // the envelope (no delete) — a fresh process, whose stream has no
-        // listeners yet, retries the whole thing.
+        // NOTE: the envelope has been EMITTED — releasing the claim here would
+        // hand it to the next sweep for a second emission. The claim and the
+        // envelope are both kept; a fresh process retries the whole thing.
         logger.warning('Envelope $envelopeKey was received but its payload '
             'handler failed; it is kept for a retry at the next start: $e');
         continue;
@@ -618,44 +549,28 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           'enrollment ${envelope.fromEnrollmentId}; skipping');
       return null;
     }
-    // Resolving the KEM doubles as the support check. Testing membership of
-    // `SecretSharingAlgos.suites` separately would be a second list that has
-    // to agree with this one, and a suite present in that list but absent
-    // here would pass the guard and then have no KEM to open with.
+    // Resolving the KEM doubles as the support check: a suite with no KEM
+    // cannot be opened.
     final AtKemAlgorithm? kem = SecretSharingAlgos.kemForSuite(envelope.suite);
     if (kem == null) {
       logger.warning('Envelope $envelopeKey uses unsupported sealing suite '
           '${envelope.suite}; skipping');
       return null;
     }
-    // The key the envelope was sealed to, which is not necessarily the one this
-    // client currently advertises: a sender that read the key package before a
-    // rotation sealed to the superseded key, and that key is retained precisely
-    // so this still opens.
+    // Not necessarily the key this client currently advertises: a sender that
+    // read the key package before a rotation sealed to the superseded key,
+    // which is retained precisely so this still opens.
     final held = encKeyFor(envelope.kid);
     if (held == null) {
       logger.warning('Envelope $envelopeKey was encrypted to key '
           '${envelope.kid} which this client does not hold; skipping');
       return null;
     }
-    // An envelope naming a suite whose KEM is not the one its named key belongs
-    // to — newly possible now that a client can hold keys under more than one —
-    // needs no check of its own. at_chops maps the wrong-length secret key to a
-    // PqOpenException, which the open below already catches and skips, and its
-    // message names the mismatch: "ML-KEM-1024 secret key must be 3168 bytes:
-    // 32". A guard here would change no outcome and read like a security check
-    // it is not.
 
-    // The open reads the envelope's version byte itself, but the KEM instance
-    // is this caller's to supply and the two must agree — a hybrid envelope
-    // decapsulated with ML-KEM fails indistinguishably from a tampered one.
-    // The suite is what names it, which is why the envelope carries it.
-    //
-    // The AEAD authenticates: tampering, a wrong-recipient decapsulation, or
-    // mismatched `info` all surface as a PqOpenException, as does a `sealed`
-    // field that is not valid base64. Every one of them is deterministic —
-    // retrying cannot help — so a failure leaves the envelope for ttl expiry
-    // rather than blocking sweeps forever.
+    // NOTE: the KEM instance must match the suite the envelope names — a
+    // hybrid envelope decapsulated with ML-KEM fails indistinguishably from a
+    // tampered one. Every PqOpenException here is deterministic, so a failed
+    // envelope is left to expire by ttl rather than blocking sweeps.
     final Uint8List plaintext;
     try {
       plaintext = await pqOpenFromBase64(
@@ -694,20 +609,10 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
 
   /// Whether [member] is this client, so a broadcast skips itself.
   ///
-  /// Identity is the **enrollment**, not the kpid. Comparing kpids reads a
-  /// package's addressing token, and that token is a *reader's* choice —
-  /// [KeyPackage.kpid] returns the first key in this build's
-  /// [SecretSharingAlgos.keyAlgos] order, so once a package advertises more
-  /// than one key two builds with different orderings disagree about the same
-  /// package's kpid and a client can fail to recognise itself. It also misses
-  /// the drift case with one key: an instance whose enrollment changed under it
-  /// holds the old keypair while the directory serves the new package, so the
-  /// kpids differ and it sends to an address it is not listening on.
-  ///
-  /// A client with no enrollment matches nothing, which is right — `enroll:listns`
-  /// enumerates enrollments, so a legacy PKAM client is not on the roster it is
-  /// comparing against. [selfEnrollmentId] is read once by the caller rather
-  /// than per member: the getter warns every time it falls back to `primary`.
+  /// Identity is the **enrollment**, not the kpid: a kpid is the reader's
+  /// choice of addressing token, so two builds can disagree about the same
+  /// package's kpid and an instance whose enrollment changed under it holds a
+  /// stale one. A client with no enrollment matches nothing.
   bool _isSelf(NamespaceMember member, String selfEnrollmentId) =>
       member.enrollmentId == selfEnrollmentId;
 
@@ -727,21 +632,17 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     final members = await directory.listForNamespace(namespace,
         excludeEnrollmentIds: excludeEnrollmentIds);
     final String selfId = enrollmentId;
-    // ONE id for the whole fan-out, not one per holder: every holder is
-    // answering the same question, and the id is what lets a second holder
-    // see that a first has already answered THIS request rather than some
-    // other traffic at the same address.
+    // ONE id for the whole fan-out: it is what lets a second holder see that a
+    // first has already answered THIS request rather than other traffic at the
+    // same address.
     final String requestId = Uuid().v4().replaceAll('-', '').substring(0, 16);
     int sent = 0;
     for (final member in members) {
       final to = member.keyPackage;
       if (to != null && to.kpid != null && !_isSelf(member, selfId)) {
-        // Per member, because one peer this client cannot seal to says
-        // nothing about the rest: sendEnvelope throws StateError when a
-        // member advertises no mutually supported algorithm, and letting it
-        // out of the loop leaves every member after it unasked. The design is
-        // N holders precisely so that some can be unreachable — aborting the
-        // broadcast on the first one undoes that.
+        // Per member: sendEnvelope throws StateError when a member advertises
+        // no mutually supported algorithm, and the design is N holders
+        // precisely so that some can be unreachable.
         try {
           await sendEnvelope(
               to,
@@ -752,15 +653,13 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
                 if (names != null) 'want': names,
                 if (namePrefix != null) 'namePrefix': namePrefix,
               },
-              // The request itself answers nothing. Its own id travels in the
-              // sealed payload, where a holder can trust it; the address
-              // carries the id only of what an envelope ANSWERS.
+              // The request answers nothing; its own id travels in the sealed
+              // payload, where a holder can trust it.
               inReplyTo: EnvelopeAddressing.unsolicited);
           sent++;
         } catch (e) {
           // Warning, not finer: a request that never went out is
-          // indistinguishable from one nobody answered, so at a lower level
-          // this presents as the holders ignoring us.
+          // indistinguishable from one nobody answered.
           logger.warning('Could not request secrets from enrollment '
               '${member.enrollmentId} (kpid ${to.kpid}) in $namespace: $e. '
               'The remaining members are still being asked.');
@@ -819,11 +718,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
     final policy = answerSecretRequests;
     if (policy != null && !(await policy(received, requester))) {
-      // Warning, and it names both sides. A holder that declines is the only
-      // party that knows it did: the requester sees an unanswered ask, which is
-      // indistinguishable from nobody holding the secret, from nobody sweeping,
-      // and from the envelope never arriving. Silence here cost a live
-      // diagnosis that had already eliminated three other causes.
+      // Warning, and it names both sides: a holder that declines is the only
+      // party that knows it did, and the requester cannot tell that from
+      // nobody holding the secret or from the envelope never arriving.
       logger.warning('Declining to answer the secret request from kpid '
           '${received.fromKpid} (enrollment ${received.fromEnrollmentId}) in '
           '${received.appNamespace}: the answer policy refused it. The '
@@ -841,9 +738,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     // written by the sender and nothing authenticates it.
     final String? requestId = received.payload['requestId'] as String?;
     if (requestId == null) {
-      // Fail open, the same direction _envelopeKeysFor takes when its scan
-      // fails: answering costs a duplicate the requester merges away, while
-      // standing down costs it the secret with no error either side.
+      // Fail open: answering costs a duplicate the requester merges away,
+      // while standing down costs it the secret with no error either side.
       logger.info('Answering kpid ${received.fromKpid} in '
           '${received.appNamespace} without checking whether another holder '
           'already did: the request carries no requestId to correlate on');
@@ -853,13 +749,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         : await _envelopesSuggestingAnAnswer(
             requestId, received.fromKpid, received.appNamespace);
     if (suppressedBy.isNotEmpty) {
-      // Warning, and it names the record it matched, for the same reason the
-      // policy decline above is a warning: this drops an answer inside a
-      // dispatch loop, and the requester cannot tell a holder that stood down
-      // from one that never held the secret. Naming the matched key is what
-      // makes the difference readable — the address carries no indication of
-      // whether the record is a request, an answer, or an unsolicited push,
-      // so a match here is not by itself evidence that anybody answered.
+      // Warning, and it names the record it matched: this drops an answer
+      // inside a dispatch loop, and a match is not by itself evidence that
+      // anybody answered.
       logger.warning('Not answering request $requestId from kpid '
           '${received.fromKpid} (enrollment ${received.fromEnrollmentId}) in '
           '${received.appNamespace}: ${suppressedBy.length} envelope(s) '
@@ -882,9 +774,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         requesterMayTakePerEnrollment ??=
             gate != null && await gate(received.fromEnrollmentId);
         if (!requesterMayTakePerEnrollment) {
-          // Warning, not finer: a refused serve must be attributable, or a
-          // legitimate privileged puller's failure presents as "the holder
-          // never answered" and gets blamed on the wrong side.
+          // Warning, not finer: a refused serve must be attributable, or it
+          // presents as the holder never having answered.
           logger.warning('Not serving ${secret.name} to enrollment '
               '${received.fromEnrollmentId} (kpid ${received.fromKpid}): '
               'per-enrollment secrets are served only to fully privileged '
@@ -906,22 +797,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
 
   /// The store entries an inbound request may be answered from.
   ///
-  /// Namespace-scoped, as every ordinary secret is — a request rides one app
-  /// namespace and is answered from that namespace's material.
-  ///
-  /// The exception is **explicitly named per-enrollment secrets**, which are
-  /// addressed to an *enrollment* rather than to a namespace. The signing-root
-  /// private is the case that matters: it is atSign-level and carries no
-  /// namespace of its own, so a holder can only file it under some namespace
-  /// it happens to run in. Two privileged enrollments of one atSign
-  /// belonging to different apps therefore never match — the holder primed
-  /// under its namespace, the requester asks in its own — and the pull that
-  /// is the only route to a key nothing re-mints would silently never be
-  /// answered. Named secrets only: a prefix or bare request still cannot
-  /// sweep another namespace's material.
-  ///
-  /// Widening the search does not widen who is served: the privilege gate
-  /// above decides that, and it is stricter for exactly these names.
+  /// Namespace-scoped, except for **explicitly named per-enrollment
+  /// secrets**: those are addressed to an enrollment and carry no namespace of
+  /// their own, so they match across namespaces. Named secrets only — a prefix
+  /// or bare request still cannot sweep another namespace's material, and
+  /// widening the search does not widen who is served.
   Iterable<Secret> _candidatesFor(
       ReceivedEnvelope received, Set<String>? want, String? namePrefix) {
     final scoped = secretStore.listSecrets(
@@ -940,8 +820,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   }
 
   /// Envelope keys currently addressed to [kpid] in [appNamespace], read from
-  /// the atServer — which is where [sendEnvelope] writes them, and where a
-  /// holder that does not sync would look.
+  /// the atServer, where [sendEnvelope] writes them.
   Future<Set<String>> _answerKeysFor(
       String requestId, String kpid, String appNamespace) async {
     try {
@@ -951,49 +830,22 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           useRemoteAtServer: true);
       return keys.map((k) => k.toString()).toSet();
     } catch (e) {
-      // Observation is an optimisation. If it fails, answering anyway costs a
-      // duplicate the requester merges away; staying quiet could cost it the
-      // secret entirely.
+      // Fail open: a duplicate the requester merges away costs less than
+      // withholding the secret entirely.
       logger.info('Could not check whether request $requestId to kpid $kpid '
           'was already answered, so answering: $e');
       return const {};
     }
   }
 
-  /// Whether an answer is already waiting for [kpid] in [appNamespace].
+  /// The envelope keys already answering [requestId] for [kpid] in
+  /// [appNamespace] — returned rather than a bool so a caller can name them.
   ///
-  /// Deliberately coarse on two axes, both sound here.
-  ///
-  /// It cannot see *what* was answered — the envelope key carries no secret
-  /// name and the payload is sealed to the requester. That does not matter,
-  /// because a responder answers every matching secret in one pass, so any
-  /// single answer is already complete for the request.
-  ///
-  /// It also cannot tell an answer to *this* request from an unconsumed one
-  /// left over from an earlier exchange, because nothing in the key orders it
-  /// against the request. Diffing against a snapshot taken when this responder
-  /// picked the request up does not help and is strictly worse: a holder that
-  /// starts late sees the earlier answer in its own baseline and concludes
-  /// nothing has happened, so exactly the responders that should stay quiet
-  /// are the ones that answer. Presence alone is the better rule — the
-  /// requester deletes each envelope as it consumes it, and it is
-  /// demonstrably online, having just sent the request, so anything still
-  /// waiting for it is almost certainly a fresh answer.
-  ///
-  /// ⚠️ The cost of over-suppressing is **not** a retry. Nothing re-asks: a
-  /// read miss broadcasts once per generation for the life of the ring, and
-  /// the single wait then gives up until the next process start. So a holder
-  /// that stands down here on a record which is not an answer costs the
+  /// Coarse by design: it cannot see *what* was answered, which does not
+  /// matter because a responder answers every matching secret in one pass.
+  /// ⚠️ Over-suppressing is **not** a retry — nothing re-asks, so a holder
+  /// that stands down here on a record that is not an answer costs the
   /// requester the secret outright, and silently.
-  ///
-  /// Returns the envelope keys that caused the suppression rather than a bool,
-  /// so the caller can name them.
-  ///
-  /// Narrowed to envelopes that answer [requestId]. It used to match anything
-  /// addressed to the requester in the namespace, which is also true of a
-  /// request written there by a third enrollment's fan-out and of an
-  /// unconsumed leftover — so holders stood down for records that were not
-  /// answers at all.
   Future<Set<String>> _envelopesSuggestingAnAnswer(
           String requestId, String kpid, String appNamespace) async =>
       _answerKeysFor(requestId, kpid, appNamespace);
@@ -1065,11 +917,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
 
   /// Shares one secret with one key package.
   ///
-  /// [inReplyTo] is required rather than defaulted so that the compiler names
-  /// every call site: whether a share answers a request decides whether other
-  /// holders stand down for it, and a share that silently claimed to answer
-  /// nothing (or to answer everything) is the defect this parameter exists to
-  /// close. Pass [EnvelopeAddressing.unsolicited] for a push nobody asked for.
+  /// [inReplyTo] decides whether other holders stand down for this share; pass
+  /// [EnvelopeAddressing.unsolicited] for a push nobody asked for.
   Future<void> shareSecretWith(KeyPackage to, Secret secret,
           {required String inReplyTo}) =>
       sendEnvelope(
@@ -1123,22 +972,18 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
 
   /// Prefix marking a secret addressed to **one** enrollment.
   ///
-  /// Distinct from the general `__` reserved space, and the distinction
-  /// matters: [SecretStore.putIfNewer] accepts reserved names precisely so
-  /// system secrets — namespace rotation keys among them — flow between a
-  /// client's enrollments, and a newly approved device needs those. What must
-  /// not flow is material addressed to a single enrollment: its own
-  /// `apkamSymmetricKey`, its own approval-chain link.
+  /// Distinct from the general `__` reserved space, which
+  /// [SecretStore.putIfNewer] accepts precisely so that system secrets flow
+  /// between a client's enrollments. Material addressed to a single enrollment
+  /// — its own `apkamSymmetricKey`, its own approval-chain link — must not.
   static const String perEnrollmentSecretPrefix = '__en.';
 
   /// Whether [name] is addressed to one enrollment, and so must never be
   /// forwarded on.
   ///
-  /// A received secret is stored like any other, which is what makes this
-  /// necessary rather than merely tidy: an enrollment conveyed its own key
-  /// material holds it in the same store [shareAllSecretsWith] iterates, so
-  /// without this the next enrollment it approves would be handed the previous
-  /// one's. Forwarding is never right for these, whatever the namespace says.
+  /// A received secret is stored like any other, so without this the next
+  /// enrollment [shareAllSecretsWith] reaches would be handed the previous
+  /// one's key material, whatever the namespace says.
   static bool isPerEnrollmentSecretName(String name) =>
       name.startsWith(perEnrollmentSecretPrefix);
 
@@ -1158,9 +1003,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     for (final member in members) {
       final to = member.keyPackage;
       if (to != null && to.kpid != null && !_isSelf(member, selfId)) {
-        // Per member, for the same reason as requestSecretsFromNamespace: one
-        // peer this client cannot seal to must not stop the broadcast reaching
-        // the others.
+        // Per member: one peer this client cannot seal to must not stop the
+        // broadcast reaching the others.
         try {
           await shareSecretWith(to, secret,
               inReplyTo: EnvelopeAddressing.unsolicited);

@@ -22,8 +22,8 @@ void main() {
     test(
         'the atSign\'s own credential authenticates with no enrollment id on '
         'the wire', () {
-      // Raw literals: a released atServer knows the credential only by the
-      // absence of an id and refuses `enrollmentId:primary`.
+      // NOTE: raw literals — a released atServer knows the credential only by
+      // the absence of an id and refuses `enrollmentId:primary`.
       final bare = PkamVerbBuilder()
         ..signature = 'abc123'
         ..enrollmentlId = 'primary';

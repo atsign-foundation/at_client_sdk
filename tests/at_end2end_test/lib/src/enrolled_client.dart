@@ -11,32 +11,18 @@ import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:uuid/uuid.dart';
 
-/// A live, APKAM-authenticated client for one approved enrollment.
+/// A live, APKAM-authenticated client for one approved enrollment, with its
+/// own `enrollmentId`, APKAM keypair and key package.
 ///
-/// Deliberately a copy of `at_functional_test`'s helper of the same name.
-/// The two suites are separate packages with no shared library between them,
-/// and a copy is cheaper here than a third package that both would have to
-/// depend on. Keep them in step if the enrollment flow changes.
+/// A copy of `at_functional_test`'s helper of the same name; the two suites
+/// are separate packages with no shared library between them, so keep the two
+/// in step if the enrollment flow changes.
 ///
-/// Several claims in the PQ acceptance catalogue are about what one
-/// *enrollment* may do to another — the namespace boundary, the signing-root
-/// pull, ML-DSA authentication against the enrollment record. None of them can
-/// be driven by a client authenticating with the atSign's own keys, which is
-/// what the rest of this package uses: the atServer answers `enroll:listns`
-/// only for an APKAM-authenticated connection, and both halves of the
-/// substrate's pull path go through it — the requester to enumerate holders,
-/// the responder to authorize the requester before answering.
-///
-/// So this exists to hand back a client that genuinely *is* an enrollment,
-/// with its own `enrollmentId`, its own APKAM keypair, and its own key
-/// package.
-///
-/// This works because `AtClientImpl` caches clients by
-/// `(atSign, enrollmentId)` — the `(owner, id)` rule applied to the client
-/// cache — so a second enrollment of one atSign is a genuinely separate
-/// client with its own connection carrying its own enrollment id. Use one
-/// `AtClientManager` per client (the public constructor), never
-/// `getInstance().setCurrentAtSign`, which would stop the other client.
+/// `AtClientImpl` caches clients by `(atSign, enrollmentId)`, so a second
+/// enrollment of one atSign is a genuinely separate client with its own
+/// connection carrying its own enrollment id. Use one `AtClientManager` per
+/// client (the public constructor), never `getInstance().setCurrentAtSign`,
+/// which would stop the other client.
 class EnrolledClient {
   /// The enrolled client, authenticated as [enrollmentId].
   final AtClient client;
@@ -45,32 +31,18 @@ class EnrolledClient {
   /// its [client] authenticates and signs as.
   ///
   /// ⛔ **A self-retrofit supersedes it.** This copy submits every enrollment
-  /// under a hard-coded `rsa2048` APKAM keypair — it has no `signingAlgo`
-  /// parameter, unlike `at_functional_test`'s copy — so a client whose posture
+  /// under a hard-coded `rsa2048` APKAM keypair, so a client whose posture
   /// wants a stronger authentication key ALWAYS retrofits itself during
-  /// `_init` and comes up on a **new** enrollment id, with no way to opt out. This field keeps the submitted one. The
-  /// atServer caps the old enrollment rather than deleting it, so both ids are
-  /// real: this one is what the roster shows and what an approver approved,
-  /// while `client.enrollmentId` is what authenticates the connection, what
-  /// `_apsk` is published under, and what signs.
-  ///
-  /// **Both are needed, and the difference is asserted on purpose.**
-  /// `pq_retrofitted_scope_test.dart` requires them to DIFFER — "equal ids mean
-  /// no retrofit ran" is the precondition for that whole file — and requires
-  /// them to MATCH in its cold-keyfile arm, where a retrofit would leave
-  /// nothing varying. `nskey_self_notify_live_test.dart` requires them to match
-  /// because the receiving client's id is what the atServer authorizes the
-  /// monitor connection against. Making this field mirror `client.enrollmentId`
-  /// would redden the first pair and turn the rest into tautologies —
-  /// preconditions that are green whatever happens.
+  /// `_init` and comes up on a **new** enrollment id, with no way to opt out.
+  /// The atServer caps the old enrollment rather than deleting it, so both ids
+  /// are real: this one is what the roster shows and what an approver
+  /// approved, while `client.enrollmentId` is what authenticates the
+  /// connection, what `_apsk` is published under, and what signs.
   ///
   /// ⚠️ **So compare this against another `EnrolledClient`'s id or against the
   /// enrollment roster; never against anything the CLIENT produced.** A
   /// signature's `kid`, an `_apsk` address or a kpid on the wire all carry the
   /// settled id, and comparing them to this passes only when no retrofit ran.
-  /// A test needing an enrollment that is post-quantum from birth cannot get
-  /// one from this copy; `at_functional_test`'s takes `signingAlgo: mldsa65`
-  /// for that, and porting the parameter here is owed.
   final String enrollmentId;
 
   /// The key package id this enrollment advertised, which is the address
@@ -79,9 +51,7 @@ class EnrolledClient {
 
   /// This enrollment's key material, as `waitForApproval` left it: its APKAM
   /// keypair, its key-package private half, and the encryption keys unwrapped
-  /// from the approver's conveyance. Exposed because tests that drive
-  /// authentication by hand — signing a PKAM challenge to check what the
-  /// atServer verifies against — need the keypair the record names.
+  /// from the approver's conveyance.
   final AtKeys keys;
 
   /// The manager owning [client]. Its own instance rather than the singleton —
@@ -104,19 +74,12 @@ class EnrolledClient {
 /// [approver] must be a privileged client able to call `otp:get` and approve —
 /// in this package, the ordinary `TestUtils.initAtClient` client.
 ///
-/// Runs the **real** flow rather than assembling keys by hand: submit, approve,
-/// then `waitForApproval`, which is what unwraps this enrollment's encryption
-/// keys with the `apkamSymmetricKey` the approver sealed to its key package and
-/// persists the result. Short-cutting that would produce a client whose keys
-/// never went through the conveyance under test, which is the one thing these
-/// tests are supposed to exercise.
-///
 /// [namespaces] overrides the grants requested, which defaults to `rw` on
 /// [namespace] alone. Pass `{'*': 'rw', '__manage': 'rw', …}` for a fully
 /// privileged enrollment — the class entitled to hold the signing root, and
 /// the only one a holder will serve per-enrollment material to.
 ///
-/// The approval is issued **before** `waitForApproval` is awaited. Both sides
+/// The approval is issued **before** `waitForApproval` is awaited: both sides
 /// run in this one process, so waiting first would deadlock — nothing else is
 /// scheduled to approve.
 Future<EnrolledClient> enrolAndAuthenticate({
@@ -150,13 +113,11 @@ Future<EnrolledClient> enrolAndAuthenticate({
       namespaces: namespaces ?? {namespace: 'rw'},
       otp: otp,
       // pq mode, so the approver mints the symmetric key and seals it to the
-      // advertised key package. On the legacy path it would RSA-wrap it, which
-      // is the thing this branch exists to remove.
+      // advertised key package rather than RSA-wrapping one the enrollee sent.
       metadataBuilder: (keysIo) async => built = await build(keysIo),
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-      // pq is the key EXCHANGE. The APKAM authentication keypair stays
-      // RSA-2048, which is what every caller of this helper has been handed
-      // all along.
+      // pq is the key EXCHANGE; the APKAM authentication keypair stays
+      // RSA-2048.
       signingAlgo: SigningAlgoType.rsa2048,
     ),
     AtLookUp.withSecureSocket(
@@ -178,10 +139,8 @@ Future<EnrolledClient> enrolAndAuthenticate({
   await AtEnrollment.create().waitForApproval(response);
 
   // reuse: true asks for the AtLookUp that already authenticated as this
-  // enrollment during waitForApproval, instead of opening a fresh unauthenticated
-  // one. It is necessary but NOT sufficient, and on its own changes nothing
-  // observable — see the class doc: while AtClientImpl hands back a cached
-  // client for this atSign, none of these arguments are applied at all.
+  // enrollment during waitForApproval, instead of opening a fresh
+  // unauthenticated one.
   final manager = await AtClientManager(atSign)
       .fromAuthSession(response.session ?? session, preference, reuse: true);
 

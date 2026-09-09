@@ -4,12 +4,6 @@
 /// client that took the lock and then re-entered loses the election to
 /// itself. `ownLockIsNotContention` is what lets an idempotent critical
 /// section proceed anyway, and it is off by default.
-///
-/// The flag is the ONLY thing that varies between the two arms here: same
-/// fake atServer, same refusal, same lock record, same holder. A caller that
-/// leaves it off and whose previous instance died before publishing gets
-/// nothing done for the rest of the ttl, and the process that would fix it is
-/// the one being refused.
 library;
 
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
@@ -91,9 +85,6 @@ void main() {
     });
 
     test('and opting in still loses to a DIFFERENT enrollment', () async {
-      // The control: the flag must not turn the interlock off. It has to be
-      // able to stay red while the arm above is green, or the arm above shows
-      // only that the flag exists.
       final lookups = <String>[];
       var ran = false;
 

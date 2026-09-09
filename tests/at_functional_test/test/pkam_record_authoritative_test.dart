@@ -19,31 +19,18 @@ import 'test_utils.dart';
 /// APKAM authentication verifies against the **enrollment record**, never the
 /// algorithm the client names on the wire.
 ///
-/// This is a security property, and the attack it forbids is concrete: if the
-/// atServer picked its verifier from the `signingAlgo` field of the incoming
-/// `pkam:` command, a caller could name whichever algorithm suited it. The
-/// record's `apkamPublicKey` and its stored `signingAlgo` are the only
-/// authority, and the wire field is a claim to be ignored.
+/// The attack this forbids is concrete: if the atServer picked its verifier
+/// from the `signingAlgo` field of the incoming `pkam:` command, a caller could
+/// name whichever algorithm suited it. The record's `apkamPublicKey` and its
+/// stored `signingAlgo` are the only authority.
 ///
-/// **How this is tested, and why it is the only way.** The client API cannot
-/// express the mismatch: `AtLookupImpl.signingAlgoType` drives *both* the
-/// signature the at_chops pkam dispatch produces and the value it puts on
-/// the wire, so the two never diverge through the API — setting `mldsa65`
-/// with an RSA keypair fails on this side in base64/ML-DSA key handling,
-/// never reaching the atServer with an RSA signature under an mldsa65 claim.
-/// So the `pkam:` command is built by hand — always signing RSA with the
-/// enrollment's real keypair, varying only the algorithm *claimed*.
-///
-/// The two arms therefore differ in exactly one byte-range of one command, and
-/// the outcome is the discriminator:
-///
-/// - if the atServer reads the **record** (correct), it verifies RSA and both
-///   arms authenticate;
-/// - if it read the **wire**, the second arm would attempt ML-DSA verification
-///   of an RSA signature and fail.
-///
-/// A pass here is therefore *both* arms succeeding, which reads oddly until you
-/// see that the mldsa65 arm succeeding is precisely the claim.
+/// The client API cannot express the mismatch — `AtLookupImpl.signingAlgoType`
+/// drives both the signature at_chops produces and the value put on the wire —
+/// so the `pkam:` command is built by hand, always signing RSA with the
+/// enrollment's real keypair and varying only the algorithm claimed. Both arms
+/// are therefore expected to authenticate: the mldsa65 arm succeeding is
+/// precisely the claim, because an atServer reading the wire would attempt
+/// ML-DSA verification of an RSA signature and fail.
 void main() {
   TestUtils.isolateStorage('pkam_record_authoritative_test');
   late AtClient approver;
@@ -109,9 +96,6 @@ void main() {
               ..signature = signature)
             .buildCommand();
 
-        // Rig check: the claim must actually be on the wire. Without this the
-        // two arms could be the same command and the comparison would be of a
-        // case with itself.
         expect(command, contains('signingAlgo:$claimedAlgo'),
             reason: 'the built command must carry the claimed algorithm, or '
                 'this test varies nothing');
@@ -128,10 +112,9 @@ void main() {
         reason: 'the enrollment is approved and the signature is genuine, so '
             'a truthful claim must authenticate');
 
-    // The assertion. Succeeding here is the property: the atServer verified
-    // with the algorithm the RECORD names, having ignored a wire field that
-    // said something else. Had it trusted the wire, it would have tried to
-    // verify an RSA signature as ML-DSA and refused.
+    // The assertion: succeeding here is the property, the atServer having
+    // verified with the algorithm the RECORD names and ignored a wire field
+    // that said something else.
     expect(await authenticateClaiming('mldsa65'), contains('success'),
         reason: 'the atServer must verify against the enrollment record\'s '
             'signingAlgo and treat the wire field as a claim. If this fails, '

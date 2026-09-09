@@ -135,12 +135,6 @@ void main() {
     });
   });
 
-  // A group here used to police the envelope's own `hashingAlgo` member: an
-  // unsigned field naming a cryptographic routine, which a verifier had to
-  // resolve without trusting. The shape no longer has one — `alg` is `RS256`,
-  // which IS SHA-256, and it sits under the signature. Nothing unsigned
-  // selects a routine any more, so there is nothing left to police.
-
   group('public key caching', () {
     test('with caching enabled, the _apsk key is fetched only once', () async {
       final cachingVerifier = TestEnvelopeSigner(atClientB,

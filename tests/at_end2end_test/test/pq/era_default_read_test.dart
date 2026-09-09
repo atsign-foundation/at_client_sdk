@@ -15,25 +15,19 @@ import 'package:test/test.dart';
 
 /// A client that named **no** `CryptoConfig` decrypts an inbound PQ record.
 ///
-/// This is the claim the era default exists to make, and it is the one a unit
-/// test cannot reach: a mock never runs `AtClientImpl._init`, so an era default
-/// that was never adopted passes every unit assertion, and the functional check
-/// only shows the wiring arrived. Here bob is given nothing — no config, no
-/// providers — and has to open a record alice sealed to his namespace key.
-///
-/// The asymmetry under test is the whole 3.x shape: alice must name
-/// `CryptoConfig.nskey` to *write* PQ, because the era default deliberately
-/// still writes legacy. Bob needs nothing to *read* it.
+/// Bob is given nothing — no config, no providers — and has to open a record
+/// alice sealed to his namespace key. That is the asymmetry under test: alice
+/// must name `CryptoConfig.nskey` to *write* PQ, because the era default
+/// deliberately still writes legacy, while bob needs nothing to *read* it.
 void main() {
   late String alice;
   late String bob;
   late String authType;
   final namespace = TestConstants.namespace;
-  // One manager per atSign, so alice and bob are live at once. Through the
-  // singleton, bringing one up stops the other, and a client rebuilt by a
-  // bare switch holds no nskey keyfile: the private it then mints is filed
-  // nowhere, and every later client of the atSign adopts a generation it
-  // cannot open.
+  // NOTE: one manager per atSign, so alice and bob are live at once. Through
+  // the singleton, bringing one up stops the other, and a client rebuilt by a
+  // bare switch holds no nskey keyfile, so the private it then mints is filed
+  // nowhere and every later client adopts a generation it cannot open.
   final managers = <String, AtClientManager>{};
 
   setUpAll(() {
@@ -51,9 +45,9 @@ void main() {
     return manager.atClient;
   }
 
-  /// The key ring the SDK built for [client] as part of its era default —
-  /// reached through the provider that holds it, so the test mints into the
-  /// very ring the read path will consult rather than a lookalike.
+  /// The key ring the SDK built for [client] as part of its era default,
+  /// reached through the provider that holds it so that minting lands in the
+  /// very ring the read path consults rather than a lookalike.
   PublishedNskeyKeyRing eraKeyRing(AtClient client) {
     final config = CryptoConfig.forClient(client);
     final provider = config.lookup(nskeyCryptoProviderId);
@@ -69,8 +63,7 @@ void main() {
   test('bob, given no CryptoConfig at all, opens what alice sealed to him',
       () async {
     // Bob first: alice's pre-pass discovers his published nskey by plookup, so
-    // it must exist before she writes. He mints through his OWN era ring, which
-    // is the point — no config was ever handed to him.
+    // it must exist before she writes.
     final bobClient = await clientFor(bob);
     expect(bobClient.getPreferences()?.crypto,
         same(const CryptoConfig.eraDefault()),
@@ -104,9 +97,6 @@ void main() {
     await E2ESyncService.getInstance()
         .syncData(aliceClient.syncService, atSign: alice);
 
-    // Verified, not assumed: alice really did write the PQ scheme. Without this
-    // a legacy write would sail through the read below and the test would pass
-    // for the wrong reason.
     final asWritten = await aliceClient.get(shared);
     expect(asWritten.metadata?.appMetadata?.providerId,
         symmetricAesGcmCryptoProviderId,

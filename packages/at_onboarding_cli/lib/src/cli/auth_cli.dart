@@ -86,12 +86,9 @@ void deleteStorage() {
 
 Future<int> main(List<String> arguments) async {
   AtSignLogger.defaultLoggingHandler = AtSignLogger.stdErrLoggingHandler;
-  // A retrofit reads a keyfile, decides what to write from what it found, and
-  // writes it. Two of these CLIs pointed at one keyfile can each read the
-  // pre-retrofit state and each write a different enrollment into it, leaving
-  // no unique answer to which one the keyfile authenticates as. This takes a
-  // lock beside the keyfile for the whole sequence; at_auth cannot do it on
-  // its own behalf because only the caller knows the keys are on disk.
+  // NOTE: a retrofit reads a keyfile and writes back what it decided from what
+  // it read, so two CLIs on one keyfile can each write a different enrollment
+  // into it. This serialises the whole sequence on a lock beside the keyfile.
   retrofitSerializer = fileRetrofitSerializer;
   try {
     return await wrappedMain(arguments);
@@ -123,9 +120,6 @@ Future<int> wrappedMain(List<String> arguments) async {
 
   final first = arguments.first;
   if (first.startsWith('-') && first != '-h' && first != '--help' && first != '--version') {
-    // This used to insert 'onboard' and carry on. It no longer does: a command
-    // is named or the invocation is refused, so that what the binary is about
-    // to do is stated rather than inferred from the shape of the arguments.
     stderr.writeln('Version: $packageVersion');
     stderr.writeln('No command was given. "$first" is an option, not a '
         'command — an invocation with no command used to be treated as '
@@ -434,8 +428,8 @@ Future<int> status(ArgResults ar) async {
 
   String? pk;
   try {
-    // authenticator: null - this reads a public key, which needs no
-    // authentication and for which no credential is held here.
+    // NOTE: a public key lookup needs no authentication, and no credential is
+    // held here.
     final AtLookUp al = AtLookUp.withSecureSocket(
       atSign: atSign,
       rootDomain: rootDomain,
@@ -554,43 +548,15 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     apkamKeysExpiryDuration: parseDuration(apkamKeysExpiry),
     maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
     retryInterval: AtOnboardingService.defaultApkamRetryInterval,
-    // `--posture` is on the shared parser, so `enroll` has always accepted it
-    // — and until now it reached the client's preference and nothing else, so
-    // `enroll --posture pqActive` still minted an RSA-2048 APKAM key and the
-    // client retrofitted it away on its first start. The posture's own
-    // `authenticationKeyAlgorithm` is what the stage means by "which key
-    // authenticates", so that is what the enrolment is submitted under.
-    //
-    // Null when `--posture` is absent, which the service reads as "the
-    // position this service was built at" — and that is the same preference,
-    // built from the same `postureIn(argResults)` a few lines up in
-    // `createOnboardingService`.
-    //
-    // ⚠️ This fell back to `SigningAlgoType.rsa2048`, on the argument that
-    // "the caller named no posture" is not "the caller asked for the default
-    // one". `preferenceUnder` does not keep that distinction — an unnamed
-    // `--posture` leaves the superclass default in place, deliberately, so the
-    // binary rides the rollout schedule of the at_client it was built against.
-    // So the fallback made the enrolment mint under one answer while
-    // `authenticate()` declared the other, and once the shipped default became
-    // `pqReady` they stopped agreeing: an RSA-2048 APKAM key with an ML-DSA-65
-    // declaration, which at_chops refuses by size.
-    // The enroller rule, not the raw argument: an unnamed --posture means
-    // legacy here, and the algorithm has to agree with the posture the
-    // service was built at or at_chops is handed a key of one algorithm and a
-    // declaration of another.
+    // NOTE: the minted key's algorithm has to agree with the posture the
+    // enrolment is submitted under, or at_chops is handed a key of one
+    // algorithm and a declaration of another.
     signingAlgo:
         AuthCliArgs.postureForEnroller(argResults).posture.authenticationKeyAlgorithm,
-    // Null unless `--key-exchange` was named, and null means "the posture
-    // decides" — resolved in the service against the same preference this
-    // command's `signingAlgo` above is resolved against.
-    //
-    // It is a separate argument from `--posture` rather than another thing the
-    // posture implies because it answers a question the posture cannot see:
-    // whether the APPROVER on the other side conveys. A pq request carries no
-    // wrapped key, so against an approver that predates conveyance the
-    // enrollment is approved and then cannot decrypt anything. Nobody but the
-    // person running this command knows which approver will pick it up.
+    // NOTE: null means the posture decides. This is asked separately from the
+    // posture because a pq request carries no wrapped key, so an approver that
+    // cannot convey approves an enrollment that can decrypt nothing, and only
+    // the caller knows which approver will pick the request up.
     keyExchangeMode: AuthCliArgs.keyExchangeIn(argResults),
   );
 
@@ -896,26 +862,16 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
       atSign: atClient.getCurrentAtSign()!,
       enrollmentId: eId,
-      // ⛔ `?? ''` is not defensive padding — an ABSENT wrapped key is the
-      // signal that identifies a pq request, and it must reach approve()
-      // rather than crashing here. A pq enrollee sends nothing RSA-wrapped, so
-      // this field is legitimately missing; `AtBytes.fromString(null)` threw
-      // `type 'Null' is not a subtype of type 'String'` and neither approver
-      // could approve such a request at all.
-      //
-      // The value is then IGNORED on that path: EnrollmentServiceImpl.approve
-      // re-reads the pending record, sees an empty wrapped key beside an
-      // advertised keyPackage, mints its own symmetric key and swaps in
-      // EnrollmentRequestDecision.approvedWithMintedKey. Empty is what the
-      // functional harness passes, for the same reason.
+      // NOTE: `?? ''` is not defensive padding. An absent wrapped key is what
+      // identifies a pq request, so it has to reach approve(), which mints a
+      // symmetric key for itself and ignores this value.
       apkamSymmetricKey:
           AtBytes.fromString(er['encryptedAPKAMSymmetricKey'] ?? ''),
     );
 
-    // Approve through at_client's EnrollmentService, not at_auth directly:
-    // approving is also when this atSign's secrets are sealed to the new
-    // device's key package, so the direct call would approve an enrollment
-    // that can authenticate and decrypt nothing.
+    // NOTE: approving is also when this atSign's secrets are sealed to the new
+    // device's key package, so approving through at_auth alone leaves an
+    // enrollment that can authenticate and decrypt nothing.
     final response = await atClient.enrollmentService!.approve(decision);
 
     stdout.writeln('Server response: $response');
@@ -996,15 +952,14 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
       EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
         atSign: atClient.getCurrentAtSign()!,
         enrollmentId: eId,
-        // See the note on the interactive approve path above: an absent
-        // wrapped key IS a pq request, and approve() mints for itself.
+        // NOTE: an absent wrapped key is what identifies a pq request, so it
+        // has to reach approve(), which mints a symmetric key for itself.
         apkamSymmetricKey:
             AtBytes.fromString(er['encryptedAPKAMSymmetricKey'] ?? ''),
       );
 
-      // Approve through at_client's EnrollmentService, not at_auth directly:
-      // approving is also when this atSign's secrets are sealed to the new
-      // device's key package, so the direct call would approve an
+      // NOTE: approving is also when this atSign's secrets are sealed to the
+      // new device's key package, so approving through at_auth alone leaves an
       // enrollment that can authenticate and decrypt nothing.
       final response = await atClient.enrollmentService!.approve(decision);
       stdout.writeln('Approval successful.\n'
@@ -1175,11 +1130,8 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     throw ArgumentError('Invalid root server domain: $e');
   }
 
-  // The posture rides the constructor, not a cascade: it is final in
-  // AtClientPreference, and every axis it supplies is fixed at construction.
-  // This serves `onboard` and `enroll`, so an unnamed --posture resolves to
-  // legacy and says so — the CLI states its own default rather than taking
-  // whichever one the at_client it was compiled against happens to carry.
+  // NOTE: the posture is final in AtClientPreference, so it is fixed at
+  // construction rather than set in the cascade below.
   final enroller = AuthCliArgs.postureForEnroller(ar);
   if (enroller.notice != null) {
     stderr.writeln('${chalk.blue('[Information]')} ${enroller.notice}');

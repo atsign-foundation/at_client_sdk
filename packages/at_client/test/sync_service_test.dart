@@ -118,10 +118,10 @@ void main() async {
   group('setAndGetSkipDeletesUntil (initial-sync delete guard)', () {
     test('localCommitId == -1: persists and returns the server commit id',
         () async {
-      // ⚠️ The named argument belongs in the matcher. Without it the stub does
-      // not match, mocktail returns null, and the write fails — which the
-      // guard inside `setAndGetSkipDeletesUntil` swallows, so this test would
-      // report 100 and pass while persisting nothing. Hence the `verify`.
+      // NOTE: the putRequestOptions matcher must stay. Without it the stub
+      // does not match, the write fails, and the guard inside
+      // setAndGetSkipDeletesUntil swallows it — so this test would report 100
+      // and pass while persisting nothing. Hence the verify.
       when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any(),
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
@@ -146,7 +146,6 @@ void main() async {
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenThrow(AtKeyException('keystore unavailable'));
 
-      // Best-effort: this run still has its window in hand, so it proceeds.
       await expectLater(
           syncServiceImpl.setAndGetSkipDeletesUntil(-1, 100), completion(100),
           reason: 'an unwritable watermark must not be able to stop a new '
@@ -170,11 +169,6 @@ void main() async {
     });
   });
 
-  /// Its only caller runs it inside a `finally`, where anything thrown REPLACES
-  /// the exception already in flight from the sync — so a failure to write the
-  /// cursor would be reported in place of whatever actually broke the sync.
-  /// "Never throws" is therefore the property to hold it to; if it cannot
-  /// throw, it cannot mask.
   group('persistPullCursor (never throws, so it can never mask)', () {
     AtKey pullCursor() =>
         AtKey.local('lastreceivedservercommitid', '@alice').build();

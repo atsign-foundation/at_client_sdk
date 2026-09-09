@@ -6,20 +6,19 @@ description: >-
 version: 1.0.0
 
 # Deliberately NOT a workspace member, and deliberately WITHOUT
-# dependency_overrides. `packages/at_client` is in the root `workspace:` list,
-# so anything inside the workspace resolves at_client by path — this package
-# exists because the control arm has to run the version pub.dev ships.
+# dependency_overrides: `packages/at_client` is in the root `workspace:` list,
+# so anything inside the workspace resolves at_client by path, and the control
+# arm has to run the version pub.dev ships.
 #
-# `pubspec.lock` is committed. The whole point of a control is that it does not
-# move, and an unpinned transitive set would let a changed matrix result be
-# either a finding or a different at_commons.
+# `pubspec.lock` is committed: an unpinned transitive set would let a changed
+# matrix result be either a finding or a different at_commons.
 
 environment:
   sdk: ^3.6.0
 
 dependencies:
-  # Exact, not a caret range. The day 3.15.0 is published, this arm must keep
-  # measuring 3.14.0 until somebody deliberately moves it.
+  # Exact, not a caret range: this arm stays on the version it names until
+  # somebody deliberately moves it, whatever pub.dev publishes next.
   at_client: 3.14.0
   pq_matrix_scenario:
     path: ../scenario

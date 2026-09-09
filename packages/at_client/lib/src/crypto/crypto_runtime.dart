@@ -19,13 +19,8 @@ class CryptoRuntime {
   /// "reach them somehow", `disallowLegacyEncryption` says "never write
   /// legacy". The second wins.
   ///
-  /// It lives here rather than beside its first caller because it governs
-  /// **every** write path, not the `put` one it was built for. Until
-  /// 2026-08-27 a notification could not fall back at all — measured live, a
-  /// client with the preference set had its `put` succeed under legacy and its
-  /// `notify` come back `undelivered` for the same recipient and namespace,
-  /// carrying an exception that told the app to opt into the legacy path it
-  /// had already opted into.
+  /// Shared by **every** write path, so `put` and `notify` cannot answer
+  /// differently for the same recipient and namespace.
   static bool mayFallBackToLegacy(AtClientPreference? preference) =>
       (preference?.allowLegacyCryptoFallback ?? false) &&
       preference?.disallowLegacyEncryption != true;
@@ -40,21 +35,15 @@ class CryptoRuntime {
   /// carries none, and gives the provider its pre-write step
   /// ([prepareForPut]). Returns the resolved provider id.
   ///
-  /// A provider that has to write a record of its own — a key conveyance —
-  /// cannot do it from inside `encrypt`, which is called part-way through
-  /// building a verb builder; this runs while nothing is in flight.
-  ///
   /// [useRemoteAtServer] carries how this write is being routed, so a record
   /// the provider writes travels the same route as the write that will cite
   /// it. A notification passes `true` unconditionally: it is remote-only by
   /// construction, so a conveyance left to reach the atServer by sync would
   /// be announced before it exists.
   ///
-  /// [stampProviderId] exists for the one caller that must NOT stamp early:
-  /// the put pre-pass, whose catch may re-route the write to legacy when the
-  /// prepare step finds the recipient has no post-quantum key. A key already
-  /// stamped with the provider that then declined would claim a scheme its
-  /// value was never sealed under.
+  /// [stampProviderId] is false for a caller that may re-route the write to
+  /// legacy after the prepare step, because a key stamped with a provider that
+  /// then declined would claim a scheme its value was never sealed under.
   Future<String> prepareWrite(AtKey atKey,
       {String? requestedProviderId,
       bool? useRemoteAtServer,
@@ -71,11 +60,10 @@ class CryptoRuntime {
 
   /// Give the provider that will handle this write a chance to act *before* the
   /// pipeline starts — see [PreparesWrites]. Providers that do not implement it
-  /// are skipped, which is nearly all of them.
+  /// are skipped.
   ///
   /// [providerId] is resolved from the request options rather than from the
   /// key's `appMetadata`, because at this point nothing has stamped it yet.
-  ///
   /// [useRemoteAtServer] carries how this write is being routed, so a provider
   /// writing a record the write will depend on can route it the same way.
   Future<void> prepareForPut(AtKey atKey, String providerId,
@@ -92,10 +80,8 @@ class CryptoRuntime {
   /// default scheme, asked *before* anything is composed.
   ///
   /// A post-quantum share needs the recipient to have published a key for the
-  /// namespace, and there is no fallback that keeps it post-quantum. An app
-  /// that asks first can say "@bob hasn't enabled this yet" up front, instead
-  /// of discovering it when the send fails. Schemes with no such precondition —
-  /// legacy among them — answer true.
+  /// namespace, and there is no fallback that keeps it post-quantum. Schemes
+  /// with no such precondition — legacy among them — answer true.
   ///
   /// Throws if the answer cannot be established (an unreachable atServer is not
   /// the same as an unready recipient), and — like every other read of a peer's
@@ -111,12 +97,9 @@ class CryptoRuntime {
   /// The provider id a write will use, before anything has stamped the key.
   ///
   /// When [atKey] is supplied and the selected provider declines it
-  /// ([HandlesSelectively]), a *defaulted* id falls back to legacy — the nskey
-  /// data path is `(owner, namespace)`-scoped and cannot serve the SDK's
-  /// namespace-less internal keys, and writing something it could not read back
-  /// is worse than declining. An *explicitly requested* id does not fall back:
-  /// the caller asked for a scheme that cannot handle this key, and quietly
-  /// doing something else is how you end up thinking data is PQ when it is not.
+  /// ([HandlesSelectively]), a *defaulted* id falls back to legacy, while an
+  /// *explicitly requested* id throws instead — quietly writing under another
+  /// scheme is how an app comes to believe data is post-quantum when it is not.
   static String providerIdFor(AtClient atClient, String? requested,
       {AtKey? atKey}) {
     final config = CryptoConfig.forClient(atClient);
@@ -151,25 +134,18 @@ class CryptoRuntime {
   /// Throw if [providerId] is the legacy provider and [atClient] set
   /// [AtClientPreference.disallowLegacyEncryption].
   ///
-  /// Called at selection time ([providerIdFor]), where the error is actionable
-  /// and nothing is in flight, **and** again at encryption time. The second is
-  /// not redundant: it is the point every encrypting write passes through
-  /// however the id was chosen, so the guarantee does not depend on each call
-  /// path having remembered to ask.
+  /// Called both at selection time ([providerIdFor]), where the error is
+  /// actionable and nothing is in flight, and again at encryption time, which
+  /// is the point every encrypting write passes through however the id was
+  /// chosen.
   static void refuseLegacyIfDisallowed(
       AtClient atClient, AtKey atKey, String providerId,
       {required String because}) {
     if (providerId != legacyProviderId) return;
-    // A `local:` record is never transmitted, so the harvest-now-decrypt-later
-    // premise this flag exists for has no referent: there is no destination,
-    // and no ciphertext an adversary can capture to open later. What "legacy"
-    // resolves to for such a key is [SelfKeyEncryption] — AES-256-CTR under a
-    // key that never leaves the device — which is not Shor-vulnerable anyway.
-    //
-    // Deliberately keyed on `isLocal` and not on "lands on SelfKeyEncryption":
-    // a *synced* self key IS held by the atServer and so IS harvestable, and
-    // what to do about those belongs to the retirement of the legacy self and
-    // shared key material, not here.
+    // NOTE: keyed on `isLocal`, not on "resolves to SelfKeyEncryption". A
+    // `local:` record is never transmitted, so there is no ciphertext to
+    // harvest and open later; a *synced* self key is held by the atServer and
+    // is harvestable.
     if (atKey.isLocal) return;
     if (atClient.getPreferences()?.disallowLegacyEncryption != true) return;
     throw LegacyEncryptionRefusedException(atKey.key, because);

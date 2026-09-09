@@ -9,17 +9,12 @@ import 'package:test/test.dart';
 
 import 'test_utils/envelope_tamper.dart';
 
-/// The committed JWS vectors (`test/vectors/jws_envelope.json`) against
-/// our own verifier — the other half of the off-the-shelf check
-/// (`tool/verify_jws_vectors.mjs`, which hands the same bytes to an
-/// implementation that is not ours).
+/// The committed JWS vectors (`test/vectors/jws_envelope.json`) against our
+/// own verifier.
 ///
-/// The vectors are FIXED bytes: if our verifier drifts, this goes red even
-/// though sign→verify round trips would stay green (a round trip agrees with
-/// itself about any drift). And the RS256 arm re-signs and compares the full
-/// envelope byte-for-byte — PKCS#1 v1.5 is deterministic — so producer drift
-/// is caught too. ML-DSA signing is hedged (randomised), so that arm can
-/// only be verified, not re-signed.
+/// The vectors are fixed bytes, so verifier drift reddens this where a
+/// sign→verify round trip would stay green; ML-DSA signing is hedged, so that
+/// arm can only be verified, never re-signed.
 void main() {
   late Map<String, dynamic> vectors;
 

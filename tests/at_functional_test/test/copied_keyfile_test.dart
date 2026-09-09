@@ -19,24 +19,11 @@ import 'package:uuid/uuid.dart';
 
 import 'test_utils.dart';
 
-/// A second host running against a **copy** of an enrollment's keyfile.
+/// A second host running against a copy of an enrollment's keyfile.
 ///
-/// This is the case people actually hit — a `.atKeys` file copied to a laptop,
-/// a container image baked with one, a device restored from backup — and the
-/// design's answer is that it is not a second enrollment at all. Both hosts
-/// share one APKAM keypair and one key package, so they are one recipient: a
-/// secret sealed once opens on both, and revoking the enrollment cuts both,
-/// because there is only one thing to revoke.
-///
-/// That last part is why the identity assertions here matter more than they
-/// look. If a copied keyfile somehow presented as a distinct recipient, an
-/// operator revoking the enrollment they knew about would leave the copy
-/// running, and nothing in the system would report a second holder.
-///
-/// The copy is made by round-tripping through `toJson`/`fromJson` rather than
-/// by reusing the object, because that is what copying the file does — and a
-/// test that passed the same instance twice would be asserting that a variable
-/// equals itself.
+/// A copy is not a second enrollment: both hosts share one APKAM keypair and
+/// one key package, so a secret sealed once opens on both and one revoke cuts
+/// both.
 void main() {
   TestUtils.isolateStorage('copied_keyfile_test');
   late AtClient atClient;
@@ -78,8 +65,7 @@ void main() {
         },
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
         // pq is the key exchange; the enrollment still authenticates with an
-        // RSA-2048 APKAM keypair. This test is about a copied keyfile being
-        // the same enrollment, not about which algorithm signs.
+        // RSA-2048 APKAM keypair.
         signingAlgo: SigningAlgoType.rsa2048,
       ),
       AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
@@ -96,18 +82,12 @@ void main() {
             as Map)['keys'] as List)
         .single as Map)['kid'] as String;
 
-    // The copy: serialize and re-read, exactly as copying the file does.
-    //
-    // The atsign is set first because the in-flight AtKeys handed to
-    // metadataBuilder does not carry one yet, while a .atKeys file on disk
-    // always does — and it is the file that gets copied. Restoring it is
-    // fidelity to the scenario, not a convenience.
+    // The copy: serialize and re-read, exactly as copying the file does. The
+    // atsign is set first because the in-flight AtKeys handed to
+    // metadataBuilder carries none, while a .atKeys file on disk always does.
     originalKeys!.atsign ??= atSign.toAtsign();
     final copiedKeys = AtKeys.fromJson(originalKeys!.toJson());
 
-    // Same key package, so the same recipient. This is the assertion the rest
-    // of the row rests on — anything sealed to that kpid is sealed to both
-    // hosts at once, because there is only one kpid.
     final originalMaterial = keyPackageMaterial(originalKeys!);
     final copiedMaterial = keyPackageMaterial(copiedKeys);
 
@@ -123,27 +103,20 @@ void main() {
             'this compares two local objects and tells us nothing about what '
             'senders will seal to');
 
-    // The same id is not on its own enough to say a secret opens on both
-    // hosts: opening decapsulates with the KEM seed the keyfile carries, so
-    // an id that survived the round trip while the seed did not would leave
-    // the second host advertising a key package it cannot open anything with
-    // — and the failure would surface at the first secret conveyed to it,
-    // long after the copy was made.
     expect(copiedMaterial!.bytes.bytes, originalMaterial.bytes.bytes,
         reason: 'the copy must hold the same KEM private half, or "one '
             'recipient" is true of the advertisement and false of what can '
             'actually be opened');
 
-    // Same APKAM keypair, so the same enrollment — which is what makes
-    // revocation cover both hosts. There is one enrollment id, so an operator
-    // revoking it cannot miss the copy.
+    // Same APKAM keypair, so the same enrollment — one enrollment id is all an
+    // operator has to revoke.
     expect(copiedKeys.apkamPublicKey!.toString(),
         originalKeys!.apkamPublicKey!.toString());
     expect(copiedKeys.apkamPrivateKey!.toString(),
         originalKeys!.apkamPrivateKey!.toString());
 
-    // Proven on the wire rather than by comparing strings: the copy
-    // authenticates as that same enrollment against the live atServer.
+    // On the wire rather than by comparing strings: the copy authenticates as
+    // that same enrollment against the live atServer.
     final copyLookup =
         AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
           ..enrollmentId = response.enrollmentId
@@ -166,18 +139,14 @@ void main() {
       await copyLookup.close();
     }
 
-    // And the consequence that makes the identity matter: revoking the one
-    // enrollment cuts the copy too, without the operator having to know a
-    // copy exists. The successful authentication above is this arm's control
-    // — the same keyfile, the same enrollment id, over a connection built the
+    // Revoking the one enrollment cuts the copy too; the authentication above
+    // is this arm's control — the same keyfile over a connection built the
     // same way, refused only after the revoke.
     final revoked = await atClient.enrollmentService!.revoke(
         EnrollmentRequestDecision.revoked(response.enrollmentId, atSign));
-    // The acknowledgement, asserted rather than discarded: an `error:`
-    // response would throw out of the line above, but a `data:` response
-    // naming a different enrollment or another status would not — and then
-    // "the copy is refused" would be equally explained by the revoke never
-    // having taken.
+    // NOTE: assert the acknowledgement — a `data:` response naming another
+    // enrollment or status does not throw, and "the copy is refused" below
+    // would then be equally explained by the revoke never having taken.
     expect(revoked.enrollmentId, response.enrollmentId);
     expect(revoked.enrollStatus, EnrollmentStatus.revoked);
 
@@ -191,13 +160,9 @@ void main() {
                 copiedKeys.apkamPrivateKey!.toString()),
           ));
     try {
-      // Named, not `throwsA(anything)`: this is a live connection, so a reset,
-      // a timeout and a malformed command all throw too, and a catch-all
-      // would pass for the copy failing to reach the atServer at all.
-      // `AT0027 … is revoked` is what the atServer answers, and it is the
-      // only refusal this arm may pass on. Revocation is immediate — the
-      // non-error acknowledgement above means the credential is already
-      // unavailable — so there is nothing to poll for.
+      // NOTE: named rather than `throwsA(anything)` — on a live connection a
+      // reset, a timeout or a malformed command throws too, so only the
+      // atServer's `AT0027 … is revoked` may pass this arm.
       await expectLater(
           afterRevoke.pkamAuthenticate(enrollmentId: response.enrollmentId),
           throwsA(predicate(

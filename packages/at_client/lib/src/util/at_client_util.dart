@@ -13,11 +13,6 @@ class AtClientUtil {
   @Deprecated('use RemoteSecondary.findSecondaryUrl')
   static Future<String> findSecondary(
       String toAtSign, String rootDomain, int rootPort) async {
-    // at_lookup's own `findSecondary` static was itself a deprecated wrapper over this
-    // finder, and it could not return null - it built the address and called
-    // `toString()`. The null branch below was therefore already unreachable;
-    // an address that cannot be found arrives as a thrown exception, which is
-    // what this method's own callers already handle.
     final secondaryAddress =
         await CacheableSecondaryAddressFinder(rootDomain, rootPort)
             .findSecondary(toAtSign);
@@ -112,9 +107,6 @@ class AtClientUtil {
         metadataMap[AtConstants.sharedWithPublicKeyHash]);
     metadata.appMetadata =
         Metadata.decodeAppMetadata(metadataMap[AtConstants.appMetadata]);
-    // Without this, `immutable` reads back false for every record fetched from
-    // an atServer, whatever the server holds — so a client-side guard on it
-    // cannot distinguish an immutable record from an ordinary one.
     metadata.immutable = metadataMap[AtConstants.immutable] ?? false;
 
     return metadata;

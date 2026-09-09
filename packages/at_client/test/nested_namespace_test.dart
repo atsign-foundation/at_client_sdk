@@ -7,20 +7,16 @@ import 'test_utils/mocks.dart';
 
 /// The nskey data path over a **nested** namespace.
 ///
-/// Two things make this its own file. First, `AtKey.fromString` splits at the
-/// last dot, so `someid.d.c.b.a@alice` parses back as `key = someid.d.c.b`,
-/// `namespace = a` — a multi-segment namespace cannot be recovered from the wire
-/// string, and every path that re-parses a key (sync pull, both notify
-/// directions) sees the wrong split. Second, `AtCollection` composes
-/// sub-collection namespaces as `<subName>.<parentId>.<ns>` with a per-**item**
-/// id, so an exact-match nskey rule would need a keypair per item.
-///
-/// Resolution therefore walks up, and the records state their namespaces. Both
-/// facts are only visible with more than one segment, which is why the rest of
-/// the suite — and both live suites — never showed them.
+/// `AtKey.fromString` splits at the last dot, so `someid.d.c.b.a@alice` parses
+/// back as `key = someid.d.c.b`, `namespace = a`: a multi-segment namespace
+/// cannot be recovered from the wire string, and every path that re-parses a
+/// key sees the wrong split. `AtCollection` also composes sub-collection
+/// namespaces as `<subName>.<parentId>.<ns>` with a per-**item** id, so an
+/// exact-match nskey rule would need a keypair per item. Resolution therefore
+/// walks up, and the records state their own namespaces.
 void main() {
   const alice = '@alice';
-  // Multi-segment on purpose: with a single-segment app namespace the
+  // NOTE: multi-segment on purpose — with a single-segment app namespace the
   // last-dot split lands on it by coincidence and nothing is proven.
   const appNs = 'app_1.my_apps';
   const composedNs = '__rr.item123.app_1.my_apps';
@@ -37,8 +33,7 @@ void main() {
   late Map<String, ({AtKey key, String value})> store;
 
   /// A client holding the app-namespace keypair and nothing deeper — the
-  /// ordinary state after eager minting, which mints for the preference
-  /// namespace and the enrollment's `rw` namespaces, never per item.
+  /// ordinary state after eager minting, which never mints per item.
   ({
     NskeyProvider nskey,
     SymmetricAesGcmProvider data,
@@ -92,9 +87,8 @@ void main() {
       final asked = inv.positionalArguments[0] as AtKey;
       final held = store[asked.toString()];
       if (held == null) throw KeyNotFoundException(asked.toString());
-      // The reader re-parses the record from its wire string, which is the
-      // whole point: it is what sync and notify do, and it is where a
-      // multi-segment namespace is lost.
+      // NOTE: re-parsed from the wire on purpose — that is what sync and
+      // notify do, and where a multi-segment namespace is lost.
       final reparsed = AtKey.fromString(held.key.toString())
         ..metadata.appMetadata = held.key.metadata.appMetadata;
       await c.nskey.decrypt(context, reparsed, held.value);
@@ -123,11 +117,8 @@ void main() {
     expect(meta['ckNs'], appNs,
         reason: 'the CK lives where the nskey was found, one level up');
 
-    // One conveyance, addressed at the resolved namespace — not one per item.
     expect(store.keys.single, contains('.__ck.$appNs$alice'));
 
-    // The reader's view: parsed from the wire, so its own namespace field is
-    // the wrong split. It must still decrypt.
     final asRead = AtKey.fromString(valueKey.toString())
       ..metadata.appMetadata = valueKey.metadata.appMetadata;
     expect(asRead.namespace, 'my_apps',
@@ -142,10 +133,6 @@ void main() {
 
   test('a second client opens the conveyance and reads, both from the wire',
       () async {
-    // The case the writer's own cache hides: a client that has never seen the
-    // content key has to open the conveyance record — and it sees that record
-    // as the wire gives it, mis-split. Without the conveyance stating its own
-    // namespace it would look for the private under `my_apps` and find none.
     final writer = client();
     wireConveyance(writer);
     final valueKey = value('someid', composedNs);
@@ -189,8 +176,6 @@ void main() {
 
   test('a value cannot be relocated to another item under the same key',
       () async {
-    // The AAD binds the record's full address, so the shared CK does not make
-    // two sub-collection items interchangeable.
     final c = client();
     wireConveyance(c);
 

@@ -13,9 +13,8 @@ import 'utils/onboarding_service_impl_override.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
 
-/// Where at_onboarding_cli falls back to when `atKeysFilePath` is null. Only
-/// ever compared against — nothing in this package writes there, see
-/// [testKeysDir].
+/// Where at_onboarding_cli falls back to when `atKeysFilePath` is null; only
+/// ever compared against, never written to.
 final String defaultAtKeysDir = '${Platform.environment['HOME']}/.atsign/keys';
 Map<String, bool> keysCreatedMap = {};
 
@@ -41,18 +40,13 @@ void main() {
     await atLookup.close();
   }
 
-  /// ⛔ **`PqPosture.legacy`, named rather than defaulted.** Every test in this
-  /// group and the next drives a PRE-ENROLLMENT atSign: `_createKeys` installs
-  /// the flat `at_pkam_publickey` and nothing else, and `generateAtKeysFile`
-  /// writes the keyfile a legacy onboarding left behind. The SDK default is
-  /// `pqReady`, and a client built at any post-quantum posture now gives such
-  /// an atSign its first enrollment on its first start — rewriting the keyfile
-  /// and replacing the PKAM key these tests read back. That is the intended
-  /// rollout, and it is the wrong subject for a group about legacy behaviour.
-  ///
-  /// ⚠️ Named on EVERY call in both groups, not only the two that noticed. One
-  /// atSign in one process holds one posture, so a client cached by an earlier
-  /// test at another posture is refused outright rather than reused.
+  // NOTE: every test in this group and the next drives a pre-enrollment atSign
+  // — `_createKeys` installs the flat `at_pkam_publickey` and nothing else —
+  // so each names `PqPosture.legacy`. At a post-quantum posture the client
+  // gives such an atSign its first enrollment on its first start, rewriting
+  // the keyfile and replacing the PKAM key these tests read back. Name it on
+  // every call: one atSign in one process holds one posture, so a client
+  // cached at another posture is refused rather than reused.
   group('A group of tests to assert on authenticate functionality', () {
     test('A test to verify authentication is successful with .atKeys file',
         () async {
@@ -236,8 +230,7 @@ void main() {
         'A test to verify atSign is activated and .atKeys file is generated using activate_cli',
         () async {
       List<String> args = [
-        // Named, not inferred. The CLI used to insert 'onboard' whenever the
-        // first argument was an option; it no longer does, and refuses instead.
+        // The CLI infers no command from the options; it must be named.
         'onboard',
         '-a',
         atSign,
@@ -259,11 +252,9 @@ void main() {
 
       // Authenticate atSign with the .atKeys file generated via the activate_cli tool
       expect(await File(onboardingPreference.atKeysFilePath!).exists(), true);
-      // The activation above built a client for this atSign at the CLI's own
-      // default path, and it is still in the static cache. Authenticating now
-      // asks for `storage/hive/client` instead, which the cache cannot honour
-      // — evict, or this authenticates the activation's client and the
-      // preference below is decoration.
+      // NOTE: the activation left a client in the static cache, keyed without
+      // the storage path this preference asks for. Without the eviction the
+      // authenticate below reuses that client and the preference does nothing.
       await evictCachedAtClients();
       expect(await onboardingService.authenticate(), true);
     });
@@ -274,30 +265,15 @@ void main() {
   });
 }
 
-/// Waits for the client an onboard brought up to finish its startup tail,
-/// before a test deletes the `.atKeys` file that tail is still writing to.
+/// Waits for the client an onboard brought up to finish its startup tail —
+/// successfully or not — before a test deletes the `.atKeys` file that tail
+/// is still writing to.
 ///
-/// A post-quantum activation — which is what the default posture asks for,
-/// since `PqPosture.pqReady` authenticates with `mldsa65` — creates the
-/// atSign's signing root, and that needs an `AtClient`. Building one fires the
-/// PQ startup as an unawaited task, and its steps file key material through
-/// `AtKeysIo.update`. That call reads the keyfile and then writes it back, and
-/// the write recreates the file when it has gone in between: a delete landing
-/// mid-update is undone, and the next onboard then refuses at
-/// `AtFileUtil.ensureWritable` — the first statement of `onboard` — instead of
-/// reaching the activation check the test is asserting on. The tail and the
-/// test share one isolate, so every `await` between the two is a point where
-/// they can interleave.
-///
-/// Nothing here needs the tail to have *succeeded*: `startupComplete` answers
-/// "has the startup finished", and a step that failed is logged rather than
-/// thrown. All this waits for is that nothing is left writing to the keyfile.
-///
-/// `AtClient.ensureReachable` is the supported wait and is deliberately not
-/// used: it waits for one namespace's advertisement to be published, which is
-/// a single startup step, while what has to be quiet here is every step that
-/// touches the keyfile. Reaching the experimental `pqBootstrap` is the only
-/// way to ask the question this needs answered.
+/// A post-quantum activation runs its startup as an unawaited task that files
+/// key material through `AtKeysIo.update`, which reads the keyfile and writes
+/// it back, so a delete landing mid-update is undone and the next onboard
+/// refuses at `AtFileUtil.ensureWritable` instead of reaching the activation
+/// check under test.
 Future<void> quiesceStartupTail(AtOnboardingService service) async {
   final client = service.atClient;
   if (client is AtClientImpl) {
@@ -306,10 +282,10 @@ Future<void> quiesceStartupTail(AtOnboardingService service) async {
   }
 }
 
-/// [posture] is threaded because it is FINAL at construction — a test cannot
-/// set it on the returned object. Omitted, this is whatever the SDK currently
-/// defaults to, which is what the onboard and activate_cli groups want: they
-/// are about activation, and activation follows the shipped default.
+/// Builds the onboarding preference these tests share.
+///
+/// [posture] is a constructor argument because the field is final; omitted,
+/// the preference takes the SDK default.
 AtOnboardingPreference getPreferences(String atSign, {PqPosture? posture}) {
   atSign = AtUtils.fixAtSign(atSign);
   AtOnboardingPreference atOnboardingPreference = (posture == null

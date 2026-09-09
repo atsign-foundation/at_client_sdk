@@ -1,21 +1,16 @@
-/// Exact-string pins over every wire literal the PQ refactor will relocate.
+/// Exact-string pins over the PQ wire literals.
 ///
-/// Almost every existing test asserts these values *through the constants that
+/// Almost every other test asserts these values *through the constants that
 /// define them* — `expect(x, SomeClass.someConst)` — which stays green when the
 /// constant's VALUE changes. These pins assert the raw literals, so moving or
-/// centralising a definition (the refactor's whole business) cannot silently
-/// change what goes on the wire. On an intended wire change — there should be
-/// none — the pin's edit is the review.
+/// centralising a definition cannot silently change what goes on the wire. On
+/// an intended wire change — there should be none — the pin's edit is the
+/// review.
 ///
 /// Every pin here is **FROZEN FOREVER** — wire contract: record names, provider
 /// ids, payload field names, algorithm spellings, crypto bindings. Records
 /// already written on live atServers carry these; several are immutable or
 /// write-once. A red pin here means a wire break, full stop.
-///
-/// There was a second, softer class — `JWS-WILL-MOVE`, the signed-envelope
-/// wrapper that a 4.0 default flip was going to retire. It is gone with the
-/// wrapper: the envelope has one shape now, so its pins are frozen like
-/// everything else here.
 library;
 
 import 'dart:convert';
@@ -252,8 +247,6 @@ void main() {
     });
 
     test('the aliases carry the same value', () {
-      // Three names, one value: the const, the runtime alias, and the
-      // provider's own id getter. All three are read somewhere.
       expect(CryptoRuntime.legacyProviderId, 'legacy');
       expect(CryptoConfig.legacy().defaultProviderId, 'legacy');
     });
@@ -473,8 +466,8 @@ void main() {
 
     test('the envelope filters the atServer is asked to apply', () {
       // Not stored anywhere, but the atServer evaluates them, so their grammar
-      // is a contract with it — the alternation especially, which arrived when
-      // a client began answering at more than one address.
+      // is a contract with it — the alternation especially, which is how a
+      // client answers at more than one address.
       expect(
           EnvelopeAddressing.envelopeKey(
                   msgId: 'msg-1',
@@ -513,11 +506,10 @@ void main() {
 
     test('the answer filter matches answers to its request and nothing else',
         () {
-      // The pin above fixes the string; this fixes the MEANING, which is the
-      // half that was wrong. The old filter matched every envelope at an
-      // address, so a request written there by a third enrollment's fan-out
-      // read as "somebody already answered" and holders that could serve the
-      // request stood down.
+      // The pin above fixes the string; this fixes the MEANING. A filter that
+      // matched every envelope at an address would let a request written there
+      // by a third enrollment's fan-out read as "somebody already answered",
+      // and holders that could serve the request would stand down.
       final sweep =
           RegExp(EnvelopeAddressing.answerSweepRegexFor('req-1', 'kp-1', 'ns'));
       expect(sweep.hasMatch('m1.req-1.kp-1.__ssenv.ns@alice'), isTrue,
@@ -617,9 +609,9 @@ void main() {
     });
 
     test('an unrecognised status is carried through, not flattened', () {
-      // Until 2026-08-22 both of these read as `retired`, and the writers
-      // then emitted `retired` back - an older build rewriting a newer one's
-      // statement about a key the newer one owns.
+      // Flattening an unknown token to `retired` would have the writer emit
+      // `retired` back — an older build rewriting a newer one's statement
+      // about a key the newer one owns.
       expect(KeyEntryStatus.fromWire('verifyOnly'), 'verifyOnly',
           reason: 'a token this build has never heard of survives the read, '
               'so republishing the record does not weaken what it says');
@@ -628,9 +620,9 @@ void main() {
               'unknown, and stringifying keeps what was written visible '
               'without repairing it into a token that means something');
 
-      // Both decisions say no, which is the whole point of preserving it: an
+      // Both answers are no, which is the whole point of preserving it: an
       // unknown token is MORE restrictive than either value this build knows,
-      // never less. `retired` was permissive on the second of these, and a
+      // never less. `retired` is permissive on the second of these, and a
       // revoked key that goes on verifying is unrecoverable.
       for (final unknown in ['verifyOnly', 'revoked', '7', '']) {
         expect(KeyEntryStatus.offersNewOperations(KeyEntryStatus.of(unknown)),
@@ -674,11 +666,10 @@ void main() {
     });
 
     test('computeKid hashes the decoded key BYTES, not the base64 text', () {
-      // It used to be the other way round, and this pin is what recorded it:
-      // the kid was SHA-256 over the UTF-8 of the base64 STRING, which was an
-      // accident rather than a decision, and the nskey side hashed the bytes.
-      // Two derivations both described as "SHA-256 of the public key" agreed
-      // for nothing. One function now, over the material.
+      // One derivation over the material, shared with the nskey side: two
+      // functions both described as "SHA-256 of the public key" — one over the
+      // decoded bytes, one over the UTF-8 of the base64 STRING — agree for
+      // nothing.
       //
       // Pinned against a digest computed outside this tree:
       //   python3 -c "import hashlib,base64;
@@ -701,11 +692,6 @@ void main() {
           '"pub":"QUJD"}],'
           '"suites":["x-wing-rfc9180-v1"]}');
     });
-
-    // Two constants used to be pinned here against ever growing:
-    // `KeyPackage.legacySuites` and `legacyNskeySuites`, the values an absent
-    // `suites` field was read as. Both are gone — `suites` is required now, so
-    // nothing is read on a holder's behalf and there is no list to widen.
   });
 
   group('FROZEN FOREVER: algorithm spellings, wire and keyfile', () {
@@ -764,13 +750,10 @@ void main() {
     });
 
     test('ML-DSA-65 has ONE spelling on the wire: mldsa65', () {
-      // This test used to be "two spellings coexist, and BOTH are frozen":
-      // the root record said the hyphenated 'ml-dsa-65' (the
-      // key-ESTABLISHMENT vocabulary, which a signer has no part in) while
-      // the root link and everything pkam/enroll/keyfile said 'mldsa65'.
-      // Nothing was ever released carrying either, so "frozen" was the
-      // greenfield rule re-litigated; decisions 101 harmonised them when the
-      // root became an ordinary signing key advertised through `_apsk`.
+      // One spelling everywhere the signer is named: the root record, the root
+      // link, and every pkam/enroll/keyfile token. The hyphenated 'ml-dsa-65'
+      // belongs to the key-ESTABLISHMENT vocabulary, which a signer has no
+      // part in.
       expect(PqSigningRoot.rootKeyAlgo, SigningAlgoType.mldsa65);
       expect(PqSigningRoot.rootKeyAlgo.name, 'mldsa65');
       expect(PqSigningChain.rootLinkAlgo, 'mldsa65');
@@ -795,8 +778,8 @@ void main() {
     });
 
     test('the bare _apsk value round-trips untouched', () {
-      // The released form, and what a plain-legacy enrollment still
-      // publishes. Every deployed consumer base64-decodes it as an RSA key.
+      // The bare form a plain-legacy enrollment publishes. Every deployed
+      // consumer base64-decodes it as an RSA key.
       final parsed = parseApskValue('MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A');
 
       expect(parsed.signingAlgo, SigningAlgoType.rsa2048);

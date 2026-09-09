@@ -46,22 +46,15 @@ void main() {
   /// map backs every mocked client's put/get/scan/delete, modelling the
   /// post-sync state in which sender writes are visible to recipients.
   ///
-  /// Because one map serves as both the local store and the atServer, this
-  /// fixture **cannot** tell a local-first write from a remote-first one on
-  /// the read side. That distinction matters — a local-first envelope waits
-  /// for a sync cycle while its wake-up notify goes straight out, so a
-  /// sync-less recipient can remote-sweep before the value lands — so the
-  /// options each put was made with are recorded in [putOptions] and asserted
-  /// directly instead.
+  /// One map backs both stores, so a local-first write is indistinguishable
+  /// from a remote-first one on the read side; routing is asserted through
+  /// [putOptions] and [scanRoutedRemote] instead.
   late Map<String, String> remoteData;
 
-  /// Full key string -> the [PutRequestOptions] that wrote it, so routing can
-  /// be asserted where [remoteData] alone is blind to it.
+  /// Full key string -> the [PutRequestOptions] that wrote it.
   late Map<String, PutRequestOptions> putOptions;
 
-  /// One entry per envelope scan: whether it was routed to the atServer. Same
-  /// reason as [putOptions] — the merged store makes a local scan and a remote
-  /// one indistinguishable by their results.
+  /// One entry per envelope scan: whether it was routed to the atServer.
   late List<bool> scanRoutedRemote;
 
   /// Simulates the atServer fanning self-notifications to every one of the
@@ -189,9 +182,6 @@ void main() {
     final sharer =
         TestSharer(buildMockClient(enrollmentId, syncService: syncService))
           ..directory = directory
-          // Deterministic and instant: the jitter exists to spread real
-          // responders apart, and a test that waits for it is only testing
-          // Future.delayed. The suppression it enables is asserted directly.
           ..requestAnswerJitter = Duration.zero;
     sharer.loadApkamKeys =
         () async => PersistedApkamKeys.single(encSeed: base64Encode(seed));
@@ -256,15 +246,9 @@ void main() {
 
     test('the envelope key emits its exact layout, segment by segment',
         () async {
-      // Emitter pin: <msgId uuidV4>.<inReplyTo>.<recipientKpid>.__ssenv
-      // .<appNamespace>@<sender>. The layout is hand-built and hand-parsed at
-      // seven sites in this file's production twin plus two more in
-      // enrollment_symmetric_key.dart — the sibling tests match fragments,
-      // which would survive a segment being added, dropped or reordered.
-      //
-      // The inReplyTo segment is what an answer is correlated by, and it
-      // reads '0' here because sendEnvelope's own default is "answers
-      // nothing".
+      // NOTE: frozen wire layout, hand-built and hand-parsed at both ends —
+      // <msgId uuidV4>.<inReplyTo>.<recipientKpid>.__ssenv.<ns>@<sender>.
+      // An inReplyTo of '0' means the envelope answers nothing.
       await sharerA
           .sendEnvelope(sharerB.myKeyPackage, 'myapp', {'hello': 'bob'});
 
@@ -274,9 +258,6 @@ void main() {
           matches(RegExp(
               '^[0-9a-f-]{36}\\.0\\.${sharerB.kpid}\\.__ssenv\\.myapp@alice\$')));
 
-      // And an envelope that DOES answer something carries that id instead —
-      // the pair is the point, since a pin on one form alone would pass for
-      // an emitter that ignored the argument.
       remoteData.clear();
       await sharerA.sendEnvelope(
           sharerB.myKeyPackage, 'myapp', {'hello': 'bob'},
@@ -342,22 +323,13 @@ void main() {
     });
 
     test('refuses a peer that only opens the retired construction', () async {
-      // Same X-Wing key, so the only thing that differs between these two
-      // arms is what the package says it can open. That is the whole point of
-      // the `suites` field: without it a second construction could only be
-      // introduced by upgrading every reader first.
-      //
-      // This arm used to assert the opposite — that such a peer was sent
-      // `0x01`. Retiring that version makes the pair share no construction,
-      // and the contract for no overlap is a refusal rather than a downgrade:
-      // sealing this client's own preference anyway would hand the peer a
-      // record it cannot open, failing on ITS side as an opaque AEAD error.
+      // NOTE: same X-Wing key as sharerB, so the only difference between this
+      // peer and a supported one is what its `suites` field claims to open.
       final legacyPeer = KeyPackage.fromPayload({
         'v': 1,
         'createdAt': DateTime.now().toUtc().toIso8601String(),
         'keys': sharerB.myKeyPackage.keys.map((k) => k.toJson()).toList(),
-        // Declares only the retired construction, by its raw wire id: this
-        // build no longer has a constant for it, which is the point.
+        // A raw wire id: this build holds no constant for that construction.
         'suites': const ['x-wing-hpke-v1'],
       }, enrollmentId: sharerB.enrollmentId);
       expect(legacyPeer.suites, ['x-wing-hpke-v1'],
@@ -378,10 +350,6 @@ void main() {
 
     test('two ML-KEM-1024 clients exchange the no-hybrid construction',
         () async {
-      // The whole chain under the other KEM: mint, advertise, negotiate, seal,
-      // and open. Nothing here names X-Wing, and nothing here could pass by
-      // falling back to it — a 1568-byte ML-KEM key cannot produce a 0x02
-      // envelope, and an X-Wing decapsulation of a 0x03 one fails.
       TestSharer mlKemSharer(String enrollmentId, Uint8List seed) {
         final client = buildMockClient(enrollmentId);
         when(() => client.getPreferences()).thenReturn(AtClientPreference(
@@ -423,9 +391,6 @@ void main() {
 
     test('refuses rather than guessing when nothing is mutually supported',
         () async {
-      // Stamping this client's own preference anyway would hand the recipient
-      // an envelope it cannot unwrap, and the failure would surface on their
-      // side as an opaque AEAD error.
       final noOverlap = KeyPackage(
         enrollmentId: 'enroll-x',
         createdAt: DateTime.now().toUtc(),
@@ -439,28 +404,12 @@ void main() {
 
   /// FROZEN FOREVER: the domain-separation binding this substrate seals under.
   ///
-  /// The sibling pins for the `at/nskey` substrate live in
-  /// `wire_literal_pins_test.dart`; this one has to live here because it is fed
-  /// by real [PairwiseSecretSharing.sendEnvelope] output and the harness that
-  /// produces it is file-local.
-  ///
-  /// Why production-fed rather than a constant comparison: every other test in
-  /// this file seals and opens through the same production path, so it is
-  /// symmetric in `info` by construction and stays green under **any** shared
-  /// value — including the wrong one. `wire_literal_pins_test.dart`'s
-  /// `expect(utf8.decode(sealInfo), 'at_client/secret_sharing/v1')` pins the
-  /// constant but never touches a ciphertext, so it cannot see a call site that
-  /// stopped passing it. Deleting `info:` from every production seal and open
-  /// at once leaves both of those green. These arms are what go red.
-  ///
-  /// [enrollment_symmetric_key.dart] opens with this same constant, so its
-  /// substrate is covered here too: a convergence has to move the SEAL binding,
-  /// and the seal binding is what these arms read.
+  /// Read from real [PairwiseSecretSharing.sendEnvelope] output rather than
+  /// compared against the constant: a symmetric seal-and-open stays green
+  /// under any shared `info`, the wrong one included.
   group('FROZEN FOREVER: the pairwise seal binding, read from real output', () {
-    /// The exact bytes the two substrates bind, built as raw literals rather
-    /// than read from `PairwiseSecretSharing.sealInfo` or `NskeyProvider._info`
-    /// — reading the constants would follow them if one were changed to the
-    /// other, which is the bug these arms exist to catch.
+    /// The exact bytes each substrate binds, as raw literals: reading the
+    /// constants would follow one of them being changed into the other.
     final pairwiseInfo =
         Uint8List.fromList(utf8.encode('at_client/secret_sharing/v1'));
     final nskeyInfo =
@@ -478,9 +427,6 @@ void main() {
     }
 
     test('the two substrates bind different bytes', () {
-      // The arm that fails at the level the bug would occur. Without it, "both
-      // directions threw" is equally consistent with the two values having
-      // collapsed into one AND something else being broken.
       expect(pairwiseInfo, isNot(nskeyInfo));
     });
 
@@ -489,18 +435,13 @@ void main() {
       await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'hello': 'b'});
       final sealed = sentSealed(sharerB.kpid);
 
-      // Production negotiates 0x02 here, which derives through RFC 9180's
-      // key schedule — a structurally different function from 0x01's. Pinning
-      // the binding at 0x01 would pin the branch nothing emits.
       expect(sealed.first, 0x02);
 
       final kem = XWingPureDartAlgo.instance;
       final recipient = await kem.keyPairFromSeed(seedB);
 
-      // POSITIVE CONTROL, and it carries the argument: without a green arm
-      // here, the refusal below is equally explained by a wrong key, the wrong
-      // KEM or an unsupported version, and would pass for the absence of
-      // domain separation rather than its presence.
+      // NOTE: positive control — without a green open here the refusal below
+      // is equally explained by a wrong key, KEM or version.
       final opened =
           await pqOpen(kem, recipient.secretKey, sealed, info: pairwiseInfo);
       expect(jsonDecode(utf8.decode(opened))['hello'], 'b');
@@ -638,14 +579,13 @@ void main() {
   });
 
   group('a rotated client still answers at its superseded address', () {
-    // Nothing rotates an enc key yet, so the holding is built directly. That
-    // is the point of the ordering: the receive side has to work before a
-    // rotation can be turned on, or the first one loses a week of traffic.
+    // NOTE: no code path rotates an enc key, so the retired-plus-active
+    // holding is built directly here.
     late TestSharer rotated;
     late String oldKpid;
 
-    /// The key package a sender fetched BEFORE the rotation: the old key, and
-    /// nothing saying it is not current, because at the time it was.
+    /// A sender's view from before the rotation: the old key, with nothing
+    /// marking it superseded.
     late KeyPackage staleView;
 
     setUp(() async {
@@ -731,13 +671,9 @@ void main() {
 
     test('an envelope whose suite and key name different KEMs is skipped',
         () async {
-      // Newly possible now that a client can hold keys under more than one
-      // KEM. No guard in _consume covers it and none is wanted: at_chops maps
-      // the wrong-length secret key to a PqOpenException, which the open
-      // already catches, and the message names the mismatch. This pins that
-      // the envelope is skipped rather than crashing the sweep — the thing
-      // that would actually matter, since one throw here takes every
-      // remaining envelope in the batch with it.
+      // NOTE: deliberately unguarded — a wrong-length secret key surfaces as
+      // the PqOpenException the open already catches, so the sweep skips this
+      // envelope instead of losing the rest of the batch with it.
       final envelope = SecretEnvelope(
         fromKpid: sharerA.kpid,
         fromEnrollmentId: 'enroll-a',
@@ -835,9 +771,8 @@ void main() {
       await listeningB.register();
       final client = listeningB.atClient as MockAtClient;
       final notifications = client.notificationService;
-      // AtClientImpl's getters throw until AtClientManager sets the services,
-      // which it does after the client, and the PQ startup the client
-      // launches, already exist.
+      // NOTE: these getters throw until AtClientManager sets the services,
+      // which is after the client and its PQ startup already exist.
       when(() => client.syncService)
           .thenThrow(StateError('SyncService has not yet been set'));
       when(() => client.notificationService)
@@ -1021,12 +956,6 @@ void main() {
   });
 
   group('a member whose SUITES do not overlap is skipped, not fatal', () {
-    // The group above is the peer whose *algorithm* this client does not
-    // know: its kpid is null and the loop's own guard skips it. This one is
-    // the case that guard cannot see — a peer advertising a key this client
-    // understands, so kpid resolves, while advertising only suites it cannot
-    // produce. sendEnvelope refuses that peer with a StateError, and an
-    // unguarded await let one such member end the whole broadcast.
     setUp(() {
       directory.authorize('myapp', 'enroll-a');
       directory.authorize('myapp', 'enroll-b');
@@ -1036,8 +965,8 @@ void main() {
         keys: sharerB.myKeyPackage.keys,
         suites: const ['x-wing-hpke-v99'],
       );
-      // The discriminator: unlike enroll-future, this peer HAS a usable kpid,
-      // so it reaches sendEnvelope rather than being filtered before it.
+      // A usable kpid, so this peer reaches sendEnvelope rather than being
+      // filtered out ahead of it.
       expect(futureSuites.kpid, isNotNull);
       directory.seed('enroll-future-suites', futureSuites);
       directory.authorize('myapp', 'enroll-future-suites');
@@ -1062,13 +991,10 @@ void main() {
   });
 
   group('a broadcast identifies itself by enrollment, not by kpid', () {
-    // The roster serves enroll-a a package whose kpid is NOT the one this
-    // instance holds. That is not hypothetical: an instance whose enrollment
-    // changed under it (the self-retrofit) keeps its old keypair while the
-    // directory serves the new package, and once a package may advertise more
-    // than one key, KeyPackage.kpid is the *reader's* preferred key rather than
-    // an identity. A kpid comparison calls that entry a peer and sends to an
-    // address nobody is listening on; an enrollment comparison does not.
+    // NOTE: KeyPackage.kpid is the reader's preferred key, not an identity —
+    // an instance can hold a keypair the directory no longer serves, so a kpid
+    // comparison would call its own roster entry a peer and send to an address
+    // nobody listens on.
     late TestSharer staleSelf;
 
     setUp(() async {
@@ -1134,9 +1060,6 @@ void main() {
     });
 
     test('a second holder stays quiet once another has answered', () async {
-      // Two holders of the same secret, both authorized, both seeing the same
-      // request. Without suppression each seals and writes its own answer, so
-      // the cost of a pull scales with the number of holders.
       final sharerC = buildSharer('enroll-c', seedC)..directory = directory;
       directory.authorize('myapp', 'enroll-c');
       directory.seed('enroll-c', await sharerC.register());
@@ -1152,14 +1075,12 @@ void main() {
           2,
           reason: 'both holders are asked');
 
-      // B answers first.
       expect(await sharerB.sweepOnce(), 1);
       final afterB = remoteData.keys
           .where((k) => k.contains('.${sharerA.kpid}.__ssenv.'))
           .length;
       expect(afterB, 1);
 
-      // C sees the same request, observes B's answer, and adds nothing.
       expect(await sharerC.sweepOnce(), 1,
           reason: 'C still consumes the '
               'request envelope — it just declines to answer it');
@@ -1172,7 +1093,6 @@ void main() {
               'is about cost rather than correctness — N holders should not '
               'mean N seals and N writes');
 
-      // And the requester still gets the secret.
       expect(await sharerA.sweepOnce(), 1);
       expect(sharerA.secretStore.getSecret('myapp', '__rk.1.dupe')!.value,
           'KEYBYTES');
@@ -1181,14 +1101,10 @@ void main() {
     test(
         'another enrollment\'s request at my address does not silence my '
         'holders', () async {
-      // The measured defect, as a unit. Every envelope — request, answer and
-      // unsolicited push alike — is addressed to the recipient's kpid, and a
-      // request fans out one record per OTHER roster member. So C asking for
-      // something writes a record to A's address, and a holder deciding
-      // whether A had already been answered used to match it.
-      //
-      // The consequence was not a duplicate: it was silence. B stood down, A
-      // waited out its window, and nothing logged an error on either side.
+      // NOTE: every envelope — request, answer and push alike — is addressed
+      // to the recipient's kpid, and a request fans out one record per other
+      // roster member, so C's request also lands at A's address. Suppression
+      // that matched on the address alone silences A's holders outright.
       final sharerC = buildSharer('enroll-c', seedC)..directory = directory;
       directory.authorize('myapp', 'enroll-c');
       directory.seed('enroll-c', await sharerC.register());
@@ -1197,8 +1113,6 @@ void main() {
           Secret(namespace: 'myapp', name: '__rk.1.cross', value: 'KEYBYTES'),
           allowReservedName: true);
 
-      // C broadcasts its own request. That fans out to A as well as B, so a
-      // record now sits at A's address that is not an answer to anything.
       await sharerC
           .requestSecretsFromNamespace('myapp', names: ['__rk.1.cross']);
       final atAsAddress = remoteData.keys
@@ -1209,14 +1123,12 @@ void main() {
               'address. Without this the test proves nothing about '
               'suppression');
 
-      // A, which has NOT swept C's request, now asks for the same secret.
+      // A has NOT swept C's request, and now asks for the same secret.
       expect(
           await sharerA
               .requestSecretsFromNamespace('myapp', names: ['__rk.1.cross']),
           2);
 
-      // B must answer A. Before the correlation segment it saw C's request
-      // sitting at A's address and returned early.
       expect(await sharerB.sweepOnce(), greaterThan(0));
       await sharerA.sweepOnce();
       expect(sharerA.secretStore.getSecret('myapp', '__rk.1.cross')?.value,
@@ -1229,14 +1141,10 @@ void main() {
     test(
         'a holder answers a second request even with the first still '
         'unconsumed', () async {
-      // Suppression keyed on the address alone also made a requester's own
-      // unconsumed answer silence its next ask, for the whole envelope ttl.
-      //
-      // The anti-storm cap is neutralised deliberately: it is a SEPARATE
-      // guard, keyed on (requester, secret name) with a 5s floor, and at unit
-      // timescales it refuses the second answer on its own. Leaving it in
-      // place would make this test pass or fail for that reason instead, and
-      // say nothing about the correlation this test exists to check.
+      // NOTE: the anti-storm cap is neutralised deliberately. It is a
+      // separate guard, keyed on (requester, secret name) with a 5s floor, so
+      // at unit timescales it refuses the second answer on its own and this
+      // test would pass or fail for that reason instead of the correlation.
       sharerB.requestAnswerMinInterval = Duration.zero;
       await sharerB.secretStore.putSecret(
           Secret(namespace: 'myapp', name: '__rk.1.twice', value: 'KEYBYTES'),
@@ -1247,10 +1155,8 @@ void main() {
       expect(await sharerB.sweepOnce(), 1);
       // A deliberately does NOT sweep, so B's answer stays at A's address.
 
-      // Count ANSWERS, not sweeps. A request from A travels to B's address,
-      // so everything at A's address is an answer — whereas sweepOnce's
-      // return counts the request B consumes, and is >0 whether or not B
-      // answers it. That distinction is the whole test.
+      // NOTE: count answers, not sweeps — sweepOnce's return counts the
+      // request B consumes, and is >0 whether or not B answers it.
       int answersToA() => remoteData.keys
           .where((k) => k.contains('.${sharerA.kpid}.__ssenv.'))
           .length;
@@ -1310,8 +1216,6 @@ void main() {
           '${PairwiseSecretSharing.perEnrollmentSecretPrefix}pqSigningRoot';
 
       setUp(() async {
-        // B holds the atSign's signing-root private, primed into its store
-        // the way a privileged holder's start does.
         await sharerB.secretStore.putSecret(
             Secret(namespace: 'myapp', name: rootName, value: 'ROOTPRIVATE'),
             allowReservedName: true);
@@ -1319,8 +1223,8 @@ void main() {
 
       test('with no privilege resolver wired, the request is never answered',
           () async {
-        // sharerB is a bare mixin composition: perEnrollmentSecretRequestGate
-        // is null, which must FAIL CLOSED.
+        // sharerB is a bare mixin composition, so
+        // perEnrollmentSecretRequestGate is null and must fail closed.
         expect(
             await sharerA
                 .requestSecretsFromNamespace('myapp', names: [rootName]),
@@ -1354,15 +1258,11 @@ void main() {
       test(
           'a holder answers a named per-enrollment secret it filed under a '
           'DIFFERENT namespace', () async {
-        // The shape this exists for: the signing root is atSign-level and
-        // carries no namespace, so a holder files it under whichever app
-        // namespace it happens to run in. Two privileged enrollments of one
-        // atSign belonging to different apps would otherwise never match.
-        //
-        // A name the group's setUp did NOT seed under 'myapp', so the only
-        // copy in B's store is the other namespace's. Reusing the seeded name
-        // would let the ordinary namespace-scoped lookup answer and the test
-        // would pass with this widening reverted.
+        // NOTE: the signing root is atSign-level and carries no namespace, so
+        // a holder files it under whichever app namespace it runs in, and two
+        // privileged enrollments of one atSign in different apps would
+        // otherwise never match. This name is deliberately absent from
+        // 'myapp', so only the cross-namespace lookup can answer it.
         const crossName =
             '${PairwiseSecretSharing.perEnrollmentSecretPrefix}crossNsProbe';
         await sharerB.secretStore.putSecret(
@@ -1393,11 +1293,6 @@ void main() {
       test(
           'the cross-namespace reach is limited to NAMED per-enrollment '
           'secrets', () async {
-        // A boundary assertion rather than a differential: it holds before
-        // and after the widening, which is exactly the point — the widening
-        // must not have moved this line. An ordinary secret in another
-        // namespace stays out of reach, and so does a per-enrollment one that
-        // was not asked for by name.
         await sharerB.secretStore.putSecret(
             Secret(
                 namespace: 'someotherapp',
@@ -1425,10 +1320,9 @@ void main() {
 
       test('a handler failure after emission never re-emits the envelope',
           () async {
-        // The gate is the injection point: it runs inside the request
-        // handler, strictly after the envelope has been emitted on
-        // [receivedEnvelopes] — so a claim released on ITS failure would
-        // hand the same envelope to the next sweep for a second emission.
+        // NOTE: the gate runs inside the request handler, strictly after the
+        // envelope is emitted on [receivedEnvelopes], so a claim released on
+        // its failure would hand the same envelope to the next sweep.
         var gateCalls = 0;
         sharerB.perEnrollmentSecretRequestGate = (enrollmentId) async {
           gateCalls++;
@@ -1469,13 +1363,10 @@ void main() {
     });
 
     group('the revocation guard', () {
-      // What makes a rotation's exclusion hold. Excluding an enrollment from
-      // the push is worth nothing on its own — it can ask any other holder
-      // for the successor private and get it — so the serve side has to
-      // refuse it too. It does, and the thing it honours is the atServer's
-      // roster rather than any list a client remembers: `enroll:listns`
-      // returns approved enrollments only, so revocation is what every
-      // holder sees, including ones that never heard of the rotation.
+      // NOTE: excluding an enrollment from a push is worth nothing on its own
+      // — it can ask any other holder for the successor — so the serve side
+      // refuses it too, against the atServer roster rather than any list a
+      // client remembers.
       const successor = '__nskey.gen2';
 
       setUp(() async {
@@ -1485,17 +1376,16 @@ void main() {
       });
 
       test('a holder refuses a requester the roster no longer lists', () async {
-        // The request goes out while A is still approved — a revoked
-        // enrollment cannot authenticate, so the envelope it left behind is
-        // the realistic shape, not one it sends afterwards.
+        // The request goes out while A is still approved: a revoked
+        // enrollment cannot authenticate, so an envelope it left behind is
+        // the only shape it can have.
         expect(
             await sharerA
                 .requestSecretsFromNamespace('myapp', names: [successor]),
             1);
 
-        // After the request is written and before it is swept — so a serve
-        // path that consulted a roster cached from send time would answer,
-        // and this would pass for the wrong reason.
+        // Revoked after the request is written and before it is swept, so a
+        // serve path reading a roster cached at send time would still answer.
         directory.revoke('enroll-a');
 
         expect(await sharerB.sweepOnce(), 1,
@@ -1510,8 +1400,8 @@ void main() {
       });
 
       test('and serves the same request while it is still listed', () async {
-        // The control arm. Without it the refusal above is equally explained
-        // by a serve path that answers nobody.
+        // Control arm: without it the refusal above is equally explained by a
+        // serve path that answers nobody.
         await sharerA.requestSecretsFromNamespace('myapp', names: [successor]);
         expect(await sharerB.sweepOnce(), 1);
         expect(await sharerA.sweepOnce(), 1);
@@ -1522,28 +1412,16 @@ void main() {
       test(
           'a surviving child of a revoked parent is still answered, by the '
           'holder that just refused the parent', () async {
-        // The hazard, written as the behaviour it is rather than as a gap.
-        // A revoke names one enrollment id and reaches exactly that id.
-        // Nothing on this path knows what an enrollment spawned — there is no
-        // parent anywhere in what a holder can read — so the id below is a
-        // child only in the story, and the holder answering it could not tell
-        // the difference if it wanted to. That is the whole content: a lost
-        // keyfile is the case that can self-enroll before an operator gets to
-        // it, what it enrolls keeps `approved`, and roster membership is the
-        // only gate the serve path applies.
-        //
-        // The mutation that would redden the second half, named rather than
-        // applied: have the serve path refuse a requester whose roster entry
-        // names an excluded ancestor. The child would stop being served while
-        // the parent arm stayed green.
+        // NOTE: a revoke names one enrollment id and reaches exactly that id.
+        // Nothing a holder can read records what an enrollment spawned, so
+        // the id below is a child only in the story and roster membership is
+        // the only gate the serve path applies.
         final child = buildSharer('enroll-a-child', seedC);
         directory.authorize('myapp', 'enroll-a-child');
         directory.seed('enroll-a-child', await child.register());
 
         // Both ask while both are still approved, so the two arms differ in
-        // the revoke and in nothing else — and a revoked enrollment cannot
-        // authenticate, so an envelope it left behind is the realistic shape
-        // for the parent either way.
+        // the revoke and in nothing else.
         await sharerA.requestSecretsFromNamespace('myapp', names: [successor]);
         await child.requestSecretsFromNamespace('myapp', names: [successor]);
 
@@ -1595,34 +1473,28 @@ void main() {
   test(
       'a background sweep that cannot list envelopes is logged, not thrown '
       'into the zone', () async {
-    // `sweepOnce` opens with a getAtKeys over the wire, so it throws for
-    // reasons that have nothing to do with this client being wrong: a
-    // transient network failure, or a REVOKED enrollment, which throws on
-    // every trigger for as long as the client runs. The three background
-    // triggers cannot await it, and `unawaited` discards the error along with
-    // the future — so it became an unhandled async error in whatever zone the
-    // timer happened to fire in. Found exactly that way: after a revocation
-    // the doomed client's background sweep threw AT0027 into a functional test
-    // that had never called it, from a stack naming no assertion.
+    // NOTE: `sweepOnce` opens with a getAtKeys over the wire, so a transient
+    // network failure or a revoked enrollment makes it throw on every
+    // background trigger for as long as the client runs — and the triggers
+    // cannot await it, so `unawaited` would discard the error with the future
+    // into whatever zone the timer fired in.
     when(() => sharerA.atClient.getAtKeys(
             regex: any(named: 'regex'),
             showHiddenKeys: any(named: 'showHiddenKeys'),
             useRemoteAtServer: any(named: 'useRemoteAtServer')))
         .thenThrow(Exception('AT0027: enrollment_id: enroll-a is revoked'));
 
-    // The PERIODIC timer is the trigger, not a wake-up notification: a
-    // hand-built notification has to match the subscribe regex to reach the
-    // listener at all, and one that does not makes this test pass whether the
-    // fix is present or not. The timer needs no such luck — and startListening
-    // creates it BEFORE the awaited sweep that throws, so it is live even
-    // though that call fails.
+    // NOTE: the periodic timer is the trigger, not a wake-up notification — a
+    // hand-built notification that misses the subscribe regex would make this
+    // pass either way. startListening creates the timer before the awaited
+    // sweep that throws, so it is live even though that call fails.
     sharerA.sweepInterval = const Duration(milliseconds: 50);
 
     final unhandled = <Object>[];
     await runZonedGuarded(() async {
-      // startListening's OWN final sweep is awaited, and is meant to surface:
-      // a caller that asked to start watching should hear that it could not,
-      // rather than read it in a log. Only the background triggers swallow.
+      // Only the background triggers swallow: startListening's own final
+      // sweep is awaited, so a caller that asked to start watching hears that
+      // it could not.
       await expectLater(sharerA.startListening(), throwsA(isA<Exception>()));
       // Long enough for several timer ticks, each of which sweeps and throws.
       await Future<void>.delayed(const Duration(milliseconds: 400));

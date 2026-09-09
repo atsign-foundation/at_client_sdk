@@ -267,13 +267,6 @@ void main() {
       //       per atSign and never negotiated per message, which is the
       //       downgrade surface SP 800-227 4.6.3 warns about; what is
       //       negotiated is the construction (UC-A4.6).
-      // The clause itself, isolated: ONE sender, configured for ml-kem-1024
-      // throughout, sealing to two destinations that differ only in what they
-      // advertise. Added 2026-08-26 by the citation audit, which found that
-      // the two citations below co-vary the sender's configuration with the
-      // recipient's — both-X-Wing in one arm, both-ML-KEM in the other — so
-      // neither isolates "the recipient decides", and a regression routing by
-      // the sender's own algorithm would leave both green.
       provenIn('packages/at_client/test/nskey_kem_selection_test.dart',
           'the RECIPIENT advertisement decides the conveyance provider',
           proves: 'the differential the clause names, with the sender held '
@@ -316,11 +309,6 @@ void main() {
             'recipient can never open. "defaults to the hybrid" and "takes the '
             'no-hybrid option, and it resolves" pin the knob itself.',
       );
-      // The four below carry the corrected clause: a holder may offer several
-      // KEMs, and what removes the downgrade surface is that the offer is
-      // signed and the order reading it is fixed. Until 2026-08-27 this clause
-      // asserted the opposite — one KEM per generation — and rested the
-      // SP 800-227 argument on it.
       provenIn(
         'packages/at_client/test/key_package_minting_test.dart',
         'a second algorithm is minted, filed and advertised beside the first',
@@ -331,15 +319,10 @@ void main() {
             'reaches rather than a shape the format merely permits',
         clauses: ['a holder may advertise **more than one** KEM'],
       );
-      // ⛔ A citation was WITHDRAWN here on 2026-08-27, and must not be
-      // restored. It pinned the clause's old half — "an nskey generation
-      // carries the FIRST of that list, because a mint writes one key" — to
-      // nskey_minting_test.dart's raw-literal wire pin, whose keys list has
-      // length one. The clause now says a generation carries a key for every
-      // configured algorithm, so the same test proves the opposite of what the
-      // catalogue states. That test is untouched and is the right place for it:
-      // it goes red the day the mint stops taking the first algorithm, which is
-      // exactly the signal wanted.
+      // NOTE: nskey_minting_test.dart's raw-literal wire pin carries a
+      // one-entry keys list, so it must not be cited for the clause that a
+      // generation carries a key for every configured algorithm — it pins the
+      // mint taking the first algorithm, which is the opposite claim.
       provenIn(
         'packages/at_client/test/published_nskey_key_ring_test.dart',
         'a tampered advertisement is rejected',
@@ -401,9 +384,7 @@ void main() {
       //       candidates are narrowed to the chosen key's own KEM BEFORE the
       //       intersection, so a suite the key cannot decapsulate can never be
       //       selected. Unrecognised entries survive a parse, because the list
-      //       is the holder's statement about itself. This is what moved the
-      //       wire to a new construction with no readers-upgrade-first
-      //       migration.
+      //       is the holder's statement about itself.
       provenIn(
         'packages/at_client/test/pairwise_secret_sharing_test.dart',
         'negotiates RFC 9180 with a peer whose package says it opens it',

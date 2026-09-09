@@ -14,11 +14,9 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
 
-// The nskey data path is part of this library's public surface: it is what
-// `CryptoConfig.nskey` takes and returns, and what a caller catches and names.
-// Importing without re-exporting left `NskeyKeyRing` — a *required* parameter
-// on an exported factory — and `ContentKeyUnavailableException`, which the
-// CHANGELOG tells callers to catch, unreachable through the package barrel.
+// NOTE: the nskey data path is public surface — these types are what
+// `CryptoConfig.nskey` requires, returns and throws, so they have to reach the
+// package barrel.
 export 'package:at_client/src/crypto/nskey/ck_manager.dart';
 export 'package:at_client/src/crypto/nskey/content_key.dart';
 export 'package:at_client/src/crypto/nskey/content_key_eviction.dart';
@@ -26,10 +24,6 @@ export 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
 export 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 export 'package:at_client/src/crypto/nskey/nskey_provider.dart';
-// Of the wire vocabulary, only the advertisement builder and the provider
-// ids are public surface (readers address the published record; callers and
-// the CHANGELOG name providers by id). The record-name constants and the
-// other builders stay internal.
 export 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
         mlKemNskeyCryptoProviderId,
@@ -53,11 +47,9 @@ const String legacyCryptoProviderId = 'legacy';
 /// A write would have been encrypted with the legacy provider, and this client
 /// was told never to do that ([AtClientPreference.disallowLegacyEncryption]).
 ///
-/// Not a failure of anything: the data path worked, the destination is simply
-/// only reachable under a scheme a quantum computer will one day open. An app
-/// that catches this can tell its user the recipient cannot be reached
-/// securely — which is the whole point of asking to be refused rather than
-/// silently downgraded.
+/// The data path did not fail: the destination is simply only reachable under
+/// a scheme a quantum computer will one day open, so an app that catches this
+/// can tell its user the recipient cannot be reached securely.
 class LegacyEncryptionRefusedException extends AtEncryptionException {
   /// The record that would have been written legacy.
   final String key;
@@ -72,22 +64,16 @@ class LegacyEncryptionRefusedException extends AtEncryptionException {
 /// A record was sealed to an nskey generation whose private half this client
 /// does not hold **yet**.
 ///
-/// Distinguished from every other decryption failure by its own type, because
-/// it is the one that is worth waiting for: the private is conveyed to an
-/// enrollment at approval and filed asynchronously, so a value that arrives in
-/// that gap is openable moments later. Everything else that fails to decrypt is
-/// final. Matching on the message text instead would make the retry path
-/// silently stop working the day the wording changed.
-///
-/// Carries the three fields that identify what is missing, so a caller holding
-/// the record can match it against a private as that private is filed.
+/// Its own type because it is the one decryption failure worth retrying: the
+/// private is conveyed to an enrollment at approval and filed asynchronously,
+/// so a value that arrives in that gap is openable moments later. Everything
+/// else that fails to decrypt is final.
 class NskeyPrivateUnavailableException extends AtDecryptionException {
   /// The atSign whose namespace key this is — not necessarily the reader.
   final String owner;
   final String namespace;
 
-  /// The generation, which is what makes this specific: holding *a* private for
-  /// the namespace is not holding the one this record was sealed to.
+  /// Identifies the generation the record was sealed to.
   final String nskeyKid;
 
   NskeyPrivateUnavailableException(
@@ -102,27 +88,14 @@ typedef FiledNskeyPrivate = ({String owner, String namespace, String nskeyKid});
 
 /// Implemented by an [NskeyKeyRing] that can say when a private half arrives.
 ///
-/// A conveyed private is filed asynchronously — a client is handed back before
-/// its startup sweep has run — so a notification sealed to that generation can
-/// arrive before the key that opens it. Without a signal the only options are to
-/// drop it (data loss: the value is on the atServer for its ttl and the key is
-/// in hand milliseconds later) or to poll.
-///
-/// **The signal belongs at the FILING point, not at the arrival of the secret.**
-/// A start-time sweep consumes secrets from the inbox before any per-secret
-/// stream exists, so anything keyed on arrival misses exactly the privates that
-/// were already waiting — which is the common case, since the conveyance
-/// happens at approval and the client starts afterwards.
-///
-/// Separate from [NskeyKeyRing] so adding it breaks no existing
-/// `implements NskeyKeyRing` — a mock of that interface satisfies it through
-/// `noSuchMethod` and would return null into a non-nullable Stream at runtime,
-/// with the analyzer silent.
+/// A conveyed private is filed asynchronously, so a notification sealed to that
+/// generation can arrive before the key that opens it. The signal fires at the
+/// filing point rather than at the arrival of the secret, because a start-time
+/// sweep consumes waiting secrets before any per-secret stream exists.
 abstract interface class SignalsPrivateFiling {
   /// Fires once per private half filed, after it is stored and readable.
   ///
-  /// Broadcast, so a late subscriber misses earlier events: a caller that must
-  /// not miss one subscribes before it does the read that might come up empty.
+  /// Broadcast, so a late subscriber misses earlier events.
   Stream<FiledNskeyPrivate> get privatesFiled;
 }
 
@@ -141,28 +114,23 @@ class CryptoConfig {
 
   /// The namespace key material these providers share, when there is any.
   ///
-  /// Held here as well as inside the providers because it is the config, not
-  /// any one provider, that a non-crypto collaborator can reach: the
-  /// notification service subscribes to [SignalsPrivateFiling] on it to learn
-  /// when a private it was waiting for has been filed. Routing that through a
-  /// particular provider type would tie an unrelated subsystem to which
-  /// providers happen to be registered.
+  /// Held on the config as well as inside the providers so that a collaborator
+  /// outside the crypto path can reach it — [SignalsPrivateFiling] included —
+  /// without depending on which providers happen to be registered.
   final NskeyKeyRing? keyRing;
 
   /// Asked, on the write path, whether the content key for a destination and
   /// namespace should be replaced before anything else is written under it.
   ///
-  /// A closure rather than a duration so that an application can answer
-  /// differently for different namespaces, and differently from how it answers
-  /// for [nskeyRotationPolicy]. Defaults to [rotateCkAfterOneWeek].
+  /// Answered per namespace, and independently of [nskeyRotationPolicy].
+  /// Defaults to [rotateCkAfterOneWeek].
   final CkRotationPolicy ckRotationPolicy;
 
   /// Asked whether a namespace key this atSign owns should be replaced.
   ///
   /// Defaults to [neverRotateNskey]: replacing one costs a conveyance to every
   /// authorised enrollment and makes every peer cut a fresh content key, so
-  /// nothing in the SDK fires it on a schedule. An application that wants it on
-  /// a cadence says so here.
+  /// nothing in the SDK fires it on a schedule.
   final NskeyRotationPolicy nskeyRotationPolicy;
 
   const CryptoConfig({
@@ -184,42 +152,28 @@ class CryptoConfig {
   /// The distinguished "the app named nothing" marker — the default value of
   /// [AtClientPreference.crypto].
   ///
-  /// The field is non-nullable (published that way in 3.14.0), yet the SDK
-  /// must still tell "the app chose a config" from "the app left the
-  /// default", because the era default is the SDK's to move. This
-  /// distinguished const instance is that signal: [forClient] treats it as
-  /// "no choice" and resolves the per-client era default instead. Assigning
-  /// any other config — including [CryptoConfig.legacy] — is an explicit
-  /// opt-out.
-  ///
-  /// A caller that uses this instance *as* a config — reading
-  /// [defaultProviderId] or [providers] directly instead of resolving through
-  /// [forClient] — gets exactly [CryptoConfig.legacy]'s behaviour, which is
-  /// the value the published 3.14.0 default held, so code compiled against
-  /// that release sees no change.
+  /// The field is non-nullable, so this const instance is how the SDK tells
+  /// "the app chose a config" from "the app left the default": [forClient]
+  /// treats it as no choice and resolves the per-client era default instead,
+  /// while assigning any other config — [CryptoConfig.legacy] included — is an
+  /// explicit opt-out. Read directly rather than through [forClient], it
+  /// behaves exactly as [CryptoConfig.legacy].
   const factory CryptoConfig.eraDefault() = _EraDefaultSentinel;
 
   /// The nskey data path: application data under `at/symmetric/AES/GCM`, content
   /// keys conveyed by `at/nskey`, and the CK manager that mints one the first
   /// time a destination is written to.
   ///
-  /// The SDK assembles it because the parts are not independent — the manager
-  /// and both providers must share **one** [ContentKeyCache], or a conveyance
-  /// caches a CK the data provider then cannot find. Leaving that to callers
-  /// makes a silent misconfiguration easy and a working one boilerplate.
+  /// The SDK assembles the set because the parts are not independent — the
+  /// manager and both providers must share **one** [ContentKeyCache], or a
+  /// conveyance caches a CK the data provider then cannot find. A fresh set
+  /// comes back per call, and each atSign needs its own, because that cache is
+  /// per-atSign state.
   ///
-  /// Returns a **fresh set per call**, so give each atSign its own: these
-  /// providers hold per-atSign state, which is the case
-  /// [CryptoConfig.providers] documents as needing a per-atSign instance.
-  ///
-  /// [keyRing] supplies the namespace key material. Until the secret-sharing
-  /// substrate delivers it, that is a fixture.
-  ///
-  /// [sealsToKeyAlgorithms] is which of a destination's advertised KEM keys
-  /// this client will seal to — `AtClientPreference.sealsToKeyAlgorithms`.
-  /// Defaulted to everything this build can seal under, which refuses nobody,
-  /// because a caller assembling a config without a preference in hand has no
-  /// basis to narrow it.
+  /// [keyRing] supplies the namespace key material. [sealsToKeyAlgorithms] is
+  /// which of a destination's advertised KEM keys this client will seal to —
+  /// `AtClientPreference.sealsToKeyAlgorithms` — defaulted to everything this
+  /// build can seal under, which refuses nobody.
   factory CryptoConfig.nskey(
           {required NskeyKeyRing keyRing,
           List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
@@ -231,22 +185,11 @@ class CryptoConfig {
   /// The nskey providers wired for **reading**, with writes still going out
   /// under [legacyCryptoProviderId].
   ///
-  /// This is the final-3.x era shape, and the release sequence is what makes it
-  /// the right one: a 3.x client *reads* PQ records, mints and publishes its
-  /// namespace keys and its signing root, and still writes legacy; 4.x is what
-  /// makes PQ the write default. Registering the provider set without moving
-  /// [defaultProviderId] is exactly that sentence in code.
-  ///
-  /// The asymmetry is deliberate rather than transitional sloppiness. Reading
-  /// is *additive* — a record arrives stamped with the provider that wrote it,
+  /// Reading is *additive* — a record routes to the provider stamped on it,
   /// so a client that cannot resolve that id fails on data someone already
-  /// sent it. Writing is a fleet-wide commitment: the first client to write PQ
-  /// produces records every other client must already be able to read. So the
-  /// read side goes first, and the write side flips once.
-  ///
-  /// "First" rather than "everywhere": a posture whose `configuresPqProviders` is false
-  /// gets [CryptoConfig.legacy] instead of this set, and is exactly the client
-  /// that has not taken the read side yet.
+  /// sent it — while moving the write default is a fleet-wide commitment,
+  /// since the first client to write post-quantum produces records every
+  /// other client must already be able to read.
   factory CryptoConfig.readsNskeyWritesLegacy(
           {required NskeyKeyRing keyRing,
           List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
@@ -255,8 +198,7 @@ class CryptoConfig {
       _nskeySet(keyRing, legacyCryptoProviderId, sealsToKeyAlgorithms,
           ckRotationPolicy, nskeyRotationPolicy);
 
-  /// One [ContentKeyCache] shared by the manager and both providers — the
-  /// coupling [CryptoConfig.nskey] exists to enforce.
+  /// One [ContentKeyCache] shared by the manager and both providers.
   static CryptoConfig _nskeySet(
       NskeyKeyRing keyRing,
       String defaultProviderId,
@@ -270,12 +212,9 @@ class CryptoConfig {
       ckRotationPolicy: ckRotationPolicy,
       nskeyRotationPolicy: nskeyRotationPolicy,
       providers: [
-        // One conveyance provider per key-establishment algorithm, each with
-        // its own wire id. Reads route by the id the record carries, so a
-        // conveyance written under either KEM keeps opening; writes are routed
-        // by CkManager from the destination's advertised algorithm. Both are
-        // registered on every client regardless of what this atSign mints,
-        // because a *recipient's* KEM is the recipient's choice.
+        // NOTE: both KEM providers are registered on every client whatever
+        // this atSign mints — the KEM is the recipient's choice, and a read
+        // routes by the id the record carries.
         NskeyProvider(
             keyRing: keyRing, cache: cache, keyAlgo: SecretSharingAlgos.xWing),
         NskeyProvider(
@@ -297,28 +236,13 @@ class CryptoConfig {
   /// The config [atClient] encrypts under — the app's if it named one, else
   /// the SDK's default for this release.
   ///
-  /// **The resolution seam for the era default.** `AtClientPreference.crypto`
-  /// defaults to the [CryptoConfig.eraDefault] marker precisely so this
-  /// decision belongs to the SDK: an app that had to name a real config just
-  /// to have one would be pinned to whatever was current on the day it was
-  /// written, and would sit out the migration it was supposed to ride.
-  ///
-  /// The era default is chosen by the client's `PqPosture` at construction, on
-  /// the two axes that decide it: [CryptoConfig.legacy] wherever `configuresPqProviders`
-  /// is false, which is `PqPosture.legacy` and registers no post-quantum
-  /// provider at all; otherwise [CryptoConfig.readsNskeyWritesLegacy] wherever
-  /// `writesPqByDefault` is false, which is `PqPosture.pqReady`; and
-  /// [CryptoConfig.nskey] under `PqPosture.pqActive` — built once per client,
-  /// adopted by [adoptEraDefault], and looked up here. Moving the fleet default is
-  /// therefore an edit to the default posture and nowhere else. It stopped
-  /// being a constant because the nskey providers hold per-atSign state
-  /// (a [ContentKeyCache], a key ring bound to one client), so one shared
-  /// instance would let two atSigns read each other's cached content keys.
-  ///
-  /// A client that was never given an era default — one built before
-  /// [adoptEraDefault] ran, or a test double — falls back to
-  /// [CryptoConfig.legacy] rather than assembling a set here, because building
-  /// one needs the client and this is also called *during* construction.
+  /// The era default is chosen from the client's `PqPosture` at construction
+  /// and adopted by [adoptEraDefault]: [CryptoConfig.legacy] where
+  /// `configuresPqProviders` is false, [CryptoConfig.readsNskeyWritesLegacy]
+  /// where `writesPqByDefault` is false, and [CryptoConfig.nskey] otherwise.
+  /// A client that was never given one falls back to [CryptoConfig.legacy]
+  /// rather than assembling a set here, because building one needs the client
+  /// and this is also called *during* construction.
   static CryptoConfig forClient(AtClient? atClient) {
     final named = atClient?.getPreferences()?.crypto;
     if (named != null && named is! _EraDefaultSentinel) return named;
@@ -326,9 +250,8 @@ class CryptoConfig {
     return _eraDefaults.of(atClient) ?? const CryptoConfig.legacy();
   }
 
-  /// Per-client era defaults ([EraDefaults] — beside the client, never
-  /// resolved into the shared preference object). The registry lives in its
-  /// own type now; this value type just holds the production instance.
+  /// Per-client era defaults, held beside the client and never resolved into
+  /// the shared preference object.
   static final EraDefaults<CryptoConfig> _eraDefaults =
       EraDefaults<CryptoConfig>();
 
@@ -355,12 +278,8 @@ class CryptoConfig {
   /// The content-key cache this config's nskey providers share, or null for a
   /// config that has none (the legacy set, or a caller's own providers).
   ///
-  /// The cache is deliberately not a field: [_nskeySet] builds one and hands
-  /// it to both providers precisely so they cannot drift apart, and exposing a
-  /// settable copy alongside them would reintroduce the drift. This reads it
-  /// back from the provider that owns it, for the one caller that has to reach
-  /// it from outside — the sync listener that evicts a content key when its
-  /// conveyance record is deleted.
+  /// Read back from the provider that owns it rather than held as a field, so
+  /// that the providers built together cannot drift onto different caches.
   ContentKeyCache? get contentKeyCache {
     for (final provider in providers) {
       if (provider is NskeyProvider) return provider.cache;
@@ -370,11 +289,6 @@ class CryptoConfig {
 
   /// The [CkManager] the configured providers share, or null if this config
   /// has no nskey data path.
-  ///
-  /// Found the same way [contentKeyCache] is, and for the same reason: the
-  /// manager is built inside the provider set so that the set can share one,
-  /// and a client that has to reach it — to give it the namespace-key
-  /// replacement it cannot build for itself — has nowhere else to look.
   CkManager? get ckManager {
     for (final provider in providers) {
       if (provider is SymmetricAesGcmProvider) return provider.ckManager;
@@ -395,10 +309,8 @@ class CryptoConfig {
   }
 }
 
-/// The marker type behind [CryptoConfig.eraDefault]. A private subtype rather
-/// than a value comparison, so the check can never collide with a
-/// caller-built config: the only reachable instance is the canonical const
-/// one.
+/// The marker type behind [CryptoConfig.eraDefault], private so that the type
+/// check can never collide with a caller-built config.
 class _EraDefaultSentinel extends CryptoConfig {
   const _EraDefaultSentinel()
       : super(defaultProviderId: legacyCryptoProviderId);
@@ -468,10 +380,6 @@ abstract class CryptoProvider {
 /// from there without re-entering the pipeline on a half-built request. The SDK
 /// calls [prepareForWrite] ahead of that, with the fully resolved [AtKey] and
 /// nothing yet in flight.
-///
-/// This is a separate interface rather than a method on [CryptoProvider] so that
-/// adding it does not break existing `implements CryptoProvider` code. The SDK
-/// checks for it with `is` and skips providers that do not need it.
 abstract interface class PreparesWrites {
   /// Prepare for a write of [atKey].
   ///
@@ -489,17 +397,9 @@ abstract interface class PreparesWrites {
 
 /// Implemented by a [CryptoProvider] that can only handle some keys.
 ///
-/// `defaultProviderId` applies to *every* encrypted write, including the SDK's
-/// own internal keys — which carry no namespace. A scheme scoped to
-/// `(owner, namespace)`, as the nskey data path is, genuinely cannot serve those,
-/// and silently writing something it cannot read back is worse than declining.
-///
-/// A provider that declines is skipped **at write-time selection only**: a record
-/// already stamped with its id always routes back to it on read, because that is
-/// the only thing that can open it.
-///
-/// Separate from [CryptoProvider] so adding it breaks no existing
-/// `implements CryptoProvider`.
+/// A provider that declines is skipped **at write-time selection only**: a
+/// record already stamped with its id always routes back to it on read, because
+/// that is the only thing that can open it.
 abstract interface class HandlesSelectively {
   /// Whether this provider can encrypt [atKey].
   bool canHandle(AtKey atKey);
@@ -508,20 +408,15 @@ abstract interface class HandlesSelectively {
 /// Implemented by a [CryptoProvider] whose ability to encrypt for a destination
 /// depends on something that destination must have published.
 ///
-/// Without this, an app finds out only when the write fails — after the user
-/// has composed and sent. A scheme that seals to a recipient-published key has
-/// a real, answerable precondition, so it should be askable *before* the user
-/// starts rather than reported as an error afterwards.
-///
-/// Separate from [CryptoProvider] so adding it breaks no existing
-/// `implements CryptoProvider`.
+/// Sealing to a recipient-published key has an answerable precondition, so an
+/// app can ask before the user composes rather than reporting a failed write
+/// afterwards.
 abstract interface class ReportsReadiness {
   /// Whether this provider could encrypt for [atSign] in [namespace] right now.
   ///
-  /// Throws rather than answering false when the answer cannot be established —
+  /// Throws rather than answering false when the answer cannot be established:
   /// an unreachable atServer is not the same as a recipient who has not enabled
-  /// the namespace, and reporting one as the other would send an app down the
-  /// wrong path.
+  /// the namespace.
   Future<bool> isReadyFor(
       CryptoContext context, String atSign, String namespace);
 }

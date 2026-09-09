@@ -53,10 +53,6 @@ void main() {
       //       is the one exception: supersession never revokes it, so clones
       //       of the atSign's first enrollment's keyfile may each retrofit in
       //       their own time (UC-B1.2).
-      //
-      // ⚠️ Until 2026-09-07 this row was the grace-period variant, with a cap
-      //    re-armed by each sibling's first authentication; at_server #2797
-      //    replaced the cap with the revocation, and the row states that.
       provenIn(
         'tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart',
         'UC-B2.1/B2.2: the retrofit revokes its parent at first authentication',

@@ -4,19 +4,12 @@ import 'package:test/test.dart';
 
 /// Every hand-rolled metadata converter in this package, held to one standard.
 ///
-/// The sync PUSH once dropped `appMetadata` because its serializer was a
-/// duplicate of the canonical builder that had fallen behind it. Deleting that
-/// duplicate fixed one of five converters; these are the rest. A dropped field
-/// never fails loudly — the value simply is not there on the other side — so
-/// the only defence is a test that names the whole field set and checks each
-/// converter against it.
+/// A converter that drops a field fails silently — the value simply is not
+/// there on the other side — so each is checked against the whole field set.
 void main() {
-  /// The canonical field inventory: what `Metadata` says it has.
-  ///
-  /// Pinned deliberately. When a field is added to `Metadata` in at_commons,
-  /// this fails first, and fixing it means visiting each converter below and
-  /// deciding — on purpose — whether that field travels. That decision is the
-  /// thing the push-side drift never got.
+  // NOTE: pinned to what `Metadata` says it has. A field added to `Metadata`
+  // reddens this first, and fixing it means deciding, per converter below,
+  // whether that field travels.
   const knownMetadataFields = {
     'availableAt',
     'expiresAt',

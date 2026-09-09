@@ -18,12 +18,9 @@ class _Callbacks implements AtRpcCallbacks {
   Future<void> handleResponse(AtRpcResp response) async {}
 }
 
-/// The far side answers an RPC request with a notification back to the caller,
-/// so a caller that sends before its own notification listener is up can have
-/// the answer arrive with nothing subscribed to receive it — and nothing
-/// replays it, because a client that has never received a notification asks
-/// the atServer for no backlog. [AtRpc.sendRequest] therefore waits for
-/// [AtRpc.ready] before it sends.
+/// The far side answers over the caller's notification listener, and nothing
+/// replays an answer that arrives with nothing subscribed, so
+/// [AtRpc.sendRequest] waits for [AtRpc.ready] before it sends.
 void main() {
   AtSignLogger.root_level = 'shout';
 
@@ -74,9 +71,8 @@ void main() {
     final Future<void> sending =
         rpc.sendRequest(toAtSign: '@bob', request: AtRpcReq.create({'q': 1}));
 
-    // Pumped rather than merely checked: a `sendRequest` that did not wait
-    // would already have notified by the time an await of any kind completes,
-    // so an unpumped assertion passes for a version with no wait in it.
+    // NOTE: pumped rather than merely checked — an unpumped assertion passes
+    // for a `sendRequest` with no wait in it.
     await Future<void>.delayed(Duration(milliseconds: 50));
     expect(notified, isEmpty,
         reason: 'the far side answers over the notification listener, so '
@@ -94,12 +90,8 @@ void main() {
         .thenReturn(NotificationListenerState.listening);
     final AtRpc rpc = rpcFor(isClient: true);
 
-    // No event is ever pushed onto `states`, so this passes only because the
-    // current state is read as well as the stream. Waiting on the stream alone
-    // would hang here for the full timeout, since a listener that came up
-    // before this call emits nothing further. (The ORDER of those two — read
-    // after subscribing, not before — closes a race a single isolate cannot
-    // drive, so it is stated in the source and not pinned here.)
+    // NOTE: no event is ever pushed onto `states`, so this passes only because
+    // the current state is read as well as the stream.
     await rpc
         .sendRequest(toAtSign: '@bob', request: AtRpcReq.create({'q': 2}))
         .timeout(Duration(seconds: 5));
@@ -111,9 +103,8 @@ void main() {
         .thenReturn(NotificationListenerState.notConnected);
     final AtRpc rpc = rpcFor(isClient: false);
 
-    // isServer-only: it has no response listener, so there is nothing for it
-    // to wait on and waiting would deadlock it. The existing call sites are
-    // the specification here — this is the arm that must keep working.
+    // NOTE: isServer-only, so it has no response listener to wait on and
+    // waiting would deadlock it.
     await rpc
         .sendRequest(toAtSign: '@bob', request: AtRpcReq.create({'q': 3}))
         .timeout(Duration(seconds: 5));

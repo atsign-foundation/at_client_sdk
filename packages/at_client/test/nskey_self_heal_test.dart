@@ -18,14 +18,7 @@ class MockAtClient extends Mock implements AtClient {}
 class MockPairwiseSecretSharing extends Mock implements PairwiseSecretSharing {}
 
 /// The nskey-private self-heal: mint if none exists, else pull from any
-/// current holder (`decisions.md` 38).
-///
-/// What forced this: the only delivery of an nskey private was the mint-time
-/// push, so any enrollment created after the mint was stranded — it met
-/// `no nskey private held` with no request, no retry and no recovery, and
-/// that is the ordinary second device, not an edge case. These tests pin the
-/// two pull triggers (start-time sweep, on-miss read) and the shape of the
-/// ask, so the healing loop can never again silently lose its initiator.
+/// current holder.
 void main() {
   const atSign = '@alice';
   const namespace = 'app_1.my_apps';
@@ -40,7 +33,7 @@ void main() {
   setUpAll(() async => pair = await XWingKeyPair.generate());
 
   /// A client whose enrollment can name its namespaces via the preference —
-  /// the legacy-PKAM shape, which is most of the fleet during the rollout.
+  /// the legacy-PKAM shape.
   MockAtClient client() {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
@@ -238,8 +231,6 @@ void main() {
       when(() => lookUp.enrollmentId).thenReturn('enrollment-1');
       when(() => atClient.getPreferences())
           .thenReturn(AtClientPreference()..namespace = namespace);
-      // `AtClientManager` wires this only after construction returns, and the
-      // real getter throws until then.
       when(() => atClient.enrollmentService)
           .thenThrow(StateError('EnrollmentService has not yet been set'));
       return atClient;
@@ -327,12 +318,6 @@ void main() {
   group('the late joiner (NskeySeeding.conveyHeldPrivatesTo)', () {
     test('is pushed EVERY generation its approver holds, not just the live one',
         () async {
-      // UC-A5.1's late-joiner clause said "the current generation only" until
-      // 2026-08-27, and the approval path has never done that. The code is the
-      // specification here: forward secrecy for a namespace's past is the CK
-      // lever — deleting the superseded CK's conveyance record — so once that
-      // record is gone an old nskey private opens nothing, and withholding it
-      // from a joiner would cost a round trip and buy no secrecy.
       final rotated = await XWingKeyPair.generate();
       final superseded = nskeyKidOf(pair.publicKeyBytes);
       final live = nskeyKidOf(rotated.publicKeyBytes);
@@ -375,8 +360,6 @@ void main() {
 
     test('a namespace the joiner was not approved for is not conveyed',
         () async {
-      // The other side of "every generation": every is bounded by the
-      // approval, not by what the approver happens to hold.
       final held = await filing();
       await held.store(
           namespace: namespace,
@@ -420,11 +403,6 @@ void main() {
     });
 
     test('a later miss asks again once the cooldown has passed', () async {
-      // The burst collapse above is kept, but it used to be permanent: the
-      // set of asked-for generations never expired, so a client whose one
-      // broadcast reached only holders that could not serve it never asked
-      // again for the life of the instance — and anything waiting on that
-      // generation had nothing left that could rescue it.
       final atClient = client();
       final asked = <(String, String)>[];
       final ring = PublishedNskeyKeyRing(
@@ -445,8 +423,6 @@ void main() {
     });
 
     test('inside the cooldown a repeat miss still collapses', () async {
-      // The other arm, so the pair discriminates: this must stay at one even
-      // though the cooldown is now time-based rather than permanent.
       final atClient = client();
       final asked = <(String, String)>[];
       final ring = PublishedNskeyKeyRing(
@@ -504,16 +480,6 @@ void main() {
     });
 
     test('a ring built from the client alone asks too', () async {
-      // The shape an app gets from `PublishedNskeyKeyRing(client)`. Before
-      // this it could file what it minted and still never ask for what it was
-      // missing, so a record that arrived ahead of its key was permanently
-      // unreadable rather than merely early — the quieter half of the same
-      // defect the derived filing closed.
-      //
-      // Asserted through `asksOnReadMiss` rather than by counting substrate
-      // traffic: the derived ask reaches `AtClientSecretSharing.forClient`,
-      // and a unit fixture that stood one up would be testing the double.
-      // What has to be true here is that a miss has somewhere to go at all.
       final atClient = client();
       final io = InMemoryAtKeysIo();
       await io.write(atSign, AtKeys());
@@ -523,10 +489,6 @@ void main() {
     });
 
     test('and a client with no key source still asks nothing', () async {
-      // The control, and the reason the ask is gated on the filing rather than
-      // on the client: an answer with nowhere to land leaves the reply in the
-      // in-memory secret store, which repairs the client at its NEXT start and
-      // reads meanwhile as a heal that ran and did nothing.
       final atClient = client();
 
       expect(PublishedNskeyKeyRing(atClient).asksOnReadMiss, isFalse);
@@ -545,9 +507,7 @@ class _RecordingStoreSharing extends Fake implements PairwiseSecretSharing {
   final SecretStore secretStore = SecretStore();
 }
 
-/// Records which secrets were conveyed, by name — the question
-/// `conveyHeldPrivatesTo` is asked is *what did the joiner receive*, and a
-/// store-only double cannot answer it.
+/// Records which secrets were conveyed, by name.
 class _RecordingShares extends Fake implements PairwiseSecretSharing {
   final List<String> sharedNames = [];
 

@@ -21,15 +21,6 @@ void main() {
       //       privates missed during the offline window arrive by the PUSH
       //       primary path once a holder is online, with requestSecret as the
       //       backstop.
-      //
-      // The row splits, and both halves are now proven. Namespaced nskey
-      // privates arrive by the push path (NskeySeeding's conveyance). The
-      // headline half — requestSecret as the steady-state route to the root —
-      // had no initiator until PqSigningRoot.requestPrivateIfAbsent, and could
-      // not be driven until AtClientImpl's instance cache was keyed by
-      // (atSign, enrollmentId): before that every "enrollment" in a test was
-      // identical to the approver's client, so the request was a client asking
-      // itself over a connection carrying no enrollment id.
       provenIn(
         'tests/at_functional_test/test/signing_root_pull_two_enrollments_test.dart',
         'a holder answers another enrollment and the private is filed',
@@ -57,21 +48,11 @@ void main() {
       // THEN  it decrypts via the legacy provider (reads are universal) and
       //       providerId routes per value. PQ retrofit NEVER makes old data
       //       unreadable.
-      //
-      // The claim that matters here, and the one the cross-cutting
-      // "reads are universal" row does NOT make, is that routing is decided
-      // **per value** rather than per client or per namespace. After a retrofit
-      // a single namespace holds both eras at once — everything written before
-      // it and everything written after — so a client that picked one scheme
-      // for the namespace would be wrong about half of it.
       const namespace = 'app_1.my_apps';
       final legacy = _RecordingProvider(legacyCryptoProviderId);
       final pq = _RecordingProvider(symmetricAesGcmCryptoProviderId);
 
       final client = MockAtClient();
-      // The retrofitted client: writes the PQ scheme by default, and has NOT
-      // dropped the legacy provider — that retention is what "the legacy
-      // ENCRYPTION key is retained" means in config terms.
       client.getPreferences().crypto = CryptoConfig(
           defaultProviderId: symmetricAesGcmCryptoProviderId,
           providers: [legacy, pq]);
@@ -84,7 +65,6 @@ void main() {
         ..metadata =
             (Metadata()..appMetadata = AppMetadata(providerId: providerId));
 
-      // Two records, same atSign, same namespace, different eras.
       expect(
           await runtime.decryptForGet(
               record('written_in_2024', legacyCryptoProviderId), 'old'),
@@ -103,13 +83,9 @@ void main() {
               'routing is not per-value at all and one of these two passed by '
               'accident');
 
-      // And a NEW write in that same namespace still goes out PQ: retaining
-      // the ability to read the old era must not drag the write default back.
-      //
-      // Asked of `providerIdFor`, which is where the write scheme is actually
-      // decided. `encryptForPut` routes by the id already stamped on the key,
-      // so asking IT which scheme a new write gets would answer "legacy" for
-      // every unstamped key and prove nothing.
+      // NOTE: `providerIdFor` is where the scheme for a new write is decided.
+      // `encryptForPut` routes by the id already stamped on the key, so it
+      // answers "legacy" for every unstamped key and proves nothing here.
       final fresh = AtKey()
         ..key = 'written_next'
         ..namespace = namespace
@@ -215,13 +191,12 @@ void main() {
       // WHEN  the same enrollment asks to rotate n.
       // THEN  refused, naming the cooldown; accepted once the ttl lapses.
       //
-      // ⚠️ Cited live and NOT from a unit test on purpose. The interlock is
-      // the atServer refusing a second create of an immutable record; a mocked
-      // executeVerb accepts the second take, so every unit test of this path
-      // is green whether or not the cooldown exists.
-      // Cited up to the apostrophe: provenIn matches raw source, and the test
-      // is named with an escaped `\'`, so the full name is not the string in
-      // the file. The prefix identifies it uniquely.
+      // NOTE: cited live, not from a unit test: the interlock is the atServer
+      // refusing a second create of an immutable record, and a mocked
+      // executeVerb accepts the second take, so a unit test of this path is
+      // green whether or not the cooldown exists. The citation stops at the
+      // apostrophe because provenIn matches raw source and the cited test's
+      // name is written with an escaped quote.
       provenIn(
         'tests/at_functional_test/test/nskey_rotation_live_test.dart',
         'a rotation inside the mint lock',
@@ -235,13 +210,6 @@ void main() {
         ],
       );
 
-      // The same clause's other half, and it is a different act: the two
-      // above are what `rotate` does, these are what
-      // `revokeEnrollmentAndRotate` does around a rotate that refused. It
-      // belongs in a unit test rather than beside them because the failing
-      // namespace has to be one that CANNOT rotate on demand, and driving a
-      // second namespace into that state live would mean minting it and then
-      // waiting the cooldown out a second time to prove nothing extra.
       provenIn(
         'packages/at_client/test/nskey_rotation_test.dart',
         'one namespace failing to rotate does not abandon the rest',
@@ -400,8 +368,8 @@ void main() {
   });
 }
 
-/// Names itself in its output, so a routing assertion cannot pass by reaching
-/// the wrong provider and getting a plausible-looking string back.
+/// A [CryptoProvider] that names itself in its output and counts its decrypts,
+/// so a routing assertion cannot pass by reaching the wrong provider.
 ///
 /// Extends rather than implements: a member added to [CryptoProvider] with a
 /// body reaches a subclass, while an implementer silently loses it and fails

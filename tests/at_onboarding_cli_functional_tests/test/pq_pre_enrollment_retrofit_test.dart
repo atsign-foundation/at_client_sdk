@@ -12,34 +12,16 @@ import 'utils/at_client_cache.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
 
-/// A **legacy** atSign — one whose keyfile names no enrollment — gives itself
-/// an enrollment of its own when its app names a post-quantum posture.
+/// A legacy atSign — one whose keyfile names no enrollment — gives itself an
+/// enrollment of its own when its app names a post-quantum posture.
 ///
-/// Such a client authenticates with a bare `pkam:`, naming no enrollment id.
-/// The atServer answers that with the enrollment it calls `primary`: the
-/// credential a legacy onboarding left at `privatekey:at_pkam_publickey` is
-/// migrated into a real, approved, unexpiring enrollment holding `*:rw` and
-/// `__manage:rw`, and the flat key is deleted. So the connection is not
-/// unidentified — it carries `primary` — while the CLIENT still believes it
-/// holds no enrollment, because nothing in its keyfile names one.
+/// Every assertion reads `enroll:list` over a connection this file opens
+/// itself, because the client's own `enrollmentId` is only what it believes.
 ///
-/// An `enroll:request` from that connection is therefore a retrofit of
-/// `primary`: the atServer approves it outright, the successor carries
-/// `primary`'s grants exactly, and its record names what it replaced in
-/// `retrofitPredecessorEnrollmentId`. The client's own self-approval never
-/// runs, because it fires only on a `pending` answer.
-///
-/// **Everything here is asserted against the atServer, over a connection this
-/// file opens itself with the flat key.** The client's own `enrollmentId` is
-/// its belief; `enroll:list` is what the atServer actually holds.
-///
-/// ⚠️ **One-shot, destructive server state.** CRAM authentication works once
-/// per atSign per virtualenv, and the retrofit arm creates an enrollment that
-/// cannot be un-created — an atSign that has run this holds a successor for
-/// ever, and a successor may not itself be retrofitted. So `@barbara🛠` and `@jagan🛠` are this file's alone; both
-/// were checked to be claimed by nothing else in the repo before they were
-/// chosen, and borrowing an atSign another file uses would break that file
-/// rather than this one.
+/// ⚠️ One-shot, destructive server state: CRAM authentication works once per
+/// atSign per virtualenv and a retrofit cannot be un-created, so `@barbara🛠`
+/// and `@jagan🛠` are this file's alone — borrowing an atSign another file
+/// uses breaks that file rather than this one.
 void main() {
   AtSignLogger.root_level = 'WARNING';
 
@@ -47,20 +29,14 @@ void main() {
   final String staysPut = AtUtils.fixAtSign('@jagan🛠');
   const rootDomain = 'vip.ve.atsign.zone';
 
-  /// Leaves [atSign] in the state a legacy onboarding left behind: its
-  /// encryption public key published, and one credential — the legacy PKAM
-  /// keypair — reachable by a bare `pkam:` and by nothing else.
-  ///
-  /// The write below installs that credential. On a server in testing mode it
-  /// does not land at `privatekey:at_pkam_publickey` at all: the value becomes
-  /// `primary`'s, minted here if absent. So the roster holds exactly one
-  /// record from this point on, before any client has authenticated.
+  /// Leaves [atSign] holding one credential — the legacy PKAM keypair,
+  /// reachable by a bare `pkam:` and by nothing else — and its encryption
+  /// public key published.
   ///
   /// ⛔ Deliberately NOT `AtOnboardingServiceImpl.onboard()`, which sends
-  /// `enroll:request` on the CRAM connection and so creates a SECOND, ordinary
-  /// enrollment whose id the keyfile would carry. The state under test is a
-  /// keyfile that names none, and using onboard would make this file assert
-  /// the ordinary APKAM retrofit instead.
+  /// `enroll:request` on the CRAM connection and so creates a second, ordinary
+  /// enrollment whose id the keyfile would carry; the state under test is a
+  /// keyfile that names none.
   Future<void> makeLegacyAtSign(String atSign) async {
     final atLookup = AtLookupImpl(atSign, rootDomain, virtualenvRootPort);
     await atLookup.cramAuthenticate(at_demos.cramKeyMap[atSign]!);
@@ -84,10 +60,6 @@ void main() {
   /// `pkam:` connection — which the atServer admits as `primary`, and
   /// `primary` holds `__manage:rw`, so the answer is the whole roster rather
   /// than one record.
-  ///
-  /// Deliberately a connection this file opens rather than the client under
-  /// test: the client's `enrollmentId` is its belief, and this is what the
-  /// atServer holds.
   Future<Map<String, dynamic>> enrollmentsOf(String atSign) async {
     final atLookup = AtLookupImpl(atSign, rootDomain, virtualenvRootPort);
     expect(await atLookup.authenticate(at_demos.pkamPrivateKeyMap[atSign]),
@@ -157,9 +129,6 @@ void main() {
 
   test('a pre-enrollment atSign at a post-quantum posture gives itself its '
       'first enrollment', () async {
-    // The precondition, established rather than assumed. The virtualenv
-    // pre-provisions demo atSigns, so what this atSign's roster holds is a
-    // claim that has to be read before anything runs.
     expect(await enrollmentsOf(retrofits), hasLength(1),
         reason: 'this file is about an atSign whose only credential is the '
             'legacy one the atServer keeps as `primary`; a second record here '
@@ -176,7 +145,6 @@ void main() {
         reason: 'the client came up on an enrollment it created for itself; '
             'a null id here is the state commit 7 removes');
 
-    // What the atServer holds, not what the client believes.
     final roster = await enrollmentsOf(retrofits);
     expect(roster, hasLength(2),
         reason: 'the retrofit ADDS a successor and leaves its predecessor '
@@ -207,9 +175,6 @@ void main() {
         reason: 'the enrollment the client authenticates as is one the '
             'atServer holds, not a second one it left behind');
 
-    // The legacy credential SURVIVES its own retrofit. A retrofit caps its
-    // predecessor only when the predecessor is not a root, and primary is one,
-    // so nothing expires it. Retiring it stays the owner's explicit act.
     final legacy = AtLookupImpl(retrofits, rootDomain, virtualenvRootPort);
     expect(
         await legacy.authenticate(at_demos.pkamPrivateKeyMap[retrofits]), true,
@@ -219,8 +184,6 @@ void main() {
     await legacy.close();
   }, timeout: Timeout(Duration(minutes: 4)));
 
-  /// The control, and it can go red while every assertion above stays green:
-  /// the same fixture, the same shape of atSign, only the posture differs.
   test('the same atSign shape at a legacy posture does not', () async {
     expect(await enrollmentsOf(staysPut), hasLength(1));
 

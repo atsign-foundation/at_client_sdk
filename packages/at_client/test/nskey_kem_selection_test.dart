@@ -9,10 +9,6 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
 /// The nskey conveyance path under both key-establishment algorithms.
-///
-/// Everything else in the nskey suite runs on the hybrid, which is the
-/// default, so without this the ML-KEM arm would be entirely unexercised — the
-/// collapsed-arm case where a whole option is "supported" and never once run.
 void main() {
   const owner = '@alice';
   const namespace = 'myapp';
@@ -81,10 +77,6 @@ void main() {
 
     test('and refuses an owner that only opens the retired construction',
         () async {
-      // The arm that makes the one above safe. Same key, same KEM — the only
-      // difference is what the advertisement says it can open, which is what a
-      // `suites` list exists to carry. Without this the version could only be
-      // raised by upgrading every reader first.
       final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
       final pair = await kem.keyPairFromSeed(kem.newSeed());
       final ring = _FixedRing(
@@ -101,33 +93,14 @@ void main() {
       final ck = ContentKey(Uint8List(32));
       final atKey = conveyanceKey();
 
-      // This arm used to assert the conveyance went out at `0x01`. That
-      // version is retired, so the two now share no construction at all, and
-      // the contract for that is a refusal: an owner sent a construction it
-      // never claimed would fail on ITS side as an AEAD error naming nothing.
       await expectLater(provider.encrypt(context, atKey, ck.toBase64()),
           throwsA(isA<AtEncryptionException>()));
     });
 
-    /// UC-A4.5's central clause, and the arm the row's own citations do not
-    /// have: *"Alice's configuration decides what `@alice` is a **recipient**
-    /// for and nothing about who she can send to."*
-    ///
-    /// ⚠️ **The two arms that used to stand for this co-varied.** One had
-    /// sender and recipient both on X-Wing, the other both on ML-KEM, so they
-    /// differed in the recipient's advertised KEM *and* in the sender's
-    /// configuration together — and a regression that routed by the sender's
-    /// own algorithm would have left both green, surfacing only as
-    /// `NskeyProvider.encrypt`'s guard throwing. That is the outcome the row
-    /// rejects in its own words: "refusing would protect nothing."
-    ///
-    /// Here the sender is configured for **ml-kem-1024 in both arms** and
-    /// nothing about it changes; the only thing that varies is what the
-    /// destination advertises. `CkManager` stamps the conveyance write with
-    /// `nskeyProviderIdFor(advertised.alg)`, so that id is where the routing
-    /// decision becomes observable.
-    // ⚠️ No apostrophe in this name, deliberately: `provenIn` matches the raw
-    // source with `source.contains("'$testName")`, so an escaped `\'` in the
+    /// UC-A4.5's central clause: *"Alice's configuration decides what `@alice`
+    /// is a **recipient** for and nothing about who she can send to."*
+    // NOTE: no apostrophe in this test name — `provenIn` matches the raw source
+    // with `source.contains("'$testName")`, so an escaped `\'` in the
     // declaration never matches the runtime string a citation carries.
     test(
         'the RECIPIENT advertisement decides the conveyance provider, '
@@ -148,9 +121,6 @@ void main() {
             keyAlgo: SecretSharingAlgos.mlKem1024);
 
       final cache = ContentKeyCache();
-      // One provider per KEM, and the put routes to whichever id the manager
-      // stamped — the production shape. A single-provider fake would refuse
-      // the second arm at its own guard and prove nothing about routing.
       final providers = {
         for (final algo in SecretSharingAlgos.keyAlgos)
           nskeyProviderIdFor(algo)!:
@@ -158,11 +128,9 @@ void main() {
       };
 
       final stamped = <String?>[];
-      // ⛔ The varied thing must be the RECIPIENT, so the sender is pinned to
-      // ml-kem-1024 for both — a configuration that disagrees with @bob.
-      // Via the constructor, not `when(() => …getPreferences())`: that is a
-      // concrete override on this mock and stubbing it silently does nothing,
-      // which the mock's own dartdoc says.
+      // NOTE: the send posture goes in through the constructor —
+      // `getPreferences()` is a concrete override on this mock, so stubbing it
+      // silently does nothing.
       final sender = MockAtClient(
           keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024]);
       when(() => sender.getCurrentAtSign()).thenReturn(owner);
@@ -236,10 +204,6 @@ void main() {
 
     test('a provider will not seal to the other KEM\'s advertisement',
         () async {
-      // Routing sends each conveyance to the provider matching the advertised
-      // algorithm. If one is addressed directly to the wrong provider it must
-      // refuse: encapsulating an ML-KEM key under X-Wing produces a record
-      // whose owner can never open it, and nothing downstream would say so.
       final (_, mlKemRing) = await providerFor(SecretSharingAlgos.mlKem1024);
       final wrongProvider = NskeyProvider(
           keyRing: mlKemRing,
@@ -256,10 +220,7 @@ void main() {
   group('a widened advertisement is addressable entry by entry', () {
     /// An advertisement carrying BOTH algorithms, with the privates for each.
     ///
-    /// What a recipient publishes after rollout 1. Built by hand because the
-    /// mint writes one key: the reader has to understand the shape before any
-    /// writer produces it, or the capability can never be turned on without
-    /// breaking every peer that has not upgraded.
+    /// Built by hand because a mint writes one key.
     Future<_WidenedRing> widened() async {
       final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
       final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
@@ -286,12 +247,6 @@ void main() {
     }
 
     test('either entry seals and opens, and each stamps its OWN kid', () async {
-      // ⛔ Both arms REFUSED before 2026-08-28, one of them silently wrong.
-      // The provider asked the advertisement which algorithm it was, and
-      // `NskeyAdvertisement.alg` answers for the single entry a sender with no
-      // preference would take — so over an advertisement carrying two it named
-      // x-wing, refused the ml-kem provider outright, and would have sealed
-      // the x-wing arm to the right key for the wrong reason.
       final ring = await widened();
       final byAlgo = {
         for (final k in ring.advertised.keys) k.alg: k,
@@ -306,9 +261,9 @@ void main() {
 
         final wire = await provider.encrypt(context, atKey, ck.toBase64());
 
-        // Asserted BEFORE the round trip, or it never fails on its own terms:
-        // a wrong kid fetches the wrong private, so the decrypt below would
-        // redden first and quote a decapsulation error instead of this.
+        // NOTE: assert the kid before the round trip — a wrong kid fetches the
+        // wrong private, so the decrypt below would redden first and quote a
+        // decapsulation error instead.
         expect(atKey.metadata.appMetadata?.additional?['nskeyKid'],
             byAlgo[algo]!.kid,
             reason: '$algo must stamp the kid of the entry it sealed to. The '
@@ -321,17 +276,11 @@ void main() {
                 'owner holds a private that does not open what arrived');
       }
 
-      // The kids are different, which is what makes the assertion above
-      // discriminate: were both entries to share one, stamping either would
-      // satisfy it.
       expect(ring.advertised.keys[0].kid, isNot(ring.advertised.keys[1].kid));
     });
 
     test('an algorithm the advertisement does not carry is still refused',
         () async {
-      // The guard the fix must not remove. Its message now names every
-      // algorithm on offer rather than the single one the document's own
-      // getter picked, because with two entries that answer is arbitrary.
       final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
       final pair = await xWing.keyPairFromSeed(xWing.newSeed());
       final ring = _FixedRing(
@@ -372,11 +321,6 @@ void main() {
     });
 
     test('every algorithm with a KEM also states a key length', () {
-      // kemFor and publicKeyLengthFor are two switches over the same ids, and
-      // the advertisement reader needs both: it refuses an algorithm with no
-      // KEM, then refuses a key that is not that algorithm's length. If only
-      // the second gained an id the reader would accept any length for it, so
-      // this pins the pair rather than either alone.
       for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
         expect(SecretSharingAlgos.kemFor(keyAlgo), isNotNull,
             reason: '$keyAlgo is offered but has no KEM');
@@ -393,9 +337,6 @@ void main() {
 
   group('the crypto config registers a conveyance provider per KEM', () {
     test('both ids resolve on every client', () {
-      // Registered regardless of what this atSign mints: a *recipient's* KEM
-      // is the recipient's choice, and a sender must be able to convey to
-      // either.
       final config = CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing());
 
       expect(config.lookup(nskeyCryptoProviderId), isNotNull);
@@ -403,8 +344,8 @@ void main() {
     });
 
     test('both share one content-key cache', () {
-      // The coupling CryptoConfig.nskey exists to enforce — two caches would
-      // let a conveyance cache a CK the data provider then cannot find.
+      // NOTE: two caches would let a conveyance cache a content key the data
+      // provider then cannot find.
       final config = CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing());
       final providers = config.providers.whereType<NskeyProvider>().toList();
 
@@ -415,14 +356,7 @@ void main() {
   });
 
   group('the one suite negotiation', () {
-    // It was written twice — once for key packages, once for nskey — and a
-    // negotiation that disagrees with itself picks different constructions for
-    // the same two parties depending on which substrate is asking.
-
     test('the SENDER\'s order decides, not the recipient\'s', () {
-      // The property a reimplementation gets wrong. Both lists contain both
-      // suites, in opposite orders, so a walk driven by the wrong side
-      // returns the other answer — the arms cannot collapse into each other.
       const sender = ['x-wing-rfc9180-v1', 'x-wing-hpke-v1'];
       const recipient = ['x-wing-hpke-v1', 'x-wing-rfc9180-v1'];
 
@@ -446,8 +380,6 @@ void main() {
     });
 
     test('a suite this build has never heard of is still negotiable', () {
-      // The list is the OTHER party's statement about itself, so an entry we
-      // do not recognise is not ours to filter out — only ours to not offer.
       expect(
           SecretSharingAlgos.bestSuiteBetween(
               ['from-2032', 'x-wing-hpke-v1'], ['from-2032']),
@@ -458,7 +390,7 @@ void main() {
 
 /// A ring serving one fixed advertisement, so a test can state exactly what an
 /// owner claims — including shapes `InMemoryNskeyKeyRing` derives rather than
-/// accepts, such as an advertisement written before `suites` existed.
+/// accepts.
 class _FixedRing implements NskeyKeyRing {
   final NskeyAdvertisement _advertised;
   final Uint8List _secretKey;
@@ -479,7 +411,7 @@ class _FixedRing implements NskeyKeyRing {
 }
 
 /// A ring serving one advertisement carrying MORE THAN ONE key, plus the
-/// private for each — a recipient that has taken rollout 1.
+/// private for each.
 class _WidenedRing implements NskeyKeyRing {
   _WidenedRing(this.advertised, this._privates);
 

@@ -18,33 +18,22 @@ import 'test_utils.dart';
 
 /// What keeps one root per atSign, observed on the wire rather than inferred.
 ///
-/// It used to be the record: `PqSigningRoot` wrote `immutable = true` and the
-/// design leaned on the atServer refusing a second create. `decisions.md` 101
-/// moved that job to `_rootlock@<atSign>` — a short-ttl immutable self key —
-/// because the root is an ordinary signing key, and advertising a successor
-/// beside its retired predecessor is a rewrite that an immutable record makes
-/// unimplementable.
+/// Two cross-tier claims: that the root record reaching the atServer is **not**
+/// immutable, and that a second create of `_rootlock@<atSign>` **is** refused.
+/// The lock is the interlock; the mutable record is what makes rotation
+/// possible at all, because advertising a successor beside its retired
+/// predecessor is a rewrite that an immutable record makes unimplementable.
 ///
-/// So there are now two cross-tier claims to watch rather than one, and they
-/// are the kind this branch has had wrong twice: that the record reaching the
-/// atServer is **not** immutable, and that a second create of the lock **is**
-/// refused. The second is the interlock; the first is what makes rotation
-/// possible at all.
-///
-/// ⚠️ **Nothing here touches the root record — not a write, not a seed.** It
-/// used to write one: a second create was safe to attempt precisely because
-/// the atServer refused it. Now it would LAND, and `signing_root_pull_test`,
-/// `signing_root_pull_two_enrollments_test` and
-/// `enrollment_chain_link_live_test` all read that record on this same atSign
-/// — the last of them MINTS it into its own keyfile, so a root published here
-/// with a private nobody holds takes three of its rows down. The write mode is
-/// proved on a scratch record carrying the root's own metadata instead, and
-/// the loser-of-the-race row moved to `enrollment_chain_link_live_test.dart`,
-/// which owns the root on this atSign and mints it legitimately.
+/// ⚠️ **Nothing here touches the root record — not a write, not a seed.** The
+/// record is mutable, so a probe write would LAND, and other files read that
+/// record on this same atSign — one of them mints it into its own keyfile, so
+/// a root published here with a private nobody holds takes their rows down.
+/// The write mode is proved on a scratch record carrying the root's own
+/// metadata instead.
 ///
 /// The companion claim is that `public:__nskey.<ns>@owner` is mutable too, and
-/// for the same reason. Asserting both in one file keeps the pattern visible:
-/// neither key record is immutable, and both are minted behind a lock that is.
+/// for the same reason: neither key record is immutable, and both are minted
+/// behind a lock that is.
 void main() {
   TestUtils.isolateStorage('pq_signing_root_mint_lock_test');
   late AtClient atClient;
@@ -71,16 +60,12 @@ void main() {
       'atServer', () async {
     // ⚠️ Deliberately NOT the root record itself, and not a seeded one either.
     // With the record mutable a probe write LANDS, and a root published here
-    // with a private nobody holds makes `enrollment_chain_link_live_test.dart`
-    // — which mints the root into its own keyfile so the approval rows have a
-    // private to convey — fail three assertions with no visible connection to
-    // this file. Measured on 2026-08-15, not predicted: an earlier draft of
-    // this test seeded a root and did exactly that.
+    // with a private nobody holds fails assertions in other files that read it
+    // on this atSign, with no visible connection to this one.
     //
     // So the claim is made about the METADATA the root builder produces,
-    // carried by a scratch record. `wire_literal_pins_test.dart` pins that
-    // `pqSigningRootKey` produces exactly this metadata; this is that metadata
-    // going onto a live atServer and being written twice.
+    // carried by a scratch record: that metadata going onto a live atServer
+    // and being written twice.
     final rootMetadata = PqSigningRoot(atClient).keyFor(atSign).metadata;
     final scratch = AtKey()
       ..key = 'rootwritemode${DateTime.now().microsecondsSinceEpoch}'
@@ -115,9 +100,7 @@ void main() {
   });
 
   test('a second signing-root mint lock create is refused', () async {
-    // The interlock itself, watched rather than assumed. This is the property
-    // the record used to carry, so it is worth seeing the atServer issue the
-    // refusal on the record that carries it now.
+    // The interlock itself, watched rather than assumed.
     final lockKey = pqSigningRootMintLockKey(atSign);
     expect(lockKey.key, pqSigningRootMintLockRecordName);
 
@@ -136,10 +119,9 @@ void main() {
 
     await take();
     try {
-      // Named, not `anything`: a bare throwsA would pass if the write failed
-      // for an unrelated reason — a malformed verb, an auth problem — and the
-      // test would be green for the absence of the effect rather than for the
-      // interlock.
+      // Named, not `anything`: a bare throwsA would pass on a malformed verb
+      // or an auth problem, green for the absence of the effect rather than
+      // for the interlock.
       await expectLater(
           take(),
           throwsA(predicate((e) =>
@@ -158,9 +140,9 @@ void main() {
             ..force = true);
     }
 
-    // Control: the same client, the same verb, the same key — accepted once
-    // the lock is released. Without this, the refusal above could be this
-    // client being unable to write the record at all.
+    // Control: the same client, the same verb, the same key, accepted once the
+    // lock is released. Without it, the refusal above could be this client
+    // being unable to write the record at all.
     await take();
     await atClient.getRemoteSecondary()!.executeVerb(
         DeleteVerbBuilder()
@@ -170,15 +152,13 @@ void main() {
 
   test('the published nskey is mutable, because rotation depends on it',
       () async {
-    // The sibling of the first test: same atSign, same public namespace, same
-    // requirement. Both key records are mutable and both are minted behind an
-    // immutable lock; if "immutable" ever migrated back onto either record,
-    // rotation would stop working on that one and nothing else would say so.
+    // Both key records are mutable and both are minted behind an immutable
+    // lock. If "immutable" ever landed on either record, rotation would stop
+    // working on that one and nothing else would say so.
     final ns = 'rot${DateTime.now().microsecondsSinceEpoch}.$namespace';
     // Nothing releases a mint lock but its ttl, so the mint below holds it and
-    // the rotation that follows is refused until it lapses. Shortened here
-    // because the production `mintLockTtl` would make this test wait two
-    // minutes; the refusal itself is asserted in nskey_rotation_live_test.
+    // the rotation that follows is refused until it lapses. Shortened from the
+    // production `mintLockTtl`, which would make this test wait two minutes.
     const lockTtl = Duration(seconds: 5);
     final ring = PublishedNskeyKeyRing(atClient, lockTtl: lockTtl);
 

@@ -1,9 +1,8 @@
 /// Pins that the "do not record a commit" request reaches the wire.
 ///
 /// The flag travels as `:nc` in the built command, and what the atServer sees
-/// is whatever the *builder* copied into it — a round trip on the options
-/// object would be green for a field nothing sends. So every assertion here is
-/// over `buildCommand()`, as a raw literal, with and without the flag.
+/// is whatever the *builder* copied into it, so every assertion here is over
+/// `buildCommand()`, as a raw literal, with and without the flag.
 library;
 
 import 'package:at_client/at_client.dart';
@@ -42,16 +41,12 @@ void main() {
 
   group('the put path carries the flag', () {
     test('a put that asks for no commit builds "update:nc:"', () async {
-      // Pinned whole, and note where `:nc` sits — before the metadata
-      // fragment, not after it.
       expect(await putCommandFor(noCommit: true),
           'update:nc:isEncrypted:false:ordinary.testing@alice a value\n');
     });
 
     test('and a put that does not ask is byte-identical but for that',
         () async {
-      // The pair is the point: an assertion on the flagged form alone would
-      // pass for a builder that emitted ":nc" unconditionally.
       expect(await putCommandFor(noCommit: false),
           'update:isEncrypted:false:ordinary.testing@alice a value\n');
     });
@@ -63,13 +58,9 @@ void main() {
   });
 
   group('the delete path carries the flag', () {
-    // Driven through the real `delete()` rather than by building a
-    // DeleteVerbBuilder here: the builder already had the field, so asserting
-    // on one built in the test would be green whether or not at_client passes
-    // the option along.
-    // A distinct atSign per call, deliberately: AtClientImpl.create caches one
-    // client per atSign, so reusing @alice hands the second call the FIRST
-    // client — still holding the first mock — and its recorder stays empty.
+    // NOTE: a distinct atSign per call — AtClientImpl.create caches one client
+    // per atSign, so reusing one hands the second call the FIRST client, still
+    // holding the first mock, and its recorder stays empty.
     Future<String> deleteCommandFor(
         {required bool noCommit, required String atSign}) async {
       final commands = <String>[];
@@ -113,10 +104,6 @@ void main() {
   });
 
   group('asking for no commit without going remote is refused', () {
-    // Refused rather than ignored: a local write sends no command, so the flag
-    // would do nothing, the record would take a local commit entry, and sync
-    // would push it later under a command carrying no flag. The commit the
-    // caller asked to avoid would happen, and nothing would say so.
     Future<AtClient> clientFor(String atSign) async {
       final remote = MockRemoteSecondary();
       when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
@@ -137,9 +124,6 @@ void main() {
       ..sharedBy = atSign
       ..metadata = (Metadata()..namespaceAware = true);
 
-    // Both assert the MESSAGE, not just the type: the refusal is only useful
-    // if it names the fix, and a type-only assertion is green for any other
-    // exception the call happens to raise.
     final namesTheFix = predicate<Object>(
         (e) => e.toString().contains('Set useRemoteAtServer as well'),
         'names the fix');
@@ -149,8 +133,8 @@ void main() {
       await expectLater(
           atClient.put(keyFor('@ncputlocal'), 'a value',
               putRequestOptions: PutRequestOptions()..noCommit = true),
-          // put wraps everything it throws into AtClientException; delete does
-          // not. That difference is at_client's, not this feature's.
+          // NOTE: put wraps what it throws in AtClientException; delete
+          // does not.
           throwsA(allOf(isA<AtClientException>(), namesTheFix)));
     });
 
@@ -163,8 +147,6 @@ void main() {
     });
 
     test('and the same call going remote is accepted', () async {
-      // The control. Without it the refusal above would pass for a client that
-      // threw on every put, whatever the options said.
       final atClient = await clientFor('@ncremoteok');
       await expectLater(
           atClient.delete(keyFor('@ncremoteok'),
@@ -177,9 +159,6 @@ void main() {
 
   group('the mint lock asks for no commit', () {
     test('taking a lock writes a command carrying ":nc"', () async {
-      // The record the whole feature exists for: an interlock held for a few
-      // seconds and abandoned to its ttl, whose commit entry every other
-      // device would otherwise sync, expire and reclaim.
       final commands = <String>[];
       final atClient = MockAtClient();
       final remote = MockRemoteSecondary();

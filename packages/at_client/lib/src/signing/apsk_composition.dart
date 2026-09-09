@@ -6,59 +6,12 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys;
 
-/// The `_apsk` entries an enrollment advertises: **the keys that sign for it
-/// now, plus the signing keys it has withdrawn from service.**
+/// The `_apsk` entries an enrollment advertises: [signing], strongest first,
+/// followed by the signing keys it has withdrawn from service.
 ///
-/// One composer for both publishers. `_apsk` is one record whether the
-/// atServer writes it from an `enroll:request`/`enroll:update` or a client
-/// with no enrollment publishes it directly, and two compositions of one
-/// record are two chances to disagree about what an enrollment can verify.
-///
-/// [signing] is what the enrollment holds of its own, strongest first — the
-/// active entries. [withdrawn] is the public half of every signing key it has
-/// taken out of service, each with the status the keyfile gives it, which
-/// stays advertised because envelopes are stored durably and verified whenever
-/// they are read: a key is retained for **what it signed**.
-///
-/// A withdrawn entry's status is written through, not replaced with `retired`.
-/// The advertisement is rewritten whole on every publish, so this composer
-/// decides what the record says about every key an enrollment has ever used;
-/// substituting a token here would republish the owner's record with their own
-/// statement about a key overwritten by a build that could not read it.
-///
-/// [authentication] is the APKAM authentication keypair, and its treatment is
-/// the whole point of this function:
-///
-/// - **With no signing keys of its own**, an enrollment signs with the
-///   authentication key, so that key is the one active entry. The
-///   advertisement is byte-for-byte what the single-key composer wrote, which
-///   is what every deployed reader parses.
-/// - **Once it holds signing keys**, the authentication key never signed
-///   anything durable and is **not advertised at all** — neither active nor
-///   retained.
-///
-/// ⚠️ **The authentication key is never retained, and that asymmetry is the
-/// design rather than an oversight.** A key is retained for what it signed,
-/// and the premise is that nothing this key signed outlives the transition;
-/// retaining it would advertise a key with nothing to verify.
-///
-/// ⚠️ **What makes that premise hold is that a posture move REPLACES the
-/// enrollment**, and this comment said "an enrollment holding signing keys held
-/// them from birth" — false in general — until 2026-09-08. A client whose
-/// posture asks for a stronger authentication algorithm than its keyfile holds
-/// retrofits into a new enrollment that owns a data signing key from birth and
-/// publishes under its own id; the old enrollment keeps its record, so what its
-/// authentication key signed goes on verifying against that record rather than
-/// needing a retained entry here.
-///
-/// ⚠️ **One configuration escapes it and is knowingly left unfixed:** pinning
-/// the authentication algorithm to `rsa2048` while the data signing set moves
-/// to `mldsa65` takes no retrofit, mints ML-DSA, and drops the RSA key that
-/// signed everything. Reaching it needs both axes set by hand.
-///
-/// A key already listed as an active signer is not listed again as retired.
-/// One key described twice, once as current and once as withdrawn, is a
-/// document a verifier has to choose between with nothing to choose on.
+/// Each [withdrawn] entry keeps the status it is given, a key already listed as
+/// an active signer is not listed again, and the [authentication] keypair is
+/// listed only while [signing] is empty.
 List<ApskSigningKey> apskEntries({
   required List<ApkamSigningKeys> signing,
   required List<
@@ -75,9 +28,7 @@ List<ApskSigningKey> apskEntries({
       ApskSigningKey.forPublicKey(alg: key.algorithm, pub: key.publicKey)
   ];
 
-  // The authentication key is the signer exactly while the enrollment holds no
-  // active signing key of its own — the same condition ApkamSigning.signingKeys
-  // falls back on. Advertising it here and falling back there are one rule, so
+  // NOTE: this condition must match the fallback in ApkamSigning.signingKeys —
   // what signs and what is advertised cannot disagree.
   if (entries.isEmpty && authentication != null) {
     entries.add(ApskSigningKey.forPublicKey(
@@ -92,24 +43,11 @@ List<ApskSigningKey> apskEntries({
   return entries;
 }
 
-/// The **bare** `_apsk` value for [entries] — the public key itself — or null
-/// when they cannot be said that way and the array is the only form.
+/// The bare `_apsk` value for [entries] — the public key itself — or null when
+/// only the JSON array can express them.
 ///
-/// The bare form is kept for the one case everything deployed can read. Every
-/// `_apsk` consumer that predates the array base64-decodes the value as an RSA
-/// key, so publishing JSON where a bare key would do breaks them — fail-closed,
-/// but service-breaking for anything already running.
-///
-/// Anything else has to be the array. A bare value says `rsa2048` by convention
-/// and can name only one key, so it cannot express a second algorithm or a
-/// retained entry at all.
-///
-/// The rule lives here, once, because two publishers need it and they publish
-/// one record. A client with no enrollment writes the value itself
-/// ([apskValueOf]); an enrolled client sends `enroll:update`, where the choice
-/// is which *field* carries the advertisement — `apskLegacy` for the bare
-/// string, `apsk` for the array — and the two are mutually exclusive. A second
-/// copy of the rule is a second chance to describe one record two ways.
+/// A bare value says `rsa2048` by convention and can name one key, so a second
+/// algorithm or a withdrawn entry forces the array.
 String? bareApskValueOf(List<ApskSigningKey> entries) {
   if (entries.length == 1 &&
       entries.single.alg == SigningAlgoType.rsa2048 &&

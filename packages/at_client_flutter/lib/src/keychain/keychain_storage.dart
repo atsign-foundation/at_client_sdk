@@ -85,21 +85,11 @@ class KeychainStorage {
   /// Replace the stored [keys] for [atSign], or append them if this atSign has
   /// no entry yet.
   ///
-  /// One read and one write, with [assureUpdate] called in between on the entry
-  /// being replaced. That ordering is the point: the never-lose check has to
-  /// see the state this write is about to overwrite, and re-reading afterwards
-  /// would be checking a different state from the one replaced. There is no
-  /// keychain equivalent of the `.atKeys` file lock — `biometric_storage`
-  /// offers no compare-and-swap — so two isolates racing here still resolve
-  /// last-writer-wins; keeping the window to a single read/write pair is as
-  /// narrow as this backend allows.
-  ///
-  ///   [atSign] - Atsign whose entry should be replaced
-  ///
-  ///   [keys] - the complete new [AtKeys] state for that atSign
-  ///
   ///   [assureUpdate] - called with the entry about to be replaced, before
   ///   anything is written. Throwing from it abandons the write.
+  ///
+  /// Concurrent writers resolve last-writer-wins: this backend offers no
+  /// compare-and-swap, so the read and the write cannot be made atomic.
   Future<void> updateAtKeysInKeychain({
     required String atSign,
     required AtKeys keys,
@@ -127,8 +117,8 @@ class KeychainStorage {
   }
 
   /// The atSign an entry belongs to, in whatever spelling it was stored: the
-  /// typed `atsign` field when a typed-keys document supplied one, else the
-  /// `atsign` metadata entry, else the `name` one an older release wrote.
+  /// typed `atsign` field, else the `atsign` metadata entry, else the legacy
+  /// `name` one.
   String? _atSignOf(AtKeys keys) {
     if (keys.atsign != null) return keys.atsign.toString();
     final value = keys.metadata.containsKey('atsign')
@@ -137,18 +127,10 @@ class KeychainStorage {
     return value is String ? value : null;
   }
 
-  /// Two spellings of one atSign name one entry, so the comparison is made on
-  /// the normalized form rather than the stored one.
+  /// [atSign] in its normalized spelling, so that two spellings of one atSign
+  /// match the same entry — callers supply either.
   ///
-  /// Nothing normalizes on the way in — `AuthRequest.atSign` is a plain
-  /// mutable String, and at_auth passes that string verbatim to `read`/`write`
-  /// while passing `toAtsign()` to `flush`, on one keyset. A raw comparison
-  /// therefore makes an entry unreachable by the very spelling that created
-  /// it, and makes a flush append beside the entry it meant to replace —
-  /// leaving the newer keys behind the older ones, which is the loss
-  /// [KeychainAtKeysIo.write]'s create-only guard exists to prevent.
-  ///
-  /// A value `toAtsign()` rejects is compared as it stands rather than
+  /// A value `toAtsign()` rejects is returned as it stands rather than
   /// dropped, so a malformed stored entry is still readable and removable.
   String? _normalized(String? atSign) {
     if (atSign == null) return null;
@@ -209,9 +191,6 @@ class KeychainStorage {
       );
       if (data != null) {
         final atKeysData = AtKeysData.fromJson(jsonDecode(data));
-        // Same predicate the lookups use, so an entry written under the legacy
-        // `name` metadata key, or under a different spelling of this atSign,
-        // can be removed as well as read.
         final wanted = _normalized(atSign);
         atKeysData.keys.removeWhere(
           (element) => _normalized(_atSignOf(element)) == wanted,
@@ -475,11 +454,10 @@ class KeychainStorage {
         return value;
       }
     } catch (e, s) {
-      // A failure to read — a transient platform-channel error, a cancelled
-      // biometric prompt — must never touch what is stored: the only copies
-      // of the atSign's keys may live here, and recovery from a genuinely
-      // corrupt store is the caller's explicit decision, not a side effect
-      // of the read that discovered it.
+      // NOTE: never clear the store on a read failure. A transient platform
+      // error or a cancelled biometric prompt would destroy what may be the
+      // only copy of the atSign's keys; recovering a corrupt store is the
+      // caller's decision.
       _logger.severe('_read failed with $e', e, s);
       rethrow;
     }

@@ -5,17 +5,11 @@ import 'package:pq_matrix_published/arm.dart' show publishedPreference;
 import 'package:pq_matrix_scenario/pq_matrix_scenario.dart'
     show ClientSpec, attachWithoutKeySource, connect, readPeerApskAsReleasedReader;
 
-/// What at_client **3.14.0** makes of an enrollment's `_apsk`.
+/// Reports what at_client **3.14.0** makes of an enrollment's `_apsk`.
 ///
-/// A separate process because it is a separate BUILD: no single process can
-/// hold two versions of one package, and the whole value of this program is
-/// that it is the version pub.dev ships rather than a simulation of it.
-///
-/// It reads and reports; it decides nothing. The verdict — that a `pqReady`
-/// advertisement is indistinguishable from a `legacy` one to a deployed peer,
-/// and that a `pqActive` one is not — is asserted by the test that spawns
-/// this, because a probe that judges its own output is a probe whose failure
-/// mode is invisible.
+/// A separate process because no single process can hold two versions of one
+/// package; it judges nothing, writing one `##APSK##`-prefixed JSON line to
+/// stdout for its caller to assert on.
 Future<void> main(List<String> args) async {
   String arg(String name) {
     final i = args.indexOf('--$name');
@@ -45,8 +39,8 @@ Future<void> main(List<String> args) async {
   final verdict = await readPeerApskAsReleasedReader(
       client, peerAtSign, peerEnrollmentId);
 
-  // One line, sentinel-prefixed: at_client logs to stdout too, and "the logger
-  // is turned down" is a claim about levels rather than about the stream.
+  // NOTE: at_client logs to stdout too, so the result carries a sentinel
+  // prefix for the caller to pick out.
   stdout.writeln('##APSK##${jsonEncode(verdict)}');
   exit(0);
 }

@@ -23,28 +23,10 @@ import 'test_utils.dart';
 
 /// UC-G1.14 — a `pqReady` sender is invisible to a **deployed** peer.
 ///
-/// The one measurement in this project that genuinely needs a second build of
-/// at_client, and therefore the one thing that survived the rollout matrix.
-/// Everything else the matrix did now runs in one process in
-/// `pq_posture_grid_test.dart`, which it can precisely because it no longer
-/// has a released arm among its cells.
-///
-/// The question is not what this tree believes it published. It is what a
-/// build nobody here can change makes of it — so the reader is at_client
-/// **3.14.0** resolved from pub.dev, spawned as its own process because no
-/// single process can hold two versions of one package.
-///
-/// The row needs three stages and all three are load-bearing:
-///
-/// - **legacy** is the baseline: what a deployed peer does with an
-///   advertisement today.
-/// - **pqReady** is the claim: it must parse as an RSA public key exactly as
-///   legacy does, AND must be a different key — a stage that published
-///   nothing new would also "look the same", and that is the reading this
-///   control excludes.
-/// - **pqActive** is the second control: `rsa: true` has to be capable of
-///   being false, or the first two assertions pass for a reader that says yes
-///   to anything.
+/// The question is not what this tree believes it published but what a build
+/// nobody here can change makes of it, so the reader is at_client **3.14.0**
+/// resolved from pub.dev and spawned as its own process — no single process
+/// can hold two versions of one package.
 void main() {
   TestUtils.isolateStorage('pq_released_peer_test');
   final atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
@@ -81,8 +63,8 @@ void main() {
       workingDirectory: publishedDir.path,
     );
 
-    // The sentinel exists because at_client logs to stdout too, and "the
-    // logger is turned down" is a claim about levels rather than the stream.
+    // NOTE: at_client logs to stdout too, so the verdict carries a sentinel
+    // prefix rather than being read off the last line.
     final line = const LineSplitter()
         .convert('${result.stdout}')
         .where((l) => l.startsWith('##APSK##'))
@@ -102,7 +84,7 @@ void main() {
             "this tree's legacy posture against a released at_client");
 
     // The control arm's lockfile is committed and its at_client pin is exact,
-    // so this resolves what it always resolved rather than whatever is newest.
+    // so this resolves the pinned build rather than whatever is newest.
     final pubGet = await Process.run('dart', ['pub', 'get'],
         workingDirectory: publishedDir.path);
     expect(pubGet.exitCode, 0,
@@ -135,10 +117,9 @@ void main() {
             '${DateTime.now().microsecondsSinceEpoch}',
     storage: TestUtils.storage,
   );
-      // The id the client is RUNNING as, not the one it was enrolled as: a pq
-      // posture retrofits itself during construction and advertises its
-      // `_apsk` under the new id. Asking about the enrolled id would ask about
-      // a record the retrofit left behind.
+      // NOTE: the id the client RUNS as, not the one it was enrolled as — a pq
+      // posture retrofits during construction and advertises its `_apsk` under
+      // the new id.
       stdout.writeln('##RELPEER## ${entry.key} runs as '
           '${cells[entry.key]!.client.enrollmentId}');
     }
@@ -158,14 +139,12 @@ void main() {
           '${entry.value['fetched']} rsa=${entry.value['rsa']}');
     }
 
-    // The baseline.
     expect(asLegacy['fetched'], true, reason: '${asLegacy['error']}');
     expect(asLegacy['rsa'], true,
         reason: 'the released reader must parse a legacy sender\'s _apsk as '
             'an RSA public key. If it cannot, this tree has already broken '
             'every deployed peer and the rest of the row is moot');
 
-    // The claim.
     expect(asPqReady['fetched'], true, reason: '${asPqReady['error']}');
     expect(asPqReady['rsa'], true,
         reason: 'a pqReady enrollment advertises its own freshly minted '
@@ -174,14 +153,12 @@ void main() {
             'legacy sender. If this is false, rollout stage 1 is visible to '
             'the fleet and the staged rollout does not work');
 
-    // Positive control 1: "looks the same" must not mean "published nothing".
     expect(asPqReady['value'], isNot(asLegacy['value']),
         reason: 'pqReady must publish a DIFFERENT key from legacy — its own '
             'signing key rather than its APKAM authentication key. Identical '
             'values would satisfy the assertion above while meaning the stage '
             'did nothing at all');
 
-    // Positive control 2: `rsa: true` must be capable of being false.
     expect(asPqActive['rsa'], false,
         reason: 'pqActive publishes the JSON array form, which is the one a '
             'released reader cannot parse. If this is ALSO true then the '

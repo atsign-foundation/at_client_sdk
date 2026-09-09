@@ -22,11 +22,9 @@ import 'package:uuid/uuid.dart';
 
 /// The notification receive path with the record sealed to a namespace key.
 ///
-/// Split out of `concurrent_notify_test.dart`, which keeps the legacy half of
-/// the same claim. This half publishes namespace keys for both atSigns, so it
-/// writes post-quantum material into whichever atServers it runs against — the
-/// reason it lives under `test/pq/` and never runs against the long-lived CI
-/// atSigns.
+/// Publishes namespace keys for both atSigns, so it writes post-quantum
+/// material into whichever atServers it runs against — the reason it lives
+/// under `test/pq/` and never runs against the long-lived CI atSigns.
 void main() {
   late String alice;
   late String bob;
@@ -40,8 +38,6 @@ void main() {
   });
 
   /// Puts [client] on the nskey data path and publishes its namespace key.
-  /// The ring needs the client, and the preference is read live, so the config
-  /// is set once both exist.
   Future<void> onNskeyPath(AtClient client) async {
     final ring = PublishedNskeyKeyRing(client);
     client.getPreferences()!.crypto = CryptoConfig.nskey(keyRing: ring);
@@ -56,8 +52,8 @@ void main() {
             posture: legacyPlusPqProviders);
     addTearDown(clients.close);
 
-    // Bob first: alice's pre-pass discovers his published nskey by plookup, so
-    // it has to exist before she writes anything to him.
+    // NOTE: bob first — alice's pre-pass discovers his published nskey by
+    // plookup, so it must exist before she writes anything to him.
     await onNskeyPath(clients.second);
     await onNskeyPath(clients.first);
 
@@ -78,15 +74,11 @@ void main() {
     });
     addTearDown(subscription.cancel);
 
-    // A second authorised enrollment of @bob, on a monitor of its own. The
-    // clause says the value decrypts on EVERY authorised bob enrollment, and
-    // one client cannot show that: a design sealing per device would deliver
-    // to both monitors and decrypt on only one, which is exactly the failure
-    // a single-client test cannot see.
+    // A second authorised enrollment of @bob, on a monitor of its own.
     //
-    // Its own storage path, because two monitors of one atSign sharing a store
-    // share the notification replay watermark — the record that decides what a
-    // reconnecting monitor asks the atServer for.
+    // NOTE: it needs its own storage path — two monitors of one atSign sharing
+    // a store share the notification replay watermark, the record that decides
+    // what a reconnecting monitor asks the atServer for.
     await AtClientSecretSharing.forClient(clients.second).register();
     final bobPreference = clients.second.getPreferences()!;
     final bobSecond = await enrolAndAuthenticate(
@@ -104,19 +96,15 @@ void main() {
         reason: 'the second enrollment must be a genuinely different client, '
             'or this reads one monitor twice');
 
-    // Reading is all this enrollment does, so it mints nothing: @bob's
-    // generation is already published and a second mint here would rotate it.
+    // NOTE: this enrollment only reads, so it mints nothing — @bob's
+    // generation is published already and a second mint here would rotate it.
     bobSecond.client.getPreferences()!.crypto = CryptoConfig.nskey(
         keyRing: PublishedNskeyKeyRing(bobSecond.client));
 
-    // No `regex:` on this one, deliberately — a regex is a second thing that
-    // can be wrong, and a wrong one fails identically to a notification that
-    // never arrived. Everything delivered is recorded, so "nothing arrived"
-    // can be told apart from "everything except this arrived".
     final secondSeen = <String>[];
     final secondReceived = Completer<AtNotification>();
     final secondMonitorLive = Completer<void>();
-    // Declared here because the listener has to be watching before the
+    // NOTE: declared here because the listener must be watching before the
     // notification it waits for is sent, and that send happens after this
     // monitor's socket has been taken away.
     final queued = Completer<AtNotification>();
@@ -134,15 +122,13 @@ void main() {
     });
     addTearDown(secondSubscription.cancel);
 
-    // ⚠️ Listener before trigger, and the listener that matters is the
-    // atServer's. `subscribe()` returns before the monitor's socket has
-    // connected, PKAMed and written `monitor:`, and the monitor asks for no
-    // backlog — so a notification the atServer creates in that window reaches
-    // this connection never, which reads exactly like a product defect.
-    // `currentListenerState == listening` is not this gate either: it is set
-    // straight after writing the command. A notification actually arriving is.
-    // The atServer's own `statsNotification` satisfies it every ~11s, which
-    // makes it the readiness signal and the positive control at once.
+    // NOTE: `subscribe()` returns before the monitor's socket has connected,
+    // PKAMed and written `monitor:`, and the monitor asks for no backlog, so a
+    // notification created in that window never reaches this connection.
+    // `currentListenerState == listening` does not close that window either —
+    // it is set straight after the command is written. A notification actually
+    // arriving does, and the atServer's periodic stats notification supplies
+    // one.
     await secondMonitorLive.future.timeout(
       Duration(seconds: 90),
       onTimeout: () => throw StateError(
@@ -161,9 +147,6 @@ void main() {
           'Nothing reached $bob\'s monitor within 60s for the nskey path'),
     );
 
-    // The UC's own wording: providerId travels ON THE NOTIFICATION FRAME, not
-    // only on stored keys. Read off the frame bob's monitor delivered, which is
-    // the only place that can show it.
     expect(notification.metadata?.appMetadata?.providerId,
         symmetricAesGcmCryptoProviderId,
         reason: 'without this on the frame the receiver has nothing to route '
@@ -175,11 +158,10 @@ void main() {
             'is alice-owned, so a reader keying its ring by sharedBy would ask '
             'for a private it will never hold');
 
-    // The same notification, on @bob's other enrollment. It holds no nskey
-    // private of its own — the fixture gives each enrollment an in-memory
-    // AtKeysIo — so opening this value means the namespace private reached it
-    // by conveyance, which is what makes the count of bob's devices the
-    // sender's business and not hers.
+    // The same notification, on @bob's other enrollment, which holds no nskey
+    // private of its own: the fixture gives each enrollment an in-memory
+    // AtKeysIo, so opening this value means the namespace private reached it
+    // by conveyance.
     final second = await secondReceived.future.timeout(
       Duration(seconds: 90),
       onTimeout: () => throw StateError(
@@ -200,33 +182,18 @@ void main() {
             'out. Sealing per device would deliver to both monitors and '
             'decrypt on only one');
 
-    // ── Offline, then online ─────────────────────────────────────────────
-    //
-    // The clause's other half: a value sealed while @bob was disconnected
-    // still opens when he comes back. `monitor_reconnect_live_test.dart`
-    // shows a queued notification surviving an outage, with one atSign
-    // notifying itself and no namespace key in it; everything above shows a
-    // cross-atSign nskey notification opening, with the monitor up
-    // throughout. Neither says that a CK sealed to @bob's namespace key while
-    // his monitor was down still opens on his return.
-    //
-    // Deliberately last: everything above has passed, so the pair is known
-    // good before the connection is taken away and a failure here is the
-    // outage rather than the fixture.
+    // Offline, then online: a content key sealed to @bob's namespace key while
+    // his monitor was down still opens on his return. Deliberately last, so
+    // the pair is known good before the connection is taken away.
     final secondNotifications =
         bobSecond.client.notificationService as NotificationServiceImpl;
     expect(secondNotifications.monitor.lookUp.isNotifying, isTrue,
         reason: 'the monitor must be demonstrably up before it is dropped, or '
             '"it reconnected" and "it never connected" are the same green');
-    // The socket really going away is what makes the arm below an outage,
-    // and it has to be watched for before it is taken away — the stream is a
-    // broadcast with no backlog.
-    //
-    // ⚠️ `isNotifying` cannot answer this and reads as though it can. It is a
-    // SESSION flag, cleared only by `stopNotifications`, and the reconnect
-    // loop reads it to decide whether to keep trying — so it stays true
-    // across exactly the drop being staged here. Asserting it false after a
-    // close fails against a monitor that did go down.
+    // NOTE: `isNotifying` cannot tell whether the socket went away — it is a
+    // session flag, cleared only by `stopNotifications`, so it stays true
+    // across the drop staged here. The connection stream is a broadcast with
+    // no backlog, so the watch goes on before the close.
     final connectionEvents = <bool>[];
     final wentDown = Completer<void>();
     final connectionWatch = secondNotifications.monitor.lookUp
@@ -257,10 +224,6 @@ void main() {
       ..metadata = (Metadata()..ttr = 60000);
     const queuedValue = 'sealed while bob had no monitor';
 
-    // @alice sends this on her own client's connection, which is a different
-    // socket on a different atServer from the one just closed — so
-    // `delivered` means @bob's atServer took it for a listener that is not
-    // currently there.
     expect(
         (await clients.first.notificationService
                 .notify(NotificationParams.forUpdate(queuedKey,

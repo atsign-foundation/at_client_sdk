@@ -9,6 +9,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
+/// An AtClient double whose atSign and preferences are concrete overrides, so
+/// they answer the same way in every test and cannot be stubbed with `when`.
 class MockAtClient extends Mock implements AtClient {
   @override
   String? getCurrentAtSign() => '@alice';
@@ -17,6 +19,8 @@ class MockAtClient extends Mock implements AtClient {
   AtClientPreference getPreferences() => AtClientPreference();
 }
 
+/// A NotificationServiceImpl double whose `subscribe` is a concrete override
+/// returning a stream that never emits, so no test can stub it into emitting.
 class MockNotificationServiceImpl extends Mock
     implements NotificationServiceImpl {
   @override
@@ -26,15 +30,10 @@ class MockNotificationServiceImpl extends Mock
   }
 }
 
-/// Pins that `stop()` actually stops: a sync run parked on its opening
-/// network read (the stats fetch inside `_isInSync`) when `stop()` is
-/// called must do no further sync work when it resumes, and `stop()`
-/// must not return until that run has unwound.
-///
-/// The scenario is the one the functional pack caught red: a caller
-/// awaits `stop()`, stages local writes on the promise that sync is
-/// halted, and a run that entered processing before the stop resumes
-/// from its network await and pushes the staged writes.
+/// Pins that `stop()` actually stops: a sync run parked on its opening network
+/// read (the stats fetch inside `_isInSync`) when `stop()` is called does no
+/// further sync work when it resumes, and its request is answered as stopped
+/// rather than left dangling.
 void main() {
   late MockAtClient atClient;
   late MockRemoteSecondary remote;
@@ -55,11 +54,8 @@ void main() {
 
     when(() => atClient.notificationService).thenReturn(notificationService);
     when(() => atClient.getLocalSecondary()).thenReturn(local);
-    // lastReceivedServerCommitId reads (and _getLocalCommitId's pulled arm).
     when(() => atClient.get(any()))
         .thenAnswer((_) async => AtValue()..value = '7');
-    // Five staged-but-unpushed local writes: what the resumed run reads,
-    // and what it must NOT push once stopped.
     when(() => local.syncQueueSize).thenAnswer((_) async => 5);
     when(() => local.peekSyncQueue(limit: any(named: 'limit')))
         .thenAnswer((_) async => <String>[]);
@@ -83,24 +79,14 @@ void main() {
 
     SyncResult? errorResult;
     service.sync(onError: (result) => errorResult = result as SyncResult?);
-    // The enqueue trigger runs on a microtask; after this await the run
-    // has entered processSyncRequests and is parked on the stats fetch.
     await Future.delayed(Duration.zero);
-    // Positive control: the run really is in flight on the network call.
     verify(() => remote.executeVerb(any())).called(1);
 
     final stopFuture = service.stop();
-    // The network reply arrives after stop() — the red functional run's
-    // exact shape. The resumed run sees five pending entries.
     park.complete('data:[{"value":"7"}]');
     await stopFuture;
-    // stop() does not wait for the parked run; give it a tick to resume and
-    // bail. The resumed run bailed before syncInternal: it never even took
-    // the pending-push snapshot, let alone pushed.
     await Future.delayed(Duration(milliseconds: 20));
     verifyNever(() => local.peekSyncQueue(limit: any(named: 'limit')));
-    // The in-sync check reads the pull cursor from the local store right after
-    // its network read; on a stopped client that store is already closed.
     verifyNever(() => atClient.get(any()));
     expect(errorResult, isNotNull,
         reason: 'the stranded request must be answered, not left dangling');
@@ -129,8 +115,6 @@ void main() {
     park.complete('data:[]');
     await stopFuture;
     await Future.delayed(Duration(milliseconds: 20));
-    // The pull's cursor is persisted in a finally, so the stop guard's own
-    // bail-out reaches it; the store it writes is closed by then.
     verifyNever(() => atClient.put(any(), any(),
         putRequestOptions: any(named: 'putRequestOptions')));
     expect(
@@ -146,14 +130,10 @@ void main() {
     service.sync();
     await Future.delayed(Duration.zero);
     park.complete('data:[{"value":"7"}]');
-    // Let the resumed run finish: server 7 == pulled 7 but five entries
-    // are pending, so it is not in sync and syncInternal runs.
     await Future.delayed(Duration(milliseconds: 50));
 
-    // The mechanism the first test guards actually runs when not stopped:
-    // syncInternal took its pending-push snapshot. Without this arm, the
-    // first test's verifyNever could pass because the path was never
-    // reachable at all.
+    // NOTE: without this control arm the first test's verifyNever could pass
+    // because the path was never reachable at all.
     verify(() => local.peekSyncQueue(limit: any(named: 'limit')))
         .called(greaterThanOrEqualTo(1));
   });

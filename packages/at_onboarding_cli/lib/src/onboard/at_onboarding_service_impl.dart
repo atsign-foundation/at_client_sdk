@@ -1,7 +1,7 @@
 // ignore_for_file: unnecessary_null_comparison
 
-// The PQ activation surface is deliberately @experimental while it matures;
-// this CLI ships from the same workspace and moves in step with it.
+// The PQ activation surface is @experimental, and this CLI ships from the
+// same workspace.
 // ignore_for_file: experimental_member_use
 
 import 'dart:async';
@@ -42,19 +42,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   bool _isAtsignOnboarded = false;
   AtSignLogger logger = AtSignLogger('OnboardingCli');
   AtOnboardingPreference atOnboardingPreference;
-  // Stays `AtLookUp?`, deliberately. Narrowing it to AtLookupMuxable breaks
-  // two assignments that are not this class's to change: it is assigned from
-  // `RemoteSecondary.atLookUp`, which is typed AtLookUp, and from the public
-  // `set atLookUp(AtLookUp?)` this class overrides - narrowing a public
-  // setter's parameter is a breaking change.
+  // NOTE: narrowing this to AtLookupMuxable breaks the assignment from
+  // `RemoteSecondary.atLookUp`, which is typed AtLookUp, and narrows the
+  // public `set atLookUp(AtLookUp?)` this class overrides, which is breaking.
   AtLookUp? _atLookUp;
 
-  /// The five lookups this class builds, which differed only in formatting.
-  ///
-  /// `authenticator: null` at construction is right for all of them:
-  /// [_installAuthenticator] supplies one afterwards from whichever credential
-  /// the CLI actually holds, and two of these sites only ever send an
-  /// unauthenticated `from:` through a proxy.
+  /// A lookup with no authenticator: [_installAuthenticator] supplies one
+  /// afterwards from whichever credential the CLI holds.
   AtLookupMuxable _newLookUp() => AtLookUp.withSecureSocket(
         atSign: _atSign,
         rootDomain: AtRootDomain(
@@ -146,15 +140,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           storagePath: atOnboardingPreference.storagePath!,
           closedByClient: true);
 
-  /// [atKeysIo] is the key *source* the client keeps for everything the
-  /// injected [atChops] cannot answer — resolving its PKAM algorithm from the
-  /// key material, filing conveyed privates, sourcing per-algorithm signing
-  /// keys. It does not change which AtChops authenticates: `AtClientImpl`
-  /// honours the injected one and never builds its own when it has it.
+  /// Builds the client for this atSign, authenticating with [atChops].
   ///
-  /// Null where there is no source to hand across. The enrollment path is one:
-  /// it authenticates with the APKAM keypair it just had approved, and the
-  /// keyfile that will hold it is written afterwards.
+  /// [atKeysIo] is the key source the client keeps for everything [atChops]
+  /// cannot answer — resolving its PKAM algorithm from the key material,
+  /// filing conveyed privates, sourcing per-algorithm signing keys — and is
+  /// null where there is no source to hand across, as on the enrollment path
+  /// whose keyfile is written afterwards.
   Future<void> _initAtClient(AtChops atChops,
       {String? enrollmentId, AtKeysIo? atKeysIo}) async {
     AtClientManager atClientManager = AtClientManager.getInstance();
@@ -170,85 +162,56 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         enrollmentId: enrollmentId,
         storage: _storageForClient());
 
-    // Read before the `??=` below erases the distinction, because which of the
-    // two flows this is decides whether the preference gets to say how the
-    // connection authenticates.
+    // NOTE: read before the `??=` below erases the distinction between the
+    // two flows.
     final serviceBuiltTheLookup = _atLookUp != null;
 
     // ??= to support mocking
     _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
 
-    /// The keypair the connection signs its PKAM challenge with.
-    ///
-    /// Resolved beside the enrollment id and the algorithm, and from the same
-    /// source as whichever of them this flow trusts, because the three are one
-    /// fact: an enrollment, the key it holds, and the routine that key is
-    /// signed with. Taking two of them from the client and the third from the
-    /// caller is what left `at_activate list` unable to run a verb on a
-    /// retrofitted keyfile.
+    /// The keypair the connection signs its PKAM challenge with, taken from
+    /// the same source as the enrollment id and the algorithm beside it.
     final AtChops authenticationSigner;
 
     if (serviceBuiltTheLookup) {
-      // Enrolment. The APKAM keypair was minted moments ago under the
-      // posture's axis and the keyfile that will hold it is written later, so
-      // there is no key material to resolve from and the preference is the
-      // only source there is.
+      // Enrolment: the APKAM keypair was minted under the posture's axis and
+      // the keyfile that will hold it is written later, so there is no key
+      // material to resolve from and the preference is the only source.
       _atLookUp!.enrollmentId = enrollmentId;
       _atLookUp!.signingAlgoType =
           atOnboardingPreference.authenticationKeyAlgorithm;
       authenticationSigner = atChops;
     } else {
-      // Authentication. The lookup just adopted is the client's own, and the
-      // client has already read the keyfile — which outranks any preference,
-      // because you cannot sign ML-DSA with an RSA key. Writing the
-      // preference over the top is how `at_activate otp`/`list` came to fail
-      // on a PQ-native atSign: they build their client through
-      // `createAtClient`, which names no posture, so the posture is `legacy`,
-      // so the overwrite claimed rsa2048 for an ML-DSA enrollment and the
-      // first reconnect signed the challenge with the wrong routine.
+      // Authentication: the lookup just adopted is the client's own, and the
+      // client has already read the keyfile, which outranks any preference —
+      // you cannot sign ML-DSA with an RSA key.
       //
-      // Asserted rather than left alone: a cached client short-circuits
+      // NOTE: the enrollment id, the algorithm and the signer must all come
+      // from the client. A client that retrofitted during its own init
+      // authenticates as a different enrollment from the one the keyfile
+      // named when this call started, and at_chops refuses an algorithm
+      // declared over a keypair of another. They are asserted rather than
+      // left alone because a cached client short-circuits
       // `AtClientImpl.create` without rebuilding its RemoteSecondary, so its
-      // lookup carries whatever the previous caller left on it. And the id is
-      // the client's rather than the argument's, because a client that
-      // retrofitted during its own init came up on a different enrollment
-      // from the one the keyfile named when this call started.
-      //
-      // ⛔ **And the signer comes from the client for the same reason**, which
-      // it did not until a retrofitted keyfile made the two disagree. `atChops`
-      // here is at_auth's, built for the enrollment the keyfile's flat fields
-      // name; a client that retrofitted during its own init rebuilt its own to
-      // the new enrollment's ML-DSA keypair. Declaring the client's algorithm
-      // over the caller's keypair is a pairing at_chops refuses outright —
-      // `this PKAM key is 1218 bytes, and an ML-DSA-65 secret key is 4032` —
-      // and it refuses it on the first PKAM the adopted lookup performs, which
-      // is the one before the verb. So authentication reports success and the
-      // command fails, on every run: the retrofit is due again each time,
-      // because it deliberately leaves the keyfile's own `enrollmentId` at the
-      // capped legacy enrollment.
+      // lookup carries whatever the previous caller left on it.
       final client = atClientManager.atClient;
       _atLookUp!.enrollmentId = client.enrollmentId ?? enrollmentId;
       _atLookUp!.signingAlgoType = AtClientImpl.signingAlgoOf(client);
       authenticationSigner = client.atChops ?? atChops;
     }
-    // Neither key material nor a posture says how a challenge is *hashed*, so
-    // this axis is the preference's on both paths — and asserting it is what
-    // resets a cached client's lookup after a caller that ran with another
-    // value, which the `list` after a passphrase-protected authentication
-    // depends on.
+    // NOTE: neither key material nor a posture says how a challenge is
+    // hashed, so this axis is the preference's on both paths; asserting it is
+    // what resets a cached client's lookup after a caller that ran with
+    // another value.
     _atLookUp!.hashingAlgoType = atOnboardingPreference.hashingAlgoType;
 
     _adoptBuiltClient(atClientManager.atClient);
-    // The caller's, on both flows, and deliberately not [authenticationSigner]:
-    // this field is what at_auth's EnrollmentApprover reads for enrollment
-    // crypto, where the material that matters is the encryption keypair and the
-    // APKAM symmetric key rather than the APKAM signing keypair. A retrofitted
-    // client's AtChops is built from its own enrollment's authentication
-    // material and carries no APKAM symmetric key, so putting it here would
-    // move a second, unrelated behaviour under cover of fixing authentication.
+    // NOTE: the caller's on both flows, not [authenticationSigner]. at_auth's
+    // EnrollmentApprover reads this field for enrollment crypto, where the
+    // encryption keypair and the APKAM symmetric key matter rather than the
+    // APKAM signing keypair, and a retrofitted client's AtChops carries no
+    // APKAM symmetric key.
     _atLookUp!.atChops = atChops;
-    // Beside atChops, not instead of it: at_auth's EnrollmentApprover reads
-    // that field for enrollment crypto, which is not authentication.
     final lookUp = _atLookUp;
     if (lookUp is AtLookupMuxable) {
       lookUp.authenticator = authenticatorFor(
@@ -271,11 +234,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   /// Where this CLI's keys live, for READING them during authentication.
   ///
-  /// The passphrase is not optional here. A password-protected keyfile cannot
-  /// be read without it, and this source is handed to an authenticator that
-  /// reads on every authentication - so omitting it fails `list`, and every
-  /// other authenticated command, with "Pass Phrase is required". That is a
-  /// long way from where the mistake was made, and no unit test sees it.
+  /// The passphrase is not optional here: this source is handed to an
+  /// authenticator that reads the keyfile on every authentication, and a
+  /// password-protected keyfile cannot be read without it.
   AtKeysIo _keysIo() => FileAtKeysIo(
         filePath: atOnboardingPreference.atKeysFilePath != null
             ? (_) => atOnboardingPreference.atKeysFilePath!
@@ -339,19 +300,15 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
 
     atAuth ??= AtAuth.create();
-    // The same source `sendEnrollRequest` reads, and for the same reason: the
-    // preference is what `authenticate()` stamps on the connection, so minting
-    // under anything else hands at_chops a key of one algorithm and a
-    // declaration of another.
+    // NOTE: the preference is what `authenticate()` stamps on the connection,
+    // so minting under anything else hands at_chops a key of one algorithm and
+    // a declaration of another.
     var atOnboardingRequest = AtOnboardingRequest(_atSign,
         signingAlgoType: atOnboardingPreference.authenticationKeyAlgorithm);
     atOnboardingRequest.rootDomain = AtRootDomain(
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     atOnboardingRequest.retryOptions =
         RetryOptions(maxRetries: maxRetries, retryDelay: retryInterval);
-    // Deliberately not _keysIo(): this one omits the passphrase where the read
-    // path requires it. Whether that omission is right is a separate question,
-    // and not one to answer as a side effect of sharing a helper.
     final atKeysIo = FileAtKeysIo(
       filePath: atOnboardingPreference.atKeysFilePath != null
           ? (_) => atOnboardingPreference.atKeysFilePath!
@@ -360,16 +317,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     );
     atOnboardingRequest.atKeysIo = atKeysIo;
 
-    // A post-quantum activation is all-or-nothing, which is why it goes
-    // through one call rather than a few assignments here: an ML-DSA APKAM
-    // without a key package produces an atSign no sender can address until
-    // that enrollment sends an `enroll:update` for itself, since
-    // `metadata.keyPackage` is otherwise written only by the `enroll:request`
-    // that creates the enrollment record.
-    // Matched on mldsa65 exactly, not on "anything but rsa2048": ecc_secp256r1
-    // is a third, classical option this package already supports, and treating
-    // it as post-quantum would silently mint an ML-DSA APKAM for a caller who
-    // asked for an elliptic-curve one.
+    // NOTE: matched on mldsa65 exactly, not on "anything but rsa2048" —
+    // ecc_secp256r1 is a third, classical option this package supports, and
+    // treating it as post-quantum would silently mint an ML-DSA APKAM for a
+    // caller who asked for an elliptic-curve one. The activation itself is
+    // all-or-nothing: an ML-DSA APKAM without a key package produces an atSign
+    // no sender can address until that enrollment sends an `enroll:update` for
+    // itself.
     final bool pqNative = atOnboardingPreference.authenticationKeyAlgorithm ==
         SigningAlgoType.mldsa65;
     if (pqNative) {
@@ -408,12 +362,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   /// Creates the atSign-level signing root, which needs a client and so cannot
   /// happen until the activation is done.
   ///
-  /// It is created while this process still holds the **first** enrollment —
-  /// the one the atServer grants `__manage` — because that is what entitles it
-  /// to create the root at all. It does not fail the onboard: activation has
-  /// already succeeded by here, the CRAM secret is spent, and a start-time pull
-  /// or a re-run mints the root later. Reporting a live atSign as unactivated
-  /// would be much the worse outcome.
+  /// Done while this process still holds the first enrollment, the one the
+  /// atServer grants `__manage`, which is what entitles it to create the root.
   Future<void> _mintSigningRoot(
       AtOnboardingResponse response, AtKeysIo atKeysIo) async {
     final session = response.session;
@@ -542,12 +492,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       {Duration? apkamKeysExpiryDuration,
       SigningAlgoType? signingAlgo,
       EnrollmentKeyExchangeMode? keyExchangeMode}) async {
-    // One source for the algorithm this enrollment authenticates with. The
-    // preference is what `authenticate()` stamps on the connection
-    // (`_atLookUp!.signingAlgoType = atOnboardingPreference
-    // .authenticationKeyAlgorithm` on the enrolment branch), so minting under
-    // anything else hands at_chops a key of one algorithm and a declaration of
-    // another. A caller with a position of its own still passes it.
+    // NOTE: the preference is what `authenticate()` stamps on the connection,
+    // so minting under anything else hands at_chops a key of one algorithm and
+    // a declaration of another.
     final algo =
         signingAlgo ?? atOnboardingPreference.authenticationKeyAlgorithm;
     if (appName == null || deviceName == null) {
@@ -557,33 +504,20 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     _atLookUp ??= _newLookUp();
 
-    // One source for how the symmetric key travels, resolved the same way the
-    // algorithm above is: the caller's word if it has one, else this service's
-    // posture. `PqPosture.keyExchangeMode` is one of the axes a posture is
-    // *made of*, so a request built without consulting it makes the posture a
-    // partial instruction — which is what `enroll --posture pqActive` was
-    // until now. It reached the preference and the authentication key and
-    // stopped there, so the request went out hard-coded to legacy and the
-    // enrolment got no key package, silently.
     final mode =
         keyExchangeMode ?? atOnboardingPreference.posture.keyExchangeMode;
 
-    // The enrollment owns a data signing key from birth, under the algorithm
-    // the in-use set names — so `_apsk` advertises a key this enrollment holds
-    // rather than its APKAM authentication key, and the first start's
-    // reconciliation finds nothing missing and republishes nothing. Without
-    // it the record names the authentication key, the key package is signed
-    // by that key, and the first mint drops it: the package stops verifying
-    // and any link an approver conveyed against that value stops matching.
+    // NOTE: `_apsk` must advertise a data signing key this enrollment owns
+    // rather than its APKAM authentication key. Otherwise the first start
+    // mints one and drops the advertised value: the key package stops
+    // verifying, and any link an approver conveyed against it stops matching.
     final advertisedSigningKey = await mintAdvertisedSigningKey(
         atOnboardingPreference.dataSigningKeyAlgorithms);
 
-    // The constructor IS the decision, which is why this is a branch and not a
-    // parameter. A pq request needs both callbacks and carries no wrapped key;
-    // a legacy request carries the wrapped key and needs neither. Making the
-    // mode settable independently of the callbacks would create requests
-    // at_auth has to refuse at runtime, so `AtEnrollmentRequest` does not
-    // expose it and this chooses between the two shapes instead.
+    // NOTE: a pq request needs both callbacks and carries no wrapped key; a
+    // legacy request carries the wrapped key and needs neither. The mode is
+    // therefore the constructor rather than a field, so that no request can be
+    // built in a shape at_auth has to refuse at runtime.
     final AtEnrollmentRequest newClientEnrollmentRequest;
     if (mode == EnrollmentKeyExchangeMode.pq) {
       newClientEnrollmentRequest = AtEnrollmentRequest.pq(
@@ -594,23 +528,16 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           otp: otp,
           signingAlgo: algo,
           advertisedSigningKey: advertisedSigningKey,
-          // `algo`, not a constant: the builder signs the key package with the
-          // APKAM keypair this request is about to mint, so it has to be told
-          // which algorithm that is. Passing anything else signs the package
-          // with a key the record does not name, and every peer that resolves
-          // `_apsk` to verify it before sealing a secret verifies against
-          // nothing — the enrollment is created and then receives no conveyed
-          // material at all.
+          // NOTE: the builder signs the key package with the keypair this
+          // request advertises, so it must be told the same `algo` and the
+          // same advertised key. A package signed by anything else verifies
+          // against a record that does not name its signer, so a peer that
+          // resolves `_apsk` before sealing a secret seals nothing.
           metadataBuilder: enrollmentKeyPackageBuilder(_atSign,
               signingAlgo: algo,
-              // The same keypair the request advertises. A package signed by
-              // anything else is verified against a record that does not name
-              // its signer, so a peer resolves `_apsk`, fails, and seals
-              // nothing to the enrollment.
               advertisedSigningKey: advertisedSigningKey,
-              // The primary of the configured list. An enrollment is created
-              // holding one encapsulation key; the rest of the list is minted
-              // at the client's first startup.
+              // An enrollment is created holding one encapsulation key; the
+              // rest of the list is minted at the client's first startup.
               keyEstablishmentAlgo:
                   atOnboardingPreference.keyEstablishmentAlgorithms.first),
           apkamSymmetricKeyResolver:
@@ -623,11 +550,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           namespaces: namespaces,
           otp: otp,
           signingAlgo: algo,
-          // Advertised here too, and deliberately without a key package: the
-          // key-exchange mode decides whether a package exists at all, while
-          // `_apsk` is what every peer verifies signatures against whatever
-          // the mode. A legacy-mode enrolment under a posture that names a
-          // signing algorithm still owns its signing key.
+          // Advertised whatever the mode, and without a key package: the mode
+          // decides only whether a package exists, while `_apsk` is what every
+          // peer verifies signatures against.
           advertisedSigningKey: advertisedSigningKey);
     }
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
@@ -667,15 +592,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       await _sendFromCommandIfUsingProxy(_atLookUp!, context: 'awaitApproval');
     }
 
-    // Later steps re-authenticate on this connection (a reconnect PKAMs
-    // again), so the lookup must know which enrollment it authenticates as;
-    // the delegate passes the id per call and never stamps it.
+    // NOTE: later steps re-authenticate on this connection, so the lookup must
+    // know which enrollment it authenticates as; the delegate passes the id
+    // per call and never stamps it.
     _atLookUp!.enrollmentId = enrollmentResponse.enrollmentId;
 
-    // The enrollment checkpoint deliberately strips the atSign from the
-    // persisted response (the file must not reveal whose it is), and the
-    // delegate validates and addresses by both fields — so a resumed
-    // response gets them restored from what this service already knows.
+    // The delegate validates and addresses by both fields, so a response
+    // resumed from a checkpoint gets them restored from what this service
+    // already knows.
     // ignore: deprecated_member_use
     enrollmentResponse.atSign ??= _atSign;
     // ignore: deprecated_member_use
@@ -683,11 +607,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
 
     _atEnrollment ??= AtEnrollment.create();
-    // The whole approval handshake — PKAM-until-approved, then fetching and
-    // decrypting the encryption private key and self-encryption key — is
-    // at_auth's canonical implementation; this class used to carry a copy of
-    // it. Its progress events are forwarded for the duration so this
-    // service's subscribers see the same stream the copy used to emit.
     final forward = _atEnrollment!.progressStream.listen(_psc.add);
     try {
       await _atEnrollment!.waitForApproval(
@@ -704,15 +623,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   /// Write newly created encryption key-pairs into atKeys file
   ///
-  /// The keyfile is written by [FileAtKeysIo] — the same store [authenticate]
-  /// reads it back through. This class used to assemble the document itself,
-  /// which made it a second writer of a format at_auth owns: it self-encrypted
-  /// the four legacy fields by hand (byte-identically, as it happens), rolled
-  /// its own passphrase envelope, and could file no typed key material at all.
-  /// It also dereferenced the flat APKAM and self-encryption fields
-  /// unconditionally, which holds only while every enrollment mints an RSA
-  /// APKAM and every atSign has legacy material — the same assumption that
-  /// broke `_persistKeysLocalSecondary` on a PQ-native keyfile.
+  /// The keyfile is written by [FileAtKeysIo], the same store [authenticate]
+  /// reads it back through.
   Future<File> _generateAtKeysFile(
     AtKeys atAuthKeys, {
     String? enrollmentId,
@@ -731,10 +643,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       if (!allowOverwrite) {
         throw StateError('atKeys file ${atKeysFile.path} already exists');
       }
-      // `write` is create-only by contract and `flush` is never-lose, so
-      // neither of them means "replace" — which is exactly what allowOverwrite
-      // asks for. The old file goes first, at the caller's request, rather
-      // than by weakening a store verb.
+      // NOTE: `write` is create-only by contract and `flush` never loses, so
+      // neither of them means "replace"; the old file goes first, at the
+      // caller's request.
       await atKeysFile.delete();
     }
 
@@ -744,17 +655,16 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     if (enrollmentId != null) {
       atAuthKeys.enrollmentId = enrollmentId;
     }
-    // Every .atKeys file in existence carries the self-encryption key a second
-    // time under the atSign itself. Nothing in this repo reads it, and a
-    // freshly built AtKeys has no metadata to emit it from, so it is put there
-    // deliberately — a reader that has always found it must keep finding it.
+    // NOTE: every .atKeys file carries the self-encryption key a second time
+    // under the atSign itself. Nothing in this repo reads it back, but a
+    // reader that expects it must keep finding it.
     final selfEncryptionKey = atAuthKeys.defaultSelfEncryptionKey;
     if (selfEncryptionKey != null) {
       atAuthKeys.metadata[_atSign] = selfEncryptionKey.toString();
     }
     if (atOnboardingPreference.authMode != PkamAuthMode.keysFile) {
-      // In a SIM or another secure element the private half cannot be read
-      // and has never been in this file.
+      // In a SIM or another secure element the private half cannot be read,
+      // and this file does not carry it.
       atAuthKeys.apkamPrivateKey = null;
     }
 
@@ -777,20 +687,11 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   /// Back-up encryption keys to local secondary
   /// #TODO remove this method in future when all keys are read from AtChops
   ///
-  /// Every field here is **optional**, and each absence is a legitimate shape
-  /// rather than a fault:
-  ///
-  /// - a PQ-native enrollment files its APKAM as typed material under the
-  ///   enrollment id and leaves the flat `apkamPublicKey`/`apkamPrivateKey`
-  ///   empty, by design — authentication resolves the algorithm and the key
-  ///   from the keyfile, so nothing reads these back for such an enrollment;
-  /// - an atSign activated with `mintLegacyMaterial: false` has no RSA
-  ///   encryption keypair and no self-encryption key at all.
-  ///
-  /// Dereferencing them unconditionally is what made a PQ-native keyfile fail
-  /// here with `Null check operator used on a null value` — after a successful
-  /// authentication, from a back-up step, which is about as far from the cause
-  /// as an error can land.
+  /// Every field here is optional, and each absence is a legitimate shape: a
+  /// PQ-native enrollment files its APKAM as typed material under the
+  /// enrollment id and leaves the flat `apkamPublicKey`/`apkamPrivateKey`
+  /// empty, and an atSign activated with `mintLegacyMaterial: false` has no
+  /// RSA encryption keypair and no self-encryption key at all.
   Future<void> _persistKeysLocalSecondary(AtKeys atAuthKeys) async {
     Future<void> persist(String name, String key, AtBytes? value) async {
       if (value == null) {

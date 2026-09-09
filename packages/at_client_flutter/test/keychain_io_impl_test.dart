@@ -15,14 +15,9 @@ class MockBiometricStorageFile extends Mock implements BiometricStorageFile {}
 
 /// `KeychainAtKeysIo` as a *bootstrap store*.
 ///
-/// The keychain is one of the two homes the never-lose contract binds — the
-/// other being the `.atKeys` file — and until now it implemented only half of
-/// the interface. `flush` fell through to `WrittenAtKeysIo`'s throwing default,
-/// so on Flutter the nskey-private filing path and the signing-root store both
-/// hit `UnimplementedError` on a store that is the platform's own default.
-/// `write` was the mirror-image problem: it appended unconditionally to a list
-/// `read` scans front-to-back, so writing an atSign twice left the newer keys
-/// permanently unreachable behind the older ones.
+/// The keychain is one of the two homes the never-lose contract binds, the
+/// other being the `.atKeys` file, and `read` scans its list front-to-back —
+/// so an entry appended beside an existing one is unreachable.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -46,9 +41,7 @@ void main() {
   late MockBiometricStorageFile file;
   late KeychainAtKeysIo io;
 
-  /// The keychain blob, as a plain string the mock reads and writes. Real
-  /// enough for these tests: what is under examination is the read-modify-write
-  /// the io layer performs, not the platform channel underneath it.
+  /// The keychain blob, as a plain string the mock reads and writes.
   String? blob;
 
   setUp(() {
@@ -166,8 +159,6 @@ void main() {
       await io.write('@alice', keys);
       final before = blob;
 
-      // The same atSign, without the key it already had. The never-lose contract
-      // is what makes a bootstrap store safe to flush from several places.
       await expectLater(
         io.flush('@alice'.toAtsign(), keysFor('@alice')),
         throwsA(isA<AtKeysAssuranceException>()),
@@ -178,10 +169,6 @@ void main() {
 
   test('an entry stored under the legacy `name` metadata key is found, '
       'replaced and removed by the same predicate', () async {
-    // What a keychain written by an older release looks like: the atSign lives
-    // under `name`, not `atsign`. Reading it worked; `getAllAtsigns` threw on
-    // it (a non-bool used as a condition) and `removeAtsignFromKeychain`
-    // silently kept it.
     blob = jsonEncode({
       'keys': [
         {
@@ -208,11 +195,8 @@ void main() {
   });
 
   test('an atSign is one entry however the caller spells it', () async {
-    // Nothing normalizes on the way in: `AuthRequest.atSign` is a plain
-    // mutable String, and at_auth hands this layer that string verbatim on
-    // `read`/`write` while passing `toAtsign()` on `flush` — so both spellings
-    // reach the same keyset on one flow. Matching on the raw string would make
-    // an entry unreachable by the very spelling that created it.
+    // NOTE: `read`/`write` are handed the caller's raw string while `flush`
+    // is handed `toAtsign()`, so both spellings must resolve to one entry.
     await io.write('@Alice', keysFor('@alice'));
 
     expect(
@@ -236,13 +220,9 @@ void main() {
 
   test('a stored spelling that differs from its normal form is replaced, '
       'not appended beside', () async {
-    // The dangerous half of the same mismatch. An entry an older release wrote
-    // under the spelling the user typed — `@colin.constable` normalizes to
-    // `@colinconstable`, dots in the right-hand side being decoration — is
-    // found by `read`, because that is the raw string the caller still holds,
-    // and then flushed under the normalized one. An index that missed it would
-    // append: `read` answers with the first match, so the flushed material
-    // would be unreachable behind the entry it was meant to replace.
+    // NOTE: `@colin.constable` normalizes to `@colinconstable` — dots in the
+    // right-hand side are decoration — so a stored spelling can differ from
+    // the one `flush` matches on.
     blob = jsonEncode({
       'keys': [
         {

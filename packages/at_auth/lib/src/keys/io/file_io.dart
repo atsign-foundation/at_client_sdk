@@ -129,24 +129,11 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// The suffix [_preserveLegacyShape] writes the pre-upgrade document under.
   static const legacyShapeBackupSuffix = '.pre-v1';
 
-  /// Copies the keyfile aside, **once**, at the moment its shape stops being
-  /// the flat one every published build can read.
+  /// Copies the keyfile aside, once, at the moment its shape stops being the
+  /// flat one every published build can read.
   ///
-  /// The `.bak` beside this is a rolling copy: the next write replaces it, and
-  /// a client's startup makes several within seconds of the one that changed
-  /// the shape. So it preserves nothing an operator could come back to a day
-  /// later. This copy is keyed on the transition rather than on the write, and
-  /// is never overwritten — a second one would be a document that is already
-  /// upgraded, which is not what anybody would be reaching for.
-  ///
-  /// Detected from the documents themselves rather than from a flag a caller
-  /// passes: the writer is the only layer holding both the old and the new
-  /// shape, and a caller that has to remember to say "this one is the upgrade"
-  /// is a caller that will one day forget.
-  ///
-  /// Announced at `shout` because it is the one level a CLI that has silenced
-  /// its logging still shows, and because the whole point is that the operator
-  /// learns their credential file changed format at the moment it happens.
+  /// Keyed on that transition and never overwritten, unlike the rolling `.bak`
+  /// beside it, which the next write replaces.
   Future<void> _preserveLegacyShape(
     File file,
     Map<String, dynamic> existing,

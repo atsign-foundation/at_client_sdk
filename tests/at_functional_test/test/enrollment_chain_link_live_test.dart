@@ -1,5 +1,4 @@
-// The substrate and the chain are deliberately marked @experimental and will
-// be reshaped as the group surface matures.
+// The substrate and the chain are deliberately marked @experimental.
 // ignore_for_file: experimental_member_use
 
 @Tags(['pq'])
@@ -22,13 +21,9 @@ import 'test_utils.dart';
 
 /// The approval chain against a live atServer.
 ///
-/// The design rests on a property of the atServer that was established by
-/// reading its code and never observed: `_apsk` is written at first-enrollment
-/// creation and on approve, and *not* on every authenticated use, so metadata
-/// a client adds afterwards survives. The whole parent-signs / child-publishes
-/// arrangement exists because of that, so it is worth watching happen rather
-/// than trusting a code read — the same class of cross-tier assumption that
-/// has already been wrong twice on this branch.
+/// The whole parent-signs / child-publishes arrangement rests on the atServer
+/// writing `_apsk` at first-enrollment creation and on approve, and *not* on
+/// every authenticated use, so metadata a client adds afterwards survives.
 void main() {
   TestUtils.isolateStorage('enrollment_chain_link_live_test');
   late AtClient atClient;
@@ -39,9 +34,8 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    // The approver conveys the root private out of `atClient.atKeysIo`, so a
-    // client built without one could never hold it and any assertion about
-    // conveyance would be about the harness rather than the code.
+    // NOTE: the approver conveys the root private out of `atClient.atKeysIo`,
+    // so a client built without one has nothing to convey.
     keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final manager =
@@ -65,10 +59,6 @@ void main() {
         childEnrollmentId: enrollmentId,
         childApkamPublicKey: before.value as String,
       ),
-      // Typed as a link because that is what is being published. Signed as
-      // anything else it is not one, which is the whole point of the type —
-      // and the file publishes it by hand rather than through signLinkFor,
-      // so nothing else here would have said so.
       type: EnvelopeType.chainLink,
     );
 
@@ -107,8 +97,8 @@ void main() {
 
   test('an atSign anchors itself to its own signing root, and the walk sees it',
       () async {
-    // Mints if this run's atServer has no root yet, into the very AtKeysIo the
-    // client holds — so the approval tests below find a private to convey.
+    // NOTE: mints into the AtKeysIo the client itself holds, so the approval
+    // rows below find a private to convey.
     await PqSigningRoot(atClient, keysIo: keysIo)
         .mintIfAbsent(isFullyPrivileged: true);
 
@@ -134,26 +124,10 @@ void main() {
 
   test('the enrollment that loses the race does not mint a second root',
       () async {
-    // Here rather than in `pq_signing_root_mint_lock_test.dart` because this
-    // file is the one that legitimately mints the root on this atSign — the
-    // row above does it, into a keyfile it keeps — so the precondition is
-    // established by construction rather than by seeding a root whose private
-    // nobody holds. A file that seeded one took three rows of THIS file down
-    // on 2026-08-15, which is why the row lives here now.
-    //
-    // What a losing CLIENT does is the half the atServer cannot show: it must
-    // return empty-handed AND hold nothing, so its caller knows to request the
-    // root from a holder. With the record mutable, a loser that minted anyway
-    // would OVERWRITE the winner's root rather than be refused — which is the
-    // outcome the whole interlock exists to prevent — and one that kept a
-    // filed private would read as "already holding the root" forever and
-    // never ask.
-    //
-    // Against an atSign whose root is already published the loss is met at the
-    // absence check: nothing reaches the atServer and nothing is filed. The
-    // narrower race, where two mints both find the record absent and one is
-    // refused the lock, is unit-covered; the refusal itself is what
-    // `pq_signing_root_mint_lock_test.dart` watches the live atServer issue.
+    // NOTE: this row belongs beside the one above, which mints the root on
+    // this atSign into a keyfile it keeps — that is what makes the loser's
+    // precondition hold by construction rather than by seeding a root whose
+    // private nobody holds.
     final published = await PqSigningRoot.publishedPublicKey(atClient, atSign);
     expect(published, isNotNull,
         reason: 'the row above minted it, so this call is the LOSER by '
@@ -197,14 +171,12 @@ void main() {
         deviceName: 'priv-${Uuid().v4().hashCode}',
         namespaces: namespaces,
         otp: otp,
-        // pq mode so the approver mints the symmetric key. On the legacy path
-        // it would RSA-decrypt whatever the decision carries, and this test has
-        // no enrollee running to have produced one.
+        // pq mode so the approver mints the symmetric key rather than
+        // RSA-decrypting one that no enrollee is running to have produced.
         metadataBuilder: (keysIo) async => built = await build(keysIo),
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-        // pq is the key exchange; the enrollment still authenticates with
-        // an RSA-2048 APKAM keypair. What is under test is the privilege
-        // gate on the chain link, not the signing algorithm.
+        // pq is the key exchange; the enrollment still authenticates with an
+        // RSA-2048 APKAM keypair.
         signingAlgo: SigningAlgoType.rsa2048,
       ),
       AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
@@ -234,9 +206,6 @@ void main() {
         {'*': 'rw', '__manage': 'rw', namespace: 'rw'});
     final scoped = await enrolApproveAndCount({namespace: 'rw'});
 
-    // Checked, not assumed: if the atServer trimmed the grant, the approver
-    // would classify it as scoped and the comparison below would be between
-    // two identical cases while still reading green.
     expect(EnrollmentServiceImpl.isFullyPrivileged(privileged.granted), isTrue,
         reason: 'the atServer has to have granted * and __manage for this to '
             'be a test of the privilege gate at all');
@@ -263,7 +232,7 @@ void main() {
       otp: otp,
       metadataBuilder: (keysIo) async => built = await build(keysIo),
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-      // As above: pq key exchange, RSA-2048 APKAM authentication.
+      // pq key exchange, RSA-2048 APKAM authentication.
       signingAlgo: SigningAlgoType.rsa2048,
     );
 
@@ -281,12 +250,8 @@ void main() {
       apkamSymmetricKey: AtBytes.fromString(''),
     ));
 
-    // Two envelopes are addressed to this key package: the symmetric key it
-    // cannot start without, and the link vouching for it — root-flavoured
-    // here, because this approver authenticates with the atSign's own keys
-    // and is fully privileged. Counted rather than read, because both are
-    // sealed to a private half only the enrolling device holds — the count
-    // is what an approver-side test can honestly see.
+    // NOTE: both envelopes are sealed to a private half only the enrolling
+    // device holds, so their count is all an approver-side row can see.
     final envelopes = await atClient.getAtKeys(
         regex: '.*\\.$kpid\\.__ssenv\\..*', useRemoteAtServer: true);
 

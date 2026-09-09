@@ -11,22 +11,12 @@ import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// **Arm C of the startup-tail differential**: the client whose tail was
-/// abandoned asks to be made reachable, and is.
+/// A client whose startup tail was abandoned — the shape a CLI tool, a cron
+/// job or a piped-stdin notifier has — asks to be made reachable, and is.
 ///
-/// Read with its two pairs. `seeding_tail_runs_live_test.dart` shows a living
-/// client publishes on its own; `seeding_tail_abandoned_live_test.dart` shows
-/// a stopped one publishes nothing while `startupComplete` resolves anyway.
-/// This one takes the *same* stopped client — the shape a CLI tool, a cron job
-/// or a piped-stdin notifier actually has — and shows the supported way out.
-///
-/// ⚠️ **Its own file for the same reason as the others**: `AtClientManager` is
-/// a per-isolate singleton that re-serves the client it already built, so a
-/// bootstrap that has not yet run needs a fresh isolate.
-///
-/// `ensureReachable` is on the **`AtClient` interface**, so nothing here
-/// downcasts to reach it — the downcast below is only to stop the startup
-/// tail, which is a test manoeuvre and not something an app does.
+/// NOTE: its own file because `AtClientManager` is a per-isolate singleton
+/// that re-serves the client it already built, so a bootstrap that has not yet
+/// run needs a fresh isolate.
 void main() {
   TestUtils.isolateStorage('ensure_reachable_live_test');
   late String atSign;
@@ -44,7 +34,7 @@ void main() {
         atKeysIo: keysIo, posture: PqPosture.pqActive);
     final atClient = manager.atClient;
 
-    // Reproduce the defect first, so what follows is a rescue and not a
+    // Abandon the tail first, so what follows is a rescue and not a
     // demonstration against a client that was going to publish anyway.
     (atClient as AtClientImpl).pqBootstrap!.stop();
     await atClient.pqBootstrap!.startupComplete
@@ -69,10 +59,6 @@ void main() {
         reason: 'and the outcome is not merely a claim — the advertisement is '
             'on the atServer, fetched by the exact lookup a sender uses');
 
-    // Idempotent and cheap on every start, which is what makes it safe to
-    // call unconditionally. A second call must not mint a second generation:
-    // that would rotate the namespace key out from under any peer that had
-    // already fetched the first.
     final again = await atClient.ensureReachable(namespace);
     expect(again.outcome, AtReachability.alreadyReachable,
         reason: 'the second call finds the key and does nothing, so an app may '

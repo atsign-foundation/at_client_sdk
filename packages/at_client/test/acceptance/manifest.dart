@@ -1,33 +1,9 @@
 /// The acceptance ledger's own data, so its guards read a declaration rather
 /// than infer one from prose.
 ///
-/// Two things used to be inferred, and both could be fooled without anything
-/// going red:
-///
-/// - **Which files hold burn-down rows.** The rule was "every `*_test.dart`
-///   here except `catalogue_test.dart`", so adding any non-scenario file to
-///   this directory silently inflated the row count the README is pinned to —
-///   and the only way to add a guard without inflating it was to not add one.
-/// - **Which use cases the catalogue defines.** The rule was every
-///   `UC-…`-shaped string anywhere in `acceptance.md`, so a cross-reference
-///   inside another row's prose counted as a catalogue entry. The defined set
-///   and the mentioned set are still identical, which is luck rather than
-///   construction: one typo'd cross-reference invents a use case that can never
-///   have a scenario, and the guard would demand one forever.
-///
-///   ⚠️ This said "the same 43" until 2026-08-23, when the count was 69 — a
-///   figure with no way to go red, since nothing reads it. Re-derive rather
-///   than quoting one here, which is why no number replaces it:
-///
-///   ```bash
-///   git grep -cP '^#{2,4} +(?:[\d.]+ +)?UC-[ABCG]\d+\.\d+[a-z]? +— ' \
-///     -- docs/projects/pq/acceptance.md
-///   ```
-///
-/// Both are declarations here now, and [undeclaredTestFiles] is what fails
-/// when a file appears in this directory without being classified either way.
-///
-/// Catalogue: `docs/projects/pq/acceptance.md`.
+/// Which files hold burn-down rows, and which use cases the catalogue defines,
+/// are both declared here rather than inferred; [undeclaredTestFiles] fails
+/// when a file appears in this directory classified as neither.
 library;
 
 import 'dart:io';
@@ -67,14 +43,9 @@ const guardFiles = <String>[
 
 /// The packages whose tests drive a real atServer.
 ///
-/// A citation into one of these is evidence about the product. A citation
-/// anywhere else runs in-process against a mock, where the other side accepts
-/// whatever it is handed — so a refusal, a lock or an interlock the mock does
-/// not model is green whether the mechanism is present or absent.
-///
-/// Trailing slashes are part of the match: `tests/at_functional_test` is also
-/// a prefix of `tests/at_functional_test_helpers`, and a pack added later with
-/// such a name would silently count as this one.
+/// The trailing slash is part of the match: without it,
+/// `tests/at_functional_test` would also prefix-match a pack named
+/// `tests/at_functional_test_helpers`.
 const livePackPaths = <String>[
   'tests/at_functional_test/',
   'tests/at_end2end_test/',
@@ -83,19 +54,9 @@ const livePackPaths = <String>[
 
 /// Rows allowed to rest on an in-process proof, each with the reason.
 ///
-/// The standing rule (gkc, 2026-08-26) is that a proof by mock is acceptable
-/// **only** where a live test would be prohibitively costly or impossible.
-/// This map is where that "only" is spent: an entry here is a claim that no
-/// live test could add anything, and the sentence is what a reviewer judges.
-///
-/// The bar is high, and the shape that clears it is "there is no atServer in
-/// the loop" — parsing, format composition, provider selection, crypto over
-/// fixed vectors. "It would need an enrollment dance" does not clear it: the
-/// live packs do that routinely.
-///
-/// ⛔ Not a place to park work. A row that owes a live test belongs in
-/// [liveProofOwed], which says the same thing about the tree while saying the
-/// opposite about the intent.
+/// An entry claims no live test could add anything — the shape that qualifies
+/// is "there is no atServer in the loop"; a row that merely owes one belongs
+/// in [liveProofOwed].
 const liveProofExempt = <String, String>{
   'UC-G3.4':
       'the mechanism is a client-side whole-string comparison — a record this client fetched, held against a field of a payload conveyed to it — so every party to the decision is in one process and a real atServer contributes nothing but the fetch. Who may WRITE _apsk is a different claim and IS live-proven, in tests/at_functional_test/test/apsk_server_side_test.dart. Unit by argument, not by omission',
@@ -107,24 +68,10 @@ const liveProofExempt = <String, String>{
 
 /// Clauses that CANNOT reach proven, whatever anyone builds, with the reason.
 ///
-/// Objective 1 is "every **provable** THEN clause proven" (gkc, 2026-08-31),
-/// restated from "every THEN clause" once it emerged that at least one clause
-/// is unreachable by construction rather than by neglect.
-///
-/// The shape to watch for: a clause whose assertion is that a mechanism **does
-/// not exist**. Building the mechanism makes the clause FALSE rather than
-/// proven, and pinning the absence would count a clause proven for describing a
-/// hole — which gkc declined for UC-G2.9 c1 and c2 on 2026-08-31, ruling that
-/// such an absence gets a source-shaped guard cited WITHOUT a `clauses:` list:
-/// a tripwire, not proof. Both exits are closed, so the clause is stuck.
-///
-/// ⚠️ **This is not a waiver and must not become one.** An entry here says the
-/// clause is unprovable *as written*; it says nothing about whether the work it
-/// describes is owed, and the owed work keeps its own row. Rewriting or
-/// withdrawing such a clause is always available and is usually better — this
-/// map is for the ones deliberately kept as written.
-///
-/// Keyed `<use case> c<n>`, because the unit is a clause and not a row.
+/// Keyed `<use case> c<n>`, the shape being a clause that asserts a mechanism
+/// **does not exist**: building it would falsify the clause, pinning the
+/// absence would count it proven for describing a hole, and the absence gets a
+/// guard cited without a `clauses:` list instead.
 const unprovableClauses = <String, String>{
   'UC-A5.3 c2':
       'every sentence of it is the atServer\'s: the transitive cascade, the roster it empties, and the three refusals (un-revoking behind an unapproved approver, a revoke that would remove the caller, one that would leave no permanent fully privileged enrollment). at_server pins each by name in BOTH its tiers — `the cascade is transitive, not one level deep` and `a revoke whose cascade would remove the caller is refused` carry the core, and its `apkam_self_enrollment_test.dart` holds the rest beside them. A pin here would build the subtree on this side and re-assert their behaviour through a fixture this side controls, which goes green for the wrong reason the day the cascade breaks in a shape that fixture does not construct (gkc, 2026-09-09). The client half of the old clause is now c3 and IS pinned',
@@ -137,18 +84,9 @@ const unprovableClauses = <String, String>{
 /// How many THEN clauses some citation pins, and how many of those are pinned
 /// by a citation into a live pack.
 ///
-/// The burn-down, in the two columns gkc asked for (2026-08-26): a clause is
-/// **proven** when something claims it, and **server-proven** when the thing
-/// claiming it drove a real atServer. Done is `proven` reaching the clause
-/// total; `serverProven` is the second axis and has its own target.
-///
-/// ⚠️ **Recorded as an exact figure, not a floor, and the guard fails in both
-/// directions.** A floor would let the real number drift upward unrecorded,
-/// which is how every stale count in this project began — the count and the
-/// thing it counts must move in one diff. Raising these is what landing a pin
-/// looks like in review.
-///
-/// Re-derive rather than guessing:
+/// An exact figure, not a floor: the guard fails in both directions, so the
+/// count and the thing it counts move in one diff. Re-derive rather than
+/// guessing:
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
@@ -160,9 +98,7 @@ const serverProvenClauseCount = 94;
 /// Rows with no live proof yet, each pointing at what owes it.
 ///
 /// Separate from [liveProofExempt] because the two decay in opposite
-/// directions: an exemption is meant to last, and an entry here is meant to be
-/// deleted. Collapsing them into one map would make a permanent waiver and an
-/// unpaid debt indistinguishable, which is the state this rail exists to end.
+/// directions: an exemption is meant to last, an entry here to be deleted.
 const liveProofOwed = <String, String>{
   'UC-G2.1':
       'feasible AND it would add something these citations cannot: they parse hand-built payloads, so nothing establishes that an atServer STORES and SERVES a key-package entry it has no code for, verbatim. That is the other half of reader-ships-first, and it is reachable by publishing such a package with enroll:update and reading it back',
@@ -247,60 +183,35 @@ class UseCase {
 
   /// Whether the catalogue has withdrawn this row rather than owing it.
   ///
-  /// A withdrawn row keeps its heading — the id stays resolvable, and the
-  /// entry says why the row is not coming and what replaced it, which is the
-  /// whole value of writing it down. Deleting the heading instead would leave
-  /// every cross-reference to it dangling and lose the reason.
-  ///
-  /// So it must not be counted as owing a scenario: a burn-down that demands
-  /// a test for a mechanism that was deleted can never reach zero.
+  /// A withdrawn row keeps its heading, so cross-references to it still
+  /// resolve, and it must not be counted as owing a scenario.
   bool get isWithdrawn => title.startsWith('WITHDRAWN');
 
   @override
   String toString() => '$id — $title';
 }
 
-/// The shape of a use-case id, in ONE place.
+/// The shape of a use-case id, in ONE place — ⚠️ **widening the catalogue to a
+/// new cluster means widening this, and nothing else.**
 ///
-/// ⚠️ **Widening the catalogue to a new cluster means widening this, and
-/// nothing else.** It used to be spelled out in every regex that needed it —
-/// three here and three in `docs_structure_test.dart` — and the ledger's note
-/// about the last widening says "both of them, doc-side and test-side" because
-/// there were two at the time. By 2026-08-18 there were six, the note still
-/// said two, and adding the `G` cluster went red in a place that looked
-/// unrelated: the status-table guard, whose own copy nobody had thought to
-/// grep for.
-///
-/// The optional trailing letter is for a row inserted between two that were
-/// already numbered — `UC-G1.9a` sits between 9 and 10 and is its own use
-/// case. It does NOT capture the `(a)`/`(b)` suffix a SCENARIO uses to split
-/// one row into two, because a bracket is not a letter: those still resolve to
-/// the row they split.
+/// The optional trailing letter marks a row inserted between two already
+/// numbered (`UC-G1.9a`), not the `(a)`/`(b)` suffix a scenario uses to split
+/// one row into two.
 const ucIdPattern = r'UC-[ABCG]\d+\.\d+[a-z]?';
 
-/// Every heading that DEFINES a use case. The number prefix is optional
+/// Every heading that DEFINES a use case; the number prefix is optional
 /// because the catalogue's first cluster has none.
 ///
-/// ⚠️ **The letter class is what decides which clusters are enforced at all.**
-/// It read `[ABC]` until 2026-08-18, so the sixteen `UC-G1.x` rows in
-/// [acceptance.md section 16] were invisible to every check here — no heading
-/// had to exist, no scenario had to cite one, and nothing compared the rows to
-/// the tree. Eleven of the twelve that were then checked turned out to describe
-/// code that had been deleted or reversed. Widening a cluster into this class
-/// is what makes it real; adding rows to the document is not.
+/// ⚠️ **The letter class decides which clusters are enforced at all** — a
+/// cluster missing from it is invisible to every check here.
 final _definition =
     RegExp('^#{2,4} +(?:[\\d.]+ +)?($ucIdPattern) +— +(.*)\$', multiLine: true);
 
 /// A use-case id anywhere at all, definitions and cross-references alike.
-/// The optional trailing letter is for a row inserted between two that were
-/// already numbered — `UC-G1.9a` sits between 9 and 10 and is its own use
-/// case, not a variant. It does NOT capture the `(a)`/`(b)` suffix a SCENARIO
-/// uses to split one row into two, because a bracket is not a letter: those
-/// still resolve to the row they split.
 final _mention = RegExp(ucIdPattern);
 
 /// The same id at the start of a `test('UC-…')` name — the quote is what keeps
-/// this to scenario names and out of the Given/When/Then prose.
+/// this to scenario names and out of the surrounding prose.
 final _scenarioName = RegExp("test\\(\\s*'($ucIdPattern)");
 
 /// Any `test(` at all, however its name is written.
@@ -312,9 +223,8 @@ final _skip = RegExp(r'skip: (\w+)\)');
 /// The path a `provenIn` citation names, wherever that path sits.
 ///
 /// ⚠️ **Spans newlines deliberately.** `provenIn(` is routinely formatted with
-/// its path on the following line, so a line-anchored matcher sees a minority
-/// of the corpus and reads as though it saw all of it — one reported 62
-/// citations over 18 files where the true figure was 161.
+/// its path on the following line, so a line-anchored matcher would silently
+/// see a minority of the corpus and read as though it saw all of it.
 final _citationPath = RegExp("provenIn\\(\\s*'([^']+)'");
 
 /// A citation of either kind: `provenIn(` with its path, or `provenHere(`
@@ -337,9 +247,11 @@ Directory repoRoot() {
   }
 }
 
+/// The directory holding the scenarios and the guards over them.
 Directory acceptanceDir() =>
     Directory('${repoRoot().path}/packages/at_client/test/acceptance');
 
+/// The catalogue this ledger reads its use cases and clauses from.
 File catalogueFile() =>
     File('${repoRoot().path}/docs/projects/pq/acceptance.md');
 
@@ -371,9 +283,8 @@ int scenarioCount() => scenarioFiles
 /// How many of those rows are skipped.
 ///
 /// "Skipped", not "blocked": a blocker's label (`blocked:` vs `owed:`) lives
-/// in `blockers.dart` and is not visible from a `skip:`. Conflating the two is
-/// the error `decisions.md` 35 caught, so this counts what it can see and
-/// leaves the split to prose.
+/// in `blockers.dart` and is not visible from a `skip:`, so this counts what it
+/// can see and leaves the split to prose.
 int skippedCount() => scenarioFiles
     .map((f) => _skip.allMatches(_read(f)).length)
     .reduce((a, b) => a + b);
@@ -390,23 +301,9 @@ Set<String> scenarioUseCaseIds() {
 /// Where each scenario's citations point, keyed by the use case that made
 /// them.
 ///
-/// Read from the sources rather than from a run, because the citations a
-/// scenario makes are a property of the file. Recording them at run time would
-/// tie every guard over them to `ACCEPTANCE_LEDGER` being set, and a guard
-/// that mostly does not run is worse than none — it reads as coverage.
-///
-/// Sliced at each `test(` for the reason [skippedUseCases] is: a citation
-/// belongs to the scenario whose body encloses it, not to whichever scenario
-/// name sits nearest it in the file.
-///
-/// A scenario with no use-case id contributes nothing here. That is not a
-/// gap — section 13's cross-cutting invariants are deliberately unnumbered,
-/// so they have no catalogue row for a citation to attach to.
-///
-/// A scenario that cites nothing still gets an entry, holding an empty list.
-/// "Proves itself inline" and "is not a scenario at all" are different states
-/// and a caller needs to tell them apart: five rows are in the first, and
-/// reading them as the second would drop them from every count here.
+/// Read from the sources, so no guard over it depends on the ledger having
+/// been executed; a scenario with no use-case id contributes nothing, and one
+/// that cites nothing gets an entry holding an empty list.
 Map<String, List<String>> citationsByUseCase() {
   final out = <String, List<String>>{};
   for (final file in scenarioFiles) {
@@ -446,11 +343,9 @@ class SourceCitation {
 /// Every citation each scenario makes, with its clause pins, keyed by use
 /// case.
 ///
-/// Read from source rather than from a run for the reason
-/// [citationsByUseCase] is — and here there is a second reason. `provenIn`
-/// resolves its fragments while the scenario executes, and test files run in
-/// separate isolates, so no single process ever sees every pin. A guard over
-/// the whole catalogue has to read the sources or it cannot exist.
+/// Read from source: `provenIn` resolves its fragments while the scenario
+/// executes and test files run in separate isolates, so no single process ever
+/// sees every pin.
 Map<String, List<SourceCitation>> citationDetailsByUseCase() {
   final out = <String, List<SourceCitation>>{};
   for (final file in scenarioFiles) {
@@ -463,15 +358,12 @@ Map<String, List<SourceCitation>> citationDetailsByUseCase() {
       if (named == null) continue;
       final list = out.putIfAbsent(named.group(1)!, () => <SourceCitation>[]);
 
-      // One slice per call, so a citation's pins cannot be read off the call
-      // that follows it.
       final calls = _anyCitation.allMatches(chunk).toList();
       for (var j = 0; j < calls.length; j++) {
         final callEnd =
             j + 1 < calls.length ? calls[j + 1].start : chunk.length;
-        // A `provenHere` names no path because the proof is this file. It is
-        // recorded as this file, which is in-process by construction — an
-        // inline proof runs in at_client's unit suite with no atServer.
+        // NOTE: a `provenHere` names no path, so it is recorded as this file —
+        // in-process by construction.
         final path =
             calls[j].group(1) ?? 'packages/at_client/test/acceptance/$file';
         list.add(SourceCitation(
@@ -485,17 +377,12 @@ Map<String, List<SourceCitation>> citationDetailsByUseCase() {
 /// Every test file a `provenIn` citation names, repo-relative.
 ///
 /// Deliberately NOT derived from [citationDetailsByUseCase], which keys each
-/// citation to a `UC-` id read off the enclosing scenario's name — so it
-/// cannot see a cross-cutting invariant's citations at all, section 13's rows
-/// being unnumbered by design. A guard over *everything cited* has to read
-/// every call, and one built on the keyed map would silently exempt the
-/// citations nobody thought to number.
+/// citation to a `UC-` id read off the enclosing scenario's name and so cannot
+/// see an unnumbered cross-cutting invariant's citations at all.
 Set<String> citedTestPaths() {
   final out = <String>{};
   for (final file in scenarioFiles) {
     for (final match in _anyCitation.allMatches(_read(file))) {
-      // A `provenHere` names no path — the proof is the acceptance file
-      // itself, which needs no separate mention anywhere.
       final path = match.group(1);
       if (path != null) out.add(path);
     }
@@ -505,12 +392,9 @@ Set<String> citedTestPaths() {
 
 /// The `clauses:` fragments in one `provenIn(...)` call.
 ///
-/// Scanned rather than split on commas. A fragment is a sentence of the
-/// catalogue and sentences contain commas, so splitting first would silently
-/// drop every pin that has one — an undercount that reads exactly like a
-/// citation which never pinned anything. Adjacent literals are joined,
-/// because Dart concatenates them and a fragment distinctive enough to
-/// resolve is usually long enough to wrap.
+/// Scanned rather than split on commas, because a fragment is a sentence of
+/// the catalogue and may contain one; adjacent string literals are joined, as
+/// Dart concatenates them.
 List<String> _pinsIn(String call) {
   final at = call.indexOf('clauses:');
   if (at < 0) return const [];
@@ -557,9 +441,7 @@ List<String> _pinsIn(String call) {
 
 /// Which clause indexes of [useCase] the fragment [pin] names.
 ///
-/// Mirrors `provenIn`'s own rule: exactly one, or the pin is meaningless. A
-/// pin resolving to nothing claims nothing while reading as coverage, and one
-/// resolving to two says which of them nobody can tell.
+/// Mirrors `provenIn`'s own rule: exactly one, or the pin is meaningless.
 List<int> resolvePin(String useCase, String pin) => clausesOf(useCase)
     .where((c) => c.text.contains(pin))
     .map((c) => c.index)
@@ -614,17 +496,15 @@ Set<String> declaredBlockers() {
 /// Which use cases have a skipped scenario, and the blocker each is skipped
 /// against.
 ///
-/// Attributed per scenario, not per file. [skippedCount] only has to total the
-/// skips, but the catalogue's status table has to say *which* use case is
-/// blocked — and a file holds both running and skipped scenarios, so a
-/// file-level answer would mark every use case in `a2_enrollment_test.dart`
-/// blocked when two of its six are.
+/// Attributed per scenario, not per file: a file holds both running and
+/// skipped scenarios, so a file-level answer would mark every use case in it
+/// blocked.
 Map<String, String> skippedUseCases() {
   final out = <String, String>{};
   for (final file in scenarioFiles) {
     final text = _read(file);
-    // Slice at each `test(` so a `skip:` belongs to the scenario it closes
-    // rather than to whichever one happens to sit nearest it in the file.
+    // NOTE: slice at each `test(` so a `skip:` belongs to the scenario it
+    // closes, not to whichever one sits nearest it in the file.
     final starts = _anyScenario.allMatches(text).map((m) => m.start).toList();
     for (var i = 0; i < starts.length; i++) {
       final end = i + 1 < starts.length ? starts[i + 1] : text.length;
@@ -667,23 +547,15 @@ List<String> missingDeclaredFiles() => [...scenarioFiles, ...guardFiles]
     .toList();
 
 /// One THEN clause of a catalogue row — the unit a scenario can claim.
-///
-/// A row's verdict has always been all-or-nothing: cite one live test and the
-/// whole row reads as proven, however many separate things its THEN states.
-/// UC-A2.5 states six, and the one known overclaim in this catalogue — three
-/// clauses of UC-A2.5/UC-A2.6 that no test reached — was found by hand,
-/// because nothing could compute it.
 class Clause {
   const Clause(this.useCase, this.index, this.text);
 
-  /// The row this clause belongs to.
   final String useCase;
 
   /// Position within the row, from 1, in catalogue order.
   ///
-  /// For reporting only. A citation names a clause by a distinctive fragment
-  /// of its text, never by this number, so inserting a clause does not
-  /// silently re-point every citation after it.
+  /// For reporting only: a citation names a clause by a distinctive fragment of
+  /// its text, never by this number.
   final int index;
 
   /// The clause as written, collapsed to one line.
@@ -695,10 +567,9 @@ class Clause {
 
 /// The two forms a THEN takes in this catalogue.
 ///
-/// Most rows write `- **Then:**` bullets. The `UC-G1.x` cluster writes an
-/// indented `*Then*` / `*And*` italic instead, and it is 16 of the 69 rows —
-/// a parser that knows only the bullet form reports them as having no clauses
-/// at all, which reads as "nothing to prove" rather than "I cannot see them".
+/// Most rows write `- **Then:**` bullets; the `UC-G1.x` cluster writes an
+/// indented `*Then*` / `*And*` italic instead, and a parser that knows only
+/// the bullet form reports those rows as having no clauses at all.
 final _thenBullet = RegExp(r'^- \*\*Then');
 final _thenItalic = RegExp(r'^\s*\*(?:Then|And)\*');
 final _subBullet = RegExp(r'^  - ');
@@ -710,12 +581,8 @@ String _collapse(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
 /// Every THEN clause the catalogue states, in catalogue order, keyed by row.
 ///
 /// A `**Then:**` bullet carrying sub-bullets contributes its sub-bullets and
-/// not itself: the bullet is then a heading for them, and counting both would
-/// double every multi-clause row. A `**Then:**` with no sub-bullets is one
-/// clause, whatever its prose asserts — the document's own structure is the
-/// authority here, not a reading of the sentence.
-///
-/// A withdrawn row yields none, which is correct rather than a gap.
+/// not itself, one with no sub-bullets is a single clause whatever its prose
+/// asserts, and a withdrawn row yields none.
 Map<String, List<Clause>> catalogueClauses() {
   final lines = catalogueFile().readAsStringSync().split('\n');
   final defs = <int, UseCase>{};

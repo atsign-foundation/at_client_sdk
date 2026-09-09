@@ -529,11 +529,9 @@ class EnrollmentSubmitter {
       final metadata = await _buildMetadata(
           request.metadataBuilder, request.atSign, constructionKeys);
 
-      // No otp, and no `encryptedAPKAMSymmetricKey`: the connection's own
-      // authentication is the whole authority, and a retrofit conveys nothing
-      // because the keyfile already holds every secret an approver would
-      // otherwise pass on. The atServer requires a symmetric key only for a
-      // request carrying an otp.
+      // NOTE: no otp, so no `encryptedAPKAMSymmetricKey` — the atServer
+      // requires the symmetric key only for a request carrying an otp, and
+      // here the connection's own authentication is the whole authority.
 
       final enrollVerbBuilder = EnrollVerbBuilder()
         ..appName = request.appName

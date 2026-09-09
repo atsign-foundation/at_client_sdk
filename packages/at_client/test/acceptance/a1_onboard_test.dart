@@ -16,10 +16,10 @@ void main() {
       // THEN  alice1.APKAM = pq and authenticates via PQ APKAM (no RSA APKAM
       //       needed for auth); public:pq_signing_root@alice exists, is
       //       MUTABLE (what is create-once is _rootlock@alice, the mint lock)
-      //       and alice1 holds its private; alice1.KP registered in E1's record but not published
-      //       (discoverable only via enroll:listns). Legacy material is STILL
-      //       cut and published BY DEFAULT (decisions 37, reversing the old
-      //       Decision #1): the RSA encryption keypair + selfEncryptionKey are
+      //       and alice1 holds its private; alice1.KP registered in E1's
+      //       record but not published (discoverable only via
+      //       enroll:listns). Legacy material is cut and published BY
+      //       DEFAULT: the RSA encryption keypair + selfEncryptionKey are
       //       minted (the PQ data path never touches them) and
       //       public:publickey@alice is present unless the opt-OUT flag is
       //       set.

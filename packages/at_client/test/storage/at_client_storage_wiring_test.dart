@@ -38,11 +38,9 @@ void main() {
 
   test('a bundle and an injected keystore together are refused, not merged',
       () async {
-    // An injected keystore skips the storage block entirely — keystore AND
-    // sync queue — so accepting both would hand the caller the keystore it
-    // named beside a queue on the global Hive instance. That is the shared
-    // queue the per-file storage isolation exists to remove, and it would be
-    // silent.
+    // NOTE: an injected keystore skips the storage block entirely — keystore
+    // AND sync queue — so accepting both would silently pair the named
+    // keystore with a queue on the global Hive instance.
     final dir = Directory.systemTemp.createTempSync('at_client_both_');
     addTearDown(() => dir.deleteSync(recursive: true));
     final storage =

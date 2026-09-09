@@ -1,5 +1,4 @@
-// The PQ enrolment surface is @experimental while it matures; this test drives
-// it deliberately.
+// The PQ enrolment surface is @experimental; this test drives it deliberately.
 // ignore_for_file: experimental_member_use
 
 import 'package:at_auth/at_auth.dart';
@@ -15,26 +14,14 @@ import 'package:test/test.dart';
 /// `at_onboarding_cli` builds its enrolment request from the posture's
 /// key-exchange axis, and a caller can override it.
 ///
-/// **The axis used to reach nothing.** `sendEnrollRequest` built the unnamed
-/// `AtEnrollmentRequest(...)`, whose initialiser hard-sets
-/// `EnrollmentKeyExchangeMode.legacy` — only the `.pq` named constructor sets
-/// `pq`. So `at_activate enroll --posture pqActive` submitted a legacy request,
-/// the enrolment advertised no key package, and nothing said so. The posture
-/// was a partial instruction: it reached the preference and the authentication
-/// key and stopped.
-///
-/// **What is asserted is the request that reaches `submit`**, captured off the
+/// What is asserted is the request that reaches `submit`, captured off the
 /// `AtEnrollment` seam, because that is the object at_auth turns into the wire
-/// command. A test that built an `AtEnrollmentRequest` itself and checked its
-/// `keyExchangeMode` would pass for a service that never consulted the posture
-/// at all — it would be testing at_auth's constructor, which already has its
-/// own tests.
+/// command; a test that built an `AtEnrollmentRequest` itself would be testing
+/// at_auth's constructor instead.
 ///
-/// ⚠️ **`keyExchangeMode` is not settable**, by design: the constructor decides
-/// it, so that a mode and the callbacks it requires cannot be chosen
-/// separately. That is why every cell below asserts the callbacks alongside the
-/// mode — a `pq` request without them is a state at_auth refuses to construct,
-/// and asserting the mode alone would not notice if that ever changed.
+/// `keyExchangeMode` is not settable — the constructor decides it, so a mode
+/// and the callbacks it requires cannot be chosen separately, which is why
+/// every cell below asserts the callbacks alongside the mode.
 class _MockEnrollment extends Mock implements AtEnrollment {}
 
 class _FakeAtLookUp extends Fake implements AtLookUp {}
@@ -138,21 +125,12 @@ void main() {
 
     test('the key package is built under that algorithm too, not a constant',
         () async {
-      // ⚠️ **This test exists because the assertion above does NOT cover it,
-      // and a mutation proved that.** Writing `SigningAlgoType.rsa2048` by
-      // hand into the `enrollmentKeyPackageBuilder(...)` call left every other
-      // cell in this file green: `request.signingAlgo` is a different field
-      // from the one handed to the builder, so asserting it says nothing about
-      // what the package is signed with.
-      //
-      // Running the builder is the only way to observe the algorithm it was
-      // given. It signs with the APKAM keypair in the AtKeysIo it is handed,
-      // so an ML-DSA keypair plus a builder told "rsa2048" is a size mismatch
-      // at_chops refuses — which is exactly the production failure this
-      // guards: a key package signed by a key the enrollment record does not
-      // name verifies against nothing, so every peer that resolves `_apsk`
-      // before sealing a secret to this enrollment declines, and the
-      // enrollment is created and then receives no conveyed material at all.
+      // NOTE: `request.signingAlgo` is a different field from the one handed
+      // to the key package builder, so asserting it says nothing about what
+      // the package is signed with; running the builder is the only way to
+      // observe the algorithm it was given. A package signed by a key the
+      // enrollment record does not name verifies against nothing, so every
+      // peer declines to seal anything to that enrollment.
       final request = await submittedUnder(PqPosture.pqReady);
 
       final pair = await MlDsa65KeyPair.generate();
@@ -177,11 +155,10 @@ void main() {
   });
 
   group('an explicit mode overrides the posture, in both directions', () {
-    // The override exists for the half a posture cannot see: the APPROVER. A pq
-    // request relies on the approver sealing a symmetric key to the advertised
-    // key package, and against an approver that predates conveyance the
-    // enrollment is approved and then cannot decrypt anything. Only the person
-    // running the command knows which approver will pick the request up.
+    // The override exists for the half a posture cannot see: the approver. A
+    // pq request relies on the approver sealing a symmetric key to the
+    // advertised key package, and only the person running the command knows
+    // which approver will pick the request up.
     test('legacy is reachable from a pq posture — the escape hatch', () async {
       final request = await submittedUnder(PqPosture.pqActive,
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
@@ -207,11 +184,10 @@ void main() {
   /// The enrolment owns a data signing key from birth, under the algorithm the
   /// in-use set names.
   ///
-  /// **It used to own none.** `_apsk` then advertised the APKAM authentication
-  /// key, the key package was signed by that key, and the new client's first
-  /// start minted a signing key and republished — dropping the APKAM entry, so
-  /// the key package stopped verifying and any link the approver had conveyed
-  /// against that exact advertised value stopped matching.
+  /// Without one, `_apsk` advertises the APKAM authentication key, and the new
+  /// client's first start mints a signing key and republishes — dropping that
+  /// entry, so the key package stops verifying and any link the approver
+  /// conveyed against the advertised value stops matching.
   group('the enrolment advertises a data signing key of its own', () {
     test('pqReady advertises rsa2048, not the APKAM key', () async {
       final request = await submittedUnder(PqPosture.pqReady);
@@ -247,10 +223,9 @@ void main() {
 
     test('a legacy-MODE enrolment under a pq posture still advertises one',
         () async {
-      // The mode decides whether a key package exists; `_apsk` is what every
-      // peer verifies signatures against whatever the mode. The two are
-      // independent, and conflating them would leave this enrolment
-      // advertising its APKAM key.
+      // The mode decides whether a key package exists; `_apsk` is what peers
+      // verify signatures against whatever the mode. Conflating the two would
+      // leave this enrolment advertising its APKAM key.
       final request = await submittedUnder(PqPosture.pqReady,
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
 

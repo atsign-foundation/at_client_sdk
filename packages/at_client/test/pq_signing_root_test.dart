@@ -18,6 +18,8 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
 
+/// A bare [AtClient] mock that shadows the one in `test_utils/mocks.dart`,
+/// whose concrete `getPreferences()` override cannot be stubbed.
 class MockAtClient extends Mock implements AtClient {}
 
 /// Generation 1 of a root filed under the algorithm this build mints.
@@ -26,12 +28,6 @@ final rootSlot1 =
 
 /// An [InMemoryAtKeysIo] that runs [beforeUpdate] once, immediately before the
 /// nth [update] opens.
-///
-/// The mint's read-decide-write spans three awaits, and the sibling that can
-/// invalidate its decision is the client's own PQ start, fired unawaited. There
-/// is no way to make that interleaving happen on demand from outside, so the
-/// hook stages it exactly: the private lands in the instant between the mint
-/// deciding it holds nothing and the store opening for the write.
 class _RacingAtKeysIo extends InMemoryAtKeysIo {
   _RacingAtKeysIo({required this.atUpdate, required this.beforeUpdate});
 
@@ -61,13 +57,6 @@ bool _bytesEqual(Uint8List a, Uint8List b) {
 }
 
 /// The atSign's root of trust.
-///
-/// Every property here is about the same thing: two roots would leave half an
-/// atSign's enrollments chaining to one the other half rejects, and D1 builds
-/// no rotation able to reconcile that. The record itself is mutable — a
-/// successor has to be advertised beside its retired predecessor — so what
-/// keeps there being one root is `_rootlock@<atSign>` plus the reconciliation
-/// that retires a private the record does not advertise.
 void main() {
   const atSign = '@alice';
 
@@ -81,9 +70,6 @@ void main() {
 
   /// [published] holds only the writes to the ROOT RECORD; [verbs] holds every
   /// verb in order, so a test can say what was taken before what was written.
-  /// Separated because the mint now issues a lock take and a lock release
-  /// around the publish, and a bare list would make `.single` mean something
-  /// different in every test.
   ({
     MockAtClient client,
     List<UpdateVerbBuilder> published,
@@ -95,17 +81,12 @@ void main() {
       Uint8List? publishedRoot,
       List<({Uint8List key, KeyEntryStatus status})>? publishedRoots,
       bool rootUnreadable = false}) {
-    // One entry or several. `publishedRoots` is what a record mid-rotation
-    // looks like — a successor active beside its retired predecessor — and
-    // `publishedRoot` stays as the one-entry shorthand every other test uses.
     final entries = publishedRoots ??
         (publishedRoot == null
             ? null
             : [(key: publishedRoot, status: KeyEntryStatus.active)]);
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
-    // The signing-root pull reads the enrollment id off the lookup to tell an
-    // APKAM enrollment from a client using the atSign's own keys.
     final lookup = MockAtLookUp();
     when(() => secondary.atLookUp).thenReturn(lookup);
     when(() => lookup.enrollmentId).thenReturn(enrollmentId);
@@ -113,8 +94,6 @@ void main() {
     final verbs = <VerbBuilder>[];
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
-    // The published-record read: confirmed absent unless the fixture holds
-    // one, unreadable when asked to be.
     when(() => atClient.get(any(),
         getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
       if (rootUnreadable) {
@@ -134,15 +113,14 @@ void main() {
     });
     when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
         .thenAnswer((inv) async {
-      // Type-tested, never cast: the lock release is a DeleteVerbBuilder, and a
-      // cast would throw inside the mock where MintLock's own catch swallows
-      // it — a release that never happened, reported as one that did.
+      // NOTE: type-test, never cast to UpdateVerbBuilder — the lock release is
+      // a DeleteVerbBuilder, and a cast throws inside the mock where MintLock's
+      // catch swallows it, reporting a release that never happened.
       final builder = inv.positionalArguments[0] as VerbBuilder;
       verbs.add(builder);
       if (builder is UpdateVerbBuilder) {
         if (builder.atKey.key == pqSigningRootMintLockRecordName) {
           if (lockHeldElsewhere) {
-            // What the atServer says to the loser of the race.
             throw AtLookUpException(
                 'AT0023', 'Immutable records may not be updated');
           }
@@ -190,8 +168,6 @@ void main() {
     expect(record.atKey.metadata.isPublic, isTrue);
     expect(jsonDecode(record.value!)['keys'], hasLength(1));
 
-    // The lock, in order: taken before anything is generated, and never
-    // deleted.
     expect(c.verbs.first, isA<UpdateVerbBuilder>());
     expect((c.verbs.first as UpdateVerbBuilder).atKey.key,
         pqSigningRootMintLockRecordName,
@@ -215,10 +191,9 @@ void main() {
 
   test('the published record emits its exact wire shape — raw literals',
       () async {
-    // Emitter pin (frozen forever): this is what a reader in the field parses,
-    // and after the GA minor those readers exist. Raw strings deliberately —
-    // the sibling tests assert through PqSigningRoot's own constants, which
-    // follow a changed value.
+    // NOTE: raw literals deliberately — this is the wire shape a reader in the
+    // field parses, and asserting it through PqSigningRoot's own constants
+    // would follow a changed value instead of catching it.
     final c = client();
 
     await PqSigningRoot(c.client, keysIo: await keysIo())
@@ -255,13 +230,6 @@ void main() {
 
   test('nothing can encapsulate to the root — its algorithm has no KEM',
       () async {
-    // The reader-side half of "the root is a signing key; nothing encapsulates
-    // to it, at onboarding or ever". The wire pin above asserts what the
-    // WRITER says (`use: sign`), which a sender is free to ignore. This asserts
-    // the sender CANNOT act on the record as a sealing target even handed it
-    // directly: there is no KEM behind its algorithm, the algorithm is not
-    // offered for key establishment, and the selector every sealing path uses
-    // returns nothing for its entry.
     final c = client();
 
     await PqSigningRoot(c.client, keysIo: await keysIo())
@@ -305,17 +273,11 @@ void main() {
   test('a copied keyfile signs with the root private on the second host',
       () async {
     // UC-A2.2: a second host running against a COPY of E1's keyfile is the
-    // same enrollment, not a second one. Nothing anywhere copied a keyfile
-    // that HOLDS the root private and then drove a second client from it, so
-    // the clause rested on the copy being conveyed nothing — which is exactly
-    // the case that has to work.
+    // same enrollment, not a second one.
     final a = client();
     final ioA = await keysIo();
-    // The flat enrollment id is what a copy carries to the atServer, and so
-    // what makes the second host present as E1 rather than as a new
-    // enrollment. It is why the namespace authorisations follow the copy. The
-    // atsign is set for the same reason a real keyfile has one: typed material
-    // will not serialize without it, and a copy is made of the serialized form.
+    // NOTE: typed material will not serialize without an atsign, and the copy
+    // below is made of the serialized form.
     (await ioA.read(atSign))
       ..enrollmentId = 'enrollment-1'
       ..atsign = atSign.toAtsign();
@@ -327,8 +289,8 @@ void main() {
     final rootPublic = base64Decode(((rootBody['keys'] as List).single
         as Map<String, dynamic>)['pub'] as String);
 
-    // The copy: through the JSON a .atKeys file holds, which is the whole of
-    // what copying one does. Nothing is re-minted and nothing is conveyed.
+    // The copy: the JSON a .atKeys file holds is the whole of what copying one
+    // does.
     final ioB = InMemoryAtKeysIo();
     await ioB.write(
         atSign,
@@ -350,10 +312,8 @@ void main() {
         reason: 'naming the same advertised entry, so a link either host '
             'signs points at the same published key');
 
-    // Resolving is not signing. This is the arm the row asked for: the copy
-    // produces a signature the atSign's PUBLISHED root verifies, so a
-    // verifier cannot tell the two hosts apart — which is what "share the
-    // root" has to mean to be worth stating.
+    // Resolving is not signing: the copy produces a signature the atSign's
+    // PUBLISHED root verifies, so a verifier cannot tell the two hosts apart.
     final message = Uint8List.fromList(utf8.encode('a link signed on host B'));
     final signature = await MlDsa65PureDartAlgo()
         .signBytes(message, secretKey: hostB.private);
@@ -413,7 +373,6 @@ void main() {
     final c = client();
 
     await expectLater(
-        // Key storage with nothing written for this atSign: the read throws.
         PqSigningRoot(c.client, keysIo: InMemoryAtKeysIo())
             .mintIfAbsent(isFullyPrivileged: true),
         throwsA(isA<StateError>()));
@@ -446,8 +405,6 @@ void main() {
             'there is no losing pair to retire and no window in which it '
             'reads as holding the root');
 
-    // The heal that never having filed anything leaves open: with nothing
-    // active held, the pull asks the namespace.
     final broadcast = _RecordingSharing();
     final asked = await root.requestPrivateIfAbsent(
       isFullyPrivileged: () async => true,
@@ -463,10 +420,7 @@ void main() {
   test('a root published while the lock was being taken is not overwritten',
       () async {
     // The window the lock alone does not close: the absence check runs BEFORE
-    // the lock, so a winner that published in between is invisible to it. With
-    // an immutable record the atServer refused the second write; with a
-    // mutable one, nothing but the re-read under the lock stops this mint
-    // overwriting the root it thought was missing.
+    // the lock, so a winner that published in between is invisible to it.
     final winner = await MlDsa65PureDartAlgo().generateKeyPair();
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
@@ -517,19 +471,10 @@ void main() {
   });
 
   group('when the publish call fails but its outcome is unknown', () {
-    // A failed write and a write that LANDED and was not reported throw the
-    // same way, and they need opposite handling. Getting the second one wrong
-    // is the expensive mistake: retiring the pair for a root this client did
-    // publish leaves every enrollment on the atSign chaining to a key nobody
-    // holds, and D1 builds no rotation to replace it with.
-    //
-    // "The atServer refused a second create" is no longer one of the cases —
-    // the record is mutable and the write goes out under the lock — so the
-    // third case is the one the lock cannot exclude: a peer published anyway.
+    // A failed write and a write that LANDED but was not reported throw the
+    // same way, and they need opposite handling.
 
     test('a create that actually landed is kept, not retired', () async {
-      // The record the failed call wrote is whatever key this mint generates,
-      // so serve it back by capturing what was published.
       final atClient = MockAtClient();
       final secondary = MockRemoteSecondary();
       final lookup = MockAtLookUp();
@@ -541,8 +486,6 @@ void main() {
       when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
           .thenAnswer((inv) async {
         final builder = inv.positionalArguments[0] as VerbBuilder;
-        // The lock is taken and released normally; only the record write is
-        // the one whose outcome is unknown.
         if (builder is! UpdateVerbBuilder ||
             builder.atKey.key == pqSigningRootMintLockRecordName) {
           return 'data:1';
@@ -587,9 +530,9 @@ void main() {
       when(() => atClient.get(any(),
           getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
         reads++;
-        // Two absence checks now — one outside the mint lock and one under it
-        // — and both must answer "no root". It is the reconciliation read
-        // after the failed publish that cannot be served.
+        // Two absence checks — one outside the mint lock, one under it — then
+        // the reconciliation read after the failed publish, which cannot be
+        // served.
         if (reads <= 2) throw KeyNotFoundException('not found');
         throw AtLookUpException('AT0011', 'cannot read');
       });
@@ -616,15 +559,10 @@ void main() {
 
     test('a write that failed with nothing published retires the pair',
         () async {
-      // ⚠️ The branch the mutable record TEMPTS you to change, and must not.
-      // "There is no one chance to burn any more, so keep the pair and let a
-      // later start republish it" is true about the record and false about
-      // this codebase: nothing on a start path mints. `mintIfAbsent` runs at
-      // activation and at retrofit only — `pq_client_bootstrap.dart` says so
-      // in as many words, "a mint is once per keyfile while a start is every
-      // time" — so a kept pair is permanent, blocks the pull that is the one
-      // heal that DOES run every start, and gets a root link signed with it
-      // that nothing ever rewrites.
+      // NOTE: keeping the pair here for a later start to republish would
+      // strand it. Nothing on a start path mints, so a kept pair is permanent,
+      // it blocks the pull that is the one heal that does run every start, and
+      // root links signed with it are never rewritten.
       final c = client(publishFails: true);
       final io = await keysIo();
       final root = PqSigningRoot(c.client, keysIo: io);
@@ -641,8 +579,6 @@ void main() {
       expect(materials.map((m) => m.status).toSet(),
           {CryptographicMaterialStatus.dead});
 
-      // The heal the retirement re-opens, and the reason it has to be re-opened
-      // here rather than at a later mint: this is the only one that runs again.
       final asked = await root.requestPrivateIfAbsent(
         isFullyPrivileged: () async => true,
         sharing: _RecordingSharing(),
@@ -670,12 +606,6 @@ void main() {
             'retrofit, for nothing');
     expect((await io.read(atSign)).keys, isEmpty);
   });
-
-  // DELETED 2026-08-15: 'a root published before the shape was settled is
-  // still read'. It asserted the bare-base64 reader, which decisions 101
-  // removed. Its premise — that already-published roots can never be
-  // rewritten and so must be tolerated forever — was the greenfield rule in
-  // disguise: nothing is released, so every atSign holding a root is ours.
 
   test('an unreadable root record aborts the mint rather than racing it',
       () async {
@@ -705,8 +635,8 @@ void main() {
     final io = await keysIo();
     final root = PqSigningRoot(c.client, keysIo: io);
 
-    // The pre-rollback loser's state: an active private filed by a lost
-    // create, corresponding to nothing published.
+    // An active private filed by a lost create, corresponding to nothing
+    // published.
     expect(await root.store(atSign, poisoned.secretKey), isTrue);
 
     expect(await root.mintIfAbsent(isFullyPrivileged: true), isNull);
@@ -716,7 +646,6 @@ void main() {
             'probes happily, they just verify against nothing anyone '
             'published');
 
-    // The heal: the real private now files beside the dead slot…
     expect(
         await root.file(
             atSign,
@@ -725,7 +654,6 @@ void main() {
                 name: PqSigningRoot.secretName,
                 value: base64Encode(minted.secretKey))),
         isTrue);
-    // …and is what readers see.
     expect(await root.privateHalf(atSign), minted.secretKey);
   });
 
@@ -734,8 +662,7 @@ void main() {
     final c = client();
 
     // The state a crash between filing and publishing leaves behind: both
-    // halves filed and active, nothing published. Built directly — the crash
-    // itself cannot be staged through the API, which is rather the point.
+    // halves filed and active, nothing published.
     final freshIo = await keysIo();
     final held = await MlDsa65PureDartAlgo().generateKeyPair();
     final keys = await freshIo.read(atSign);
@@ -784,7 +711,6 @@ void main() {
     final io = await keysIo();
     final root = PqSigningRoot(c.client, keysIo: io);
 
-    // The pre-both-halves file shape: a private alone, nothing published.
     final orphan = await MlDsa65PureDartAlgo().generateKeyPair();
     expect(await root.store(atSign, orphan.secretKey), isTrue);
 
@@ -804,22 +730,14 @@ void main() {
   test('a private arriving mid-mint is kept, and the minted pair discarded',
       () async {
     // The mint decides it holds nothing, then awaits three times — the record
-    // fetch, a retire, and an ML-DSA keygen — before it writes. The client's
-    // own PQ start runs unawaited beside it and files whatever a peer conveyed
-    // in that window, so the decision is taken against a snapshot that is
-    // already stale by the time it is acted on.
-    //
-    // Nothing below refuses the second key either: at_auth's
-    // single-active-per-algorithm rule is enrollment-scoped, and root material
-    // is atSign-scope with a null enrollment id. Two active root privates were
-    // therefore writable AND survived a keyfile round trip, with `.firstOrNull`
-    // returning the EARLIEST filed — the losing pair, not the conveyed key
-    // every other enrollment can verify against.
+    // fetch, a retire, and an ML-DSA keygen — before it writes, while the
+    // client's own PQ start runs unawaited beside it and files whatever a peer
+    // conveyed in that window.
     final arrived = await MlDsa65PureDartAlgo().generateKeyPair();
     final c = client();
     final io = _RacingAtKeysIo(
-      // The mint's first update is _storeFreshPair's own: the record is absent,
-      // so the poison heal and the orphan retire above it never run.
+      // The first update is the fresh pair's own: with the record absent, the
+      // poison heal and the orphan retire above it never run.
       atUpdate: 1,
       beforeUpdate: (io) async {
         final keys = await io.read(atSign);
@@ -855,17 +773,9 @@ void main() {
   });
 
   test('a root slot of another algorithm is still a root slot', () async {
-    // What rotatability rests on, and it is the READER half: a slot is
-    // recognised by its role, never by one algorithm. A build that only
-    // matches `root:mldsa65:` can find no successor of any other algorithm,
-    // which would pin the atSign to ML-DSA-65 by accident of its reader rather
-    // than by any decision — and would do it silently, since a keyfile holding
-    // such a slot simply reads as holding no root at all.
-    //
-    // The token is deliberately one this build knows nothing about:
-    // `CryptographicMaterialAlgorithm.known` exists for warn-level tooling and explicitly
-    // does not gate what may be filed, so a reader that recognised only known
-    // tokens would be a second, undocumented gate.
+    // A reader that only matched `root:mldsa65:` would find no successor of
+    // any other algorithm, and would do it silently: such a keyfile simply
+    // reads as holding no root at all.
     const laterAlgo =
         CryptographicMaterialAlgorithm.of('some-later-signing-algo');
     final c = client();
@@ -887,10 +797,8 @@ void main() {
   });
 
   test('generations count per algorithm, so a successor starts at 1', () async {
-    // The counter is per `root:<algo>:`, not per role: two algorithms each
-    // begin at generation 1 rather than the second one inheriting the first's
-    // count. Filed in the same document so the two lines are visibly
-    // independent.
+    // Both algorithms are filed in the same document, so the two counts are
+    // visibly independent.
     final io = await keysIo();
     final keys = await io.read(atSign);
     keys.addKey(CryptographicMaterial(
@@ -914,9 +822,6 @@ void main() {
   group('a record advertising a successor beside a retired predecessor', () {
     // The state a rotation passes through, staged directly: the record carries
     // both entries, and this client still holds the predecessor's private.
-    // Every path below asks the same question — "is the private I am looking
-    // at the root's?" — and D1's claim is that the answer is about the SET the
-    // record advertises, not about its one active entry.
     late ({Uint8List publicKey, Uint8List secretKey}) predecessor;
     late ({Uint8List publicKey, Uint8List secretKey}) successor;
 
@@ -993,15 +898,8 @@ void main() {
     });
 
     test('a late predecessor never displaces the held successor', () async {
-      // The supersede has a direction, and the record decides it — not which
-      // private arrived last. A holder that has not yet healed can convey the
-      // predecessor to a client already holding the successor, and the answer
-      // is to keep what is active.
-      //
-      // It is *recognised* rather than discarded as poison — the record
-      // advertises it — but it is not filed beside the successor: a retired
-      // key's private signs nothing, so a second slot for it would be dead
-      // material that every later reader has to reason about.
+      // A holder that has not yet healed conveys the predecessor to a client
+      // already holding the successor.
       final c = rotating();
       final io = await keysIo();
       final root = PqSigningRoot(c.client, keysIo: io);
@@ -1025,9 +923,7 @@ void main() {
     test('a poisoned leftover does not survive the real key arriving',
         () async {
       // A private corresponding to no advertised entry is the leftover of a
-      // lost create. Filing the real key beside it and leaving it active would
-      // let it go on winning "what do I sign with" — the arriving key would be
-      // held and still not used, which is the worst of both.
+      // lost create.
       final c = rotating();
       final io = await keysIo();
       final root = PqSigningRoot(c.client, keysIo: io);
@@ -1050,15 +946,9 @@ void main() {
 
     test('a retired-only private is refused even by an empty keyfile',
         () async {
-      // The gap the "not filed beside an active one" rule left: with nothing
-      // active to sit beside, `store`'s guard does not fire and `CryptographicMaterial`
-      // defaults to active — so the predecessor became the keyfile's sole
-      // ACTIVE private, and the single-private short circuit then hands it back
-      // without ever reading the record. The client would sign root links with
-      // a key the record calls retired.
-      //
-      // Production-shaped: a holder that has not yet healed conveys the only
-      // private it has to a freshly approved privileged enrollment.
+      // A holder that has not yet healed conveys the only private it has to a
+      // freshly approved privileged enrollment, which holds nothing active for
+      // the arrival to sit beside.
       final c = rotating();
       final io = await keysIo();
       final root = PqSigningRoot(c.client, keysIo: io);
@@ -1098,10 +988,9 @@ void main() {
   });
 
   group('choosing between two active root privates', () {
-    // Two actives are writable and survive a keyfile round trip: at_auth's
+    // Two actives are writable and survive a keyfile round trip: the
     // single-active-per-algorithm rule is enrollment-scoped, and root material
-    // is atSign-scope. Filed directly here, because the mint no longer produces
-    // the state and staging it through the API would prove only that.
+    // is atSign-scope. Filed directly rather than staged through the API.
     late ({Uint8List publicKey, Uint8List secretKey}) first;
     late ({Uint8List publicKey, Uint8List secretKey}) second;
 
@@ -1130,7 +1019,7 @@ void main() {
 
     test('the record decides, not the order the keyfile filed them', () async {
       // `first` is filed first, so anything taking the head of the keyfile
-      // returns it. The record says the OTHER one is active.
+      // returns it; the record says the OTHER one is active.
       final c = client(publishedRoots: [
         (key: second.publicKey, status: KeyEntryStatus.active),
         (key: first.publicKey, status: KeyEntryStatus.retired),
@@ -1145,11 +1034,9 @@ void main() {
 
     test('a single held private is answered without reading the record',
         () async {
-      // The property four production call sites document as the reason they
-      // check possession BEFORE paying for a round trip — one of them on the
-      // approval path. A selector that consults the record unconditionally
-      // would break all four silently, since they would still be correct, just
-      // no longer cheap.
+      // NOTE: production call sites check possession before paying for a round
+      // trip. A selector that consulted the record unconditionally would still
+      // be correct, just no longer cheap, so nothing but this would catch it.
       final c = client(publishedRoots: [
         (key: first.publicKey, status: KeyEntryStatus.active),
       ]);
@@ -1187,10 +1074,6 @@ void main() {
     });
 
     test('every unadvertised private is retired, not just the first', () async {
-      // The heal used to judge one private chosen by filed order, so a second
-      // unadvertised one stayed active and went on answering "do I hold the
-      // root" with bytes no verifier accepts — the state the heal exists to
-      // clear, surviving the heal.
       final real = await MlDsa65PureDartAlgo().generateKeyPair();
       final c = client(publishedRoots: [
         (key: real.publicKey, status: KeyEntryStatus.active),
@@ -1226,7 +1109,6 @@ void main() {
               'never asks, and a correct private conveyed to it would be '
               'dropped by store() for the same reason');
 
-      // And the repair it re-opens actually works.
       expect(
           await root.file(
               atSign,
@@ -1252,10 +1134,8 @@ void main() {
     });
 
     test('a private matching only a RETIRED entry is left alone', () async {
-      // The control arm for the row below, and the doctrine this heal was
-      // built on: a predecessor the record still vouches for is not a
-      // poisoned leftover. Without this arm the row below would pass on a
-      // heal that simply retired everything not active.
+      // The control arm for the test below: without it, that one would pass on
+      // a heal that simply retired everything not active.
       final successor = await MlDsa65PureDartAlgo().generateKeyPair();
       final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
       final c = client(publishedRoots: [
@@ -1274,13 +1154,9 @@ void main() {
 
     test('a private matching only a status this build cannot read is retired',
         () async {
-      // The differential against the arm above, and the reason this heal has
-      // to make the SAME judgement the verifier makes. `PqSigningChain` will
-      // not check a signature against an entry whose status it cannot read, so
-      // a client that went on holding the matching private as active would
-      // anchor links its own verifier then rejects — and the heal that clears
-      // that state is this one. Until 2026-08-22 an unreadable status read as
-      // `retired`, so this row and the one above were indistinguishable.
+      // The differential against the arm above: the heal has to make the same
+      // judgement the verifier makes, which will not check a signature against
+      // an entry whose status it cannot read.
       final successor = await MlDsa65PureDartAlgo().generateKeyPair();
       final disowned = await MlDsa65PureDartAlgo().generateKeyPair();
       final c = client(publishedRoots: [
@@ -1428,7 +1304,6 @@ void main() {
   });
 
   group('requesting the private when this enrollment has none', () {
-    /// Records what was broadcast without doing any real sharing.
     _RecordingSharing sharing() => _RecordingSharing();
 
     test('a privileged enrollment that holds nothing asks the namespace',
@@ -1495,18 +1370,14 @@ void main() {
 
     test('a restricted enrollment says why it is not asking', () async {
       // The return value cannot carry a reason: 0 is also what an enrollment
-      // that already holds the root returns, and what one with no enrollment
-      // id returns. So an operator wondering why a device never obtained the
-      // root has nothing but this line to tell those three apart, and a
-      // silent decline is indistinguishable from a broadcast nobody answered.
+      // already holding the root returns, and what one with no enrollment id
+      // returns, so the log line is what tells the three apart.
       final io = await keysIo();
 
-      // The control runs FIRST and is deliberately not drawn from the
-      // property under test: the privileged arm of the same method logs
-      // whatever the restricted arm does. It stays green if the decline stops
-      // explaining itself, and goes red if the recorder never bound — which
-      // is the failure that would otherwise let an empty recorder satisfy the
-      // assertion below by matching nothing.
+      // The control runs first and is deliberately not drawn from the property
+      // under test: it goes red if the recorder never bound, which would
+      // otherwise let an empty recorder satisfy the assertion below by
+      // matching nothing.
       logs.records.clear();
       await PqSigningRoot(client().client, keysIo: io).requestPrivateIfAbsent(
         isFullyPrivileged: () async => true,
@@ -1580,9 +1451,8 @@ void main() {
   });
 }
 
-/// Captures broadcasts instead of sending them, so the guards can be asserted
-/// on what reached the wire rather than on a return value the method could
-/// produce without doing anything.
+/// Captures broadcasts instead of sending them, so a guard can be asserted on
+/// what reached the wire rather than on a return value.
 class _RecordingSharing extends Fake implements PairwiseSecretSharing {
   final List<({String namespace, List<String>? names})> requests = [];
 

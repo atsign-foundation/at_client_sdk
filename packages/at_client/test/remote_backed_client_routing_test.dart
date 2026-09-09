@@ -1,16 +1,10 @@
 /// The substrate fixture can tell a local-first read from a remote-first one.
 ///
-/// B-1 carried this as an open residual: one map backed local storage and the
-/// atServer, so routing was invisible in results and every test that cared had
-/// to assert the call instead. Asserting the call proves the argument was
-/// passed; it cannot prove the argument *means* anything. These rows prove the
-/// fixture now distinguishes them by results, which is what lets a future test
-/// catch a wrong route without anybody remembering to look for one.
-///
-/// The defect this shape produces is not hypothetical: the nskey mint read
-/// local storage, where a sibling enrollment's publication is absent until
-/// sync catches up, and reading that absence as a cold start published a
-/// second key over the first. Every unit test was green.
+/// One map backing both local storage and the atServer leaves routing
+/// invisible in results, and a test that can only assert the call proves the
+/// argument was passed, never that it *means* anything. These rows prove the
+/// fixture distinguishes the two by results, so a wrong route fails without
+/// anybody remembering to look for one.
 library;
 
 import 'package:at_client/at_client.dart';
@@ -48,9 +42,9 @@ void main() {
       // client has not synced.
       remote[key('__nskey.buzz').toString()] = 'siblings-key';
 
-      // Closure form, not `expectLater(client.get(...), …)`: the fixture
-      // throws synchronously, as it always has, so the call never returns a
-      // Future to await and the exception escapes the argument expression.
+      // NOTE: closure form, not `expectLater(client.get(...), …)` — the
+      // fixture throws synchronously, so the call never returns a Future to
+      // await and the exception escapes the argument expression.
       expect(
         () => client.get(key('__nskey.buzz')),
         throwsA(isA<AtKeyNotFoundException>()),
@@ -94,8 +88,8 @@ void main() {
 
   test('without localData the historical single-store behaviour is unchanged',
       () async {
-    // The nine callers that predate the divergence specify this: a local-first
-    // write is immediately readable by a local-first read.
+    // Callers that supply no localData specify this: a local-first write is
+    // immediately readable by a local-first read.
     final remote = <String, String>{};
     final client = buildRemoteBackedMockClient(
       atSign: '@alice',

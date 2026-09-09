@@ -45,22 +45,11 @@ class AtOnboardingRequest extends AuthRequest {
   /// The algorithm this activation's first APKAM keypair is minted under, and
   /// the algorithm the connection then authenticates with.
   ///
-  /// It also decides the keyfile's shape: `mldsa65` makes the atSign
-  /// **PQ-native from activation** — the first enrollment's APKAM is an
-  /// ML-DSA-65 keypair, filed as typed material under the enrollment id rather
-  /// than in the flat `apkamPublicKey` / `apkamPrivateKey` fields, which stay
-  /// empty. A keyfile with no flat APKAM fields makes any reader that calls
-  /// [AtKeys.toAtChops] fail loudly instead of signing an ML-DSA key with the
-  /// RSA routine.
-  ///
-  /// **Required, with no default, and it lives here rather than on
-  /// [AuthRequest].** It used to default to `rsa2048` on the shared base, which
-  /// let a caller inherit an algorithm it never chose — the same state that
-  /// produced the defect [AtEnrollmentRequest.signingAlgo]'s own doc describes,
-  /// on the other door. Authentication does not take it from a caller at all:
-  /// the algorithm an existing keyfile authenticates with is resolved from that
-  /// keyfile, so a settable value there would be one the caller could get wrong
-  /// and never be told about.
+  /// `mldsa65` makes the atSign PQ-native from activation: the keypair is
+  /// filed as typed material under the enrollment id and the flat
+  /// `apkamPublicKey` / `apkamPrivateKey` fields stay empty, so any reader
+  /// calling [AtKeys.toAtChops] on that keyfile fails loudly instead of
+  /// signing an ML-DSA key with the RSA routine.
   SigningAlgoType signingAlgoType;
 
   // Default root domain and port

@@ -16,17 +16,13 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
+/// A bare mock, shadowing the shared one in `test_utils/mocks.dart` whose
+/// concrete `getPreferences()` override cannot be stubbed.
 class MockAtClient extends Mock implements AtClient {}
 
 /// A lock that is taken successfully and hands out a lease that has already
 /// run out — the slow-winner case, without waiting for a real ttl.
-///
-/// Overriding [withLock] rather than stubbing the wire keeps the ttl out of
-/// the ring's constructor: the lease is what the mint is supposed to honour,
-/// and this hands it one it cannot.
 class _SpentLeaseLock extends MintLock {
-  // Not const: MintLock stopped being a const class when it gained the
-  // in-flight map that stops an enrolment racing itself.
   _SpentLeaseLock(super.atClient);
 
   @override
@@ -52,11 +48,6 @@ void main() {
   /// back whatever has been published to the one record these tests turn on.
   /// [lockAlreadyHeld] makes the lock's immutable create fail, which is how the
   /// atServer reports that another enrollment already holds it.
-  ///
-  /// Serving the advertisement back matters: the mint path reads the atServer
-  /// rather than this client's caches, precisely so that a *sibling*
-  /// enrollment's publication is visible before sync catches up. A fixture that
-  /// always answered "absent" would make every adoption test pass by minting.
   ({
     MockAtClient client,
     List<AtKey> verbs,
@@ -66,36 +57,26 @@ void main() {
     Map<String, String> advertised,
 
     /// The `updatedAt` the atServer serves with the advertisement record, by
-    /// namespace. Absent unless a test sets one, so every other test reads the
-    /// record exactly as before.
+    /// namespace. Absent unless a test sets one.
     Map<String, DateTime> advertisedStamps,
     List<GetRequestOptions?> advertisementReads,
 
     /// [takeDelay] makes the lock's own take slow, which is the only way to
-    /// tell a lease stamped BEFORE the request from one stamped after it:
-    /// with an instant take the two are indistinguishable.
+    /// tell a lease stamped BEFORE the request from one stamped after it.
   }) client(
       {bool lockAlreadyHeld = false, Duration takeDelay = Duration.zero}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     final lookUp = MockAtLookUp();
     final verbs = <AtKey>[];
-    // Every builder, not only the updates: "the lock is never deleted" is a
-    // claim about a verb that must not appear, and a recorder that only keeps
+    // NOTE: every builder, not only the updates — a recorder that kept only
     // updates cannot tell an absent delete from an unrecorded one.
     final builders = <Object>[];
     final values = <String, String?>{};
-    // When each remote write arrived. The mint lock's window is the gap
-    // between the lock take and the advertisement, and nothing else can
-    // measure it from outside.
     final verbTimes = <String, DateTime>{};
-    // The atServer's copy of `public:__nskey.<ns>@alice`, by namespace. A test
-    // writes into it to stand for another enrollment having published.
+    // The atServer's copy of `public:__nskey.<ns>@alice`, by namespace.
     final advertised = <String, String>{};
     final advertisedStamps = <String, DateTime>{};
-    // How each advertisement read was asked for. A mocktail stub cannot tell a
-    // local-first get from a remote one on its own — both arrive here — so the
-    // options are what the remote-only claim is pinned against.
     final advertisementReads = <GetRequestOptions?>[];
     final chops = AtChopsImpl(
         AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
@@ -113,9 +94,9 @@ void main() {
         .thenAnswer((inv) async {
       final key = inv.positionalArguments[0] as AtKey;
       // Anything that is not the advertisement is the `_apsk` its signature is
-      // checked against. One key for every enrollment of this atSign, so an
+      // checked against — one key for every enrollment of this atSign, so an
       // advertisement signed by the fixture verifies whichever enrollment it
-      // claims — authenticity itself is pinned in published_nskey_key_ring_test.
+      // claims.
       if (key.key != '__nskey') {
         return AtValue()
           ..value = chops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
@@ -178,19 +159,13 @@ void main() {
 
     final advertisement = await ring.mintAndPublish(namespace);
 
-    // The positive half: the update really carried this generation, so the
-    // absence below is a second write that did not happen rather than a mint
-    // that did not.
     expect(c.values['__nskey'], isNotNull);
     expect(c.advertised[namespace], c.values['__nskey']);
     expect(advertisement.nskeyKid, isNotEmpty);
 
-    // A local write of a sync-eligible key queues the key's NAME for a
-    // client→server push, and the push sends whatever local storage holds when
-    // it drains. A second write here would therefore race the update above: a
-    // drain landing in between puts the superseded generation back on the
-    // atServer, this client pulls that back over its own copy, and the atSign
-    // goes on advertising a key it rotated away from.
+    // NOTE: a local put would queue the key's name for a sync push that sends
+    // whatever local storage holds when it drains, putting the superseded
+    // generation back on the atServer.
     verifyNever(() => c.client
         .put(any(), any(), putRequestOptions: any(named: 'putRequestOptions')));
   });
@@ -206,20 +181,12 @@ void main() {
         reason: 'a key published ahead of its private leaves every sender '
             'sealing to something nobody can open, and rotation replaces the '
             'key rather than decrypting what was written meanwhile');
-    // Ordering, not just presence: the lock is taken, then the advertisement
-    // goes out. The filing happens between them, off the wire.
     final published = c.verbs.where((k) => k.key.startsWith('__nskey') == true);
     expect(published, hasLength(1));
   });
 
   test('a ring built from the client alone files into the client\'s keyfile',
       () async {
-    // The shape every hand-built ring has: `PublishedNskeyKeyRing(client)`,
-    // naming no filing. It has to be durable anyway, because the client was
-    // handed an AtKeysIo and an nskey private is the one kind of material that
-    // cannot be re-fetched or re-derived — a ring that kept it in memory
-    // beside a keyfile that was there all along publishes a key that stops
-    // opening anything the moment the process ends.
     final c = client();
     final io = InMemoryAtKeysIo();
     await io.write(atSign, AtKeys());
@@ -234,8 +201,8 @@ void main() {
     final advertisement = await ring.mintAndPublish(namespace);
 
     // Read through a SEPARATE filing over the same key source, standing for
-    // the next process: what is being asserted is that the seed reached the
-    // keyfile, not that the ring that minted it remembers it.
+    // the next process: what is asserted is that the seed reached the keyfile,
+    // not that the ring that minted it remembers it.
     expect(
         await NskeyPrivateFiling(keysIo: io, atSign: atSign)
             .read(namespace, advertisement.nskeyKid),
@@ -243,11 +210,8 @@ void main() {
   });
 
   test('and a client with no key source mints into memory only', () async {
-    // The control for the row above, and the posture a mocked fixture has:
-    // `atKeysIo` unstubbed, so mocktail answers null and there is nothing to
-    // derive a filing from. Minting still succeeds — refusing would refuse
-    // every fixture — and `_mint` says so at `severe`, which this does not
-    // assert because a log line is not a testable interface.
+    // NOTE: `atKeysIo` is left unstubbed, so mocktail answers null and there is
+    // nothing to derive a filing from.
     final c = client();
 
     final ring = PublishedNskeyKeyRing(c.client);
@@ -261,15 +225,12 @@ void main() {
 
   test('the published advertisement emits its exact wire shape — raw literals',
       () async {
-    // Emitter pin, frozen forever for both halves — the payload and the
-    // envelope carrying it. Raw strings deliberately: the sibling tests assert
-    // through the constants that define these values, which follow a changed
-    // value silently. Only this pin fails when the wire moves, which is what
-    // makes editing it the review.
-    //
-    // The entry spelling `{use, alg, pub, kid}` inside `{v, createdAt, keys,
-    // suites}` is shared with the `_apsk` advertisement and the enrollment key
-    // package, so a field renamed here is a field renamed in three records.
+    // NOTE: raw strings deliberately — an assertion made through the constants
+    // that define these values follows a change silently, so only this pin
+    // fails when the wire moves. The entry spelling `{use, alg, pub, kid}`
+    // inside `{v, createdAt, keys, suites}` is shared with the `_apsk`
+    // advertisement and the enrollment key package, so a field renamed here is
+    // a field renamed in three records.
     final c = client();
     final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
 
@@ -298,12 +259,9 @@ void main() {
   });
 
   group('the record stamp says when the generation was minted', () {
-    // `updatedAt` on `public:__nskey.<ns>@alice` is what a client compares a
-    // revocation moment against, and it only means "when this generation was
-    // minted" because an add puts the atServer's own previous value back while
-    // a rotation lets it stamp afresh. Both directions are pinned: asserting on
-    // a rotation would freeze the trigger, and not asserting on an add would
-    // disarm it.
+    // `updatedAt` on `public:__nskey.<ns>@alice` only means "when this
+    // generation was minted" because an add puts the atServer's own previous
+    // value back while a rotation lets it stamp afresh.
     const stamped = '2026-03-04T05:06:07.000008Z';
     final stamp = DateTime.parse(stamped);
 
@@ -319,8 +277,7 @@ void main() {
       final ring =
           PublishedNskeyKeyRing(c.client, privateFiling: await filing());
       await ring.mintAndPublish(namespace);
-      // The atServer's stamp on what was just published, which the add must
-      // hand back rather than let a fresh one replace.
+      // The atServer's stamp on what was just published.
       c.advertisedStamps[namespace] = stamp;
       when(() => c.client.getPreferences())
           .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: const [
@@ -361,8 +318,7 @@ void main() {
   test('a mint that cannot store its private publishes nothing', () async {
     final c = client();
     // Key storage with nothing in it for this atSign: `read` throws, so
-    // `store` cannot persist and the mint must publish nothing rather than
-    // leave a key whose private dies with the process.
+    // `store` cannot persist.
     final ring = PublishedNskeyKeyRing(c.client,
         privateFiling:
             NskeyPrivateFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign));
@@ -409,10 +365,6 @@ void main() {
   });
 
   test('a lock key with no ttl is refused outright', () async {
-    // The invariant the never-release change creates. While a successful mint
-    // deleted its lock, a missing ttl only meant "no crash backstop"; now it
-    // means the record has nothing that will ever remove it, so taking one
-    // would block this atSign's minting permanently.
     final c = client();
 
     await expectLater(
@@ -431,9 +383,6 @@ void main() {
   });
 
   test('a loser with nothing published fails rather than minting', () async {
-    // Row 4's other arm. The adopt case is below; this is the one where there
-    // is nothing to adopt, and the loser still must not mint — two enrollments
-    // minting is exactly what the election exists to prevent.
     final c = client(lockAlreadyHeld: true);
     final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
 
@@ -453,8 +402,6 @@ void main() {
     // client give up slightly EARLY. One taken from the reply would have it
     // believe it still held a lock the atServer had already released — and
     // publish over the enrollment that legitimately won the next election.
-    // The sibling test proves a SPENT lease refuses; nothing proved where the
-    // deadline came from, and with an instant take the two are identical.
     const ttl = Duration(seconds: 20);
     const takeDelay = Duration(milliseconds: 400);
     final c = client(takeDelay: takeDelay);
@@ -474,9 +421,8 @@ void main() {
         reason: 'the control that the delay was actually paid: the take is '
             'the verb it was attached to, and it went out exactly once');
 
-    // The discriminator. A deadline stamped from before the send is at most
-    // `before + ttl`; one stamped from the reply is at least
-    // `before + takeDelay + ttl`. The delay is what separates them, so the
+    // A deadline stamped from before the send is at most `before + ttl`; one
+    // stamped from the reply is at least `before + takeDelay + ttl`, so the
     // bound sits between the two.
     expect(deadline.isBefore(before.add(ttl + takeDelay ~/ 2)), isTrue,
         reason: 'the deadline does NOT include the ${takeDelay.inMilliseconds}'
@@ -490,19 +436,10 @@ void main() {
 
   test('the keygen and the signature happen BEFORE the lock is taken',
       () async {
-    // A mint lock is a window bounded by a ttl. Everything done while holding
+    // A mint lock is a window bounded by a ttl: everything done while holding
     // it is time in which no other enrollment of this atSign can mint and this
-    // one can still lose its lease — so the section should hold the writes
-    // that must be serialised and as little else as possible.
-    //
-    // Measured on 2026-08-27, same fixture, only the hoist differing:
-    //
-    //   before  before-lock 2.6ms   in-lock 53.1ms
-    //   after   before-lock 43.7ms  in-lock  5.6ms
-    //
-    // The ~47ms that left the critical section is the KEM keygen plus the
-    // ML-DSA signature, which is what the hoist moved and matches the cost of
-    // the two operations.
+    // one can still lose its lease, so the section holds the writes that must
+    // be serialised and as little else as possible.
     final c = client();
     final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
 
@@ -530,10 +467,9 @@ void main() {
   });
 
   test('a mint that overruns its lease publishes nothing', () async {
-    // Row 5. The election bounds when the enrollments ATTEMPT, not how long
-    // the winner TAKES, so without this the requirement fails with every other
-    // part correct: a slow winner publishes over the enrollment that
-    // legitimately won the next election.
+    // The election bounds when the enrollments ATTEMPT, not how long the
+    // winner TAKES: a slow winner would otherwise publish over the enrollment
+    // that legitimately won the next election.
     final c = client();
     final ring = PublishedNskeyKeyRing(c.client,
         mintLock: _SpentLeaseLock(c.client), privateFiling: await filing());
@@ -563,15 +499,9 @@ void main() {
 
   test('UC-G2.6 c6 · the added document is re-signed by the ADDING enrollment',
       () async {
-    // The generation is minted and signed by ANOTHER enrollment, and this
-    // client adds to it. c6 says the republished document carries the adder's
-    // signature, not the minter's: an advertisement's signer is a property of
-    // the document rather than of the generation, so a reader resolves it from
-    // the envelope's own kid.
     final c = client();
-    // Same chops as the fixture — the fixture serves one `_apsk` for every
-    // enrollment, so this verifies while claiming a different kid, which is
-    // exactly the situation under test.
+    // Same chops as the fixture, which serves one `_apsk` for every enrollment,
+    // so this signature verifies while claiming a different kid.
     final other = MockAtClient();
     final otherSecondary = MockRemoteSecondary();
     final otherLookUp = MockAtLookUp();
@@ -627,10 +557,8 @@ void main() {
 
   test('every advertisement read on the mint path goes to the atServer',
       () async {
-    // Row 1. The sender's read (`currentPublic`) stays local-first on purpose —
-    // `CkManager.ensureCurrent` reaches it on every put — so this is a claim
-    // about the mint path only, and it is a claim about the OPTIONS rather than
-    // about a value, because both routings return the same thing here.
+    // NOTE: the mint path only — `currentPublic`, which every put reaches
+    // through `CkManager.ensureCurrent`, stays local-first on purpose.
     final c = client();
     final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
 
@@ -650,9 +578,8 @@ void main() {
     final c = client(lockAlreadyHeld: true);
     final winner = await XWingKeyPair.generate();
     final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
-    // On the atServer, not in this client's memory. A sibling enrollment's
-    // publication is exactly what local storage does not have yet, so a
-    // fixture that seeded it locally would be testing the wrong absence.
+    // On the atServer, not in this client's memory: a fixture that seeded it
+    // locally would be testing the wrong absence.
     c.advertised[namespace] = await publishedByAnother(c.client, winner);
 
     final adopted = await ring.mintAndPublish(namespace);
@@ -666,10 +593,9 @@ void main() {
 
   test('a winner that published while this client took the lock is adopted',
       () async {
-    // Row 2's differential, and the one the lock alone never covered: this
-    // client WINS the race, so nothing refuses it — but a sibling published in
-    // the window between the decision to mint and the lock being taken. The
-    // record is mutable, so minting here overwrites a key peers already hold.
+    // This client WINS the race, so nothing refuses it — but a sibling
+    // published in the window between the decision to mint and the lock being
+    // taken, and the record is mutable.
     final c = client();
     final winner = await XWingKeyPair.generate();
     final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());

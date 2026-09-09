@@ -20,36 +20,23 @@ import 'test_utils.dart';
 
 /// The nskey-private self-heal between two real APKAM enrollments.
 ///
-/// The scenario is the ordinary second device: the namespace key was minted
-/// and pushed before this enrollment existed, so it holds the *published*
-/// generation's public half and none of the private. Before the self-heal
-/// landed this was a dead end — the only delivery was the mint-time push, and
-/// an enrollment created after the mint met `no nskey private held` with no
-/// request, no retry and no recovery (decisions.md 38).
-///
-/// What is asserted is the outcome in the seeker's KEYFILE, not that a method
-/// ran: the private a holder answered with must be filed durably and byte-
-/// exact, the ring must serve it, and nothing may have re-minted — a heal
-/// that "fixed" the seeker by rotating the namespace key would strand every
-/// peer that had already fetched the old generation.
+/// The seeker is the ordinary second device, holding the published
+/// generation's public half and none of the private; what is asserted is the
+/// outcome in its keyfile — the private a holder answered with is filed
+/// durably and byte-exact, the ring serves it, and nothing re-minted.
 void main() {
   TestUtils.isolateStorage('nskey_self_heal_live_test');
   late AtClient approver;
   late String atSign;
 
-  // Unique per run: the atServer refuses a second enrollment carrying an
-  // (appName, deviceName) pair that already has one approved.
+  // NOTE: unique per run — the atServer refuses a second enrollment carrying
+  // an (appName, deviceName) pair that already has one approved.
   final runId = DateTime.now().microsecondsSinceEpoch;
 
-  // ⚠️ **Run-unique, and it has to be.** This file's premise is that the
-  // HOLDER is the one that minted — "the wave the seeker missed" — so anything
-  // else publishing an nskey for the same namespace first makes
+  // NOTE: the premise here is that the HOLDER is the one that minted, so this
+  // namespace must be one nothing else publishes to — another publisher makes
   // `mintAndPublish` ADOPT that generation instead, leaving the holder without
-  // the private half it is about to be asked for. That is correct production
-  // behaviour (the mint election, decisions 105), so the test has to stop
-  // racing rather than the code stop adopting. On a shared `buzz` it lost the
-  // race to `self_enrollment_retrofit_live_test`, whose pqActive posture seeds
-  // namespace keys, and the failure surfaced as this file's own precondition.
+  // the private half it is about to be asked for.
   final namespace = 'selfheal$runId';
 
   setUpAll(() async {
@@ -63,21 +50,18 @@ void main() {
     await AtClientSecretSharing.forClient(approver).register();
   });
 
-  /// [atKeysIo] is the client's OWN keyfile, so the test observes exactly what
-  /// the client's start-time self-heal files. With two separate stores the
-  /// client's own sweep can consume an answer and file it where the test is
-  /// not looking, and the assertion reads a null meaning "somebody else got
-  /// there first".
+  /// [atKeysIo] must be the client's OWN keyfile: with a separate store the
+  /// client's own sweep can consume an answer and file it where the test is not
+  /// looking.
   Future<EnrolledClient> enrol(String device, {AtKeysIo? atKeysIo}) =>
       enrolAndAuthenticate(
         approver: approver,
         atSign: atSign,
         namespace: namespace,
-        // `legacyPlusPqProviders`, not `PqPosture.legacy`: these clients have to
-        // ANSWER and COLLECT over the envelope channel, and a posture configuring
-        // no post-quantum providers runs none of that startup. The authentication
-        // algorithm stays rsa2048 here, so no retrofit fires and the enrollment id
-        // is still stable — which is what `PqPosture.legacy` was being used for.
+        // NOTE: these clients have to ANSWER and COLLECT over the envelope
+        // channel, and a posture configuring no post-quantum providers runs
+        // none of that startup. The authentication algorithm stays rsa2048, so
+        // no retrofit fires and the enrollment id is still stable.
         preference:
             TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
         rootDomain: 'vip.ve.atsign.zone',
@@ -89,14 +73,9 @@ void main() {
 
   test('an enrollment that missed the mint pulls the private from a holder',
       () async {
-    // The holder exists and mints BEFORE the seeker does — which is the
-    // scenario ("the wave the seeker missed") and also what keeps the test
-    // honest. Every client runs the same self-heal from its own start, and a
-    // start-time sweep consumes and DELETES the requests it finds; a holder
-    // that started before the namespace existed has an empty store and would
-    // eat the seeker's request while answering nothing. In production that
-    // holder restarts with the private in its keyfile and primes it; here,
-    // ordering the mint first is the equivalent.
+    // NOTE: the holder must mint BEFORE the seeker exists. A start-time sweep
+    // consumes and DELETES the requests it finds, so a holder whose store is
+    // still empty would eat the seeker's request while answering nothing.
     final holderIo = InMemoryAtKeysIo();
     await holderIo.write(atSign, AtKeys());
     final holder = await enrol('nskey-holder', atKeysIo: holderIo);
@@ -123,8 +102,6 @@ void main() {
     final seekerSharing = AtClientSecretSharing.forClient(seeker.client);
     await seekerSharing.register();
 
-    // The seeker's view: the published generation exists, the private does
-    // not. Both checked, so the heal below provably has work to do.
     final seekerFiling = NskeyPrivateFiling(keysIo: seekerIo, atSign: atSign);
     final seekerRing =
         PublishedNskeyKeyRing(seeker.client, privateFiling: seekerFiling);
@@ -138,9 +115,8 @@ void main() {
         reason: 'the seeker must genuinely lack the private, or filing at the '
             'end proves nothing about acquiring it');
 
-    // The holder "restarts": its in-memory store is re-primed from AtKeys, as
-    // AtClientImpl does at every start. Without this the holder would answer
-    // with nothing — its store is a transit buffer the mint never populated.
+    // NOTE: the holder's store is a transit buffer the mint never populated,
+    // so it has to be re-primed from AtKeys before it can answer anything.
     expect(
         await NskeySeeding(
                 atClient: holder.client,
@@ -151,7 +127,6 @@ void main() {
         reason: 'the holder must prime its answerable holdings, or the pull '
             'below is asked into a void');
 
-    // The heal: the exact call AtClientImpl makes at every start.
     final asked = await NskeySeeding(
       atClient: seeker.client,
       ring: seekerRing,
@@ -161,12 +136,10 @@ void main() {
         reason: 'the request must go out — a heal that silently decided '
             'nothing was missing is the initiator-less state this replaces');
 
-    // The holder comes online and answers; the seeker collects. Both legs are
-    // store-and-forward — these sweeps are "each device runs occasionally".
     await holderSharing.sweepOnce(fromRemote: true);
     await seekerSharing.sweepOnce(fromRemote: true);
 
-    // The in-run filing is unawaited by design; give it a moment.
+    // NOTE: the in-run filing is unawaited, so the read has to be polled.
     var filed = await seekerFiling.read(namespace, advertisement.nskeyKid);
     for (var i = 0; i < 20 && filed == null; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -183,8 +156,8 @@ void main() {
         reason: 'and the ring must serve it, which is what makes the '
             'namespace readable');
 
-    // No re-mint: the published generation is still the holder's. A heal that
-    // rotated would strand every peer holding the old advertisement.
+    // No re-mint: a heal that rotated would strand every peer holding the old
+    // advertisement.
     expect((await seekerRing.currentPublic(atSign, namespace))?.nskeyKid,
         advertisement.nskeyKid);
   });
@@ -192,19 +165,12 @@ void main() {
   test(
       'a client START primes what it holds, so it can answer without anyone '
       'driving it', () async {
-    // The test above drives `hydrateStoreFromFiling` by hand, which proves the
-    // mechanism and NOT that anything calls it. This proves the call: a client
-    // built the way production builds one primes its own store during its own
-    // construction, before the sweep that would otherwise consume other
-    // enrollments' requests and answer them with nothing.
-    //
-    // On an atSign this file has not built a client for, and with the private
-    // seeded BEFORE that first construction. Both matter: `AtClientImpl`
-    // caches by `(atSign, enrollmentId)`, so a second client for a principal
-    // is the first one handed back and its construction never runs again; and
-    // an enrollment's own approval rewrites its keyfile, which would discard
-    // anything seeded beforehand. A holder restarting with material already
-    // in its keyfile is the production shape this reproduces.
+    // NOTE: on an atSign this file has not built a client for, and with the
+    // private seeded BEFORE that first construction. `AtClientImpl` caches by
+    // `(atSign, enrollmentId)`, so a second client for a principal is the first
+    // one handed back and its construction never runs again; and an
+    // enrollment's own approval rewrites its keyfile, discarding anything
+    // seeded beforehand.
     final other = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     final startIo = InMemoryAtKeysIo();
     final seeded = AtKeys();
@@ -219,8 +185,7 @@ void main() {
     ));
     await startIo.write(other, seeded);
 
-    // The whole point of this test is that the START primes the store, and
-    // priming is a startup step a provider-less posture does not run.
+    // NOTE: priming is a startup step a provider-less posture does not run.
     final manager =
         await TestUtils.initAtClient(other, namespace, atKeysIo: startIo,
             posture: legacyPlusPqProviders);

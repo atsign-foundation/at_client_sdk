@@ -9,23 +9,14 @@ import 'package:at_end2end_test/utils/test_constants.dart';
 /// ⛔ **Not a rollout stage, and deliberately not one of `PqPosture`'s named
 /// constants** — the ladder names three positions and this is not one of them.
 ///
-/// ⚠️ **It is not an impossible combination, and nothing here should be read
-/// as saying so.** A real client built this way works: an enrollment
-/// advertises a key package in every key-exchange mode, and the startup's
-/// conveyed-key collection registers one through
-/// `KeyPackageRegistration.register()` — so such a client is conveyed nskey
+/// ⚠️ **It is not an impossible combination.** A real client built this way
+/// works: an enrollment advertises a key package in every key-exchange mode,
+/// and the startup's conveyed-key collection registers one through
+/// `KeyPackageRegistration.register()`, so such a client is conveyed nskey
 /// privates like any other. ⚠️ **That last step turns on the providers axis
 /// this posture sets true**, and not on the legacy ones beside it: a posture
 /// configuring no post-quantum providers runs none of the startup, collects
-/// nothing and is conveyed nothing. Some tests
-/// using this posture mint their own ring in-process; others read a private
-/// that reached them by conveyance. What keeps it out of `PqPosture` is that
-/// the release programme does not offer it as a stage, not that it could not
-/// exist.
-///
-/// An earlier version of this comment claimed such a client "could never
-/// acquire a key to use" and that these tests "bypass conveyance entirely".
-/// Both were false.
+/// nothing and is conveyed nothing.
 final legacyPlusPqProviders = PqPosture(
   authenticationKeyAlgorithm: PqPosture.legacy.authenticationKeyAlgorithm,
   dataSigningKeyAlgorithms: PqPosture.legacy.dataSigningKeyAlgorithms,
@@ -79,10 +70,6 @@ class TestPreferences {
   ///   `public:__nskey.<ns>@<atSign>`, which every peer then seals to.
   /// - [AtClientPreference.dataSigningKeyAlgorithms] mints signing keys and
   ///   advertises them in `_apsk`.
-  ///
-  /// Called from [getPreference] and from `TestSuiteInitializer.testInitializer`,
-  /// which between them are every route this pack has to a live client —
-  /// including a preference a test built by hand and passed in.
   static void refuseDurableWritesToLongLivedAtSigns(
       String atSign, AtClientPreference preference) {
     if (!longLivedAtSigns.contains(atSign)) return;
@@ -121,12 +108,10 @@ class TestPreferences {
 
   /// The preference for [atSign], built on the first ask and reused after.
   ///
-  /// [posture] has no default **on purpose**: every test in this pack states
-  /// the era its client runs at, so the compiler names any site that has not
-  /// chosen and a new test cannot be written without choosing. What a posture
-  /// changes is not cosmetic — it decides whether this client mints signing
-  /// keys, publishes an `_apsk` advertisement, seeds namespace keys and
-  /// retrofits its own enrollment.
+  /// [posture] has no default **on purpose**: it decides whether this client
+  /// mints signing keys, publishes an `_apsk` advertisement, seeds namespace
+  /// keys and retrofits its own enrollment, so the compiler names any site
+  /// that has not chosen an era to run at.
   ///
   /// ⛔ **The atSigns this pack runs against are never recycled.** `@ce2e1`
   /// through `@ce2e4` are long-lived, and their keyfiles are repository
@@ -137,10 +122,9 @@ class TestPreferences {
   /// Pin them to [PqPosture.legacy] unless the test is about the
   /// post-quantum behaviour itself.
   ///
-  /// A second ask naming a different posture is **refused**. The memo is per
-  /// atSign, so without the refusal this parameter would be decorative for
-  /// every atSign the pack uses twice — which is most of them — and a test
-  /// would run at whichever posture its file happened to ask for first.
+  /// A second ask naming a different posture is **refused**: the memo is per
+  /// atSign, so otherwise a test would run at whichever posture its file
+  /// happened to ask for first.
   AtClientPreference getPreference(String atSign,
       {required PqPosture posture}) {
     final existing = atClientPreferencesMap[atSign];
@@ -183,19 +167,13 @@ class TestPreferences {
   /// two enrollments normally run as two processes.
   ///
   /// Returned as a **separate object** rather than the memoised one with its
-  /// path reassigned. `AtSyncQueue` reads `hiveStoragePath` off the preference
+  /// path reassigned: `AtSyncQueue` reads `hiveStoragePath` off the preference
   /// when the queue is first opened rather than when the client is built, so
   /// reassigning the shared object would move whichever client opens its queue
   /// after the reassignment — including the first one.
   ///
   /// [device] must be unique within the run: it is the whole of what keeps two
   /// co-located clients apart on disk.
-  ///
-  /// ⚠️ Naming separate paths was not enough until 2026-08-29
-  /// (`docs/projects/pq/detail/decisions.md`, ruling 125): a box's identity was
-  /// the global Hive registry plus its name, and names derive from the atSign,
-  /// so a second client silently attached to the first's box whatever path it
-  /// asked for.
   AtClientPreference forCoLocatedClient(String atSign,
       {required PqPosture posture, required String device}) {
     // Also the posture check: this refuses a second client asking for an era

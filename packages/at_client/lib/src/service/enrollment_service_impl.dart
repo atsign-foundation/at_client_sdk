@@ -20,9 +20,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
   final AtEnrollment _atEnrollmentImpl;
   final EnrollmentConveyance? _injectedConveyance;
 
-  /// What approval seals to the newly approved device. Defaults to the
-  /// envelope-sealing conveyance, listing enrollments and resolving
-  /// privilege through this service's own verb wrapper.
+  /// What approval seals to the newly approved device.
   late final EnrollmentConveyance _conveyance = _injectedConveyance ??
       EnvelopeEnrollmentConveyance(_atClient,
           listEnrollments: fetchEnrollmentRequests,
@@ -69,24 +67,17 @@ class EnrollmentServiceImpl implements EnrollmentService {
 
   /// Whether this client is configured to do post-quantum work at all.
   ///
-  /// Permissive when there is no preference to ask, matching every other
-  /// posture consult on this path: a client built without one is not a client
-  /// that has declined post-quantum, it is one that said nothing.
+  /// Permissive when there is no preference to ask: a client built without one
+  /// has not declined post-quantum, it has said nothing.
   bool get _configuresPqProviders =>
       _atClient.getPreferences()?.posture.configuresPqProviders ?? true;
 
   /// Signs and conveys approval-chain links for approved enrollments that
   /// lack one — see [EnrollmentConveyance.sweepUnanchoredEnrollments].
   ///
-  /// **Refused by a client whose posture configures no post-quantum
-  /// providers.** The sweep signs links and seals secrets; a client standing in
-  /// for a build that predates the substrate has neither the providers to do it
-  /// nor a reason to. Refusing here rather than only gating the startup step
-  /// covers a direct caller too, which is how this is reached outside a start.
-  ///
-  /// `async`, so the refusal arrives as a rejected future rather than a
-  /// synchronous throw: the signature promises a `Future`, and a caller that
-  /// writes `sweep().catchError(...)` would otherwise never see it.
+  /// Rejects its future when this client's posture configures no post-quantum
+  /// providers: the sweep signs links and seals secrets, which such a client
+  /// cannot do.
   Future<int> sweepUnanchoredEnrollments() async {
     if (!_configuresPqProviders) {
       throw AtClientException.message(
@@ -106,14 +97,10 @@ class EnrollmentServiceImpl implements EnrollmentService {
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision) async {
-    // Read the pending record before approving. A request that sent no wrapped
-    // symmetric key is one that expects this approver to mint it — that
-    // absence is the whole signal, and it is only visible while the record is
-    // still the one the enrollee wrote. Its advertised key package alone would
-    // not do: every mode may carry one, because a package is also how existing
-    // secrets are sealed to a new device.
-    // `approved` as well as `pending`: re-approving an already-approved
-    // enrollment must compute the same minting decision.
+    // NOTE: an absent wrapped symmetric key is what asks this approver to mint
+    // one, and it is only visible while the record is still the one the
+    // enrollee wrote. `approved` is in the filter so that re-approving an
+    // already-approved enrollment computes the same decision.
     final pending = await _enrollmentById(
         enrollmentRequestDecision.enrollmentId,
         const [EnrollmentStatus.pending, EnrollmentStatus.approved]);
@@ -121,18 +108,10 @@ class EnrollmentServiceImpl implements EnrollmentService {
         (pending?.encryptedAPKAMSymmetricKey?.isEmpty ?? true) &&
             pending?.metadata?['keyPackage'] != null;
 
-    // ⛔ **Refused before the approval reaches the atServer**, so the
-    // enrollment stays pending and an approver that CAN service it still may.
-    // Approving here would flip the record to approved and then fail to mint,
-    // seal or convey anything — leaving a device that is authorised and holds
-    // none of the material it was authorised for, which no later approval can
-    // repair because the request is spent.
-    //
-    // Keyed on `mintsSymmetricKey`, not on the advertised key package: a
-    // package rides every mode, and what actually asks this approver for
-    // post-quantum work is the ABSENCE of a wrapped symmetric key. A legacy
-    // request carries its own, needs none of this, and is still approved
-    // normally by such a client — which is the whole of what it is for.
+    // NOTE: refuse before the approval reaches the atServer. An approval that
+    // lands and then fails to mint leaves the device authorised holding none
+    // of the material it was authorised for, and no later approval repairs it
+    // because the request is spent.
     if (mintsSymmetricKey && !_configuresPqProviders) {
       throw AtClientException.message(
           'enrollment ${enrollmentRequestDecision.enrollmentId} expects its '
@@ -157,12 +136,9 @@ class EnrollmentServiceImpl implements EnrollmentService {
         decision, _atClient.getRemoteSecondary()!.atLookUp,
         approverChops: _atClient.atChops);
 
-    // Re-read the record rather than trusting the decision object: the
-    // decision carries only the id and the symmetric key, while conveyance
-    // needs the granted namespaces and the advertised key package, and both
-    // live on the enrollment the atServer just approved. Re-read *after*
-    // approval specifically, because the atServer publishes the enrollment's
-    // _apsk at that point and the package cannot be verified before it exists.
+    // NOTE: re-read after the approval, not before — the atServer publishes
+    // the enrollment's _apsk at that point, and the advertised key package
+    // cannot be verified until it exists.
     final enrollment = await _enrollmentById(
         enrollmentRequestDecision.enrollmentId,
         const [EnrollmentStatus.approved]);
@@ -174,19 +150,10 @@ class EnrollmentServiceImpl implements EnrollmentService {
       } on EnrollmentConveyanceException {
         rethrow;
       } on AtEnrollmentException catch (e) {
-        // A thrown refusal — the unregistered-approver guard, the
-        // no-ordinary-namespace refusal — fires just as much after the
-        // successful server-side approval as a rejected package does, so it
-        // carries the response the same way. The package itself was fine as
-        // far as the conveyance got, which is what `present` records here.
         throw EnrollmentConveyanceException(e.message,
             response: response, keyPackageStatus: KeyPackageStatus.present);
       }
       if (status == KeyPackageStatus.rejected) {
-        // The approval has already happened on the atServer, so refusing
-        // loudly here is what lets the approver learn what it has approved —
-        // and the response rides along so the refusal cannot cost the caller
-        // the evidence of that success.
         throw EnrollmentConveyanceException(
             'Enrollment ${enrollment.enrollmentId} is approved, but the key '
             'package it advertised does not verify against its _apsk, so no '
@@ -202,10 +169,6 @@ class EnrollmentServiceImpl implements EnrollmentService {
 
   /// The enrollment with [enrollmentId], from an `enroll:list` narrowed to
   /// [statuses].
-  ///
-  /// The filter is required rather than optional: an unfiltered
-  /// `enroll:list` returns every enrollment the atSign has ever held,
-  /// revoked ones included, and the cost tracks the records returned.
   Future<Enrollment?> _enrollmentById(
           String enrollmentId, List<EnrollmentStatus> statuses) async =>
       (await fetchEnrollmentRequests(

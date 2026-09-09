@@ -5,44 +5,34 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'virtualenv_ports.dart';
 
-/// The `at_activate` entrypoint, named relative to this package's root.
-///
-/// That root is the working directory `dart test` and the CI job both use, and
-/// it is the same assumption `testKeysFile` makes about the key paths it hands
-/// out, so a relative `-k` resolves the same way in parent and child.
+/// The `at_activate` entrypoint, named relative to this package's root — the
+/// working directory `dart test` and the CI job both use, and the one
+/// `testKeysFile` assumes, so a relative `-k` resolves the same way in parent
+/// and child.
 const String _activateCli =
     '../../packages/at_onboarding_cli/bin/activate_cli.dart';
 
 /// How long a CLI command may take before this helper gives up on it.
 ///
-/// Generous, because these commands do real network work against a live
-/// atServer. The point is not to be tight — it is that a command which never
-/// finishes must produce a message naming itself, rather than silence until the
-/// test's own deadline.
+/// Generous, because these commands do real network work; the point is that a
+/// command which never finishes names itself instead of falling silent until
+/// the test's own deadline.
 const Duration cliCommandTimeout = Duration(seconds: 120);
 
 /// Evicts every cached `AtClient` so that the next one this process asks for is
 /// actually built.
 ///
-/// ⚠️ **`AtClientManager.getInstance().reset()` does not do this, and reads as
-/// though it does.** It nulls the manager's current client and drops its change
-/// listeners, but `AtClientImpl.atClientInstanceMap` is **static** and survives
-/// it. So the next `setCurrentAtSign` for an atSign this process has already
-/// built hands back the ORIGINAL client — with the storage path, `AtChops`,
-/// `AtKeysIo` and preference it was born with, whatever the caller just passed.
+/// ⚠️ `AtClientManager.getInstance().reset()` does not do this: the static
+/// `AtClientImpl.atClientInstanceMap` survives it, so a second build for an
+/// atSign already built here hands back the first client — with the storage
+/// path, `AtChops`, `AtKeysIo` and preference it was born with — whenever the
+/// two differ in anything the key `(atSign, enrollmentId)` does not carry.
 ///
-/// **When a test needs this.** Any time this process builds a client for one
-/// atSign more than once and the second build differs in something the cache
-/// key does not carry — and the key is only `(atSign, enrollmentId)`. That
-/// means clients the TEST builds directly: every method of
-/// `EnrollmentOperations` is one. CLI commands are not among them, because
-/// [runCliCommand] runs those in their own process.
-///
-/// ⛔ **Never call this while another service has an operation in flight.** It
-/// resets the shared `AtClientManager`. Evict *between* operations, never
-/// inside one — and prefer not to need it at all.
+/// ⛔ Never call this while another service has an operation in flight: it
+/// resets the shared `AtClientManager`, turning a legible refusal into a
+/// silent stall.
 Future<void> evictCachedAtClients() async {
-  // Stopped, not dropped: a client left running keeps its claim on its
+  // NOTE: stopped, not dropped — a client left running keeps its claim on its
   // storage location, and the next client of the atSign is refused there.
   for (final client
       in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
@@ -55,39 +45,19 @@ Future<void> evictCachedAtClients() async {
 /// Runs one `at_activate` command in its own OS process and returns its exit
 /// code, streaming its output as it arrives.
 ///
-/// ⚠️ **Do not call `auth_cli.wrappedMain` from a test instead.** In-process,
-/// every command reaches `createAtClient`, which mints
-/// `~/.atsign/storage/<atSign>/at_activate/<millisecondsSinceEpoch>` — a new
-/// directory on **every call**. Two commands in one process therefore always
-/// name two paths for one atSign, and the client cache, keyed only by
-/// `(atSign, enrollmentId)`, can honour just the first. The second silently ran
-/// against the first command's client and store, and the unique path it asked
-/// for was never created. That is not hypothetical: this file's tests were
-/// green for exactly that reason, asserting through clients they had not built.
+/// ⚠️ Not `auth_cli.wrappedMain`: in-process each command mints its own
+/// `~/.atsign/storage/<atSign>/at_activate/<millisecondsSinceEpoch>` directory
+/// while the static client cache honours only the first, so a second command
+/// silently runs against the first's client and store — and a separate process
+/// runs `main`, which installs the keyfile retrofit lock.
 ///
-/// Evicting the cache before each command is **not** the fix. It resets the
-/// shared `AtClientManager`, and doing that between a service's own operations
-/// converts a legible refusal into a silent stall — measured, six minutes of it.
+/// ⚠️ Streamed rather than `Process.run`, whose buffered output a child that
+/// never exits takes with it; [cliCommandTimeout] bounds the wait so a stuck
+/// command names itself.
 ///
-/// A separate process has neither problem, and it is what a CLI invocation
-/// *is*: its own static state, its own manager, its own storage. Note it runs
-/// `main`, not `wrappedMain`, so it also gets the keyfile retrofit lock that
-/// `main` installs — which is the shipped behaviour and the whole point.
-///
-/// **Output is streamed, not buffered.** `Process.run` collects output and
-/// hands it over only when the child exits, so a child that never exits takes
-/// its entire log with it — which is precisely what made an earlier hang here
-/// undiagnosable. And [cliCommandTimeout] bounds the wait so a stuck command
-/// names itself instead of consuming the test's whole deadline in silence.
-///
-/// ⚠️ **A child's log is nearly empty by default, and that is the CLI's own
-/// doing, not a symptom.** `auth_cli` sets `AtSignLogger.root_level` to
-/// `shout` unless the command carries `-v` (`info`) or `--debug` (`finest`).
-/// A silenced child is indistinguishable from a stalled one in the captured
-/// output — and the INFO lines interleaved around it belong to the TEST
-/// process, which is louder, so the transcript reads as though the child ran
-/// and stopped. Add `--debug` to [args] before concluding anything about where
-/// a CLI command got to.
+/// ⚠️ The child logs almost nothing unless [args] carries `-v` (`info`) or
+/// `--debug` (`finest`) — `auth_cli` sets `AtSignLogger.root_level` to `shout`
+/// otherwise — so a silenced child reads exactly like a stalled one.
 Future<int> runCliCommand(List<String> args) async {
   // NOTE: the at_activate child builds its own client and defaults to port 64.
   final rooted = _withRootPort(args);
@@ -96,8 +66,8 @@ Future<int> runCliCommand(List<String> args) async {
 
   final out = proc.stdout.transform(utf8.decoder).listen(stdout.write);
   final err = proc.stderr.transform(utf8.decoder).listen(stderr.write);
-  // No interactive user is attached. EOF is the truthful answer to any prompt,
-  // and leaving the pipe open instead would just block on one.
+  // NOTE: no interactive user is attached, so leaving the pipe open would
+  // block on any prompt; EOF is the truthful answer to one.
   await proc.stdin.close();
 
   try {

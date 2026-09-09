@@ -74,9 +74,6 @@ void main() {
 
   test('a document holding no authentication material names no enrollment',
       () async {
-    // A store that only files other material — the e2e initializer's
-    // nskey stand-in, a keychain read before onboarding — beside a caller
-    // whose credentials arrive as injected AtChops.
     final io = InMemoryAtKeysIo();
     await io.write(atSign, AtKeys());
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),

@@ -25,18 +25,10 @@ final _logger = AtSignLogger('NskeySeeding');
 /// Mints and publishes this atSign's namespace keys at client start, and
 /// conveys each private to the atSign's other enrollments.
 ///
-/// **Why at start rather than on first write.** The rollout mints and
-/// publishes while clients are still *writing legacy*, so that by the time the
-/// PQ flag flips the keys are already everywhere. Minting on first write would
-/// seed only as traffic happened, leaving early senders cold-starting against
-/// recipients who simply had not written yet. It is also what makes the
-/// sender-side rule honest: if a recipient has ever run a PQ-capable client
-/// for a namespace, the key is there.
-///
-/// Seeding is best-effort by construction. A namespace that cannot be minted
-/// now is minted at the next start, and a cold-start failure on the write path
-/// is already a named, recoverable error — so nothing here throws into a
-/// client's startup.
+/// At start rather than on first write, so a recipient that has ever run a
+/// PQ-capable client for a namespace is already reachable for it, and
+/// best-effort throughout: nothing here throws into a client's startup, and a
+/// namespace that cannot be minted now is minted at the next start.
 @experimental
 class NskeySeeding {
   final AtClient atClient;
@@ -52,14 +44,6 @@ class NskeySeeding {
 
   /// Asked, once per authorised namespace at every client start, whether this
   /// atSign's namespace key should be replaced.
-  ///
-  /// This is one of the two points the question is put — the other is before a
-  /// content key is conveyed to this atSign's own namespace — and it is the one
-  /// that reaches an application which only ever writes to peers, because such
-  /// an application never conveys a content key to a key of its own.
-  ///
-  /// Defaulted to [neverRotateNskey] here rather than left null so every call
-  /// site asks unconditionally; a client passes its configuration's.
   final NskeyRotationPolicy rotationPolicy;
 
   NskeySeeding({
@@ -72,29 +56,10 @@ class NskeySeeding {
 
   /// The namespaces this client should hold a key for.
   ///
-  /// An APKAM client is told by its own enrollment record — the atServer
-  /// returns only that record unless the caller holds `__manage`. A legacy
-  /// PKAM client has no enrollment at all and can name exactly one namespace,
-  /// its `preference.namespace`; those clients are most of the fleet during
-  /// the rollout, so that is where seeding coverage actually comes from.
-  ///
-  /// `*` is not a namespace data lives in, so nothing mints for it as such;
-  /// an enrollment granted it seeds `preference.namespace`, exactly as the
-  /// atSign's own credential does, since a wildcard grant is that credential's
-  /// privilege under another name. `__manage` is skipped: not an app
-  /// namespace.
-  ///
-  /// Read by the routes that have to iterate — [seed] and
-  /// [requestMissingPrivates] — which have no other way to know what to loop
-  /// over.
-  ///
-  /// A caller asking about ONE named namespace does not need it, and the round
-  /// trip would buy nothing: the atServer refuses a write into a namespace
-  /// this enrollment was not granted, under the verb's own name, so an
-  /// ungranted namespace is reported by that refusal — which names the write —
-  /// rather than guessed at beforehand. What such a caller does want cheaply is
-  /// [isSeedable], which answers "that namespace never holds a key of its own"
-  /// from the argument alone.
+  /// An APKAM client is told by its own enrollment record, all the atServer
+  /// returns without `__manage`, while a legacy PKAM client has no enrollment
+  /// and names exactly one — its `preference.namespace`, which is also what a
+  /// grant of `*` seeds, `__manage` being skipped either way.
   Future<Set<String>> authorisedNamespaces() async {
     final own = atClient.getPreferences()?.namespace;
     final ownNamespace =
@@ -123,20 +88,14 @@ class NskeySeeding {
   /// Whether [namespace] can hold a namespace key of its own.
   ///
   /// `*` and `__manage` are grants over *other* namespaces rather than
-  /// namespaces data lives in, so nothing ever mints for them: "every
-  /// namespace" is not a list that can be minted, and `__manage` is not an app
-  /// namespace. Public because it is the cheap half of "can this atSign be
-  /// made reachable for that namespace" — answered from the argument with no
-  /// round trip, and no later start can change the answer.
+  /// namespaces data lives in, so nothing ever mints for them; the answer comes
+  /// from the argument alone and no later start can change it.
   static bool isSeedable(String namespace) =>
       namespace != '*' && namespace != '__manage' && namespace.isNotEmpty;
 
   /// Mints and publishes for every authorised namespace that has no key yet,
   /// then conveys each new private. Returns the namespaces this start published
   /// fresh material for — a cold-start mint, or a rotation a revocation owed.
-  ///
-  /// The revocation check rides this loop because the namespace list is what it
-  /// needs and this is where that list is already fetched.
   Future<Set<String>> seed() async {
     final owner = atClient.getCurrentAtSign();
     if (owner == null) return const {};
@@ -144,63 +103,30 @@ class NskeySeeding {
     final minted = <String>{};
     for (final namespace in await authorisedNamespaces()) {
       try {
-        // Before the seed, not after: a rotation mints every algorithm this
-        // client is configured for, so an add behind one would find nothing
-        // missing and the policy question would be put against a generation
-        // minted seconds ago.
+        // NOTE: before the seed, not after — a rotation mints every algorithm
+        // this client is configured for, so seeding behind one would find
+        // nothing missing and would ask the policy about a brand-new generation.
         if (await rotateIfRevoked(owner, namespace)) {
           minted.add(namespace);
           continue;
         }
         if (await seedNamespace(owner, namespace)) minted.add(namespace);
       } catch (e) {
-        // One namespace failing must not stop the others: a partly seeded
-        // atSign is strictly better than an unseeded one, and the next start
-        // retries whatever is still missing.
         _logger.warning('Could not seed $owner:$namespace this start: $e');
       }
     }
     return minted;
   }
 
-  /// Mints, publishes and conveys the key for **one** namespace, unless one is
-  /// already published. Returns whether this call minted.
+  /// Mints, publishes and conveys the key for **one** namespace unless one is
+  /// already published, throwing rather than logging, and returns whether this
+  /// call minted.
   ///
-  /// Split out of [seed] so a caller that wants a single namespace ready —
-  /// `AtClient.ensureReachable` — does not have to seed every other namespace
-  /// this enrollment happens to be authorised for as a side effect of asking
-  /// about one.
-  ///
-  /// Throws rather than logging: [seed] contains a failure so that one
-  /// namespace cannot stop the others, while a caller asking about one
-  /// namespace wants the reason.
-  ///
-  /// Safe to call concurrently with **another enrolment's** mint: that one the
-  /// wire lock excludes, and the published check below plus the re-read inside
-  /// [PublishedNskeyKeyRing.mintAndPublish] make the loser adopt.
-  ///
-  /// ⚠️ **NOT safe against a concurrent mint by the SAME enrolment**, which is
-  /// what this said until 2026-08-27. The lock's value is the enrolment id, so
-  /// two racers of one enrolment each read it back, each see their own id, and
-  /// each mint — measured live as two advertisements 7.5ms apart with
-  /// different key material. What makes concurrent callers safe is the
-  /// in-flight guard on the [MintLock] instance they share, so callers that do
-  /// **not** share a ring are still racing.
-  ///
-  /// [askRotationPolicy] governs whether an already-published generation is
-  /// put to [rotationPolicy]. A caller that read the advertisement itself a
-  /// moment ago, found none, and is only trying to make this atSign reachable
-  /// passes false: a sibling enrollment publishing in the window between that
-  /// read and the one below routes this call onto the branch that puts the
-  /// rotation question, and a route whose whole answer for an already-published
-  /// namespace is "already reachable" never offers it. The read below stays
-  /// either way — it is what makes the loser of that race adopt the winner's
-  /// generation instead of minting a second one.
-  ///
-  /// Refuses a namespace that can never hold a key of its own ([isSeedable]).
-  /// Every seeding route passes through here, so a caller that arrived by some
-  /// other road is stopped rather than publishing a key at an address nothing
-  /// will ever look at.
+  /// ⚠️ Concurrent callers of the SAME enrolment are safe only where they share a
+  /// mint-lock instance — the wire lock's value is the enrolment id, so two
+  /// racers of one enrolment each read back their own and each mint — while
+  /// [askRotationPolicy] false suppresses putting an already-published generation
+  /// to [rotationPolicy], for a caller that only wants this atSign reachable.
   Future<bool> seedNamespace(String owner, String namespace,
       {bool askRotationPolicy = true}) async {
     if (!isSeedable(namespace)) {
@@ -211,14 +137,11 @@ class NskeySeeding {
               'no key is ever minted for it');
     }
 
-    // The atServer, not local storage: a namespace another enrollment minted a
-    // moment ago is absent locally until sync catches up, and reading that
-    // absence as a cold start is what publishes a second key over the first.
+    // NOTE: the atServer, not local storage — a namespace another enrollment
+    // minted a moment ago is absent locally until sync catches up, and reading
+    // that absence as a cold start publishes a second key over the first.
     final published = await ring.publishedAdvertisement(owner, namespace);
     if (published != null) {
-      // A rotation mints every algorithm this client is configured for, so an
-      // add after one would find nothing missing. Only the namespace that was
-      // left alone needs the second question.
       final rotated = askRotationPolicy &&
           await rotateIfPolicyAsks(owner, namespace, published: published);
       if (!rotated) await _addMissing(owner, namespace, published);
@@ -226,23 +149,15 @@ class NskeySeeding {
     }
     final advertisement = await ring.mintAndPublish(namespace);
 
-    // ⚠️ **The conveyance is guarded separately, and the boundary is the
-    // point.** Publishing is what makes this atSign reachable — a peer seals
-    // to the advertisement and needs nothing else. Conveying is what gives
-    // this atSign's OTHER enrollments the private half, and an enrollment that
-    // misses the push pulls at its next start. So a conveyance failure is not
-    // a failure to seed, and reporting it as one tells a caller its atSign is
-    // unreachable when it is reachable.
-    //
-    // Not hypothetical: a legacy PKAM client has no APKAM keypair, the
-    // conveyance enumerates members with `enroll:listns`, and the atServer
-    // refuses that without APKAM authentication. Measured 2026-08-27, where it
-    // turned a successful publish into a reported failure.
+    // NOTE: the conveyance is guarded separately because publishing alone makes
+    // this atSign reachable, while conveying only hands its other enrollments
+    // the private half, which they can also pull. A legacy PKAM client cannot
+    // enumerate members at all — `enroll:listns` is APKAM-gated — so reporting
+    // that as a failure to seed would call a reachable atSign unreachable.
     try {
-      // Every key the mint produced, each under its own id. A generation can
-      // hold one per algorithm the fleet needs, and conveying only the id the
-      // advertisement's own getter names would leave the others held by this
-      // client alone — peers sealing to entries nobody else can open.
+      // NOTE: every key the generation carries, not only the id the
+      // advertisement's getter names — an unconveyed key is one peers seal to
+      // and nobody else can open.
       for (final key in advertisement.keys) {
         await _convey(namespace, key.kid);
       }
@@ -258,13 +173,9 @@ class NskeySeeding {
   /// Adds this client's own missing key-establishment material to a generation
   /// that already exists, and conveys **only what was added**.
   ///
-  /// The other enrollments already hold everything else in the generation, and
-  /// re-sending it would be one envelope each for material they can already
-  /// open.
-  ///
-  /// Failure is logged, not thrown, for [seedNamespace]'s reason: this atSign
-  /// is reachable either way. What an add buys is that a peer configured for
-  /// the added algorithm can seal under it — a peer that was not is unaffected.
+  /// Failure is logged, not thrown: this atSign is reachable either way, and an
+  /// add only buys peers configured for the added algorithm the ability to seal
+  /// under it.
   Future<void> _addMissing(
       String owner, String namespace, NskeyAdvertisement published) async {
     final before = published.keys.map((key) => key.kid).toSet();
@@ -280,9 +191,8 @@ class NskeySeeding {
     if (widened == null) return;
 
     for (final key in widened.keys) {
-      // Only what this add minted. `before` is the generation as it stood when
-      // the decision was made, so an entry already in it is one the authorised
-      // enrollments were conveyed when it was minted.
+      // NOTE: an entry already in `before` was conveyed when it was minted, so
+      // re-sending it costs one envelope each for material they can open.
       if (before.contains(key.kid)) continue;
       try {
         await _convey(namespace, key.kid);
@@ -296,29 +206,16 @@ class NskeySeeding {
   }
 
   /// Puts [rotationPolicy] the question for a namespace that already has a
-  /// generation, and replaces it if the answer is yes. Returns whether it did.
+  /// generation, replaces it if the answer is yes, and returns whether it did.
   ///
-  /// **The one implementation, asked from two places.** Once per authorised
-  /// namespace at every client start, from [seedNamespace]; and before a
-  /// content key is conveyed to a namespace key this atSign owns, from the
-  /// manager that cuts it. Neither point reaches every application alone — an
-  /// application that only writes to peers never conveys to a key of its own,
-  /// and a process that never restarts is never seeded again.
-  ///
-  /// [published] is the generation already read, where the caller has it;
-  /// otherwise it is read here.
-  ///
-  /// Returns false rather than throwing on any failure. What a caller is doing
-  /// when it asks is reaching this atSign or writing to it, and neither is
-  /// broken by a rotation that did not happen: the published generation stays
+  /// [published] is the generation already read where the caller has it, and any
+  /// failure returns false rather than throwing — the published generation stays
   /// published, and the question is put again at the next start.
   @experimental
   Future<bool> rotateIfPolicyAsks(String owner, String namespace,
       {NskeyAdvertisement? published}) async {
     final generation =
         published ?? await ring.publishedAdvertisement(owner, namespace);
-    // Nothing published is a cold start, which is a mint rather than a
-    // replacement — and there is no generation to have an opinion about.
     if (generation == null) return false;
 
     final bool replace;
@@ -336,13 +233,10 @@ class NskeySeeding {
     }
     if (!replace) return false;
 
-    // Asked BEFORE this check, deliberately. Replacing a namespace key conveys
-    // the successor to every authorised enrollment, so a client with nowhere
-    // to convey would publish a generation only it can open — worse than not
-    // replacing one. Checking first would be cheaper and would make an
-    // application's yes disappear without trace; this way it is refused out
-    // loud, which is what an application that configured a policy and sees
-    // nothing happen needs to read.
+    // NOTE: the policy is asked before this check, so that a client with
+    // nowhere to convey the successor refuses out loud rather than swallowing
+    // the application's yes. Replacing without a substrate would publish a
+    // generation only this client can open.
     final substrate = sharing;
     final filing = privateFiling;
     if (substrate == null || filing == null) {
@@ -365,9 +259,6 @@ class NskeySeeding {
       ).rotateNamespaceKey(namespace);
       return true;
     } catch (e) {
-      // The commonest cause is the mint lock: another enrollment rotated or
-      // minted within its cooldown, which means the thing the policy asked for
-      // has just happened or is about to.
       _logger.warning('The rotation policy asked for a fresh namespace key for '
           '$owner:$namespace and it did not happen; the published generation '
           'is unchanged and the next start will ask again: $e');
@@ -376,42 +267,23 @@ class NskeySeeding {
   }
 
   /// Rotates [namespace] when a revocation has touched an enrollment granted it
-  /// since that namespace's advertisement was last rotated. Returns whether it
-  /// did.
+  /// since that namespace's advertisement was last rotated, and returns whether
+  /// it did.
   ///
-  /// **Unconditional, and deliberately not [rotationPolicy]'s question.** That
-  /// lever governs discretionary rotation and its shipped default declines, so
-  /// asking it here would leave the mechanism inert for every application that
-  /// has not opted in. A revocation is an obligation rather than a preference:
-  /// the revoked enrollment holds the current generation's private, and only a
-  /// fresh generation cuts it off from what is sealed next. This is the backstop
-  /// for the revoke that could not finish its own rotation — a lost lock, a
-  /// process that died, one namespace of several — after which nothing else
-  /// would ever notice.
-  ///
-  /// **Both moments are stamped by the atServer**: the revocation's, and the
-  /// advertisement record's `updatedAt`. Comparing a server-stamped revocation
-  /// with the generation's own `createdAt` would compare two machines, and it
-  /// fails silently in the dangerous direction — a minting client whose clock
-  /// runs fast produces a generation that looks newer than a revocation that
-  /// actually followed it, so the rotation never fires.
-  ///
-  /// **Establishing no cause rotates nothing**: a client running as the
-  /// atSign's own credential, which has no enrollment to ask as, an unreadable
-  /// namespace answer, or no substrate to convey a successor over. A published
-  /// record whose stamp cannot be read while a revocation moment WAS returned
-  /// does rotate — of the two directions that is the safe one. Nothing
-  /// published is a cold start rather than a failure: the mint that follows
-  /// produces a generation no earlier revocation can be later than.
+  /// Unconditional rather than [rotationPolicy]'s question, because only a fresh
+  /// generation cuts a revoked enrollment off from what is sealed next; both
+  /// moments compared are stamped by the atServer — the revocation's and the
+  /// record's `updatedAt`, never the generation's own `createdAt`, which would
+  /// compare two clocks — and establishing no cause rotates nothing, while a
+  /// published record whose stamp cannot be read does rotate.
   @experimental
   Future<bool> rotateIfRevoked(String owner, String namespace) async {
     final substrate = sharing;
     final filing = privateFiling;
     if (substrate == null || filing == null) return false;
 
-    // The predicate [authorisedNamespaces] uses, for the same reason: the
-    // atSign's own credential is not an enrollment the atServer will answer
-    // about, and the verb is APKAM-gated.
+    // NOTE: the atSign's own credential is not an enrollment the atServer will
+    // answer about, and the verb behind the lookup is APKAM-gated.
     if (isAtSignCredential(
         atClient.getRemoteSecondary()?.atLookUp.enrollmentId)) {
       return false;
@@ -455,10 +327,6 @@ class NskeySeeding {
       ).rotateNamespaceKey(namespace);
       return true;
     } catch (e) {
-      // The commonest cause is the mint lock: another enrollment is rotating
-      // this namespace for the same reason. The next start asks again, and
-      // until one succeeds the revoked enrollment can still open what is
-      // sealed to the published generation.
       _logger.warning('A revocation touched $owner:$namespace at $revokedAt '
           'and the rotation it owes did not happen; the published generation '
           'is unchanged and the next start asks again: $e');
@@ -469,27 +337,19 @@ class NskeySeeding {
   /// Primes the in-memory secret store with the nskey privates this client
   /// holds durably, so the request-answer path can serve them.
   ///
-  /// The pull's answering side reads the SECRET STORE, and the store is a
-  /// transit buffer: in memory, empty after every restart. Without this, a
-  /// holder that had restarted since the mint held the private in AtKeys and
-  /// answered requests with nothing — the self-heal's whole supply side gone,
-  /// invisibly, the moment the minting process exited. (Found by the live
-  /// two-enrollment test, not by any unit test: the unit fixtures put secrets
-  /// straight into the store, which is exactly the state a restart destroys.)
-  ///
-  /// Idempotent: nskey privates are immutable per generation, so re-priming
-  /// the same name is a no-op under `putIfNewer`. Returns how many were
-  /// primed.
+  /// That path reads the secret store, a transit buffer emptied by every
+  /// restart, so without this a holder that restarted since the mint holds the
+  /// private in AtKeys and answers every request with nothing; re-priming a name
+  /// is a no-op under `putIfNewer`, and the return is how many were primed.
   Future<int> hydrateStoreFromFiling(PairwiseSecretSharing sharing) async {
     final filing = privateFiling;
     if (filing == null) return 0;
 
     int hydrated = 0;
-    // Off the keyfile, not off the enrollment record. What a holder can answer
-    // with is what it HOLDS; asking the atServer which namespaces it is
-    // authorised for would add a round trip, and — because this runs during
-    // client construction, before the manager has wired the enrollment
-    // service — would fail and silently prime nothing.
+    // NOTE: off the keyfile, not off the enrollment record — this runs during
+    // client construction, before the enrollment service is wired, so asking
+    // the atServer what this client is authorised for would fail and silently
+    // prime nothing. What a holder can answer with is what it holds anyway.
     final Map<String, Map<String, NskeySeed>> held;
     try {
       held = await filing.readAll();
@@ -510,23 +370,15 @@ class NskeySeeding {
     return hydrated;
   }
 
-  /// Pulls the nskey privates this enrollment is entitled to and does not
-  /// hold, from whichever enrollments currently do.
+  /// Pulls the nskey privates this enrollment is entitled to and does not hold,
+  /// from whichever enrollments currently do, and returns the namespaces a
+  /// request went out for.
   ///
-  /// The other half of the self-heal: [seed] mints when no key exists, and
-  /// this asks when one does. It is what heals an
-  /// enrollment that missed the mint-time push — a device approved after the
-  /// namespace was minted, a clone upgrading late — and it runs at client
-  /// start, unconditionally on any client that can file the answer, because
-  /// "created after the mint" is the ordinary second device and not an edge.
-  ///
-  /// Broadcast to the namespace's key packages, not addressed to the minter:
-  /// any current holder answers, and the creator may be long gone. Both legs
-  /// are store-and-forward, so nothing needs two devices up at once. When an
-  /// answer arrives while this client still runs it is filed immediately;
-  /// one that arrives later is filed by the next start's sweep.
-  ///
-  /// Returns the namespaces a request went out for.
+  /// The other half of the self-heal — [seed] mints when no key exists, this asks
+  /// when one does — broadcast to the namespace's key packages rather than
+  /// addressed to a minter that may be long gone, and store-and-forward on both
+  /// legs, so an answer arriving after this client exits is filed by the next
+  /// start's sweep.
   Future<Set<String>> requestMissingPrivates(
       PairwiseSecretSharing sharing) async {
     final owner = atClient.getCurrentAtSign();
@@ -537,7 +389,6 @@ class NskeySeeding {
     for (final namespace in await authorisedNamespaces()) {
       try {
         final advertised = await ring.currentPublic(owner, namespace);
-        // No published key is cold start — minting's business, not pulling's.
         if (advertised == null) continue;
         if (await ring.privateHalf(owner, namespace, advertised.nskeyKid) !=
             null) {
@@ -555,10 +406,8 @@ class NskeySeeding {
         }
         asked.add(namespace);
 
-        // File the answer the moment it lands, so the heal completes within
-        // this run rather than at the next start. Unawaited: a holder may be
-        // offline for days, and this client's start (and this sweep) must not
-        // wait on that.
+        // NOTE: unawaited on purpose — a holder may be offline for days, and
+        // neither this sweep nor the client's start may wait on one.
         unawaited(sharing
             .waitForSecret(namespace, name,
                 timeout: NskeyPrivateFiling.conveyanceWait)
@@ -574,7 +423,6 @@ class NskeySeeding {
               'wait; a later answer is filed at the next start ($e)');
         }));
       } catch (e) {
-        // One namespace failing must not stop the others, matching [seed].
         _logger.warning(
             'Could not request the nskey private for $owner:$namespace: $e');
       }
@@ -585,11 +433,9 @@ class NskeySeeding {
   /// Sends every nskey private this client holds for [approvedNamespaces] to
   /// one newly approved enrollment.
   ///
-  /// Reads them from `AtKeys` rather than the secret store. The store is a
-  /// transit buffer and is in-memory by design, so after a restart it holds
-  /// nothing — an approver relying on it would convey a new enrollment
-  /// **nothing**, including the very privates without which it can read
-  /// anything at all.
+  /// Read from `AtKeys` rather than the secret store, which is in-memory by
+  /// design and holds nothing after a restart — an approver relying on it would
+  /// convey a new enrollment **nothing**.
   Future<int> conveyHeldPrivatesTo(
       KeyPackage keyPackage, Iterable<String> approvedNamespaces) async {
     final sharing = this.sharing;
@@ -617,35 +463,18 @@ class NskeySeeding {
   /// Sends the minted private to the atSign's other enrollments, and puts it
   /// in this client's own secret store so it can answer for it.
   ///
-  /// Read back from the durable store rather than passed along from the mint:
-  /// what is conveyed is then exactly what this client will itself use, and a
-  /// private that failed to persist is never sent to anyone.
-  ///
-  /// The store write is what lets the minter serve a later pull. The answering
-  /// path reads the secret store (`_candidatesFor`), and the store is filled
-  /// from the filing only by `hydrateStoreFromFiling` at bootstrap — which
-  /// runs before the mint, not after. Without this the enrollment that minted
-  /// the generation holds it in its filing, offers an empty candidate list to
-  /// every request for it, and answers nothing until the process restarts:
-  /// silently, because a holder with no matching candidate writes no envelope
-  /// and logs nothing.
-  ///
-  /// It grants no access the push below does not already grant — that fans
-  /// these exact bytes, unsolicited, to every key package on the same roster,
-  /// so serving them to a roster member that *asks* is strictly less.
-  ///
-  /// ⚠️ Not closed here: `PublishedNskeyKeyRing._mint` is a second mint path
-  /// that never reaches this method, so a generation minted during rotation
-  /// still leaves that client's store unprimed. The ring holds no sharing
-  /// instance, so closing it there is a wider change than this.
+  /// The private is read back from the durable store, so one that failed to
+  /// persist is never sent, and the store write is what lets the minter serve a
+  /// later pull — the secret store the answering path reads is otherwise filled
+  /// only at bootstrap, before the mint — but ⚠️ a generation minted inside
+  /// [PublishedNskeyKeyRing] never reaches this method, leaving that client's
+  /// store unprimed for it.
   Future<void> _convey(String namespace, String nskeyKid) async {
     final sharing = this.sharing;
-    // The SEED, never the expanded decapsulation key: the receiver validates
-    // an arrival by re-deriving the published public half from it, which only
-    // the seed can do. For X-Wing the two are the same bytes, which is the
-    // accident that let this path read the expanded form and still work; for
-    // ML-KEM the expanded form is refused on arrival and the other
-    // enrollments never get the key.
+    // NOTE: the SEED, never the expanded decapsulation key — a receiver
+    // validates an arrival by re-deriving the published public half, which only
+    // the seed allows. For X-Wing the two are the same bytes; for ML-KEM the
+    // expanded form is refused on arrival and nobody else gets the key.
     final seed = await privateFiling?.readSeed(namespace, nskeyKid);
     if (sharing == null || seed == null) return;
 

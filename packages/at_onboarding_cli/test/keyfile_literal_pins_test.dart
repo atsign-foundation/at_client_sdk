@@ -1,18 +1,10 @@
-/// Exact-shape pins over the CLI's at-rest keyfile and checkpoint writers.
+/// Exact-shape pins over what the CLI's keyfile and checkpoint writers put at
+/// rest through `FileAtKeysIo`, the same store `authenticate` reads back
+/// through.
 ///
-/// The CLI no longer declares the keyfile format: `_generateAtKeysFile`
-/// writes through `FileAtKeysIo`, the same store `authenticate` reads back
-/// through. These pins hold what that produces — the legacy fields under
-/// their historical names, the `<@atSign>` entry the CLI still contributes,
-/// and the typed-keys document's `version`/`atsign`/`keys` when there is
-/// typed material to describe. A change to any of it changes files users
-/// already hold, so it edits this list first.
-///
-/// The two arms below are a pair on purpose. A legacy onboard emits a
-/// byte-for-byte legacy file with no typed scaffolding, so the absence of
-/// `version`/`atsign`/`keys` is the contract, not an omission — and an
-/// absence alone would pass just as well if the writer had lost the ability
-/// to emit them at all. The typed arm is what rules that out.
+/// A change to any of it changes files users already hold, so it edits this
+/// list first, and the two arms stay a pair — an absence alone would pass just
+/// as well for a writer that had lost the ability to emit the typed document.
 library;
 
 import 'dart:convert';
@@ -59,11 +51,9 @@ void main() {
 
       final json = jsonDecode(File(file.path).readAsStringSync())
           as Map<String, dynamic>;
-      // The exact emission, in the store's order. '@alice_pins' is the atSign
-      // itself as a JSON key, carrying the plaintext selfEncryptionKey a
-      // second time: it is in every keyfile ever written, so the CLI files it
-      // into AtKeys.metadata rather than let the consolidation drop it. Note
-      // it sits beside the store's own 'atsign' field, which is a different
+      // The exact emission, in the store's order. The atSign itself is a JSON
+      // key carrying the plaintext selfEncryptionKey a second time, and it
+      // sits beside the store's own 'atsign' field, which is a different
       // thing — the name, not a key.
       expect(json.keys.toList(), [
         'aesPkamPublicKey',
@@ -86,11 +76,10 @@ void main() {
               'selfEncryptionKey, never plaintext');
       expect(json['aesEncryptPrivateKey'],
           isNot(encryptionPair.atPrivateKey.privateKey));
-      // No typed-keys document at all. A `version: 1` document carrying no
-      // enrollments and no atSign keys says nothing a legacy file does not,
-      // so emitting one would stamp every file a new build merely opened — a
-      // diff on files nobody meant to change. The marker appears with the
-      // material it marks, which the next test pins.
+      // No typed-keys document at all: a `version: 1` document carrying no
+      // enrollments says nothing a legacy file does not, and emitting one
+      // would stamp every file a new build merely opened. The marker appears
+      // with the material it marks.
       expect(json.containsKey('version'), isFalse);
       expect(json.containsKey('atsign'), isFalse);
       expect(json.containsKey('enrollments'), isFalse);
@@ -140,8 +129,8 @@ void main() {
           as Map<String, dynamic>;
       expect(json['version'], 1);
       expect(json['atsign'], atsign);
-      // One entry per enrollment, each carrying its own keys — the material
-      // is no longer a flat document-wide `keys` array.
+      // One entry per enrollment, each carrying its own keys rather than one
+      // flat document-wide `keys` array.
       final enrollments = json['enrollments'] as List;
       expect(enrollments, hasLength(1));
       expect((enrollments.single as Map)['enrollmentId'], '456');
@@ -190,8 +179,8 @@ void main() {
     });
 
     test('the AuthKeyType field names, as raw strings', () {
-      // A verbatim second declaration of at_auth's auth_constants values —
-      // the classic both-sites hazard when either package's copy moves.
+      // NOTE: a verbatim second declaration of at_auth's auth_constants
+      // values — either package's copy moving breaks the other.
       expect(AuthKeyType.aesEncryptedPkamPublicKey, 'aesPkamPublicKey');
       expect(AuthKeyType.aesEncryptedPkamPrivateKey, 'aesPkamPrivateKey');
       expect(
@@ -225,9 +214,8 @@ void main() {
           reason: 'the checkpoint deliberately does not reveal which atSign '
               'it belongs to');
       expect(json['enrollmentId'], '456');
-      // The keys are persisted PLAINTEXT — chmod 600 is the only protection,
-      // unlike every .atKeys writer. Stated here so the consolidation cannot
-      // change the posture silently in either direction.
+      // NOTE: the keys are persisted PLAINTEXT — chmod 600 is the only
+      // protection, unlike every .atKeys writer.
       expect(json['atAuthKeys']['selfEncryptionKey'], 'U0VMRkVOQw==');
     });
   });

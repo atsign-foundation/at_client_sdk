@@ -12,30 +12,12 @@ import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:test/test.dart';
 
-/// Legacy in every axis, with the post-quantum providers configured — the
-/// combination the post-quantum tests in this pack need, and one **no
-/// deployment should ever have**.
+/// Legacy in every axis but with the post-quantum providers configured — the
+/// combination the post-quantum tests in this pack need, and one no deployment
+/// should have.
 ///
-/// ⛔ **Not a rollout stage, and deliberately not one of `PqPosture`'s named
-/// constants** — the ladder names three positions and this is not one of them.
-///
-/// ⚠️ **It is not an impossible combination, and nothing here should be read
-/// as saying so.** A real client built this way works: an enrollment
-/// advertises a key package in every key-exchange mode, and the startup's
-/// conveyed-key collection registers one through
-/// `KeyPackageRegistration.register()` — so such a client is conveyed nskey
-/// privates like any other. ⚠️ **That last step turns on the providers axis
-/// this posture sets true**, and not on the legacy ones beside it: a posture
-/// configuring no post-quantum providers runs none of the startup, collects
-/// nothing and is conveyed nothing. Some tests
-/// using this posture mint their own ring in-process; others read a private
-/// that reached them by conveyance. What keeps it out of `PqPosture` is that
-/// the release programme does not offer it as a stage, not that it could not
-/// exist.
-///
-/// An earlier version of this comment claimed such a client "could never
-/// acquire a key to use" and that these tests "bypass conveyance entirely".
-/// Both were false.
+/// Deliberately not one of `PqPosture`'s named constants: the rollout ladder
+/// does not offer it as a stage.
 final legacyPlusPqProviders = PqPosture(
   authenticationKeyAlgorithm: PqPosture.legacy.authenticationKeyAlgorithm,
   dataSigningKeyAlgorithms: PqPosture.legacy.dataSigningKeyAlgorithms,
@@ -70,8 +52,8 @@ class TestUtils {
     final storage = FunctionalStorage(testFile);
     _storage = storage;
     tearDownAll(() async {
-      // A client stopped after its store closed keeps syncing into
-      // `Box not found` until the isolate dies.
+      // NOTE: a client stopped after its store closed keeps syncing into
+      // `Box not found` until the isolate dies, so stop before closing.
       for (final client in List.of(AtClientImpl.atClientInstanceMap.values)) {
         await client.stop();
       }
@@ -98,61 +80,32 @@ class TestUtils {
   static AtClientStorage storageForPrincipal(String atSign, String label) =>
       storage.forPrincipal(atSign, label);
 
-  /// [posture], [authenticationKeyAlgorithm], [dataSigningKeyAlgorithms],
-  /// [keyEstablishmentAlgorithms] and [sealsToKeyAlgorithms] must be threaded
-  /// here because all five are final at construction — a test cannot set any
-  /// of them on the returned instance.
-  ///
-  /// ⚠️ [keyEstablishmentAlgorithms] and [sealsToKeyAlgorithms] are different
-  /// sides of the same exchange and are easy to confuse. The first is what
-  /// this atSign MINTS and advertises; the second is the order in which, as a
-  /// SENDER, it picks among the keys a recipient advertises. A test varying
-  /// the wrong one changes nothing it can observe.
   /// Whatever `AtClientPreference` currently defaults its posture to.
   ///
-  /// For the handful of tests whose SUBJECT is the default — "what does the
-  /// SDK do when the app names nothing?" — and only those. A required
-  /// parameter cannot express "the default", so pinning such a test to a
-  /// named constant makes it stop following the thing it is about: it goes on
-  /// passing while measuring a posture the SDK no longer ships. Every other
-  /// test names the era it wants, so that a release moving the default cannot
-  /// change what that test exercises.
+  /// For the tests whose subject IS that default, and only those: it follows
+  /// the SDK, so a release moving the default moves what such a test
+  /// exercises.
   static PqPosture get sdkDefaultPosture => AtClientPreference().posture;
 
-  /// [posture] has no default **on purpose**: what a posture decides is not
-  /// cosmetic — whether this client mints signing keys, publishes an `_apsk`
-  /// advertisement, seeds namespace keys and retrofits its own enrollment —
-  /// and a test that has not chosen is a test whose subject is undeclared.
-  /// Required so the compiler names every site, and so a new test cannot be
-  /// written without choosing.
+  /// A preference for [atsign] at [posture], carrying no storage path: what
+  /// opens the store is the bundle passed to `setCurrentAtSign`, so a call
+  /// site that forgets one fails loudly there rather than quietly opening the
+  /// shared directory.
   ///
-  /// The preference carries no storage path: what opens the store is the
-  /// bundle passed to `setCurrentAtSign`, and a call site that forgets one
-  /// fails loudly there rather than quietly opening the shared directory.
+  /// [keyEstablishmentAlgorithms] is what this atSign mints and advertises;
+  /// [sealsToKeyAlgorithms] is the order in which, as a sender, it picks among
+  /// the keys a recipient advertises.
   ///
-  /// ⚠️ **An approver or fixture client is `PqPosture.legacy`**, whatever the
-  /// test is about. Seeding is the only posture-gated step in the whole PQ
-  /// bootstrap, so an approver at `pqReady` or `pqActive` publishes
-  /// `public:__nskey.<ns>@<atSign>` before any subject client does — and stays
-  /// green while doing it. Classify by what the CLIENT does, not by what the
-  /// file is called.
-  ///
-  /// ⚠️ **One atSign in one process holds one posture.** Every axis here is
-  /// final at construction, and `setCurrentAtSign` refuses a preference that
-  /// differs from the running client's — see
-  /// `AtClientPreference.rolloutDifferencesFrom`. Two tests in a file that
-  /// share an atSign therefore share a posture; give one its own atSign or its
-  /// own enrollment to vary it.
+  /// ⚠️ One atSign in one process holds one posture: every axis here is final
+  /// at construction and `setCurrentAtSign` refuses a preference differing
+  /// from the running client's, so two tests sharing an atSign share a
+  /// posture.
   static AtClientPreference getPreference(String atsign,
       {required PqPosture posture,
       SigningAlgoType? authenticationKeyAlgorithm,
       Set<SigningAlgoType>? dataSigningKeyAlgorithms,
       List<String>? keyEstablishmentAlgorithms,
       List<String>? sealsToKeyAlgorithms}) {
-    // One construction, not two. The constructor defaults every algorithm
-    // field to the posture's own value (`?? posture.<field>`), so passing
-    // nulls is indistinguishable from omitting them — the branch this used to
-    // carry chose between two identical objects.
     var preference = AtClientPreference(
         posture: posture,
         authenticationKeyAlgorithm: authenticationKeyAlgorithm,
@@ -185,42 +138,24 @@ class TestUtils {
     return digest.toString();
   }
 
-  /// [atKeysIo] is threaded through for tests of anything that reads key
-  /// material from `AtClient.atKeysIo` — the signing root's private half is the
-  /// first. Without one that getter is null, so such a test would assert
-  /// against a client structurally unable to hold the key and pass or fail for
-  /// reasons having nothing to do with the code under test.
+  /// Builds this file's client for [currentAtSign] in [namespace] at
+  /// [posture], with its encryption keys loaded.
   ///
-  /// Supplying it also forces `setCurrentAtSign` past its same-atSign
-  /// short-circuit, which checks for exactly these override arguments — so it
-  /// reaches the client rather than being dropped on an already-current atSign.
-  /// [posture] is required even when [preference] is supplied, because the
-  /// `??=` below applies [getPreference] inside this helper: a required
-  /// parameter on that alone would leave every caller here naming nothing, and
-  /// this is where most callers are. A supplied preference naming a different
-  /// posture is refused rather than silently winning.
-  ///
-  /// [storage] overrides this file's bundle, for a caller that has none —
-  /// a child isolate is a fresh heap, so [isolateStorage]'s static is null
-  /// there and the isolate has to build its own from what it was handed.
+  /// A [preference] built at a different posture is refused rather than
+  /// silently winning; passing [atKeysIo] also forces `setCurrentAtSign` past
+  /// its same-atSign short-circuit; and [storage] is for a caller with no
+  /// file-level bundle, such as a child isolate, where [isolateStorage]'s
+  /// static is null.
   static Future<AtClientManager> initAtClient(
       String currentAtSign, String namespace,
       {required PqPosture posture,
       AtClientPreference? preference,
       AtKeysIo? atKeysIo,
       AtClientStorage? storage}) async {
-    // `info`, matching the e2e pack (`test_initializers.dart`), not `shout`.
-    //
-    // At `shout` the client's own account of what it did is filtered out
-    // before it reaches the run's output — including `warning`, which is the
-    // level a notification dropped in the delivery loop logs at. A drop and a
-    // non-arrival then print the same nothing, and the failure gets attributed
-    // to whichever side the reader guesses. That cost most of an evening on
-    // `nskey_self_notify_live_test.dart`: three hypotheses about the atServer,
-    // all wrong, while the reason sat in a `warning` line nobody could see.
-    //
-    // A test wanting the monitor's frame-by-frame detail still has to ask for
-    // `finest` — and must do so AFTER this call, which resets the level.
+    // NOTE: `shout` hides `warning`, the level at which a notification dropped
+    // in the delivery loop logs, making a drop and a non-arrival print the same
+    // nothing. A test wanting the monitor's frame-by-frame detail must set
+    // `finest` AFTER this call, which resets the level.
     AtSignLogger.root_level = 'info';
     if (preference != null && preference.posture != posture) {
       throw ArgumentError(

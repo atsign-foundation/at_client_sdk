@@ -50,10 +50,6 @@ class RemoteSecondary implements Secondary {
 
   /// The algorithm the constructor resolved, so an authenticator built from a
   /// bare signer names the same one the lookup was told to use.
-  ///
-  /// `late final` rather than nullable: the constructor assigns it before
-  /// either path that can reach the read, so a null-guard here would be a
-  /// second written home for `rsa2048` that nothing can ever reach.
   late final SigningAlgoType _signingAlgoType;
 
   /// Hands the lookup an authenticator, so authentication is decided from the
@@ -61,9 +57,7 @@ class RemoteSecondary implements Secondary {
   ///
   /// Called from the constructor as well as the [atChops] setter, because the
   /// constructor sets `atLookUp.atChops` directly - hooking only the setter
-  /// installs nothing on the path that matters, which was measured: the
-  /// injected and ladder authentication counts were unchanged, 57 and 201,
-  /// while every suite stayed green.
+  /// installs nothing on the path that matters.
   ///
   /// Installed beside `atChops`, not instead of it: at_auth's
   /// `EnrollmentApprover` reads that field for enrollment crypto, which is not
@@ -89,10 +83,8 @@ class RemoteSecondary implements Secondary {
 
     // No keystore. The order from here is the ladder's own - atChops, then
     // privateKey - so a client holding both authenticates with the same
-    // credential it did before. That precedence is stated rather than fallen
-    // into: an earlier version of this method left the private-key branch
-    // without a return, so the signer below silently overwrote it. The result
-    // was right by accident, which is a bad way to be right.
+    // credential the ladder chose. That precedence is stated rather than
+    // fallen into.
     final chops = _atChops;
     if (chops != null) {
       lookUp.authenticator = authenticatorForChops(
@@ -100,10 +92,8 @@ class RemoteSecondary implements Secondary {
         chops,
         enrollmentId: lookUp.enrollmentId,
         signingAlgo: _signingAlgoType,
-        // The same preference field the constructor stamps on the lookup.
-        // Omitting it took this function's sha256 default, so the
-        // authenticator and the ladder it replaces read one preference field
-        // differently - agreeing for exactly as long as nothing sets it.
+        // The same preference field the constructor stamps on the lookup, so
+        // the authenticator and the ladder it replaces read it alike.
         hashingAlgo: _preference.hashingAlgoType,
       );
       return;
@@ -121,11 +111,10 @@ class RemoteSecondary implements Secondary {
       return;
     }
 
-    // Last, matching the ladder's own order: atChops, then privateKey, then
-    // cramSecret. Nothing in this tree sets `preference.cramSecret` - every
-    // in-tree CRAM goes through onboarding, which builds its own lookup - but
-    // the field is public API, so a consumer that sets it kept working through
-    // the ladder and must keep working through the seam.
+    // Last in the ladder's own order. Nothing in this tree sets
+    // `preference.cramSecret` - every in-tree CRAM goes through onboarding,
+    // which builds its own lookup - but the field is public API, so a consumer
+    // that sets it must keep working through the seam.
     final cramSecret = _cramSecret;
     if (cramSecret != null) {
       lookUp.authenticator = authenticatorForCramSecret(_atSign, cramSecret);
@@ -137,11 +126,9 @@ class RemoteSecondary implements Secondary {
     // all, and an OTP enrollment submit routes through auth: false.
   }
 
-  /// [signingAlgoType] overrides the preference's PKAM signing algorithm —
-  /// the per-enrollment resolution for a self-retrofit's ML-DSA enrollment,
-  /// whose algorithm is a property of the enrollment record, not of the
-  /// preference object (one preference can serve clients on two enrollments
-  /// of one atSign with different algorithms).
+  /// [signingAlgoType] overrides the preference's PKAM signing algorithm: the
+  /// algorithm is a property of the enrollment record, and one preference can
+  /// serve clients on two enrollments of one atSign with different algorithms.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
       AtChops? atChops,
@@ -175,8 +162,6 @@ class RemoteSecondary implements Secondary {
           clientConfig: _getClientConfig(),
         );
     this.atLookUp.enrollmentId = enrollmentId;
-    // The preference is the documented legacy fallback: the caller passes the
-    // key-material resolution when the enrollment has typed material.
     final resolvedSigningAlgo =
         // ignore: deprecated_member_use_from_same_package
         signingAlgoType ?? preference.signingAlgoType;

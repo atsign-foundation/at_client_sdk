@@ -108,9 +108,6 @@ void main() {
     await mintLegacyEnrollment('l1');
     await mintLegacyEnrollment('l2');
 
-    // Both authenticate before anything happens. This is the arm that makes
-    // the failure below mean something: without it, an atServer that refused
-    // everything would look exactly like a working revocation.
     expect((await authenticateLegacy('l1')).isSuccessful, isTrue,
         reason: 'precondition: the legacy enrollment works BEFORE its '
             'retrofit — this is the "before" of a before/after pair');
@@ -122,8 +119,7 @@ void main() {
 
     final session = (await authenticateLegacy('l1')).session!;
     final manager = await selfRetrofit(
-      // Mode B, explicitly: these rows test the PQ retrofit, and the
-      // parameter default is the rollout-window RSA mode.
+      // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
       // Its own store location: the owner client holds the atSign's, and a
@@ -140,16 +136,13 @@ void main() {
         reason: 'the retrofit itself must have succeeded, or the revocation '
             'below is being attributed to a retrofit that never happened');
 
-    // UC-B2.1: the un-upgraded copy is locked out. The lockout is the
-    // supersession — the parent revoked at its successor's first
-    // authentication, checked at auth, per attempt — not a per-key delete:
-    // the keypair in that file is untouched and still perfectly valid, and it
-    // is refused anyway.
+    // UC-B2.1: the un-upgraded copy is locked out. The keypair in that file is
+    // untouched and still perfectly valid; it is refused because the parent
+    // enrollment was revoked as superseded, which is checked at every auth.
     //
-    // Named rather than `throwsA(anything)`: a bare catch-all would pass for
-    // a malformed keyfile, an unreachable atServer, or any other accident,
-    // and the row would be green for the absence of an effect instead of for
-    // the revocation.
+    // NOTE: named rather than `throwsA(anything)` — a bare catch-all would
+    // pass for a malformed keyfile or an unreachable atServer, leaving the row
+    // green for the absence of an effect instead of for the revocation.
     await expectLater(
         authenticateLegacy('l1b'),
         throwsA(predicate(
@@ -159,28 +152,22 @@ void main() {
             'must stop authenticating at once, or a stolen keyfile outlives '
             'the upgrade that was supposed to retire it');
 
-    // The control arm, re-run in the same session: the sibling that never
-    // retrofitted still authenticates. So the refusal above is the
-    // supersession this retrofit caused, not the environment, the clock, or
-    // the atSign.
+    // The control arm, re-run in the same session, so the refusal above is
+    // attributable to this retrofit rather than to the environment or the
+    // clock.
     expect((await authenticateLegacy('l2')).isSuccessful, isTrue,
         reason: 'a second legacy enrollment of the same atSign, minted at the '
             'same moment and never a parent of any retrofit, must be '
             'unaffected — this is what makes the lockout attributable');
 
-    // The remedy, asserted rather than left as advice: a device stranded past
-    // the window comes back by an ordinary OTP enrollment. Without this the
-    // row says only that a credential stopped working — which is also what a
-    // broken atSign looks like — and the clause's "must re-enroll" would rest
-    // on nothing.
+    // The remedy, asserted rather than left as advice: a stranded device comes
+    // back by an ordinary OTP enrollment.
     await mintLegacyEnrollment('l1c');
     expect((await authenticateLegacy('l1c')).isSuccessful, isTrue,
         reason: 'a fresh enrollment authenticates on the same atSign moments '
             'after the superseded one was refused: the route back is enrolling '
             'again, and nothing about the atSign itself is broken');
 
-    // And the upgraded credential itself keeps working: the retrofit retires
-    // the old enrollment, not the device.
     final scan =
         await upgraded.getRemoteSecondary()!.executeCommand('scan\n', auth: true);
     expect(scan, startsWith('data:'),

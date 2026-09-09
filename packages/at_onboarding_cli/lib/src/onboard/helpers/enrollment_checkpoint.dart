@@ -64,20 +64,10 @@ class EnrollmentCheckpoint {
 
     final Map<String, dynamic> json = er.toJson();
 
-    // ⚠️ **The atSign is recorded.** This removed it — "do not reveal which
-    // atSign this checkpoint belongs to" — and that stopped being possible
-    // once an enrolment could mint TYPED key material: `AtKeys.toJson` refuses
-    // a document carrying enrollments or atSign keys with no `atsign`, because
-    // such a document does not say whose keys it holds, and it emits the
-    // atsign itself when it does have one. Keeping the removal would have left
-    // the checkpoint throwing on every post-quantum enrolment — which is what
-    // `at_activate enroll --posture pqActive` did, unnoticed, because the only
-    // test driving a post-quantum enrolment goes through `sendEnrollRequest`
-    // and never reaches a checkpoint.
-    //
-    // The property was thin: this file already holds the enrollment's own
-    // APKAM private key material, at chmod 600. Which atSign it belongs to is
-    // the least of what reading it gives away.
+    // NOTE: the checkpoint records which atSign it belongs to, because
+    // `AtKeys.toJson` refuses a document carrying enrollments or atSign keys
+    // with no `atsign`. The file is chmod 600 and already holds this
+    // enrollment's own APKAM private key material.
     final keys = er.atAuthKeys;
     keys?.atsign ??= _atSign.toAtsign();
     json['atAuthKeys'] = keys?.toJson();

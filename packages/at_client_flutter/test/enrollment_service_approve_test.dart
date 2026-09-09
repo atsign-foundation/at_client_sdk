@@ -2,15 +2,9 @@
 ///
 /// at_client's `approve()` returns `(enrollmentId, status)` with no
 /// `atAuthKeys` — the enrollee files its own keys on its own device, so there
-/// is nothing for the approver to hold. An approver-side null-bang on
-/// `atAuthKeys` therefore fires on every approval, and the generic catch
-/// around it re-reports the success as `Enrollment failed: Null check
-/// operator used on a null value` — after the server-side approval has
-/// already gone through.
+/// is nothing for the approver to hold.
 library;
 
-// The conveyance surface is deliberately marked @experimental and will be
-// reshaped as the group surface matures.
 // ignore_for_file: experimental_member_use
 
 import 'package:at_auth/at_auth.dart';
@@ -83,7 +77,6 @@ void main() {
   test(
     'an approval with no returned key material is reported approved',
     () async {
-      // What at_client's approve() actually returns: id and status, no keys.
       when(() => mockEnrollmentService.approve(any())).thenAnswer(
         (_) async =>
             AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved),
@@ -99,7 +92,6 @@ void main() {
 
       expect(response.enrollStatus, EnrollmentStatus.approved);
       expect(response.enrollmentId, enrollmentId);
-      // Nothing to write: the approver holds no enrollee key material.
       verifyNever(() => mockKeychainAtKeysIo.write(any(), any()));
       verify(() => mockKeychainStorage.deleteEnrollmentData(atSign)).called(1);
       verify(() => mockAtLookUp.close()).called(1);
@@ -109,9 +101,6 @@ void main() {
   test(
     'a conveyance refusal is not re-reported as a failed approval',
     () async {
-      // What at_client's approve() throws when the server-side approval
-      // succeeded but the enrollee's advertised key package was refused: the
-      // enrollment is live and cannot decrypt, and the response rides along.
       final refusal = EnrollmentConveyanceException(
         'Enrollment $enrollmentId is approved, but the key package it '
         'advertised does not verify against its _apsk, so no secrets were '
@@ -137,15 +126,14 @@ void main() {
             'state: approved, cannot decrypt, consider revoking',
       );
 
-      // The approval itself succeeded, so the approval bookkeeping still runs.
       verify(() => mockKeychainStorage.deleteEnrollmentData(atSign)).called(1);
       verify(() => mockAtLookUp.close()).called(1);
     },
   );
 
   test('the pending record is dropped before approve() returns', () async {
-    // Ordering, not the call itself: an unawaited delete is still *recorded*
-    // by the mock, so verify() alone cannot tell the two apart.
+    // NOTE: an unawaited delete is still recorded by the mock, so verify()
+    // alone cannot tell the ordering apart.
     var dropped = false;
     when(() => mockKeychainStorage.deleteEnrollmentData(atSign)).thenAnswer((
       _,
@@ -177,8 +165,6 @@ void main() {
   });
 
   test('a keychain failure after approval is not a failed approval', () async {
-    // The atServer has already recorded the decision by this point. Losing
-    // the local pending row costs a stale row, not an enrollment.
     when(
       () => mockKeychainStorage.deleteEnrollmentData(atSign),
     ).thenThrow(Exception('keychain unavailable'));
@@ -219,8 +205,8 @@ void main() {
   });
 
   test('a failed denial still closes the connection', () async {
-    // The mock answers nothing, so the real deny() fails partway through —
-    // which is the point: the connection is the caller's either way.
+    // NOTE: nothing stubs deny(), so it fails partway through — the point is
+    // that the connection is closed either way.
     final decision = EnrollmentRequestDecision.denied(enrollmentId, atSign);
 
     await expectLater(

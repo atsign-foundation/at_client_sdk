@@ -60,11 +60,11 @@ class FunctionalTestSyncService {
             syncProgress.syncStatus != SyncStatus.failure) {
           continue;
         }
-        // A terminal event says a run finished — not that THIS call's
-        // work is done. The event can belong to an earlier run (this
-        // method used to return on such an event, stranding its own
-        // request mid-flight), and a failure event must mean try again,
-        // never "done". Only the service's own fresh answer settles it.
+        // NOTE: a terminal event says a run finished, not that THIS call's
+        // work is done. It can belong to an earlier run, and a failure event
+        // must mean try again, never "done" — returning on one strands this
+        // call's own request mid-flight. Only the service's own fresh answer
+        // settles it.
         if (await syncImpl.isInSync()) {
           _logger.info('SyncProgress $logLabel: ${syncProgress.syncStatus};'
               ' isInSync() confirms server and local are in sync');

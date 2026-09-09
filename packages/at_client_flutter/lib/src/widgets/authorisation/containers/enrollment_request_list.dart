@@ -31,12 +31,10 @@ class EnrollmentRequestList extends StatefulWidget {
 class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   late final FlutterEnrollmentService _service;
 
-  /// Whether this widget made [_service], and may therefore close it.
+  /// Whether this widget built [_service], and may therefore dispose it.
   ///
-  /// An injected one belongs to the caller, who may share it across routes:
-  /// [FlutterEnrollmentService.dispose] closes the request stream and drops
-  /// the controller, so disposing someone else's service makes every later
-  /// use of it throw on a null controller.
+  /// Disposing an injected service drops a controller its owner still holds,
+  /// and every later use of that service throws.
   late final bool _ownsService;
   final List<ServerEnrollmentRequest> _requests = [];
   final List<Timer> _overlayTimers = [];
@@ -112,17 +110,13 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
   Future<void> _handleApprove(ServerEnrollmentRequest request) async {
     try {
-      // Through the service's own client seam, so the whole flow is
-      // testable by injecting one service; in production it is the same
-      // AtClientManager-resolved instance either way.
       final atSign = _service.atClient.getCurrentAtSign()!;
       final atLookUp = _service.atClient.getRemoteSecondary()!.atLookUp;
       await _service.approve(
         EnrollmentRequestDecision.approved(
           enrollmentId: request.enrollmentId,
-          // Absent on a pq-mode request: the enrollee wrapped no key and the
-          // approver mints one, so empty — not a crash — is the signal the
-          // approve path expects.
+          // NOTE: a pq-mode enrollee wraps no key, and the approve path takes
+          // the resulting empty value as its signal to mint one.
           apkamSymmetricKey: AtBytes.fromString(
             request.encryptedAPKAMSymmetricKey ?? '',
           ),
@@ -138,10 +132,8 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
       }
       // ignore: experimental_member_use
     } on EnrollmentConveyanceException catch (e) {
-      // The server-side approval succeeded — only the secret conveyance was
-      // refused, so the request is no longer pending and leaves the list,
-      // and the message (approved, cannot decrypt, consider revoking) is
-      // shown as-is rather than wrapped in a failure claim.
+      // NOTE: the approval itself succeeded and only conveying the secret
+      // failed, so the request leaves the list and the message stands as-is.
       if (mounted) {
         setState(() {
           _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);

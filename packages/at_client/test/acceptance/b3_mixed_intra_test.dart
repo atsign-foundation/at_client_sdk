@@ -1,9 +1,8 @@
 /// B3 · Mixed-PQ within one atSign — the two-release ladder itself.
 ///
-/// Catalogue: `docs/projects/pq/acceptance.md` section 10 (rewritten 2026-08-05
-/// for the app-decides model, `decisions.md` 36). There is no readiness marker
-/// and no negotiation: what an install writes is decided by which build it
-/// runs, and these rows assert the two builds' contracts at the one decision
+/// Catalogue: the PQ acceptance catalogue, section 10. There is no readiness
+/// marker and no negotiation: what an install writes is decided by which build
+/// it runs, and these rows assert the two builds' contracts at the one decision
 /// point every put and notify share.
 library;
 
@@ -84,8 +83,8 @@ void main() {
       );
 
       // The "reads PQ" half, stated as the registered set rather than assumed:
-      // both PQ providers resolve, so a record arriving stamped with either id
-      // routes. The decrypt itself is proven by the data-path suites.
+      // both PQ providers resolve, so a record arriving stamped with either
+      // id routes.
       final config = CryptoConfig.forClient(atClient);
       expect(config.lookup(nskeyCryptoProviderId), isNotNull);
       expect(config.lookup(symmetricAesGcmCryptoProviderId), isNotNull);
@@ -115,19 +114,13 @@ void main() {
               atKey: selfKey('heartbeat')),
           symmetricAesGcmCryptoProviderId);
 
-      // The data value routes to the symmetric provider; at/nskey is reached
-      // only by the conveyance, which asks for it by name — the data is never
-      // encapsulated to the nskey directly.
+      // at/nskey is reached only by the conveyance, which asks for it by name;
+      // the data value itself routes to the symmetric provider.
       expect(
           CryptoRuntime.providerIdFor(atClient, nskeyCryptoProviderId,
               atKey: selfKey('ck7.__ck')),
           nskeyCryptoProviderId);
 
-      // And the round trip a capability-stage sibling performs on this data is
-      // the data-path suites' business, proven live:
-      // `nskey_data_path_live_test.dart` (functional) and
-      // `era_default_read_test.dart` (e2e) — a client with no config at all
-      // opens what an active client sealed.
       provenIn(
         'tests/at_functional_test/test/nskey_data_path_live_test.dart',
         'a self value round-trips through the nskey data path',

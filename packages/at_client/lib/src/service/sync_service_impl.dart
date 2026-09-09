@@ -60,12 +60,6 @@ class SyncServiceImpl implements SyncService {
   /// cleared in the run's `finally`.
   bool _processInProgress = false;
 
-  /// Completes when the currently-executing [processSyncRequests] run has
-  /// fully unwound, so [stop] can wait for it. Flipping [isStopped] does
-  /// not cancel a run parked on one of its awaits — the run resumes when
-  /// its await resolves — so without this wait, "stopped" would mean only
-  /// "no new runs start", while the parked run went on to read state and
-  /// move data. Null when no run is active.
   /// Cached latest known server commit id. Kept fresh by three
   /// authoritative sources:
   ///   * [statsServiceListener]: push-side stats notifications.
@@ -139,10 +133,10 @@ class SyncServiceImpl implements SyncService {
   ///
   /// They are `local:` records — never synced, and already encrypted at rest by
   /// the keystore — so there is nothing for value-level encryption to protect.
-  /// Saying so explicitly keeps them off the shared-data crypto path, which is
-  /// where a client that refuses legacy encryption used to have them refused:
-  /// every post-quantum provider declines a local key, and the fallback from
-  /// that decline is legacy.
+  /// Saying so explicitly keeps them off the shared-data crypto path, where
+  /// every post-quantum provider declines a local key and the fallback from
+  /// that decline is legacy, which a client refusing legacy then refuses
+  /// outright.
   ///
   /// A fresh instance per call: [PutRequestOptions] is mutable and the put
   /// pipeline may rewrite the options it is handed.
@@ -311,11 +305,9 @@ class SyncServiceImpl implements SyncService {
     try {
       final inSync = await _isInSync(syncRequest);
       if (isStopped) {
-        // stop() landed while _isInSync was parked on its network read.
-        // Anything this run did from here would be sync activity after
-        // stop() returned — acting on puts and deletes a caller staged
-        // on the promise that the service was halted — so the request
-        // is answered as stopped instead.
+        // NOTE: stop() landed while _isInSync was parked on its network read.
+        // Anything this run did from here would be sync activity after stop()
+        // returned, so the request is answered as stopped instead.
         syncRequest.result!
           ..syncStatus = SyncStatus.failure
           ..atClientException = AtClientException(
@@ -811,12 +803,10 @@ class SyncServiceImpl implements SyncService {
           final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
               source.atKey, source.seq);
           if (!removed) {
-            // A newer local write to this atKey replaced the queue entry
-            // while this batch was in flight. The server has the version
-            // this batch carried; the newer op pushes next round. Removing
-            // unconditionally here is how an awaited delete() used to
-            // vanish: the server kept the update, the queue read empty, and
-            // the client reported itself in sync.
+            // NOTE: a newer local write to this atKey replaced the queue entry
+            // while this batch was in flight. The server has the version this
+            // batch carried and the newer op pushes next round, so removing
+            // the entry unconditionally here would lose it.
             _logger.info('${source.atKey} re-enqueued mid-push; '
                 'keeping the newer entry queued for the next round');
           }
@@ -1066,7 +1056,6 @@ class SyncServiceImpl implements SyncService {
       // fetch the next set of entries to sync from server
       // Adding this piece in finally block to ensure lastReceivedServerCommitId state
       // is persisted even if there occurs any exception during sync to local.
-      //
       await persistPullCursor(lastReceivedServerCommitId);
       _bailIfStopped();
     }
@@ -1075,17 +1064,13 @@ class SyncServiceImpl implements SyncService {
 
   /// Persist the pull cursor, best-effort. **Never throws.**
   ///
-  /// Its only caller runs it in a `finally`, where a thrown exception REPLACES
-  /// whichever one is already in flight from the sync itself — so an unguarded
-  /// failure here would report a sync error as a failure of the cursor write
-  /// and lose the real cause. Not persisting the cursor costs one re-read of
-  /// the same window on the next round, which is survivable in a way that
-  /// losing the reason a sync failed is not.
+  /// Its only caller runs it in a `finally`, where a thrown exception would
+  /// replace whichever one is already in flight from the sync itself and lose
+  /// the real cause; not persisting the cursor costs one re-read of the same
+  /// window on the next round.
   @visibleForTesting
   Future<void> persistPullCursor(int lastReceivedServerCommitId) async {
     if (isStopped) {
-      // Reached from a finally after the stop guard's own bail-out; the
-      // store is closed, and the next start re-reads from the last cursor.
       _logger.finer('Not persisting the pull cursor at '
           '$lastReceivedServerCommitId: the service has been stopped');
       return;
@@ -1162,12 +1147,11 @@ class SyncServiceImpl implements SyncService {
   Future<int?> setAndGetSkipDeletesUntil(
       int? localCommitIdBeforeSync, int serverCommitId) async {
     if (localCommitIdBeforeSync == -1) {
-      // Best-effort, like the pull cursor: an unwritable watermark must not be
-      // able to stop a new client's first sync. The value returned below is
-      // what THIS run uses, so a failed write costs nothing until the process
-      // restarts — at which point an initial sync interrupted midway has no
-      // persisted window and will apply deletes it would have skipped. That is
-      // why the failure is warned about rather than swallowed silently.
+      // NOTE: best-effort — an unwritable watermark must not stop a new
+      // client's first sync. This run uses the value returned below, so a
+      // failed write costs nothing until the process restarts, where an
+      // initial sync interrupted midway has no persisted window and applies
+      // deletes it would have skipped.
       try {
         await _atClient.put(
             _skipDeletesUntilCommitId, serverCommitId.toString(),
@@ -1258,19 +1242,13 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
+  /// The sync push's metadata serializer, delegating to the canonical
+  /// [Metadata.toAtProtocolFragment] that direct writes also go through.
   @visibleForTesting
   static String metadataToString(AtMetaData? metadata) {
-    // Delegate to the single canonical metadata serializer —
-    // Metadata.toAtProtocolFragment, the same one UpdateVerbBuilder uses for
-    // direct writes — so this sync-push path can never again drift from it.
-    // That drift is exactly what silently dropped appMetadata (and immutable)
-    // from synced records: a cross-atSign lookup of the pushed record then saw
-    // a null providerId and CryptoRuntime fell back to legacy.
-    //
-    // AtMetaData.toCommonsMetadata intentionally omits the timestamp fields
-    // (createdAt/updatedAt/expiresAt/availableAt) and sharedKeyStatus, so — as
-    // this method did before — the sync push does not send them and the server
-    // re-derives them on receipt.
+    // NOTE: `toCommonsMetadata` omits the timestamp fields
+    // (createdAt/updatedAt/expiresAt/availableAt) and sharedKeyStatus, so the
+    // push does not send them and the atServer re-derives them on receipt.
     return metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
   }
 
@@ -1314,8 +1292,8 @@ class SyncServiceImpl implements SyncService {
     // such value in hand and fetches one, see [_getServerCommitId].
     var serverCommitId = await _getServerCommitId(
         forceFresh: syncRequest.requestSource == SyncRequestSource.app);
-    // stop() may have landed during that network read and closed the store
-    // the next line reads.
+    // NOTE: stop() may have landed during that network read and closed the
+    // store the next line reads.
     _bailIfStopped();
     var lastReceivedServerCommitId = await getLastReceivedServerCommitId();
     final pendingPushCount = await _atClient.getLocalSecondary()!.syncQueueSize;
@@ -1475,11 +1453,8 @@ class SyncServiceImpl implements SyncService {
 
   /// The sync PULL's metadata deserializer — the mirror of [metadataToString].
   ///
-  /// Still hand-rolled: the commit entry carries every value as a string, so
-  /// the canonical [Metadata.fromJson] (which expects typed values) cannot be
-  /// dropped in without changing what the atServer's wire shape means here.
-  /// `metadata_converter_sweep_test.dart` guards it against the drift that bit
-  /// the push side.
+  /// Hand-rolled because the commit entry carries every value as a string,
+  /// where the canonical [Metadata.fromJson] expects typed ones.
   @visibleForTesting
   static void setMetadataFromCommitEntry(Metadata md, Map serverCommitEntry) {
     var metaData = serverCommitEntry['metadata'];
@@ -1546,8 +1521,6 @@ class SyncServiceImpl implements SyncService {
         md.appMetadata =
             Metadata.decodeAppMetadata(metaData[AtConstants.appMetadata]);
       }
-      // The mirror of the push-side drop: without it a record pulled from
-      // the atServer loses `immutable` on the way in.
       if (metaData[AtConstants.immutable] != null) {
         md.immutable =
             metaData[AtConstants.immutable].toString().toLowerCase() == 'true';
@@ -1618,12 +1591,10 @@ class SyncServiceImpl implements SyncService {
 
     removeAllProgressListeners();
 
-    // A run parked on one of its awaits when isStopped flipped above is
-    // not cancelled by the flip — it resumes when its await resolves and
-    // bails at its next isStopped check.
-    // callers of stop() stage local state on the promise that sync
-    // activity has halted, and a run resuming after this method returned
-    // would push that state.
+    // NOTE: a run parked on one of its awaits when isStopped flipped above is
+    // not cancelled by the flip — it resumes when its await resolves and bails
+    // at its next isStopped check, which can be after this method has
+    // returned.
   }
 
   /// Reverses a prior [stop]: re-subscribes to stats notifications and
@@ -1639,10 +1610,8 @@ class SyncServiceImpl implements SyncService {
     }
     _logger.info('Restarting sync service for $currentAtSign');
     isStopped = false;
-    // Re-subscribe to stats notifications. stop() waited for any
-    // in-flight run to unwind before returning, so no run survives into
-    // this restart. New sync() calls after restart will queue normally
-    // and fire their microtask trigger as usual.
+    // Re-subscribe to stats notifications. New sync() calls after restart
+    // will queue normally and fire their microtask trigger as usual.
     await statsServiceListener();
     _startPeriodicSyncTimer();
     sync();
@@ -1689,10 +1658,8 @@ class SyncServiceImpl implements SyncService {
     return _syncProgressListeners.length;
   }
 
-  /// The registered listeners, so a test can say *which* ones survived rather
-  /// than only how many. The count alone stopped meaning "the app's listeners"
-  /// once the SDK began registering one of its own — the content-key eviction
-  /// that makes a deleted conveyance evict everywhere.
+  /// The registered listeners, so a caller can tell *which* ones survived and
+  /// not only how many — the SDK registers one of its own alongside the app's.
   @visibleForTesting
   List<SyncProgressListener> progressListeners() =>
       List.unmodifiable(_syncProgressListeners);

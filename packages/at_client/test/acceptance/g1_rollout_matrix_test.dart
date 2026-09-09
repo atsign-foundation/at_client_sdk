@@ -2,22 +2,14 @@ import 'package:test/test.dart';
 
 import 'proven_elsewhere.dart';
 
-/// Part G1 — signature agility, the rollout matrix (`acceptance.md` 16.5).
+/// Part G1 — signature agility, the rollout matrix: what a deployed peer makes
+/// of a rollout-1 sender, and whether every stage reads every other stage's
+/// signature.
 ///
-/// The two rows measured by the programme pair in `tests/pq_matrix/`: what a
-/// **deployed** peer makes of a rollout-1 sender, and whether every stage can
-/// read every other stage's signature. Both are cross-build or cross-stage
-/// questions, so both run as separate processes against a live atServer —
-/// no single process can hold two versions of at_client.
+/// Both are proven in separate processes against a live atServer: no single
+/// process can hold two versions of at_client.
 void main() {
   test('UC-G1.14 · pqReady is invisible to a deployed peer', () {
-    // GIVEN a sender at rollout 1 — an ML-DSA-65 authentication key and a
-    //       freshly minted RSA-2048 signing key.
-    // WHEN  a published-arm client (at_client 3.14.0 from pub.dev) fetches
-    //       that enrollment's _apsk.
-    // THEN  it reads a String that base64-decodes as an RSA public key,
-    //       exactly as for a `now` sender — the released reader cannot tell
-    //       the two stages apart.
     provenIn('tests/at_functional_test/test/pq_released_peer_test.dart',
         'UC-G1.14 · pqReady is invisible to a deployed peer',
         proves: 'the released reader\'s own verdict, with two positive '
@@ -31,11 +23,6 @@ void main() {
 
   test('UC-G1.15 · every rollout stage verifies every other stage\'s envelope',
       () {
-    // GIVEN a sender and a receiver, each at one of now, rollout1, rollout2.
-    // WHEN  the sender signs an envelope at its stage and the receiver fetches
-    //       the sender's _apsk and verifies it with its own build.
-    // THEN  all nine cells verify. rollout2 → rollout1 is the cell it exists
-    //       for: an ML-DSA-65 signature read by a client that signs RSA-2048.
     provenIn('tests/at_functional_test/test/pq_posture_grid_test.dart',
         'UC-G1.15 · every posture verifies every other posture',
         proves: 'nine live cells, and the assertion that makes them mean '

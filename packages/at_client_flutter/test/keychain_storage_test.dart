@@ -91,10 +91,9 @@ void main() {
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => mockBiometricStorageFile);
-      // A cancelled biometric prompt or a transient platform-channel error is
-      // a failure to READ. The only copies of the atSign's keys may live in
-      // this store; a read path that writes over them turns a transient error
-      // into permanent key loss.
+      // NOTE: this store may hold the only copies of the atSign's keys, so a
+      // read path that writes on failure turns a transient error into
+      // permanent key loss.
       when(
         () => mockBiometricStorageFile.read(),
       ).thenThrow(Exception('platform channel unavailable'));

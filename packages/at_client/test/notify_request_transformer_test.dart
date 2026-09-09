@@ -8,12 +8,10 @@ import 'test_utils/mocks.dart';
 
 /// Notify has to reach the same provider `put` would for the same key.
 ///
-/// The two paths resolve the namespace at different points, and provider
-/// selection is namespace-sensitive: the nskey path is `(owner, namespace)`
-/// scoped and declines a key without one. Selecting before the namespace is
-/// filled in therefore picks legacy for every key that relies on the
-/// preference default — silently, at `finer`, while `put` on the identical key
-/// picks nskey. An app would believe a channel is post-quantum when it is not.
+/// Provider selection is namespace-sensitive — the nskey path is
+/// `(owner, namespace)` scoped and declines a key without one — so selecting
+/// before the preference namespace is filled in silently downgrades the
+/// channel to legacy.
 void main() {
   const owner = '@alice';
   const namespace = 'wavi'; // MockAtClient's preference namespace
@@ -67,7 +65,7 @@ void main() {
         ..key = 'phone'
         ..sharedWith = '@bob'
         ..sharedBy = owner;
-      // NotificationServiceImpl.notify sets this before it calls transform.
+      // NOTE: notify sets this before it calls transform.
       atKey.metadata.isEncrypted = true;
       final params = NotificationParams.forUpdate(atKey, value: '555');
 
@@ -93,8 +91,7 @@ void main() {
 
       await NotificationRequestTransformer(c.atClient).transform(params);
 
-      // The current-CK pointer rides the same client. It is an ordinary self
-      // key, not a conveyance, so it is not what this counts.
+      // The current-CK pointer is an ordinary self key, not a conveyance.
       c.written.removeWhere((k) => k.key.startsWith('__ckcur') == true);
       expect(c.written, hasLength(1),
           reason: 'a namespace-less key makes CkManager.ensureCurrent bail, so '

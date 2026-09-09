@@ -166,11 +166,6 @@ void main() {
       //       delivered. The boundary is enforced at the atServer __ssenv
       //       namespace-delivery gate, not by a client-side refusal alone, so
       //       alice3 can read/write app_1.my_apps but not app_2.my_apps.
-      //
-      // Three claims, three proofs, and they are deliberately at different
-      // layers: the boundary is asserted to hold at the atServer, *and* the
-      // sender is asserted not to send across it. Either alone would be a
-      // weaker guarantee than the row states.
       provenIn(
         'tests/at_functional_test/test/enrollment_namespace_gate_test.dart',
         'a scoped enrollment cannot read the envelope channel of a namespace',
@@ -182,11 +177,6 @@ void main() {
         clauses: ['enforced at the atServer `__ssenv` namespace-delivery gate'],
       );
 
-      // The row's last sentence, and a separate claim from the one above:
-      // that one is about DELIVERY of conveyed material over the __ssenv
-      // channel, this is about the ordinary records an application reads and
-      // writes. The __ssenv channel could have been special-cased without the
-      // same gate standing over an app's own keys.
       provenIn(
         'tests/at_functional_test/test/enrollment_namespace_gate_test.dart',
         'a scoped enrollment can read and write the namespace it was granted',
@@ -254,9 +244,6 @@ void main() {
             'algorithm fails rather than minting something else".',
         clauses: ['1568-byte ML-KEM-1024'],
       );
-      // The three siblings the paragraph above names. They were described and
-      // not cited, so the row's clauses 4, 5 and 6 read as unproven while the
-      // tests that prove them sat in the same group.
       provenIn(
         'packages/at_client/test/key_package_registration_test.dart',
         'the persisted seed re-derives an ML-KEM package',
@@ -305,9 +292,8 @@ void main() {
       );
       provenIn(
         'tests/at_functional_test/test/key_package_amendment_live_test.dart',
-        // Cited up to the literal boundary: provenIn matches raw source, and
-        // the test's name is split across two adjacent string literals, so the
-        // concatenated name appears nowhere in the file.
+        // NOTE: provenIn matches raw source, so a test name split across two
+        // adjacent string literals can only be cited up to that boundary.
         'UC-A2.5 · a sender picks by its own order and stamps the matching',
         proves: 'the version byte a real peer stamps when it seals to an '
             'ML-KEM-1024 key, read off the envelope the atServer is holding '
@@ -345,15 +331,6 @@ void main() {
       //       nothing already sealed is re-sealed and no conveyance fires, the
       //       updater holding the plaintext already; and an unnamed sibling
       //       metadata key survives the write.
-      //
-      // ⚠️ Two corrections, both 2026-08-19. The verb is `enroll:update`, not
-      // `enroll:updateMetadata` (renamed by decisions 91 ruling 13), and the
-      // old wording had the client "mint a second keypair and send" as one
-      // explicit act — it is a startup reconciliation against the configured
-      // list. The parenthetical also said a replaced kpid is "retained rather
-      // than retired"; rulings 95.6-9 say it is retained AND marked retired,
-      // so senders stop addressing it while the holder goes on opening what
-      // already named it.
       provenIn(
         'tests/at_functional_test/test/key_package_amendment_live_test.dart',
         'UC-A2.5 · an enrollment amends its own key package',
@@ -381,10 +358,6 @@ void main() {
         clauses: ['an unnamed metadata key survives'],
       );
 
-      // ✅ Both of these were the ⛔ NOT-proven pair, and both are live now.
-      // This read: "NOT proven, and deliberately not claimed: the pre-existing
-      // envelope at a SUPERSEDED kpid still opening, and a peer negotiating to
-      // its own preferred key."
       provenIn(
         'tests/at_functional_test/test/key_package_amendment_live_test.dart',
         'UC-A2.5 · an envelope sealed before the amendment still opens after it',
@@ -459,9 +432,6 @@ void main() {
         ],
       );
 
-      // ✅ The state gate, live since 2026-08-24. This read "⛔ NOT proven,
-      // and deliberately not claimed: the state gate — the same request
-      // against a REVOKED E4."
       provenIn(
         'tests/at_functional_test/test/key_package_amendment_live_test.dart',
         'UC-A2.6 · a revoked enrollment cannot re-advertise a key package',

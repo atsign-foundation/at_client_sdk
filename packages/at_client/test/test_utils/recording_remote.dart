@@ -12,11 +12,8 @@ import 'mocks.dart';
 ///   `update:<key>[:rootlink|:chainlink]` · `delete:<key>` · `scan:<regex>` ·
 ///   `get:<key>` · `cmd:<head>`
 ///
-/// Built for the startup-path instruments (the call-order recorder and the
-/// no-AtKeysIo inertness pin), which observe `_fileConveyedKeysAndAnchor`
-/// through its effects because its steps deliberately have no injection
-/// seams. The atLookUp carries no enrollment id, so a client built on this is
-/// fully privileged by construction.
+/// The atLookUp carries no enrollment id, so a client built on this is fully
+/// privileged by construction.
 ///
 /// Callers must `registerFallbackValue` a [VerbBuilder] fake in `setUpAll`.
 MockRemoteSecondary buildRecordingRemote({

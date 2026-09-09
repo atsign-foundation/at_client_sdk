@@ -5,19 +5,10 @@ import 'test_utils/mocks.dart';
 
 /// The era default: which crypto config a client encrypts and decrypts under
 /// when the app never named one.
-///
-/// The release sequence is what this encodes. A final-3.x client **reads** PQ
-/// records — a record arrives stamped with the provider that wrote it, so a
-/// client that cannot resolve that id fails on data someone already sent it —
-/// while still **writing** legacy, because the first client to write PQ produces
-/// records every other client must already be able to read. Read side first
-/// everywhere, write side flipped once, at 4.x.
 void main() {
   late MockAtClient client;
 
   setUp(() {
-    // A fresh preference holds the CryptoConfig.eraDefault() marker — the
-    // "app named nothing" state under test here.
     client = MockAtClient();
   });
 
@@ -39,16 +30,7 @@ void main() {
 
   test('a NOTIFICATION at the era default reaches the legacy provider too',
       () async {
-    // UC-B3.1 says the capability stage writes legacy and adds "(applies to
-    // put and notify alike)". Every arm asserting that asked
-    // `providerIdFor` twice under two key names, which is the same call
-    // answered the same way — a claim about put, restated. The notify entry
-    // point has its own refusal check and its own stamp, so this drives it.
-    //
-    // The pqActive contrast is in `disallow_legacy_encryption_test.dart`,
-    // where the identical notification is REFUSED. This is the arm that says
-    // the capability stage does not refuse it — which is the whole reason the
-    // capability build is safe to roll out everywhere first.
+    // UC-B3.1: the capability stage writes legacy for put and notify alike.
     final legacy = _Recorder(legacyCryptoProviderId);
     final pq = _Recorder(symmetricAesGcmCryptoProviderId);
     client.getPreferences().crypto = CryptoConfig(
@@ -111,10 +93,8 @@ void main() {
 
   test('the marker read as a config degrades to the published legacy shape',
       () {
-    // External code compiled against 3.14.0 reads preference.crypto directly
-    // (the field defaulted to CryptoConfig.legacy() there). The marker must
-    // answer those reads with exactly that shape, or restoring non-nullability
-    // would change behaviour for the very callers it exists to keep working.
+    // NOTE: external code reads preference.crypto directly, so the marker has
+    // to answer those reads with the published legacy shape.
     expect(const CryptoConfig.eraDefault().defaultProviderId,
         legacyCryptoProviderId);
     expect(const CryptoConfig.eraDefault().providers, isEmpty);
@@ -173,9 +153,6 @@ void main() {
   });
 }
 
-/// Records which provider a path reached, so the routing decision can be read
-/// off the call counts rather than inferred from a provider id resolved in
-/// isolation.
 class _Recorder extends CryptoProvider {
   @override
   final String id;

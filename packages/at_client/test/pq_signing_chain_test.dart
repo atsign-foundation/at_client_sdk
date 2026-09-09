@@ -1,5 +1,3 @@
-// The substrate and the chain are deliberately marked @experimental and will
-// be reshaped as the group surface matures.
 // ignore_for_file: experimental_member_use
 
 import 'dart:convert';
@@ -20,12 +18,6 @@ import 'test_utils/remote_backed_client.dart';
 import 'test_utils/recorded_logs.dart';
 
 /// [envelope] with its signature replaced by one that cannot verify.
-///
-/// Reaches inside the `signatures` array, which the type now makes the only
-/// way to write it: before [SignedEnvelope] existed, spreading a top-level
-/// `'signature'` member over a Map was the obvious spelling, and it left the
-/// real signature untouched in the entry the verifier reads — so the forgery
-/// verified and the test passed for the absence of a forgery.
 SignedEnvelope withForgedSignature(SignedEnvelope envelope) =>
     envelope.withEntryMember('signature', b64u('forged'));
 
@@ -34,21 +26,15 @@ SignedEnvelope withForgedSignature(SignedEnvelope envelope) =>
 /// the atSign's signing root without an approval graph being published
 /// anywhere.
 ///
-/// The awkward part the design has to work around is that the signer is not a
-/// permitted writer: `_apsk` takes writes only from its own enrollment's
-/// connection. So the parent signs, conveys, and the child publishes.
+/// `_apsk` takes writes only from its own enrollment's connection, so the
+/// parent signs, conveys, and the child publishes.
 void main() {
   const atSign = '@alice';
   late Map<String, String> remoteData;
-  // The link rides appMetadata, so this fixture has to round-trip metadata as
-  // well as values — shared across clients, since the parent writes the record
-  // the child later reads.
   late Map<String, Metadata> remoteMetadata;
 
-  // Installed here rather than in the group that reads it: an at_client
-  // library binds whatever handler is current when its logger first logs, and
-  // by the time a group-level setUpAll runs the chain has already logged in an
-  // earlier test — so a handler installed there would record nothing.
+  // NOTE: a logger binds whatever handler is current when it first logs, so
+  // installing this from a group's setUpAll would record nothing.
   final logs = RecordedLogs();
   setUpAll(() {
     registerFallbackValue(AtKey());
@@ -134,17 +120,6 @@ void main() {
   });
 
   test('a republish silently leaves the enrollment unsigned', () async {
-    // The converse of the row above. There the link is written and the value
-    // is carried over untouched; here the value is written and the link is
-    // not carried, because the two live on one record and the key publisher
-    // sends the value alone. Whenever what is published differs from what
-    // the client holds it rewrites the record, and the link that vouched for
-    // this enrollment goes with it — no party withdrew it and nothing says
-    // it is gone.
-    //
-    // The mutation that reddens this: have `publishPublicSigningKeyLocked`
-    // read the existing record's `appMetadata` and carry it onto its put.
-    // The link would survive the republish. Named, not applied.
     final parentClient = client('parent-1');
     final parent = await registered(parentClient);
     final childClient = client('child-1');
@@ -160,18 +135,10 @@ void main() {
         reason: 'the setup has to leave a real link on the record, or every '
             'assertion below passes on there being nothing to discard');
 
-    // The control: the same call with the record and the client agreeing. It
-    // writes nothing, so nothing is discarded — without this arm a fixture
-    // that never carried a link at all would satisfy the assertion below.
     await child.publishPublicSigningKey();
     expect(await PqSigningChain(childClient).readLink('child-1'), isNotNull,
         reason: 'a publisher that writes nothing can discard nothing');
 
-    // And the arm where they disagree, which is what an `enroll:update`
-    // carrying fresh signing material leaves behind. The replacement is
-    // another registered enrollment's genuine `_apsk` rather than a
-    // manufactured string, so the republish cannot be explained by the
-    // record holding something no reader could parse.
     await registered(client('donor-1'));
     final drifted = remoteData[PqSigningChain.apskUri(atSign, 'donor-1')]!;
     expect(drifted, isNot(published),
@@ -203,8 +170,6 @@ void main() {
 
     final read = await PqSigningChain(childClient).readLink('child-1');
 
-    // A third party verifying: it resolves the signer from the envelope's own
-    // claim and checks against that enrollment's published _apsk.
     final verifier = AtClientSecretSharing.forClient(client('verifier-1'));
     await expectLater(
         verifier.verifyEnvelopeSignature(read!,
@@ -262,11 +227,6 @@ void main() {
 
     test('replaces an existing link with a DIFFERENT one conveyed later',
         () async {
-      // The arm that catches an already-published check comparing the wrong
-      // thing. The signature lives inside the envelope's `signatures` array,
-      // so a check reading a top-level `['signature']` gets null from both
-      // sides, matches every time, and skips the write — and the skip is the
-      // same `return false` as "already published", so nothing looks wrong.
       final parentClient = client('parent-1');
       final parent = await registered(parentClient);
       final childClient = client('child-1');
@@ -277,8 +237,6 @@ void main() {
       await convey(child, first!);
       expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
 
-      // A second, genuinely different link for the same child: another
-      // privileged enrollment re-vouches for it.
       final otherClient = client('parent-2');
       final other = await registered(otherClient);
       final second =
@@ -327,7 +285,6 @@ void main() {
       final childClient = client('child-1');
       final child = await registered(childClient);
 
-      // A link genuinely signed by the parent, but vouching for a sibling.
       final link =
           await PqSigningChain(parentClient).signLinkFor(parent, 'sibling-1');
       await convey(child, link!);
@@ -399,13 +356,10 @@ void main() {
       expect(link, isNotNull);
       expect(link!['alg'], PqSigningChain.rootLinkAlgo);
 
-      // The signature is over the same canonical text a verifier rebuilds,
-      // checked against the root's public half rather than merely present.
       expect(
           await MlDsa65PureDartAlgo().verifyBytes(
-            // The domain tag spelled out rather than read from the
-            // constant: this rebuilds the bytes the way an independent
-            // implementation would, so it pins the prefix too.
+            // NOTE: the domain tag is spelled out rather than read from the
+            // constant, so the prefix is pinned too.
             Uint8List.fromList(
                 utf8.encode('at-root-link:${signableTextOf(link['payload'])}')),
             signature: base64Decode(link['signature'] as String),
@@ -493,11 +447,6 @@ void main() {
   });
 
   group('the child consuming a conveyed ROOT link', () {
-    // This path had no test at all. It is the flavour a scoped enrollment
-    // gets — it cannot hold the root private, so a privileged holder signs
-    // and conveys, exactly as with a chain link — and it shares the
-    // already-published check with that one.
-
     Future<void> conveyRoot(
         AtClientSecretSharing child, Map<String, Object?> link) async {
       await child.secretStore.putSecret(
@@ -518,9 +467,8 @@ void main() {
       return pair;
     }
 
-    /// Publishes a record advertising [active] beside [retired], which
-    /// carries [retiredStatus] — `retired` unless a caller wants to see what
-    /// a status this build cannot read does.
+    /// Publishes a record advertising [active] beside [retired], which carries
+    /// [retiredStatus].
     Future<void> publishRotatedRoot({
       required Uint8List active,
       required Uint8List retired,
@@ -538,18 +486,12 @@ void main() {
     }
 
     test('a link signed under a RETIRED root still verifies', () async {
-      // The whole reason a retired entry stays advertised: what it signed goes
-      // on verifying. Checking only the active entry would turn every link
-      // written before a rotation into `broken` — reported as tampering — the
-      // moment a successor appeared.
       final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
       final successor = await MlDsa65PureDartAlgo().generateKeyPair();
       final holder = client('priv-1');
       final childClient = client('child-1');
       final child = await registered(childClient);
 
-      // Signed while the predecessor was the only root, then the record moves
-      // on: the successor is active and the predecessor is retired beside it.
       final link = await PqSigningChain(holder)
           .signRootLinkFor('child-1', rootPrivate: predecessor.secretKey);
       await publishRotatedRoot(
@@ -569,14 +511,6 @@ void main() {
 
     test('a link signed under a root of UNKNOWN status does not verify',
         () async {
-      // The differential against the row above, and the reason the status is
-      // an open token. `retired` means "withdrawn from new use, still vouches
-      // for what it signed", so that link verifies. A token this build has
-      // never seen means something else the owner chose to say, and the
-      // likeliest something else is a key they have disowned - so its
-      // signatures must stop checking out here rather than go on doing so.
-      // Until 2026-08-22 an unknown token READ as `retired`, which made these
-      // two rows indistinguishable.
       final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
       final successor = await MlDsa65PureDartAlgo().generateKeyPair();
       final holder = client('priv-1');
@@ -599,12 +533,9 @@ void main() {
     test(
         'and a link already published stops anchoring once the record '
         'disowns its root', () async {
-      // The CHAIN verifier's arm of the row above, and it has to be staged
-      // this way round to reach it at all: with the record already carrying an
-      // unreadable status nothing is ever published, so `verifyChain` returns
-      // `unsigned` without entering `_checkRootLink` — a green that proves
-      // only that no link exists. So the link is published while the record
-      // still vouches for the key, and the record then disowns it.
+      // NOTE: the link has to be published while the record still vouches for
+      // the key. Staged the other way round nothing is ever published, and
+      // `verifyChain` returns `unsigned` without reaching the root-link check.
       final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
       final successor = await MlDsa65PureDartAlgo().generateKeyPair();
       final holder = client('priv-1');
@@ -625,7 +556,6 @@ void main() {
           reason: 'the control: while the record calls the root retired the '
               'link verifies. Reason if not: ${anchored.reason}');
 
-      // The owner disowns that root. Nothing about the link changes.
       await publishRotatedRoot(
           active: successor.publicKey,
           retired: predecessor.publicKey,
@@ -642,16 +572,6 @@ void main() {
 
     test('D1 boundary: a keyfile and a record both carrying two root entries',
         () async {
-      // ⚠️ THE ROW THAT MAKES D1's CLAIM FALSIFIABLE
-      // (`decisions.md` 101 requirement 5). Every mechanism below is already
-      // covered somewhere — the record half by the sibling rows in this group,
-      // the keyfile half by `pq_signing_root_test.dart`'s "a record
-      // advertising a successor beside a retired predecessor" group — but each
-      // in its own file against its own fixture. D1 claims the two hold
-      // TOGETHER: that a second root is representable, publishable and
-      // verifiable end to end, so that rotation is a later operation over a
-      // structure that already works. This drives both halves in one scenario,
-      // through the real APIs, with no rotation machinery anywhere.
       final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
       final successor = await MlDsa65PureDartAlgo().generateKeyPair();
       final holderClient = client('priv-1');
@@ -659,7 +579,6 @@ void main() {
       final childClient = client('child-1');
       final child = await registered(childClient);
 
-      // (1) The world before: one root, and the holder's keyfile has it.
       final io = InMemoryAtKeysIo();
       await io.write(atSign, AtKeys());
       final holderRoot = PqSigningRoot(holderClient, keysIo: io);
@@ -668,19 +587,13 @@ void main() {
               public: predecessor.publicKey),
           isTrue);
 
-      // (2) A link signed then, by the only root there was.
       final oldLink = await PqSigningChain(holderClient)
           .signRootLinkFor('child-1', rootPrivate: predecessor.secretKey);
       expect(oldLink, isNotNull);
 
-      // (3) The record moves on: successor active, predecessor RETIRED beside
-      // it. Written by hand — minting a successor is the rotation D1 does not
-      // build, and needing it here would be the boundary failing.
       await publishRotatedRoot(
           active: successor.publicKey, retired: predecessor.publicKey);
 
-      // (4) The successor reaches the holder the way a rotation would deliver
-      // it — over the substrate, through the ordinary filing path.
       expect(
           await holderRoot.file(
               atSign,
@@ -691,9 +604,6 @@ void main() {
               )),
           isTrue);
 
-      // (5) THE KEYFILE HALF: two root entries at rest, in two slots, one
-      // active and one retired — and the retired one keeps its bytes, because
-      // they are what verifies what it signed.
       final keys = await io.read(atSign);
       final rootPrivates = keys.atSignKeys
           .where((m) =>
@@ -712,8 +622,6 @@ void main() {
         CryptographicMaterialStatus.retired
       }, reason: 'exactly one of them answers "what do I sign with"');
 
-      // (6) SIGNING SELECTS THE SUCCESSOR, and stamps ITS kid — read off the
-      // public half filed beside it, never off the record.
       expect(
           await PqSigningChain(holderClient).publishOwnRootLink(
               isFullyPrivileged: () async => true, keysIo: io),
@@ -726,11 +634,6 @@ void main() {
               'the predecessor would publish anchors that a peer narrowing on '
               'the kid would reject');
 
-      // (7) AND THE LINK SIGNED UNDER THE RETIRED ROOT STILL VERIFIES —
-      // through both verifiers, against the same two-entry record. This is the
-      // half that makes a retired entry worth advertising at all: without it,
-      // every anchor written before the rotation becomes `broken`, which reads
-      // as tampering.
       await conveyRoot(child, oldLink!);
       expect(await PqSigningChain(childClient).publishPendingLink(), isTrue,
           reason: 'the conveyance verifier stamps it');
@@ -743,9 +646,6 @@ void main() {
 
     test('a link signed under a root the record never advertised is broken',
         () async {
-      // The differential: same code path, same two-entry record, a signer the
-      // record does not vouch for. Without this, "tries every advertised root"
-      // and "accepts anything" look identical.
       final stranger = await MlDsa65PureDartAlgo().generateKeyPair();
       final successor = await MlDsa65PureDartAlgo().generateKeyPair();
       final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
@@ -766,10 +666,6 @@ void main() {
 
     test('a kid naming nothing advertised is broken, not retried broadly',
         () async {
-      // The kid has to be a claim, not decoration. If an unknown kid fell back
-      // to trying every candidate, the field would pass whenever ANY
-      // advertised key happened to verify — which is exactly the case it
-      // exists to distinguish.
       final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
       final successor = await MlDsa65PureDartAlgo().generateKeyPair();
       final holder = client('priv-1');
@@ -781,9 +677,6 @@ void main() {
       await publishRotatedRoot(
           active: successor.publicKey, retired: predecessor.publicKey);
 
-      // The same link, relabelled to name a key the record does not carry. Its
-      // SIGNATURE is still good against the retired entry, so without strict
-      // narrowing this verifies and the kid means nothing.
       final mislabelled = {...link!, PqSigningChain.rootLinkKidField: 'nope'};
       await conveyRoot(child, mislabelled);
 
@@ -852,9 +745,8 @@ void main() {
       await conveyRoot(child, first!);
       expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
 
-      // ML-DSA signing is hedged, so re-signing the same payload yields a
-      // genuinely different link — which is the differential this needs, and
-      // the reason it does not have to manufacture one.
+      // NOTE: ML-DSA signing is hedged, so re-signing the same payload yields
+      // a genuinely different link.
       final second = await PqSigningChain(holder)
           .signRootLinkFor('child-1', rootPrivate: pair.secretKey);
       expect(second, isNot(first),
@@ -960,10 +852,6 @@ void main() {
       expect(result.path, ['child-1', 'parent-1']);
     });
 
-    // A second copy of the test above used to sit here, re-signing the same
-    // payload in the JWS shape to prove the walk climbed both wrappers. There
-    // is one shape now, so it was the preceding test twice over.
-
     test('reports broken, not chained, for a link that does not verify',
         () async {
       final parentClient = client('parent-1');
@@ -987,7 +875,6 @@ void main() {
 
     test('reports broken for a root link that does not verify', () async {
       await publishRoot();
-      // Anchored with a DIFFERENT root private than the one published.
       final other = await MlDsa65PureDartAlgo().generateKeyPair();
       await anchored('priv-1', other.secretKey);
 
@@ -1005,7 +892,6 @@ void main() {
       final b = client('loop-b');
       final sharingB = await registered(b);
 
-      // Each vouches for the other: individually well-formed, jointly a ring.
       final linkForB = await PqSigningChain(a).signLinkFor(sharingA, 'loop-b');
       await PqSigningChain(b).publishLink('loop-b', linkForB!);
       final linkForA = await PqSigningChain(b).signLinkFor(sharingB, 'loop-a');
@@ -1021,12 +907,6 @@ void main() {
     });
 
     test('an envelope signed for anything else is not a chain link', () async {
-      // The shape this closes. A chain link used to be told from every other
-      // envelope by which fields its payload carried — so an envelope signed
-      // by a parent for some ORDINARY purpose, over a payload naming a child
-      // and that child's published key, walked as a link from that parent.
-      // An application signing data it was handed is the reachable version:
-      // wrapAndSign is the app-facing verb and its payload is the app's input.
       final pair = await publishRoot();
       final parentClient = await anchored('priv-1', pair.secretKey);
       final parent = AtClientSecretSharing.forClient(parentClient);
@@ -1049,9 +929,6 @@ void main() {
               'actually published. Only the type refuses it');
       expect(result.reason, contains('at-app+jws'));
 
-      // The differential: the same parent, the same child, the same payload,
-      // signed AS a link — anchored. Without this arm the refusal above would
-      // also pass for a build whose chain walk was simply broken.
       final realLink =
           await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
       await PqSigningChain(childClient).publishLink('child-1', realLink!);
@@ -1061,9 +938,6 @@ void main() {
     });
 
     test('a root link signed without the domain tag does not verify', () async {
-      // What a root link written before the tag existed looks like: signed by
-      // the real root, over the real payload, and one prefix short. It has to
-      // fail, or the tag is decoration.
       final pair = await publishRoot();
       final c = await anchored('priv-1', pair.secretKey);
 
@@ -1084,11 +958,6 @@ void main() {
 
     test('an entitled enrollment re-anchors a root link that stopped holding',
         () async {
-      // Presence used to be the whole question, so a link that no longer
-      // verified stayed on the record for good: nothing else can replace it,
-      // because the conveyance path publishes what an approver sends and no
-      // approver sends a root link to an enrollment already holding the
-      // private.
       final pair = await publishRoot();
       final c = await anchored('priv-1', pair.secretKey);
 
@@ -1125,21 +994,6 @@ void main() {
   /// Every comparison of what a link vouches for against what the record
   /// actually publishes — the check that makes a signature mean something
   /// about a *key* rather than merely about a payload.
-  ///
-  /// A parent signs the child's published key, conveys the link, and the child
-  /// publishes it onto its own record. That key can move between any two of
-  /// those steps, and after all of them: an `enroll:update` carrying fresh
-  /// signing material rewrites `_apsk`. With nothing comparing, the record
-  /// would advertise an anchor for a key no parent ever vouched for, and a
-  /// verifier would follow it — which is the whole attack the link exists to
-  /// stop, arriving without anybody having to forge a signature.
-  ///
-  /// Five comparisons make that impossible, and each is reached by a different
-  /// caller: two refuse a conveyed link (chain flavour, root flavour), two
-  /// report the walk broken (chain flavour, root flavour), and one decides
-  /// that an enrollment holding the root private must re-anchor itself. Every
-  /// test below carries the arm where the key did NOT move, so a refusal
-  /// cannot be explained by the fixture rather than by the mismatch.
   group('a link vouching for a key the record no longer publishes', () {
     late MockAtClient verifierClient;
     late AtClientSecretSharing verifier;
@@ -1181,11 +1035,6 @@ void main() {
 
     /// Moves the key [id] publishes, which is what an `enroll:update` carrying
     /// fresh signing material does.
-    ///
-    /// The replacement is a genuine `_apsk` — another registered enrollment's —
-    /// rather than a manufactured string, so a refusal cannot be explained by
-    /// the record holding something no reader could parse. The donor keeps its
-    /// own record; nothing in these tests looks at it.
     Future<void> moveKeyOf(String id, {required String donor}) async {
       await registered(client(donor));
       final replacement = remoteData[PqSigningChain.apskUri(atSign, donor)]!;
@@ -1200,10 +1049,6 @@ void main() {
       final parentClient = client('parent-1');
       final parent = await registered(parentClient);
 
-      // The arm where nothing moved. It is the control twice over: it proves
-      // this fixture publishes at all, and it proves the recorder is bound —
-      // without which every message assertion below would pass by matching
-      // nothing.
       final steadyClient = client('steady-1');
       final steady = await registered(steadyClient);
       final steadyLink =
@@ -1218,7 +1063,6 @@ void main() {
               'publish, so an unbound recorder is reported as unbound rather '
               'than satisfying the WARNING assertion below by being empty');
 
-      // The arm where the key moved between the signing and the publish.
       final movedClient = client('moved-1');
       final moved = await registered(movedClient);
       final movedLink =
@@ -1291,9 +1135,6 @@ void main() {
       await registered(childClient);
       final link =
           await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
-      // Published directly, which is how a link written before the key moved
-      // comes to be sitting on the record — the write-side check above cannot
-      // see a key that moves afterwards.
       await PqSigningChain(childClient).publishLink('child-1', link!);
 
       expect(
@@ -1352,10 +1193,6 @@ void main() {
     });
 
     test('an enrollment whose own key moved re-anchors itself', () async {
-      // The fifth comparison, and the only one that refuses silently: it
-      // returns a bool to its own caller rather than a reason to an operator.
-      // What it decides is whether the link already on the record still holds,
-      // and a key that has moved is one of the two ways it can stop holding.
       final pair = await publishRoot();
       final c = client('priv-1');
       final io = InMemoryAtKeysIo();
@@ -1401,10 +1238,6 @@ void main() {
     final childClient = client('child-1');
     await registered(childClient);
 
-    // The impostor signs a perfectly well-formed link for child-1 — anyone
-    // can — but then claims it came from parent-1. The claim lives inside the
-    // protected header, so this is not a relabel: it edits bytes the
-    // signature covers.
     final link =
         await PqSigningChain(impostorClient).signLinkFor(impostor, 'child-1');
     await registered(client('parent-1'));
@@ -1424,11 +1257,6 @@ void main() {
 
 /// Writes [link] into [enrollmentId]'s published `_apsk` as its root link,
 /// straight into the fixture's record store.
-///
-/// Reaching past the production writer on purpose: what these tests need to
-/// set up is a record carrying a link production would never write — one from
-/// an older shape, or one whose root has moved on — and going through the
-/// writer could only ever produce a link this build considers current.
 void writeRootLink(Map<String, Metadata> remoteMetadata, String atSign,
     String enrollmentId, Map<String, Object?> link) {
   final uri = PqSigningChain.apskUri(atSign, enrollmentId);

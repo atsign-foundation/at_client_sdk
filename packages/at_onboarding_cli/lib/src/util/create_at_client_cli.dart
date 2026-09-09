@@ -16,17 +16,12 @@ import 'home_directory_util.dart';
 /// `list`, `spp`, `approve` and the rest.
 ///
 /// [waitForPqStartup] holds the command until the client's post-quantum
-/// startup has finished, bounded by [startupTailBound]. A command that reads
-/// what that startup leaves behind — `list` after a retrofit — needs it; one
-/// that sends a single verb and exits, `otp` or `spp`, does not, and through a
-/// slow path the wait alone can exceed the command's budget. It defaults to
-/// waiting because an app calling this has no basis to choose.
+/// startup has finished, bounded by [startupTailBound]; a command that reads
+/// what that startup leaves behind needs it, one that sends a single verb and
+/// exits does not.
 ///
 /// [posture] is how far into the post-quantum rollout this invocation runs;
-/// null means whatever the at_client this was built against defaults to. It is
-/// optional because this function is exported and apps already call it, but a
-/// command that has a `--posture` to pass and does not pass it silently runs
-/// at another stage than the one the user named.
+/// null means whatever the at_client this was built against defaults to.
 Future<AtClient> createAtClient(
     {required String atSign,
     String? atKeysFilePath,
@@ -99,10 +94,9 @@ Future<AtClient> createAtClient(
   }
   stderr.writeln(chalk.brightGreen('Connected'));
   final client = AtClientManager.getInstance().atClient;
-  // A command's process ends when the command does, and the client's
-  // post-quantum startup — seeding and publishing this atSign's namespace keys
-  // among it — runs after the client is built and is not awaited by it. Waited
-  // for here so a short-lived command still leaves the atSign able to receive.
+  // NOTE: the post-quantum startup — seeding and publishing this atSign's
+  // namespace keys among it — runs unawaited after the client is built, so a
+  // short-lived command would exit before it finishes.
   if (waitForPqStartup && client is AtClientImpl) {
     // ignore: experimental_member_use
     await client.pqBootstrap?.startupComplete.timeout(startupTailBound,

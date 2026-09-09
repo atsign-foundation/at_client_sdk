@@ -34,12 +34,8 @@ void main() {
 
 /// Connects to [host]:[port], retrying while the virtualenv comes up.
 ///
-/// ⚠️ **The retry bound used to be unreachable.** `retryCount > maxRetryCount`
-/// was only ever evaluated after a SUCCESSFUL connect, so a host that refused
-/// every attempt looped forever — the caller hung until its test timeout and
-/// reported that, rather than the connection failure that actually happened.
-/// The bound is now on the loop itself, and running out throws with the last
-/// error attached.
+/// Throws a `StateError` naming the last error once `maxRetryCount` attempts
+/// have all been refused, rather than looping until the caller's test timeout.
 Future<SecureSocket> secureSocketConnection(String host, int port) async {
   Object? lastError;
   for (retryCount = 1; retryCount <= maxRetryCount; retryCount++) {

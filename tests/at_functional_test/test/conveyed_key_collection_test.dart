@@ -21,30 +21,19 @@ import 'test_utils.dart';
 
 /// A conveyed nskey private reaching the keyfile, against a live atServer.
 ///
-/// This is the arrival half of the substrate, and until this file existed it
-/// had none: the filer's only entry point was a `receivedSecrets` subscription
-/// with no production caller, so a private sent to an enrollment reached its
-/// in-memory transit buffer and never its `AtKeys` — and was gone at restart,
-/// taking with it every value the content keys it opens protect.
-///
-/// Three things have to hold at once for this to work, and the test asserts
-/// each rather than only the end state, because any one of them failing
-/// silently leaves the others looking correct:
-///
-/// - the running client's key package is the one in its keyfile (otherwise it
-///   scans for an address nobody writes to);
-/// - a sweep runs (the transit buffer is in memory, and nothing else fills it);
-/// - the filer moves the material into `AtKeys`.
+/// Three steps are asserted separately rather than only the end state — the
+/// client listening on the kpid its keyfile advertises, the sweep running, and
+/// the filer moving the material into `AtKeys` — because any one of them
+/// failing silently leaves the others looking correct.
 void main() {
   TestUtils.isolateStorage('conveyed_key_collection_test');
   late AtClient atClient;
   late String atSign;
   const namespace = 'wavi';
 
-  // A real 32-byte X-Wing seed, not arbitrary bytes: what is filed is a seed
-  // now, and NskeyPrivateFiling.read expands it into the decapsulation key the
-  // caller actually uses. Arbitrary bytes read back as null, correctly — they
-  // are not a key for anything.
+  // NOTE: a real 32-byte X-Wing seed — what is filed is a seed, which
+  // NskeyPrivateFiling.read expands into a decapsulation key, so arbitrary
+  // bytes read back as null.
   final privateBytes = Uint8List.fromList(List<int>.generate(32, (i) => i));
 
   setUpAll(() async {
@@ -102,9 +91,9 @@ void main() {
     final (io, advertised) = await keyfileWithPackage();
     final from = await sender();
 
-    // The first collection registers the receiver against the keyfile and
-    // sweeps an empty atServer. Both matter: without the binding the receiver
-    // would listen on a kpid of its own invention.
+    // NOTE: the first collection binds the receiver to the keyfile as well as
+    // sweeping an empty atServer; without it the receiver listens on a kpid of
+    // its own invention.
     expect(await collectConveyedKeyMaterial(atClient, io), 0);
 
     final receiver = AtClientSecretSharing.forClient(atClient);
@@ -122,8 +111,7 @@ void main() {
 
     expect(await collectConveyedKeyMaterial(atClient, io), 1);
 
-    // Read back through a filer built fresh from the same keyfile: what the
-    // restart the whole change exists for would see.
+    // A fresh filer over the same keyfile: what a restarted process sees.
     expect(
         await NskeyPrivateFiling(keysIo: io, atSign: atSign)
             .read(namespace, 'kid-live'),
@@ -138,8 +126,8 @@ void main() {
     final elsewhere = await sender();
     final receiver = AtClientSecretSharing.forClient(atClient);
 
-    // Both arms in one collection, so the negative cannot pass for the wrong
-    // reason: if nothing were swept at all, the positive arm would fail too.
+    // NOTE: both arms go through one collection, so a sweep that ran not at
+    // all fails the positive arm rather than passing the negative one.
     await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-mine'), inReplyTo: EnvelopeAddressing.unsolicited);
     await from.shareSecretWith(
         elsewhere.myKeyPackage, nskeySecret('kid-elsewhere'), inReplyTo: EnvelopeAddressing.unsolicited);

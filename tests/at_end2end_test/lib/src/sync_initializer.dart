@@ -36,10 +36,9 @@ class E2ESyncService {
   /// Returns when the local secondary has caught up to the remote
   /// secondary's commit id as observed by the first sync event after
   /// this call. Times out after [timeout].
-  /// [atSign] is a log label only. It is a parameter rather than a lookup
-  /// because reading it off the singleton crashes any caller whose client
-  /// belongs to a dedicated `AtClientManager` (see `ConcurrentClients`) — and
-  /// crashing a sync over a label would be an absurd way to lose a test.
+  /// [atSign] is a log label only. It is a parameter rather than a lookup so
+  /// that a caller whose client belongs to a dedicated `AtClientManager` (see
+  /// `ConcurrentClients`) does not fail a sync on reading the singleton.
   Future<void> syncData(
     SyncService syncSvc, {
     String? atSign,

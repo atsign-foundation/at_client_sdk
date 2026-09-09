@@ -21,20 +21,11 @@ import 'test_utils.dart';
 
 /// An app can enrol post-quantum from birth, and then does not retrofit.
 ///
-/// Until `AtEnrollmentRequest` carried a `signingAlgo`, an app enrolling over
-/// OTP always got an RSA-2048 APKAM authentication keypair — there was no way
-/// to ask for anything else. On an atSign whose deployment had moved to
-/// post-quantum, every install therefore created an RSA-authenticating
-/// enrollment, which the client retrofitted away during its first
-/// construction: a discarded enrollment per install, and an RSA credential
-/// live for the atServer's grace window on an atSign that believed it had
-/// left RSA behind.
-///
 /// The differential is the second half. Asserting only that an mldsa65
 /// enrollment comes back mldsa65 would pass just as well for a build that
-/// minted RSA and immediately retrofitted, because the client would end up on
-/// ML-DSA either way. What distinguishes the fix from the defect is that the
-/// enrollment id does NOT change — nothing was thrown away.
+/// minted RSA and immediately retrofitted, because the client ends up on
+/// ML-DSA either way. What distinguishes the two is that the enrollment id does
+/// NOT change — nothing was thrown away.
 void main() {
   TestUtils.isolateStorage('pq_native_app_enrollment_test');
   final atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
@@ -93,7 +84,6 @@ void main() {
     final native = await enrolAt(SigningAlgoType.mldsa65, 'mldsa65');
     final legacy = await enrolAt(SigningAlgoType.rsa2048, 'rsa2048');
 
-    // The fix.
     expect(native.runningAs, native.enrolledAs,
         reason: 'an enrollment minted with an ML-DSA-65 APKAM key already '
             'authenticates the way a pqActive posture wants, so no retrofit '
@@ -108,12 +98,9 @@ void main() {
             'it holds nothing, the algorithm never reached the wire and the '
             'atServer recorded the absent-field default');
 
-    // The flat fields hold the SAME keypair, deliberately. What must not
-    // happen is flat and typed naming DIFFERENT enrollments — that is a
-    // retrofitted keyfile, where the flat fields belong to the enrollment left
-    // behind. Here there is one enrollment and the keyfile's own enrollmentId
-    // names it, so both resolve to one key; and the approval handshake needs
-    // the keypair and the symmetric key out of a single `toAtChops`.
+    // The flat fields hold the SAME keypair, deliberately: flat and typed
+    // naming DIFFERENT enrollments is a retrofitted keyfile, where the flat
+    // fields belong to the enrollment left behind.
     // ignore: deprecated_member_use
     expect(native.keys.apkamPublicKey, isNotNull,
         reason: 'the flat fields carry this enrollment\'s own keypair too, '

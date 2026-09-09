@@ -43,13 +43,10 @@ class NskeyRecipientKind {
 /// of surfacing an encryption error for a situation neither side has done
 /// anything wrong in.
 ///
-/// ⚠️ **It means "not found now", not "never published".** The distinction
-/// used to matter a great deal: the resolver remembered misses, and a recipient
-/// who published after this client last looked went on raising this for the
-/// rest of that window. `NskeyResolver.resolve` no longer answers null on the
-/// strength of a remembered miss, so this is now raised only after a probe that
-/// found nothing. [CryptoRuntime.isReadyFor] asks the same question ahead of
-/// composing anything, and is as current as this is.
+/// ⚠️ **It means "not found now", not "never published"** — it is raised only
+/// after a probe that found nothing, never on the strength of a remembered
+/// miss. [CryptoRuntime.isReadyFor] asks the same question ahead of composing
+/// anything, and is as current as this is.
 ///
 /// There is no post-quantum fallback to offer: the only atSign-level key is a
 /// signing root, which cannot receive an encapsulation. The escape hatch is the
@@ -119,15 +116,6 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
   /// The strongest `pqSeal` construction both this provider and the
   /// destination can handle, or null if there is no overlap.
   ///
-  /// The advertisement's `suites` list is what makes this a negotiation rather
-  /// than a guess. Without it a writer could only ever raise the version by
-  /// flag day: every conveyance already written stays readable, but a reader
-  /// on a build that predates the new construction would find new ones
-  /// unopenable, with nothing having told the writer to hold off. An
-  /// advertisement that declares no `suites` at all is refused at the parse
-  /// rather than defaulted: guessing on an owner's behalf is how a sender
-  /// comes to seal something the owner cannot unwrap.
-  ///
   /// No overlap is a refusal, not a fallback to this build's preference: the
   /// owner would get a conveyance it cannot unwrap, and the failure would
   /// surface on their side as an AEAD error naming nothing.
@@ -150,31 +138,17 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
 
     final advertised = await keyRing.currentPublic(nskeyOwner, namespace);
     if (advertised == null) {
-      // Cold start fails, by design — see the exception's own doc. Normally the
-      // pre-pass has already raised this, so reaching it here means a
-      // conveyance was routed directly rather than through a value write.
       throw NamespaceKeyUnavailableException(nskeyOwner, namespace);
     }
 
     final ck = ContentKey.fromBase64(plaintext);
 
-    // The ENTRY this provider seals to, not the advertisement's own `alg`.
-    //
-    // `NskeyAdvertisement.alg`, `.publicKey` and `.nskeyKid` are all the same
-    // single-key answer — the best entry over everything the *build* supports
-    // — and an advertisement carrying two gives them for one of the two. So
-    // asking the document which algorithm it is silently disagrees with
-    // whichever entry `CkManager` routed here, and the disagreement is
-    // invisible: the guard below would refuse a perfectly good destination,
-    // and a seal that got past it would encapsulate to the wrong entry's key
-    // and stamp the wrong kid, producing a record the owner never looks for.
+    // NOTE: seal to the ENTRY under this provider's own KEM, never to
+    // `NskeyAdvertisement.alg`/`.publicKey`/`.nskeyKid` — those answer for a
+    // single entry, so on an advertisement carrying two they encapsulate to the
+    // wrong key and stamp a kid the owner never looks for.
     final entry = advertised.usableFor([keyAlgo]);
     if (entry == null) {
-      // The destination offers nothing under this KEM, so its conveyance
-      // belongs to another provider. CkManager routes by the algorithm the
-      // resolver picked, so reaching here means a conveyance was addressed
-      // directly to the wrong one — sealing anyway would produce a record
-      // nobody can open.
       throw AtEncryptionException('$nskeyOwner:$namespace advertises '
           '${advertised.keys.map((k) => k.alg).toSet().join(', ')}, '
           'and $id can only seal to $keyAlgo');
@@ -188,9 +162,8 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           'construction, so nothing is sealed rather than sealing something '
           'they cannot open');
     }
-    // [_info] is this provider's own binding and must stay distinct from the
-    // pairwise substrate's, or an envelope from one could be opened as the
-    // other's.
+    // NOTE: this binding must stay distinct from the pairwise substrate's, or
+    // an envelope from one could be opened as the other's.
     final String envelope = await pqSealToBase64(
       _kem,
       entry.pubBytes,
@@ -205,21 +178,17 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
         'recipientKind': NskeyRecipientKind.nskey,
         'ckKid': ck.ckKid,
         'nskeyKid': entry.kid,
-        // A conveyance lives at the namespace the nskey resolved to, and no
-        // reader can recover that from the wire string — AtKey.fromString cuts
-        // at the last dot, so `<ckKid>.__ck.app_1.my_apps` parses back with
-        // namespace `my_apps`. The record therefore states it.
+        // NOTE: no reader can recover the namespace the nskey resolved to from
+        // the wire string — AtKey.fromString cuts at the last dot, so
+        // `<ckKid>.__ck.app_1.my_apps` parses back as `my_apps`.
         'ns': namespace,
       },
     );
 
-    // Cache on write too, so the writer can re-open its own conveyance without
-    // a round trip — but do *not* make it current here. Sealing a CK is not the
-    // same event as its conveyance record reaching storage: this runs inside
-    // the put transformer, with the write still to come. Promoting it now would
-    // survive a failed write as a current CK whose conveyance does not exist,
-    // and `CkManager.ensureCurrent`'s already-current guard would then skip
-    // conveying forever. The manager promotes it once the write returns.
+    // NOTE: cached but deliberately not made current — this runs inside the put
+    // transformer, with the write still to come, so promoting a CK whose
+    // conveyance never reaches storage leaves `CkManager.ensureCurrent`
+    // skipping it forever. The manager promotes it once the write returns.
     cache.put(nskeyOwner, namespace, ck);
 
     return envelope;
@@ -230,10 +199,9 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       CryptoContext context, AtKey atKey, String ciphertext) async {
     final nskeyOwner = _nskeyOwnerOf(atKey);
     final additional = atKey.metadata.appMetadata?.additional;
-    // The record states its own namespace, because a conveyance key re-parsed
-    // from the wire mis-splits a multi-segment one: `<ckKid>.__ck.app_1.my_apps`
-    // comes back as namespace `my_apps`, and both the private lookup and the
-    // HPKE binding would then be wrong.
+    // NOTE: the record states its own namespace, because a conveyance key
+    // re-parsed from the wire mis-splits a multi-segment one — both the private
+    // lookup and the HPKE binding would then be wrong.
     final namespace = additional?['ns'] as String? ?? _namespaceOf(atKey);
 
     final nskeyKid = additional?['nskeyKid'];
@@ -245,9 +213,8 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
 
     final private = await keyRing.privateHalf(nskeyOwner, namespace, nskeyKid);
     if (private == null) {
-      // Typed, not a message: the notification service parks on exactly this
-      // and re-drives it when the private is filed, so the retry must not
-      // depend on the wording here.
+      // NOTE: the notification service parks on this type and re-drives it when
+      // the private is filed, so the retry must not depend on the wording.
       throw NskeyPrivateUnavailableException(
           nskeyOwner,
           namespace,
@@ -265,19 +232,15 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
         info: _info(_recordOwnerOf(atKey), namespace),
       );
     } on PqOpenException catch (e) {
-      // Covers a value that is not valid base64 too — the helper folds that in,
-      // because on this wire the base64 string is the envelope.
       throw AtDecryptionException('could not decapsulate the content key: $e');
     } on ArgumentError catch (e) {
-      // at_chops routes malformed envelopes to PqOpenException, but the
-      // provider's own contract must hold whatever the envelope is: a stray
-      // ArgumentError still surfaces as a decryption failure rather than
-      // escaping as a raw error.
+      // NOTE: a stray ArgumentError must still surface as a decryption failure
+      // rather than escaping as a raw error.
       throw AtDecryptionException('malformed at/nskey envelope: $e');
     }
 
-    // Cache, but do not make current: sync is unordered, so this conveyance may
-    // be older than the CK new writes are already using.
+    // NOTE: cached but not made current — sync is unordered, so this conveyance
+    // may be older than the CK new writes are already using.
     final ck = ContentKey(ckBytes);
     cache.put(nskeyOwner, namespace, ck);
     return ck.toBase64();

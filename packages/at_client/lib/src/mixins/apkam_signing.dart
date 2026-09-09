@@ -24,21 +24,15 @@ final Expando<Future<void>> _apskWriteChain = Expando('apskWriteChain');
 
 /// Runs [action] with no other `_apsk` write for [client] interleaved.
 ///
-/// **This is in-process only, and deliberately claims nothing more.** A minter
-/// publishes its new key before it files it, so that no envelope is ever signed
-/// under a key the advertisement does not name. Between those two steps the
-/// keyfile does not yet hold what was advertised, so any other writer composing
-/// from the keyfile sees no signing key, takes the authentication-key fallback,
-/// and overwrites the advertisement with it. Measured 2026-08-17: the approver's
-/// own envelope signer overwrote its own mint 20 ms later, and the enrollment it
-/// was approving then failed because the enrollee could find no algorithm in
-/// common.
+/// A minter publishes its new key before it files it, so that no envelope is
+/// ever signed under a key the advertisement does not name. Between those two
+/// steps the keyfile does not yet hold what was advertised, and any other
+/// writer composing from the keyfile sees no signing key, takes the
+/// authentication-key fallback, and overwrites the advertisement with it.
 ///
-/// Serialising here closes that, because both writers are this process's. It
-/// does **not** close the same window against a writer in another process, and
-/// no caller should read it as doing so — the record has no single owner, and a
-/// rule stated over it fails for that reason. What remains uncovered is a
-/// genuinely concurrent second client of the same atSign, which is accepted.
+/// ⚠️ This is in-process only and claims nothing more: a concurrent second
+/// client of the same atSign in another process can still interleave, which is
+/// accepted.
 ///
 /// A failed predecessor never wedges the chain: its error is the caller's to
 /// see, not the next writer's to inherit.
@@ -81,25 +75,19 @@ mixin ApkamSigning {
   ///
   /// This is the only writer for an `_apsk` that no `enroll:request` can
   /// carry. A client whose keyfile names no enrollment publishes under
-  /// `primary` — the name the atServer answers a bare `pkam:` with — and it
-  /// has no id of its own to send an `enroll:update` for, so the atServer is
-  /// never asked to compose the record and the client writes it directly.
-  ///
-  /// Republishes on a change rather than only when the record is absent. It
-  /// used to read the record and log "have already published", so a key that
-  /// had rotated never reached the atServer and every envelope signed with the
-  /// new one was verified against the old.
+  /// `primary` — the name the atServer answers a bare `pkam:` with — and has
+  /// no id of its own to send an `enroll:update` for, so it writes the record
+  /// directly.
   ///
   /// [value] overrides what is published, for the one caller that must
   /// advertise a key before filing it: [publicSigningKeyValue] is composed from
-  /// what the keyfile holds, and a minter publishes first precisely so that no
-  /// envelope is ever signed under a key the advertisement does not name.
+  /// what the keyfile holds, and a minter publishes first so that no envelope
+  /// is ever signed under a key the advertisement does not name.
   ///
   /// Serialised against every other `_apsk` write this process makes for this
-  /// client — see [serialiseApskWrite] for what that does and does not promise.
-  /// The composition happens **inside** the lock, which is the point: composing
-  /// outside it would read a keyfile a mint had not finished writing and then
-  /// publish the fallback it computed from it.
+  /// client — see [serialiseApskWrite]. The composition happens inside the
+  /// lock, so it cannot read a keyfile a mint has not finished writing and
+  /// publish the fallback computed from it.
   Future publishPublicSigningKey({String? value}) => serialiseApskWrite(
       atClient, () => publishPublicSigningKeyLocked(value: value));
 
@@ -129,9 +117,8 @@ mixin ApkamSigning {
       logger.info('publishPublicSigningKey: what is published is not what this '
           'client holds - republishing');
     }
-    // Writes the value alone. A chain link rides this record's `appMetadata`,
-    // and nothing here carries it over — `PqSigningChain` re-attaches the
-    // record it read when it writes, and this call does not.
+    // NOTE: this writes the value alone — a chain link riding this record's
+    // `appMetadata` is not carried over.
     await atClient.put(
       AtKey.fromString(publicSigningKeyUri),
       value,
@@ -152,38 +139,24 @@ mixin ApkamSigning {
       ));
 
   /// This client's signing keys, strongest algorithm first — one entry per
-  /// algorithm this enrollment holds a key for, which is what a
-  /// multi-signature writer iterates. Never empty.
+  /// algorithm this enrollment holds a key for. Never empty.
   ///
-  /// Sourced from the keyfile through [AtClient.atKeysIo], which is where an
-  /// enrollment's signing material lives. `atChops` is not a source for it:
-  /// what it carries is the APKAM **authentication** keypair, a single pair
-  /// that authenticates connections, and an enrollment's signing keys are
-  /// separate material with their own lifecycle.
+  /// Sourced from the keyfile through [AtClient.atKeysIo] and read on every
+  /// call: a cached copy goes stale the moment an `enroll:update` rotates the
+  /// material, and signing with a key the keyfile has retired produces a
+  /// signature that verifies against nothing. `atChops` is not a source — it
+  /// carries the APKAM **authentication** keypair, which is separate material.
   ///
-  /// Read on every call rather than cached. A cached copy goes stale the
-  /// moment an `enroll:update` rotates the material out from under it, and
-  /// signing with a key the keyfile has retired produces a signature that
-  /// verifies against nothing.
+  /// Falls back to that authentication keypair when the enrollment holds no
+  /// signing material this build can sign with, or when the client has no key
+  /// source at all. [apskEntries] advertises that key on exactly the same
+  /// condition, so what signs and what is advertised cannot drift apart.
   ///
-  /// **Falls back to the APKAM authentication keypair** when the enrollment
-  /// holds no signing material this build can sign with, or when the client
-  /// has no key source at all — a source-less client is a deliberate, tested
-  /// property rather than an oversight. [apskEntries] advertises that key on
-  /// exactly the same condition, so what signs and what is advertised are one
-  /// rule and cannot drift apart. Once the enrollment does hold a signing key
-  /// the authentication key stops signing here and stops being advertised
-  /// there, in the same step.
-  ///
-  /// ⚠️ **That rule holds outside one window.** A mint publishes its new key
-  /// before it files it, so between those two writes the keyfile does not yet
-  /// hold what the advertisement names. On an enrollment already holding a
-  /// signing key this is harmless — the held key is still named — but on one
-  /// holding none, a read here takes the authentication fallback at the moment
-  /// the advertisement stops naming it, and the envelope verifies against
-  /// nothing. Reaching it needs an enrollment that authenticates
-  /// post-quantum and owns no signing key, which is the shape of a keyfile
-  /// written before an enrollment was given a signing key at creation.
+  /// ⚠️ A mint publishes its new key before it files it, so between those two
+  /// writes the keyfile does not yet hold what the advertisement names. On an
+  /// enrollment holding no signing key, a read here then takes the
+  /// authentication fallback at the moment the advertisement stops naming it,
+  /// and the envelope verifies against nothing.
   Future<List<ApkamSigningKeys>> get signingKeys async {
     final held = await heldSigningKeys;
     if (held.isNotEmpty) return held;
@@ -197,15 +170,10 @@ mixin ApkamSigning {
   /// Two jobs, one key, for as long as an enrollment holds no signing material
   /// of its own: it authenticates the connection and it signs what the
   /// enrollment attests to. Once signing keys exist it stops doing the second
-  /// job and drops out of the advertisement entirely ([apskEntries]), on the
-  /// premise that nothing it signed outlives the transition.
-  ///
-  /// ⚠️ **The premise holds because a posture move replaces the enrollment**,
-  /// and this said "held them from birth" as though it were universal until
-  /// 2026-09-08. A credential whose posture wants a stronger authentication
+  /// job and drops out of the advertisement entirely ([apskEntries]) — safe
+  /// because a credential whose posture wants a stronger authentication
   /// algorithm retrofits into a new enrollment rather than reclassifying this
-  /// key, and the old enrollment's record keeps verifying what this key
-  /// signed.
+  /// key, so the old enrollment's record keeps verifying what this key signed.
   ApkamSigningKeys? get authenticationSigningKey {
     final keyPair = atClient.atChops?.atChopsKeys.atPkamKeyPair;
     if (keyPair == null) return null;
@@ -228,9 +196,6 @@ mixin ApkamSigning {
     try {
       keys = await io.read(atSign);
     } on Object catch (e) {
-      // warning, not info: falling back signs with a key the keyfile may not
-      // hold as this enrollment's current one, and a signature produced by an
-      // unexpected key is the hardest kind of failure to attribute later.
       logger.warning('Cannot read $atSign\'s signing keys ($e) — signing with '
           'the APKAM authentication key instead');
       return const [];
@@ -250,23 +215,18 @@ mixin ApkamSigning {
   /// The public half of every signing key this enrollment has taken out of
   /// service, each with the status the keyfile gives it — the non-active
   /// entries of its advertisement, which keep envelopes signed before the key
-  /// was withdrawn from service verifiable.
+  /// was withdrawn verifiable.
   ///
-  /// The status travels because the keyfile's vocabulary is open and so is the
-  /// advertisement's: a token a newer build wrote is what this enrollment's
-  /// owner said about that key, and the composer republishes it rather than
-  /// substituting one this build knows.
+  /// The status token is carried across verbatim, because the keyfile's
+  /// vocabulary and the advertisement's are both open: a token a newer build
+  /// wrote is what this enrollment's owner said about that key.
   ///
-  /// ⚠️ **Not filtered by [canSignEnvelopeWith], unlike [heldSigningKeys].**
-  /// That filter asks what *this* build can sign with, and these entries exist
-  /// for *other* parties to verify with. Dropping one because this build has
-  /// no signing routine for its algorithm would withdraw a key from the
-  /// advertisement on a fact about the publisher, unverifying that key's
-  /// envelopes for every reader that could have handled them.
+  /// ⚠️ Not filtered by [canSignEnvelopeWith], unlike [heldSigningKeys]: that
+  /// filter asks what *this* build can sign with, and these entries exist for
+  /// *other* parties to verify with.
   ///
   /// Empty when the client has no key source, when the read fails, or when
-  /// nothing has been withdrawn from service — which is every enrollment
-  /// until a signing key leaves the in-use set.
+  /// nothing has been withdrawn from service.
   Future<
       List<
           ({
@@ -280,10 +240,6 @@ mixin ApkamSigning {
 
     try {
       final keys = await io.read(atSign);
-      // The one place the keyfile's status vocabulary becomes the
-      // advertisement's. Both are open and they agree on `active`/`retired`;
-      // the token is carried across verbatim rather than collapsed, so a
-      // value a newer client wrote still says what it said.
       return [
         for (final key in keys.withdrawnSigningKeysFor(enrollmentId))
           (
@@ -293,9 +249,6 @@ mixin ApkamSigning {
           ),
       ];
     } on Object catch (e) {
-      // warning, not info: publishing without these entries retroactively
-      // unverifies every envelope the retired keys signed, and a verification
-      // failure read months later names nothing that points back to here.
       logger.warning('Cannot read $atSign\'s withdrawn signing keys ($e) — '
           'advertising without them, so anything they signed will not verify '
           'until a later publish succeeds');
@@ -306,12 +259,11 @@ mixin ApkamSigning {
   /// The public key which verifies signatures made using [signingKeys] — the
   /// strongest one held, since [signingKeys] is ordered and never empty.
   ///
-  /// **One key out of what may be several, which is why nothing in production
-  /// reads this.** An envelope carries a signature per key held and a verifier
-  /// picks the strongest algorithm the envelope and the published `_apsk` have
-  /// in common, so a caller that took this one would be choosing on the
-  /// signer's behalf. What is published is [publicSigningKeyValue], which
-  /// names every key.
+  /// One key out of what may be several: an envelope carries a signature per
+  /// key held, and a verifier picks the strongest algorithm the envelope and
+  /// the published `_apsk` have in common, so a caller taking this one would
+  /// be choosing on the signer's behalf. What is published is
+  /// [publicSigningKeyValue], which names every key.
   Future<String> get publicSigningKey async =>
       (await signingKeys).first.publicKey;
 }

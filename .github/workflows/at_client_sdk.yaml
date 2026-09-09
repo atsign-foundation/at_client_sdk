@@ -384,10 +384,9 @@ jobs:
         run: mv tests/at_end2end_test/config/config14.yaml tests/at_end2end_test/config/config.yaml
 
       # Through the test runner, not `dart run`: a test file executed with
-      # `dart run` reports exit 0 even when its tests fail, so this step went
-      # green on 2026-08-20 with all four enrollments timed out, and the
-      # failure surfaced three minutes later as eight missing-keyfile errors in
-      # the step below. The exit code is the whole point of a setup gate.
+      # `dart run` reports exit 0 even when its tests fail, so a timed-out
+      # enrollment would pass this gate and surface later as a missing keyfile.
+      # The exit code is the whole point of a setup gate.
       - name: Submit and approve enrollment request
         working-directory: tests/at_end2end_test
         run: dart test --concurrency=1 -r expanded test/enrollment_setup.dart
@@ -468,9 +467,7 @@ jobs:
         run: |
           # `supervisorctl status` exits non-zero whenever ANY program is not
           # RUNNING, and pkamLoad is deliberately STOPPED until a later step
-          # starts it. So its exit code can never mean "ready" here - and as
-          # the last command of the step it failed the job outright, sixty
-          # seconds after a container that was in fact healthy.
+          # starts it, so its exit code can never mean "ready" here.
           #
           # Wait on the atDirectory instead. Its supervisord program name ends
           # `_root` whatever bind port the entrypoint shifted it to, so this
@@ -551,9 +548,6 @@ jobs:
   # image this row does not fail — it stops testing anything, because the
   # server simply auto-approves and there is no refusal to observe. So the
   # image is pinned to a release tag, which stays pre-PQ for good.
-  #
-  # Verified in both directions when it was written: green against the pin, red
-  # against a PQ-capable image.
   legacy_server_tests:
     runs-on: ubuntu-latest
     env:
@@ -595,9 +589,7 @@ jobs:
         run: |
           # `supervisorctl status` exits non-zero whenever ANY program is not
           # RUNNING, and pkamLoad is deliberately STOPPED until a later step
-          # starts it. So its exit code can never mean "ready" here - and as
-          # the last command of the step it failed the job outright, sixty
-          # seconds after a container that was in fact healthy.
+          # starts it, so its exit code can never mean "ready" here.
           #
           # Wait on the atDirectory instead. Its supervisord program name ends
           # `_root` whatever bind port the entrypoint shifted it to, so this

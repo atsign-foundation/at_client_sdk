@@ -13,26 +13,9 @@ import 'test_utils/mocks.dart';
 
 /// The re-entrant conveyance read: a value whose content key is NOT cached.
 ///
-/// `SymmetricAesGcmProvider.decrypt` resolves a missing CK by calling
-/// `context.atClient.get(<ckKid>.__ck…)` from inside the value's own decrypt,
-/// and **discards the result** — the key arrives only as a side effect of the
-/// nested read populating the cache. Every other test of this provider seeds
-/// the cache first, so that path has never run under test: with an unstubbed
-/// `MockAtClient`, the nested `get` returns null, `read()` swallows it, and the
-/// resolve reports the CK unavailable.
-///
-/// What it pins is the outer call's contract: after resolving a CK through a
-/// nested read, the outer decrypt must return **the value's** plaintext, not
-/// the content key the nested read produced.
-///
-/// ⚠️ This is a **narrower** claim than the live defect it was written for.
-/// Measured 2026-08-24 against a real atServer, an outer `get` came back
-/// holding the conveyance record's 44-character content key and its
-/// `at/nskey/XWING/AES/GCM` metadata while the atServer held the value record
-/// correctly. That crosses `AtClientImpl.get` and `GetResponseTransformer`,
-/// which no unit fixture drives — `buildRemoteBackedMockClient` stubs
-/// `AtClient.get` outright. So a green here does not clear the read path; it
-/// narrows where the fault can be.
+/// Pins the outer call's contract — after resolving a content key through a
+/// nested read, the outer decrypt answers with the value's plaintext, not with
+/// the content key that nested read produced.
 void main() {
   const owner = '@alice';
   const namespace = 'app_1.my_apps';
@@ -78,7 +61,6 @@ void main() {
       () async {
     const plaintext = 'the treaty text';
 
-    // The writer holds the CK and stamps the value record.
     final writer = client();
     final writerContext = contextFor(MockAtClient());
     final ck =
@@ -96,8 +78,6 @@ void main() {
     final ciphertext =
         await writer.data.encrypt(writerContext, valueKey, plaintext);
 
-    // The reader has never seen the CK, so the outer decrypt must resolve it
-    // through the nested read rather than from cache.
     final reader = client();
     final readerClient = MockAtClient();
     final readerContext = contextFor(readerClient);
@@ -105,10 +85,6 @@ void main() {
         reason: 'the reader must start without the content key, or the nested '
             'read this test exists to exercise never happens');
 
-    // The nested read, modelled the way production behaves: the conveyance
-    // record arrives carrying the appMetadata its writer stamped, and opening
-    // it caches the CK. `_resolveFromConveyance` discards the returned value,
-    // so the cache write is the whole effect.
     var nestedReads = 0;
     Future<AtValue> nested(Invocation inv) async {
       nestedReads++;
@@ -130,7 +106,6 @@ void main() {
         getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer(nested);
     when(() => readerClient.get(any())).thenAnswer(nested);
 
-    // The value record as it reaches the reader: the writer's stamp travels.
     final synced = dataKey('treaty')
       ..metadata = (Metadata()..appMetadata = valueKey.metadata.appMetadata);
     final opened = await reader.data.decrypt(readerContext, synced, ciphertext);

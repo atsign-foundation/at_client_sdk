@@ -1,14 +1,6 @@
 /// Renders the acceptance ledger: every catalogue row, and whether the live
 /// test it cites actually ran and passed **in this set of runs**.
 ///
-/// The problem it solves. `provenIn` asserts that a cited test still exists
-/// under its name — a real guard against silent citation rot, but a weaker
-/// claim than it reads as. It cannot tell a test that passed from one that was
-/// never run, so a row stays green when the pack holding its proof did not
-/// execute at all, and half the catalogue's PROVEN rows cite unit tests rather
-/// than anything live. This joins the citations to the runners' own output and
-/// says which is which.
-///
 /// It reports what it observed rather than a verdict: `NOT-EXERCISED` means
 /// "no report covering that file was supplied", never "broken". A row can only
 /// be shown as proven by a run that actually happened.
@@ -40,9 +32,8 @@ class Citation {
 
   /// Which of the row's THEN clauses this citation claims, by index from 1.
   ///
-  /// Empty means the citation claims the row as a whole, which is how every
-  /// citation read before clause pinning existed — so an empty list is
-  /// "unpinned", never "claims nothing".
+  /// Empty means the citation claims the row as a whole — "unpinned", never
+  /// "claims nothing".
   final List<int> clauses;
 
   String get file => path.split('/').last;
@@ -70,17 +61,17 @@ const _invariantGroup = 'cross-cutting invariants ';
 String invariantKey(String scenario) =>
     'INV: ${scenario.startsWith(_invariantGroup) ? scenario.substring(_invariantGroup.length) : scenario}';
 
+/// Reads the citation stream the acceptance suite writes, one JSON object per
+/// line.
 List<Citation> readCitations(File f) {
   final out = <Citation>[];
   for (final line in f.readAsLinesSync()) {
     if (line.trim().isEmpty) continue;
     final m = jsonDecode(line) as Map<String, dynamic>;
     final scenario = m['scenario'] as String;
-    // A scenario with no use-case id is a CROSS-CUTTING INVARIANT, not a
-    // defect: section 13's rows apply to every flow, so they are deliberately
-    // unnumbered. They are keyed by their own name and reported in their own
-    // table — dropping them would hide 14 of 135 citations, and inventing ids
-    // for them would put a number in the catalogue that nothing else uses.
+    // NOTE: a scenario with no use-case id is a cross-cutting invariant, not a
+    // defect — those rows apply to every flow and are deliberately unnumbered,
+    // so they are keyed by their own name.
     final id =
         _ucInName.firstMatch(scenario)?.group(0) ?? invariantKey(scenario);
     out.add(Citation(
@@ -96,9 +87,8 @@ List<Citation> readCitations(File f) {
 /// Every non-hidden test the runner reported, keyed by nothing — the caller
 /// matches on file and name prefix.
 ///
-/// `hidden` marks the runner's own scaffolding (`(setUpAll)`, the synthetic
-/// "loading …" entry). Counting those as proof would make every suite look
-/// like it proved something.
+/// The runner's own scaffolding is marked `hidden` and left out, so it cannot
+/// count as proof.
 List<RanTest> readReport(File f) {
   final byId = <int, Map<String, dynamic>>{};
   final out = <RanTest>[];
@@ -127,11 +117,8 @@ List<RanTest> readReport(File f) {
 
 /// Finds the catalogue by walking up from the working directory.
 ///
-/// It used to be `'${Directory.current.path}/../../docs/…'`, which works from
-/// `packages/at_client` and throws a stack trace anywhere else — including the
-/// repo root, which is the obvious place to try. A tool that runs from exactly
-/// one directory and fails with a stack trace rather than a sentence is a tool
-/// people stop using.
+/// Null when no directory within eight levels holds it, so the caller can say
+/// so rather than throwing.
 File? findCatalogue() {
   var dir = Directory.current.absolute;
   for (var i = 0; i < 8; i++) {
@@ -159,19 +146,14 @@ Map<String, String> readCatalogue(File f) {
 
 /// Whether [reported] is the test [cited] names.
 ///
-/// ⚠️ **The runner prepends every enclosing `group` name, `provenIn` does
-/// not.** A citation names the test's own name — that is what
-/// `proven_elsewhere.dart` matches against the source — while the reporter
-/// emits `"<group> <name>"`. A `startsWith` comparison therefore misses every
-/// grouped test, which is most of the unit suites: it scored 28 PROVEN where
-/// the truth was higher, and looked entirely plausible because the rows it
-/// missed were ones whose proof genuinely lives elsewhere.
-///
-/// `contains` is the correct generalisation rather than a loosening: a
-/// citation is already a *prefix* of the test name by design, so the only
-/// thing being tolerated here is the group prefix in front of it.
+/// ⚠️ **The runner prepends every enclosing `group` name, a citation does
+/// not**, so the match is `contains` rather than `startsWith`: a citation is
+/// already a prefix of the test's own name, and the only thing tolerated here
+/// is the group prefix in front of it.
 bool namesMatch(String reported, String cited) => reported.contains(cited);
 
+/// Whether [c]'s cited test ran and passed in [ran], as one of `PROVEN`,
+/// `FAILED` or `NOT-EXERCISED`.
 String verdictFor(Citation c, List<RanTest> ran) {
   final inFile = ran.where((r) => r.file == c.file).toList();
   if (inFile.isEmpty) return 'NOT-EXERCISED';
@@ -240,8 +222,6 @@ void main(List<String> args) {
     ..writeln('| Use case | Verdict | Clauses | Where |')
     ..writeln('|---|---|---|---|');
 
-  // The catalogue's own THEN clauses, so a row's parts can be counted rather
-  // than taken on the word of its verdict.
   final clausesByRow = catalogueClauses();
 
   /// Which clause indexes of [id] a PROVEN citation pins.
@@ -254,9 +234,8 @@ void main(List<String> args) {
   final tally = <String, int>{};
   for (final id in catalogue.keys) {
     final cites = byUseCase[id] ?? const <Citation>[];
-    // Counted before the early return, or a row with no live citation would
-    // drop its clauses out of the denominator entirely — the totals read 120
-    // against a catalogue of 129, and the missing 9 were exactly these rows.
+    // NOTE: counted before the early return, or a row with no live citation
+    // drops its clauses out of the denominator entirely.
     final rowClauses = clausesByRow[id]?.length ?? 0;
     if (cites.isEmpty) {
       tally['NO-LIVE-CITATION'] = (tally['NO-LIVE-CITATION'] ?? 0) + 1;
@@ -283,10 +262,8 @@ void main(List<String> args) {
     b.writeln('| $id | $v | ${proven.length}/$rowClauses | $where |');
   }
 
-  // Every row whose clauses are not all pinned by a proven citation. This is
-  // the half of the ledger that touches what a test ASSERTS rather than
-  // whether it ran: UC-A2.5 states six separate things, and citing one live
-  // test for the row said nothing about the other five.
+  // Every row whose clauses are not all pinned by a proven citation: what the
+  // tests ASSERT, rather than whether they ran.
   final gaps = clauseGaps.entries
       .where((e) => e.value.proven.length < e.value.total)
       .toList();
@@ -315,10 +292,8 @@ void main(List<String> args) {
     }
   }
 
-  // The cross-cutting invariants: section 13's rows, which apply to every flow
-  // and so carry no number. Reported separately rather than forced into the
-  // numbered table, because a reader asking "is this row proven" and one asking
-  // "does this invariant still hold" are asking different questions.
+  // The cross-cutting invariants apply to every flow and so carry no number;
+  // they get their own table rather than a row in the numbered one.
   final invariants = byUseCase.keys.where((k) => k.startsWith('INV: ')).toList()
     ..sort();
   if (invariants.isNotEmpty) {

@@ -1,15 +1,12 @@
 /// Guards the burn-down itself.
 ///
-/// The scenarios here were skipped placeholders while D1 was in flight; a
-/// green build said nothing about whether this directory still mirrored the
-/// catalogue. These checks are what did: they fail when a use case loses its
+/// These checks are **not** skipped: they fail when a use case loses its
 /// scenario, when a `skip:` and the blocker declaring it fall out of step in
 /// either direction, or when the README's counts drift from the scenarios they
 /// describe.
 ///
 /// What each guard reads is declared in `manifest.dart` rather than inferred
-/// from prose or from a directory listing — see that file for the two ways the
-/// inferred versions could be fooled without anything going red.
+/// from prose or from a directory listing.
 ///
 /// Catalogue: `docs/projects/pq/acceptance.md`.
 library;
@@ -40,11 +37,9 @@ void main() {
   });
 
   test('every use case the catalogue mentions is one it defines', () {
-    // A use case is defined by its heading. Before that was the rule, the set
-    // was every UC-shaped string anywhere in acceptance.md, so a
-    // cross-reference in one row's prose counted as a catalogue entry — and a
-    // typo in one invented a use case that could never have a scenario and
-    // would have been demanded forever.
+    // NOTE: a use case is defined by its heading. Counting every UC-shaped
+    // string instead would make a cross-reference in one row's prose a
+    // catalogue entry, and a typo in one an entry no scenario could satisfy.
     final defined = catalogueUseCases().map((u) => u.id).toSet();
     expect(catalogueMentions().difference(defined), isEmpty,
         reason: 'acceptance.md refers to a use case it never defines with a '
@@ -53,13 +48,8 @@ void main() {
   });
 
   test('every blocker constant guards at least one scenario', () {
-    // The burn-down reached zero on 2026-08-08 and `blockers.dart` was deleted
-    // rather than kept empty; this guard was replaced by one asserting the
-    // mechanism stayed retired. KE-2 blocked rows again, so the file and this
-    // cross-check came back together — which is the contract the retired guard
-    // stated. A bare `skip:` with nothing declaring it hides a row from the
-    // count with nobody recorded as owing it, and a constant that guards
-    // nothing tells whoever greps it that the project owes no scenarios.
+    // NOTE: a bare `skip:` with nothing declaring it hides a row from the
+    // count with nobody recorded as owing it.
     final blockers = File('${acceptanceDir().path}/blockers.dart');
     expect(blockers.existsSync(), isTrue,
         reason: 'a scenario skipped against a named blocker needs '
@@ -77,19 +67,13 @@ void main() {
   });
 
   test('no use-case heading is invisible to the id pattern', () {
-    // The guard that watches the guard.
-    //
-    // Narrowing `ucIdPattern` does NOT turn this suite red — it turns it
-    // silently green, because the rows it stops admitting disappear from the
+    // NOTE: narrowing `ucIdPattern` does not turn this suite red — it turns it
+    // silently green, because the rows it stops admitting leave the
     // catalogue's view along with the scenarios that cite them, and the row
-    // counts still reconcile because they are counted per FILE rather than per
-    // id. Measured 2026-08-18: reverting the class to `UC-[ABC]` with sixteen
-    // `UC-G1.x` rows and scenarios in place left the whole suite passing.
-    //
-    // That is how the G cluster went a week describing deleted code while
-    // every rail was green. So this reads the headings with a DELIBERATELY
-    // permissive pattern and asserts the real one admits each — a cluster can
-    // only leave the catalogue on purpose, by deleting its rows.
+    // counts still reconcile, being counted per file rather than per id. So
+    // the headings are read with a deliberately permissive pattern and the
+    // real one asserted to admit each: a cluster can only leave the catalogue
+    // on purpose, by deleting its rows.
     final permissive = RegExp(
         r'^#{2,4} +(?:[\d.]+ +)?(UC-[A-Z]+\d+\.\d+[a-z]?) +— ',
         multiLine: true);
@@ -125,9 +109,8 @@ void main() {
     expect(int.parse(total![1]!), rows,
         reason: 'README.md says ${total[1]} rows; there are $rows');
 
-    // `is` as well as `are`: the count reached one, and a guard that forces
-    // "1 rows are skipped" is holding the prose to the regex rather than the
-    // other way round.
+    // `is` as well as `are`: forcing "1 rows are skipped" would hold the prose
+    // to the regex rather than the other way round.
     final skippedStated =
         RegExp(r'\*\*(\d+) of the (\d+)\*\* rows? (?:are|is) skipped')
             .firstMatch(text);
@@ -142,15 +125,10 @@ void main() {
   });
 
   group('every row has live evidence, or a written reason it cannot', () {
-    // The standing rule (gkc, 2026-08-26): a proof by mock is acceptable ONLY
-    // where a live test would be prohibitively costly or impossible. Before
-    // this, a row proven entirely in-process was indistinguishable from one
-    // proven against a real atServer — the status table said PROVEN for both,
-    // and half the catalogue was in the first group without anyone choosing
-    // that.
-    //
-    // The rule needs a rail rather than prose because the doc has already
-    // carried three stale claims about exactly this subject.
+    // The rule: a proof by mock is acceptable only where a live test would be
+    // prohibitively costly or impossible. Without a rail, a row proven
+    // entirely in-process is indistinguishable from one proven against a real
+    // atServer.
 
     test('no row rests on an in-process proof without a declared reason', () {
       final undeclared = (useCasesWithoutLiveProof()
@@ -196,10 +174,8 @@ void main() {
     });
 
     test('a row that has since been proven live loses its entry', () {
-      // The direction nobody checks. An exemption or a debt outlives the state
-      // that justified it, and a stale waiver reads exactly like a considered
-      // one — so the map has to shrink when the tree improves, not just grow
-      // when it does not.
+      // NOTE: a stale waiver reads exactly like a considered one, so the maps
+      // have to shrink when the tree improves, not only grow when it does not.
       final withoutLive = useCasesWithoutLiveProof();
       final stale = {...liveProofExempt.keys, ...liveProofOwed.keys}
           .where((id) => !withoutLive.contains(id))
@@ -228,10 +204,10 @@ void main() {
   });
 
   group('the clause burn-down', () {
-    // What "done" means, in the two columns gkc set (2026-08-26): every THEN
-    // clause proven by something, and as many as feasible proven against a
-    // real atServer. Row-level PROVEN cannot express either — a row reads
-    // proven on one citation however many separate things its THEN states.
+    // "Done" has two columns: every THEN clause proven by something, and as
+    // many as feasible proven against a real atServer. Row-level PROVEN
+    // expresses neither — a row reads proven on one citation however many
+    // separate things its THEN states.
 
     test('the recorded counts are what the tree produces', () {
       var clauses = 0, proven = 0, server = 0;
@@ -242,9 +218,8 @@ void main() {
         server += cov.serverProven.length;
       }
 
-      // Printed on every run, pass or fail: the burn-down is the reason this
-      // guard exists, and a number only visible when something breaks is a
-      // number nobody watches.
+      // Printed on every run, pass or fail: a number only visible when
+      // something breaks is a number nobody watches.
       // ignore: avoid_print
       print('BURN-DOWN  clauses proven: $proven of $clauses   '
           'server-proven: $server of $clauses');
@@ -265,10 +240,9 @@ void main() {
     });
 
     test('every clause called unprovable is real, and still unproven', () {
-      // Objective 1 is "every PROVABLE THEN clause proven". That only means
-      // anything if the exceptions are enumerated somewhere a rail can see, and
-      // if an entry dies the moment it stops being true — a hand-kept list of
-      // exceptions is how a target quietly stops being a target.
+      // The target is every PROVABLE THEN clause proven, which means something
+      // only if the exceptions are enumerated where a rail can see them and an
+      // entry dies the moment it stops being true.
       final byId = {for (final u in catalogueUseCases()) u.id: u};
       final problems = <String>[];
 
@@ -313,17 +287,15 @@ void main() {
       }
       final reachable = clauses - unprovableClauses.length;
 
-      // Printed beside the burn-down rather than folded into it: the existing
-      // line's shape is quoted in the plan, and a figure with two homes is a
-      // figure that drifts. This one says what "done" is.
+      // Printed beside the burn-down rather than folded into it: a figure with
+      // two homes is a figure that drifts. This one says what "done" is.
       // ignore: avoid_print
       print('REACHABLE  provable clauses: $reachable of $clauses   '
           'proven: $proven   still to prove: ${reachable - proven}');
 
-      // The other side of that subtraction, named rather than left to be asked:
-      // "232 of 235" invites "and the other three?", and the answer is a list
-      // this suite already holds. Printed from the same map the denominator is
-      // computed from, so the names and the count cannot drift apart.
+      // The other side of that subtraction, named rather than left to be
+      // asked. Printed from the same map the denominator is computed from, so
+      // the names and the count cannot drift apart.
       // ignore: avoid_print
       print('UNPROVABLE ${unprovableClauses.length}, and why is in '
           'manifest.dart: ${(unprovableClauses.keys.toList()..sort()).join(', ')}');
@@ -334,9 +306,8 @@ void main() {
     });
 
     test('every pin resolves to exactly one clause', () {
-      // provenIn enforces this while a scenario RUNS, which covers the pins
-      // on rows whose scenario executes. This says the same thing about the
-      // sources, so a pin cannot be counted here and rejected there.
+      // provenIn enforces this while a scenario RUNS; this says the same thing
+      // about the sources, so a pin cannot be counted here and rejected there.
       final broken = <String>[];
       citationDetailsByUseCase().forEach((useCase, citations) {
         for (final citation in citations) {

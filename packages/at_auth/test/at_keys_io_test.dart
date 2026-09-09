@@ -233,16 +233,11 @@ void main() {
 
       test('a flush that leaves the document flat copies nothing aside',
           () async {
-        // The control. It must be able to stay green while the assertion above
-        // goes red, so it exercises the same writer over the same fixture and
-        // differs only in whether typed material is added.
+        // NOTE: the control for the arm above — it must differ from it only
+        // in whether typed material is added.
         final dir = await Directory.systemTemp.createTemp('pre_v1_test');
         try {
           final flat = await flatKeyfile(dir);
-          // Flushed unchanged: assurance freezes the legacy block, so there is
-          // no legacy mutation a flat-to-flat write could make. What the arm
-          // needs is a flush through the same writer that does not add typed
-          // material, and this is it.
           final keys = await flat.io.read(atsign);
           await flat.io.flush(atsign.toAtsign(), keys);
 
@@ -471,11 +466,9 @@ void main() {
           final files = tempDir.listSync().whereType<File>().toList();
           expect(
             files.map((file) => file.path).toSet(),
-            // Three, not two. This flush is the moment the document stops
-            // being the flat shape every published build reads, so the writer
-            // keeps a copy of it that the next write will not roll over — see
-            // the `flat-to-typed upgrade is preserved once` group for what
-            // that copy has to contain.
+            // Three, not two: this flush turns the flat document typed, so the
+            // writer also keeps a copy of the flat one that the next write
+            // will not roll over.
             {
               tempPath,
               '$tempPath.bak',

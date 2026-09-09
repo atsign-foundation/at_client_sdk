@@ -37,8 +37,7 @@ class _Signer with ApkamSigning {
   final AtSignLogger logger = AtSignLogger('_Signer');
 }
 
-// AtKeysIo itself is sealed; its abstract written flavour is the mockable
-// face.
+/// AtKeysIo is sealed; its abstract written flavour is the mockable face.
 class MockAtKeysIo extends Mock implements WrittenAtKeysIo {}
 
 class _FakePrivilege implements EnrollmentPrivilegeResolver {
@@ -59,6 +58,7 @@ class _FakePrivilege implements EnrollmentPrivilegeResolver {
   }
 }
 
+/// The one PQ startup a client runs, and the instances its steps share.
 void main() {
   late MockAtClient client;
 
@@ -137,9 +137,8 @@ void main() {
         'completes despite every step failing or skipping, and is '
         'idempotent', () async {
       final bootstrap = build();
-      // With no keysIo, no preference and unstubbed client calls, every
-      // step either skips its precondition or throws internally; each
-      // failure is contained and startupComplete still completes.
+      // With no keysIo, no preference and unstubbed client calls, every step
+      // either skips its precondition or throws internally.
       await bootstrap.startup();
       await bootstrap.startupComplete;
       // A second call must not re-run the steps.
@@ -159,8 +158,8 @@ void main() {
     });
 
     test('stop() between steps halts the startup', () async {
-      // Park the first step: hydration reads the keyfile, and the read's
-      // future is under this test's control.
+      // Parks the first step: hydration reads the keyfile, so the read's
+      // future is this test's hold on the sequence.
       final keysIo = MockAtKeysIo();
       final readGate = Completer<Never>();
       when(() => keysIo.read(any())).thenAnswer((_) => readGate.future);
@@ -176,8 +175,7 @@ void main() {
 
       final startup = bootstrap.startup();
       bootstrap.stop();
-      // The parked step finishes (by failing, which hydration contains);
-      // no step after it may start.
+      // The parked step finishes, by failing, which hydration contains.
       readGate.completeError(Exception('the test releases the parked read'));
       await startup;
       await bootstrap.startupComplete;
@@ -189,12 +187,10 @@ void main() {
 
     test('an abandoned startup says so at WARNING, naming what it skipped',
         () async {
-      // The cost of an abandoned tail is paid by a DIFFERENT principal in a
-      // different process: this atSign goes on sending while no peer can seal
-      // to it, so the only symptom appears at the far end naming the wrong
-      // party. That is the same reason a dropped delivery-loop event logs at
-      // warning, and this line logged at `info` until 2026-08-27 — among 31
-      // other info lines in a 15-second run, measured.
+      // NOTE: the cost of an abandoned tail is paid by a different principal
+      // in another process — this atSign goes on sending while no peer can
+      // seal to it, so the only symptom appears at the far end, naming the
+      // wrong party. That is why the line has to be warning rather than info.
       final logs = RecordedLogs();
       final previousHandler = AtSignLogger.defaultLoggingHandler;
       final previousLevel = AtSignLogger.root_level;
@@ -205,16 +201,14 @@ void main() {
         AtSignLogger.root_level = previousLevel;
       });
 
-      // The default fixture answers null here; the consequence sentence is
-      // conditional on this client actually being one that seeds, so a null
-      // preference would make the test assert the absence of the sentence it
-      // is about.
+      // The consequence sentence is emitted only for a client that seeds, and
+      // the default fixture answers null here.
       when(() => client.getPreferences())
           .thenReturn(AtClientPreference()..seedNamespaceKeys = true);
 
-      // Built AFTER the handler is installed — AtSignLogger binds its handler
-      // at construction, so a bootstrap built earlier would log elsewhere and
-      // this test would assert against an empty recorder.
+      // NOTE: built AFTER the handler is installed — AtSignLogger binds its
+      // handler at construction, so a bootstrap built earlier logs elsewhere
+      // and every assertion below runs against an empty recorder.
       final keysIo = MockAtKeysIo();
       final readGate = Completer<Never>();
       when(() => keysIo.read(any())).thenAnswer((_) => readGate.future);
@@ -230,12 +224,10 @@ void main() {
       readGate.completeError(Exception('the test releases the parked read'));
       await startup;
 
-      // The POSITIVE CONTROL for the recorder, and it has to be independent
-      // of the level under test: the parked read this fixture arranges makes
-      // the hydrate step log at SEVERE, which arrives whatever level the
-      // abandonment uses. Controlling on WARNING instead would go red under
-      // the very mutation this test exists to catch, so an empty recorder and
-      // a wrongly-levelled line would be indistinguishable.
+      // NOTE: positive control, and it has to stay independent of the level
+      // under test — the parked read logs at SEVERE whatever level the
+      // abandonment uses, whereas controlling on WARNING would go red under
+      // the very mutation this test exists to catch.
       expect(logs.records, isNotEmpty,
           reason: 'the recorder is installed and capturing; without this an '
               'empty capture satisfies every absence assertion below while '
@@ -261,16 +253,10 @@ void main() {
     });
 
     test('a signer answers while a startup step is still parked', () async {
-      // ⛔ **The regression guard for the deadlock this replaced.** Everything
-      // that signs used to wait on a barrier the startup settled at its mint
-      // step — and the two sweep steps BEFORE that one answer an inbound
-      // request by sealing and signing a reply, so the startup waited on a
-      // step that could not begin until it returned. `at_activate approve` did
-      // not exit within its two-minute bound in eight separate runs.
-      //
-      // The sweep is parked here, so the startup is genuinely mid-flight and
-      // has not reached the mint. A signer that consulted the startup in any
-      // way would not return.
+      // NOTE: the sweep is parked, so the startup is genuinely mid-flight and
+      // has not reached the mint. Signing must not consult the startup in any
+      // way: the startup's own steps sign, so a signer that waits on it
+      // deadlocks both.
       when(() => client.atKeysIo).thenReturn(InMemoryAtKeysIo());
       when(() => client.atChops).thenReturn(AtChopsImpl(
           AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
@@ -293,9 +279,6 @@ void main() {
     });
 
     test('a gated-off mint still completes the startup', () async {
-      // The gate's own construction, kept alive here: it is the only
-      // `mintInUseSigningKeys: false` in the tree, and a startup that hung on
-      // a step it had been told to skip would be the worst kind of silence.
       final bootstrap =
           build(gates: const PqStartupGates(mintInUseSigningKeys: false));
 
@@ -349,7 +332,7 @@ void main() {
     const enrollmentId = 'enroll-1';
 
     /// A keyfile holding APKAM material for [id], so the enrollment slot
-    /// exists — which is the precondition the reconciliation requires.
+    /// exists — the precondition the reconciliation requires.
     Future<InMemoryAtKeysIo> keyfileHolding(String id) async {
       final io = InMemoryAtKeysIo();
       final keys = AtKeys(atsign: atSign.toAtsign())
@@ -469,13 +452,9 @@ void main() {
   });
 
   test('the step order is the documented one', () {
-    // ⚠️ **This pinned a hand-written copy until 2026-08-19, and the copy had
-    // drifted.** `stepNamesInOrder` was a `static const` transcription of the
-    // sequence written out beside it, so this test compared one transcription
-    // to another and never read the list `startup()` iterates. It was missing
-    // `startEnvelopeListener` and stayed green through that omission. The
-    // getter is now derived from the real list, so a step added without a row
-    // here goes red — which is the whole point of an ordering pin.
+    // NOTE: `stepNamesInOrder` must stay derived from the list `startup()`
+    // iterates. A transcription beside it compares one copy to another and
+    // stays green while a step goes missing.
     expect(build().stepNamesInOrder, const [
       'hydrateHeldSecrets',
       'collectConveyedKeys',

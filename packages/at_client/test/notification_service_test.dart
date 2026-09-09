@@ -79,7 +79,7 @@ class FakeNotifyFetchVerbBuilder extends Fake
     implements NotifyFetchVerbBuilder {}
 
 /// Keeps the [AtKey] it was handed, so a test can assert which namespace the
-/// encryption was scoped to rather than only that the send succeeded.
+/// encryption was scoped to.
 class RecordingProvider extends CryptoProvider {
   @override
   final String id = 'recording-provider';
@@ -641,9 +641,9 @@ void main() {
   });
 
   /// `send()`'s name is an id and a namespace joined by a dot, and the split is
-  /// at the FIRST dot. `AtKey.fromString` cuts at the last one, so leaving it to
-  /// parse the name scopes the encryption to the wrong namespace — or, for a
-  /// two-segment name, to no namespace at all, which sends the write to legacy.
+  /// at the FIRST dot. Splitting at the last one scopes the encryption to a
+  /// namespace the caller never named — or, for a two-segment name, to no
+  /// namespace at all, which sends the write to legacy.
   group('send() splits its name into an id and a namespace', () {
     late RecordingProvider recorder;
     late MockRemoteSecondary remoteSecondary;
@@ -673,9 +673,6 @@ void main() {
       await (await service())
           .send(to: '@bob'.toAtsign(), idAndNamespace: 'a.b.c', body: 'hello');
 
-      // The mechanism, not the outcome: this is the AtKey the encryption was
-      // actually handed, so it says which namespace scoped the key. Asserting
-      // only that the send succeeded would pass with the old last-dot split.
       expect(recorder.seen!.key, 'a');
       expect(recorder.seen!.namespace, 'b.c',
           reason: 'the last-dot split would say "c" here, and would encrypt '
@@ -685,9 +682,8 @@ void main() {
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
               .single as String;
-      // Raw literal: the wire name is frozen. Re-splitting the AtKey must not
-      // move it, because the recipient derives the ciphertext's binding from
-      // this string and would compute different bytes.
+      // NOTE: the wire name is frozen — the recipient derives the ciphertext's
+      // binding from this string, so moving it computes different bytes.
       expect(command, contains(':@bob:a.b.c@alice'));
     });
 
@@ -700,10 +696,8 @@ void main() {
               .captured
               .single as String;
 
-      // A raw literal, with only the generated id substituted out. This is a
-      // wire shape, so it is frozen: an intended change has to edit this line,
-      // and that edit is the review. A `contains` check would not have caught
-      // the swap to NotifyVerbBuilder adding `:notifier:SYSTEM`.
+      // NOTE: a frozen wire shape, with only the generated id substituted out
+      // — an intended change edits this line, and that edit is the review.
       expect(
           command.replaceFirst(id, '<id>'),
           'notify:id:<id>:notifier:SYSTEM:ttln:900000:isEncrypted:true'
@@ -1649,7 +1643,6 @@ void main() {
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
 
-      // The first-call branch seeds the watermark and returns null.
       expect(await service.getLastNotificationTime(), isNull);
 
       final captured = verify(() => mockAtClientImpl.put(any(), captureAny(),
@@ -1676,9 +1669,6 @@ void main() {
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenThrow(AtKeyException('keystore unavailable'));
 
-      // Monitor.stayConnected calls this partway through connecting and treats
-      // anything thrown as a failed connection, retrying with backoff for as
-      // long as the cause persists.
       await expectLater(service.getLastNotificationTime(), completion(isNull),
           reason: 'seeding the watermark is an optimisation — failing to seed '
               'it costs one replayed window, where letting the failure out '
@@ -1688,15 +1678,11 @@ void main() {
     });
 
     test('a record written by an older build still reads back', () async {
-      // Older builds stored all twelve AtNotification fields. The reader takes
-      // one key out of the JSON, so both shapes open without a compat branch —
-      // which is why dropping the fields needs no migration.
       final legacyShape = AtNotification(
           Uuid().v4(), 'k', '@bob', '@alice', 1234567890123, 'update', true,
           value: 'a payload an older build persisted', metadata: Metadata());
-      // The canonical record has to EXIST for the migration to read it — with
-      // `exists` false it takes the first-call seed branch and this would be a
-      // test of the seed, not of the reader.
+      // NOTE: with `exists` false this takes the first-call seed branch, and
+      // tests the seed rather than the reader.
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
           .thenAnswer((_) async => true);
       when(() => mockAtClientImpl.put(any(), any(),

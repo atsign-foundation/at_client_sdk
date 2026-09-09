@@ -60,8 +60,6 @@ void main() {
       const atSign = '@threading_1';
       const enrollmentId = 'pq-threading-1';
       final client = await pqClient(atSign, enrollmentId);
-      // Read back rather than assumed: if the resolution had not happened this
-      // test would pin the preference default and prove nothing.
       expect(client.signingAlgoType, SigningAlgoType.mldsa65,
           reason: 'the rig must supply a resolved ML-DSA client, or the '
               'assertions below compare rsa2048 with rsa2048');
@@ -76,13 +74,10 @@ void main() {
     });
 
     test('is the only way this class opens a connection', () {
-      // `stream()` opens a connection of its own — separate from the client's,
-      // because it hands the socket raw bytes and closes it — and used to
-      // build it by hand, carrying neither the enrollment id nor the resolved
-      // algorithm. It cannot be driven from a unit test (it is deprecated,
-      // needs a file on disk and a real socket), so what is pinned instead is
-      // that no site in the class builds one by hand any more: a fourth site
-      // added the old way fails here rather than at an ML-DSA atSign's first
+      // NOTE: `stream()` opens a connection of its own and cannot be driven
+      // from a unit test — it needs a file on disk and a real socket — so what
+      // is pinned instead is that no site in the class builds one by hand. A
+      // hand-rolled site fails here rather than at an ML-DSA atSign's first
       // file transfer.
       final source =
           File('lib/src/client/at_client_impl.dart').readAsStringSync();
@@ -100,16 +95,13 @@ void main() {
   });
 
   group('Monitor', () {
-    /// Monitor no longer holds a signing algorithm - it holds an
-    /// `AtLookupMuxable`, and the algorithm travels inside the authenticator
-    /// that `NotificationServiceImpl` builds for it. The guarantee is the same
-    /// and it still has to be checked: a monitor connection stamped with the
-    /// preference's rsa2048 default fails every re-authentication for an
-    /// ML-DSA enrollment.
+    /// Monitor holds an `AtLookupMuxable` rather than a signing algorithm, and
+    /// the algorithm travels inside the authenticator `NotificationServiceImpl`
+    /// builds for it: a monitor connection stamped with the preference's
+    /// rsa2048 default fails every re-authentication for an ML-DSA enrollment.
     ///
-    /// Asserted against the source, as the `buildRemoteSecondary` group above
-    /// is, because the algorithm is now captured in a closure and there is
-    /// nothing on the built object to read it back from.
+    /// Asserted against the source because the algorithm is captured in a
+    /// closure, with nothing on the built object to read it back from.
     test('the resolved algorithm reaches the monitor connection', () {
       final source = File('lib/src/service/notification_service_impl.dart')
           .readAsStringSync();

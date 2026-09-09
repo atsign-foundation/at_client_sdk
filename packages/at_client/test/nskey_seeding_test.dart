@@ -15,15 +15,11 @@ import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
+/// A stand-in [Secret], registered as mocktail's fallback value so `any()`
+/// can match one.
 class FakeSecret extends Fake implements Secret {}
 
 /// Which namespaces a client seeds at start.
-///
-/// This decides how much of the fleet ends up with keys before the PQ flag
-/// flips anywhere, so the two populations that matter are the ones with the
-/// least to go on: a legacy client, which can name no enrollment and so has
-/// no record it can read its grants from, and a wildcard enrollment, whose
-/// authorisation cannot be enumerated.
 void main() {
   const atSign = '@alice';
 
@@ -85,9 +81,6 @@ void main() {
 
   test('nothing published is a cold start, and the policy is not asked',
       () async {
-    // There is no generation to have an opinion about, and what a namespace
-    // with none needs is a mint rather than a replacement. Asking anyway would
-    // hand an application a context describing a key that does not exist.
     final w = withPublished(null, answer: true);
 
     expect(
@@ -120,10 +113,6 @@ void main() {
   });
 
   test('a yes with no substrate to convey over rotates nothing', () async {
-    // Replacing a namespace key conveys the successor to every authorised
-    // enrollment. A client with nowhere to convey would publish a generation
-    // only it can open, which is worse than not replacing one — so the answer
-    // is honoured only where it can be carried out.
     final w = withPublished(
         NskeyAdvertisement.single(
           publicKey: Uint8List.fromList(List<int>.filled(1216, 7)),
@@ -142,11 +131,6 @@ void main() {
 
   test('a policy that throws rotates nothing, and does not fail the caller',
       () async {
-    // What a caller is doing when the policy is consulted is reaching this
-    // atSign or writing to it, and neither is broken by a rotation that did
-    // not happen: the published generation stays published and the question is
-    // put again at the next start. Letting the exception out would turn an
-    // application's bug in its own closure into a failed write.
     final w = withPublished(
         NskeyAdvertisement.single(
           publicKey: Uint8List.fromList(List<int>.filled(1216, 7)),
@@ -191,14 +175,6 @@ void main() {
 
   test('seeding follows the posture, and the shipped default does not seed',
       () async {
-    // Minting publishes a permanent, discoverable record on the atSign, so it
-    // is off by default. ⚠️ **This assertion has now been inverted twice.** It
-    // read "off unless the preference asks", then briefly "the shipped default
-    // now seeds" when the default moved to pqReady on 2026-08-26, and is off
-    // again since the ladder moved back a stage on 2026-09-08: 3.x defaults to
-    // legacy, and seeding turns on at 4.x with pqReady. What is stable through
-    // all three is the sentence the test is named for — seeding follows the
-    // posture — which is why the arms below matter more than this line.
     expect(AtClientPreference().seedNamespaceKeys, isFalse,
         reason: 'the shipped default is legacy, which publishes no '
             'discoverable record at all');
@@ -207,8 +183,6 @@ void main() {
         reason: 'and pqReady is where it turns on: a client is READY when it '
             'holds the keys a peer needs before anyone writes post-quantum '
             'to it');
-    // And the axis is still an axis: a client that names the legacy era
-    // publishes nothing, which is what makes a compatibility test possible.
     expect(AtClientPreference(posture: PqPosture.legacy).seedNamespaceKeys,
         isFalse,
         reason: 'a client asked to behave as though it were built before any '
@@ -243,12 +217,6 @@ void main() {
   });
 
   group('the rotation question follows the route that asked to seed', () {
-    // `AtClient.ensureReachable` reads what is published, finds nothing, and
-    // then `NskeySeeding.seedNamespace` reads again — two reads of the same
-    // record with the seed's decision between them. A sibling enrollment
-    // publishing in that window routes the second read onto the branch that
-    // puts the rotation question, from a route that never offers it.
-
     /// The generation a sibling publishes mid-route. Dated far enough back
     /// that any policy with an opinion about age would say replace it, so a
     /// zero ask count is the question not being put rather than a policy
@@ -281,9 +249,7 @@ void main() {
 
     /// `AtClient.ensureReachable`'s branches, in its order: the namespace
     /// check that costs nothing, its own read of what is published, and then
-    /// the seed with the argument that route passes. An `AtClientImpl` cannot
-    /// be driven from here — it builds its own key ring and nothing can
-    /// replace it — so this walks the same sequence over a ring that can be.
+    /// the seed with the argument that route passes.
     Future<void> reachabilityRoute(NskeySeeding seeding, String ns) async {
       if (!NskeySeeding.isSeedable(ns)) return;
       if (await seeding.ring.publishedAdvertisement(atSign, ns) != null) return;
@@ -291,11 +257,6 @@ void main() {
     }
 
     test('a sibling publishing mid-route does not become a rotation', () async {
-      // ⚠️ A discriminator, not a restatement of the parameter: the ring below
-      // really does take `seedNamespace` into its published branch, which is
-      // the only branch that puts the question. Before the parameter existed
-      // this recorded ONE ask, and the mutation that records one again is to
-      // have the route pass `askRotationPolicy` defaulted.
       final w = wired();
 
       await reachabilityRoute(w.seeding, 'app_1.my_apps');
@@ -314,10 +275,6 @@ void main() {
 
     test('the startup route still puts it, on the parameter\'s default',
         () async {
-      // The control, and the arm most easily left out: `seedNamespace` called
-      // exactly as `seed()` calls it, naming no argument at all. It stays
-      // green under the mutation above, and reddens if the default is turned
-      // the wrong way or the lever disabled outright.
       final w = wired();
       expect(
           await w.seeding.ring.publishedAdvertisement(atSign, 'app_1.my_apps'),
@@ -337,9 +294,6 @@ void main() {
 
     test('seedNamespace refuses a namespace that can never hold a key',
         () async {
-      // Every seeding route passes through here, so this is where a caller
-      // that arrived by some other road is stopped. `__manage` is a grant over
-      // other namespaces, not a namespace data lives in.
       final w = wired();
 
       await expectLater(w.seeding.seedNamespace(atSign, '__manage'),
@@ -390,8 +344,6 @@ void main() {
           enrollmentNamespaces: {ns: 'rw'});
       final directory = FakeEnrollmentDirectory();
       if (revokedAt != null) {
-        // The shape a revocation really leaves: an enrollment that held the
-        // namespace, revoked at a moment the atServer stamped.
         directory.authorize(ns, 'enroll-b');
         directory.revoke('enroll-b', at: revokedAt);
       }
@@ -429,11 +381,6 @@ void main() {
 
     test('a revocation later than the generation replaces it, unasked',
         () async {
-      // The backstop: `revokeEnrollmentAndRotate` revokes and then rotates, so
-      // this exists for the rotation that did not complete — a lost lock, a
-      // process that died. Nothing else would ever notice, and until it
-      // happens the revoked enrollment opens everything sealed to the
-      // generation it still holds.
       final w = revocable(
           stamp: DateTime.utc(2026, 2, 1), revokedAt: DateTime.utc(2026, 3, 1));
 
@@ -450,9 +397,6 @@ void main() {
 
     test('a revocation the published generation already answers does not',
         () async {
-      // The control for the arm above, differing in the ORDER of the two
-      // moments and nothing else: this generation was minted after the
-      // revocation, so it is already the answer to it.
       final w = revocable(
           stamp: DateTime.utc(2026, 4, 1), revokedAt: DateTime.utc(2026, 3, 1));
 
@@ -474,8 +418,6 @@ void main() {
     });
 
     test('an unreadable namespace answer rotates nothing', () async {
-      // Establishing no cause is not the same as establishing there is none:
-      // a client that cannot read the answer has nothing to act on.
       final w = revocable(unreadable: true, stamp: DateTime.utc(2026, 2, 1));
 
       expect(await w.seeding.rotateIfRevoked(atSign, ns), isFalse);
@@ -483,8 +425,6 @@ void main() {
     });
 
     test('a record whose stamp cannot be read rotates anyway', () async {
-      // The safe direction of the two: a revocation moment WAS returned, and
-      // the record cannot say it came first.
       final w = revocable(stamp: null, revokedAt: DateTime.utc(2026, 3, 1));
 
       expect(await w.seeding.rotateIfRevoked(atSign, ns), isTrue);
@@ -506,10 +446,6 @@ void main() {
       test(
           'a client running as the atSign\'s own credential (${credential ?? 'no id'}) never asks',
           () async {
-        // Both spellings of that credential, because both reach here: the
-        // namespace list a client with one gets is its preference's namespace,
-        // not a roster it read. There is no enrollment record for the atServer
-        // to answer about, and the verb is APKAM-gated.
         final w = revocable(
             enrollmentId: credential,
             stamp: DateTime.utc(2026, 2, 1),
@@ -585,11 +521,6 @@ void main() {
     });
 
     test('and nothing at all when the add added nothing', () async {
-      // ⚠️ NOT a control for the arm above — measured: a mutation removing
-      // the "skip what was already there" filter reddens BOTH, because both
-      // turn on that filter. This is the ZERO case of the same property: an
-      // add with nothing to add must send nothing, where the arm above says
-      // an add with one thing to add sends exactly that one.
       final current = await advertisement([SecretSharingAlgos.xWing]);
       final base =
           seeding(enrollmentId: 'enroll-a', preferenceNamespace: 'my_apps');
@@ -628,12 +559,6 @@ class _RingAdding extends PublishedNskeyKeyRing {
 }
 
 /// Records which generation ids a conveyance was attempted for.
-///
-/// `_convey` reads the seed for a kid before anything else, so the kids that
-/// arrive here are exactly the ones it set out to send — which is what "only
-/// the newly minted private is conveyed" is a claim about. The COUNT is the
-/// point: a test that merely checked the new kid was among them would pass
-/// just as well if every kid in the generation were re-sent.
 class _CountingFiling extends NskeyPrivateFiling {
   _CountingFiling({required super.keysIo, required super.atSign});
 
@@ -654,8 +579,6 @@ class _RingPublishingLate extends PublishedNskeyKeyRing {
 
   final NskeyAdvertisement _published;
 
-  /// How many reads have been served, so a test can tell "the second read
-  /// landed on the published branch" from "there was no second read".
   int reads = 0;
 
   @override
@@ -663,8 +586,6 @@ class _RingPublishingLate extends PublishedNskeyKeyRing {
       publishedRecord(String owner, String namespace) async =>
           reads++ == 0 ? null : (advertisement: _published, updatedAt: null);
 
-  /// Nothing to add, so `_addMissing` returns immediately and the only thing
-  /// these tests can observe is whether the rotation policy was asked.
   @override
   Future<NskeyAdvertisement?> add(String namespace) async => null;
 }
@@ -694,11 +615,8 @@ class _RingRotating extends PublishedNskeyKeyRing {
   final ({NskeyAdvertisement advertisement, DateTime? updatedAt})? _record;
   final NskeyAdvertisement _successor;
 
-  /// The namespaces a rotation was actually driven for.
   final List<String> rotations = [];
 
-  /// How many times the published record was read, so "it did not even look"
-  /// is distinguishable from "it looked and decided against".
   int reads = 0;
 
   @override

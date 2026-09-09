@@ -8,9 +8,7 @@
 /// to — so a mis-postured client there does not fail, it arms a failure for
 /// somewhere else later.
 ///
-/// Pinning a posture that writes nothing durable at every call site is a
-/// convention, and a convention is what this file exists to replace. Pure local inspection; it
-/// talks to no atServer.
+/// Pure local inspection; it talks to no atServer.
 library;
 
 import 'dart:io';
@@ -23,13 +21,9 @@ void main() {
   const protectedAtSign = '@ce2e1';
   const throwawayAtSign = '@alice🛠';
 
-  /// The guard reads a built preference, so each case builds the real thing
-  /// rather than a stub — a stub would prove the matcher, not the rule.
   void check(String atSign, AtClientPreference preference) =>
       TestPreferences.refuseDurableWritesToLongLivedAtSigns(atSign, preference);
 
-  // The negative control comes first on purpose: without it, a guard that
-  // threw unconditionally would pass every other test in this file.
   test('the legacy posture is allowed there', () {
     expect(
         () => check(
@@ -51,14 +45,6 @@ void main() {
   });
 
   test('the shipped default no longer reaches that case, and is allowed', () {
-    // ⚠️ **This asserted the OPPOSITE until 2026-09-08**, when a bare
-    // preference took `pqReady` and an unwitting new test naming nothing would
-    // have retrofitted these atSigns. The default moved back to `legacy`, so
-    // the hazard the guard was built for is no longer the DEFAULT path — but
-    // the guard stays, because a test that names a post-quantum posture
-    // deliberately is still one keystroke from permanent damage. Asserted
-    // rather than deleted: "the default is safe here" is a property worth
-    // going red if the ladder moves again.
     expect(() => check(protectedAtSign, AtClientPreference()), returnsNormally,
         reason: 'the shipped default drives no retrofit, seeds nothing and '
             'runs no post-quantum startup, so it writes nothing to these '
@@ -66,10 +52,8 @@ void main() {
   });
 
   test('a throwaway atSign is not restricted', () {
-    // ⚠️ Named `pqReady`, not bare. The shipped default is `legacy`, which the
-    // guard allows on ANY atSign — so a bare preference here would pass
-    // whether or not the atSign was the reason, and the row would be green for
-    // a guard that refused nothing at all.
+    // NOTE: the posture has to be named — the default `legacy` is allowed on
+    // any atSign, so a bare preference would pass whatever the guard did.
     expect(
         () => check(
             throwawayAtSign, AtClientPreference(posture: PqPosture.pqReady)),
@@ -80,9 +64,6 @@ void main() {
   });
 
   group('it checks the axes, not the posture', () {
-    // The point of the whole guard. Every axis below is settable BESIDE a
-    // posture, so `posture == PqPosture.legacy` is a weaker test than it looks
-    // and would pass each of these.
     test('a legacy posture with a stronger authentication key still refuses',
         () {
       expect(
@@ -91,12 +72,9 @@ void main() {
               AtClientPreference(
                   posture: PqPosture.legacy,
                   authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
-                  // Non-empty, because an enrollment holding no data signing
-                  // key signs with its authentication key and the constructor
-                  // refuses a non-rsa2048 one there. Without it this row throws
-                  // an ArgumentError at construction while the assertion below
-                  // names a StateError — a red for the wrong reason, which
-                  // proves nothing about the guard.
+                  // NOTE: must be non-empty, or the constructor rejects the
+                  // non-rsa2048 authentication key and this throws at
+                  // construction instead of reaching the guard.
                   dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})),
           throwsA(isA<StateError>()
               .having((e) => e.message, 'message', contains('RETROFIT'))),
@@ -119,9 +97,8 @@ void main() {
     });
 
     test('seeding turned on after construction still refuses', () {
-      // seedNamespaceKeys is the one axis that stays assignable, so a test
-      // could flip it on a preference the guard had already accepted. The
-      // guard runs at the point of use, which is why that is caught.
+      // NOTE: seedNamespaceKeys stays assignable after construction; the guard
+      // catches it because it runs at the point of use.
       final preference = AtClientPreference(posture: PqPosture.legacy)
         ..seedNamespaceKeys = true;
       expect(
@@ -134,9 +111,6 @@ void main() {
   });
 
   test('the helper itself refuses, not just the check in isolation', () {
-    // Every test above calls the guard directly, which proves the rule and
-    // says nothing about whether anything invokes it. This one goes through
-    // the door the suite actually uses.
     expect(
         () => TestPreferences.getInstance()
             .getPreference(protectedAtSign, posture: PqPosture.pqReady),
@@ -148,13 +122,9 @@ void main() {
   });
 
   test('no test reaches a live client around the guarded doors', () {
-    // The guard can only refuse what passes through it. Three doors reach a
-    // live client in this pack — TestPreferences.getPreference, the
-    // initialiser, and the isolate-local builder in notify_with_isolate_test —
-    // and every one of them calls the guard. A file that BUILT its own
-    // preference and called setCurrentAtSign itself would go round all three,
-    // and nothing else would notice. So: a file may construct an
-    // AtClientPreference only if it also invokes the guard.
+    // The rule: a file may construct an AtClientPreference only if it also
+    // invokes the guard, since the guard can only refuse what passes through
+    // it.
     final offenders = <String>[];
     for (final entity in Directory('test').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -173,19 +143,9 @@ void main() {
   });
 
   test('every atSign the CI configs name is covered by the guard', () {
-    // The set cannot be allowed to drift from the configs it protects: adding
-    // a fifth atSign to a config without adding it here would leave that one
-    // unguarded, and nothing else would notice.
-    // ⚠️ **Whichever of the two survive, not both.** CI renames one into
-    // place before it runs — `mv config/config23.yaml config/config.yaml` in
-    // the end2end_tests job, config14 in end2end_test_14 — so demanding both
-    // fails in exactly the environment this guard exists to protect. It did,
-    // the first time this ran on CI.
-    //
-    // Either is enough: the two name the same four atSigns in a different
-    // order, so a set covering one covers the other. Requiring at least one
-    // is what keeps a rename of BOTH from leaving this passing over an empty
-    // set — which the isNotEmpty below then also catches.
+    // NOTE: whichever of the two survives, not both — CI renames one to
+    // config.yaml before it runs. Either is enough, as they name the same
+    // atSigns in a different order.
     final configs = ['config14.yaml', 'config23.yaml']
         .map((name) => File('config/$name'))
         .where((file) => file.existsSync())

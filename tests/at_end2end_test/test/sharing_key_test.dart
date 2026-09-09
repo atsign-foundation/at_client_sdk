@@ -29,12 +29,8 @@ void main() async {
             posture: PqPosture.legacy);
 
     // Defensive: ensure auto-notify is on for the publisher atServer
-    // before any TTR-using test runs. The cicd atSigns are long-lived, so
-    // a `false` written by an older build persists across runs.
-    // ⚠️ This named bypasscache_test as the writer until 2026-09-08. That
-    // test no longer turns auto-notify off at all — it makes a cached copy
-    // stale by deleting it — so nothing in this pack writes `false` today.
-    // The guard stays for what earlier runs may already have left behind.
+    // before any TTR-using test runs. The cicd atSigns are long-lived, so a
+    // persisted `autoNotify=false` outlives the run that wrote it.
     await TestSuiteInitializer.getInstance()
         .switchToAtSign(currentAtSign, namespace, posture: PqPosture.legacy);
     await acm.atClient

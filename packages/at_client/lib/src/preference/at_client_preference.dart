@@ -20,135 +20,24 @@ class AtClientPreference {
   /// Never encrypt *new* data with the legacy (pre-post-quantum) provider:
   /// take a post-quantum path, or refuse the write.
   ///
-  /// ⚠️ **Set by [posture] alone.** There is no constructor argument and no
-  /// setter: unlike the algorithm lists, this axis has no per-preference
-  /// override, because a safety flag whose escape hatch defeats its purpose is
-  /// not the same kind of thing as deployment policy. An app that wants it on
-  /// ahead of the release schedule adopts [PqPosture.pqActive], or builds a
-  /// posture that says so — and such a posture must write post-quantum by
-  /// default, or it would refuse its own writes.
-  ///
-  /// What it governs is exactly one thing: **legacy encryption of new data.**
-  /// - Legacy **reads** are always available. History has to keep opening, and
-  ///   upgrading only ever adds read capability.
-  /// - `shouldEncrypt = false` — the app-accessible no-crypto path — is
-  ///   unaffected. This is not a "must be encrypted" switch.
-  /// - Public keys are unaffected; they are signed, not encrypted.
-  ///
-  /// A destination that only legacy can reach is therefore **refused**, never
-  /// silently written legacy — which is also why
-  /// [allowLegacyCryptoFallback] does not survive this being set. The two
-  /// switches say opposite things ("reach this recipient however you can" and
-  /// "never write legacy") and this one wins.
-  ///
-  /// **Final at construction**, and the value cannot be changed for a live
-  /// client: a flag that governs what a client is allowed to write must not be
-  /// flippable mid-run, or "was that record written under the guarantee?" has
-  /// no answer.
-  ///
-  /// Expect refusals in 3.x. The SDK still writes several of its own records
-  /// under the legacy provider — a shared key for a legacy recipient most
-  /// obviously — and those are retired by the projects that follow, not by
-  /// this flag.
+  /// ⚠️ Set by [posture] alone — no constructor argument and no setter — and
+  /// it overrides [allowLegacyCryptoFallback], which says the opposite.
   final bool disallowLegacyEncryption;
 
   /// How far into the post-quantum rollout this client runs — every rollout
-  /// axis set as a group. Defaults to [PqPosture.pqReady]; pass
-  /// [PqPosture.legacy] to behave as a client built before any of this, or
-  /// [PqPosture.pqActive] to run the last stage today, or a posture of your
-  /// own for a combination none of them expresses.
+  /// axis set as a group, and a floor an explicit axis may raise but not lower.
   ///
-  /// ⚠️ **The default moved from [PqPosture.legacy] in this release**, and it
-  /// moves four axes at once: this client authenticates with ML-DSA-65, keeps
-  /// an active classical signing key of its own, seeds namespace keys for the
-  /// namespaces it is authorised for, and enrols advertising a key package.
-  /// What it does **not** change is what it writes — `writesPqByDefault` and
-  /// `disallowLegacyEncryption` are false at this stage, so new data is still
-  /// encrypted with the legacy provider and every deployed reader can read it.
-  /// That is the point of the stage: ready before active.
-  ///
-  /// ⚠️ **An existing enrollment holding a weaker authentication key is
-  /// RETROFITTED at the next start**, and there is no opt-out — see
-  /// `AtClientImpl.retrofitIsDue`. An app that must not move names
-  /// [PqPosture.legacy] explicitly.
-  ///
-  /// Individual axes still win, **within two coherence rules the constructor
-  /// enforces**: an explicit [authenticationKeyAlgorithm] or
-  /// [dataSigningKeyAlgorithms] argument, an assigned [crypto], or a per-call
-  /// algorithm each override the posture's value for that one axis.
-  /// [disallowLegacyEncryption] and [PqPosture.configuresPqProviders] are the deliberate
-  /// exceptions and are settable only through the posture.
-  ///
-  /// The two rules, both refused at construction:
-  ///
-  /// - **An empty [dataSigningKeyAlgorithms] requires rsa2048 authentication.**
-  ///   With no data signing key the authentication key signs data and is what
-  ///   `_apsk` advertises, and the bare advertisement — the one an un-upgraded
-  ///   peer can parse — states a single active rsa2048 entry and nothing else.
-  /// - **A posture is a floor.** An explicit axis may raise what the posture
-  ///   names and may not lower it. An app that must not move names
-  ///   [PqPosture.legacy], rather than keeping a stronger posture and weakening
-  ///   an axis it is made of.
-  ///
-  /// The axes stay independent wherever there are genuinely two keys; an empty
-  /// signing set is one key wearing both hats, which is what the first rule
-  /// constrains.
-  ///
-  /// Final at construction, like [disallowLegacyEncryption] and for the same
-  /// reason: what a client writes must not change meaning mid-run. A client
-  /// that already exists keeps the posture it was built under, and a caller
-  /// asking for it with a preference naming a different one is **refused** —
-  /// see [rolloutDifferencesFrom]. It used to be ignored, which left the
-  /// caller running on the stage it thought it had left.
+  /// ⚠️ An existing enrollment holding an authentication key weaker than this
+  /// asks for is retrofitted at the next start, with no opt-out; an app that
+  /// must not move names [PqPosture.legacy].
   final PqPosture posture;
 
   /// Which algorithms this client keeps an **active signing key** for — the
   /// keys that sign what its enrollment attests to, which is a different job
   /// from the APKAM authentication key that proves possession on a connection.
   ///
-  /// Not to be confused with [signingAlgoType], which is that authentication
-  /// key's algorithm and is resolved from the key material rather than chosen.
-  ///
-  /// **Empty in 3.x, `{mldsa65}` in 4.0** ([PqPosture]). Empty is not
-  /// "unsigned": with no signing key of its own an enrollment signs with its
-  /// APKAM authentication key, whose public half is published as this
-  /// enrollment's signing key and stays published afterwards, because it is
-  /// what verifies every envelope signed before the two jobs were separated.
-  ///
-  /// Naming an algorithm this build cannot sign an envelope under is
-  /// **refused at construction**. Skipping it quietly would leave an app that
-  /// asked for a post-quantum signature believing it had one while every
-  /// signature it produced was classical.
-  ///
-  /// **Final at construction**, like [disallowLegacyEncryption]: an app that
-  /// could change it mid-run would leave "which key signed this, and does it
-  /// still exist?" without an answer. A [Set] rather than a list because
-  /// membership is the whole of the meaning — the order signatures are emitted
-  /// in is the strongest-first order the keyfile is read in, never this one.
-  ///
-  /// **This is what a signing migration moves, and it moves once, in the middle
-  /// of three releases.** Ship a build that can *verify* the new algorithm
-  /// first — that is a property of the build, not of this field, and there is
-  /// nothing to configure for it. Then move this field to the new algorithm.
-  /// Then, in a third release, stop *accepting* the old one.
-  ///
-  /// The third release is separate because a release may relax what it accepts,
-  /// or tighten what it produces, but tightening what it **accepts** has to be
-  /// its own: doing both at once is only sound after the first has finished on
-  /// every install, which is a fleet-wide flip nobody can perform.
-  ///
-  /// ⚠️ **A two-member set is NOT the migration lever, though this said it was.**
-  /// An envelope carries one signature per active signing key, so two members
-  /// means every envelope is signed twice — and that buys nothing a verifier can
-  /// rely on, because an attacker can strip the stronger signature and the
-  /// verifier will accept the weaker one. Nothing lets a verifier insist. Use
-  /// the three releases above; no posture on the rollout ladder sets two
-  /// members.
-  ///
-  /// The encryption-side counterpart is [sealsToKeyAlgorithms], whose migration
-  /// needs only two releases — you stop being sealed to under an old algorithm
-  /// by not advertising it, and no peer can force you, where anyone can present
-  /// an old-algorithm signature.
+  /// ⚠️ Empty is not "unsigned": the enrollment signs with its APKAM
+  /// authentication key, whose public half stays published as its signing key.
   final Set<SigningAlgoType> dataSigningKeyAlgorithms;
 
   /// The algorithm this client's APKAM **authentication** key is minted under
@@ -156,39 +45,15 @@ class AtClientPreference {
   /// connection, which only the atServer verifies.
   ///
   /// Not to be confused with [dataSigningKeyAlgorithms], which is what the
-  /// enrollment signs *content* with and which every peer verifies. The two
-  /// keys have different audiences and move on different schedules, which is
-  /// why they are two axes rather than one stage name.
-  ///
-  /// Not to be confused with [signingAlgoType] either: that is the algorithm
-  /// of the authentication key this client actually holds, resolved from the
-  /// key material rather than chosen.
+  /// enrollment signs *content* with and which every peer verifies.
   final SigningAlgoType authenticationKeyAlgorithm;
 
   /// The key-establishment algorithms this client will **seal to**, strongest
-  /// first — the sender's side of the choice, defaulted by [posture].
+  /// first — which of a recipient's advertised keys it is willing to use, where
+  /// [keyEstablishmentAlgorithms] is what this atSign publishes.
   ///
-  /// Not to be confused with [keyEstablishmentAlgorithms], which is what this atSign
-  /// *publishes* for others to seal to. That one is about this atSign's own
-  /// key; this one is about which of a **recipient's** advertised keys this
-  /// client is willing to use.
-  ///
-  /// ⚠️ **Narrowing it is choosing to refuse.** The default names everything
-  /// this build can seal under, so no recipient is turned away by accident.
-  /// Drop an entry and a recipient advertising only that algorithm shares no
-  /// construction with this client: the write is refused rather than
-  /// downgraded, and the two atSigns cannot exchange data at all. A
-  /// FIPS-constrained deployment accepts that; nobody else should.
-  ///
-  /// **Final at construction and held unmodifiable**, like
-  /// [dataSigningKeyAlgorithms] and for the same reason: an app that could
-  /// widen it mid-run would leave "could this client have sealed to that
-  /// recipient?" without an answer, and a list the caller still holds a
-  /// reference to would be a way past the check below.
-  ///
-  /// Naming an algorithm this build cannot seal under is **refused at
-  /// construction**, so a deployment that misspells one finds out where it
-  /// wrote it rather than at the first refused write.
+  /// ⚠️ Narrowing it is choosing to refuse: a recipient advertising only a
+  /// dropped algorithm is refused rather than downgraded.
   final List<String> sealsToKeyAlgorithms;
 
   AtClientPreference(
@@ -206,30 +71,12 @@ class AtClientPreference {
             sealsToKeyAlgorithms ?? posture.sealsToKeyAlgorithms),
         keyEstablishmentAlgorithms = _advertisableOrRefuse(
             keyEstablishmentAlgorithms ?? posture.keyEstablishmentAlgorithms) {
-    // Defaulted in the body rather than the initializer list because the field
-    // is mutable: an app may still turn seeding on or off after construction,
-    // and the posture only decides where it starts.
     seedNamespaceKeys = posture.seedNamespaceKeys;
 
-    // The two coherence rules below are in the BODY because each needs both
-    // resolved axes at once, and an initializer list gives no point where both
-    // are available.
-    //
-    // ⚠️ **They read different things, and the difference is the whole of their
-    // correctness.** Inside this body the bare names `authenticationKeyAlgorithm`
-    // and `dataSigningKeyAlgorithms` are the *parameters* — nullable, and null
-    // exactly when the caller named no value. `this.`-qualified, they are the
-    // *resolved* fields. The first rule is about what this preference IS, so it
-    // reads the fields; the second is about what the caller ASKED FOR, so it
-    // reads the parameter, where non-null is what "explicit" means.
+    // NOTE: in this body a bare parameter name is the caller's nullable value,
+    // null exactly when the caller named none, while `this.`-qualified it is
+    // the resolved field.
 
-    // An enrollment with no data signing key signs data with its authentication
-    // key, and `apskEntries` advertises that key as the sole active entry. The
-    // bare `_apsk` form — the one spelling an un-upgraded peer can parse, since
-    // it base64-decodes the value as an RSA key — exists only for a single
-    // active rsa2048 entry. So a non-rsa2048 authentication key beside an empty
-    // signing set forces the JSON array onto exactly the record that shape is
-    // there to keep readable.
     if (this.dataSigningKeyAlgorithms.isEmpty &&
         this.authenticationKeyAlgorithm != SigningAlgoType.rsa2048) {
       throw ArgumentError.value(
@@ -241,10 +88,6 @@ class AtClientPreference {
               'dataSigningKeyAlgorithms a member, or authenticate with rsa2048');
     }
 
-    // A posture is a floor. An axis named explicitly may raise what the posture
-    // asks for and may not lower it: an app that must not move names
-    // `PqPosture.legacy`, rather than keeping a stronger posture and weakening
-    // one of the axes it is made of.
     final asked = authenticationKeyAlgorithm;
     if (asked != null &&
         asked != posture.authenticationKeyAlgorithm &&
@@ -263,46 +106,11 @@ class AtClientPreference {
   /// Where [other] would change what a **running** client does — one line per
   /// differing axis, empty when the two are interchangeable.
   ///
-  /// This is what a caller asking for a client that already exists is checked
-  /// against. Every axis below is final at construction precisely because what
-  /// a client writes must not change meaning mid-run, so a second preference
-  /// naming a different one cannot be adopted; before this existed it was
-  /// silently ignored, and the caller ran on the stage it thought it had left
-  /// behind. Post-rollout that is not a flag being ignored but a **key**: the
-  /// stage decides which algorithm an enrollment authenticates and signs under.
-  ///
-  /// **Compared by value, never by identity.** Repeated
-  /// `setCurrentAtSign(atSign, namespace, TestPreferences.getPreference(…))`
-  /// calls hand over a fresh, equal preference object every time — an identity
-  /// test would refuse every one of them.
-  ///
-  /// ⚠️ **The posture is compared by what it MEANS, not as an object**, for
-  /// the same reason one step further down: [PqPosture] declares no `==`,
-  /// so comparing two of them is an identity test, and a caller writing
-  /// `PqPosture.legacy` without `const` gets an instance that is not
-  /// the canonical one. Two behaviourally identical postures would then read as
-  /// a mismatch. What is compared is the three posture fields nothing else
-  /// carries — [PqPosture.writesPqByDefault], [PqPosture.configuresPqProviders] and
-  /// [PqPosture.keyExchangeMode] — beside the three effective axes, which
-  /// is the whole of what a posture can change.
-  ///
-  /// [PqPosture.configuresPqProviders] is here because it decides a **capability**: a
-  /// client built without the post-quantum providers keeps them absent for its
-  /// whole life, so a caller handing over a preference that reads post-quantum
-  /// data and being given that client back would go on failing every such read
-  /// with nothing having said no.
-  ///
-  /// [seedNamespaceKeys] is not compared: it is mutable, so it was never one
-  /// of the axes fixed at construction that this refusal exists to protect.
-  ///
-  /// [crypto] is deliberately **not** here: it is adopted from the incoming
-  /// preference rather than refused, so that a provider registered after first
-  /// construction takes effect.
+  /// Compared by value rather than identity, and only over the axes fixed at
+  /// construction: the mutable [seedNamespaceKeys] and [crypto] are excluded.
   List<String> rolloutDifferencesFrom(AtClientPreference other) {
     final differences = <String>[];
 
-    // Each line reads "asked for X, running on Y", since the caller is the one
-    // holding a preference it expected to take effect.
     void compare(String axis, Object? asked, Object? running) {
       if (asked != running)
         differences.add('$axis (asked $asked, running $running)');
@@ -318,24 +126,18 @@ class AtClientPreference {
         authenticationKeyAlgorithm.name);
     compare('disallowLegacyEncryption', other.disallowLegacyEncryption,
         disallowLegacyEncryption);
-    // Order is meaning here, unlike the signing set: it decides which of a
-    // recipient's advertised keys is picked, so two lists holding the same
-    // algorithms in a different order are two different clients.
+    // NOTE: order is meaning in both lists — it picks the algorithm — so they
+    // are compared as strings rather than as sets.
     compare('sealsToKeyAlgorithms', '${other.sealsToKeyAlgorithms}',
         '$sealsToKeyAlgorithms');
-    // Order-sensitive for a different reason than the list above: here the
-    // first entry is the algorithm anything minting a single key uses, so a
-    // reorder changes what this atSign mints next even though the set of
-    // advertised keys is unchanged.
     compare('keyEstablishmentAlgorithms', '${other.keyEstablishmentAlgorithms}',
         '$keyEstablishmentAlgorithms');
 
     final asked = other.dataSigningKeyAlgorithms;
     final running = dataSigningKeyAlgorithms;
     if (asked.length != running.length || !asked.containsAll(running)) {
-      // Rendered strongest-first so both sides read in one order — a Set
-      // iterates in insertion order, so two equal sets built by different
-      // routes would otherwise print differently and read as a difference.
+      // NOTE: rendered strongest-first because a Set iterates in insertion
+      // order, so two equal sets would otherwise print differently.
       String spell(Set<SigningAlgoType> algorithms) =>
           '{${SigningAlgoType.strongestFirst.where(algorithms.contains).map((a) => a.name).join(', ')}}';
       differences.add('dataSigningKeyAlgorithms (asked ${spell(asked)}, '
@@ -347,8 +149,8 @@ class AtClientPreference {
   /// [algorithms] unmodifiable, or an [ArgumentError] naming the first member
   /// this build cannot seal under.
   ///
-  /// Unmodifiable for the same reason as [_signableOrRefuse]'s set: the check
-  /// runs once, and a list the caller retains would otherwise be a way past it.
+  /// Unmodifiable because the check runs once, and a list the caller retains
+  /// would otherwise be a way past it.
   static List<String> _sealableOrRefuse(List<String> algorithms) {
     for (final algorithm in algorithms) {
       if (!SecretSharingAlgos.keyAlgos.contains(algorithm)) {
@@ -362,10 +164,10 @@ class AtClientPreference {
   /// [algorithms] unmodifiable, or an [ArgumentError] — naming the first
   /// member this build cannot mint a key for, or refusing an empty list.
   ///
-  /// Empty is refused where [_sealableOrRefuse] permits it, and the asymmetry
-  /// is the point: a client that seals to nothing simply writes to nobody,
-  /// while an atSign that advertises nothing can **receive** nothing, and
-  /// would look like a working enrollment that silently never gets its data.
+  /// Empty is refused where [_sealableOrRefuse] permits it: a client that seals
+  /// to nothing writes to nobody, while an atSign advertising nothing can
+  /// **receive** nothing and looks like a working enrollment that silently
+  /// never gets its data.
   static List<String> _advertisableOrRefuse(List<String> algorithms) {
     if (algorithms.isEmpty) {
       throw ArgumentError.value(
@@ -389,7 +191,7 @@ class AtClientPreference {
   ///
   /// Unmodifiable because the field is only as final as its contents: an app
   /// holding the set it passed could otherwise add an algorithm afterwards and
-  /// get past this check.
+  /// get past the check.
   static Set<SigningAlgoType> _signableOrRefuse(
       Set<SigningAlgoType> algorithms) {
     for (final algorithm in algorithms) {
@@ -568,10 +370,8 @@ class AtClientPreference {
   /// Signing algorithm to use for pkam authentication.
   ///
   /// Consulted only for a legacy enrollment whose keyfile carries no typed
-  /// signing material: the algorithm is a fact about the key material — you
-  /// cannot sign ML-DSA with an RSA key — so the client resolves it from the
-  /// keyfile whenever typed material exists, and this value never overrides
-  /// that resolution.
+  /// signing material; where typed material exists the client resolves the
+  /// algorithm from the keyfile and this value never overrides it.
   @Deprecated('The signing algorithm is resolved from the enrollment\'s key '
       'material; this value is only a fallback for legacy keyfiles with no '
       'typed signing material')
@@ -589,34 +389,13 @@ class AtClientPreference {
 
   /// Configures the crypto providers used for encrypted puts and reads.
   ///
-  /// **Leave this alone** unless the app genuinely needs its own providers.
-  /// The default, [CryptoConfig.eraDefault], means "whatever this SDK release
-  /// encrypts with by default", which is what almost every app wants: the
-  /// default is the SDK's to move as the post-quantum migration proceeds, and
-  /// an app that pinned `CryptoConfig.legacy()` only because it had to name
-  /// something would find itself pinned to the old scheme after the release
-  /// that changed it. [CryptoConfig.forClient] is where that resolution
-  /// happens.
+  /// The default, [CryptoConfig.eraDefault], is whatever this SDK release
+  /// encrypts with; assign one only to register a custom provider or to hold a
+  /// named scheme deliberately.
   ///
-  /// Assign a config to opt out — to register a custom provider, or to hold a
-  /// specific scheme deliberately. Custom providers are initialised by the
-  /// client implementation before sync and notification services start.
-  ///
-  /// ⚠️ **Assigning a post-quantum config is refused when [posture] configures
-  /// no post-quantum providers.** The two say opposite things about the same
-  /// client, and silently letting either win is worse than refusing: a client
-  /// standing in for a build that predates those schemes must not be handed
-  /// them, and an app that asked for them must not quietly not get them. A
-  /// custom provider of the app's own is unaffected — only the ids in
-  /// [pqCryptoProviderIds] are declined.
-  ///
-  /// ⚠️ **Checked when the config is assigned, and not after.**
-  /// [CryptoConfig.providers] is held by reference, so a caller that keeps the
-  /// list it passed can add a post-quantum provider to it afterwards and this
-  /// will not fire again. That is not a hole worth closing on the read path —
-  /// resolution happens per operation and re-checking there would cost every
-  /// caller — but it does mean the refusal answers "was this config
-  /// post-quantum when you handed it over", not "is it now".
+  /// ⚠️ Assigning a config that registers a [pqCryptoProviderIds] provider is
+  /// refused when [posture] configures none, and the check runs at assignment
+  /// only — [CryptoConfig.providers] is held by reference.
   CryptoConfig get crypto => _crypto;
 
   set crypto(CryptoConfig config) {
@@ -640,125 +419,27 @@ class AtClientPreference {
   CryptoConfig _crypto = const CryptoConfig.eraDefault();
 
   /// Whether a write that cannot go out under [crypto]'s scheme may fall back
-  /// to legacy encryption instead of failing.
-  ///
-  /// This exists for one case: a post-quantum write to a destination that has
-  /// never used or authorised the namespace, so has no key to seal to. There is
-  /// no post-quantum fallback — the only atSign-level key is a signing root,
-  /// which cannot receive an encapsulation — so the alternatives are legacy or
+  /// to legacy encryption instead of failing with
   /// [NamespaceKeyUnavailableException].
   ///
-  /// **Off by default, and deliberately awkward to turn on.** A silent
-  /// downgrade to RSA is what the post-quantum work exists to prevent: the
-  /// write succeeds, the app looks healthy, and the data is harvestable. Only
-  /// an app that knowingly accepts that — an invitation flow reaching a
-  /// first-contact recipient, during the migration — should set it.
-  ///
-  /// The fallback is **forward-only**, because the check runs per write: the
-  /// first write after the destination publishes a key is post-quantum, with no
-  /// flag to flip. Records already written under the fallback stay legacy;
-  /// re-encrypting them is an explicit migration, never a side effect of a put.
-  ///
-  /// It ends with the post-quantum-by-default release, where cold start throws
-  /// whatever this says.
+  /// ⚠️ Off by default: the fallback is a silent downgrade to RSA, and it is
+  /// forward-only — the first write after the destination publishes a key is
+  /// post-quantum, but records already written under it stay legacy.
   bool allowLegacyCryptoFallback = false;
 
   /// Whether this client mints and publishes namespace keys at start.
   ///
-  /// Seeding is a **rollout** action, not a crypto-path one, which is why it
-  /// is its own knob rather than following [crypto]. The release sequence has
-  /// clients minting and publishing *while still writing legacy*, so that by
-  /// the time post-quantum writes are switched on the keys are already
-  /// everywhere; gating it on the PQ path being active would seed nothing
-  /// until the very moment seeding stopped being useful.
-  ///
-  /// **Defaulted from [posture]** — false under [PqPosture.legacy], true from
-  /// [PqPosture.pqReady] on — and assignable afterwards, unlike the axes fixed
-  /// at construction. Minting publishes a permanent, discoverable record on
-  /// the atSign, which is why the default stage does not start doing it behind
-  /// an app's back.
+  /// Defaulted from [posture] and assignable afterwards, unlike the axes fixed
+  /// at construction; minting publishes a permanent, discoverable record.
   bool seedNamespaceKeys = false;
 
   /// Which key-establishment algorithms this atSign **mints and advertises** —
-  /// ids from [SecretSharingAlgos.keyAlgos], strongest-preferred first.
+  /// ids from [SecretSharingAlgos.keyAlgos], strongest-preferred first, where
+  /// [sealsToKeyAlgorithms] is which of a recipient's this client will use.
   ///
-  /// The receiver's side of the choice. [sealsToKeyAlgorithms] is the sender's:
-  /// this decides what others seal to when they write to this atSign, that
-  /// decides which of *their* advertised keys this client will use.
-  ///
-  /// **One entry is the default and the ordinary state.** A second entry is
-  /// what a migration between KEMs looks like: the enrollment advertises both
-  /// while peers catch up, then the first is dropped and **retired** — still
-  /// openable for what was already sealed to it, no longer offered. The
-  /// keyfile permits at most one active key per algorithm, so this list is
-  /// exactly the set of active keys the enrollment's key package advertises.
-  ///
-  /// Unlike [sealsToKeyAlgorithms], a shorter list here refuses nobody: a
-  /// sender needs one construction in common, and every build can seal to
-  /// both. What an extra entry costs is a keypair minted, filed and carried
-  /// for the life of the enrollment. So this defaults to one and widens only
-  /// when a deployment is moving.
-  ///
-  /// **The first entry is the primary, and that is not cosmetic.** Only the
-  /// enrollment's own key package advertises the whole list; everything that
-  /// mints exactly one key — an **nskey** for a namespace, and the fresh key
-  /// `KeyPackageRegistration` would mint for a client that holds none — takes
-  /// the first. So reordering a two-entry list changes what this atSign mints
-  /// next, which is why two lists holding the same algorithms in a different
-  /// order are two different clients to [rolloutDifferencesFrom].
-  ///
-  /// **Changing it takes effect at the next client start**, where
-  /// `KeyPackageMinting` mints what this names and the enrollment lacks,
-  /// retires what it holds and this no longer names, and republishes the
-  /// package by `enroll:update`. An enrollment created under the current list
-  /// already holds everything it names and finds nothing to do.
-  ///
-  /// Two options, and the choice is a deployment's rather than a message's:
-  ///
-  /// - [SecretSharingAlgos.xWing] (the default) — the ML-KEM-768 + X25519
-  ///   hybrid, which keeps a classical hedge covering exactly one scenario:
-  ///   ML-KEM falling to *classical* cryptanalysis before a quantum computer
-  ///   exists. Its combiner is specified only in an IETF draft.
-  /// - [SecretSharingAlgos.mlKem1024] — FIPS 203 alone, no combiner and no
-  ///   draft anywhere in its specification chain, which is what answers a
-  ///   "FIPS-approved algorithms only" questionnaire. It is also CNSA 2.0's
-  ///   mandated parameter set, and CNSA 2.0 treats hybrids as non-compliant.
-  ///
-  /// **This does not restrict who this client can talk to.** It decides what
-  /// this atSign publishes; a *sender* always follows what the recipient
-  /// advertised, and every build can produce and open both suites. An atSign
-  /// configured for ML-KEM-1024 still seals to a hybrid peer, because refusing
-  /// would leave the two unable to communicate while protecting nothing — the
-  /// peer's key is the peer's decision.
-  ///
-  /// **Configuration rather than negotiation, and the reason is NIST's.**
-  /// SP 800-227 §4.6.3 warns that composite schemes "introduce additional
-  /// choices in protocols, which could also introduce vulnerabilities (e.g. in
-  /// the form of downgrade attacks)".
-  ///
-  /// ⚠️ **This paragraph used to end "each atSign advertises one KEM and there
-  /// is no per-message negotiation to attack", and a two-entry list falsifies
-  /// the first clause.** What still holds, and why a migration window is
-  /// acceptable rather than a hole:
-  ///
-  /// - The advertisement is an **APKAM-signed envelope** verified against the
-  ///   enrollment's `_apsk`, so entries cannot be stripped in flight. The
-  ///   choice a sender makes is over keys the enrollment attested to.
-  /// - Both options are **post-quantum**. Selecting the other entry picks a
-  ///   different PQ KEM, not a weaker class of algorithm — which is not the
-  ///   hybrid-versus-classical downgrade SP 800-227 has in view.
-  /// - The sender's choice is its own standing configuration
-  ///   ([sealsToKeyAlgorithms]), not something the recipient's record steers
-  ///   per message.
-  ///
-  /// The residual exposure is a **replayed older signed package** advertising
-  /// only the entry a deployment is migrating away from. That is the same
-  /// exposure a retained retired key already carries, and it is why a
-  /// migration is meant to be a window rather than a resting state.
-  ///
-  /// Changing it does not re-key anything already published, and never
-  /// silently drops a key: what leaves the list is retired, not deleted, so
-  /// everything sealed to it still opens.
+  /// ⚠️ The first entry is the one anything minting a single key takes, so
+  /// reordering changes what this atSign mints at its next start; dropping an
+  /// entry retires that key rather than deleting it.
   final List<String> keyEstablishmentAlgorithms;
 }
 

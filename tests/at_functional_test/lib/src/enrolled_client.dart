@@ -12,79 +12,43 @@ import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:uuid/uuid.dart';
 
-/// A live, APKAM-authenticated client for one approved enrollment.
+/// A live, APKAM-authenticated client for one approved enrollment, with its
+/// own `enrollmentId`, APKAM keypair and key package.
 ///
-/// Several claims in the PQ acceptance catalogue are about what one
-/// *enrollment* may do to another — the namespace boundary, the signing-root
-/// pull, ML-DSA authentication against the enrollment record. None of them can
-/// be driven by a client authenticating with the atSign's own keys, which is
-/// what the rest of this package uses: the atServer answers `enroll:listns`
-/// only for an APKAM-authenticated connection, and both halves of the
-/// substrate's pull path go through it — the requester to enumerate holders,
-/// the responder to authorize the requester before answering.
-///
-/// So this exists to hand back a client that genuinely *is* an enrollment,
-/// with its own `enrollmentId`, its own APKAM keypair, and its own key
-/// package.
-///
-/// This works because `AtClientImpl` caches clients by
-/// `(atSign, enrollmentId)` — the `(owner, id)` rule applied to the client
-/// cache — so a second enrollment of one atSign is a genuinely separate
-/// client with its own connection carrying its own enrollment id. Use one
-/// `AtClientManager` per client (the public constructor), never
-/// `getInstance().setCurrentAtSign`, which would stop the other client.
+/// `AtClientImpl` caches clients by `(atSign, enrollmentId)`, so a second
+/// enrollment of one atSign is a genuinely separate client with its own
+/// connection carrying its own enrollment id. Use one `AtClientManager` per
+/// client (the public constructor), never `getInstance().setCurrentAtSign`,
+/// which would stop the other client.
 class EnrolledClient {
-  /// The enrolled client, authenticated as [enrollmentId].
   final AtClient client;
 
   /// The id this enrollment was **submitted** as — and not necessarily the one
   /// its [client] authenticates and signs as.
   ///
-  /// ⛔ **A self-retrofit supersedes it.** `enrolAndAuthenticate` submits under
-  /// [signingAlgo], which defaults to `rsa2048`; a client whose posture wants a
-  /// stronger authentication key retrofits itself during `_init` and comes up
-  /// on a **new** enrollment id. This field keeps the submitted one. The
-  /// atServer caps the old enrollment rather than deleting it, so both ids are
-  /// real: this one is what the roster shows and what an approver approved,
-  /// while `client.enrollmentId` is what authenticates the connection, what
-  /// `_apsk` is published under, and what signs.
+  /// ⛔ A self-retrofit supersedes it: a client whose posture wants a stronger
+  /// authentication key than it was submitted under retrofits itself during
+  /// `_init` and comes up on a **new** enrollment id. The atServer caps the old
+  /// enrollment rather than deleting it, so both ids are real — this one is
+  /// what the roster shows and what an approver approved, while
+  /// `client.enrollmentId` is what authenticates the connection, what `_apsk`
+  /// is published under, and what signs.
   ///
-  /// **Both are needed, and the difference is asserted on purpose.**
-  /// `pq_retrofitted_scope_test.dart` requires them to DIFFER — "equal ids mean
-  /// no retrofit ran" is the precondition for that whole file — and requires
-  /// them to MATCH in its cold-keyfile arm, where a retrofit would leave
-  /// nothing varying. `nskey_self_notify_live_test.dart` requires them to match
-  /// because the receiving client's id is what the atServer authorizes the
-  /// monitor connection against. Making this field mirror `client.enrollmentId`
-  /// would redden the first pair and turn the rest into tautologies —
-  /// preconditions that are green whatever happens.
-  ///
-  /// ⚠️ **So compare this against another `EnrolledClient`'s id or against the
-  /// enrollment roster; never against anything the CLIENT produced.** A
+  /// ⚠️ So compare this against another `EnrolledClient`'s id or against the
+  /// enrollment roster, never against anything the CLIENT produced: a
   /// signature's `kid`, an `_apsk` address or a kpid on the wire all carry the
   /// settled id, and comparing them to this passes only when no retrofit ran.
-  /// Pass `signingAlgo: mldsa65` for an enrollment that is post-quantum from
-  /// birth and therefore never retrofits, if that is what the test wants.
   final String enrollmentId;
 
   /// The key package id this enrollment advertised, which is the address
   /// anything sealed to it is written under.
   ///
   /// Throws for a **legacy-mode** enrollment, whose creation request carried
-  /// no key package — that is the point of the mode, not a gap.
+  /// no key package; use [kpidOrNull] where either mode is possible.
   ///
-  /// ⚠️ **"No key package on the request" is not "no key package ever".** The
-  /// enrollment acquires one at its first client start, because
-  /// `reconcileKeyPackage` mints against `keyEstablishmentAlgorithms` whatever
-  /// the posture, and it is then conveyed secrets like any other enrollment.
-  /// What this getter reports is the value the request advertised, which is
-  /// the address a test sealing at approval time needs. Reading it as a
-  /// statement about the enrollment's lifetime is a mistake that has been made
-  /// from this comment. A throwing getter
-  /// rather than a nullable field because every existing reader is a test
-  /// about key packages, so `null` would only have been forced away with `!`
-  /// at each one; this way the failure names what happened. Use [kpidOrNull]
-  /// where either mode is possible.
+  /// ⚠️ "No key package on the request" is not "no key package ever": the
+  /// enrollment acquires one at its first client start, whatever the posture,
+  /// and is then conveyed secrets like any other.
   String get kpid =>
       _kpid ??
       (throw StateError(
@@ -101,16 +65,16 @@ class EnrolledClient {
 
   /// This enrollment's key material, as `waitForApproval` left it: its APKAM
   /// keypair, its key-package private half, and the encryption keys unwrapped
-  /// from the approver's conveyance. Exposed because tests that drive
-  /// authentication by hand — signing a PKAM challenge to check what the
-  /// atServer verifies against — need the keypair the record names.
+  /// from the approver's conveyance.
   final AtKeys keys;
 
-  /// The manager owning [client]. Its own instance rather than the singleton —
-  /// `AtClientManager.getInstance()` is per-process and keyed by atSign, so a
-  /// second enrollment of the SAME atSign would otherwise evict the first.
+  /// The manager owning [client] — its own instance rather than the
+  /// per-process singleton, which is keyed by atSign and would otherwise evict
+  /// the first enrollment of the same atSign.
   final AtClientManager manager;
 
+  /// Wraps an enrollment that is already approved and authenticated;
+  /// [enrolAndAuthenticate] is what produces one.
   EnrolledClient({
     required this.client,
     required this.enrollmentId,
@@ -119,61 +83,39 @@ class EnrolledClient {
     required this.manager,
   });
 
-  /// Stops [client]; `TestUtils.isolateStorage`'s teardown stops whatever a
-  /// test did not, so this is for silencing one mid-test.
+  /// Stops [client], for silencing one mid-test; the pack's teardown stops
+  /// whatever a test did not.
   Future<void> stop() => client.stop();
 }
 
 /// Enrols a new APKAM enrollment on [atSign], approves it from [approver], and
 /// returns a client authenticated as it.
 ///
+/// [approver] must be a privileged client able to call `otp:get` and approve.
+///
 /// [keyExchangeMode] decides how the enrollment's `apkamSymmetricKey` travels,
 /// and therefore whether this enrollment advertises a key package at all. It
-/// defaults to **pq**, which is what nearly every test here wants and what
-/// this helper always did.
-///
-/// ⚠️ It is a parameter rather than being read from
-/// `preference.posture.keyExchangeMode`, even though `PqPosture`'s dartdoc
-/// tells *app* authors to derive it from the posture. Deriving it here was
-/// tried and reverted: [AtClientPreference]'s posture defaults to
-/// `PqPosture.legacy`, so every caller that names no posture — which is most
-/// of this pack — would silently switch to legacy-mode enrollment and lose its
-/// key package. Measured: seven substrate tests went red at once.
+/// is a parameter rather than being read from the preference's posture, which
+/// defaults to legacy and would silently drop the key package for every caller
+/// naming no posture.
 ///
 /// ⚠️ Legacy mode is **not** a faithful legacy client, and must not be read as
 /// one. It submits a legacy request, so nothing is sealed to it at approval
 /// time — but the running client still registers a key package of its own at
-/// startup (`collectConveyedKeyMaterial` calls `register()` unconditionally),
-/// so it remains addressable and can still take part in secret sharing. The
-/// faithful un-upgraded peer in this repo is a separate process running a
-/// released at_client: `tests/pq_matrix/published` on 3.14.0, spawned by
-/// `pq_released_peer_test.dart`.
-///
-/// [approver] must be a privileged client able to call `otp:get` and approve —
-/// in this package, the ordinary `TestUtils.initAtClient` client.
-///
-/// Runs the **real** flow rather than assembling keys by hand: submit, approve,
-/// then `waitForApproval`, which is what unwraps this enrollment's encryption
-/// keys with the `apkamSymmetricKey` the approver sealed to its key package and
-/// persists the result. Short-cutting that would produce a client whose keys
-/// never went through the conveyance under test, which is the one thing these
-/// tests are supposed to exercise.
+/// startup, so it remains addressable and can still take part in secret
+/// sharing.
 ///
 /// The approval is issued **before** `waitForApproval` is awaited. Both sides
 /// run in this one process, so waiting first would deadlock — nothing else is
 /// scheduled to approve.
 ///
 /// [signingAlgo] is the algorithm the enrollment's APKAM **authentication**
-/// keypair is minted under, and it is a different axis from the pq key
-/// EXCHANGE this helper always uses: how the symmetric key travels and which
-/// algorithm authenticates the connection are separate questions.
-///
-/// It defaults to `rsa2048` because that is what every caller of this helper
-/// was handed before the parameter existed, and several of them assert against
-/// it — including the advance ladder, whose first rung needs an RSA enrollment
-/// to have something to advance FROM. A test wanting an enrollment that is
-/// post-quantum from birth, and therefore does NOT retrofit itself on first
-/// client construction, passes `mldsa65`.
+/// keypair is minted under, a different axis from the key EXCHANGE above: how
+/// the symmetric key travels and which algorithm authenticates the connection
+/// are separate questions. Under the default `rsa2048` a client whose posture
+/// wants better retrofits itself on first construction and comes up on a new
+/// enrollment id; pass `mldsa65` for one that is post-quantum from birth and
+/// therefore never retrofits.
 ///
 /// [namespaces] overrides the grants requested, which defaults to `rw` on
 /// [namespace] alone. Pass `{'*': 'rw', '__manage': 'rw', …}` for a fully
@@ -190,10 +132,6 @@ Future<EnrolledClient> enrolAndAuthenticate({
   /// it, told apart by the device name below: the enrollee and the owner
   /// client that approves for it are two live principals on one atSign, and
   /// one store holds one principal.
-  ///
-  /// Required rather than optional: a preference carries no storage path any
-  /// more, so a caller that omits this fails at `_init` with 'Please set local
-  /// storage path' instead of here, where the compiler names the call site.
   required FunctionalStorage storage,
   String? deviceName,
   Map<String, String>? namespaces,
@@ -206,25 +144,20 @@ Future<EnrolledClient> enrolAndAuthenticate({
   final session = AtAuthSession(
     atSign: atSign,
     rootDomain: AtRootDomain(rootDomain, rootPort),
-    // In memory: these keys exist for the length of one test, and writing them
-    // to disk would leave a file the next run's onboarding refuses to overwrite.
-    //
-    // Pass [atKeysIo] to share one keyfile with the test. That matters
-    // whenever the test observes key material the CLIENT's own start-time
-    // self-heal also files: with two stores, whichever sweep wins consumes
-    // the envelope and files it where the other side is not looking, and the
-    // test reads a null that means "somebody else got there first" rather
-    // than "it never arrived".
+    // NOTE: in memory by default, because a keyfile left on disk is one the
+    // next run's onboarding refuses to overwrite. Pass atKeysIo to share one
+    // keyfile with the test: with two stores, the client's start-time
+    // self-heal can consume an envelope and file it where the test is not
+    // looking, so the test reads a null meaning "somebody got there first"
+    // rather than "it never arrived".
     atKeysIo: atKeysIo ?? InMemoryAtKeysIo(),
   );
 
   final legacyMode = keyExchangeMode == EnrollmentKeyExchangeMode.legacy;
 
   Map<String, dynamic>? built;
-  // The key package is signed by the APKAM keypair this enrolment is about to
-  // submit, so the builder has to be told which algorithm that is. It has
-  // always taken one; nothing passed it here because until the request could
-  // carry an algorithm, the answer could only ever be rsa2048.
+  // NOTE: the key package is signed by the APKAM keypair this enrolment is
+  // about to submit, so the builder must be told the same algorithm.
   final build = enrollmentKeyPackageBuilder(atSign, signingAlgo: signingAlgo);
 
   final atLookUp = AtLookUp.withSecureSocket(
@@ -234,15 +167,15 @@ Future<EnrolledClient> enrolAndAuthenticate({
     authenticator: null,
   );
 
-  // Resolved once: it names the enrollment AND its store, so the two cannot
-  // disagree.
+  // NOTE: this names the enrollment AND its store, so resolve it once or the
+  // two can disagree.
   final resolvedDeviceName = deviceName ?? 'enrolled-${Uuid().v4().hashCode}';
 
   final response = await AtEnrollment.create().submit(
     legacyMode
         // No metadataBuilder and no resolver: a legacy request advertises no
         // key package, and the symmetric key travels RSA-wrapped on the
-        // enrollment record instead of being sealed to one.
+        // enrollment record.
         ? AtEnrollmentRequest(
             session: session,
             appName: namespace,
@@ -257,9 +190,6 @@ Future<EnrolledClient> enrolAndAuthenticate({
             deviceName: resolvedDeviceName,
             namespaces: namespaces ?? {namespace: 'rw'},
             otp: otp,
-            // pq mode, so the approver mints the symmetric key and seals it to
-            // the advertised key package. On the legacy path it would RSA-wrap
-            // it, which is the thing this branch exists to remove.
             metadataBuilder: (keysIo) async => built = await build(keysIo),
             apkamSymmetricKeyResolver:
                 enrollmentApkamSymmetricKeyResolver(atSign),
@@ -268,17 +198,17 @@ Future<EnrolledClient> enrolAndAuthenticate({
     atLookUp,
   );
 
-  // The approver's half differs by mode too, and getting it wrong is silent:
-  // a legacy request carries its own RSA-wrapped symmetric key on the record
-  // and the approver hands that back, where a pq approver mints one.
+  // NOTE: the approver's half differs by mode too, and getting it wrong is
+  // silent — a legacy request carries its own RSA-wrapped symmetric key on the
+  // record for the approver to hand back, where a pq approver mints one.
   final AtBytes apkamSymmetricKey;
   if (legacyMode) {
     final record = (await approver.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
     apkamSymmetricKey = AtBytes.fromString(record.encryptedAPKAMSymmetricKey!);
   } else {
-    // Empty: pq mode means the approver mints it rather than unwrapping one
-    // the enrollee sent.
+    // Empty: in pq mode the approver mints it rather than unwrapping one the
+    // enrollee sent.
     apkamSymmetricKey = AtBytes.fromString('');
   }
 
@@ -291,16 +221,14 @@ Future<EnrolledClient> enrolAndAuthenticate({
   await AtEnrollment.create().waitForApproval(response);
 
   // reuse: true asks for the AtLookUp that already authenticated as this
-  // enrollment during waitForApproval, instead of opening a fresh unauthenticated
-  // one. It is necessary but NOT sufficient, and on its own changes nothing
-  // observable — see the class doc: while AtClientImpl hands back a cached
-  // client for this atSign, none of these arguments are applied at all.
+  // enrollment during waitForApproval, instead of opening a fresh
+  // unauthenticated one.
   final manager = await AtClientManager(atSign).fromAuthSession(
       response.session ?? session, preference,
       reuse: true, storage: storage.forPrincipal(atSign, resolvedDeviceName));
 
-  // Null in legacy mode: `built` is only populated by the pq metadataBuilder,
-  // and there is no key package to read a kid out of.
+  // Null in legacy mode: only the pq metadataBuilder populates `built`, and
+  // there is no key package to read a kid out of.
   final String? kpid = built == null
       ? null
       : ((SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload

@@ -72,9 +72,10 @@ class _ThrowingConveyance implements EnrollmentConveyance {
 }
 
 /// approve() consults the injected [EnrollmentConveyance] and owns the policy
-/// about what its answer means: the conveyance *reports* the advertised key
-/// package's status, and whether a rejected one fails the approval is decided
-/// here, where the caller who can revoke is listening.
+/// about what its answer means.
+///
+/// The conveyance only *reports* the advertised key package's status; whether
+/// a rejected one fails the approval is decided here.
 void main() {
   const atSign = '@alice';
   const enrolleeId = 'enrollee-1';
@@ -90,10 +91,8 @@ void main() {
     'deviceName': 'pixel',
     'namespace': {'buzz': 'rw'},
     'metadata': {
-      // Opaque on purpose: this seam decides to mint on the package being
-      // PRESENT, never on what it says, and the conveyance below is a fake
-      // that never verifies it. A real envelope here would read as a claim
-      // that the shape matters to this path.
+      // NOTE: opaque on purpose — this seam mints on the package being
+      // present, never on what it says.
       'keyPackage': {'opaque-to-this-seam': true}
     },
   };
@@ -105,10 +104,6 @@ void main() {
     'namespace': {'buzz': 'rw'},
     'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
     'metadata': {
-      // Opaque on purpose: this seam decides to mint on the package being
-      // PRESENT, never on what it says, and the conveyance below is a fake
-      // that never verifies it. A real envelope here would read as a claim
-      // that the shape matters to this path.
       'keyPackage': {'opaque-to-this-seam': true}
     },
   };
@@ -172,9 +167,6 @@ void main() {
   });
 
   test('every post-approval conveyance refusal carries the response', () async {
-    // The other way a conveyance refuses: a thrown precondition — the
-    // unregistered-approver guard and the no-ordinary-namespace refusal both
-    // fire after the server-side approval has succeeded.
     final throwing = _ThrowingConveyance(AtEnrollmentException(
         'Enrollment $enrolleeId expects this approver to convey its '
         'symmetric key, but this client has not registered a key package to '

@@ -41,42 +41,27 @@ mixin EnvelopeSigning on ApkamSigning {
   /// Read the [jsonEncode] docs to learn how to use it.
   ///
   /// [type] says what the envelope is for, and applications leave it alone.
-  /// Its default, [EnvelopeType.app], is a type **no** verifier inside this
-  /// library accepts — so an application that signs data someone else
-  /// influenced cannot be walked into producing a chain link, a key package or
-  /// an advertisement, however closely the payload it was handed resembles
-  /// one. The uses inside this library each pass their own.
+  /// Its default, [EnvelopeType.app], is a type no verifier inside this library
+  /// accepts, so an application signing data someone else influenced cannot be
+  /// walked into producing a chain link, a key package or an advertisement.
   Future<SignedEnvelope> wrapAndSign(
     Object? payload, {
     Object? Function(Object? nonEncodable)? toEncodable,
     EnvelopeType type = EnvelopeType.app,
   }) async {
-    // Resolved before the try, not inside it: that catch reports a payload
-    // that could not be encoded, and a keyfile read that fails is not one.
+    // NOTE: resolved before the try — that catch reports a payload that could
+    // not be encoded, and a failed keyfile read is not one.
     final keys = await signingKeys;
     try {
       // One signature per signing key this enrollment holds, whose public
       // halves are what [ApkamSigning.publishPublicSigningKey] publishes, so a
-      // verifier can check against the per-enrollment `_apsk`. (Signing with
-      // the atSign-wide encryption keypair would use a key that is NOT a
-      // published one.)
+      // verifier can check against the per-enrollment `_apsk`. All of them
+      // rather than the strongest, because the verifier chooses: it takes the
+      // strongest algorithm the envelope and the `_apsk` share.
       //
-      // All of them rather than the strongest, because the verifier is the one
-      // that chooses: it takes the strongest algorithm the envelope and the
-      // `_apsk` SHARE.
-      //
-      // ⛔ This used to add that "an envelope carrying both is readable by the
-      // peer that has upgraded and by the peer that has not", offering the
-      // plural signature as the way across a verifier gap. It is not one: an
-      // attacker strips the stronger signature and the verifier accepts the
-      // weaker, because nothing lets it insist on the stronger. A signing
-      // migration takes three releases instead — verify both, then sign the
-      // new, then accept only the new.
-      //
-      // In practice this list holds one key: every rollout stage's default
-      // in-use set names a single algorithm. Two signatures are reachable only
-      // where an application asks for two algorithms explicitly, and nothing
-      // in the tree does.
+      // NOTE: plural signatures are not a bridge across a verifier gap — an
+      // attacker strips the stronger and the verifier accepts the weaker,
+      // because nothing lets it insist on the stronger.
       return signEnvelope(
         payload,
         keys: keys,
@@ -101,8 +86,8 @@ mixin EnvelopeSigning on ApkamSigning {
   }) async {
     final envelope =
         await wrapAndSign(payload, toEncodable: toEncodable, type: type);
-    // No toEncodable here: the payload was already encoded into base64url by
-    // the signing, and what is left is strings.
+    // NOTE: no toEncodable — the signing already encoded the payload to
+    // base64url, so what is left is strings.
     return jsonEncode(envelope.toJson());
   }
 
@@ -115,18 +100,16 @@ mixin EnvelopeSigning on ApkamSigning {
   /// the envelope was created by a client of that (approved) enrollment.
   ///
   /// Throws an [Exception] on failed validation.
+  ///
   /// [signerEnrollmentId] overrides the envelope's own `enrollmentId` claim as
   /// the address to fetch `_apsk` from. Supply it whenever something outside
-  /// the envelope already establishes whose it is — an enrollment record, say
-  /// — which is also the only way to verify an envelope that carries **no**
-  /// claim. A key package signed before its enrollment existed is exactly
-  /// that: the atServer had not assigned an id yet, so there was nothing
-  /// truthful to stamp.
+  /// the envelope already establishes whose it is, which is also the only way
+  /// to verify an envelope that carries no claim of its own — a key package
+  /// signed before its enrollment had an id, say.
   ///
-  /// [expecting] is what the caller is verifying, and an envelope signed for
+  /// [expecting] is what the caller is verifying; an envelope signed for
   /// anything else is refused before its signature is checked. It defaults to
-  /// [EnvelopeType.app] to pair with [wrapAndSign]'s default, so an
-  /// application verifies what an application signed and nothing else.
+  /// [EnvelopeType.app] to pair with [wrapAndSign]'s default.
   Future<void> verifyEnvelopeSignature(
     SignedEnvelope envelope, {
     required String signerAtSign,
@@ -144,11 +127,6 @@ mixin EnvelopeSigning on ApkamSigning {
     try {
       await verifyEnvelope(envelope, signerPublicKey: pk, expecting: expecting);
     } on AtSigningVerificationException catch (e) {
-      // The cause travels with the refusal. Without it every reason arrives as
-      // "verification failed using public key", which sends a reader after a
-      // key that is fine — an envelope signed for something else, or under a
-      // version this build does not read, fails here too and neither is a
-      // question about $pk.
       throw AtSigningVerificationException(
           'Signature verification failed using public key for '
           '$signerAtSign enrollment $id : $pk — ${e.message}');

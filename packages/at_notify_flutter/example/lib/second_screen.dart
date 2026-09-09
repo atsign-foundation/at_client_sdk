@@ -132,11 +132,8 @@ class _SecondScreenState extends State<SecondScreen> {
     } else if (!atSignController.text.contains('@')) {
       atSignController.text = '@${atSignController.text}';
     }
-    // at_lookup's own `findSecondary` static was a deprecated wrapper over this.
-    // Behaviour is unchanged, including the surprising part: an atSign with no
-    // atDirectory entry arrives as a THROWN exception, not as a null, so the
-    // old `!= null` test could only ever be true. Absence propagates to the
-    // caller exactly as it did before.
+    // NOTE: an atSign with no atDirectory entry arrives as a thrown exception
+    // rather than a null, so reaching the return means it was found.
     await CacheableSecondaryAddressFinder(AtEnv.rootDomain, 64)
         .findSecondary(atSignController.text);
     return true;

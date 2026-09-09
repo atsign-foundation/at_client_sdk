@@ -9,15 +9,10 @@ import 'test_utils/mocks.dart';
 
 /// `_apsk` writes made by one process for one client are serialised.
 ///
-/// A minter publishes its new signing key before it files it, so that no
-/// envelope is ever signed under a key the advertisement does not name. In the
-/// gap the keyfile does not hold what was advertised, so any other writer
-/// composing from the keyfile sees no signing key, takes the
+/// A minter publishes its new signing key before it files it, so in that gap
+/// another writer composing from the keyfile sees no signing key, takes the
 /// authentication-key fallback, and publishes that over the advertisement.
-/// Measured live: the approver's own envelope signer overwrote its own mint
-/// 20ms later, and the enrollment being approved then failed outright.
 void main() {
-  /// Records enter/exit order so an interleave is visible rather than inferred.
   late List<String> log;
 
   Future<void> section(AtClient client, String name, Duration hold) =>
@@ -32,9 +27,6 @@ void main() {
   test('a second write waits for the first to finish', () async {
     final client = MockAtClient();
 
-    // The slow one starts first and is still inside its section when the fast
-    // one is requested — which is exactly the live shape: the mint publishes,
-    // then files, and the envelope signer arrives in between.
     final slow = section(client, 'mint', const Duration(milliseconds: 60));
     final fast = section(client, 'signer', Duration.zero);
     await Future.wait([slow, fast]);
@@ -81,9 +73,6 @@ void main() {
   test('a write queued behind a failure still runs', () async {
     final client = MockAtClient();
 
-    // Queued while the failing one is in flight, not after it: this is the
-    // arm that fails if the chain propagates the error instead of swallowing
-    // it at the join.
     final failing = serialiseApskWrite(client, () async {
       log.add('first:enter');
       await Future<void>.delayed(const Duration(milliseconds: 40));

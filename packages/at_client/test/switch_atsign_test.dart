@@ -59,11 +59,9 @@ void main() {
       atClientManager.atClient.syncService
           .addProgressListener(BobSyncProgressListener());
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
-      // By identity rather than by count. The SDK registers a listener of its
-      // own on every sync service now — the content-key eviction that makes a
-      // deleted conveyance evict everywhere — so a bare count no longer says
-      // anything about whose app listeners survived the switch, which is what
-      // this test is actually about.
+      // NOTE: by identity rather than by count — the SDK registers a listener
+      // of its own on every sync service, so a bare count says nothing about
+      // whose app listeners survived the switch.
       final listeners =
           (atClientManager.atClient.syncService as SyncServiceImpl)
               .progressListeners();

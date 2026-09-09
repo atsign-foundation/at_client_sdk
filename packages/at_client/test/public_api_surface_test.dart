@@ -2,10 +2,8 @@
 ///
 /// This file imports `package:at_client/at_client.dart` and nothing else — no
 /// `src/` paths, no `implementation_imports` ignore. That constraint is the
-/// test: `CryptoConfig.nskey` is an exported factory with a **required**
-/// `NskeyKeyRing`, and the CHANGELOG tells callers to catch
-/// `ContentKeyUnavailableException` and to name provider ids. If any of those
-/// stops being exported, this file stops compiling.
+/// test: if a symbol an app is told to name stops being exported, this file
+/// stops compiling.
 library;
 
 import 'dart:io';
@@ -17,7 +15,7 @@ void main() {
   group('the nskey surface is reachable through the barrel', () {
     test('CryptoConfig.nskey can be constructed by an outside caller', () {
       // An app can only do this if NskeyKeyRing and a concrete ring are both
-      // exported — the required parameter type is what made this impossible.
+      // exported.
       final NskeyKeyRing ring = InMemoryNskeyKeyRing();
       final config = CryptoConfig.nskey(keyRing: ring);
 
@@ -62,8 +60,7 @@ void main() {
       // Both the posture and EnrollmentKeyExchangeMode (an at_auth type,
       // show-narrowed onto this barrel) must be reachable, or the posture's
       // key-exchange value cannot be read or compared by an app that only
-      // imports at_client. Composing an enrollment request from it still
-      // goes through package:at_auth.
+      // imports at_client.
       final preference = AtClientPreference(posture: PqPosture.pqActive);
       expect(preference.posture.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
       expect(preference.disallowLegacyEncryption, true);
@@ -74,8 +71,7 @@ void main() {
       // for the same reason as EnrollmentKeyExchangeMode: the preference asks
       // for a Set of them and `AtClientImpl.signingAlgoType` hands one back,
       // so without it a caller is asked for a set it cannot build and given a
-      // value it cannot name. This file imports at_client and nothing else, so
-      // if the export goes, the file stops compiling.
+      // value it cannot name.
       final preference = AtClientPreference(
           dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65});
 
@@ -87,12 +83,10 @@ void main() {
     });
   });
 
-  // The group above proves the REQUIRED symbols are reachable — it catches a
-  // surface REMOVAL. This one catches the opposite, which is the likelier
-  // mistake while the PQ surface is still unpublished and moving: an `src/`
-  // file exported by accident. Every change to what a barrel exports is a
-  // deliberate, reviewable diff against a checked-in set — on an intended
-  // change, update the golden set in the SAME commit; that edit is the review.
+  // The group above catches a surface REMOVAL; this one catches the opposite,
+  // an `src/` file exported by accident. Every change to what a barrel exports
+  // is a deliberate diff against a checked-in set — an intended change updates
+  // the golden set in the SAME commit, and that edit is the review.
   group('the exported file surface is a reviewed golden', () {
     Set<String> exportsOf(String barrel) {
       final file = File('lib/$barrel');
@@ -127,14 +121,13 @@ void main() {
 /// widens this surface updates the set here in the same commit.
 const Set<String> _atClientBarrelExports = {
   'package:at_client/src/client/at_client_impl.dart',
-  // Added 2026-09-07: the client factory moved off the AtClient interface,
-  // because a static there forced at_client_spec.dart to import the impl and
-  // 49 files under lib/src import that interface.
+  // The client factory lives off the AtClient interface: a static there would
+  // force at_client_spec.dart to import the impl.
   'package:at_client/src/client/at_client_factory.dart',
   'package:at_client/src/client/at_client_spec.dart',
-  // Added 2026-08-27 for AtClient.ensureReachable's result type. An app
-  // asking whether peers can seal to it needs the outcome vocabulary,
-  // so the enum and its result travel with the method.
+  // AtClient.ensureReachable's result type. An app asking whether peers can
+  // seal to it needs the outcome vocabulary, so the enum and its result travel
+  // with the method.
   'package:at_client/src/client/at_reachability.dart',
   'package:at_client/src/client/data_event.dart',
   'package:at_client/src/client/local_secondary.dart',
@@ -179,9 +172,8 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/at_collection/at_collection_model_factory.dart',
 };
 
-/// The exports of `lib/at_client_mixins.dart`, as reviewed. The PQ work will
-/// narrow this (the `enroll/` activation flows and the signing files are on
-/// this surface today); each such move updates the set here in the same commit.
+/// The exports of `lib/at_client_mixins.dart`, as reviewed. A refactor that
+/// narrows or widens this surface updates the set here in the same commit.
 const Set<String> _atClientMixinsBarrelExports = {
   'package:at_client/src/mixins/at_client_bindings.dart',
   'package:at_client/src/mixins/apkam_signing.dart',
@@ -189,10 +181,10 @@ const Set<String> _atClientMixinsBarrelExports = {
   'package:at_client/src/mixins/envelope_signing.dart',
   'package:at_client/src/enroll/pq_native_onboard.dart',
   'package:at_client/src/enroll/self_retrofit.dart',
-  // Added 2026-08-30. `mintAdvertisedSigningKey` is the one home for minting
-  // the data signing keypair an enrollment owns from birth, and
-  // `at_onboarding_cli` mints one on the enrolment path — so it has to be
-  // reachable from outside at_client, like the two activation flows above it.
+  // `mintAdvertisedSigningKey` is the one home for minting the data signing
+  // keypair an enrollment owns from birth, and `at_onboarding_cli` mints one
+  // on the enrolment path — so it has to be reachable from outside at_client,
+  // like the two activation flows above it.
   'package:at_client/src/enroll/signing_key_mint.dart',
   'package:at_client/src/secret_sharing/secret_sharing.dart',
 };

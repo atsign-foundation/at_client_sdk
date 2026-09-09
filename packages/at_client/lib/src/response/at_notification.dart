@@ -38,9 +38,8 @@ class AtNotification {
       metadata.sharedKeyEnc = json['metadata'][AtConstants.sharedKeyEncrypted];
       metadata.appMetadata =
           Metadata.decodeAppMetadata(json['metadata'][AtConstants.appMetadata]);
-      // A provider decides its wire format from isBinary, so losing it here
-      // makes a binary notification decode as text — garbage, or a raw
-      // FormatException, rather than the bytes that were sent.
+      // NOTE: a provider picks its wire format from isBinary; drop it here and
+      // a binary notification decodes as text.
       metadata.isBinary = _asBool(json['metadata'][AtConstants.isBinary]);
       metadata.encoding = json['metadata'][AtConstants.encoding];
       // AtConstants.sharedWithPublicKeyHash will be sent by the server starting v3.0.52
@@ -79,10 +78,8 @@ class AtNotification {
     };
   }
 
-  /// The atServer sends notification metadata as JSON, but the booleans in it
-  /// arrive as real bools from some paths and as `'true'`/`'false'` strings
-  /// from others, so accept both rather than silently reading a string as
-  /// false.
+  /// Reads a JSON boolean the atServer sends as a real bool on some paths and
+  /// as `'true'`/`'false'` on others.
   static bool _asBool(dynamic value) =>
       value is bool ? value : value.toString().toLowerCase() == 'true';
 

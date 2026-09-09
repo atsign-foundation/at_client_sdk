@@ -51,12 +51,10 @@ class FakeEnrollmentDirectory implements EnrollmentDirectory {
   }
 
   /// Drops [enrollmentId] from every namespace roster, modelling
-  /// `enroll:revoke` — the atServer's `enroll:listns` returns **approved**
-  /// enrollments only, so a revoked one stops appearing to anybody.
+  /// `enroll:revoke`.
   ///
-  /// [at] is the moment the atServer would have stamped on the revocation
-  /// event, which [lastRevokedAt] then reports for every namespace the
-  /// enrollment held.
+  /// [at] is the revocation moment [lastRevokedAt] then reports for every
+  /// namespace the enrollment held.
   void revoke(String enrollmentId, {DateTime? at}) {
     for (final entry in _nsAccess.entries) {
       if (entry.value.remove(enrollmentId) != null && at != null) {
@@ -67,12 +65,11 @@ class FakeEnrollmentDirectory implements EnrollmentDirectory {
 
   final Map<String, DateTime> _lastRevokedAt = {};
 
-  /// Set to have [lastRevokedAt] throw for [namespace], modelling an atServer
-  /// that cannot answer.
+  /// Namespaces for which [lastRevokedAt] throws, modelling an atServer that
+  /// cannot answer.
   final Set<String> unreadableNamespaces = {};
 
-  /// Every namespace [lastRevokedAt] was asked about, so a test can tell "it
-  /// asked and the answer was none" from "it never asked".
+  /// Every namespace [lastRevokedAt] was asked about, in call order.
   final List<String> lastRevokedAtQueries = [];
 
   @override

@@ -76,11 +76,6 @@ void main() {
         final files = tempDir.listSync().whereType<File>().toList();
         expect(
           files.map((file) => file.path).toSet(),
-          // Three, not two. This flush is where the document stops being the
-          // flat shape every published build reads, so the writer keeps a copy
-          // the next write will not roll over — `at_keys_io_test.dart`'s
-          // `flat-to-typed upgrade is preserved once` group owns what that
-          // copy has to contain.
           {path, '$path.bak', '$path${FileAtKeysIo.legacyShapeBackupSuffix}'},
         );
 

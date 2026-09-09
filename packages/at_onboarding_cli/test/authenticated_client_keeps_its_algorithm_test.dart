@@ -15,26 +15,14 @@ class _MockAtAuth extends Mock implements AtAuth {}
 
 class _FakeAtAuthRequest extends Fake implements AtAuthRequest {}
 
-/// **Key material outranks the preference for an authenticated client.**
+/// Key material outranks the preference for an authenticated client.
 ///
-/// `_initAtClient` serves two flows through one method. Enrolment hands it a
-/// lookup this service built for an APKAM keypair minted moments earlier, with
-/// no keyfile yet to resolve from — there the preference is the only source
-/// there is. Authentication hands it nothing, so it adopts the client's own
-/// lookup, and that client has already read the keyfile.
-///
-/// Writing the preference over the second case is what
-/// [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161)
-/// reported: `at_activate otp` and `at_activate list` build their client
-/// through `createAtClient`, which constructs a bare `AtOnboardingPreference`
-/// and so runs at `PqPosture.legacy`. On a PQ-native atSign the overwrite
-/// claimed `rsa2048` for an ML-DSA enrollment, and the first reconnect signed
-/// the challenge with the RSA routine.
-///
-/// The two tests are a pair. Asserting only that the adopted lookup keeps
-/// `mldsa65` would pass just as well if the stamp had been deleted outright,
-/// which would break enrolment — so the second arm holds the stamp in place
-/// for the flow that needs it.
+/// `_initAtClient` serves two flows: enrolment hands it a lookup built for a
+/// just-minted APKAM keypair, where the preference is the only source there
+/// is, while authentication hands it nothing and it adopts the client's own
+/// lookup, which has already read the keyfile. The two tests are a pair — the
+/// second holds the preference stamp in place for the flow that needs it,
+/// which asserting the first alone would let a maintainer delete outright.
 void main() {
   AtSignLogger.root_level = 'SHOUT';
 
@@ -73,15 +61,8 @@ void main() {
   /// A service whose `authenticate()` will succeed without a server, reading
   /// [keysFilePath], under `PqPosture.legacy`.
   ///
-  /// ⚠️ **Named, not inherited.** This read "under a **bare** preference — the
-  /// `PqPosture.legacy` default" until the SDK default moved to `pqReady`, at
-  /// which point the assertion below caught it: an inherited default gives
-  /// `mldsa65` and these tests then compare `mldsa65` with `mldsa65`. What the
-  /// CLI does with a bare preference is a different question, and
-  /// `onboarding_preference_forwards_test` is where it belongs — deliberately,
-  /// because `auth_cli_args.preferenceUnder` leaves an unset `--posture`
-  /// riding the SDK default rather than pinning the binary to the stage it was
-  /// compiled on.
+  /// The posture is named, not inherited: an inherited default supplies
+  /// `mldsa65`, and these tests then compare `mldsa65` with `mldsa65`.
   AtOnboardingServiceImpl legacyPostureService(
       String atSign, String keysFilePath, String enrollmentId, AtAuth atAuth) {
     final preference = AtOnboardingPreference(posture: PqPosture.legacy)
@@ -89,9 +70,6 @@ void main() {
       ..namespace = 'unit_test'
       ..hiveStoragePath = 'test/storage/hive/$atSign'
       ..commitLogPath = 'test/storage/hive/$atSign/commit';
-    // Kept, and it is the reason this file survived the default moving: it
-    // fires the moment the rig stops supplying what these tests contrast
-    // against, instead of letting them pass while measuring nothing.
     expect(preference.authenticationKeyAlgorithm, SigningAlgoType.rsa2048,
         reason: 'the rig must supply the legacy algorithm, or these tests '
             'compare mldsa65 with mldsa65 and discriminate nothing');
@@ -116,8 +94,6 @@ void main() {
 
     expect(await service.authenticate(), isTrue);
 
-    // The lookup under test is the client's own, adopted because this service
-    // built none of its own for the authenticate flow.
     final adopted = service.atLookUp!;
     expect(identical(adopted, AtClientManager.getInstance().atClient
         .getRemoteSecondary()!.atLookUp), isTrue,
@@ -136,10 +112,9 @@ void main() {
       () async {
     const atSign = '@pq_own_lookup';
     const enrollmentId = 'pq-own-1';
-    // A real lookup rather than a mock, so what is read back is the value the
-    // connection would authenticate with. It is stamped twice on this path —
-    // once by the RemoteSecondary that wraps it, once here — and only the
-    // last one decides, which a call count cannot tell you.
+    // NOTE: a real lookup rather than a mock — it is stamped twice on this
+    // path, once by the RemoteSecondary that wraps it and once here, and only
+    // the last one decides.
     final own = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
     final service = legacyPostureService(
         atSign, await pqKeyfile(atSign, enrollmentId), enrollmentId,
@@ -148,11 +123,9 @@ void main() {
 
     expect(await service.authenticate(), isTrue);
 
-    // Enrolment's case: no keyfile has been written for the new enrollment
-    // yet, so the posture's axis is the only thing that can say which routine
-    // this connection authenticates with — even though the keyfile this
-    // service happens to be pointed at says otherwise, which is what makes
-    // this the opposite arm of the test above rather than a restatement of it.
+    // Enrolment's case: with no keyfile yet written for the new enrollment,
+    // the posture's axis is the only thing that can say which routine this
+    // connection authenticates with, whatever the keyfile in hand says.
     expect(own.signingAlgoType, SigningAlgoType.rsa2048);
     expect(own.enrollmentId, enrollmentId);
   });

@@ -79,17 +79,13 @@ jobs:
       # actually exercised. `if: always()` on purpose: a suite that FAILED is
       # exactly when knowing which rows lost their proof matters most.
       #
-      # Emitted for EVERY package in the matrix rather than only the cited one.
-      # Today only at_auth is cited from here (12 citations); conditioning on
-      # that would mean a citation added to at_commons or at_chops later is
-      # silently uncovered, and an uncovered row reads as missing coverage
-      # rather than as missing wiring — the failure this whole ledger exists to
-      # remove.
+      # Emitted for EVERY package in the matrix rather than only the packages
+      # cited today, so a citation added to another package later is not
+      # silently uncovered — an uncovered row reads as missing coverage rather
+      # than as missing wiring, the failure this ledger exists to remove.
       #
-      # ⚠️ The artifact name carries `matrix.package`, without which the eight
-      # legs overwrite one another. That collision already happened once in
-      # at_client_sdk.yaml across its stable/beta legs and cost a whole
-      # dispatch to find.
+      # NOTE: the artifact name must carry `matrix.package`, or the matrix legs
+      # overwrite one another.
       - name: Upload ${{ matrix.package }} acceptance report
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -252,11 +248,10 @@ jobs:
         working-directory: tests/${{ matrix.package }}
         run: dart pub get
 
-      # No sudo, and that is the whole point: sudo resets the environment, so
-      # VIRTUALENV_IMAGE above never reached compose and it silently fell back
-      # to the published `vip` in docker-compose.yaml. The runner user is in
-      # the docker group, so plain compose works - it is what every container
-      # job in at_client_sdk.yaml does.
+      # No sudo: it resets the environment, so VIRTUALENV_IMAGE above would not
+      # reach compose and compose would silently fall back to the published
+      # `vip` in docker-compose.yaml. The runner user is in the docker group,
+      # so plain compose works.
       - name: Start docker instance
         working-directory: tests/${{ matrix.package }}
         run: docker compose up -d

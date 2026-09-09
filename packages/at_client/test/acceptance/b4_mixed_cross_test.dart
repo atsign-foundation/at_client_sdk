@@ -1,7 +1,6 @@
 /// B4 · Mixed-PQ across atSigns — the cold-start gate, cross-atSign.
 ///
-/// Catalogue: `docs/projects/pq/acceptance.md` section 11 (rewritten 2026-08-05
-/// for the app-decides model, `decisions.md` 36). Within a namespace,
+/// Catalogue: the PQ acceptance catalogue, section 11. Within a namespace,
 /// cross-atSign traffic is between installs of the same app, so "mixed" means
 /// the same app at different stages on the two sides — and the SDK's whole
 /// contribution is refusing by name when the destination has no key, taking
@@ -57,10 +56,10 @@ void main() {
       // WHEN  bob's app shares with @alice (and a legacy app on @alice shares
       //       with @bob).
       // THEN  interop works BY DEFAULT in both directions, because legacy
-      //       material outlives the atSign's own migration (decisions 37):
-      //       toward alice via the explicit legacy fallback to her publickey;
-      //       toward bob because even a PQ-native onboard publishes
-      //       public:publickey by default. Only the opt-out refuses it.
+      //       material outlives the atSign's own migration: toward alice via
+      //       the explicit legacy fallback to her publickey; toward bob
+      //       because even a PQ-native onboard publishes public:publickey by
+      //       default. Only the opt-out refuses it.
       provenIn('tests/at_functional_test/test/pq_legacy_interop_live_test.dart',
           'UC-B4.2 inbound',
           proves: 'the inbound half: a legacy app on a freshly CRAM-activated '
@@ -102,9 +101,9 @@ void main() {
       // THEN  the write takes the nskey data path. alice2 not being able to
       //       read PQ records is the release-ordering discipline violated —
       //       the app developer's failure mode, explicitly not the SDK's to
-      //       detect (decisions 36). What the SDK guarantees: alice2's own
-      //       legacy writes still work, nothing becomes unreadable to anyone,
-      //       and alice2's upgrade is purely additive.
+      //       detect. What the SDK guarantees: alice2's own legacy writes
+      //       still work, nothing becomes unreadable to anyone, and alice2's
+      //       upgrade is purely additive.
       provenIn('tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
           'alice shares with bob, and bob reads it with his own nskey private',
           proves: 'the active install\'s cross-atSign write takes the nskey '

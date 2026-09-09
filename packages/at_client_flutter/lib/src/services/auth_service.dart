@@ -68,13 +68,9 @@ class AuthService {
   ///
   /// Returns [AtAuthResponse] which contains keys and status of authentication
   ///
-  /// Deliberately has no `atKeysIo ??= KeychainAtKeysIo()`, unlike [onboard].
-  /// [AtAuthRequest] already refuses a request carrying neither `atKeysIo` nor
-  /// `atAuthKeys`, so here the default could only fire when the caller supplied
-  /// **`atAuthKeys`** — an app that loaded its own key material and said so.
-  /// Pointing it at a keychain that may hold another atSign's keys, or none, is
-  /// a guess. Onboarding is different because it *mints* keys and needs
-  /// somewhere to write them.
+  /// Unlike [onboard], no keychain `atKeysIo` is defaulted in: the request has
+  /// to carry `atKeysIo` or `atAuthKeys` of its own, since a keychain default
+  /// could read another atSign's keys.
   Future<AtAuthResponse> authenticate(
     AtAuthRequest atAuthRequest, {
     List<WrittenAtKeysIo>? backupKeys,

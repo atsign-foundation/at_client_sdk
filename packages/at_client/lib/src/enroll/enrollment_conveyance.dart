@@ -10,10 +10,8 @@ import 'package:meta/meta.dart' show experimental;
 /// link, the signing root when it is fully privileged, the nskey privates
 /// for its namespaces, and the existing app secrets they authorise.
 ///
-/// One injected seam rather than the approval verb wrapper owning the
-/// sealing itself: what to convey is substrate policy, while whether a
-/// conveyance outcome fails the approval is the *caller's* policy — so
-/// implementations report the advertised key package's [KeyPackageStatus]
+/// Whether a conveyance outcome fails the approval is the *caller's* policy,
+/// so implementations report the advertised key package's [KeyPackageStatus]
 /// and never enforce a response to it.
 @experimental
 abstract interface class EnrollmentConveyance {
@@ -23,8 +21,7 @@ abstract interface class EnrollmentConveyance {
   /// Nothing is conveyed unless the package verifies
   /// ([KeyPackageStatus.present]): an enrollment that advertised none
   /// ([KeyPackageStatus.absent]) or one this version cannot read
-  /// ([KeyPackageStatus.unsupported]) is left alone — the first is ordinary
-  /// during rollout and for the self-retrofit path, and neither is anything
+  /// ([KeyPackageStatus.unsupported]) is left alone, neither being anything
   /// the caller can fix. A package that was advertised and refused
   /// ([KeyPackageStatus.rejected]) is reported rather than thrown, so the
   /// caller can decide what a just-approved device that will be unable to
@@ -40,22 +37,17 @@ abstract interface class EnrollmentConveyance {
   /// Signs and conveys **root** links for approved enrollments that are not
   /// yet root-anchored.
   ///
-  /// A scoped enrollment can never anchor itself (not fully privileged —
-  /// correctly), and its approver may have been the legacy parent
-  /// enrollment, which can sign nothing, or a non-privileged approver, which
-  /// signs only a provisional chain link. Left alone, unanchored — or
-  /// chained-but-unanchored — is its permanent state, costing the
-  /// defence-in-depth the anchoring exists for. A fully privileged client
-  /// (`rw` on `*` and `__manage` — the class entitled to hold the signing
-  /// root) is the one party that can repair that, so it sweeps: every
-  /// approved enrollment with a discoverable key package and no published
-  /// *root* link gets one signed with the root private and conveyed, an
-  /// upgrade for the chain-linked and a first anchor for the unsigned
-  /// alike. The enrollment verifies it against the published signing root
-  /// and stamps it onto its own `_apsk` at its next start — this client
-  /// cannot stamp it directly, because `_apsk` accepts writes only from its
-  /// own enrollment's connection, and that restriction is the very
-  /// guarantee the anchoring hangs off.
+  /// A scoped enrollment can never anchor itself, and its approver may be able
+  /// to sign nothing at all or only a provisional chain link, so unanchored is
+  /// its permanent state unless a fully privileged client — `rw` on `*` and
+  /// `__manage`, the class entitled to hold the signing root — repairs it.
+  /// Every approved enrollment with a discoverable key package and no
+  /// published *root* link gets one signed with the root private and conveyed.
+  /// The enrollment verifies it against the published signing root and stamps
+  /// it onto its own `_apsk` at its next start; this client cannot stamp it
+  /// directly, because `_apsk` accepts writes only from its own enrollment's
+  /// connection, and that restriction is the guarantee the anchoring hangs
+  /// off.
   ///
   /// The caller is responsible for privilege. Returns how many links were
   /// conveyed.
@@ -71,9 +63,6 @@ abstract interface class EnrollmentConveyance {
 /// the caller the evidence that the approval itself happened: a plain throw
 /// here would report a server-side success as a failure, which is how an
 /// approver ends up retrying an approval that already went through.
-///
-/// A subtype of the published [AtEnrollmentException], so callers already
-/// catching that type keep working unchanged.
 @experimental
 class EnrollmentConveyanceException extends AtEnrollmentException {
   /// The successful server-side approval this exception is *not* about.

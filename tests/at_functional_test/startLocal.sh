@@ -2,16 +2,16 @@
 set -euo pipefail
 
 # Bring up a fresh virtualenv and leave it running; run no tests. For driving
-# individual test files by hand, or for probing a live atServer, without paying
-# a container recycle per attempt — runLocal.sh recycles on every invocation.
+# individual test files by hand, or probing a live atServer, without paying a
+# container recycle per attempt — runLocal.sh recycles on every invocation.
 #
 #   ./startLocal.sh          # legacy fixed ports (64 / 25000-25999 / 6379) — same as CI
 #   ./startLocal.sh 27000    # base port: root 27000, secondaries 27001-27080, redis 27099
 #
-# Pass a BASE_PORT to shift the virtualenv into a [BASE, BASE+99] range so it
-# can run alongside another virtualenv (e.g. the e2e suite via its own
-# runLocal.sh) on a different base port. The docker-compose.yaml reads the VE_*
-# vars exported here; with none set it uses the legacy fixed ports.
+# A BASE_PORT shifts the virtualenv into a [BASE, BASE+99] range so it can run
+# alongside another virtualenv on a different base port. docker-compose.yaml
+# reads the VE_* vars exported here; with none set it uses the legacy fixed
+# ports.
 
 cd "$(dirname "$0")"
 
@@ -29,16 +29,14 @@ fi
 
 echo "*** Getting dependencies" && dart pub get
 
-# The virtualenv image. Defaults to the locally built PQ-capable build (the
-# published vip lags the PQ work); override with
-# VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip (or a pinned tag) to run against
-# a registry image. docker-compose.yaml reads this var.
+# The virtualenv image, read by docker-compose.yaml. Defaults to the locally
+# built PQ-capable image; set VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip (or
+# a pinned tag) to run against a registry image instead.
 export VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"
 
 cd test
 echo "*** docker compose down" && docker compose down
-# A locally built image is on no registry, so pulling it fails the run. Only
-# pull what could actually have come from one.
+# A locally built image is on no registry, so pulling it fails the run.
 if [[ "$VIRTUALENV_IMAGE" == *"/"* ]]; then
   echo "*** docker compose pull (${VIRTUALENV_IMAGE})" && docker compose pull
 else

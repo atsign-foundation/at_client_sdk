@@ -22,10 +22,8 @@ typedef _Client = ({
 /// The nskey data path, driven end to end with the namespace key supplied by a
 /// fixture instead of the secret-sharing substrate.
 ///
-/// This is the walking skeleton for UC-A3.1. It proves the two providers and
-/// the CK cache compose into a working self-data round-trip, which is what the
-/// substrate work later feeds for real — the production path (a minted nskey,
-/// its private conveyed per-APKAM) is unchanged by anything here.
+/// Covers UC-A3.1: the two providers and the CK cache compose into a working
+/// self-data round-trip.
 void main() {
   const owner = '@alice';
   const namespace = 'app_1.my_apps';
@@ -49,8 +47,7 @@ void main() {
   }
 
   /// A conveyance record as it arrives on another client: the same addressing,
-  /// carrying the appMetadata the writer stamped — which is what travels on the
-  /// wire, and what names the generation the envelope was sealed to.
+  /// carrying the appMetadata that names the generation it was sealed to.
   AtKey syncedConveyance(AtKey written) => AtKey()
     ..key = written.key
     ..namespace = written.namespace
@@ -58,12 +55,11 @@ void main() {
     ..sharedWith = written.sharedWith
     ..metadata = (Metadata()..appMetadata = written.metadata.appMetadata);
 
-  /// Seal a CK into its conveyance record and then promote it, which is what
-  /// `CkManager` does around that write.
+  /// Seals a CK into its conveyance record and then promotes it, as `CkManager`
+  /// does around that write.
   ///
-  /// Sealing alone deliberately does not promote: a CK becomes the key new
-  /// writes use only once the record conveying it is durable, so these tests —
-  /// which drive the providers without a manager — have to say so themselves.
+  /// Sealing alone does not promote: a CK becomes the key new writes use only
+  /// once the record conveying it is durable.
   Future<String> conveyAsCurrent(
       _Client client, AtKey conveyanceKey, ContentKey ck) async {
     final sealed =
@@ -85,9 +81,7 @@ void main() {
     ..metadata = Metadata();
 
   setUpAll(() async {
-    // One nskey keypair per (atSign, namespace) — the recipient key for both
-    // directions. Minted once for the whole suite; minting is not what this
-    // exercises.
+    // One nskey keypair per (atSign, namespace), minted once for the suite.
     nskeyPair = await XWingKeyPair.generate();
     registerFallbackValue(AtKey());
   });
@@ -103,35 +97,25 @@ void main() {
         () async {
       const plaintext = 'the treaty text';
 
-      // --- alice1 writes -------------------------------------------------
       final alice1 = authorisedClient();
 
-      // 1. Cut a symmetric CK.
       final ck = ContentKey(_randomKeyBytes());
 
-      // 2. Convey the CK once: sealed to @alice's own nskey, written as its own
-      //    <ckKid>.__ck record.
       final conveyanceKey = ckConveyanceKey(ck.ckKid);
       final sealedCk = await conveyAsCurrent(alice1, conveyanceKey, ck);
 
-      // 3. Write the data value under that CK.
       final valueKey = dataKey('treaty');
       final ciphertext =
           await alice1.data.encrypt(context, valueKey, plaintext);
 
-      // --- alice2 syncs and reads ----------------------------------------
-      // A distinct client: its own cache, seeded only with the namespace
-      // keypair it received. It has never seen the CK.
       final alice2 = authorisedClient();
       expect(alice2.cache.get(owner, namespace, ck.ckKid), isNull,
           reason: 'alice2 must start without the content key');
 
-      // at/nskey decapsulates the CK with the nskey private and caches it.
       final recoveredCk = await alice2.nskey
           .decrypt(context, syncedConveyance(conveyanceKey), sealedCk);
       expect(recoveredCk, ck.toBase64());
 
-      // at/symmetric/AES/GCM resolves the CK by ckKid and decrypts.
       final syncedValueKey = dataKey('treaty')
         ..metadata.appMetadata = valueKey.metadata.appMetadata;
       final recovered =
@@ -188,8 +172,7 @@ void main() {
       final sealedCk =
           await alice1.nskey.encrypt(context, conveyanceKey, ck.toBase64());
 
-      // An @alice client authorised for a different namespace only: it holds no
-      // private half for app_1.my_apps.
+      // An @alice client that holds no private half for this namespace.
       final outsider = NskeyProvider(
         keyRing: InMemoryNskeyKeyRing(),
         cache: ContentKeyCache(),
@@ -209,9 +192,7 @@ void main() {
           await alice1.nskey.encrypt(context, conveyanceKey, ck.toBase64());
 
       // A different nskey keypair under the same namespace name, so the info
-      // bytes match on both sides and it is the KEM alone that refuses it.
-      // The info binding is covered separately, one keypair across two
-      // namespaces.
+      // bytes match on both sides.
       final wrongPair = await XWingKeyPair.generate();
       final wrongRing = InMemoryNskeyKeyRing()
         ..seedKeypair(owner, namespace,
@@ -221,9 +202,7 @@ void main() {
           NskeyProvider(keyRing: wrongRing, cache: ContentKeyCache());
 
       // The record names alice's generation, which this ring does not hold, so
-      // the refusal lands at the ring. Seeding the wrong pair under that same
-      // kid would push it to the KEM instead — either way it is refused, and
-      // the info binding is covered separately by the cross-namespace test.
+      // the refusal lands at the ring rather than at the KEM.
       await expectLater(
         wrongClient.decrypt(context, syncedConveyance(conveyanceKey), sealedCk),
         throwsA(isA<AtDecryptionException>()),
@@ -255,7 +234,6 @@ void main() {
             'and it is typed, so a caller can tell retry-later from give-up',
       );
 
-      // Once the conveyance syncs, the same read succeeds.
       final reseal = await _seal(alice1, ck);
       await alice2.nskey
           .decrypt(context, syncedConveyance(reseal.key), reseal.sealed);
@@ -273,7 +251,7 @@ void main() {
           await alice1.data.encrypt(context, valueKey, 'the treaty text');
 
       // alice2 has the __ck record locally but has never opened it, so its
-      // cache is cold. Reading the record routes back through at/nskey.
+      // cache is cold.
       final alice2 = authorisedClient();
       final mockAtClient = MockAtClient();
       when(() => mockAtClient.getCurrentAtSign()).thenReturn(owner);
@@ -282,8 +260,7 @@ void main() {
         expect(requested.key, '${ck.ckKid}.__ck');
         expect(requested.namespace, namespace);
         expect(requested.sharedBy, owner);
-        // Reading a record brings its stored appMetadata with it, which is what
-        // names the generation the envelope was sealed to.
+        // Reading a record brings its stored appMetadata with it.
         requested.metadata.appMetadata = conveyanceKey.metadata.appMetadata;
         await alice2.nskey.decrypt(context, requested, sealedCk);
         return AtValue();
@@ -298,10 +275,8 @@ void main() {
     });
 
     /// "Has not synced yet" and "is there but will not open" are different
-    /// answers, and the class doc promises callers they can tell them apart:
-    /// the first says retry, the second says give up. Folding a tampered or
-    /// corrupt envelope into the first hides the key layer's only integrity
-    /// alarm and tells the caller to keep polling.
+    /// answers — the first says retry, the second give up — so folding a
+    /// corrupt envelope into the first hides the only integrity alarm.
     test('a conveyance that will not open is an integrity failure, not a wait',
         () async {
       final alice1 = authorisedClient();
@@ -312,8 +287,7 @@ void main() {
       final ciphertext =
           await alice1.data.encrypt(context, valueKey, 'the treaty text');
 
-      // The conveyance record is present, but a byte of its envelope was
-      // flipped in storage.
+      // The record is present, but a byte of its envelope was flipped.
       final tampered = base64Decode(sealedCk);
       tampered[tampered.length - 1] ^= 0x01;
       final corruptCk = base64Encode(tampered);
@@ -349,7 +323,6 @@ void main() {
       final oldCk = ContentKey(_randomKeyBytes());
       final newCk = ContentKey(_randomKeyBytes());
 
-      // alice1 cuts and conveys two CKs in order; the second is current.
       await conveyAsCurrent(alice1, ckConveyanceKey(oldCk.ckKid), oldCk);
       final resealOld = await _seal(alice1, oldCk);
       await conveyAsCurrent(alice1, ckConveyanceKey(newCk.ckKid), newCk);
@@ -413,7 +386,7 @@ void main() {
     test('the same nskey cannot open a conveyance sealed for another namespace',
         () async {
       // One keypair, two namespaces — isolating the HPKE info binding from the
-      // KEM, which a wrong-keypair test cannot do.
+      // KEM.
       final ring = InMemoryNskeyKeyRing()
         ..seedKeypair(owner, namespace,
             publicKey: nskeyPair.publicKeyBytes,
@@ -457,11 +430,8 @@ void main() {
     });
 
     /// A content key covers every record in its `(owner, namespace)` scope, so
-    /// the key alone cannot say which record a ciphertext belongs to. Without
-    /// the record address bound as AAD, anyone who can write the store can move
-    /// a valid ciphertext between records in that scope and it still
-    /// authenticates — yesterday's answer reappearing under today's question,
-    /// tag intact.
+    /// without the record address bound as AAD a valid ciphertext could be
+    /// moved between records in that scope and still authenticate.
     test('a ciphertext cannot be relocated to another record in the same scope',
         () async {
       final alice = authorisedClient();

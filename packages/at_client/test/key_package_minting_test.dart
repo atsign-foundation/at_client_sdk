@@ -31,16 +31,13 @@ class MockAtClient extends Mock implements AtClient {}
 
 class MockAtEnrollment extends Mock implements AtEnrollment {}
 
-/// KE-2's writer: an enrollment amending its own advertised key package.
+/// An enrollment amending its own advertised key package.
 ///
-/// **The ordering assertion is the one that matters most, and it points the
-/// opposite way to `SigningKeyMinting`'s.** An encapsulation key advertised
+/// Ordering is the property that matters most: an encapsulation key advertised
 /// before its private half is filed makes every sender reading the
-/// advertisement in that window seal data to a key nobody holds — durable
-/// writes that no later repair opens. So the private half must be in the
-/// keyfile *before* the `enroll:update` goes out, and
-/// [heldWhenPublished] is what lets a test tell the two orders apart rather
-/// than merely observing that both happened.
+/// advertisement in that window seal data to a key nobody holds, and those
+/// writes are durable — [heldWhenPublished] is what lets a test tell the two
+/// orders apart rather than merely observe that both happened.
 void main() {
   const atSign = '@alice';
   const enrollmentId = 'enroll-a';
@@ -51,7 +48,6 @@ void main() {
   late AtChops atChops;
   late InMemoryAtKeysIo keysIo;
 
-  /// Every `enroll:update` the minter sent.
   late List<EnrollmentUpdateRequest> updates;
 
   /// The kpids the keyfile held when each update was sent, so a test can tell
@@ -61,23 +57,19 @@ void main() {
   Future<List<CryptographicMaterial>> encMaterials(
       {String part = CryptographicMaterialRole.publicEncapsulation}) async {
     final keys = await keysIo.read(atSign);
-    // Both containers: production files an enrollment's first package
-    // untagged, and anything this class mints is tagged.
+    // NOTE: not scoped by enrollment id — an enrollment's first package is
+    // filed untagged and anything minted later is tagged.
     return keys.keys.where((m) => m.role == part).toList();
   }
 
   Future<Set<String>> heldKpids() async =>
       (await encMaterials()).map((m) => m.keyId).toSet();
 
-  /// The key package the last `enroll:update` advertised, **after verifying
-  /// its signature the way a peer does**.
+  /// The key package the last `enroll:update` advertised, verified against
+  /// `_apsk` the way a peer does before sealing anything to it.
   ///
-  /// Verification is not a bonus assertion here, it is the point: a peer
-  /// checks the package against the enrollment's `_apsk` before sealing
-  /// anything to it, so a package that does not verify is one nobody acts on
-  /// — and a test that read the payload directly would pass for a package the
-  /// whole ecosystem would ignore. The enrollment holds no signing key of its
-  /// own in these rows, so `_apsk` is the bare APKAM public key.
+  /// The enrollment holds no signing key of its own in these rows, so `_apsk`
+  /// is the bare APKAM public key.
   Future<KeyPackage> advertised() async {
     final envelope = SignedEnvelope.fromJson(
         updates.last.metadata!['keyPackage'] as Map<String, dynamic>);
@@ -91,16 +83,10 @@ void main() {
   /// Files an already-held encapsulation keypair, as an enrollment created
   /// under [algorithm] would carry.
   ///
-  /// ⚠️ **[tagged] defaults to FALSE because that is what production writes.**
-  /// `enrollmentKeyPackageBuilder` files the first key package with **no**
-  /// enrollment id — it runs before the atServer has assigned one — so an
-  /// untagged pair is the ordinary state of a freshly created enrollment, and
-  /// a tagged one only appears once something re-files it under the id.
-  ///
-  /// This defaulted to `true` when the file was written, and the fixture was
-  /// wrong in the direction that hides a defect: every row passed while the
-  /// production reader saw no held key at all, mint a duplicate under the same
-  /// algorithm, and advertised it beside the one already in the record.
+  /// [tagged] defaults to false because a first key package is filed before
+  /// the atServer has assigned an enrollment id, so an untagged pair is the
+  /// ordinary state of a freshly created enrollment; a tagged one appears
+  /// only once something re-files it under the id.
   Future<String> fileHeldKey(String algorithm,
       {bool tagged = false,
       CryptographicMaterialStatus status =
@@ -193,9 +179,8 @@ void main() {
     });
 
     test('a client with no key source mints nothing', () async {
-      // A minted key that cannot be filed is one peers seal to and this
-      // client can never open — the exact data loss the file-first order
-      // exists to prevent, arriving by another route.
+      // NOTE: a minted key that cannot be filed is one peers seal to and this
+      // client can never open.
       when(() => atClient.atKeysIo).thenReturn(null);
       configure(const [SecretSharingAlgos.mlKem1024]);
 
@@ -206,8 +191,8 @@ void main() {
     });
 
     test('an unenrolled client mints nothing', () async {
-      // enroll:update is self-only, so a client running as `primary` cannot
-      // say which record's metadata to amend: it can name no enrollment.
+      // NOTE: enroll:update is self-only, so a client that can name no
+      // enrollment can name no record to amend.
       when(() => atLookUp.enrollmentId).thenReturn(null);
       configure(const [SecretSharingAlgos.mlKem1024]);
 
@@ -244,14 +229,9 @@ void main() {
     });
 
     test('an amendment conveys nothing over the wire', () async {
-      // The updater already holds the plaintext of everything sealed to its
-      // own key package, so amending it re-files locally and sends nothing.
-      // Re-sealing here would hand the same secret back to the same holder
-      // over the wire for no reason.
-      //
-      // `put` is stubbed to RECORD rather than left unstubbed: an unstubbed
-      // call on a mock throws, so the test would redden either way and the
-      // failure would be about the mock rather than about a conveyance.
+      // NOTE: `put` is stubbed to record rather than left unstubbed — an
+      // unstubbed call throws, and the failure would name the mock rather
+      // than a conveyance.
       final written = <String>[];
       when(() => atClient.put(any(), any())).thenAnswer((i) async {
         written.add((i.positionalArguments[0] as AtKey).toString());
@@ -274,10 +254,6 @@ void main() {
 
     test('the private half is filed BEFORE the advertisement goes out',
         () async {
-      // The property this whole class is ordered around. Publishing first
-      // would let a sender reading the advertisement in the window seal to a
-      // key whose decapsulation half does not exist yet — and those writes
-      // are durable, so nothing later opens them.
       await fileHeldKey(SecretSharingAlgos.xWing);
       configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
 
@@ -293,9 +269,9 @@ void main() {
 
     test('the minted private half re-derives the advertised public key',
         () async {
-      // A filed seed that does not reproduce the advertised key is an address
-      // this client answers at and cannot open — indistinguishable from a
-      // healthy enrollment until the first secret arrives.
+      // NOTE: a filed seed that does not reproduce the advertised key is an
+      // address this client answers at and cannot open, and it looks healthy
+      // until the first secret arrives.
       configure(const [SecretSharingAlgos.mlKem1024]);
 
       await minter().reconcileKeyPackage();
@@ -312,10 +288,8 @@ void main() {
     });
 
     test('the advertisement is signed by the key _apsk names', () async {
-      // advertised() verifies against the APKAM public key and throws if the
-      // signature does not check out, so reaching a package at all is the
-      // assertion. A peer verifies exactly this way before sealing anything,
-      // so a package signed by some other key is one nobody acts on.
+      // NOTE: advertised() throws unless the signature verifies, so reaching
+      // a package at all is the assertion.
       configure(const [SecretSharingAlgos.mlKem1024]);
 
       await minter().reconcileKeyPackage();
@@ -350,10 +324,8 @@ void main() {
 
       final package = await advertised();
       final byKid = {for (final k in package.keys) k.kid: k};
-      // Presence asserted before status, so dropping the entry fails with
-      // "the retired key is missing" rather than a null-check crash that
-      // names nothing. The publish rewrites the record whole, so an omitted
-      // entry IS a withdrawal — the exact mistake this row exists to catch.
+      // NOTE: presence is asserted before status, so dropping the entry fails
+      // by name rather than crashing on a null.
       expect(byKid.keys, contains(leaving),
           reason: 'a retired key stays listed: the advertisement is rewritten '
               'whole, so dropping the entry withdraws it and strands every '
@@ -369,20 +341,14 @@ void main() {
 
     test('a keyfile status this build cannot read is republished verbatim',
         () async {
-      // The advertisement is rewritten WHOLE on every reconcile, so whatever
-      // this seam decides an entry's status is becomes what the record says.
-      // Until 2026-08-22 it read the keyfile's open token and wrote one of the
-      // two values this build knows - so a newer build marking a key, say,
-      // revoked would have had an older one republish it as merely retired,
-      // in the owner's own record.
+      // NOTE: the advertisement is rewritten whole on every reconcile, so a
+      // status token this build cannot read must cross unchanged rather than
+      // be narrowed to one of the two values it knows.
       final unreadable = await fileHeldKey(SecretSharingAlgos.xWing,
           status: CryptographicMaterialStatus.of('revoked'));
       final live = await fileHeldKey(SecretSharingAlgos.mlKem1024);
       configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
 
-      // The revoked key is not active, so X-Wing counts as missing and a fresh
-      // one is minted beside it. That is what forces the republish, and it is
-      // the realistic shape: the entry is RETAINED, not superseded.
       final reconciled = await minter().reconcileKeyPackage();
       expect(reconciled.minted, [SecretSharingAlgos.xWing]);
       expect(reconciled.retired, isEmpty,
@@ -423,9 +389,6 @@ void main() {
 
     test('a swap mints the incoming key before retiring the outgoing one',
         () async {
-      // The single-step migration, which is what a deployment that edits the
-      // list in one go actually does. The enrollment must never pass through
-      // a state advertising no active key.
       final outgoing = await fileHeldKey(SecretSharingAlgos.xWing);
       configure(const [SecretSharingAlgos.mlKem1024]);
 

@@ -1,18 +1,13 @@
-// The substrate is deliberately marked @experimental and will be reshaped as
-// the group surface matures.
+// The substrate this exercises is marked @experimental.
 // ignore_for_file: experimental_member_use
 
 /// A namespace key minted by startup seeding must be DURABLY filed before its
 /// advertisement is published.
 ///
-/// The mint's own contract enforces durable-before-published — but only
-/// through the `privateFiling` its ring is built with. The client's data-path
-/// ring gets one; a seeding ring built without one silently skips the filing
-/// and publishes anyway, leaving the private in process memory only. Every
-/// peer then seals to the advertised key; the first restart discards the only
-/// copy of what opens those records, and rotation replaces the key without
-/// decrypting the past. Nothing fails at the time — the loss surfaces as
-/// unreadable records on some later day.
+/// The mint enforces that only through the `privateFiling` its ring is built
+/// with: a seeding ring built without one publishes anyway, leaving the
+/// private in process memory alone while every peer seals to it, and nothing
+/// fails until a restart discards the only copy.
 library;
 
 import 'dart:convert';
@@ -68,9 +63,8 @@ void main() {
     await AtClientImpl.create(
       atSign,
       'buzz',
-      // `pqReady`, named rather than defaulted: the 3.x default is `legacy`, which
-      // runs no post-quantum startup at all, and this exercises exactly that
-      // startup. The stage is the fixture here, not the thing under test.
+      // NOTE: the posture is named rather than defaulted — the default runs no
+      // post-quantum startup at all, and that startup is what this exercises.
       AtClientPreference(posture: PqPosture.pqReady)
         ..hiveStoragePath = storageDir
         ..commitLogPath = '$storageDir/commit'
@@ -83,9 +77,8 @@ void main() {
       atKeysIo: inner,
     );
 
-    // The mint publishes the advertisement only after the private is durable,
-    // so the publish event is the assertion point: whatever should have been
-    // filed has been by now.
+    // NOTE: the mint publishes only after the private is durable, so the
+    // publish event is the assertion point.
     final deadline = DateTime.now().add(const Duration(seconds: 15));
     while (!events.any((e) => e.startsWith('update:public:__nskey.buzz'))) {
       if (DateTime.now().isAfter(deadline)) {

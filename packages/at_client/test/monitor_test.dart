@@ -198,12 +198,9 @@ void main() {
     });
 
     /// Reading the watermark is a local keystore operation, not part of
-    /// connecting, so its failure must not abort the connect. A client that
-    /// refused legacy encryption had its own watermark write refused, the
-    /// exception reached the connect handler, and the monitor retried with
-    /// backoff for as long as the cause persisted - which, for a configuration
-    /// flag, is forever. The client was silently deaf and the only symptom was
-    /// the absence of `listening`.
+    /// connecting, so its failure must not abort the connect. A configuration
+    /// cause never clears, so a monitor that retries on one is silently deaf
+    /// with the absence of `listening` as its only symptom.
     test('a watermark read that throws does not stop it connecting', () async {
       watermarkError = LegacyEncryptionRefusedException(
           'lastreceivednotification',
@@ -351,10 +348,10 @@ void main() {
               'without the pause both run at once - the watermark is then '
               'written out of arrival order and the atServer replays a window '
               'on the next reconnect');
-      // Measured 1 and 1, not 2 and 2: the second notification is delivered
-      // out of the controller's buffer while it is still draining, and a
-      // pause during that does not re-fire onPause. What matters is that the
-      // seam is reached at all and left balanced.
+      // The count is 1 and 1, not 2 and 2: the second notification is
+      // delivered out of the controller's buffer while it is still draining,
+      // and a pause during that does not re-fire onPause. What matters is that
+      // the seam is reached at all and left balanced.
       expect(muxable.pauses, greaterThan(0),
           reason: 'the pause reached the connection rather than being an '
               'accident of handler timing: at_lookup carries it to the '

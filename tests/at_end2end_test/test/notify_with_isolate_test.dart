@@ -77,20 +77,16 @@ Future<void> initSharedAtSign(SendPort mainIsolateSendPort) async {
   });
 }
 
-/// Built here rather than through `TestPreferences`, because this runs inside
-/// a spawned isolate with no access to that singleton — so the posture is named
-/// here too. No compiler names this site: it constructs the preference
-/// directly, and `AtClientPreference.posture` has a default.
+/// Builds the client preferences for a spawned isolate, which cannot reach the
+/// `TestPreferences` singleton, so the posture is named here.
 AtClientPreference getAtClientPreferences(String atSign) {
   var atClientPreference = AtClientPreference(posture: PqPosture.legacy);
   atClientPreference.hiveStoragePath = 'test/hive/$atSign';
   atClientPreference.commitLogPath = 'test/hive/$atSign/commit/';
   atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
   atClientPreference.rootPort = ConfigUtil.getYaml()['root_server']['port'] ?? 64;
-  // The one route in this pack that reaches a live client without passing
-  // through TestPreferences or testInitializer, so the guard is invoked by
-  // hand. Leaving it out would make this file the single hole in a rule the
-  // rest of the suite cannot break.
+  // NOTE: the one route in this pack that reaches a live client without going
+  // through TestPreferences, so the guard is invoked by hand.
   TestPreferences.refuseDurableWritesToLongLivedAtSigns(
       atSign, atClientPreference);
   return atClientPreference;

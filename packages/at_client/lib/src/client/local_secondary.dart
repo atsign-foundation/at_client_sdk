@@ -134,9 +134,9 @@ class LocalSecondary implements Secondary {
           'set; AtClientManager.setCurrentAtSign must run first',
         );
       }
-      // Null is a legal answer, not a failure: a LocalSecondary built around
-      // an injected keystore has no hiveStoragePath and never needed one.
-      // AtSyncQueue then uses the global instance, exactly as it always did.
+      // NOTE: a null storagePath is legal — a LocalSecondary built around an
+      // injected keystore has no hiveStoragePath, and AtSyncQueue then uses
+      // the global Hive instance.
       final q = AtSyncQueue(
           atSign: atSign,
           storagePath: _atClient.getPreferences()?.hiveStoragePath);
@@ -318,11 +318,6 @@ class LocalSecondary implements Secondary {
   /// server already has the entry; bouncing it back would be a loop,
   /// and a queued entry carries only the key's name, so a later drain
   /// would send whatever local storage held by then.
-  ///
-  /// Grep for the flag rather than trusting a list here: this said
-  /// "today only `SyncServiceImpl._pullToLocal` does this" while
-  /// `legacy_encryption.dart` had long been caching a fetched public
-  /// key the same way.
   @override
   Future<String?> executeVerb(VerbBuilder builder,
       {@Deprecated('Inert: nothing reads it, so passing it suppresses '
@@ -524,14 +519,10 @@ class LocalSecondary implements Secondary {
   /// [isExpiry] marks a deletion the TTL sweep is performing rather than one
   /// an enrollment asked for, and skips the enrollment authorization check.
   ///
-  /// Reclaiming an expired record is storage internals, not an operation on
-  /// anyone's data: the record has already ceased to exist as far as every
-  /// reader is concerned, and the sweep is driven by a timer rather than by
-  /// the enrollment whose scope the check tests. Refusing it leaves bytes
-  /// nothing can read and — before the expiry timer learned to back off — a
-  /// record the sweep retried forever. The scoping the check exists to
-  /// enforce is unaffected: an expiry deletion is `localOnly`, so it is never
-  /// enqueued for sync and cannot reach anyone else's copy.
+  /// Safe because an expiry deletion is `localOnly`: it is never enqueued for
+  /// sync and cannot reach anyone else's copy. Without it a client whose
+  /// enrollment does not cover a record's namespace could never reclaim that
+  /// record.
   Future<String> _delete(DeleteVerbBuilder builder,
       {bool cameFromServer = false,
       bool localOnly = false,
@@ -625,14 +616,6 @@ class LocalSecondary implements Secondary {
         // the publisher's atServer has already dropped (or will drop)
         // its own copy at the same TTL, and is responsible for the
         // recipients' `cached:` evictions.
-        // isExpiry: true — reclaiming an expired record is storage internals,
-        // not an operation an enrollment is performing, so it is not subject
-        // to that enrollment's namespace scope. Without it a client whose
-        // enrollment does not cover a record's namespace can never reclaim it:
-        // the record is pulled into local storage by sync, expires, and then
-        // fails this delete forever. `_nskeylock` records reach exactly that
-        // state — created remote-only by MintLock, synced down like any other
-        // key, and released by ttl alone.
         await _delete(builder, localOnly: true, isExpiry: true);
         deleted++;
       } on Exception catch (e) {
@@ -945,28 +928,16 @@ class LocalSecondary implements Secondary {
   /// enrollment id — it is authenticating with the atSign's own keys and has
   /// no id to fetch a record by.
   ///
-  /// Public because the PQ startup reconciles the keyfile's own snapshot of
-  /// `namespaces`/`appName`/`deviceName` against this record. Two readers of
-  /// one record are two chances to describe it differently, so the second
-  /// caller shares this one rather than issuing its own `enroll:fetch`.
+  /// Shared rather than re-fetched: two readers of one record are two chances
+  /// to describe it differently, so a second caller reuses this memo instead
+  /// of issuing its own `enroll:fetch`.
   Future<Enrollment?> getEnrollmentDetails() async =>
       enrollment ??= await _getEnrollmentDetails();
 
-  /// Always goes to the atServer. There is deliberately no durable cache: the
-  /// only reuse is the in-memory memo in [getEnrollmentDetails], which makes
-  /// this one fetch per client rather than per call.
-  ///
-  /// There used to be a local-keystore cache here and **it could never hit** —
-  /// the read looked for `local:<enrollmentId><atSign>` while the write went to
-  /// `<enrollmentId>.new.enrollments.__manage<atSign>`, which is the atServer's
-  /// own naming for an enrollment record rather than a private cache key.
-  /// Nothing in the workspace read what it wrote; the chain sweep gets its
-  /// records from a remote `enroll:list`, where that string is only a key in
-  /// the response map.
-  ///
-  /// Making the cache hit would have been the wrong repair. A client re-reads
-  /// this record on every start precisely so that a grant changed since last
-  /// time is noticed, and a cache that worked would hide exactly that.
+  /// Always goes to the atServer, so that a grant changed since the last start
+  /// is noticed; there is deliberately no durable cache. The only reuse is the
+  /// in-memory memo in [getEnrollmentDetails], which makes this one fetch per
+  /// client rather than per call.
   Future<Enrollment?> _getEnrollmentDetails() async {
     if (isAtSignCredential(_atClient.enrollmentId)) {
       return null;
@@ -986,11 +957,6 @@ class LocalSecondary implements Secondary {
       fetchFailure = e;
     }
 
-    // Both catches above used to log at `finer` and fall through to a `!` on
-    // this value, so an unreachable atServer surfaced as "Null check operator
-    // used on a null value" from a line that mentions neither the enrollment
-    // nor the fetch — with the exception that explains it discarded at a level
-    // nobody runs at.
     if (enrollmentInfoFromServer == null) {
       throw AtKeyNotFoundException('Failed to fetch the enrollment record for '
           '${_atClient.enrollmentId} from the atServer'

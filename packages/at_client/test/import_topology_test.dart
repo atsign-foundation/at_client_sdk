@@ -4,12 +4,11 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 /// The public barrels are export surface only: no file under `lib/src` may
-/// import them. A src file importing a barrel creates an import cycle with
-/// everything the barrel exports (the barrel exports the impl layer, the
-/// impl layer imports the subsystems), which is what kept the PQ subsystem
-/// entangled with the whole package. The sweep that established this
-/// invariant is `docs/projects/pq/decisions.md` section 61; a violation here
-/// is a new barrel import, and the fix is a concrete
+/// import them.
+///
+/// A src file importing a barrel creates an import cycle with everything the
+/// barrel exports — the barrel exports the impl layer, the impl layer imports
+/// the subsystems — so the fix for a violation is a concrete
 /// `package:at_client/src/...` import of what the file actually uses.
 void main() {
   test('no file under lib/src imports a public barrel', () {
@@ -51,12 +50,6 @@ void main() {
   });
 
   test('the enrollment service cannot reach the client impl', () {
-    // AtClientImpl constructs and calls EnrollmentServiceImpl; the reverse
-    // reach — the service impl's import closure containing the client impl —
-    // is the AtClientImpl↔EnrollmentServiceImpl cycle the bootstrap work
-    // cut. The edges that used to close it were incidental: a dartdoc-only
-    // import in at_client_preference, and a deprecated ignored
-    // AtClientManager parameter on NotificationServiceImpl.create.
     final closure =
         _importClosure('lib/src/service/enrollment_service_impl.dart');
     expect(closure,
@@ -73,10 +66,6 @@ void main() {
   });
 
   test('the secret-sharing substrate cannot reach the enrollment service', () {
-    // The service layer composes the substrate (the conveyance seals through
-    // it); the substrate reaching back up — the old self-wired privilege
-    // gate constructing EnrollmentServiceImpl — was the cycle the injected
-    // privilege resolver cut.
     final closure =
         _importClosure('lib/src/secret_sharing/at_client_secret_sharing.dart');
     expect(
@@ -97,7 +86,7 @@ void main() {
 ///
 /// Follows relative directives as well as `package:at_client/` ones — a
 /// forbidden edge spelled `import '../client/at_client_impl.dart'` is the
-/// same edge, and a walker blind to it would guard only one spelling.
+/// same edge.
 Set<String> _importClosure(String root) {
   final directive = RegExp(
       r'''^\s*(?:import|export)\s+['"](package:at_client/|(?!package:|dart:))([^'"]+)['"]''',

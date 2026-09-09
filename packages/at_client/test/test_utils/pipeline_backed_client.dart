@@ -13,8 +13,6 @@ class WireRecord {
   /// The stored value — ciphertext for an encrypted record.
   final String value;
 
-  /// The `metaData` object the atServer returns, as a raw map so a test pins
-  /// the bytes rather than whatever a `Metadata` happens to serialise to.
   final Map<String, dynamic> metaData;
 }
 
@@ -22,19 +20,9 @@ class WireRecord {
 /// `get` runs the production pipeline — `GetRequestTransformer`, the verb, and
 /// `GetResponseTransformer` with its decryption and provider routing.
 ///
-/// ## Why this exists
-///
-/// The other fixture, `buildRemoteBackedMockClient`, stubs `AtClient.get`
-/// outright. That is right for code which merely *calls* get, and it made
-/// `GetResponseTransformer` unreachable from every unit test: 1543 of them run
-/// without the response path ever executing, so when a wrong-value read was
-/// measured against a live atServer in 2026-08 there was no unit test that
-/// could even exercise the layer under suspicion. (The cause turned out to lie
-/// below at_client, in how an atServer relays concurrent cross-atSign lookups;
-/// the coverage gap stands regardless.)
-///
-/// So the two are not alternatives. Use the mock when the client is a
-/// collaborator; use this when the read path itself is what is under test.
+/// `buildRemoteBackedMockClient` stubs `AtClient.get` outright, so use that
+/// one when the client is a collaborator and this one when the read path
+/// itself is under test.
 ///
 /// [records] is keyed by the full at-key string as `AtKey.toString()` renders
 /// it, and is mutable — a test can add a record mid-run to model one arriving.
@@ -56,9 +44,8 @@ Future<AtClient> buildPipelineBackedClient({
   when(() => remoteSecondary.executeVerb(any(), sync: any(named: 'sync')))
       .thenAnswer((invocation) async {
     final builder = invocation.positionalArguments[0];
-    // Both verbs reach this fixture: a shared record is fetched with `lookup`,
-    // a self or already-local one with `llookup`. Keying off the built command
-    // rather than the builder's type keeps the two on one path.
+    // NOTE: both `lookup` and `llookup` reach this fixture; matching on the
+    // built command rather than the builder's type keeps them on one path.
     final command = builder.buildCommand() as String;
     lookupLog?.add(command.trim());
     final match = records.entries.firstWhere(
@@ -73,11 +60,10 @@ Future<AtClient> buildPipelineBackedClient({
         })}';
   });
 
-  // `pqReady`, named rather than defaulted. Every caller of this helper that
-  // passes a `crypto` passes one registering the post-quantum providers, and
-  // `AtClientPreference.crypto` REFUSES such a config under a posture that
-  // configures none — which the 3.x default, `legacy`, does not. A caller
-  // wanting the provider-less stage builds its own preference and says so.
+  // NOTE: the posture is named rather than defaulted because
+  // `AtClientPreference.crypto` refuses a config registering the post-quantum
+  // providers under a posture that configures none. A caller wanting the
+  // provider-less stage builds its own preference.
   final preference = AtClientPreference(posture: PqPosture.pqReady)
     ..hiveStoragePath = storagePath
     ..commitLogPath = '$storagePath/commit'

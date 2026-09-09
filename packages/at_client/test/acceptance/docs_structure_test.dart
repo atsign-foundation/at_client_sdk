@@ -1,33 +1,14 @@
-/// Guards the shape of `docs/projects/pq/`, which is a structure rather than a
+/// Guards the shape of the PQ doc set, which is a structure rather than a
 /// convention.
 ///
-/// The doc set is split in two on 2026-08-16: six **live** files carrying only
-/// what is current, and `detail/` carrying every ruling body and every
-/// completed or parked plan item. The split exists so that reading or grepping
-/// a live file cannot drag a rejected design into view — the ledger reached
-/// 10,126 lines and a search for one concept returned several hundred lines of
-/// a decision nobody asked about.
+/// The set is split in two: six **live** files carrying only what is current,
+/// and `detail/` carrying every ruling body and every completed or parked plan
+/// item, so that reading or grepping a live file cannot drag a rejected design
+/// into view.
 ///
-/// A convention would not have held that. Every rule below was a convention
-/// first, and the files grew anyway, so each is asserted here:
-///
-/// - the ledger index and the ruling bodies stay in step, both directions;
-/// - no ruling body creeps back into the live ledger;
-/// - the catalogue's status table keeps saying what the scenarios do;
-/// - a ruling amended in its body says so in the index;
-/// - the plan may not claim DONE for a use case the catalogue has not proven;
-/// - no doc licenses itself to leave a falsified claim standing.
-///
-/// ⚠️ **Correctness outranks every structural rule here, and only the
-/// structural ones can be asserted.** Nothing in this file can tell whether a
-/// paragraph is true, so the rails go red for a broken link
-/// or a missing row, and stay green for a sentence the tree falsified three
-/// commits ago. That asymmetry taught exactly the wrong lesson once: rulings
-/// 104 and 105 were edited at every step, always by appending a layer under
-/// prose that had stopped being true, until a cold read of the doc set
-/// reported a settled design as an open question. The last group below is the
-/// only part of that which is mechanically checkable — a doc may not write
-/// down a rule permitting it.
+/// ⚠️ **Only the structural rules are assertable.** Nothing here can tell
+/// whether a paragraph is true, so these rails go red for a broken link or a
+/// missing row and stay green for a sentence the tree has falsified.
 library;
 
 import 'dart:io';
@@ -56,13 +37,6 @@ Set<String> _headingSlugs(String markdown) =>
         .map((m) => _slug(m.group(1)!))
         .toSet();
 
-/// The live files.
-///
-/// These carried per-file line ceilings until 2026-08-17 (gkc). They are gone:
-/// a ceiling made *length* the trigger for demotion, when the real trigger is
-/// that something has **finished**. The live/detail split is still enforced by
-/// the rules below — a ruling body may not sit in the live ledger, an index row
-/// must resolve both ways — and those are about correctness, not size.
 const _liveFiles = <String>[
   'decisions.md',
   'implementation-plan.md',
@@ -72,29 +46,21 @@ const _liveFiles = <String>[
   'seal-spec.md',
 ];
 
-/// A status marker inside a code span is a CITATION of a past status, not a
-/// status. Both guards below strip code spans before matching, because the
-/// correction for a stale label routinely quotes the label it replaced — and
-/// a checker that counts the quotation reports the defect it just fixed. This
-/// project has been caught by the code-span version of this before, in an
-/// anchor checker.
+/// Strips code spans, because a status marker inside one is a CITATION of a
+/// past status rather than a status — a checker that counts the quotation
+/// reports the defect it has just fixed.
 String _withoutCodeSpans(String s) => s.replaceAll(RegExp(r'`[^`]*`'), '');
 
 void main() {
   group('no LINKED heading is duplicated', () {
-    // ⚠️ [_headingSlugs] returns a Set, so a heading written twice in one file
-    // collapses and every other check here passes. That is not cosmetic: GitHub
-    // resolves a duplicated anchor to the FIRST occurrence and suffixes the
-    // rest, so the second copy is unreachable — a demotion that appends a body
-    // the file already holds silently orphans it, and a link lands on whichever
-    // copy happens to be earlier. Landed 2026-08-17 after a demotion did
-    // exactly that to `14.7` and a cold read found it.
+    // NOTE: [_headingSlugs] returns a Set, so a heading written twice in one
+    // file collapses and every other check here passes. GitHub resolves a
+    // duplicated anchor to the FIRST occurrence and suffixes the rest, so the
+    // second copy is unreachable.
     //
-    // Scoped to slugs something actually LINKS to. A bare duplicate is
+    // Scoped to slugs something actually LINKS to: a bare duplicate is
     // harmless, and the ledger legitimately repeats sub-headings like
-    // "The ruling" under many rulings — failing on those would demand dozens of
-    // indefensible renames, and a rail that fires for an indefensible reason
-    // gets deleted rather than obeyed.
+    // "The ruling" under many rulings.
     for (final file in [
       ..._liveFiles,
       'detail/acceptance.md',
@@ -185,13 +151,10 @@ void main() {
 
     test('a ruling amended in its body says so in the index', () {
       // The status vocabulary reserves AMENDED for "stands, but one or more
-      // sub-rulings were changed later, on the date given". Eleven rulings
-      // carried a dated amendment in the body and `LIVE` in the index — the
-      // marker is written while editing the body, and nothing takes the
-      // author back to the row.
+      // sub-rulings were changed later, on the date given".
       final index = _read('decisions.md');
-      // ⚠️ `[ \t]`, never `\s`: `\s` eats the newline and each match swallows
-      // the following row, which silently halved a count here once.
+      // NOTE: `[ \t]`, never `\s` — `\s` eats the newline, so each match
+      // swallows the following row and the count silently halves.
       final status = <String, String>{
         for (final m in RegExp(
                 r'^\|[ \t]*\[(\d+[a-z]?)\][ \t]*\|[^\n]*\|[^|\n]*\|[ \t]*([^|\n]+?)[ \t]*\|[ \t]*$',
@@ -261,10 +224,8 @@ void main() {
 
   group('the catalogue status table says what the scenarios do', () {
     // Rows look like: | UC-A2.5 | ... | BLOCKED | `ke2` |
-    // The id shape comes from manifest.dart so widening the catalogue to a
-    // new cluster is one edit. This guard used to spell it out itself, and
-    // adding the G cluster reddened it here — a place that reads as unrelated
-    // to "the catalogue gained rows".
+    // The id shape comes from manifest.dart, so widening the catalogue to a
+    // new cluster is one edit.
     final row = RegExp(
         '^\\|\\s*($ucIdPattern)\\s*\\|[^|]*\\|\\s*(\\w[\\w ]*?)\\s*\\|',
         multiLine: true);
@@ -321,15 +282,6 @@ void main() {
   });
 
   group('the catalogue summary counts its own table', () {
-    /// The headline sentence above `acceptance.md`'s status table.
-    ///
-    /// The table is generated against the scenarios and cannot drift. This
-    /// sentence is prose, and nothing checked it: it read "50 PROVEN · 2
-    /// BLOCKED · 1 WITHDRAWN across 53 use cases and 53 scenarios" while the
-    /// table under it held 69 rows. The 16-row gap was exactly the UC-G1.x
-    /// cluster, added the same day 14.17 landed — a cold read found it, five
-    /// sweeps of my own did not, and `catalogue_test.dart` never looked at
-    /// this line because it validates the headings instead.
     test('the summary sentence agrees with the table and the scenarios', () {
       final acceptance = _read('acceptance.md');
 
@@ -373,19 +325,9 @@ void main() {
   });
 
   group('a row that says owed does not point at a section that says done', () {
-    /// The one shape a cold read caught and nothing here could.
-    ///
-    /// 14.17 sat in the TODO table reading "the owed half" for a whole day
-    /// while its own section body opened "✅ COMPLETE 2026-08-18", and there
-    /// was no DONE row for it either. Every command that counts open work
-    /// keys on the ROW, so it counted an item that had shipped — honestly,
-    /// which is what makes it dangerous. The plan's own re-derivation warning
-    /// names this shape; nothing enforced it.
-    ///
-    /// The check is deliberately one-directional. A section with no done
-    /// marker is not evidence of anything, so only "row says owed, body says
-    /// done" is a failure. On an intended change, move the row — do not
-    /// soften the body.
+    // The check is deliberately one-directional: a section with no done marker
+    // is not evidence of anything, so only "row says owed, body says done" is
+    // a failure. On an intended change, move the row — do not soften the body.
     test('no TODO row names a section whose body declares itself done', () {
       final plan = _read('implementation-plan.md');
       final detail = _read('detail/implementation-plan.md');
@@ -436,23 +378,11 @@ void main() {
   });
 
   group('the plan and the catalogue agree about what is done', () {
-    /// The status column in `acceptance.md` is derived from the scenario
-    /// files, so it is the one status in the doc set that cannot lie. These
-    /// two checks make the plan borrow it.
+    /// Every line of both plan files, each entry `<file>\u0000<line>`.
     ///
-    /// ⚠️ **Neither can tell you a use case is MISSING**, which is the failure
-    /// that actually happened: the nskey mint election had nine proofs and no
-    /// use case, so every rail here was green while the done-bar had never
-    /// heard of it. Coverage has no mechanical form. What closes it is the
-    /// convention these checks reward — **a plan row marked DONE names the
-    /// use cases it proved** — and the more rows that do, the more of the plan
-    /// these two actually cover. Today only 6 lines cite one.
-    /// Each entry is `<file>\u0000<line>`. NUL is the separator because it
-    /// cannot occur in either half, and it is written as an ESCAPE, never as
-    /// a raw byte: a literal NUL makes the whole file `data` to `file(1)`, so
-    /// `grep` prints nothing and exits 1 over the whole file. `git grep` still
-    /// reads it, so the two disagree and the silent one looks like a clean
-    /// absence.
+    /// ⚠️ The NUL is written as an ESCAPE, never a raw byte: a literal
+    /// NUL makes the whole file `data` to `file(1)`, so `grep` prints nothing
+    /// and exits 1 while `git grep` still reads it.
     List<String> planLines() => [
           for (final f in const [
             'implementation-plan.md',
@@ -511,23 +441,12 @@ void main() {
 
   group('no doc licenses itself to leave a falsified claim standing', () {
     /// Phrases that assert a *rule* permitting stale prose, rather than
-    /// describing one document's history.
+    /// describing one document's history — a doc saying rulings are
+    /// append-only pre-authorises the next stale paragraph.
     ///
-    /// Each was in the tree on 2026-08-16 and each had done real damage. They
-    /// are banned rather than discouraged because their whole effect is to
-    /// pre-authorise the next stale paragraph: once a doc says rulings are
-    /// append-only, correcting one reads as a violation.
-    ///
-    /// ⚠️ **This is a check on doctrine, not on truth.** It cannot tell that a
-    /// paragraph went stale — only that a doc claimed the right to let it. The
-    /// heuristics that tried for truth were measured and dropped: flagging a
-    /// section that claims something is both missing and done scored 23 hits
-    /// before the 104/105 correction and 23 after, because it keys on tense
-    /// rather than fact.
-    /// ⚠️ Each pattern names the DOCUMENT it licenses, because the bare words
-    /// are ordinary technical vocabulary here — `design.md` describes a Key
-    /// Transparency log as append-only, which is correct and unrelated. A ban
-    /// on the word alone went red on that paragraph the first time it ran.
+    /// ⚠️ Each pattern must name the DOCUMENT it licenses: the bare words
+    /// are ordinary technical vocabulary here, and a Key Transparency log is
+    /// legitimately append-only.
     final banned = <RegExp, String>{
       RegExp(
               r'(rulings?|entries|the ledger|this (doc|file|section))\s+'
@@ -536,19 +455,16 @@ void main() {
           'a ledger whose rulings are "append-only" cannot be corrected, so '
               'every falsified claim stays and the heading becomes the stalest '
               'line in the file',
-      // "left as written" is deliberately NOT banned. Measured against the doc
-      // set it hit three passages, all three legitimate: each keeps superseded
-      // prose *and* carries a dated banner naming what closed, which is the
-      // opposite of licensing rot. A pattern wrong on every occurrence in the
-      // corpus does not earn a place here.
+      // "left as written" is deliberately NOT banned: every occurrence in the
+      // doc set keeps superseded prose beside a dated banner naming what closed
+      // it, which is the opposite of licensing rot.
       RegExp(r'(is|are|was|were) left alone because', caseSensitive: false):
           'the reason is always a structural cost — links to sweep, a body to '
               're-read — and correctness outranks it',
     };
 
-    /// An occurrence is allowed when the same paragraph records that the rule
-    /// was overruled: `detail/` keeps the history of decisions this project
-    /// reversed, and deleting that is its own kind of dishonesty.
+    /// Whether the paragraph at [at] records that the rule was overruled, which
+    /// makes the occurrence a historical note rather than a live licence.
     bool isHistorical(String text, int at) => text
         .substring(at, (at + 260).clamp(0, text.length))
         .contains('overruled');
@@ -591,11 +507,10 @@ void main() {
   });
 
   group('the catalogue states clauses the ledger can count', () {
-    // The clause level of the ledger reads THEN clauses out of the catalogue.
-    // Nothing else does, so if the prose moves to a form the parser does not
-    // recognise, every row silently reports 0/0 — a ledger that has stopped
-    // measuring, rendering as one with nothing left to prove. That is the
-    // failure this group exists to make loud.
+    // NOTE: nothing but the ledger's clause level reads THEN clauses out of the
+    // catalogue, so prose moving to a form the parser does not recognise makes
+    // every row report 0/0 — a ledger that has stopped measuring reads as one
+    // with nothing left to prove.
     test('every live row states at least one THEN clause', () {
       final clauses = catalogueClauses();
       final silent = <String>[];
@@ -629,18 +544,12 @@ void main() {
   });
 
   group('every PQ test in the tree is nameable from the doc set', () {
-    // A test no doc names is work the next reader rebuilds. Arm 3 of the
-    // acceptance suite shipped as
-    // `tests/at_functional_test/test/pq_advance_ladder_test.dart` and was
-    // named in no project document at all, so the plan went on listing it as
-    // owed while it sat green in the tree — and a plan worked top-down
-    // rebuilds what it says is owed. A filename is the cheapest thing to
-    // check and the one that rots without anything going red.
-    /// Every `.md` under docs/projects/pq, concatenated.
+    // A test no doc names is work the next reader rebuilds, and a filename is
+    // the cheapest thing to check.
+    /// Every Markdown file in the PQ doc set, concatenated.
     ///
-    /// Read once per test rather than hoisted: these two rails are the only
-    /// readers, and a shared field would be built even for a run that selects
-    /// neither.
+    /// Read once per test rather than hoisted, so a run selecting neither rail
+    /// does not build it.
     String docSet() => _pq()
         .listSync(recursive: true)
         .whereType<File>()
@@ -649,11 +558,8 @@ void main() {
         .join('\n');
 
     test('each pq_*_test.dart is named somewhere under docs/projects/pq', () {
-      // Both roots. `tests/` alone was the original scope and it left every
-      // `pq_*` file in a PACKAGE's own test tree outside the rail — six of
-      // them, including `pq_client_bootstrap_test.dart`, which nothing cites
-      // and no document named. A file is no less rebuildable for living
-      // beside the code it tests.
+      // Both roots: a `pq_*` file is no less rebuildable for living in a
+      // package's own test tree, beside the code it tests.
       final names = <String>{};
       for (final root in ['tests', 'packages']) {
         final dir = Directory('${repoRoot().path}/$root');
@@ -671,7 +577,7 @@ void main() {
 
       // The enumeration is what this rail rests on, so it is asserted rather
       // than assumed: an empty walk satisfies every check below while
-      // measuring nothing at all.
+      // measuring nothing.
       expect(names.length, greaterThanOrEqualTo(14),
           reason: 'the two roots held 19 such files on 2026-08-28 — 14 under '
               'tests/ and 6 under packages/*/test, one name common to both. A '
@@ -688,15 +594,11 @@ void main() {
     });
 
     test('every test a citation names is named in the doc set', () {
-      // The sharper half of the rail above, and the one that reaches files no
-      // filename convention would catch. A cited test is PQ-relevant by
-      // construction — a row leans on it for its verdict — while the doc set
-      // names only the acceptance SCENARIO file in its status table, so the
-      // test actually carrying the proof appears nowhere a reader looks.
-      // Measured 2026-08-28: 81 files cited, 74 named, and the seven that
-      // were not included one cited by six separate rows and two in
-      // packages/at_auth, a package neither this rail nor a widened
-      // directory walk had ever looked at.
+      // The sharper half of the rail above, reaching files no filename
+      // convention would catch: a cited test is PQ-relevant by construction —
+      // a row leans on it for its verdict — while the status table names only
+      // the acceptance SCENARIO file, so the test actually carrying the proof
+      // appears nowhere a reader looks.
       final cited = citedTestPaths();
 
       expect(cited.length, greaterThanOrEqualTo(60),
@@ -704,11 +606,9 @@ void main() {
               '2026-08-28. A sharp drop means this parse stopped finding '
               'them, not that the citations went away');
 
-      // Settled here so a vanished file is reported as a vanished file.
-      // provenIn already refuses one while its scenario runs, but this rail
-      // reads the sources rather than a run, and without this check a deleted
-      // test would surface below as "no document names it" — sending the
-      // reader to write a doc line for something that no longer exists.
+      // Settled here so a vanished file is reported as a vanished file: this
+      // rail reads the sources rather than a run, and without the check a
+      // deleted test surfaces below as "no document names it".
       final absent = cited
           .where((p) => !File('${repoRoot().path}/$p').existsSync())
           .toList()

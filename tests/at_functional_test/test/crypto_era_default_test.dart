@@ -14,11 +14,8 @@ import 'test_utils.dart';
 
 /// The era default, on a real constructed client rather than a mock.
 ///
-/// The unit tests pin the resolution rule; what they cannot show is that the
-/// wiring actually runs during `AtClientImpl` construction — a mock never goes
-/// through `_init`, so an era default that was never adopted would still pass
-/// every one of them. That gap is exactly the kind this branch has been bitten
-/// by twice: a code path that looks wired, is unit-green, and never executes.
+/// A mock never runs `AtClientImpl._init`, so the unit tests pin the resolution
+/// rule but stay green for an era default that construction never adopts.
 void main() {
   TestUtils.isolateStorage('crypto_era_default_test');
   late String atSign;
@@ -30,16 +27,13 @@ void main() {
 
   test('a client that named no CryptoConfig gets the default posture\'s providers',
       () async {
-    // The SDK's default, read rather than named: this test's subject IS the
-    // default, so a named constant would leave it passing while measuring a
-    // posture the SDK had moved on from.
+    // NOTE: read the SDK's default rather than naming a posture — a named
+    // constant keeps passing while measuring a default the SDK has moved off.
     final manager = await TestUtils.initAtClient(atSign, namespace,
         atKeysIo: InMemoryAtKeysIo(),
         posture: TestUtils.sdkDefaultPosture);
     final client = manager.atClient;
 
-    // Checked, not assumed: if the harness had named a config the assertions
-    // below would be about the app's choice, not the SDK's default.
     expect(client.getPreferences()?.crypto,
         same(const CryptoConfig.eraDefault()),
         reason: 'this test is about what the SDK supplies when the app names '
@@ -47,12 +41,6 @@ void main() {
 
     final resolved = CryptoConfig.forClient(client);
 
-    // ⚠️ **These two asserted `isNotNull` until 2026-09-08**, when the shipped
-    // default was `pqReady`. It is `legacy` again, which configures no
-    // post-quantum providers at all — so an inbound record naming one has
-    // nothing to resolve to and the read throws naming the id, exactly as a
-    // build predating those providers does. That is the point of the stage,
-    // not a gap in it.
     expect(resolved.lookup(symmetricAesGcmCryptoProviderId), isNull,
         reason: 'the shipped default stands in for a build from before these '
             'schemes, so a record stamped with one does not open here');
@@ -65,9 +53,8 @@ void main() {
             'pqActive that moves it, which is why this reads the default '
             'rather than naming one');
 
-    // The control, and it is what stops the three rows above passing for a
-    // build that dropped the providers everywhere. A stage that DOES configure
-    // them still resolves both, over the same client construction.
+    // NOTE: control — without a stage that does configure the providers, the
+    // assertions above also pass for a build that dropped them everywhere.
     final ready = await TestUtils.initAtClient(atSign, namespace,
         atKeysIo: InMemoryAtKeysIo(), posture: PqPosture.pqReady);
     final readyConfig = CryptoConfig.forClient(ready.atClient);

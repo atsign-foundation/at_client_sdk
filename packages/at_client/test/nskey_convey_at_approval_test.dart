@@ -1,5 +1,3 @@
-// The substrate is deliberately marked @experimental and will be reshaped as
-// the group surface matures.
 // ignore_for_file: experimental_member_use
 
 import 'dart:convert';
@@ -26,14 +24,11 @@ class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   }
 }
 
-/// Approval conveys the approver's **held nskey privates**, read from AtKeys.
+/// Approval conveys the approver's held nskey privates, read from AtKeys.
 ///
-/// This is the push half of the self-heal ruling (`decisions.md` 38), and the
-/// specific hole it closes: `shareAllSecretsWith` shares from the in-memory
-/// secret store, which after a restart holds nothing — so an approver that
-/// had restarted since the mint conveyed a new enrollment every secret except
-/// the namespace privates it actually needs to read anything. The durable
-/// copy in AtKeys is what must be conveyed, whatever the store holds.
+/// `shareAllSecretsWith` shares from the in-memory secret store, which after a
+/// restart holds nothing, so the durable copy in AtKeys is what must be
+/// conveyed whatever the store holds.
 void main() {
   const atSign = '@alice';
   const enrolleeId = 'enrollee-1';
@@ -82,15 +77,14 @@ void main() {
 
   test('an approver conveys its filed nskey privates to the new enrollment',
       () async {
-    // The enrollee advertises a key package, as a real enroll:request does.
     final enrollee =
         AtClientSecretSharing.forClient(buildMockClient(enrolleeId));
     await enrollee.register();
     final advertised = await enrollee.signedKeyPackagePayload();
 
-    // The approver holds one nskey private — in AtKeys, as a client that
-    // restarted since the mint would: its in-memory secret store is EMPTY,
-    // which is exactly the state the old path conveyed nothing from.
+    // The approver holds its one nskey private in AtKeys and nowhere else: its
+    // in-memory secret store is empty, as it is for a client that restarted
+    // since the mint.
     final approver = buildMockClient('approver-1');
     final approverIo = InMemoryAtKeysIo();
     await approverIo.write(atSign, AtKeys());
@@ -110,7 +104,6 @@ void main() {
             apkamSymmetricKey: AtBytes.fromString(''),
             atSign: atSign));
 
-    // The enrollee receives it over the ordinary substrate delivery.
     expect(await enrollee.sweepOnce(), greaterThan(0),
         reason: 'nothing arrived at all — the approval conveyed no envelope '
             'this enrollee can consume');

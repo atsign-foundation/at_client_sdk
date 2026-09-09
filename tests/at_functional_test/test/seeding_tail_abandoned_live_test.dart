@@ -12,28 +12,22 @@ import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// **Arm B of a two-file differential**: a client whose startup tail is
-/// stopped publishes nothing, and the only signal an app has says nothing
-/// about it.
+/// Arm B of a two-file differential: a client whose startup tail is stopped
+/// publishes nothing, and the only signal an app has says nothing about it.
 ///
-/// Its pair — and its positive control — is
-/// `seeding_tail_runs_live_test.dart`, where the identical construction at the
-/// identical posture publishes in about a second. Read the two together: on
-/// its own, "no advertisement appeared" is equally well explained by a rig
-/// that cannot seed for this namespace at all, and that is precisely how three
-/// earlier reproduction attempts were lost.
+/// Its pair, and its positive control, is `seeding_tail_runs_live_test.dart`,
+/// where the identical construction at the identical posture publishes in about
+/// a second. On its own, "no advertisement appeared" is equally well explained
+/// by a rig that cannot seed for this namespace at all.
 ///
-/// ⚠️ **Separate files because `AtClientManager` is a per-isolate singleton**
-/// that re-serves the client it already built. Two arms in one file would
-/// share one bootstrap, and whichever ran second would measure nothing.
+/// ⚠️ The arms are separate files because `AtClientManager` is a per-isolate
+/// singleton that re-serves the client it already built: two arms in one file
+/// would share one bootstrap, and whichever ran second would measure nothing.
 ///
-/// **What this stands for.** `stop()` is the in-tree stand-in for the process
-/// exiting: it breaks the step loop at the next boundary, which is what a
-/// short-lived client's death does to the unawaited tail. The real case is
-/// ordinary — a client driven from a script with piped stdin sends one message
-/// and exits, the same shape as a CLI tool, a cron job or a one-shot notifier.
-/// Confirmed live in both directions on 2026-08-26 by the at_talk demo
-/// session, where the only variable was the client's LIFETIME.
+/// `stop()` stands in for the process exiting — it breaks the step loop at the
+/// next boundary, which is what a short-lived client's death does to the
+/// unawaited tail. The real case is ordinary: a CLI tool, a cron job or a
+/// one-shot notifier sends one message and exits.
 void main() {
   TestUtils.isolateStorage('seeding_tail_abandoned_live_test');
   late String atSign;
@@ -59,8 +53,6 @@ void main() {
 
     atClient.pqBootstrap!.stop();
 
-    // The only signal an application has, and what it says about a startup
-    // that did not run.
     await atClient.pqBootstrap!.startupComplete
         .timeout(const Duration(seconds: 30));
 

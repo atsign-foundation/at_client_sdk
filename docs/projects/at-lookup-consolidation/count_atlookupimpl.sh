@@ -1,26 +1,25 @@
 #!/usr/bin/env bash
 # The acceptance gate for the at_lookup consolidation: ZERO uses of
-# AtLookupImpl in LIB CODE and READMEs (gkc, 2026-08-19).
+# AtLookupImpl in LIB CODE and READMEs.
 #
-# Scope is deliberate, not convenience.
+# Scope is deliberate:
 #
 #  - Tests, examples, docs/ and CHANGELOGs keep their references: a CHANGELOG
 #    entry describing what AtLookupImpl did in a released version is a TRUE
 #    statement about that version, and rewriting it would falsify the release
-#    history rather than clean anything up.
-#  - at_lookup's OWN lib is excluded, and that is a consequence of the release
-#    frame rather than a concession. AtLookupImpl is exported from at_lookup's
+#    history.
+#  - at_lookup's OWN lib is excluded. AtLookupImpl is exported from at_lookup's
 #    barrel, so renaming it or making it library-private REMOVES A PUBLIC CLASS
 #    - a breaking change, in a project that ships as an additive minor. A
 #    deprecated typedef alias does not help either: the typedef still spells
 #    the name in lib code. The class therefore survives 3.x where it is
 #    defined, and its removal belongs to the same major that deletes the
-#    credential ladder (gkc, 2026-08-19).
+#    credential ladder.
 #
-# What the gate still means: no code OUTSIDE at_lookup names the concrete
-# class. Consumers go through AtLookUp.withSecureSocket and hold interfaces.
+# What the gate means: no code OUTSIDE at_lookup names the concrete class.
+# Consumers go through AtLookUp.withSecureSocket and hold interfaces.
 #
-# Counting traps this avoids, each of which has produced a wrong number here:
+# Counting traps this avoids:
 #
 #  - `AtLookupImpl` matches as a SUBSTRING inside `MockAtLookupImpl`, so an
 #    unanchored pattern over-counts. Both sides are anchored.
@@ -59,7 +58,7 @@ TOTAL=$(git grep -cP "$PAT" -- "${SCOPE[@]}" | awk -F: '{s+=$NF} END {print s+0}
 FILES=$(git grep -lP "$PAT" -- "${SCOPE[@]}" | wc -l | tr -d ' ')
 
 # Reported, never gated. Shown so a zero above is not mistaken for a zero
-# everywhere - which is the misreading this line exists to prevent.
+# everywhere.
 OUT=$(git grep -cP "$PAT" | awk -F: '{s+=$NF} END {print s+0}')
 echo
 echo "  (out of scope, NOT gated: $((OUT - TOTAL)) more in at_lookup own lib, tests, examples, docs and CHANGELOGs)"

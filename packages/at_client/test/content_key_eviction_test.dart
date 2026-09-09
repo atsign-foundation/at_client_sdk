@@ -8,10 +8,9 @@ import 'package:test/test.dart';
 /// The eviction trigger for coarse forward secrecy: a client drops a cached
 /// content key when it observes that key's conveyance record being deleted.
 ///
-/// Deleting the record stops anyone unwrapping the CK *again*. It says nothing
-/// about the clients that already did — they hold the plaintext and would go on
-/// reading the very data the deletion was meant to close off. Sync carries the
-/// deletion to them; this turns arrival into eviction.
+/// Deleting the record stops anyone unwrapping the CK *again*, but says nothing
+/// about the clients that already did; sync carries the deletion to them, and
+/// this turns its arrival into eviction.
 void main() {
   const atSign = '@alice';
   const namespace = 'app_1.my_apps';
@@ -108,11 +107,9 @@ void main() {
     });
 
     test('an outbound share\'s deletion evicts under the recipient', () {
-      // alice → bob: the conveyance `@bob:<ckKid>.__ck.<ns>@alice` was cached
-      // under bob — `sharedWith ?? sharedBy`, the scope every cache writer
-      // uses — so that is where the eviction must land. Anywhere else leaves
-      // the (bob, ns, ckKid) entry alive on every sibling device, undoing
-      // the fleet-wide property the listener exists to provide.
+      // NOTE: the conveyance was cached under bob — `sharedWith ?? sharedBy`,
+      // the scope every cache writer uses — so that is where the eviction must
+      // land.
       final outbound = ck(7);
       cache.putAsCurrent('@bob', namespace, outbound, 'gen1');
 
@@ -161,10 +158,6 @@ void main() {
   });
 
   group('wiring', () {
-    // The listener is only a mechanism if a client registers it. Nothing else
-    // in the SDK reacts to a deleted conveyance, so an unregistered listener
-    // would leave every client reading data the deletion was meant to close
-    // off, with the unit tests above all green.
     tearDown(() async {
       for (final client
           in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
@@ -178,9 +171,8 @@ void main() {
       final client = await AtClientImpl.create(
           '@evictionwiring',
           'test',
-          // `pqReady`, named rather than defaulted: the 3.x default is `legacy`, which
-          // runs no post-quantum startup at all, and this exercises exactly that
-          // startup. The stage is the fixture here, not the thing under test.
+          // NOTE: the posture is named rather than defaulted — the default
+          // runs no post-quantum startup, which is the startup under test.
           AtClientPreference(posture: PqPosture.pqReady)
             ..hiveStoragePath = 'test/hive/evictionwiring'
             ..commitLogPath = 'test/hive/evictionwiring') as AtClientImpl;

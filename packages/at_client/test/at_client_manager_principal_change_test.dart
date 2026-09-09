@@ -6,10 +6,8 @@ import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
-/// A principal change is a succession: one enrollment of an atSign replaced
-/// by another over the store the outgoing client held. The default shape, a
-/// client that built its own store from the preference, is the one that has
-/// to survive it.
+/// A principal change is a succession: one enrollment of an atSign replaced by
+/// another over the store the outgoing client held.
 void main() {
   const atSign = '@principalchange';
   late Directory dir;

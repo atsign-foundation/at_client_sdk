@@ -6,13 +6,6 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 /// Tamper levers for [SignedEnvelope], shared by every test that needs to
 /// produce an envelope somebody has interfered with.
 ///
-/// They exist because the type is immutable and validated: a test can no
-/// longer reach in and assign a member. That is the point — the reason these
-/// helpers are worth having in one place is the reason the type is worth
-/// having at all. The old way, mutating a `Map`, let a test write a forgery
-/// the verifier never looks at (a top-level `'signature'`, say) and pass for
-/// the *absence* of a forgery.
-///
 /// Each returns a new envelope through `fromJson`, so a tamper that breaks the
 /// structure is refused here rather than silently producing something no
 /// verifier would recognise.

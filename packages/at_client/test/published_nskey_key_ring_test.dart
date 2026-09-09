@@ -13,13 +13,10 @@ import 'test_utils/mocks.dart';
 
 /// Discovery of another atSign's advertised nskey.
 ///
-/// Two properties are being held here. **Freshness**: a sender never sees a
-/// recipient's decapsulation fail, so re-fetching the advertisement is the only
-/// way it learns of a rotation — a sender still sealing to a superseded
-/// generation hands a revoked enrollment a key it can still open.
-/// **Authenticity**: the key a sender seals to is the one thing an attacker
-/// most wants to substitute, so an advertisement is trusted only with an APKAM
-/// signature that verifies against the `_apsk` its enrollment published.
+/// **Freshness**: a sender never sees a recipient's decapsulation fail, so
+/// re-fetching the advertisement is the only way it learns of a rotation.
+/// **Authenticity**: an advertisement is trusted only with an APKAM signature
+/// that verifies against the `_apsk` its enrollment published.
 void main() {
   const alice = '@alice';
   const bob = '@bob';
@@ -56,15 +53,8 @@ void main() {
         AtClientEnvelopeSigner(signingClient(bob, 'enroll-bob', bobChops));
   });
 
-  /// The advertisement bob really publishes: a signed envelope, not a bare
-  /// key, and every field `mintAndPublish` writes.
-  ///
-  /// It carried only `nskeyKid` and `publicKey` while `v`, `alg` and `suites`
-  /// each had an absent-means-the-old-shape hatch to fall through. The
-  /// docstring said "really publishes" the whole time; removing the hatches is
-  /// what made that true.
-  /// That payload unsigned, so a test can take a field away and watch the
-  /// reader refuse what is left.
+  /// Every field `mintAndPublish` writes, unsigned, so a test can take one
+  /// away and watch the reader refuse what is left.
   Map<String, Object?> advertisementPayload(XWingKeyPair pair,
           {List<String>? suites}) =>
       NskeyAdvertisement.single(
@@ -197,9 +187,8 @@ void main() {
         () async {
       // Another of alice's enrollments, or this one after a restart, holds
       // nothing in memory while the advertisement sits on her own atServer.
-      // Reporting that as cold start would be wrong twice over: the namespace
-      // is published, and a client that "fixed" it by minting would rotate the
-      // key out from under every peer that had already fetched it.
+      // Reporting that as a cold start and minting would rotate the key out
+      // from under every peer that had already fetched it.
       final c = client(payload: await signedPayloadFor(bobKey));
 
       final own = await PublishedNskeyKeyRing(c.atClient)
@@ -272,10 +261,8 @@ void main() {
         'an advertisement absent from local storage is fetched from the '
         'atServer', () async {
       // The advertisement is published to the atServer alone, so it reaches
-      // this device only when sync pulls it down. Between the two, a read that
-      // stopped at local storage would report a published namespace as cold
-      // start — and a client that "fixed" that by minting would rotate the key
-      // out from under every peer that had already fetched it.
+      // this device only when sync pulls it down; a read that stopped at local
+      // storage would report a published namespace as a cold start.
       final c = clientMissingLocally(await signedPayloadFor(bobKey));
 
       final own = await PublishedNskeyKeyRing(c.atClient)
@@ -357,10 +344,10 @@ void main() {
 
     test('a JWS-wrapped advertisement verifies and resolves the same key',
         () async {
-      // The version-2 wrapper a flipped producer will emit, through the whole
-      // reader stack in one pass: the shape-aware field check, the signer
-      // claim from the protected header's kid, the verify over
-      // protected.payload, and the payload out of base64url.
+      // A JWS-wrapped advertisement through the whole reader stack in one
+      // pass: the shape-aware field check, the signer claim from the protected
+      // header's kid, the verify over protected.payload, and the payload out
+      // of base64url.
       final pair = bobChops.atChopsKeys.atPkamKeyPair!;
       final envelope = signEnvelope(advertisementPayload(bobKey),
           keys: [
@@ -410,11 +397,10 @@ void main() {
     });
 
     test('an advertisement missing any required field is refused', () async {
-      // Each of these had an absent-means-the-old-shape hatch, defending
-      // against a predecessor that never shipped. What the hatches actually
-      // did was let a reader answer, on the owner's behalf, questions the
-      // owner had not answered — which KEM the bytes belong to and which
-      // construction they can unwrap. A sender acts on both immediately.
+      // A reader that defaulted a missing field would be answering, on the
+      // owner's behalf, questions the owner had not answered — which KEM the
+      // bytes belong to and which construction they can unwrap. A sender acts
+      // on both immediately.
       for (final missing in ['v', 'createdAt', 'keys', 'suites']) {
         final c = client(
             payload: await bobSigner.wrapAndSignAndJsonEncode(
@@ -428,9 +414,8 @@ void main() {
                 'it is an advertisement that does not say');
       }
 
-      // `alg` and the key itself sit INSIDE the entry now that the three
-      // advertising records share one key vocabulary. Removing them from the
-      // top level would remove nothing, so these cases have to reach into the
+      // `alg` and the key itself sit INSIDE the entry, so removing them from
+      // the top level would remove nothing: these cases have to reach into the
       // entry or they pass for the absence rather than for the guard.
       for (final missing in ['use', 'alg', 'pub', 'kid']) {
         final payload = advertisementPayload(bobKey);
@@ -461,11 +446,10 @@ void main() {
 
     test('the envelope versions independently of the payload it wraps',
         () async {
-      // The two version each other's shape independently, which is what let
-      // the envelope change shape without touching a single advertisement.
-      // The envelope's own version rides INSIDE the protected header, where
-      // the signature covers it — a version outside the signature is a claim
-      // an attacker can edit.
+      // The envelope and the payload it wraps version independently. The
+      // envelope's own version rides INSIDE the protected header, where the
+      // signature covers it — a version outside the signature is a claim an
+      // attacker can edit.
       final envelope = await bobSigner
           .wrapAndSign({'v': 99, 'anything': 1}, type: EnvelopeType.nskeyRing);
 
@@ -511,11 +495,10 @@ void main() {
         };
 
     test('an entry this build cannot use is skipped, not fatal', () async {
-      // The list exists so an owner can offer a new KEM beside an old one. A
+      // The list exists so an owner can offer a new KEM beside an old one: a
       // reader that refused the whole advertisement on the first unknown entry
-      // would mean nobody could publish the new one without cutting off every
-      // peer that predates it — the reader has to understand the shape before
-      // any writer produces it.
+      // would mean nobody could publish a new one without cutting off every
+      // peer that predates it.
       final payload = advertisementPayload(bobKey);
       (payload['keys'] as List).insert(0, unusableEntry());
       final c = client(
@@ -550,15 +533,13 @@ void main() {
 
     test('a retired entry is not what a sender is pointed at', () async {
       // This record's own writer never retires an entry — it overwrites on
-      // rotation — so this is the reader honouring a vocabulary a newer or a
-      // foreign implementation may use. Encapsulating to a generation the
-      // owner has moved off writes something the owner never looks for.
+      // rotation — so this is the reader honouring a vocabulary a foreign
+      // implementation may use. Encapsulating to a generation the owner has
+      // moved off writes something the owner never looks for.
       //
-      // The retired entry is bob's X-Wing key, which is FIRST in
-      // SecretSharingAlgos.keyAlgos — so preference order on its own would
-      // choose it and only status can make the reader pass it over. Putting
-      // the retired key under the LESS preferred algorithm would have been a
-      // test that passes whether or not status is honoured at all.
+      // The retired entry is bob's X-Wing key, FIRST in
+      // SecretSharingAlgos.keyAlgos, so preference order on its own would
+      // choose it and only status can make the reader pass it over.
       final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
       final pair = await mlKem.keyPairFromSeed(mlKem.newSeed());
       final payload = advertisementPayload(bobKey);
@@ -651,10 +632,7 @@ void main() {
     test('a key that is not its algorithm\'s length is rejected', () async {
       // The kid is the digest of whatever bytes are carried, so a forger gets
       // a matching one for free and the kid check cannot see this. The length
-      // is what says these bytes are an X-Wing public key at all. Without it
-      // the advertisement verifies, and the failure lands inside the KEM one
-      // seal later, on a stack that names neither the owner nor the
-      // advertisement it came from.
+      // is what says these bytes are an X-Wing public key at all.
       final truncated = bobKey.publicKeyBytes.sublist(0, 1000);
       final payload = advertisementPayload(bobKey);
       final entry = (payload['keys'] as List).first as Map;

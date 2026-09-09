@@ -1,15 +1,9 @@
-/// Guards the allowlist in `dart_test.yaml`.
+/// Guards the allowlist in `dart_test.yaml`: every `*_test.dart` under `test/`
+/// must be either allowlisted or under `test/pq/`, and nothing may be both.
 ///
-/// This suite runs against LONG-LIVED atSigns (@ce2e1..@ce2e4 on
-/// root.atsign.wtf), so `dart_test.yaml` names the files a bare `dart test`
-/// may run rather than excluding the ones it may not. That direction is what
-/// keeps a forgotten convention harmless: an unlisted test does not run.
-///
-/// Its one weakness is the other direction — a new NON-post-quantum test that
-/// nobody adds to the list would silently never run, and a test that never
-/// runs looks exactly like a test that passes. This file closes that: every
-/// `*_test.dart` under `test/` must be either allowlisted or under `test/pq/`,
-/// and nothing may be both.
+/// The allowlist keeps post-quantum writes off the long-lived @ce2e atSigns;
+/// this file catches the other direction, where a test nobody adds to the list
+/// silently never runs and so looks exactly like a test that passes.
 ///
 /// Pure local file inspection; it talks to no atServer.
 library;
@@ -20,9 +14,8 @@ import 'package:test/test.dart';
 
 /// The paths `dart_test.yaml` allows a bare `dart test` to run.
 ///
-/// Parsed as text rather than through a YAML library: the whole point is to
-/// read what the runner reads, and the `paths:` block is a flat list of
-/// scalars.
+/// Parsed as text rather than with a YAML library, so this reads what the
+/// runner reads.
 Set<String> _allowlist(File config) {
   final lines = config.readAsLinesSync();
   final start = lines.indexWhere((l) => l.trimRight() == 'paths:');
@@ -34,7 +27,7 @@ Set<String> _allowlist(File config) {
   for (final line in lines.skip(start + 1)) {
     final trimmed = line.trim();
     if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
-    if (!trimmed.startsWith('- ')) break; // end of the block
+    if (!trimmed.startsWith('- ')) break;
     paths.add(trimmed.substring(2).trim());
   }
   return paths;
@@ -48,8 +41,6 @@ void main() {
   late List<String> discovered;
 
   setUpAll(() {
-    // `dart test` runs from the package root, so these relative paths resolve
-    // the same way the runner's own `paths:` entries do.
     expect(config.existsSync(), isTrue,
         reason: 'cwd is ${Directory.current.path}; dart_test.yaml must be '
             'readable from the package root the runner starts in');
@@ -89,10 +80,8 @@ void main() {
   });
 
   test('every test under test/pq/ carries the pq tag', () {
-    // Matched as "a Tags annotation containing 'pq'" rather than as the
-    // literal `@Tags(['pq'])`: a file may legitimately carry a second tag —
-    // `legacy-server` marks the one row that needs a PINNED pre-PQ atServer
-    // rather than the current image — and a literal match would reject it.
+    // A file may legitimately carry a second tag beside `pq`, so match a Tags
+    // annotation containing it rather than the literal `@Tags(['pq'])`.
     final tagsWithPq =
         RegExp(r"@Tags\(\s*\[[^\]]*'pq'[^\]]*\]\s*\)", multiLine: true);
     final untagged = discovered

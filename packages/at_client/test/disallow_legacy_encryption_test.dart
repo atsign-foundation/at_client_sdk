@@ -9,11 +9,6 @@ import 'test_utils/mocks.dart';
 
 /// `disallowLegacyEncryption` — the flag that says never write new data under
 /// the legacy provider: take a post-quantum path or refuse.
-///
-/// The whole value of the flag is in what it does *not* govern. A client that
-/// refused legacy reads would lose its own history; one that refused
-/// `shouldEncrypt = false` would break every deliberately-plaintext record. So
-/// the tests below matter in both directions.
 void main() {
   const alice = '@alice';
   const bob = '@bob';
@@ -21,8 +16,7 @@ void main() {
 
   setUpAll(() => registerFallbackValue(AtKey()));
 
-  /// A client that refuses legacy encryption. Its crypto config decides what
-  /// it *would* write; the flag decides what it may.
+  /// A client that refuses legacy encryption.
   StrictMockAtClient strictClient({CryptoConfig? crypto}) {
     final atClient = StrictMockAtClient();
     when(() => atClient.getCurrentAtSign()).thenReturn(alice);
@@ -62,17 +56,12 @@ void main() {
               'over the flag — the flag is the guarantee');
     });
 
-    /// Exactly the key `NotificationService.send()` builds: it composes the
-    /// string from the namespace it was handed and then recovers the namespace
-    /// by re-parsing it. `AtKey.fromString` splits at the last dot, so a
-    /// single-segment namespace comes back as null.
+    /// Exactly the key `NotificationService.send()` builds, where
+    /// `AtKey.fromString` splits at the last dot and so hands back a null
+    /// namespace for a single-segment one.
     ///
-    /// ⚠️ Do not replace this with a hand-built key. An earlier version of the
-    /// test below asserted the same refusal against `shared_key.bob`, a shape
-    /// no caller produces — `providerIdFor` is reached only from
-    /// `PutRequestTransformer` and from `CryptoRuntime._provider`, and neither
-    /// is ever handed a `shared_key.*` key, which is written with a raw update
-    /// verb instead. The test was green and proved nothing about reachability.
+    /// Not interchangeable with a hand-built key: no caller produces one, so
+    /// the refusal would say nothing about reachability.
     AtKey sendKey(String namespace) {
       final atKey = AtKey.fromString('$bob:$namespace$alice');
       atKey.metadata.namespaceAware = false;
@@ -91,9 +80,6 @@ void main() {
               'letting it through would make the guarantee leak through '
               'every namespace-less record');
 
-      // The control: the same call with a dotted namespace takes the PQ path,
-      // so the refusal above is caused by the namespace being lost and not by
-      // anything else about this key.
       expect(
           CryptoRuntime.providerIdFor(atClient, null,
               atKey: sendKey('buzz.wavi')),
@@ -144,9 +130,8 @@ void main() {
         ..metadata = (Metadata()
           ..appMetadata = AppMetadata(providerId: legacyCryptoProviderId));
 
-      // The legacy provider itself fails on this fixture for its own reasons —
-      // no shared key, no atChops. What matters is that the refusal is NOT the
-      // failure: history has to keep opening.
+      // NOTE: the legacy provider fails on this fixture anyway — no shared
+      // key, no atChops — so assert on which failure, not that one happened.
       await expectLater(
           () => CryptoRuntime(atClient).decryptForGet(key, 'ciphertext'),
           throwsA(isNot(isA<LegacyEncryptionRefusedException>())),
@@ -167,10 +152,6 @@ void main() {
 
   /// A `local:` record is never synced to the atServer, so the
   /// harvest-now-decrypt-later premise the flag exists for has no referent.
-  /// Before this carve-out every post-quantum provider declined a local key,
-  /// the defaulted id fell back to legacy, and the flag refused it — which made
-  /// the SDK's own watermarks unwritable and took the notification listener out
-  /// with them.
   group('local: keys', () {
     AtKey watermark() =>
         AtKey.local('lastreceivednotification', alice, namespace: namespace)
@@ -194,8 +175,8 @@ void main() {
         ..metadata.appMetadata =
             AppMetadata(providerId: legacyCryptoProviderId);
 
-      // The legacy provider fails on this fixture for its own reasons (no
-      // atChops). What matters is that the refusal is not the failure.
+      // NOTE: the legacy provider fails on this fixture anyway (no atChops),
+      // so assert on which failure, not that one happened.
       await expectLater(
           () => CryptoRuntime(atClient).encryptForPut(key, 'secret'),
           throwsA(isNot(isA<LegacyEncryptionRefusedException>())),
@@ -207,10 +188,6 @@ void main() {
     test('the carve-out is isLocal, NOT "it lands on self encryption"', () {
       final atClient = strictClient(
           crypto: CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()));
-      // A synced self key: no namespace, so the nskey path declines it and the
-      // fallback is legacy — exactly as for a local key, and it reaches the
-      // very same encryption class. The difference that matters is that the
-      // atServer holds this one, so it IS harvestable.
       final syncedSelfKey = AtKey()
         ..key = 'phone'
         ..sharedBy = alice
@@ -232,8 +209,6 @@ void main() {
   });
 
   group('the switch it overrides', () {
-    // The predicate the put pre-pass consults when a destination turns out to
-    // have no post-quantum key at all.
     test('the cold-start legacy fallback does not survive it', () {
       expect(
           AtClientImpl.mayFallBackToLegacy(
@@ -259,18 +234,10 @@ void main() {
       final preference = AtClientPreference(posture: PqPosture.pqActive);
 
       expect(preference.disallowLegacyEncryption, isTrue);
-      // A flag governing what a client may write must not be flippable
-      // mid-run, or "was that record written under the guarantee?" has no
-      // answer. `final` is how that is enforced, and this asserts the default
-      // stays where the posture says it is.
       expect(AtClientPreference().disallowLegacyEncryption, isFalse);
     });
 
     test('the only way to set it is a posture that writes post-quantum', () {
-      // Posture-only, with no escape hatch: a safety flag whose override
-      // defeats its purpose is not the same kind of thing as deployment
-      // policy, which is why the algorithm lists keep theirs and this does
-      // not. The asymmetry is deliberate and recorded in ruling 113.
       expect(
           PqPosture(
             authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
@@ -287,8 +254,6 @@ void main() {
           isTrue,
           reason: 'a bespoke posture can still ask for the refusal without '
               'adopting the whole of pqActive');
-      // And it cannot be asked for while the client goes on writing legacy,
-      // which is the combination that would refuse its own writes.
       expect(
           () => PqPosture(
                 authenticationKeyAlgorithm: SigningAlgoType.rsa2048,

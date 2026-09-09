@@ -15,6 +15,8 @@ import 'test_utils/remote_backed_client.dart';
 
 import 'fake_enrollment_directory.dart';
 
+/// A bare host for the registration mixins, so a test can call `register()`
+/// without a full client.
 class TestRegistrant
     with ApkamSigning, EnvelopeSigning, KeyPackageRegistration {
   @override
@@ -30,13 +32,11 @@ class TestRegistrant
   TestRegistrant(this.atClient);
 }
 
-/// Backing the registration mixin's enc keypair with the keyfile.
+/// Backing the registration mixin's encapsulation keypair with the keyfile.
 ///
 /// A sender addresses an envelope to the `kpid` it read from the enrollment
 /// record, so a client whose kpid moves between processes scans for an address
-/// nobody writes to and can never be sent anything. That is not a degraded
-/// mode — it is the difference between the substrate delivering key material
-/// and delivering none.
+/// nobody writes to and can be sent nothing at all.
 void main() {
   const atSign = '@alice';
   late Map<String, String> remoteData;
@@ -56,8 +56,8 @@ void main() {
     return registrant;
   }
 
-  /// The keyfile an enrollment made with `enrollmentKeyPackageBuilder` carries:
-  /// both halves of one X-Wing keypair, filed under the kpid they address.
+  /// A keyfile holding both halves of one X-Wing keypair, filed under the kpid
+  /// they address, as a freshly created enrollment carries it.
   Future<(InMemoryAtKeysIo, String)> keyfileWithPackage() async {
     final pair = await XWingPureDartAlgo.instance.generateKeyPair();
     final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
@@ -118,7 +118,7 @@ void main() {
 
   test('a filed nskey private is never adopted as the key package', () async {
     final (io, advertised) = await keyfileWithPackage();
-    // Conveyed later, so it sorts newest — the trap a createdAt-only rule
+    // NOTE: filed last so it sorts newest — the trap a createdAt-only rule
     // would fall into.
     await NskeyPrivateFiling(keysIo: io, atSign: atSign).file(Secret(
       namespace: 'app_1.my_apps',
@@ -152,9 +152,8 @@ void main() {
   test(
       'a retrofitted keyfile: each principal adopts its OWN package, never '
       'its co-tenant\'s', () async {
-    // The shape a self-retrofit leaves behind: the legacy enrollment's
-    // package untagged (filed before materials carried enrollment ids) and
-    // the PQ enrollment's tagged with its id — the tagged one newer.
+    // NOTE: the tagged package is the newer one, so a newest-wins rule would
+    // hand it to the untagged principal too.
     final keys = AtKeys();
     final legacyPair = await XWingPureDartAlgo.instance.generateKeyPair();
     final legacyKpid =
@@ -229,11 +228,8 @@ void main() {
 
   test('a keyfile carrying a superseded package keeps it, as retired',
       () async {
-    // What a rotation leaves behind: the enrollment advertises the newer key
-    // and the older one is still filed, marked retired by AtKeys.retireKey.
-    // Dropping it on restart would strand every envelope a peer addressed
-    // before the rotation — up to envelopeTtl, seven days, of traffic this
-    // client could no longer even look for.
+    // NOTE: dropping the superseded key on restart would strand every
+    // envelope a peer addressed before the rotation, up to envelopeTtl.
     final keys = AtKeys();
     final oldKpid = fileKeyPackage(
         keys, await XWingPureDartAlgo.instance.generateKeyPair(),
@@ -270,12 +266,9 @@ void main() {
 
   test('a status this build does not know is carried across, not flattened',
       () async {
-    // Both vocabularies are open. Until 2026-08-22 this seam mapped anything
-    // that was not `active` to `KeyEntryStatus.retired`, which threw away the
-    // openness one hop after the keyfile preserved it — and `retired` is the
-    // permissive answer, because a retired key still verifies what it signed.
-    // A newer build of this client writing, say, `revoked` would have had an
-    // older one read it back as merely superseded.
+    // NOTE: both status vocabularies are open, so an unknown token must cross
+    // this seam unchanged rather than collapse to `retired`, which is the
+    // permissive answer.
     final keys = AtKeys();
     final unknownKpid = fileKeyPackage(
         keys, await XWingPureDartAlgo.instance.generateKeyPair(),
@@ -308,9 +301,8 @@ void main() {
   });
 
   test('a dead key package is not adopted at all', () async {
-    // Retirement is as close to deletion as a keyfile gets — status only moves
-    // forward and dead is the end of that road — so a dead key is not
-    // something to keep answering on, or to tell peers about.
+    // NOTE: status only moves forward and dead is the end of it, so a dead
+    // key is neither answered on nor advertised.
     final keys = AtKeys();
     fileKeyPackage(keys, await XWingPureDartAlgo.instance.generateKeyPair(),
         createdAt: DateTime.now().toUtc().subtract(const Duration(days: 9)),

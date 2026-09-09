@@ -7,16 +7,8 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 
-/// The CK manager — the step that makes `put` work at all on the nskey path.
-///
-/// Content keys are scoped per recipient, so "no current CK" is not a one-off
-/// bootstrap: it fires on the first write to every new destination, and again
-/// whenever that destination rotates. Minting one means *writing a conveyance
-/// record*, which is why this runs before the write pipeline rather than inside
-/// `encrypt`.
-/// A [CurrentCkPointer] backed by a plain map, standing in for the self key
-/// the real one writes. Survives a simulated restart, which is the whole
-/// point of the thing under test.
+/// A [CurrentCkPointer] backed by a plain map, standing in for the self key the
+/// real one writes, and surviving a simulated restart.
 class InMemoryCkPointer extends CurrentCkPointer {
   final Map<String, CurrentCk> _remembered = {};
 
@@ -35,11 +27,9 @@ class InMemoryCkPointer extends CurrentCkPointer {
 /// An [InMemoryNskeyKeyRing] whose advertisement for a namespace can gain a
 /// second algorithm's entry after the fact.
 ///
-/// Seeding cannot produce one: it writes single-key generations, which is all a
-/// mint produces. Widening retains the entry already published and the
-/// generation's own mint time, because that is what putting another algorithm
-/// into a live generation means — replacing either would be a rotation, and
-/// every record sealed to the old entry would need conveying again.
+/// Widening retains the entry already published and the generation's own mint
+/// time: replacing either would be a rotation, and every record sealed to the
+/// old entry would need conveying again.
 class _WidenableRing extends InMemoryNskeyKeyRing {
   final Map<String, NskeyAdvertisement> _widened = {};
 
@@ -61,6 +51,12 @@ class _WidenableRing extends InMemoryNskeyKeyRing {
       await super.currentPublic(owner, namespace);
 }
 
+/// The CK manager — the step that makes `put` work at all on the nskey path.
+///
+/// Content keys are scoped per recipient, so "no current CK" fires on the first
+/// write to every new destination and again whenever that destination rotates;
+/// minting one writes a conveyance record, which is why this runs before the
+/// write pipeline rather than inside `encrypt`.
 void main() {
   const owner = '@alice';
   const bob = '@bob';
@@ -79,20 +75,11 @@ void main() {
   /// pipeline does: the conveyance record is encrypted by `at/nskey`, which
   /// seals the CK and marks it current.
   ///
-  /// [failWrites] makes the first N conveyance writes fail *after* the record
-  /// has been encrypted — the real shape of the hazard, since encryption
-  /// happens in the put transformer and the write is issued after it.
-  ///
-  /// [keyRing] replaces the ring the fixture would build, for the cases that
-  /// need an advertisement seeding cannot produce — one carrying more than one
-  /// algorithm's entry.
-  ///
-  /// [sealsToKeyAlgorithms] narrows what this client is willing to seal to,
-  /// the way a deployment's `AtClientPreference` does, and [nskeyKeyAlgo] is
-  /// the KEM the fixture's conveyance provider seals under. The two move
-  /// together: the manager stamps a provider id chosen from the destination's
-  /// advertisement, and that id is what the runtime dispatches the conveyance
-  /// write to.
+  /// [failWrites] fails the first N conveyance writes *after* the record has
+  /// been encrypted, and [keyRing] replaces the ring the fixture would build.
+  /// [sealsToKeyAlgorithms] and [nskeyKeyAlgo] move together: the manager
+  /// stamps a provider id chosen from the destination's advertisement, and the
+  /// runtime dispatches the conveyance write to it.
   ({
     CkManager manager,
     CryptoContext context,
@@ -115,8 +102,8 @@ void main() {
       String nskeyKeyAlgo = SecretSharingAlgos.xWing,
       CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek}) {
     var writesLeftToFail = failWrites;
-    // A fixed, unmistakable date: an assertion that matched `now` would pass
-    // whether the age came from the record or from this device's clock.
+    // NOTE: a fixed date — an assertion that matched `now` would pass whether
+    // the age came from the record or from this device's clock.
     final conveyanceCreatedAt = DateTime.utc(2026, 3, 4, 5, 6, 7);
     final cache = ContentKeyCache();
     final ring = keyRing ?? InMemoryNskeyKeyRing();
@@ -129,17 +116,15 @@ void main() {
         pointer: pointer,
         sealsToKeyAlgorithms: sealsToKeyAlgorithms,
         ckRotationPolicy: ckRotationPolicy);
-    // A restart replaces the whole config — provider and manager share one
-    // cache in production, so a cold manager needs a cold provider with it.
-    // Reads must decrypt through whichever is live, or the recovered CK lands
-    // in a cache nobody is looking at.
+    // NOTE: provider and manager share one cache in production, so a cold
+    // manager needs a cold provider with it, and reads must decrypt through
+    // whichever is live.
     var activeNskey = nskey;
     // Conveyance ciphertexts, so a read can be served the way sync would.
     final conveyed = <String, String>{};
-    // The KEY as well as the value: encrypt stamps appMetadata onto it
-    // (the nskey generation the CK was sealed to), and a real get returns
-    // that stored metadata with the record. Handing decrypt a freshly built
-    // key instead would leave it unable to tell which generation to open.
+    // NOTE: the key as well as the value — encrypt stamps the sealed-to nskey
+    // generation onto its appMetadata, and decrypt needs that same key back to
+    // tell which generation to open.
     final conveyedKeys = <String, AtKey>{};
     final written = <AtKey>[];
     final deleted = <AtKey>[];
@@ -157,11 +142,8 @@ void main() {
       final value = inv.positionalArguments[1] as String;
       final options =
           inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
-      // The current-CK pointer writes an ordinary self key through the same
-      // client. It is not a conveyance and does not go through the nskey
-      // provider, so it is ignored here entirely — these assertions are about
-      // how many CKs were cut, and counting unrelated puts would make every
-      // one of them a coincidence.
+      // The current-CK pointer writes an ordinary self key through this same
+      // client; it is not a conveyance, so it is not counted here.
       if (key.key.startsWith('__ckcur') == true) {
         return true;
       }
@@ -186,8 +168,6 @@ void main() {
         throw SecondaryConnectException('conveyance delete failed');
       }
       deleted.add(key);
-      // The record is gone from the store too, so a reader can no longer
-      // recover the CK it carried — which is the whole point of deleting it.
       conveyed.remove(key.toString());
       conveyedKeys.remove(key.toString());
       return true;
@@ -198,14 +178,13 @@ void main() {
       final key = inv.positionalArguments[0] as AtKey;
       final ciphertext = conveyed[key.toString()];
       if (ciphertext == null) throw AtKeyNotFoundException('$key not found');
-      // Routes back through at/nskey, which decapsulates and caches the CK as
-      // a side effect — exactly what the production read path relies on.
+      // at/nskey decapsulates and caches the CK as a side effect, which is what
+      // the production read path relies on.
       return activeNskey
           .decrypt(CryptoContext(atClient: mockAtClient),
               conveyedKeys[key.toString()]!, ciphertext)
-          // With the record's own metadata, because a resumed CK takes its
-          // cut-time from exactly this: the atServer's date for the record
-          // that carries it, which is the only date two devices can agree on.
+          // The record's own createdAt: a resumed CK takes its cut-time from
+          // the atServer's date, the only one two devices can agree on.
           .then((plain) => AtValue()
             ..value = plain
             ..metadata = (Metadata()..createdAt = conveyanceCreatedAt));
@@ -217,10 +196,8 @@ void main() {
       return activeNskey
           .decrypt(CryptoContext(atClient: mockAtClient),
               conveyedKeys[key.toString()]!, ciphertext)
-          // ⚠️ THIS is the overload the resume path takes — one argument, no
-          // request options. Stamping the record's date on the other stub and
-          // not this one leaves the resume reading a record with no metadata,
-          // which is indistinguishable from an atServer that sent none.
+          // NOTE: the resume path takes this one-argument overload, so the
+          // record's date has to be stamped here as well as on the other stub.
           .then((plain) => AtValue()
             ..value = plain
             ..metadata = (Metadata()..createdAt = conveyanceCreatedAt));
@@ -309,7 +286,6 @@ void main() {
       await c.manager.ensureCurrent(c.context, selfValue('treaty'));
       expect(c.cache.currentNskeyKid(owner, namespace), firstGen);
 
-      // Rotation: a new keypair becomes the advertised generation.
       final rotated = await XWingKeyPair.generate();
       final secondGen = c.ring.seedKeypair(owner, namespace,
           publicKey: rotated.publicKeyBytes,
@@ -326,23 +302,9 @@ void main() {
 
     test('an algorithm added to the advertisement is nothing to re-seal',
         () async {
-      // The publishing side of a widening, and an ABSENCE: the atSign that
-      // owns the namespace key has put a second algorithm into the generation
-      // it advertises, and from that moment it writes nothing further. No
-      // fresh content key, no second conveyance, and no change to the
-      // generation its values are sealed under. That is what lets a sender
-      // upgrade whenever it likes — the publisher never learns whether one
-      // did, because nothing about the wider record reaches its write path.
-      //
-      // Counted over THIS client alone, which is the whole claim. A sibling
-      // enrollment that missed the push does pull the added private at its
-      // next start, by design, and counting that would read correct behaviour
-      // as a violation.
-      //
-      // Break it by making NskeyAdvertisement.bestKeyFor iterate `keys` outer
-      // instead of `supportedAlgos` outer: the added entry is listed first, so
-      // it becomes the resolved one, the advertised kid moves, the
-      // already-current guard misses, and a second __ck is cut and written.
+      // NOTE: counted over THIS client alone. A sibling enrollment that missed
+      // the push does pull the added private at its next start, by design, and
+      // counting that would read correct behaviour as a violation.
       final ring = _WidenableRing();
       final c = client(keyRing: ring);
       ring.seedKeypair(owner, namespace,
@@ -362,11 +324,8 @@ void main() {
           pub: second.publicKey);
       await ring.widen(owner, namespace, added);
 
-      // The control — the three checks here say the widening actually landed,
-      // and all three stay green under the mutation named above while the
-      // three assertions at the end of the test go red. A widen that quietly
-      // did nothing would leave every absence below true of an advertisement
-      // that never changed.
+      // The control: these three checks say the widening actually landed, so
+      // the absences below are read against a changed advertisement.
       final republished = (await ring.currentPublic(owner, namespace))!;
       expect(republished.keys.map((k) => k.alg),
           [SecretSharingAlgos.mlKem1024, SecretSharingAlgos.xWing]);
@@ -392,17 +351,9 @@ void main() {
 
     test('a restart after the widening resumes rather than cutting another',
         () async {
-      // The durable half of the same absence. What a client remembers about a
+      // The durable half of the same absence: what a client remembers about a
       // destination is a generation kid, and the widened advertisement must
-      // still resolve to it: a publisher that restarted after publishing the
-      // wider record and then refused its own pointer would cut a fresh
-      // content key and convey it — exactly the something-further this does
-      // not do, and the arm above reads only an in-memory cache.
-      //
-      // The same mutation reaches it by a different route: with `keys` outer
-      // the resolved kid is the added entry's, the remembered kid is the one
-      // the conveyance was sealed to, and the resume rejects the pointer as
-      // naming a generation the destination has moved off.
+      // still resolve to it.
       final ring = _WidenableRing();
       final c = client(keyRing: ring);
       ring.seedKeypair(owner, namespace,
@@ -444,21 +395,9 @@ void main() {
     test(
         'a narrowed writer seals to the algorithm it added to its own '
         'advertisement', () async {
-      // Within one atSign, narrowing the sender to a newly added algorithm
-      // refuses nothing. The destination is @alice herself, so the
-      // advertisement the write consults is @alice's own — and it carries the
-      // ML-KEM entry because this atSign is what put it there. The resolver
-      // finds an entry on the narrowed list, and the refusal that sits under
-      // that lookup is never reached; what this configuration costs surfaces
-      // later and elsewhere, at a sibling install, on a record this write has
-      // already made.
-      //
-      // Break it by making NskeyResolver's walk ask
-      // `hit.usableFor(SecretSharingAlgos.keyAlgos)` rather than
-      // `hit.usableFor(sealsToKeyAlgorithms)`: x-wing leads that list, so
-      // this ML-KEM sender resolves the x-wing entry and both assertions
-      // about where the conveyance went go red — while `completes` stays
-      // green, which is why completing is not on its own worth asserting.
+      // The destination is @alice herself, so the advertisement the write
+      // consults is the one this atSign widened: the resolver finds an entry on
+      // the narrowed list and the refusal under that lookup is never reached.
       final ring = _WidenableRing();
       final c = client(
           keyRing: ring,
@@ -501,12 +440,8 @@ void main() {
 
     test('the same narrowing refuses where nothing added the algorithm',
         () async {
-      // The control for the arm above: the same manager, the same narrowed
-      // list, the same self destination — over an advertisement that was
-      // never widened, because this @alice took the rollout without
-      // publishing an entry to match it. The refusal fires, which is what
-      // says the arm above measured a real choice rather than a fixture with
-      // nothing to refuse.
+      // The control for the arm above: the same narrowing over an
+      // advertisement that was never widened, so the refusal fires.
       final c =
           client(sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024]);
       c.ring.seedKeypair(owner, namespace,
@@ -534,9 +469,8 @@ void main() {
     });
 
     test('the default policy leaves a fresh content key alone', () async {
-      // The control for the arm below, and for the default itself: the same
-      // fixture, the same two writes, under rotateCkAfterOneWeek. A key cut a
-      // moment ago is not a week old, so nothing is re-cut.
+      // The control for the arm below: a key cut a moment ago is not a week
+      // old, so the default policy re-cuts nothing.
       final c = client();
       c.ring.seedKeypair(owner, namespace,
           publicKey: aliceNskey.publicKeyBytes,
@@ -585,8 +519,7 @@ void main() {
     test('the namespace-key hook is asked only where this atSign owns the key',
         () async {
       // A content key is sealed to the DESTINATION's namespace key, so a
-      // sender cannot replace a peer's — asking would put a question to the
-      // application it could not act on.
+      // sender cannot replace a peer's.
       final asked = <String>[];
       final c = client();
       c.manager.rotateOwnNamespaceKeyIfAsked = (ns) async {
@@ -623,17 +556,11 @@ void main() {
       expect(c.cache.current(owner, namespace)!.ckKid,
           isNot(c.cache.current(bob, namespace)!.ckKid));
 
-      // The conveyance for bob is addressed to bob but owned by alice.
       final toBob = c.written.last;
       expect(toBob.sharedWith, bob);
       expect(toBob.sharedBy, owner);
     });
 
-    /// A CK is only usable if the record conveying it exists. Marking one
-    /// current before that write lands means a failure leaves the cache
-    /// claiming a key nobody was ever sent — and `ensureCurrent`'s
-    /// already-current guard then short-circuits forever, so every later value
-    /// encrypts under it and is silently undecryptable.
     test('a failed conveyance write leaves no current CK', () async {
       final c = client(failWrites: 1);
       c.ring.seedKeypair(owner, namespace,
@@ -668,12 +595,6 @@ void main() {
           reason: 'the current CK must be the one whose conveyance landed');
     });
 
-    /// The conveyance carries the key the value cites, so it must not be
-    /// slower than the value. A per-call `useRemoteAtServer: true` sends the
-    /// value straight to the atServer; leaving the conveyance on the default
-    /// local-first route means the recipient can see a value whose key is
-    /// still sitting on the sender's device — until the next sync, or forever
-    /// if the process exits first.
     test(
         'a restart resumes the CK it was writing under rather than cutting '
         'another', () async {
@@ -687,10 +608,7 @@ void main() {
       expect(c.written, hasLength(1), reason: 'the first write cuts a CK');
       final firstKid = c.cache.current(owner, namespace)!.ckKid;
 
-      // Same durable state, empty cache — a restart. Without the pointer this
-      // finds nothing and mints, leaving a second conveyance record that can
-      // never be cleaned up, because data written under the first still needs
-      // it.
+      // Same durable state, empty cache — a restart.
       final cold = c.coldManager(ContentKeyCache());
       final resumed =
           await c.pointer.read(c.context.atClient, owner, namespace);
@@ -739,9 +657,7 @@ void main() {
     test('refuses, by name, when the destination has no nskey at all',
         () async {
       final c = client();
-      // No seeding: @bob has never used this namespace. Raising it here rather
-      // than mid-pipeline is what leaves the caller free to route the write to
-      // legacy instead — nothing has been committed to yet.
+      // No seeding: @bob has never used this namespace.
       await expectLater(
         c.manager.ensureCurrent(c.context, sharedValue('treaty')),
         throwsA(isA<NamespaceKeyUnavailableException>()
@@ -756,9 +672,6 @@ void main() {
 
   group('termination', () {
     test('the conveyance write does not itself need preparing', () {
-      // This is what stops ensureCurrent recursing: it issues a put routed to
-      // at/nskey, and at/nskey is not a PreparesWrites, so the pre-pass on that
-      // nested write is a no-op.
       final cache = ContentKeyCache();
       final nskey =
           NskeyProvider(keyRing: InMemoryNskeyKeyRing(), cache: cache);
@@ -837,9 +750,8 @@ void main() {
     });
 
     test('hands every part the same cache', () async {
-      // The parts are not independent: a conveyance caches a CK that the data
-      // provider must then find. Separate caches would fail silently at the
-      // first write, which is exactly why the SDK assembles this.
+      // A conveyance caches a CK the data provider must then find; separate
+      // caches would fail silently at the first write.
       final ring = InMemoryNskeyKeyRing()
         ..seedKeypair(owner, namespace,
             publicKey: aliceNskey.publicKeyBytes,
@@ -922,9 +834,8 @@ void main() {
     });
 
     test('deletes only after the successor is durable', () async {
-      // A conveyance write that fails must leave the old CK alone. Deleting
-      // first would strand the destination with no readable past AND no key
-      // to write the next value under.
+      // Deleting first would strand the destination with no readable past and
+      // no key to write the next value under.
       final c = client();
       c.ring.seedKeypair(owner, namespace,
           publicKey: aliceNskey.publicKeyBytes,
@@ -994,9 +905,6 @@ void main() {
       await c.manager.ensureCurrent(c.context, selfValue('treaty'));
 
       // A restart: a fresh cache and manager, with only the pointer surviving.
-      // The CK is recovered from its conveyance record, and that record's own
-      // createdAt is what the policy must be told — this process never saw the
-      // key cut, so its own clock says nothing about how old the key is.
       final asked = <CkRotationContext>[];
       final cold = c.coldManager(ContentKeyCache(), ckRotationPolicy: (ck) {
         asked.add(ck);
@@ -1037,7 +945,6 @@ void main() {
           SymmetricAesGcmProvider(cache: c.cache, ckManager: c.manager);
 
       final valueKey = selfValue('treaty');
-      // Exactly what the pipeline does: prepare, then encrypt.
       await data.prepareForWrite(c.context, valueKey);
       final ciphertext =
           await data.encrypt(c.context, valueKey, 'the treaty text');

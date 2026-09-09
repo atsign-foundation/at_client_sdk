@@ -27,26 +27,13 @@ import 'package:test/test.dart';
 /// UC-B0.1 — a PQ-capable client cannot PQ-upgrade against a legacy atServer.
 ///
 /// **This file needs a PINNED pre-PQ atServer, which is why it carries the
-/// `legacy-server` tag on top of `pq`.** Every other test in this directory
-/// wants the newest image; this one wants an old one, and would go quietly
-/// meaningless against a current image — the server would simply auto-approve
-/// and there would be no refusal to observe. `atsigncompany/virtualenv:vip-p3.15.0`
-/// is the pin: a release tag, so it stays pre-PQ for good, unlike `vip`, which
-/// gains post-quantum support and stops being a legacy atServer.
+/// `legacy-server` tag on top of `pq`.** Against a current image the server
+/// auto-approves and there is no refusal to observe.
+/// `atsigncompany/virtualenv:vip-p3.15.0` is the pin: a release tag stays
+/// pre-PQ, unlike `vip`, which gains post-quantum support.
 ///
-/// The row's Then has five clauses and they are asserted separately, because
-/// four of them can hold while the fifth does not — which is exactly what the
-/// first run of this scenario found. The abort was clean, but it left the
-/// enrollment request it had just created sitting `pending` on the server, and
-/// a client that retried left one per attempt. That is now denied on the way
-/// out (at_auth 3.4.0), and clause 5 is what guards it.
-///
-/// The third test is the row's parenthetical rather than one of its five
-/// clauses: the atServer's immutable write is long-standing, and is not a
-/// PQ-only verb. Every other live exercise of `Metadata.immutable` in this
-/// repository runs against the current image, and an immutable write working
-/// there says nothing about a pre-PQ atServer. "Present even here" is a claim
-/// about the old server, so this is the only pack that can make it.
+/// The row's Then has five clauses, asserted separately because four of them
+/// can hold while the fifth does not.
 void main() {
   late String atSign;
   late AtClient owner;
@@ -64,7 +51,7 @@ void main() {
   });
 
   /// Mints a genuinely pre-PQ enrollment — RSA APKAM, no key package — and
-  /// writes its keyfile. The upgrade's starting point.
+  /// writes its keyfile.
   ///
   /// [namespaces] decides whether the parent holds `__manage`, which is what
   /// decides whether it may deny its own aborted request.
@@ -123,9 +110,7 @@ void main() {
   test(
       'UC-B0.1: the upgrade aborts cleanly, stays legacy, and leaves the '
       'server as it found it', () async {
-    // GIVEN a legacy atServer. Asserted, not assumed — the whole row is about
-    //       what happens when the PQ surface is missing, so a run against a
-    //       PQ-capable image must fail here rather than quietly prove nothing.
+    // GIVEN a legacy atServer, asserted rather than assumed.
     expect(await PqSigningRoot.publishedPublicKey(owner, atSign), isNull,
         reason: 'a signing root means this is not the pre-PQ atServer this '
             'row needs — check VIRTUALENV_IMAGE is the pinned legacy tag');
@@ -138,8 +123,8 @@ void main() {
     Object? thrown;
     try {
       await selfRetrofit(
-        // Mode B, explicitly: these rows test the PQ retrofit, and the
-        // parameter default is the rollout-window RSA mode.
+        // Named explicitly: the parameter default is the rollout-window RSA
+        // mode, and these rows test the PQ retrofit.
         signingAlgo: SigningAlgoType.mldsa65,
         session: session,
         preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
@@ -154,7 +139,7 @@ void main() {
     }
 
     // THEN (1) it aborts, and (2) cleanly — a typed, named refusal that says
-    //      what the atServer failed to do, not an arbitrary crash.
+    //      what the atServer failed to do.
     expect(thrown, isA<AtEnrollmentException>(),
         reason: 'the client must refuse the upgrade in its own terms; an '
             'arbitrary exception type means it fell over rather than declined');
@@ -194,18 +179,16 @@ void main() {
   test(
       'UC-B0.1: a scoped parent cannot tidy up, and the refusal says so',
       () async {
-    // The limit of the cleanup, stated rather than hidden. Denying needs
-    // `__manage`; a scoped enrollment does not have it, so its aborted request
-    // survives until it expires. A caller is told that plainly instead of
-    // being left to assume the server is clean.
+    // Denying needs `__manage`; a scoped enrollment does not have it, so its
+    // aborted request survives until it expires, and the caller is told so.
     await mintLegacyEnrollment('scoped', {namespace: 'rw'});
     final session = await sessionFor('scoped');
 
     Object? thrown;
     try {
       await selfRetrofit(
-        // Mode B, explicitly: these rows test the PQ retrofit, and the
-        // parameter default is the rollout-window RSA mode.
+        // Named explicitly: the parameter default is the rollout-window RSA
+        // mode, and these rows test the PQ retrofit.
         signingAlgo: SigningAlgoType.mldsa65,
         session: session,
         preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
@@ -234,17 +217,12 @@ void main() {
   test(
       'UC-B0.1: the pre-PQ atServer refuses a second write to an immutable '
       'record', () async {
-    // The parenthetical, exercised rather than asserted in prose. A refused
-    // second create is what a mint lock IS — it is how one signing root and
-    // one nskey generation per atSign are kept — so a PQ-capable client
-    // meeting an atServer nobody has upgraded needs the enforcement to be
-    // there already. If it were not, two privileged clients would each read no
-    // lock, each take one, and each mint; the second would overwrite the first
-    // with nothing visibly going wrong.
-    //
-    // What puts this in front of a pre-PQ atServer is the `legacy-server` tag
-    // on this library, which is also why it is not in the functional pack:
-    // that pack has no pinned old image to run against.
+    // A refused second create is what a mint lock IS — how one signing root
+    // and one nskey generation per atSign are kept — so a PQ-capable client
+    // meeting an atServer nobody has upgraded needs that enforcement already
+    // present. Without it two privileged clients each read no lock, each take
+    // one, and each mint; the second overwrites the first with nothing
+    // visibly going wrong.
     final record = AtKey()
       ..key = 'b01immutable$runId'
       ..sharedBy = atSign
@@ -264,7 +242,7 @@ void main() {
 
     await write('first');
 
-    // The control, and it comes first: a refused second write is otherwise
+    // The control comes first: a refused second write is otherwise
     // indistinguishable from a record the atServer never stored at all.
     expect(await read(''), 'first',
         reason: 'the create has to be seen to have landed before a refusal of '

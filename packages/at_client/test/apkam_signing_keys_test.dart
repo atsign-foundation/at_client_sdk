@@ -20,6 +20,8 @@ import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
+/// Hosts [ApkamSigning] against a mock client, so a test can drive the
+/// mixin directly.
 class TestSigner with ApkamSigning {
   @override
   final AtClient atClient;
@@ -30,6 +32,7 @@ class TestSigner with ApkamSigning {
   TestSigner(this.atClient);
 }
 
+/// Hosts [ApkamSigning] and [EnvelopeSigning], with public-key caching off.
 class TestEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   @override
   final AtClient atClient;
@@ -44,9 +47,7 @@ class TestEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   TestEnvelopeSigner(this.atClient);
 }
 
-/// Counts keyfile reads, so a test can assert that a signer answered by
-/// READING the keyfile — a green with no read would mean the fallback answered
-/// without the keyfile ever being consulted.
+/// Counts keyfile reads, so a test can assert a signer read the keyfile.
 class CountingKeysIo extends InMemoryAtKeysIo {
   int reads = 0;
 
@@ -58,8 +59,7 @@ class CountingKeysIo extends InMemoryAtKeysIo {
 }
 
 /// Where a client's signing keys come from, and what answers when the keyfile
-/// holds none — which is every keyfile until something files per-algorithm
-/// signing material.
+/// holds none.
 void main() {
   const atSign = '@alice';
   const enrollmentId = 'enroll-a';
@@ -76,8 +76,7 @@ void main() {
       atChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
 
   /// A key source holding [atSign]'s keyfile with whatever [fill] files into
-  /// it. Reading an atSign this has never been given throws, which is the
-  /// unreadable-keyfile arm.
+  /// it. Reading an atSign this has never been given throws.
   Future<InMemoryAtKeysIo> keySource(void Function(AtKeys keys) fill) async {
     final keys = AtKeys(atsign: atSign.toAtsign());
     fill(keys);
@@ -113,10 +112,6 @@ void main() {
   group('signingKeys', () {
     test('falls back to the APKAM authentication keypair with no key source',
         () async {
-      // Not a stopgap: that key's public half stays in _apsk permanently,
-      // because everything signed before an enrollment held signing keys of
-      // its own was signed by it. A source-less client is a deliberate,
-      // tested property, so this arm has to answer rather than throw.
       final keys = await signer.signingKeys;
 
       expect(keys, hasLength(1));
@@ -127,8 +122,6 @@ void main() {
 
     test('the fallback signs under the algorithm the client resolved',
         () async {
-      // A retrofitted client authenticates ML-DSA, and an envelope it signs
-      // RSA is refused against the _apsk its own record published.
       recordResolvedSigningAlgo(atClient, SigningAlgoType.mldsa65);
 
       expect(
@@ -165,9 +158,6 @@ void main() {
 
     test('a held key this build cannot sign an envelope with is skipped',
         () async {
-      // Ed25519 is in the strength order and in the keyfile vocabulary, and
-      // no envelope signs under it — so the keyfile can hold one this build
-      // must not try to use.
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
           keys.fileSigningMaterial(
               enrollmentId: enrollmentId,
@@ -192,8 +182,6 @@ void main() {
     });
 
     test('an unreadable keyfile falls back rather than throwing', () async {
-      // The store holds no entry for this atSign, so the read throws. Signing
-      // must not become impossible because a key source could not be read.
       when(() => atClient.atKeysIo).thenReturn(InMemoryAtKeysIo());
 
       expect((await signer.signingKeys).single.publicKey, pkamPublicKey());
@@ -202,14 +190,9 @@ void main() {
 
   group('signingKeys reads without waiting on anything', () {
     test('it returns while a startup step is still parked', () async {
-      // ⛔ **The regression this replaces a process-wide barrier with.**
-      // Everything that signs used to wait on the mint step, and two startup
-      // steps before it sign envelopes themselves — so the startup waited on a
-      // step that could not begin until it returned. `at_activate approve` did
-      // not exit within its two-minute bound in eight separate runs.
-      //
-      // Nothing here settles anything: the assertion is that a signer answers
-      // from the keyfile on its own.
+      // NOTE: a signer must answer from the keyfile without awaiting any other
+      // startup work — startup steps sign envelopes themselves, so a signer
+      // that waits deadlocks every signer in the process.
       final io = CountingKeysIo();
       await io.write(atSign, AtKeys(atsign: atSign.toAtsign()));
       when(() => atClient.atKeysIo).thenReturn(io);
@@ -282,8 +265,6 @@ void main() {
     });
 
     test('one held key is still one signature', () async {
-      // The shape every client produces today, and the one that must not
-      // change: nothing files per-algorithm signing material yet.
       final envelope = await TestEnvelopeSigner(atClient).wrapAndSign({'a': 1});
 
       expect(envelope.signatures, hasLength(1));
@@ -293,9 +274,9 @@ void main() {
 
   group('publicSigningKeyValue', () {
     test('one rsa2048 key publishes bare, exactly as it always has', () async {
-      // The one form everything deployed can read. Every _apsk consumer that
-      // predates the array base64-decodes the value as an RSA key, so
-      // publishing JSON where a bare key would do breaks them.
+      // NOTE: an _apsk consumer that does not know the array base64-decodes
+      // the value as an RSA key, so publishing JSON where a bare key would do
+      // breaks it.
       final value = await signer.publicSigningKeyValue;
 
       expect(value, pkamPublicKey());
@@ -303,8 +284,6 @@ void main() {
     });
 
     test('a single non-rsa2048 key publishes the array', () async {
-      // A bare value says "rsa2048" by convention, so it cannot describe this
-      // key at all — nothing could read it.
       recordResolvedSigningAlgo(atClient, SigningAlgoType.mldsa65);
 
       final advertised = jsonDecode(await signer.publicSigningKeyValue);
@@ -329,9 +308,6 @@ void main() {
       final advertised = jsonDecode(await signer.publicSigningKeyValue);
       final entries = (advertised['keys'] as List).cast<Map>();
 
-      // The held keys, strongest first, and nothing else. The APKAM
-      // authentication key is absent: this enrollment holds signing keys, so
-      // that key never signed anything durable and has nothing to verify.
       expect(entries.map((e) => e['alg']).toList(), ['mldsa65', 'rsa2048']);
       expect(entries.map((e) => e['pub']).toList(),
           [b64('mldsa-pub'), b64('rsa-pub')]);
@@ -341,9 +317,6 @@ void main() {
 
     test('an enrollment holding its own authentication keypair publishes bare',
         () async {
-      // Its own authentication keypair filed as signing material: one key,
-      // listed once, as the active signer. One active rsa2048 entry is the
-      // bare form, which is what every deployed reader parses.
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
           keys.fileSigningMaterial(
               enrollmentId: enrollmentId,
@@ -357,9 +330,6 @@ void main() {
     });
 
     test('a retired signing key stays advertised, marked retired', () async {
-      // A key is retained for what it SIGNED. Withdrawing this entry would
-      // retroactively unverify every envelope it produced, which is a loss no
-      // later publish undoes.
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
@@ -385,9 +355,6 @@ void main() {
 
     test('a retired signing key is advertised even with no active one',
         () async {
-      // Nothing active left, so the APKAM authentication key is the signer
-      // again and is advertised as such — beside, not instead of, the retired
-      // entry it replaced.
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
@@ -407,10 +374,6 @@ void main() {
 
     test('a retired key matching an active signer is not listed twice',
         () async {
-      // One key described as both current and withdrawn is a document a
-      // verifier has to choose between with nothing to choose on. Reachable
-      // when a key is retired and the same material is filed again — a new
-      // generation of the same public half.
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
@@ -424,7 +387,6 @@ void main() {
             publicKey: b64('rsa-pub'),
             privateKey: b64('rsa-priv'))));
 
-      // The active generation wins, and one active rsa2048 entry is bare.
       expect(await signer.publicSigningKeyValue, b64('rsa-pub'));
     });
   });
@@ -466,10 +428,6 @@ void main() {
     });
 
     test('republishes when the published value is not what it holds', () async {
-      // The defect this replaces: it read the record, logged "have already
-      // published" and returned, so a key that had rotated never reached the
-      // atServer and every envelope signed with the new one was verified
-      // against the old.
       final written = stubPutAndGet('a-different-key-published-earlier');
 
       await signer.publishPublicSigningKey();

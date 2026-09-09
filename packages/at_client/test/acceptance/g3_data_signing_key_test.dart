@@ -4,28 +4,10 @@ import 'proven_elsewhere.dart';
 
 /// Part G3 — the data signing key an enrollment owns from birth
 /// (`acceptance.md` section 18).
-///
-/// Section 16 is about what an `_apsk` record MEANS to a reader. This file is
-/// about the key it names: which door minted it, what has to agree on how the
-/// record spells it, and what breaks when the record moves under a signature
-/// that vouched for it.
-///
-/// ⚠️ **Three rows here are narrower than the work item that asked for them**,
-/// and each says so on the row rather than only here: the preference's floor
-/// rule reads one axis and not "any axis" (UC-G3.9), the no-provider approval
-/// guard keys on the missing wrapped key and not on "a pq request"
-/// (UC-G3.10), and the mismatch cluster has four refusal messages plus one
-/// silent comparison rather than three (UC-G3.4).
 void main() {
   test(
       'UC-G3.1 · every creation door files the private half, not just the '
       'public one', () {
-    // GIVEN a client creating an enrollment through any of the three doors
-    //       that mint one.
-    // WHEN  the atServer answers with an enrollment id.
-    // THEN  the private half is filed as typed sign: material under that id.
-    // AND   an enrolment carrying no advertisedSigningKey files nothing.
-    // AND   what is filed is the enrollment's, not the atSign's.
     provenIn('packages/at_auth/test/enrollment_test.dart',
         'the signing key is FILED, not merely advertised',
         proves: 'the enrolment door — the request carries the key, and after '
@@ -73,11 +55,6 @@ void main() {
   test(
       'UC-G3.2 · the algorithm minted is the one kept, so the first start '
       'rewrites nothing', () {
-    // GIVEN an enrollment created holding the keypair its posture's in-use
-    //       set names.
-    // WHEN  that client starts and reconcileSigningKeys runs.
-    // THEN  it mints nothing, retires nothing and publishes nothing.
-    // AND   the mint refuses a set naming more than one algorithm.
     provenIn('packages/at_client/test/signing_key_mint_test.dart',
         'pqReady mints rsa2048',
         proves: 'the pqReady half of "the algorithm minted is the one the '
@@ -118,11 +95,6 @@ void main() {
             'record and readLink then returns null, with the matching-value '
             'call as the control that leaves the link intact',
         clauses: ['discards whatever was bound to its old value']);
-    // GIVEN two composers writing one record — at_auth at enrolment and
-    //       at_client at every start.
-    // WHEN  the advertised signing key is a single active rsa2048 key.
-    // THEN  both spell it bare, and both spell anything else as the array.
-    // AND   a second condition on either side is a defect.
     provenIn('packages/at_auth/test/enrollment_test.dart',
         'an rsa2048 APKAM key with a key package is spelled BARE',
         proves: 'the at_auth side, in the shape that was WRONG until '
@@ -154,20 +126,13 @@ void main() {
             'at enrolment, so pinning the clause with it would record both '
             'composers as server-proven when only one is');
 
-    // The clause about a SECOND condition is a statement about what must not
-    // exist, and no test can assert the absence of a future condition. What
-    // the four citations above buy is that the two composers agree today, in
-    // both directions, which is the whole of what is checkable.
+    // NOTE: the "no second condition" clause asserts an absence, which no test
+    // can pin; the citations above establish only that the two composers agree.
   });
 
   test(
       'UC-G3.4 · a link is bound to the exact _apsk string, and a republish '
       'breaks it', () {
-    // GIVEN a conveyed link whose payload carries the enrollee's entire
-    //       published _apsk value.
-    // WHEN  that value changes.
-    // THEN  all five whole-string comparisons fail.
-    // AND   the break is not self-healing: publish writes the value alone.
     provenIn('packages/at_client/test/pq_signing_chain_test.dart',
         'a conveyed CHAIN link is refused, naming the mismatch',
         proves: 'comparison 1 of 5, asserted on the REASON naming the '
@@ -204,10 +169,6 @@ void main() {
   test(
       'UC-G3.5 · what an approver conveys is decided by possession as well as '
       'privilege', () {
-    // THEN  privileged + root private     -> root link
-    // AND   privileged + no root + a key  -> chain link
-    // AND   privileged + neither          -> nothing, and the rest still flows
-    // AND   not privileged                -> chain link
     provenIn('packages/at_client/test/approve_link_flavour_test.dart',
         'a fully privileged approver conveys a root link',
         proves: 'arm 1 — the posture-invariant anchor',
@@ -242,11 +203,6 @@ void main() {
   test(
       'UC-G3.6 · a legacy enrollment\'s authentication keypair signs data in '
       'memory only', () {
-    // GIVEN an enrollment holding no typed sign: material.
-    // WHEN  something asks what may sign.
-    // THEN  the APKAM authentication keypair, built from atChops, never filed.
-    // AND   once a signing key exists it stops signing AND stops being
-    //       advertised in the same step — dropped, not retired.
     provenIn('packages/at_client/test/apkam_signing_keys_test.dart',
         'falls back to the APKAM authentication keypair with no key source',
         proves: 'the fallback is built from atChops rather than read from the '
@@ -273,13 +229,6 @@ void main() {
   test(
       'UC-G3.7 · the reconcile treats rsa2048 as already held, and only '
       'rsa2048', () {
-    // GIVEN an enrollment holding no typed signing material whose APKAM
-    //       authentication keypair is rsa2048.
-    // WHEN  the in-use set names rsa2048.
-    // THEN  it mints nothing.
-    // AND   the exclusion is scoped to rsa2048 — an ML-DSA authenticator
-    //       holding none still mints.
-    // AND   pqActive and a retrofitted enrollment both still mint.
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'so an in-use set naming rsa2048 mints nothing',
         proves: 'the correction itself — one keypair doing both jobs is not a '
@@ -319,11 +268,6 @@ void main() {
   });
 
   test('UC-G3.8 · no signer waits on a mint', () {
-    // GIVEN a client whose startup has not reached its mint step.
-    // WHEN  anything asks for the keys that may sign.
-    // THEN  it answers from the keyfile immediately.
-    // AND   it answers by READING, and returns the filed key once one is
-    //       there.
     provenIn('packages/at_client/test/apkam_signing_keys_test.dart',
         'it returns while a startup step is still parked',
         proves: 'the absence of the barrier, asserted as a BOUND rather than '
@@ -345,10 +289,6 @@ void main() {
 
   test('UC-G3.9 · two coherence rules, refused at construction before any I/O',
       () {
-    // THEN  an empty signing set beside a non-rsa2048 authentication key is
-    //       refused, with legacy as the control.
-    // AND   an explicit authenticationKeyAlgorithm weaker than the posture is
-    //       refused.
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'follows the posture, and an explicit set beats it both ways',
         proves: 'rule 1 AND its control in one test: an empty set beside '
@@ -369,11 +309,6 @@ void main() {
   test(
       'UC-G3.10 · a no-PQ-provider client refuses the work and leaves the '
       'enrolment repairable', () {
-    // GIVEN a client whose posture configures no post-quantum providers,
-    //       meeting a pending enrolment with a key package and no wrapped key.
-    // THEN  it throws BEFORE the approval reaches the atServer.
-    // AND   it refuses the sweep too.
-    // AND   the control: a request carrying its own wrapped key is approved.
     provenIn('packages/at_client/test/enrollment_conveyance_guard_test.dart',
         'refuses a request that asks it to mint, and leaves it pending',
         proves: 'the ORDER, which is the whole row: the record is still '
@@ -403,14 +338,6 @@ void main() {
 
   test('UC-G3.11 · a pre-enrollment atSign gives itself a first enrollment',
       () {
-    // GIVEN an atSign holding no enrollment, authenticating with the flat
-    //       at_pkam_publickey.
-    // WHEN  a client starts at a post-quantum posture.
-    // THEN  it asks for a first enrollment and comes up on it.
-    // AND   app constant + device constant + fresh UUID per call.
-    // AND   grants are stated.
-    // AND   control: the same shape at legacy asks for nothing.
-    // AND   the flat root credential survives.
     provenIn(
         'tests/at_onboarding_cli_functional_tests/test/pq_pre_enrollment_retrofit_test.dart',
         'a pre-enrollment atSign at a post-quantum posture gives itself its '

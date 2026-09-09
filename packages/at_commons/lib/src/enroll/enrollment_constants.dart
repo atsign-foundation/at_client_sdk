@@ -21,9 +21,8 @@ class EnrollmentConstants {
   /// The enrollment an atSign's own credential authenticates as: the flat
   /// keyfile material with no enrollment record of its own.
   ///
-  /// It never reaches the wire. A `pkam:` naming it is refused by every
-  /// released atServer, which knows the credential only by the absence of an
-  /// id, so [PkamVerbBuilder] omits it.
+  /// It never reaches the wire: an atServer knows this credential only by the
+  /// absence of an id, so [PkamVerbBuilder] omits it.
   static const String primaryEnrollmentId = 'primary';
 
   static const String pkamNamespace = '__pkams';
@@ -35,8 +34,8 @@ class EnrollmentConstants {
   /// Matches a key in an enrollment's reserved namespace, capturing the id as
   /// `EnId`.
   ///
-  /// The id is anchored at a dot, a colon or the start of the key; all three
-  /// are needed, and the atServer refuses foreign writes on this match.
+  /// The id is anchored at a dot, a colon or the start of the key, and the
+  /// atServer refuses foreign writes on this match.
   static const String regexForPerEnrollmentNamespaces =
       '(?:^|[.:])(?<EnId>[^.:]+)\\.[ard]\\.__e@';
 }

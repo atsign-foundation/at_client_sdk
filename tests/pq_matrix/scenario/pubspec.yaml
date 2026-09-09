@@ -5,29 +5,23 @@ description: >-
   at_client 3.14.0 and this tree both have.
 version: 1.0.0
 
-# Deliberately NOT a workspace member. `packages/at_client` is in the root
+# Deliberately NOT a workspace member: `packages/at_client` is in the root
 # `workspace:` list, so every member resolves at_client by path — and the
-# published arm has to resolve the hosted 3.14.0. See
-# `docs/projects/pq/decisions.md` 96.
+# published arm has to resolve the hosted 3.14.0.
 
 environment:
   sdk: ^3.6.0
 
 dependencies:
   # The floor is the released version the published arm pins, so this package
-  # cannot compile against anything 3.14.0 lacks. That is the whole contract:
-  # a divergence between the two arms is then attributable to at_client rather
-  # than to two hand-written programs.
+  # cannot compile against anything 3.14.0 lacks.
   at_client: ">=3.14.0 <4.0.0"
   at_chops: ">=3.0.0 <4.0.0"
   at_commons: ">=5.5.0 <6.0.0"
   at_demo_data: ^1.2.0
   at_utils: ">=3.2.0 <4.0.0"
-  # The RSA parse UC-G1.14 turns on. `RSAPublicKey.fromString` is the exact
-  # call at_chops makes when it verifies a pkam signature, so asserting
-  # through it is asserting what a deployed reader does with the value rather
-  # than a re-description of it. Both arms' at_chops already depend on
-  # ^2.2.1, so this pins nothing new.
+  # The RSA parse UC-G1.14 turns on: `RSAPublicKey.fromString` is the call
+  # at_chops makes when it verifies a pkam signature.
   crypton: ^2.2.1
 
 dev_dependencies:

@@ -1,20 +1,7 @@
 import 'package:at_lookup/at_lookup.dart' show SecondaryAddressFinder;
 
-/// The process-wide source `RemoteSecondary` consults for an atDirectory
-/// lookup when none was handed to it.
-///
-/// `RemoteSecondary` has always read
-/// `AtClientManager.getInstance().secondaryAddressFinder` — the singleton
-/// manager's finder, never a per-atSign manager's own — and this seam
-/// preserves exactly that: `AtClientManager`'s constructors register a
-/// source that reads the singleton's field, and the read stays lazy (per
-/// call, not captured), so a finder set after a `RemoteSecondary` was
-/// built is still found. The seam exists so `RemoteSecondary` does not
-/// import the manager, which sits above it and imports the whole client.
-///
-/// When no manager was ever constructed the source is unregistered and
-/// the answer is null — the same null the singleton's untouched field
-/// held before.
+/// The process-wide source [processSecondaryAddressFinder] reads, or null
+/// when nothing has registered one.
 SecondaryAddressFinder? Function()? _source;
 
 /// Registers where [processSecondaryAddressFinder] looks. Later
@@ -25,4 +12,7 @@ void registerSecondaryAddressFinderSource(
 }
 
 /// The process's atDirectory lookup, or null when none is available.
+///
+/// The source is called per lookup rather than captured, so a finder
+/// registered after the caller was built is still found.
 SecondaryAddressFinder? processSecondaryAddressFinder() => _source?.call();

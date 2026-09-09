@@ -86,18 +86,6 @@ abstract class AtOnboardingService implements ProgressPublisher {
     /// Null means "the position this service was built at" — the preference's
     /// `authenticationKeyAlgorithm`, which is the same field `authenticate()`
     /// stamps on the connection.
-    ///
-    /// ⚠️ **It used to default to `SigningAlgoType.rsa2048`, and that was a
-    /// second source for one fact.** The argument then was that RSA-2048 is
-    /// what this path minted before the parameter existed, so an app saying
-    /// nothing enrolled as it always had — true while the preference's default
-    /// posture also meant RSA. It stopped being true when the shipped default
-    /// became `pqReady`: the enrolment minted an RSA APKAM keypair while
-    /// `authenticate()` declared ML-DSA-65 for the same enrollment, and
-    /// at_chops
-    /// refused the pair — *"this PKAM key is 1218 bytes, and an ML-DSA-65
-    /// secret key is 4032"*. Two defaults for one fact agree only until one of
-    /// them moves.
     SigningAlgoType? signingAlgo,
 
     /// How this enrollment's `apkamSymmetricKey` travels.
@@ -106,14 +94,10 @@ abstract class AtOnboardingService implements ProgressPublisher {
     /// `AtClientPreference.posture.keyExchangeMode`, resolved the same way and
     /// for the same reason as [signingAlgo] above.
     ///
-    /// Naming one overrides the posture, and there is exactly one reason to:
-    /// **the approver is the half a posture cannot see.** A pq request carries
-    /// no wrapped key and relies on the approver sealing one to the key
-    /// package it advertised; against an approver that does not convey, the
-    /// enrollment is approved and then cannot decrypt anything. An app that
-    /// knows it is enrolling against such an approver names
-    /// [EnrollmentKeyExchangeMode.legacy] here, whatever this atSign's rollout
-    /// position is.
+    /// Naming one overrides the posture: an app enrolling against an approver
+    /// that cannot seal a key to the request's key package must name
+    /// [EnrollmentKeyExchangeMode.legacy], or the enrollment is approved and
+    /// then cannot decrypt anything.
     EnrollmentKeyExchangeMode? keyExchangeMode,
   });
 
@@ -122,22 +106,17 @@ abstract class AtOnboardingService implements ProgressPublisher {
   Future<AtEnrollmentResponse> sendEnrollRequest(String appName,
       String deviceName, String otp, Map<String, String> namespaces,
       {Duration? apkamKeysExpiryDuration,
-      /// See [enroll]'s `signingAlgo`: the same value on the
-      /// send-then-await-separately path, resolved the same way and for the
-      /// same reason.
+      /// See [enroll]'s `signingAlgo`.
       SigningAlgoType? signingAlgo,
-      /// See [enroll]'s `keyExchangeMode`: the same value on the
-      /// send-then-await-separately path, and this is the method that acts on
-      /// it — [enroll] only passes it through.
+      /// See [enroll]'s `keyExchangeMode`.
       EnrollmentKeyExchangeMode? keyExchangeMode});
 
   /// Attempts PKAM auth until successful (i.e. request was approved).
   /// If the request was denied, an exception is thrown.
   ///
-  /// The wait itself is not bounded — somebody has to decide this request, on
-  /// their own schedule. [maxRetries] budgets consecutive failures to reach
-  /// the atServer, the exit from an atServer that is genuinely gone; an
-  /// answer from it restores the budget.
+  /// The wait itself is not bounded: [maxRetries] budgets consecutive
+  /// failures to reach the atServer, and any answer from it restores the
+  /// budget.
   ///
   /// Once successful, the full set of keys are available in
   /// [enrollmentResponse].atAuthKeys

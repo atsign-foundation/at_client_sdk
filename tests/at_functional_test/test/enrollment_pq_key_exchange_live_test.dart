@@ -1,6 +1,5 @@
-// The substrate is deliberately marked @experimental and will be reshaped as
-// the group surface matures. Exercising it from another package is the point
-// of this file.
+// The substrate is deliberately marked @experimental; exercising it from
+// another package is the point of this file.
 // ignore_for_file: experimental_member_use
 
 @Tags(['pq'])
@@ -26,19 +25,11 @@ import 'package:uuid/uuid.dart';
 
 import 'test_utils.dart';
 
-/// The reversed enrollment key exchange against a live atServer.
+/// The reversed enrollment key exchange against a live atServer — UC-A2.1.
 ///
-/// UC-A2.1 asks that nothing in the conveyance path be RSA-wrapped, and the
-/// enrollment symmetric key was the last thing that was: the enrollee
-/// generated it and encrypted it to the atSign's long-lived RSA encryption
-/// public key, and everything else the enrollment receives is wrapped under
-/// it. Under `EnrollmentKeyExchangeMode.pq` the enrollee generates nothing and
-/// the approver mints the key and seals it to the advertised key package.
-///
-/// This has to run live. Both halves are unit-covered, but the mandatory-field
-/// check that made the reversal impossible lives in the atServer, not in
-/// either client — a mocked atServer accepts a request that the real one
-/// rejects outright, so nothing short of a live request proves the wire.
+/// Under `EnrollmentKeyExchangeMode.pq` the enrollee generates no symmetric
+/// key: the approver mints it and seals it to the advertised key package, so
+/// nothing RSA-wrapped rides the request.
 void main() {
   TestUtils.isolateStorage('enrollment_pq_key_exchange_live_test');
   late AtClient atClient;
@@ -74,9 +65,8 @@ void main() {
         return built;
       },
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-      // UC-A2.1 is about the key EXCHANGE — that nothing RSA-wrapped rides
-      // the request. Which algorithm authenticates the connection is the
-      // other axis, and this row asserts nothing about it.
+      // UC-A2.1 is about the key exchange; which algorithm authenticates the
+      // connection is a separate axis.
       signingAlgo: SigningAlgoType.rsa2048,
     );
 
@@ -112,10 +102,8 @@ void main() {
   });
 
   test('approving mints a symmetric key the enrollee can recover', () async {
-    // The approver seals from its own key package, so it must hold one. This
-    // is a new precondition for approval: before the reversal an approver with
-    // no secrets to convey never reached sendEnvelope at all, and now every pq
-    // approval does.
+    // NOTE: every pq approval seals from the approver's own key package, so it
+    // must hold one.
     await AtClientSecretSharing.forClient(atClient).register();
 
     final enrolled = await enrolAsPq();
@@ -124,26 +112,16 @@ void main() {
         EnrollmentRequestDecision.approved(
       atSign: atSign,
       enrollmentId: enrolled.enrollmentId,
-      // What an approving app would pass on the legacy path. The record says
-      // this enrollment sent none, so at_client must mint one and ignore this
-      // rather than trusting the caller.
+      // What an approving app passes on the legacy path: the record says this
+      // enrollment sent no key, so at_client mints one and ignores this.
       apkamSymmetricKey: AtBytes.fromString(''),
     ));
 
-    // Authenticate as the NEW enrollment and resolve over its own connection,
-    // which is what waitForApproval does. Running this over the approver's
-    // connection would prove the envelope is discoverable, authentic and
-    // openable, but not the part that only the enrolling side can show: that
-    // the atServer's namespace gating lets a connection scoped to
-    // {buzz: rw} scan for and read a self key sitting in buzz. If it did not,
-    // every pq enrollment would fail here in production while a test driven
-    // from the approver stayed green.
-    //
-    // The chops are built from the APKAM keypair alone, deliberately. PKAM
-    // needs nothing else, and this enrollment has nothing else — the symmetric
-    // key is the thing it is about to fetch, and AtKeys.toAtChops reads its
-    // absence as "PKAM keys" and then demands the encryption private key that
-    // is equally not there yet.
+    // NOTE: resolved over the new enrollment's own connection, because only
+    // that side shows the atServer letting a connection scoped to the granted
+    // namespace scan for and read the key. Its chops come from the APKAM
+    // keypair alone — `AtKeys.toAtChops` would demand an encryption private
+    // key this enrollment does not hold yet.
     final enrolleeLookup = AtLookupImpl(
         atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
       ..enrollmentId = enrolled.enrollmentId

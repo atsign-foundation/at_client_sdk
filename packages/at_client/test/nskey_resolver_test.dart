@@ -4,12 +4,6 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:test/test.dart';
 
 /// Which level of a nested namespace holds the nskey a sender seals to.
-///
-/// A namespace nests, and AtCollection composes sub-collection namespaces with a
-/// per-**item** id — so requiring an exact-match key would mean a keypair per
-/// item. Resolution walks up instead, most-specific-first, which is safe because
-/// it goes the same direction as the atServer's suffix authorisation: an
-/// enrollment approved for `a` may already access `d.c.b.a`.
 void main() {
   const alice = '@alice';
 
@@ -21,8 +15,7 @@ void main() {
     deepKey = await XWingKeyPair.generate();
   });
 
-  /// A ring that counts lookups, so the memo can be measured rather than
-  /// assumed.
+  /// A resolver over a ring that records every namespace it is asked about.
   ({NskeyResolver resolver, InMemoryNskeyKeyRing ring, List<String> lookups})
       resolver({Duration? missMemory}) {
     final ring = _CountingRing();
@@ -36,8 +29,8 @@ void main() {
 
   group('what this client is willing to seal to', () {
     test('the default reaches an owner advertising either KEM', () async {
-      // The control for the row below: with the full list this same owner
-      // resolves, so the refusal there is the narrowing and nothing else.
+      // NOTE: the control for the refusal that follows — the same owner and key
+      // resolve once the algorithm list is not narrowed.
       final r = resolver();
       r.ring.seedPublicOnly(alice, 'todos', publicKey: todosKey.publicKeyBytes);
 
@@ -46,9 +39,6 @@ void main() {
     });
 
     test('a narrowed list refuses, and the message names both sides', () async {
-      // The refusal a FIPS-only deployment asked for. It must not read as a
-      // cold start: the owner published a perfectly good key, and it is this
-      // client's own rule that will not use it.
       final ring = _CountingRing();
       final narrowed = NskeyResolver(ring,
           sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024]);
@@ -67,21 +57,12 @@ void main() {
 
     test('a widened advertisement serves each sender the entry IT understands',
         () async {
-      // UC-G2.10's rollout-1 case, and the whole reason "one rollout" works:
-      // the recipient has published a second algorithm beside the first, and
-      // a sender that cannot use one of them still seals under the other.
-      // Nothing fails, nothing is refused, and the sender is never asked to
-      // upgrade first.
+      // UC-G2.10: a recipient publishes a second algorithm beside the first,
+      // and a sender that cannot use one of them still seals under the other.
       //
-      // Run as a differential over ONE advertisement, because either
-      // narrowing on its own proves nothing: a build that always sealed to
-      // x-wing would satisfy the x-wing arm, and one that always sealed to
-      // ml-kem would satisfy the other. Only the pair shows the recipient's
-      // list and the sender's list are both being read.
-      //
-      // Every other arm over this selection varies the sender's ORDER across
-      // algorithms both builds hold. These hand it a list of ONE, which is
-      // what a build that cannot use the other entry looks like from here.
+      // NOTE: the two narrowings run as a differential over ONE advertisement.
+      // Either arm alone is satisfied by a build that always seals to a single
+      // algorithm; only the pair shows both lists are read.
       final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
       final second = await mlKem.keyPairFromSeed(mlKem.newSeed());
       final ring = _WidenedRing(NskeyAdvertisement(
@@ -109,9 +90,9 @@ void main() {
       expect(xWingOnly?.alg, SecretSharingAlgos.xWing);
       expect(mlKemOnly?.alg, SecretSharingAlgos.mlKem1024);
 
-      // Asserted at the KEY, not at the algorithm name: an advertisement that
-      // named an algorithm and handed back the wrong entry's key would seal to
-      // something the recipient cannot open, and the name alone cannot tell.
+      // NOTE: asserted at the key, not at the algorithm name — an entry naming
+      // the right algorithm and carrying the wrong key seals to something the
+      // recipient cannot open, and the name alone cannot tell.
       expect(xWingOnly?.publicKey, todosKey.publicKeyBytes);
       expect(mlKemOnly?.publicKey, second.publicKey,
           reason: 'each sender is served the entry its own list names, off '
@@ -120,11 +101,8 @@ void main() {
     });
 
     test('it refuses rather than walking up to a broader namespace', () async {
-      // Walking on would seal under a DIFFERENT namespace's key — another
-      // content-key scope than the caller asked for — arrived at silently
-      // because of a rule this client set. The parent key here is one the
-      // narrowed client would happily use, so only the refusal tells the two
-      // designs apart.
+      // NOTE: walking on would silently seal under another namespace's key, a
+      // different content-key scope than the caller asked for.
       final ring = _CountingRing();
       final narrowed = NskeyResolver(ring,
           sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024]);
@@ -216,8 +194,6 @@ void main() {
       await c.resolver.resolve(alice, '__rr.item123.todos');
       c.lookups.clear();
 
-      // A second write to the SAME item: every level is either a remembered
-      // miss or a hit the ring itself caches.
       await c.resolver.resolve(alice, '__rr.item123.todos');
 
       expect(c.lookups, ['todos'],
@@ -241,17 +217,10 @@ void main() {
 
     test('a key published after a miss is found on the very next resolve',
         () async {
-      // The memory may make a resolution CHEAPER; it may never make one WRONG.
-      // At the production default this fixture is fifteen minutes from
-      // lapsing, so if the remembered miss were allowed to decide the outcome
-      // this would answer null.
-      //
-      // Measured live before the second walk existed: a client that had tried
-      // to write to a recipient went on refusing for the rest of the window
-      // after that recipient published, and the readiness query and the
-      // exception text were wrong with it. Nothing in the write path asks a
-      // pre-flight question, so there was no caller placed to notice.
-      final c = resolver(); // production default missMemory
+      // NOTE: at the production default the remembered miss is nowhere near
+      // lapsing, so letting it decide the outcome would answer null here. The
+      // memory may make a resolution cheaper; it may never make one wrong.
+      final c = resolver();
       expect(await c.resolver.resolve(alice, 'x.todos'), isNull,
           reason: 'the premise: nothing is published yet, and this is the '
               'call that stamps the miss');
@@ -266,9 +235,6 @@ void main() {
     });
 
     test('a resolution that skips nothing probes each level once', () async {
-      // The second walk must not double the cost of an ordinary cold write.
-      // It runs only when the memory actually suppressed something, and on a
-      // first resolve it has suppressed nothing.
       final c = resolver();
 
       expect(await c.resolver.resolve(alice, 'x.todos'), isNull);
@@ -280,9 +246,6 @@ void main() {
     });
 
     test('a repeated cold resolve pays the walk again, deliberately', () async {
-      // The cost of never answering from memory, stated rather than hidden.
-      // It falls only on a resolution that is about to return null — for a
-      // write, one about to throw — and never on one that resolves.
       final c = resolver();
       await c.resolver.resolve(alice, 'x.todos');
       c.lookups.clear();
@@ -310,8 +273,8 @@ void main() {
 
     test('a deeper key is never skipped because a broader one was seen',
         () async {
-      // The correctness property that rules out remembering *hits*: warming a
-      // broader level must not make a deeper key invisible.
+      // NOTE: the property that rules out remembering hits — warming a broader
+      // level must not make a deeper key invisible.
       final c = resolver();
       c.ring
         ..seedPublicOnly(alice, 'notes', publicKey: todosKey.publicKeyBytes)
@@ -327,8 +290,7 @@ void main() {
   });
 }
 
-/// An [InMemoryNskeyKeyRing] that records every namespace it was asked about,
-/// and can be made to forget one.
+/// An [InMemoryNskeyKeyRing] that records every namespace it was asked about.
 class _CountingRing extends InMemoryNskeyKeyRing {
   final List<String> lookups = [];
 
@@ -340,9 +302,8 @@ class _CountingRing extends InMemoryNskeyKeyRing {
   }
 }
 
-/// A ring serving one advertisement that carries MORE THAN ONE key — what a
-/// recipient publishes after rollout 1. [InMemoryNskeyKeyRing] seeds only
-/// single-key generations, which is what the mint produces today.
+/// A ring serving one advertisement that carries more than one key, which
+/// [InMemoryNskeyKeyRing]'s single-key seeding cannot express.
 class _WidenedRing extends InMemoryNskeyKeyRing {
   _WidenedRing(this._advertised);
 

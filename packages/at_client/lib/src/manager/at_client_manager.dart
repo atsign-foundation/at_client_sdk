@@ -68,10 +68,8 @@ class AtClientManager {
   }
 
   /// Points `RemoteSecondary`'s process-wide finder source at the singleton
-  /// manager's field — the reach-up it has always performed, now behind a
-  /// seam so it does not import this class. Registered by every constructor
-  /// (idempotently — the closure is the same either way) so the source
-  /// exists as soon as any manager does.
+  /// manager's field, so it need not import this class. Every constructor
+  /// registers the same closure, so registering again is harmless.
   static void _registerAddressFinderSource() {
     registerSecondaryAddressFinderSource(
         () => AtClientManager.getInstance().secondaryAddressFinder);
@@ -86,31 +84,20 @@ class AtClientManager {
 
   /// Switches the active atSign and (re)creates its associated services.
   ///
-  /// The outgoing client is stopped via [AtClient.stop], which UNFILES it and
-  /// releases its storage. ⚠️ It is not resumable: `start()` refuses a client
-  /// whose storage was released, and nothing is left in the cache to resume.
-  /// Calling this method again for the same atSign therefore builds a new
-  /// client rather than reviving the old one.
+  /// The outgoing client is stopped via [AtClient.stop], which unfiles it and
+  /// releases its storage. That client is not resumable — `start()` refuses a
+  /// client whose storage was released — so calling this method again for the
+  /// same atSign builds a new one.
   ///
   /// Use [AtClient.stop] only when permanently finished with an atSign (e.g.,
   /// logout or app shutdown).
   ///
-  /// ⚠️ **A call naming the atSign that is already current usually recreates
-  /// nothing.** When no [atChops], [atKeysIo], [atLookUp] or [enrollmentId]
-  /// override is supplied and the current client is not stopped, this returns
-  /// that client as it stands. That is deliberate: the stop-and-recreate path
-  /// would briefly run two sync services against one Hive store. But it means
-  /// that of [preference], only `crypto` is adopted — a caller changing
-  /// anything else and expecting it to take effect gets nothing, silently. The
-  /// The one exception is a changed rollout axis, which is refused outright
-  /// rather than dropped, because it could not be honoured and would otherwise
-  /// leave the caller running under a stage it thinks it has left.
-  ///
-  /// ⚠️ A changed `hiveStoragePath` is among the SILENT ones. It was refused
-  /// until the per-location storage guard replaced that check, and the guard
-  /// only fires where a store is opened — which a cached client does not do. A
-  /// caller that names a different location and is handed the running client
-  /// keeps the location that client already has.
+  /// A call naming the atSign that is already current recreates nothing when
+  /// no [atChops], [atKeysIo], [atLookUp] or [enrollmentId] override is
+  /// supplied and the current client is not stopped: it returns that client as
+  /// it stands, and of [preference] only `crypto` is adopted. Every other
+  /// change — `hiveStoragePath` included — is dropped silently; a changed
+  /// rollout axis is the one exception, and is refused outright.
   ///
   /// With [atKeysIo] the enrollment is the keys' own answer,
   /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
@@ -159,9 +146,6 @@ class AtClientManager {
     // change either: it is what a caller that owns one bundle for the whole
     // of its work does on every call, and rebuilding on it would tear the
     // client down for nothing.
-    //
-    // A principal change is never a no-op: the incoming client is a different
-    // enrollment by definition, so it always takes the switch below.
     final currentAtSign = _currentAtClient?.getCurrentAtSign();
     if (currentAtSign != null &&
         currentAtSign == atSign &&
@@ -177,12 +161,6 @@ class AtClientManager {
       // cached client. The short-circuit skips create(), so adopt it here too —
       // otherwise a same-atSign call carrying a new crypto config silently drops
       // it, surfacing as CryptoProviderNotRegistered on the next put.
-      //
-      // And for the same reason it must apply create()'s refusal: this path
-      // returns a client that already exists, so a preference naming different
-      // rollout axes is being dropped rather than applied. Skipping the check
-      // here would put it on the path a caller reaches only with an override
-      // argument, and leave the ordinary one silent.
       final existing = _currentAtClient;
       if (existing is AtClientImpl) {
         AtClientImpl.refuseChangedRolloutAxes(
@@ -203,16 +181,9 @@ class AtClientManager {
     // Stop the outgoing atsign
     _atSign = atSign;
     final previousAtClient = _currentAtClient;
-    // A principal change is a SUCCESSION: one enrollment of this atSign replaced
-    // by another over the same store, usually an rsa2048-auth enrollment
-    // succeeded by an mldsa65-auth one. Two enrollments that are both live get
-    // separate stores instead; here the atServer retires the old one, so the
-    // data follows. The bundle therefore crosses the switch OPEN — a plain
-    // stop() closes a store the outgoing client built or was told to close —
-    // and the store has to be told, because `attach` refuses a holder whose
-    // principal differs from the last one. Carried from the outgoing client
-    // when the caller named none, or named the one it holds: this is the one
-    // place that knows which client is being replaced.
+    // NOTE: on a principal change one enrollment of this atSign succeeds
+    // another over the same store, so that store crosses the switch OPEN —
+    // the outgoing client hands it over instead of closing it.
     final AtClientStorage? carried;
     if (principalChange &&
         previousAtClient is AtClientImpl &&
@@ -222,8 +193,8 @@ class AtClientManager {
       await previousAtClient?.stop();
       carried = storage;
     }
-    // Between holders, never under one: `forgetPrincipal` throws while a client
-    // is attached, which is why it follows the stop.
+    // NOTE: `forgetPrincipal` throws while a client is attached, so it can
+    // only run between holders — after the stop above.
     if (principalChange) await carried?.forgetPrincipal();
 
     // Spin up the new atClient

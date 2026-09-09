@@ -29,10 +29,8 @@ class TestRegistrant
 
   TestRegistrant(this.atClient);
 
-  /// encKeyFor is @protected — a composing mixin's business rather than an
-  /// app's. Reaching it through a member of the class is what a composing
-  /// mixin does, so this test double does the same thing PairwiseSecretSharing
-  /// does.
+  /// The `@protected` `encKeyFor`, reached the way a composing mixin reaches
+  /// it.
   ({Uint8List secretKey, String keyAlgo})? heldKeyFor(String kid) =>
       encKeyFor(kid);
 }
@@ -126,9 +124,6 @@ void main() {
 
   group('the configured KEM decides what is minted', () {
     TestRegistrant registrantFor(String keyAlgo) {
-      // The list is final at construction, so the knob is set when the client
-      // is built rather than afterwards — which is what an app does, and what
-      // the rollout-axis refusal requires of anything changing it mid-life.
       final client = buildRemoteBackedMockClient(
           atSign: atSign,
           enrollmentId: 'enroll-a',
@@ -165,11 +160,10 @@ void main() {
     });
 
     test('the persisted seed re-derives an ML-KEM package', () async {
-      // The trap the seed contract exists for. ML-KEM's `secretKey` is the
-      // 3168-byte expanded decapsulation key and cannot be fed back as a
-      // seed, so persisting it — which is correct for X-Wing, where the two
-      // are the same bytes — would leave this key unrecoverable at the next
-      // start, and the client would answer at a kpid nobody writes to.
+      // NOTE: ML-KEM's `secretKey` is the expanded decapsulation key and
+      // cannot be fed back as a seed, so persisting it — correct for X-Wing,
+      // where the two are the same bytes — leaves this key unrecoverable at
+      // the next start.
       final registrant = registrantFor(SecretSharingAlgos.mlKem1024);
       PersistedApkamKeys? saved;
       registrant.saveApkamKeys = (keys) async => saved = keys;
@@ -190,8 +184,8 @@ void main() {
 
     test('a loaded key keeps its own algorithm whatever the preference says',
         () async {
-      // The kpid is the address peers already seal to, and it is frozen in an
-      // enrollment record that is never rewritten. Re-minting under a newly
+      // NOTE: the kpid is the address peers already seal to, frozen in an
+      // enrollment record that is never rewritten; re-minting under a newly
       // configured KEM would move this client to an address nobody writes to.
       final registrant = registrantFor(SecretSharingAlgos.mlKem1024);
       registrant.loadApkamKeys = () async => PersistedApkamKeys.single(
@@ -207,24 +201,14 @@ void main() {
 
     test('an unimplemented algorithm fails rather than minting something else',
         () async {
-      // ⚠️ **The refusal moved earlier when the singular knob became
-      // `keyEstablishmentAlgorithms`.** It used to surface here, from
-      // `register()`, because the preference took any string; the list is
-      // validated at construction, so a deployment that misspells an
-      // algorithm now finds out where it wrote it rather than at the first
-      // registration. This asserts the new site — and asserting the old one
-      // would pass for the wrong reason, since building the client is what
-      // throws and `register()` is never reached.
       expect(
           () => AtClientPreference(
               keyEstablishmentAlgorithms: const ['kyber-1024-v9']),
           throwsA(isA<ArgumentError>()));
 
-      // The register-time guard is kept, and is still reached — by the OTHER
-      // route into it, which the preference cannot police: an algorithm read
-      // back from a keyfile, where a package was filed under an id a later
-      // build no longer implements. That arrives through `_heldFrom`, not
-      // through the preference at all.
+      // NOTE: the register-time guard is reached by the route the preference
+      // cannot police — an algorithm read back from a keyfile, filed under an
+      // id this build no longer implements.
       final registrant = TestRegistrant(buildMockClient('enroll-a'))
         ..directory = FakeEnrollmentDirectory()
         ..loadApkamKeys = (() async => PersistedApkamKeys.single(
@@ -246,11 +230,11 @@ void main() {
     });
 
     /// A client restarting after a rotation: it advertises the ML-KEM key and
-    /// retains the X-Wing one it used to be reached at.
+    /// retains the retired X-Wing one.
     ///
-    /// The retired key is the X-Wing one deliberately, because X-Wing is FIRST
-    /// in SecretSharingAlgos.keyAlgos — so preference order alone would pick
-    /// it and only status can send the active key to the ML-KEM entry.
+    /// X-Wing is first in `SecretSharingAlgos.keyAlgos`, so preference order
+    /// alone would pick the retired key and only status can send the active
+    /// one to the ML-KEM entry.
     TestRegistrant rotated() {
       final registrant = TestRegistrant(buildMockClient('enroll-a'))
         ..directory = FakeEnrollmentDirectory();
@@ -337,11 +321,9 @@ void main() {
 
     test('and it names the statuses it actually found, not "retired"',
         () async {
-      // `status` is an open token, so reaching this throw proves "none is
-      // active" and NOT "all are retired". The message said the latter until
-      // 2026-08-22, which for a holding carrying, say, a revoked key would
-      // have described it as merely superseded and gone on to explain that it
-      // still opens what is in flight to it.
+      // NOTE: `status` is an open token, so reaching this throw proves "none
+      // is active" and NOT "all are retired" — a holding carrying a revoked
+      // key must not be described as merely superseded.
       final registrant = TestRegistrant(buildMockClient('enroll-a'))
         ..directory = FakeEnrollmentDirectory();
       registrant.loadApkamKeys = () async => PersistedApkamKeys(encKeys: [
@@ -384,8 +366,8 @@ void main() {
           {'kid': 'k3', 'use': 'enc'}, // malformed: no alg/pub
           'not even a map',
         ],
-        // Named, because a package that names no suites is refused outright —
-        // and what this test is about is the ENTRIES, not the suites.
+        // NOTE: a package that names no suites is refused outright; this test
+        // is about the entries.
         'suites': ['x-wing-hpke-v1'],
       }, enrollmentId: 'enroll-x', apkamId: 'apkam-x');
       expect(pkg.keys, hasLength(2));
@@ -401,9 +383,8 @@ void main() {
         'v': 1,
         'createdAt': '2026-06-11T00:00:00.000Z',
         'keys': [
-          // The retired one FIRST, and under the stronger algorithm, so
-          // preference order alone would choose it. Selection has to lose to
-          // status, not merely coincide with it.
+          // NOTE: the retired one first, and under the stronger algorithm, so
+          // selection has to lose to status rather than coincide with it.
           {
             'kid': 'old',
             'use': 'enc',
@@ -449,20 +430,14 @@ void main() {
       }, enrollmentId: 'enroll-x');
 
       expect(pkg.kpid, isNull);
-      // requestSecretsFromNamespace and shareSecretWithNamespace both skip a
-      // member whose kpid is null, so a holder that has retired everything is
-      // passed over rather than sealed to at an address it has withdrawn.
       expect(pkg.bestKeyFor(SecretSharingAlgos.keyAlgos), isNull);
     });
 
     test('a package that names no suites is refused, not read as the oldest',
         () {
-      // It used to be read as "the one construction that existed before the
-      // field did" — a default that spoke for holders who had said nothing.
-      // An enrollment key package is write-once, so that guess would have been
-      // permanent for the enrollment, and sealing to a holder on a
-      // construction it never claimed is exactly what cannot be recovered
-      // from: the holder simply cannot open what arrives.
+      // NOTE: an enrollment key package is write-once, so a default suite
+      // would be permanent for the enrollment, and a holder cannot open what
+      // arrives on a construction it never claimed.
       expect(
           () => KeyPackage.fromPayload({
                 'v': 1,
@@ -481,9 +456,6 @@ void main() {
         'keys': [
           {'kid': 'k1', 'use': 'enc', 'alg': 'x-wing', 'pub': 'p'},
         ],
-        // A holder that has upgraded past this build, plus an entry this build
-        // has never heard of — kept, because it is the holder's claim about
-        // itself, not ours.
         'suites': ['x-wing-hpke-v2', 'x-wing-hpke-v1', 7],
       }, enrollmentId: 'enroll-x');
 
@@ -499,9 +471,9 @@ void main() {
     });
 
     test('no overlap is null rather than a guess', () {
-      // Stamping the sender's own preference anyway would hand the holder an
-      // envelope it cannot unwrap, and the failure would surface as an opaque
-      // AEAD error on the far side rather than a refusal here.
+      // NOTE: stamping the sender's own preference would hand the holder an
+      // envelope it cannot unwrap, surfacing as an opaque AEAD error on the
+      // far side rather than a refusal here.
       final pkg = KeyPackage.fromPayload({
         'v': 1,
         'createdAt': '2026-06-11T00:00:00.000Z',
@@ -513,11 +485,9 @@ void main() {
     });
 
     test('what gets written declares what the advertised keys can open', () {
-      // The two arms differ in exactly one input — the KEM the advertised key
-      // names — and no suite appears in both. Anything that derived `suites`
-      // from the build's own list instead would produce the identical
-      // three-suite answer for both, so this fails loudly if the derivation is
-      // reintroduced.
+      // NOTE: the two arms differ in exactly one input — the KEM the
+      // advertised key names — and no suite appears in both, so a `suites`
+      // derived from the build's own list would answer identically for both.
       final xWingPayload = KeyPackage.payloadFor(
         createdAt: DateTime.utc(2026),
         keys: [
@@ -550,18 +520,15 @@ void main() {
     });
 
     test('a package advertising no key claims no suite', () {
-      // Rather than the build's whole list. This is the shape the enrollment
-      // record freezes, and a holder with nothing to decapsulate with can open
-      // nothing whatever this build supports.
       final payload =
           KeyPackage.payloadFor(createdAt: DateTime.utc(2026), keys: const []);
       expect(payload['suites'], isEmpty);
     });
 
     test('an unrecognised key algorithm contributes no suite', () {
-      // Fails closed: a holder must not have a suite claimed on its behalf on
-      // the strength of a key this build cannot identify, because a sender
-      // acts on the claim and the failure lands on the holder.
+      // NOTE: fails closed — a suite must not be claimed on a holder's behalf
+      // from a key this build cannot identify, since the sender acts on the
+      // claim and the failure lands on the holder.
       final payload = KeyPackage.payloadFor(
         createdAt: DateTime.utc(2026),
         keys: [
@@ -595,11 +562,11 @@ void main() {
     });
   });
 
-  /// A key package *is* an encapsulation target: whoever's X-Wing key ends up
-  /// in one is who this atSign's other clients seal their secrets to. So it is
-  /// advertised as an APKAM-signed envelope and verified against the
-  /// advertising enrollment's `_apsk` before the key inside is used. A package
-  /// that does not verify drops that member alone — the member is simply never
+  /// A key package is an encapsulation target, so it is advertised as an
+  /// APKAM-signed envelope and verified against the advertising enrollment's
+  /// `_apsk` before the key inside is used.
+  ///
+  /// A package that does not verify drops that member alone: they are never
   /// sealed to, which is fail-closed for them and no worse for anybody else.
   group('VerbEnrollmentDirectory', () {
     /// A registered enrollment whose `_apsk` is published (into the shared
@@ -613,8 +580,8 @@ void main() {
     }
 
     void stubListns(AtClient atClient, List<Object?> records) {
-      // Resolve the secondary first: nesting the call inside `when` would
-      // register the stub against getRemoteSecondary itself.
+      // NOTE: resolve the secondary first — nesting the call inside `when`
+      // would register the stub against getRemoteSecondary itself.
       final secondary = atClient.getRemoteSecondary()!;
       when(() => secondary.executeCommand('enroll:listns:myapp\n', auth: true))
           .thenAnswer((_) async => 'data:${jsonEncode(records)}');
@@ -630,14 +597,15 @@ void main() {
         };
 
     /// The namespace-facts verb, beside the roster one and gated identically.
-    /// A revoked enrollment leaves no trace on a roster — `enroll:listns`
-    /// answers with approved enrollments only — so this is the only thing a
+    ///
+    /// `enroll:listns` answers with approved enrollments only, so a revoked
+    /// enrollment leaves no trace on a roster and this is the only thing a
     /// client can ask to learn that one happened.
     group('lastRevokedAt', () {
       void stubInfons(AtClient atClient, String response) {
         final secondary = atClient.getRemoteSecondary()!;
-        // The command is the pin: a stub keyed on the exact string, so a build
-        // that sent anything else would find no answer here and throw.
+        // NOTE: the command is the pin — a build that sent anything else
+        // would find no stub here and throw.
         when(() =>
                 secondary.executeCommand('enroll:infons:myapp\n', auth: true))
             .thenAnswer((_) async => response);
@@ -670,8 +638,8 @@ void main() {
       test(
           'an answer this build cannot read throws rather than reading as none',
           () async {
-        // Null is "nothing was revoked", which is the answer that means do
-        // nothing. A shape nobody can read must not arrive as that.
+        // NOTE: null is "nothing was revoked", the answer that means do
+        // nothing, so a shape nobody can read must not arrive as that.
         final atClient = buildMockClient('enroll-self');
         stubInfons(atClient, 'data:[]');
 
@@ -704,8 +672,6 @@ void main() {
       expect(mb.keyPackage!.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub,
           base64Encode(publicKeyA));
 
-      // An enrollment that advertised nothing is ordinary, not an error: it
-      // is returned, simply without a package to seal to.
       expect(members.firstWhere((m) => m.enrollmentId == 'enroll-c').keyPackage,
           isNull);
 
@@ -717,7 +683,6 @@ void main() {
     test('an unsigned key package is not sealed to', () async {
       final b = await registered('enroll-b');
       final atClient = buildMockClient('enroll-self');
-      // The bare payload, as it was advertised before signing landed.
       stubListns(atClient, [record('enroll-b', b.myKeyPackage.toJson())]);
 
       final members =
@@ -730,8 +695,8 @@ void main() {
 
     test('a key package signed by another enrollment is not sealed to',
         () async {
-      // enroll-b's record, carrying a package enroll-d signed. Accepting it
-      // would hand enroll-d every secret meant for enroll-b.
+      // NOTE: accepting a package another enrollment signed would hand
+      // enroll-d every secret meant for enroll-b.
       final d = await registered('enroll-d');
       final atClient = buildMockClient('enroll-self');
       stubListns(
@@ -745,16 +710,11 @@ void main() {
 
     test('a key package that lies about who signed it is not sealed to',
         () async {
-      // The attack the signature actually stops. Someone who can write the
-      // enrollment record makes the claim match — envelope enrollmentId,
-      // record enrollmentId, all "enroll-b" — and signs with their own key.
-      // Every structural check passes; only verifying against enroll-b's real
+      // NOTE: the claim inside the protected header matches the record —
+      // envelope enrollmentId, record enrollmentId, all "enroll-b" — so every
+      // structural check passes and only verification against enroll-b's real
       // _apsk catches it.
       final d = await registered('enroll-d');
-      // Stamped at signing time, not edited afterwards: the claim is inside
-      // the protected header, so a forger has to sign it that way — which
-      // anyone with their own key can do, and which is exactly why the claim
-      // is worth nothing until it is checked against enroll-b's own _apsk.
       final forged = signEnvelope(d.myKeyPackage.toJson(),
           keys: [(await d.signingKeys).first],
           enrollmentId: 'enroll-b',
@@ -771,8 +731,8 @@ void main() {
 
     test('a tampered key package is not sealed to', () async {
       final b = await registered('enroll-b');
-      // Signature intact over the original body; only the advertised key is
-      // swapped, which is the substitution that matters.
+      // NOTE: the signature stays intact over the original body; only the
+      // advertised key is swapped.
       final envelope = (await b.signedKeyPackagePayload()).withPayloadJson({
         'v': 1,
         'createdAt': '2026-06-11T00:00:00.000Z',
@@ -792,19 +752,15 @@ void main() {
     test('each member says why it has no usable key package', () async {
       final b = await registered('enroll-b');
       final d = await registered('enroll-d');
-      // Registered so its OWN _apsk is published: the package below must
-      // genuinely verify and then fail to PARSE. Signed by another
-      // enrollment it would fail verification first and never reach the
-      // parse, which is a different outcome entirely.
+      // NOTE: registered so its own _apsk is published — the package below
+      // must genuinely verify and then fail to PARSE, where one signed by
+      // another enrollment would fail verification first.
       final future = await registered('enroll-future');
       final atClient = buildMockClient('enroll-self');
       stubListns(atClient, [
         record('enroll-b', await b.signedKeyPackagePayload()),
         record('enroll-none', null),
-        // enroll-b's record carrying a package enroll-d signed: refused.
         record('enroll-wrong', await d.signedKeyPackagePayload()),
-        // Signed by the right enrollment, but a payload this version cannot
-        // read — what a newer client's package looks like from here.
         record(
             'enroll-future',
             signEnvelope({'shape': 'from a later version'},
@@ -832,8 +788,6 @@ void main() {
               'refusing would block work purely because the other end is '
               'ahead of us');
 
-      // Only `present` carries a package; the rest are all null, which is
-      // exactly why the status is needed to tell them apart.
       expect(
           byId.values
               .where((m) => m.keyPackage != null)
@@ -844,9 +798,9 @@ void main() {
     test(
         'a package that names no enrollment still verifies — the record says '
         'whose it is', () async {
-      // The enroll:request shape: signed before the atServer assigned an id,
-      // so there was nothing truthful to stamp. Rejecting it would refuse
-      // every key package that rides an enrollment request.
+      // NOTE: the enroll:request shape is signed before the atServer assigns
+      // an id, so there is nothing truthful to stamp; rejecting it would
+      // refuse every key package that rides an enrollment request.
       final b = await registered('enroll-b');
       final atClient = buildMockClient('enroll-self');
       stubListns(atClient, [
@@ -868,16 +822,10 @@ void main() {
               'lived — the payload never carried it');
     });
 
-    // Two tests here re-ran the pair above in "the JWS wrapper" — a package
-    // read and sealed to, and one claiming another signer in its kid. There
-    // is one shape now, so both were the same tests twice.
-
     test('an envelope version this build cannot verify is rejected', () async {
-      // The version rides inside the protected header, so an envelope from a
-      // later shape cannot be checked at all — and an unverifiable package is
-      // only as trustworthy as whatever served the record, whatever the
-      // reason. That makes it `rejected`, not the `unsupported` a merely
-      // newer PAYLOAD gets: that one verified first, and this one cannot.
+      // NOTE: the version rides inside the protected header, so a later shape
+      // cannot be checked at all — `rejected`, not the `unsupported` a merely
+      // newer payload gets, which verified first.
       final b = await registered('enroll-b');
       final envelope = (await b.signedKeyPackagePayload())
           .claiming({'alg': 'RS256', 'kid': 'enroll-b', 'v': 2});
@@ -894,9 +842,8 @@ void main() {
     test('a package whose protected header cannot be read is rejected',
         () async {
       final b = await registered('enroll-b');
-      // Built through the raw JSON, because the type refuses this at parse:
-      // an entry whose header cannot be read is not an entry, which is the
-      // property under test one layer down.
+      // NOTE: built through the raw JSON because the type refuses this at
+      // parse; the property under test is one layer down.
       final signed = signEnvelope(b.myKeyPackage.toJson(),
           keys: [(await b.signingKeys).first],
           enrollmentId: 'enroll-b',

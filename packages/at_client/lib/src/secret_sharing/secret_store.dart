@@ -62,31 +62,17 @@ class Secret {
 /// lifetime (platform keystore, biometric storage, etc. — the app's
 /// concern). Without one, the store is in-memory only.
 ///
-/// The SDK deliberately ships no implementation. Key material the SDK needs to
-/// survive a restart — an APKAM keypair, a key package's KEM private half, an
-/// nskey private — is filed into `AtKeys`, which is where it is read back
-/// from.
-///
-/// ⛔ **It is also written here, and an app that supplies a backend receives
-/// it.** This paragraph claimed the opposite until 2026-08-29 — that filing
-/// into `AtKeys` "keeps the atSign's private keys out of whatever backend an
-/// app happens to supply" — and five sites falsify it: every held nskey
-/// private, re-primed at each client start (`NskeySeeding.hydrateStoreFromFiling`),
-/// a freshly minted one and a rotated one, the atSign-level signing-root
-/// **private**, and every arriving conveyed secret. [SecretStore.putSecret]
+/// The SDK ships no implementation, and ⛔ **it writes key material here**:
+/// every held nskey private, the atSign-level signing-root **private** and
+/// every arriving conveyed secret reach this store, [SecretStore.putSecret]
 /// persists on every write, and [save] receives the complete list with each
-/// `Secret.value` as plaintext base64.
+/// `Secret.value` as plaintext base64. A backend supplied here must therefore
+/// be a platform keystore or biometric storage, not a convenience cache.
 ///
-/// So a backend supplied here holds this atSign's namespace private keys and
-/// its signing-root private, and must be chosen on that basis — a platform
-/// keystore or biometric storage, not a convenience cache. Whether the
-/// behaviour or the promise should move is an open ruling; until it is made,
-/// this comment describes the behaviour.
-///
-/// [save] receives the complete secret list and replaces whatever was stored.
-/// It is never called concurrently: [SecretStore] serialises saves, because a
-/// backend that completed them out of order would persist an older snapshot
-/// over a newer one and silently lose a secret.
+/// [save] replaces whatever was stored and is never called concurrently:
+/// [SecretStore] serialises saves, because a backend that completed them out
+/// of order would persist an older snapshot over a newer one and silently lose
+/// a secret.
 @experimental
 abstract class SecretStorePersistence {
   Future<List<Secret>> load();
@@ -106,11 +92,9 @@ class SecretStore {
 
   /// Serialises calls into [SecretStorePersistence.save].
   ///
-  /// Every mutation persists the whole list, and the mutation itself is
-  /// synchronous while the save is not — so without this, two puts could each
-  /// snapshot and then land in either order, leaving an older snapshot on top
-  /// of a newer one. Chaining them means the last save to *start* is also the
-  /// last to finish, and it always carries the newest state.
+  /// Every mutation persists the whole list, so without chaining, two puts
+  /// could each snapshot and then land in either order, leaving an older
+  /// snapshot on top of a newer one.
   Future<void> _saves = Future.value();
 
   Future<void> _persist() {

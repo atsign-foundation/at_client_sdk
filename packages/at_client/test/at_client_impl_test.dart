@@ -15,15 +15,11 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
 
-/// Stops and drops EVERY cached client for [atSign], whatever enrollment it
-/// was filed under.
+/// Stops and drops every cached client for [atSign], including those filed
+/// under `atSign|enrollmentId`.
 ///
-/// `atClientInstanceMap.remove(atSign)` clears only the entry for a client with
-/// no enrollment id; a client created WITH one is filed under `atSign|id` and
-/// survives it. A later create for that atSign then finds the leftover and
-/// adopts it, which surfaces as an unrelated test failing on rollout axes or
-/// on a RemoteSecondary that is not this test's mock. Dropping an entry
-/// releases nothing on its own, so each client is stopped before it goes.
+/// Dropping an entry releases nothing on its own, so each client is stopped
+/// before it goes.
 Future<void> _dropCachedClients(String atSign) async {
   final keys = AtClientImpl.atClientInstanceMap.keys
       .whereType<String>()
@@ -43,10 +39,9 @@ void main() {
     }
   });
 
-  /// A self-retrofit changes the enrollment a client authenticates as, and the
-  /// old id keeps existing — the atServer caps it rather than deleting it, and
-  /// any caller that captured it earlier still holds one. The cache has to send
-  /// that caller to the client that superseded it.
+  /// A self-retrofit changes the enrollment a client authenticates as while the
+  /// old id keeps existing, so a caller still holding it has to reach the
+  /// client that superseded it.
   group('a superseded enrollment id', () {
     const atSign = '@alice';
     AtClientPreference pref() => AtClientPreference()
@@ -66,7 +61,6 @@ void main() {
     test('resolves to the client that superseded it', () async {
       final settled = await AtClientImpl.create(atSign, 'wavi', pref(),
           enrollmentId: 'enroll-new');
-      // What the retrofit records at the moment it re-authenticates.
       AtClientImpl.supersededInstanceKeys['$atSign|enroll-old'] =
           '$atSign|enroll-new';
 
@@ -87,10 +81,8 @@ void main() {
 
     test('with no supersession recorded, the two are different clients',
         () async {
-      // The control. It has to be able to stay green while the assertion above
-      // goes red, or that test would show only that create() returns something.
-      // Two enrollments of one atSign are two principals, so each gets its own
-      // storage: they are live at the same moment, and one location holds one.
+      // NOTE: two clients live at the same moment need separate storage — one
+      // location holds one.
       final first = await AtClientImpl.create(atSign, 'wavi', pref(),
           enrollmentId: 'enroll-new',
           storage:
@@ -107,9 +99,6 @@ void main() {
 
     test('a supersession pointing at nothing leaves the caller where it was',
         () async {
-      // Tests clear and remove from the instance map directly, so a stale
-      // supersession is ordinary. It must not send a caller to a key nothing
-      // answers for.
       AtClientImpl.supersededInstanceKeys['$atSign|enroll-old'] =
           '$atSign|evicted';
 
@@ -520,19 +509,16 @@ void main() {
         remoteSecondary: mockRemoteSecondary,
         atChops: chops,
       );
-      // No crypto config => the SDK's default for this release, which is
-      // legacy. The built-in legacy provider is the runtime's fallback
-      // (resolution itself is covered in crypto_runtime_test), so it is
-      // intentionally not in the config list.
+      // No crypto config => the legacy default. The built-in legacy provider
+      // is the runtime's fallback, so it is intentionally not in the config
+      // list.
       final config = CryptoConfig.forClient(ac);
       expect(config.defaultProviderId, 'legacy');
       expect(config.lookup('legacy'), isNull);
       expect(config.lookup('bubblesort'), isNull);
 
-      // And the app's preference is left alone. Resolving into it would hand
-      // the next atSign built from the same preference object whatever this
-      // one resolved — harmless while the default is a const, and a leak the
-      // moment it holds per-atSign state.
+      // NOTE: resolving into the preference would hand the next atSign built
+      // from the same preference object whatever this one resolved.
       expect(ac.getPreferences()?.crypto, same(const CryptoConfig.eraDefault()),
           reason: 'the SDK resolves the default; it does not write it back — '
               'the preference still holds the untouched marker');
@@ -540,11 +526,9 @@ void main() {
 
     test('the default posture keeps writes legacy in the adopted era set',
         () async {
-      // A bare preference, which is `PqPosture.pqReady` — NOT legacy, though
-      // this test was named for it until the default moved. The distinction
-      // is the whole of the row below: pqReady reads post-quantum records and
-      // legacy does not, so a test claiming to cover legacy while building
-      // the default covers neither.
+      // NOTE: a bare preference is `PqPosture.pqReady`, not legacy — pqReady
+      // reads post-quantum records and legacy does not, so this arm covers the
+      // default posture and not the legacy one.
       AtClientPreference preferences = AtClientPreference()
         ..hiveStoragePath = 'test/hive'
         ..commitLogPath = 'test/hive/path';
@@ -560,11 +544,6 @@ void main() {
       final config = CryptoConfig.eraDefaultFor(ac)!;
       expect(config.defaultProviderId, legacyCryptoProviderId,
           reason: 'the 3.x default writes legacy');
-      // ⚠️ This asserted `isNotNull` while the default was pqReady. The 3.x
-      // default is legacy, which configures NO post-quantum providers — so a
-      // record stamped with one has nothing to resolve to and the read throws
-      // naming the id, exactly as a build predating them does. The arm below
-      // is what keeps this from being a claim about every posture.
       expect(config.lookup(symmetricAesGcmCryptoProviderId), isNull,
           reason: 'the default posture registers no post-quantum provider, so '
               'a record sent by a later peer does not open here');
@@ -588,11 +567,8 @@ void main() {
 
     test('the legacy posture advertises no key package and asks for nothing',
         () async {
-      // The startup's two ACTIVE post-quantum steps are otherwise ungated by
-      // posture, which left this stage minting a key package, publishing it,
-      // and asking peers for privates it would then refuse to use. The
-      // advertisement is the harmful half — a peer seals to it and the record
-      // comes back refused.
+      // NOTE: advertising a key package this posture cannot use is the harmful
+      // half — a peer seals to it and the record comes back refused.
       AtClientPreference preferences =
           AtClientPreference(posture: PqPosture.legacy)
             ..hiveStoragePath = 'test/hive'
@@ -602,10 +578,8 @@ void main() {
           remoteSecondary: mockRemoteSecondary, atChops: chops);
 
       final gates = (ac as AtClientImpl).pqBootstrap!.gates;
-      // Every gate, listed rather than sampled. The contract is that this
-      // client does nothing at all — no wire write, no subscription, no change
-      // to the keyfile — so a sample would let a step back in unnoticed, and
-      // the guard below fails if a gate is added without a row here.
+      // Every gate, listed rather than sampled: this client does nothing at
+      // all, and a sample would let a step back in unnoticed.
       expect([
         gates.hydrateHeldSecrets,
         gates.collectConveyedKeys,
@@ -624,8 +598,6 @@ void main() {
           reason: 'a posture configuring no post-quantum providers is the arm '
               'the rollout is debugged against; anything it does is something '
               'a comparison against it cannot attribute');
-      // Named individually where the reason is specific, so a failure says
-      // which promise broke rather than only that one did.
       expect(gates.collectConveyedKeys, isFalse,
           reason: 'the collect step files conveyed material into the keyfile '
               'and publishes _apsk through register(); this client can open '
@@ -639,17 +611,13 @@ void main() {
     });
 
     test('every gate on PqStartupGates is covered by the inert arm above', () {
-      // The tripwire for the row above. Sampling is what let three gates be
-      // read as "the startup", so a gate added without a row there would
-      // otherwise be off in the constant and unasserted in the test.
       final source =
           File('lib/src/client/pq_client_bootstrap.dart').readAsStringSync();
       final classBody = source.substring(source.indexOf('class PqStartupGates'),
           source.indexOf('class PqClientBootstrap'));
-      // The initialiser branch is not decoration: a gate declared
-      // `final bool foo = false;` is one no constructor can set, so
-      // `inert()` could not turn it off — and the first mutation written
-      // against this rail used exactly that shape and slipped through it.
+      // NOTE: the initialiser branch is not decoration — a gate declared
+      // `final bool foo = false;` is one no constructor can set, so `inert()`
+      // could not turn it off.
       final fields =
           RegExp(r'^  final bool (\w+)\s*(?:=[^;]*)?;', multiLine: true)
               .allMatches(classBody)
@@ -664,8 +632,6 @@ void main() {
     });
 
     test('a configuring posture leaves both steps on', () async {
-      // The other arm. Without it the rows above pass for a build that gated
-      // the steps for every posture.
       AtClientPreference preferences =
           AtClientPreference(posture: PqPosture.pqReady)
             ..hiveStoragePath = 'test/hive'
@@ -675,9 +641,6 @@ void main() {
           remoteSecondary: mockRemoteSecondary, atChops: chops);
 
       final gates = (ac as AtClientImpl).pqBootstrap!.gates;
-      // The control, and it carries the weight now that the legacy arm asserts
-      // every gate is off: it has to be able to stay green while that one goes
-      // red, which means asserting the same list is entirely ON.
       expect([
         gates.hydrateHeldSecrets,
         gates.collectConveyedKeys,
@@ -698,9 +661,6 @@ void main() {
     });
 
     test('the legacy posture configures no post-quantum providers', () async {
-      // The arm the row above was named for and never covered. A client at
-      // this stage stands in for a build that predates those providers, so an
-      // inbound record naming one has nothing to resolve to.
       AtClientPreference preferences =
           AtClientPreference(posture: PqPosture.legacy)
             ..hiveStoragePath = 'test/hive'

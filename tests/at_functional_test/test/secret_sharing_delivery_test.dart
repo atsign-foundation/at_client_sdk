@@ -1,6 +1,4 @@
-// The substrate is deliberately marked @experimental and will be reshaped as
-// the group surface matures. Exercising it from another package is the point
-// of this file, so the annotation has nothing to tell us here.
+// The substrate this file exercises is @experimental.
 // ignore_for_file: experimental_member_use
 
 @Tags(['pq'])
@@ -19,18 +17,16 @@ import 'test_utils.dart';
 
 /// The secret-sharing substrate against a live atServer, same-atSign.
 ///
-/// Until this file existed the substrate had **no live coverage at all** —
-/// every claim about it rested on a unit fixture that backs local storage and
-/// the atServer with a single map. That fixture cannot tell a local-first
-/// write from a remote-first one, which is how an ordering defect reached the
-/// branch: the envelope was written local-first while its wake-up
-/// notification went straight out remote, so the nudge could arrive before
-/// the value it pointed at.
+/// A unit fixture backing local storage and the atServer with a single map
+/// cannot tell a local-first write from a remote-first one, and that ordering
+/// is what these tests are for: an envelope written local-first while its
+/// wake-up notification goes straight out remote leaves the nudge racing the
+/// value it points at.
 ///
-/// Both tests here deliberately run with the wake-up **off**. That isolates
-/// the two properties worth proving on a real wire: that the envelope is on
-/// the atServer by the time `sendEnvelope` returns, and that a client which
-/// has never synced can still fetch and decrypt it.
+/// Every party here is built with the wake-up **off**, which isolates what is
+/// worth proving on a real wire: that the envelope is on the atServer by the
+/// time `sendEnvelope` returns, that the negotiated construction is the one
+/// stored, and that a client which has never synced can fetch and decrypt it.
 void main() {
   TestUtils.isolateStorage('secret_sharing_delivery_test');
   late AtClient atClient;
@@ -44,11 +40,10 @@ void main() {
     atClient = manager.atClient;
   });
 
-  /// Two independently-constructed instances over one client: same atSign and
-  /// same APKAM signing key, but each generates its own X-Wing keypair, so
-  /// they have distinct kpids — which is all that envelope addressing turns
-  /// on. `forClient` deliberately caches one instance per AtClient, so the
-  /// plain constructor is the documented way to get a second identity.
+  /// A further secret-sharing identity over one client: same atSign and same
+  /// APKAM signing key, but its own X-Wing keypair and so its own kpid, which
+  /// is all that envelope addressing turns on. `forClient` caches one instance
+  /// per AtClient, so the plain constructor is the way to get another.
   Future<AtClientSecretSharing> newParty() async {
     final party = AtClientSecretSharing(atClient)
       ..sendWakeUpNotification = false;
@@ -77,11 +72,9 @@ void main() {
 
   test('the negotiated construction is what actually reaches the atServer',
       () async {
-    // The unit suite proves the negotiation picks RFC 9180 for a peer that
-    // advertises it and falls back for one that does not. What it cannot show
-    // is that the chosen version is the one on the wire — its fixture backs
-    // local and remote with a single map. Read the envelope back off the
-    // atServer and look at the byte.
+    // A fixture backing local and remote with a single map cannot show that
+    // the negotiated version is the one on the wire, so read the envelope back
+    // off the atServer and look at the byte.
     final sender = await newParty();
     final recipient = await newParty();
 

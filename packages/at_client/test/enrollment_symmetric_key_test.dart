@@ -13,11 +13,7 @@ import 'test_utils/mocks.dart';
 ///
 /// Every rejection on this path has to be a **skip**: an atSign's clients may
 /// have several envelopes in flight at once, and one this enrollment cannot use
-/// says nothing about the one it is waiting for. The case that matters most is
-/// an envelope from an enrollment that has since been revoked — the atServer
-/// moves a revoked enrollment's `_apsk` out from under its address, which is
-/// exactly the signal this path is supposed to read as "not from an approved
-/// enrollment, skip it".
+/// says nothing about the one it is waiting for.
 void main() {
   const atSign = '@alice';
   const kpid = 'kpid-1';
@@ -55,8 +51,6 @@ void main() {
       ));
   }
 
-  /// AtKeys holding a key-package, which is what the resolver needs to
-  /// identify this enrollment's kpid at all.
   AtKeys withKeyPackage() {
     final keys = AtKeys();
     fileKeyPackage(keys, keyId: kpid);
@@ -140,10 +134,9 @@ void main() {
         timeout: const Duration(milliseconds: 200),
         pollInterval: const Duration(milliseconds: 50));
 
-    // The atServer answers the `_apsk` lookup with an AT0015 ERROR, which
-    // AtLookupImpl throws rather than returning null. Left uncaught it escapes
-    // the skip and takes the whole enrollment down — so what must come out is
-    // the resolver's own "nothing arrived" timeout, never the lookup's error.
+    // NOTE: the `_apsk` lookup for a signer with no key answers AT0015, which
+    // AtLookupImpl throws rather than returning null — uncaught, it escapes
+    // the skip and takes the whole enrollment down.
     await expectLater(
         resolve(withKeyPackage(), lookupWith(signer: 'revoked-enrollment')),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
@@ -157,10 +150,6 @@ void main() {
 
   test('a JWS envelope from a revoked signer is skipped the same way',
       () async {
-    // Same outcome as the version-1 arm above, reached through the version-2
-    // claim path: the signer is named only by the protected header's kid, and
-    // the resolver must route the _apsk lookup from it before anything else
-    // can happen.
     final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
         timeout: const Duration(milliseconds: 200),
         pollInterval: const Duration(milliseconds: 50));
@@ -172,9 +161,8 @@ void main() {
   });
 
   test('and a signer whose _apsk does not verify is skipped too', () async {
-    // The control arm for the shape: a present-but-wrong `_apsk` already
-    // reached the skip before this fix, and must still. Without it, the test
-    // above would also pass on code that skipped EVERY envelope.
+    // NOTE: the control arm — without it the tests above also pass on code
+    // that skips EVERY envelope.
     final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
         timeout: const Duration(milliseconds: 200),
         pollInterval: const Duration(milliseconds: 50));
@@ -200,10 +188,6 @@ void main() {
   });
 
   test('a co-tenant enrollment\'s key package is never adopted', () async {
-    // A retrofitted keyfile carries the legacy enrollment's package beside
-    // this one's. Taking the wrong one means polling an address nobody is
-    // writing to until the enrollment times out — and the failure names the
-    // co-tenant's kpid, which points the reader at the wrong enrollment.
     final keys = AtKeys();
     fileKeyPackage(keys,
         keyId: 'co-tenant-kpid',
@@ -225,10 +209,6 @@ void main() {
 
   test('the package tagged for THIS enrollment wins over an untagged one',
       () async {
-    // The submitter now adopts what the metadataBuilder filed under the
-    // enrollment id the atServer assigned, so a current keyfile has this
-    // enrollment's package tagged. An untagged one beside it is older material
-    // and must not be preferred to it.
     final keys = AtKeys()..enrollmentId = 'mine';
     fileKeyPackage(keys, keyId: 'untagged-kpid', seed: 70);
     fileKeyPackage(keys, keyId: 'mine-kpid', enrollmentId: 'mine');
@@ -248,10 +228,9 @@ void main() {
   test(
       'an untagged package still resolves for a keyfile written before '
       'adoption existed', () async {
-    // The fallback, and it is not optional: enrollments already in the field
-    // have their package in the atSign's container, because the submitter did
-    // not adopt it under the id. Scoping without this would stop them opening
-    // anything sealed to them.
+    // NOTE: a keyfile can carry this enrollment's package untagged, so
+    // scoping strictly to the enrollment id would stop it opening anything
+    // sealed to it.
     final keys = AtKeys()..enrollmentId = 'mine';
     fileKeyPackage(keys, keyId: kpid);
 
@@ -268,9 +247,9 @@ void main() {
   });
 
   test('an nskey private is not mistaken for a key package', () async {
-    // Same part type, but filed alone — its public half lives on the
-    // atServer. Adopting it as the recipient identity would make this
-    // enrollment answer at an address it never advertised.
+    // NOTE: an nskey private has the same part type but arrives alone;
+    // adopting it as the recipient identity would make this enrollment answer
+    // at an address it never advertised.
     final keys = AtKeys()
       ..addKey(CryptographicMaterial(
         keyId: 'nskey-private',

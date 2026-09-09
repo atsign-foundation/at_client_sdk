@@ -29,15 +29,7 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 final _logger = AtSignLogger('PublishedNskeyKeyRing');
 
 /// Asks this atSign's other enrollments for one missing nskey private, then
-/// waits for a holder to answer and **files** the answer.
-///
-/// One body, two callers — `PqClientBootstrap` and the default a ring builds
-/// for itself — because the two halves are not separable. Asking alone puts
-/// the reply in the in-memory secret store and nothing files it from there
-/// mid-session: `NskeyPrivateFiling.filePending` runs at start and says so
-/// itself. A heal that only broadcast would repair the client at its *next*
-/// start, measured live 2026-08-17 with the holder replying correctly and the
-/// answer sitting unfiled.
+/// waits for a holder to answer and files the answer.
 ///
 /// The wait is unawaited and best-effort: a holder may be offline for a long
 /// time and a read must not block on one.
@@ -59,8 +51,6 @@ Future<void> requestAndFileNskeyPrivate(
           'holder conveyed on request');
     }
   }).catchError((Object e) {
-    // info, not warning: no holder replying within the window is ordinary
-    // (they may all be offline), and the next start asks again.
     logger.info('No holder conveyed $namespace:$secretName within the wait; '
         'the next start asks again: $e');
   }));
@@ -81,22 +71,9 @@ abstract class AdvertisedKeyVerifier {
 /// Verifies an advertisement's APKAM signature against the `_apsk` public key
 /// that the signing enrollment published under [owner]'s atSign.
 ///
-/// Two gates stand between an attacker and the key a sender encapsulates to,
-/// and it takes both to place one:
-///
-/// - **The write gate.** `__nskey.<ns>` sits in `<ns>`, so the atServer accepts
-///   the write only from an enrollment authorised for that namespace.
-/// - **This signature.** The envelope names its signing enrollment, and the
-///   signature is checked against the `_apsk` only that enrollment may write.
-///
-/// So a rogue enrollment holding some other namespace can sign but not publish,
-/// and anything that reaches the record unsigned — or signed by an enrollment
-/// whose `_apsk` does not verify it — is rejected rather than sealed to.
-///
-/// What this does **not** defend against is the operator of [owner]'s atServer,
-/// which serves both the advertisement and the `_apsk` it is checked against
-/// and so can substitute a consistent pair. Removing that requires anchoring
-/// the key somewhere the operator does not control.
+/// Does not defend against the operator of [owner]'s atServer, which serves
+/// both the advertisement and the `_apsk` it is checked against and so can
+/// substitute a consistent pair.
 class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
   final AtClientEnvelopeSigner _signer;
 
@@ -107,11 +84,6 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
   Future<NskeyAdvertisement> verify(String owner, String payload) async {
     final SignedEnvelope envelope;
     try {
-      // fromJson is the structural check: a payload string and at least one
-      // signatures entry carrying a readable protected header. Doing it here
-      // rather than letting a member surface as a cast error keeps a
-      // malformed advertisement a refusal rather than something that reads
-      // like a bug.
       envelope = SignedEnvelope.fromJson(jsonDecode(payload) as Map);
     } on FormatException catch (e) {
       throw AtSigningVerificationException(
@@ -134,36 +106,21 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
           'the advertised nskey for $owner ${e.message}');
     }
 
-    // An entry naming an algorithm this build does not implement is SKIPPED,
-    // not refused: that is what lets an owner advertise a new KEM beside an old
-    // one without cutting off every peer that predates it. What is refused is
-    // an advertisement with nothing left after the skipping — a reader that
-    // understands no entry refuses outright rather than falling back to a key
-    // it derived some other way.
-    //
-    // Every entry this build DOES understand is checked, including ones it will
-    // not choose. A malformed entry beside a good one is a signal about the
-    // advertisement as a whole, and sealing to the good one while ignoring it
-    // would be reading past evidence that the owner's publishing is broken.
+    // NOTE: an entry naming an algorithm this build cannot do is skipped, not
+    // refused, so an owner can advertise a new KEM beside an old one without
+    // cutting off every peer that predates it. What is refused is an
+    // advertisement with nothing left after the skipping.
     var understood = 0;
     var sealable = 0;
     for (final key in advertisement.keys) {
       if (SecretSharingAlgos.kemFor(key.alg) == null) continue;
       understood++;
-      // A retired entry is still checked — it has to be well formed to be
-      // believed at all — but it is not something to seal to, so it does not
-      // count towards this advertisement having an encapsulation target.
       if (key.offeredForNewOperations) sealable++;
-      // Length before anything is sealed to it. A kid is the digest of
-      // whatever bytes are carried, so it matches a forged key as readily as a
-      // real one and the check below cannot see a wrong-length key at all.
-      // Without this the first sign of trouble is inside the KEM, one seal
-      // later, on a stack naming neither the owner nor the advertisement.
+      // NOTE: the length is checked because a kid is the digest of whatever
+      // bytes are carried, so it matches a forged key as readily as a real one
+      // and cannot see a wrong-length key at all.
       final expected = SecretSharingAlgos.publicKeyLengthFor(key.alg);
       if (expected == null) {
-        // kemFor accepted this algorithm a few lines up, so the two switches
-        // have drifted. Refuse rather than let the length check quietly not
-        // happen.
         throw AtSigningVerificationException(
             'the advertised nskey for $owner names "${key.alg}", which this '
             'build can encapsulate to but cannot state a key length for');
@@ -174,9 +131,6 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
             'byte key for "${key.alg}", which takes $expected bytes');
       }
       if (key.kid != nskeyKidOf(key.pubBytes)) {
-        // A kid that does not name its own key would let a rotation be reported
-        // as a generation the recipient never minted, so a conveyance sealed to
-        // it could never be opened.
         throw AtSigningVerificationException(
             'the advertised nskey for $owner names a kid that is not the digest '
             'of the key it carries');
@@ -190,11 +144,6 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
           'refusing rather than sealing under one it did not name');
     }
     if (sealable == 0) {
-      // A separate refusal from the one above because it is a different
-      // situation for whoever reads the log: the algorithms are fine and the
-      // owner has withdrawn every key from new use. This record's writer never
-      // does that — it overwrites on rotation — so the reader is looking at
-      // something a newer or a foreign implementation published.
       throw AtSigningVerificationException(
           'the advertised nskey for $owner retires every key this build can '
           'encapsulate to, so it names nothing to seal to now');
@@ -203,11 +152,6 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
   }
 }
 
-/// An [NskeyKeyRing] that publishes the owner's nskey and discovers other
-/// atSigns' by `plookup`.
-///
-/// Own privates are held in memory here; conveying them per-APKAM over the
-/// secret-sharing substrate is what supplies them instead of [mintAndPublish].
 /// One freshly minted key: the seed that is filed, and the pair it derives.
 typedef _MintedKey = ({
   String keyAlgo,
@@ -224,35 +168,32 @@ typedef _PreparedMint = ({
   String signedPayload,
 });
 
+/// An [NskeyKeyRing] that publishes the owner's nskey and discovers other
+/// atSigns' by `plookup`.
+///
+/// Own privates are held in memory here; conveying them per-APKAM over the
+/// secret-sharing substrate is what supplies them to an enrollment that did
+/// not run [mintAndPublish] itself.
 class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   final AtClient _atClient;
   final AdvertisedKeyVerifier verifier;
 
   /// How long a fetched advertisement is trusted before it is re-fetched.
   ///
-  /// This is the lever on how long a rotation can go unnoticed. A sender never
-  /// sees a recipient's decapsulation fail, so re-fetching is the *only* way it
-  /// learns the recipient rotated — and a sender still sealing to a superseded
-  /// generation hands a revoked enrollment a key it can still open. Total
-  /// exposure is this window plus one content-key lifetime.
-  ///
-  /// It is a window rather than a check per write because `ensureCurrent` runs
-  /// on every `put`: fetching each time would put a round trip to the
-  /// recipient's atServer on the write path and break offline writes.
+  /// The lever on how long a peer's rotation can go unnoticed: a sender never
+  /// sees a recipient's decapsulation fail, so re-fetching is the only way it
+  /// learns of one, and total exposure is this window plus one content-key
+  /// lifetime.
   final Duration advertisementTtl;
 
   /// How far past [advertisementTtl] a *failed* re-fetch may keep serving the
   /// advertisement it already has, before this stops answering for the
   /// destination at all.
   ///
-  /// Without a bound this fails open: a re-fetch that keeps erroring — an
-  /// unreachable atServer, a network partition — would serve the cached
-  /// generation forever, and the stated exposure of "one TTL plus one content
-  /// key" would be unbounded in exactly the case that matters, since a peer
-  /// that has rotated *because of a revocation* is the peer a sender most needs
-  /// to stop sealing to. A short grace absorbs an ordinary blip; past it, the
-  /// write fails rather than silently handing a revoked enrollment a key it can
-  /// still open.
+  /// A short grace absorbs an ordinary blip; past it the write fails rather
+  /// than silently handing a revoked enrollment a key it can still open, since
+  /// a peer that rotated *because of a revocation* is the one a sender most
+  /// needs to stop sealing to.
   final Duration advertisementStaleGrace;
 
   PublishedNskeyKeyRing(
@@ -271,21 +212,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         _requestConveyance = requestConveyance,
         _signer = AtClientEnvelopeSigner(_atClient);
 
-  /// The filing a ring builds for itself when its caller named none.
+  /// The filing a ring builds for itself when its caller named none, over the
+  /// client's own `AtKeysIo`; null when the client has no key source at all.
   ///
-  /// A client that was handed an `AtKeysIo` has already said where its key
-  /// material belongs, and an nskey private is the one kind that cannot be
-  /// re-derived or re-fetched: minting it anywhere else discards it. So the
-  /// client's own key source is the default, and null means the client has
-  /// none — not that this ring should keep privates in memory beside a
-  /// keyfile that was there all along.
-  ///
-  /// Composed here rather than shared with whatever else the client built, so
-  /// a ring is constructible from an `AtClient` alone. Two filings over one
-  /// keyfile are safe — `AtKeysIo.update` serialises the read-mutate-write
-  /// across processes, and [NskeyPrivateFiling.store] is idempotent — but
-  /// they carry separate `privatesFiled` streams, so a caller that needs a
-  /// filing's *events* must pass the instance it is listening to.
+  /// Two filings over one keyfile are safe, but they carry separate
+  /// `privatesFiled` streams, so a caller that needs a filing's events must
+  /// pass the instance it is listening to.
   static NskeyPrivateFiling? _filingFor(AtClient atClient) {
     final keysIo = atClient.atKeysIo;
     if (keysIo == null) return null;
@@ -297,38 +229,17 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// Broadcasts a pull request for a missing own-atSign private, when
   /// [privateHalf] comes up empty for a generation this atSign has published.
   ///
-  /// This is the read path's half of the self-heal: a value can arrive before
-  /// the private that opens it — a new enrollment that missed the mint-time push
-  /// is the ordinary case, not an edge — and the reader asks rather than
-  /// failing forever. The request is store-and-forward: any current holder
-  /// answers when it next runs.
-  ///
-  /// Null here does **not** mean silence: a ring with a [privateFiling]
-  /// derives its own ask — see [_ask] — so a client built from an `AtClient`
-  /// alone heals like one wired by `PqClientBootstrap`. What the bootstrap
-  /// supplies that cannot be derived is the **gate**: only it knows
-  /// `PqStartupGates.askOnReadMiss`, and passing null with no filing to derive
+  /// The request is store-and-forward: any current holder answers when it next
+  /// runs, and whoever supplies this owns waiting for the answer and filing it
+  /// — see [requestAndFileNskeyPrivate]. Null is not silence, since a ring
+  /// with a [privateFiling] derives its own ask; null with no filing to derive
   /// from is what turns asking off.
-  ///
-  /// Whoever supplies it owns waiting for the answer and filing it — see
-  /// [requestAndFileNskeyPrivate], which both callers share, and the warning
-  /// on [_askForMissingPrivate], where the arrival path this field's dartdoc
-  /// used to claim turned out not to exist.
   final Future<void> Function(String namespace, String secretName)?
       _requestConveyance;
 
   /// When each generation was last asked for, so a burst of failed reads
-  /// collapses to one broadcast.
-  ///
-  /// ⚠️ This used to be a `Set` with no expiry, documented as "per instance
-  /// and never expiring: the answer is filed durably when it arrives, and a
-  /// fresh client (or the next start) asks again if it never did". The second
-  /// half is the whole session's worth of asking: a long-lived client that
-  /// asked once and was never answered never asked again, so a notification
-  /// waiting on that generation had nothing left that could rescue it.
-  ///
-  /// A timestamp keeps the burst collapse — which is a sub-second phenomenon
-  /// — and drops the permanent silence.
+  /// collapses to one broadcast without a generation ever falling permanently
+  /// silent.
   final Map<String, DateTime> _askedConveyance = {};
 
   /// How long after asking for a generation this ring stays quiet about it.
@@ -344,46 +255,34 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
   /// How long this ring holds a namespace's mint lock once it has taken it.
   ///
-  /// Expiry is the only thing that releases the lock, so this is the **cooldown
-  /// before another election may be held for the same namespace** — and a
-  /// rotation attempted inside it is refused rather than queued. That is the
-  /// intended behaviour, not a window to tune away: a rotation that adopted
-  /// what it found would have rotated nothing while reporting success.
-  ///
-  /// A parameter rather than the bare constant because the value is a policy
-  /// about how long an election may take, and a caller with a different one —
-  /// a live test that cannot wait [mintLockTtl] between a mint and the rotation
-  /// it is exercising, an operator on a very slow device — should be able to
-  /// state it rather than fork the composer.
+  /// Expiry is the only thing that releases the lock, so this is also the
+  /// cooldown before another election may be held for the same namespace, and
+  /// a rotation attempted inside it is refused rather than queued.
   final Duration lockTtl;
 
   /// Where a minted private is made durable **before** its public half is
   /// published.
   ///
-  /// Defaults to a filing over the client's own `AtKeysIo` — see [_filingFor].
-  /// It is null only for a client that has no key source at all, and [_mint]
-  /// says so at `severe` when it mints anyway: a published key whose private
-  /// did not survive the process leaves every sender sealing to something
-  /// nobody can open, and no later repair recovers what was written in
-  /// between. Pass an instance to share one filing's `privatesFiled` events
-  /// with the rest of a client's wiring.
+  /// Defaults to a filing over the client's own `AtKeysIo` — see [_filingFor]
+  /// — and is null only for a client with no key source at all, where [_mint]
+  /// says so at `severe` and mints anyway: a published key whose private did
+  /// not survive the process leaves every sender sealing to something nobody
+  /// can open.
   final NskeyPrivateFiling? privateFiling;
 
   @override
   Stream<FiledNskeyPrivate> get privatesFiled =>
       privateFiling?.privatesFiled ?? const Stream<FiledNskeyPrivate>.empty();
 
-  /// Signs this atSign's own advertisements. A recipient that cannot check who
-  /// generated the key it is about to seal to has no protection left but the
-  /// atServer's word, so publishing unsigned is not an option the ring offers.
+  /// Signs this atSign's own advertisements.
   final AtClientEnvelopeSigner _signer;
 
   final Map<String, NskeyAdvertisement> _ownCurrent = {};
 
   /// Record a generation as this client's own, without minting one.
   ///
-  /// [mintAndPublish] is the production caller; this exists so a test can put a
-  /// ring into the "already minted" state without a remote secondary.
+  /// For a test that needs a ring in the "already minted" state without a
+  /// remote secondary; [mintAndPublish] is the production caller.
   @visibleForTesting
   void rememberOwn(
           String owner, String namespace, NskeyAdvertisement advertisement) =>
@@ -392,14 +291,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// Drop what this ring cached for `(owner, namespace)`, forcing the next
   /// read to go to the atServer.
   ///
-  /// For tests that change a **peer's** published advertisement out from under
-  /// a client and need it to notice inside [advertisementTtl]. In production
-  /// the window is deliberate — `ensureCurrent` runs on every put, and
-  /// re-fetching each time would put a round trip to the recipient's atServer
-  /// on the write path — so nothing here shortens it. A test asserting what a
-  /// client does when a peer's advertisement is substituted is asserting
-  /// something about the FETCH, and it cannot observe a fetch that a cache
-  /// legitimately answered.
+  /// For a test that changes a peer's published advertisement out from under a
+  /// client and needs it to notice inside [advertisementTtl]; nothing in
+  /// production shortens that window.
   @visibleForTesting
   void forgetRemote(String owner, String namespace) =>
       _remote.remove(_scope(owner, namespace));
@@ -416,33 +310,22 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// Mint a generation for `(currentAtSign, namespace)` and publish its public
   /// half immediately.
   ///
-  /// This is the cold-start mint. Called again for the same namespace it
-  /// usually does produce a new current generation, retaining the previous
-  /// private so conveyances sealed to it still open — but **it is not the
-  /// rotation lever, and must not be used as one**. Losing the mint lock here
-  /// is resolved by adopting the winner's advertisement and returning it, so a
-  /// second call can succeed having rotated nothing. [rotate] exists for that
-  /// reason and treats the same race as a failure; see its doc for why the
-  /// difference is the one that matters.
+  /// The cold-start mint, and **not the rotation lever**: losing the mint lock
+  /// here is resolved by adopting the winner's advertisement and returning it,
+  /// so a call can succeed having rotated nothing. Use [rotate] to supersede a
+  /// generation.
   Future<NskeyAdvertisement> mintAndPublish(String namespace) async {
     final owner = _atClient.getCurrentAtSign()!;
-    // Before the lock, not inside it — see [_prepareMint].
     final prepared = await _prepareMint(owner, namespace);
     final minted = await mintLock.withLock(
         nskeyMintLockKey(owner, namespace, ttl: lockTtl),
         (lease) => _mintUnlessPublished(owner, namespace, lease, prepared),
-        // Safe here and nowhere else in this file: the critical section reads
-        // what is published and adopts it, so an enrollment meeting the lock
-        // it took a moment ago re-reads rather than minting a second key.
-        // `rotate` takes the same lock WITHOUT this, because the cooldown
-        // binding rotation is deliberate.
+        // NOTE: safe only because this critical section re-reads what is
+        // published and adopts it; `rotate` takes the same lock without this,
+        // so that the cooldown binds it.
         ownLockIsNotContention: true);
     if (minted != null) return minted;
 
-    // Another enrollment won the election. Re-read once rather than wait: the
-    // winner ends with an advertisement published, and this client needs that
-    // one — minting a second would rotate the first out from under any peer
-    // that had already fetched it.
     final published = await publishedAdvertisement(owner, namespace);
     if (published != null) {
       await _warnIfPrivateMissing(
@@ -454,12 +337,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       return published;
     }
 
-    // Nothing published, and this client may not mint: the loser of an
-    // election never does, or the election bought nothing. Failing here is
-    // deliberate — a `put` waiting on a namespace key fails loudly instead of
-    // hanging on another device that may have crashed mid-mint, and the retry
-    // is the next client start, which is where minting is triggered from
-    // anyway.
     throw StateError(
         'another enrollment holds the mint lock for $owner:$namespace and has '
         'published no advertisement yet, so this client has no namespace key '
@@ -467,37 +344,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         'ttl elapses');
   }
 
-  /// [_mint], unless a sibling enrollment published while this client was
-  /// taking the lock.
-  ///
-  /// This re-read is what the lock is worth taking for. Every check made before
-  /// it — `NskeySeeding.seed`'s, or a caller's own — ran outside the lock, so a
-  /// winner that published in the window between that check and this client
-  /// winning the race is invisible to all of them. The advertisement record is
-  /// **mutable**: minting on that stale absence overwrites the winner's key,
-  /// and every peer that had already fetched it goes on sealing to a generation
-  /// its owner will never look for.
-  ///
-  /// Adopting is the right answer only because this is the cold-start mint,
-  /// where the atSign holding *a* key is the whole of what was wanted. [rotate]
-  /// runs [_mint] directly for exactly that reason: a rotation that adopted
-  /// what it found would have rotated nothing while reporting success, and
-  /// rotation is the revocation lever.
   /// Says so when this client adopts an advertisement it cannot open with.
   ///
-  /// An advertisement is two halves and only one of them is published. A
-  /// client that adopts somebody else's can seal *outward* with it
-  /// immediately, and cannot open anything sealed *to* it until the private
-  /// arrives — so the gap surfaces later, at an unrelated read, as
-  /// [NskeyPrivateUnavailableException] naming a generation with nothing to
-  /// say where it came from. This names it at the point it opens.
-  ///
-  /// **A warning rather than a refusal, deliberately.** An enrollment that has
-  /// legitimately just joined holds no private until the conveyance reaches
-  /// it, so failing here would break a first start to report a state that is
-  /// expected and self-correcting; the read path already throws a typed
-  /// exception the notification service parks and re-drives. What was missing
-  /// was any record of the adoption that caused it.
+  /// A warning rather than a refusal: an enrollment that has legitimately just
+  /// joined holds no private until the conveyance reaches it, which is
+  /// expected and self-correcting, and the read path already throws a typed
+  /// exception for it.
   Future<void> _warnIfPrivateMissing(String owner, String namespace,
       NskeyAdvertisement published, String how) async {
     if (owner != _atClient.getCurrentAtSign()) return;
@@ -509,6 +361,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         'or healed');
   }
 
+  /// [_mint], unless a sibling enrollment published while this client was
+  /// taking the lock.
+  ///
+  /// The advertisement record is mutable, so minting on an absence checked
+  /// outside the lock overwrites the winner's key and every peer that had
+  /// already fetched it goes on sealing to a generation its owner will never
+  /// look for. Adopting is right only for the cold-start mint; [rotate] runs
+  /// [_mint] directly.
   Future<NskeyAdvertisement> _mintUnlessPublished(String owner,
       String namespace, MintLease lease, _PreparedMint prepared) async {
     final published = await publishedAdvertisement(owner, namespace);
@@ -523,31 +383,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
   /// Rotates `(currentAtSign, namespace)` onto a fresh generation: mints the
   /// next keypair, **overwrites** the published advertisement with it, and
-  /// keeps every private this client already held.
+  /// keeps every private this client already held, so records sealed to an
+  /// earlier generation still open.
   ///
-  /// Retention is by construction rather than by policy — privates are filed
-  /// per `nskeyKid` and nothing removes them — which is what keeps retained
-  /// `__ck` records sealed to an earlier generation readable. Rotation
-  /// replaces the key; it does not decrypt or re-encrypt the past.
-  ///
-  /// Differs from [mintAndPublish] in one way, and it is the way that matters:
-  /// **losing the mint lock is a failure here, not a resolution.** A cold-start
-  /// mint that loses the race adopts the winner's key and is done — the atSign
-  /// has a key, which is all that was wanted. A rotation that adopts what it
-  /// finds has rotated nothing while reporting success, leaving the enrollment
-  /// the caller was rotating away from holding the live generation. Since
-  /// rotation is the revocation lever, that failure is silent *and* is the one
-  /// case where silence costs exactly what the operation was for.
-  ///
-  /// Rotating a namespace with no published key throws for the same reason: it
-  /// is a cold-start mint wearing a rotation's name, and a caller that meant to
-  /// supersede a generation should hear that there was none.
-  ///
-  /// Returns both generations, so a caller that must name what it superseded —
-  /// which every rotation report does — takes it from the read this already
-  /// made rather than repeating it. The two reads were the same question asked
-  /// of the atServer twice, one round trip apart, with nothing able to act on a
-  /// difference between the answers.
+  /// Throws where [mintAndPublish] adopts — on losing the mint lock, and on
+  /// finding nothing published to supersede.
   Future<({NskeyAdvertisement rotated, NskeyAdvertisement superseded})> rotate(
       String namespace) async {
     final owner = _atClient.getCurrentAtSign()!;
@@ -558,9 +398,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
           'there, so this is a cold-start mint rather than a rotation');
     }
 
-    // Before the lock, not inside it — see [_prepareMint]. A rotation that
-    // loses the lock throws and discards this, which is the same trade the
-    // cold-start mint makes.
     final prepared = await _prepareMint(owner, namespace);
     final rotated = await mintLock.withLock(
         nskeyMintLockKey(owner, namespace, ttl: lockTtl),
@@ -579,52 +416,20 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   }
 
   /// Adds this client's missing key-establishment material to the **current**
-  /// generation, in place. Returns the advertisement now published, or null if
+  /// generation, in place; returns the advertisement now published, or null if
   /// nothing was added.
   ///
-  /// **Not a rotation, and the difference is what it costs.** A rotation mints
-  /// a whole fresh generation, so every peer that had fetched the old one cuts
-  /// and conveys a new content key at its next write. An add leaves every
-  /// existing key, id and status exactly where it was — the generation keeps
-  /// its own identity, `createdAt` included — so a peer sealing under an
-  /// algorithm that was already there notices nothing and re-cuts nothing.
+  /// **Not a rotation.** Every existing key, id and status stays where it was,
+  /// and the generation keeps its `createdAt` and its record stamp, so an add
+  /// after a revocation cannot read as a generation minted after it.
   ///
-  /// **Which is why it asserts the record's `updatedAt` back.** The write
-  /// rewrites one record, so left alone it would take a fresh server stamp and
-  /// a revoke-then-add sequence would leave that stamp later than the
-  /// revocation it should have triggered a rotation for — the trigger disarmed
-  /// by an operation that produced no new generation at all.
-  ///
-  /// **Why it exists at all.** Only a build that *implements* an algorithm can
-  /// mint material for it, so a client cannot mint on another version's behalf
-  /// however much it knows about the fleet. A generation therefore assembles
-  /// incrementally: whichever client rotates writes the algorithms it can do,
-  /// and each client that finds one of its own missing adds it. Reaching the
-  /// same set by successive rotations would make every peer re-cut once per
-  /// algorithm, for something cryptographically new to only one of them.
-  ///
-  /// **Takes the same mint lock as a rotation**, because two clients adding at
-  /// once is a read-mutate-write over one durable record and the loser would
-  /// overwrite the winner's entry. A client that fails the lock adds nothing
-  /// and returns null; the next start asks again, by which time either another
-  /// client has added what this one wanted or it still has to.
-  ///
-  /// **Conveys only what it minted.** The authorised enrollments already hold
-  /// everything else in the generation.
-  ///
-  /// ⚠️ **The conveyance excludes nobody.** A revoked enrollment is off the
-  /// roster, but a child it self-spawned before being revoked is not — so an
-  /// add after a revocation reaches that child, exactly as a rotation
-  /// excluding only the named id does.
+  /// ⚠️ **The conveyance excludes nobody** — a child an enrollment self-spawned
+  /// before being revoked receives what this add conveys.
   @experimental
   Future<NskeyAdvertisement?> add(String namespace) async {
     final owner = _atClient.getCurrentAtSign()!;
     final current = await publishedAdvertisement(owner, namespace);
     if (current == null) {
-      // Nothing published is a cold start, which wants a whole generation
-      // rather than an addition to one. Saying so rather than minting here:
-      // `mintAndPublish` resolves a lost election by adopting, and an add must
-      // never adopt — it would report success having added nothing.
       _logger.info('Not adding to the nskey for $owner:$namespace: nothing is '
           'published there, so what it needs is a mint');
       return null;
@@ -633,10 +438,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final missing = _missingAlgorithms(current);
     if (missing.isEmpty) return current;
 
-    // Prepared before the lock, for the reason [_prepareMint] gives: a keygen
-    // and a signature are the expensive parts and neither needs the lock, so a
-    // client that loses the election throws away work that is local and cheap
-    // rather than holding a remote, ttl-bounded window open across it.
     final prepared = await _prepareMint(owner, namespace,
         algorithms: missing,
         retaining: current.keys,
@@ -644,11 +445,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
     final added = await mintLock.withLock(
         nskeyMintLockKey(owner, namespace, ttl: lockTtl), (lease) async {
-      // Re-read INSIDE the lock, which is what the lock is worth taking for:
-      // the check above ran outside it, and a rotation that landed in the
-      // window between the two would leave this client about to publish an
-      // advertisement built from a generation that no longer exists —
-      // silently rolling the rotation back.
+      // NOTE: re-read inside the lock. The check above ran outside it, and a
+      // rotation landing in between would be silently rolled back by
+      // publishing material built from a generation that is gone.
       final fresh = await publishedRecord(owner, namespace);
       if (fresh == null || !_sameGeneration(fresh.advertisement, current)) {
         _logger.info('Not adding to the nskey for $owner:$namespace: the '
@@ -657,9 +456,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
             'The next start re-decides against whatever is published then');
         return null;
       }
-      // The stamp this read carried, asserted back over the write below. It
-      // comes from the same read that decided the generation is unchanged, so
-      // no window sits between the value and the assertion of it.
       return _mint(owner, namespace, lease, prepared,
           assertUpdatedAt: fresh.updatedAt);
     });
@@ -677,9 +473,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
   /// Which of this client's configured algorithms [current] offers no key for.
   ///
-  /// A **retired** entry does not count as offering one: it is kept so that
-  /// what it sealed still opens, and adding beside it is how the generation
-  /// regains something to seal *to*.
+  /// A retired entry does not count as offering one: it is kept so that what
+  /// it sealed still opens.
   List<String> _missingAlgorithms(NskeyAdvertisement current) =>
       wantedKeyAlgorithms()
           .where((alg) => !current.keys.any((key) =>
@@ -690,10 +485,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
   /// Whether [a] and [b] are the same generation.
   ///
-  /// By `createdAt` **and** the set of key ids, not by `nskeyKid`: that getter
-  /// names whichever entry a sender with no preference would take, so on a
-  /// generation carrying two it would call one that had gained a third
-  /// unchanged.
+  /// By `createdAt` **and** the full set of key ids, not by `nskeyKid`: that
+  /// getter names only whichever entry a sender with no preference would take,
+  /// so a generation that had gained a key would compare unchanged.
   static bool _sameGeneration(NskeyAdvertisement a, NskeyAdvertisement b) =>
       a.createdAt.isAtSameMomentAs(b.createdAt) &&
       a.keys.map((k) => k.kid).toSet().containsAll(b.keys.map((k) => k.kid)) &&
@@ -703,34 +497,22 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// the advertisement built from it, and the signature over that
   /// advertisement.
   ///
-  /// Hoisted out of the critical section deliberately. A mint lock is a window
-  /// bounded by a ttl, and everything done while holding it is time in which
-  /// another enrollment cannot mint and this one can still lose its lease —
-  /// so the section should contain the writes that have to be serialised and
-  /// as little else as possible. A KEM keygen and an ML-DSA signature are the
-  /// two expensive things here and neither needs the lock: they touch nothing
-  /// shared and the material never leaves this process until the write.
-  ///
-  /// The cost of preparing first is that a client which then loses the
-  /// election, or finds a sibling published while it was racing, throws this
-  /// away. That is the right trade: the work is local and cheap, while the
-  /// lock window it removes is remote and bounded.
+  /// Hoisted out of the critical section: a mint lock is a ttl-bounded window
+  /// in which no other enrollment can mint, and neither the KEM keygen nor the
+  /// signature touches anything shared. A client that then loses the election
+  /// throws this away, which is local and cheap.
   Future<_PreparedMint> _prepareMint(String owner, String namespace,
       {List<String>? algorithms,
       List<PackageKey> retaining = const [],
       DateTime? createdAt}) async {
     final wanted = algorithms ?? wantedKeyAlgorithms();
 
-    // Minted before the advertisement is built, because the advertisement is
-    // built FROM the keys: its `suites` is what this generation can open, and
-    // that is fixed by the KEMs it actually holds rather than by what this
-    // build implements.
     final minted = <_MintedKey>[];
     for (final keyAlgo in wanted) {
       final kem = SecretSharingAlgos.kemFor(keyAlgo)!;
-      // The SEED is what is filed and what everything re-derives from; for
-      // ML-KEM the decapsulation key is expanded and cannot be turned back
-      // into a public half, so filing it would leave the generation unopenable
+      // NOTE: the seed is what is filed and what everything re-derives from.
+      // An ML-KEM decapsulation key is expanded and cannot be turned back into
+      // a public half, so filing that instead leaves the generation unopenable
       // after a restart.
       final seed = NskeySeed(kem.newSeed());
       final pair = await kem.keyPairFromSeed(seed.bytes);
@@ -744,8 +526,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
     final advertisement = NskeyAdvertisement(
       v: nskeyAdvertisementVersion,
-      // Carried across for an ADD, which joins the current generation in
-      // place: refreshing it would make a generation minted before a
+      // NOTE: carried across for an add, which joins the current generation in
+      // place. Refreshing it would make a generation minted before a
       // revocation read as one minted after, and the rotation that revocation
       // is owed would never fire.
       createdAt: createdAt ?? DateTime.now().toUtc(),
@@ -759,11 +541,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       ],
     );
 
-    // One codec, both directions. Each entry carries its own `alg`, without
-    // which a sender has an opaque byte string and no way to tell which KEM it
-    // belongs to; `suites` says which *construction* the owner can unwrap,
-    // without which a new one could only ever arrive by upgrading every reader
-    // first — release-ordering agility rather than negotiated agility.
     final signedPayload = await _signer.wrapAndSignAndJsonEncode(
         advertisement.toPayload(),
         type: EnvelopeType.nskeyRing);
@@ -778,21 +555,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// The key-establishment algorithms this client mints for, in the
   /// preference's own order.
   ///
-  /// **Every configured algorithm, not the first.** A generation holds a key
-  /// per algorithm the fleet needs, and only a build that *implements* one can
-  /// mint material for it — so a client configured for two and able to do both
-  /// mints both, and the fleet's set assembles from what its members can
-  /// actually produce.
-  ///
-  /// **Nothing is filtered here.** `AtClientPreference` refuses an empty list
-  /// and refuses any algorithm this build does not implement, both at
-  /// construction — so a preference that exists names a non-empty set this
-  /// build can mint. Repeating either guard would be a claim about that class
-  /// rather than a check, and would be unreachable.
-  ///
-  /// A duplicate is dropped, because two entries under one algorithm are two
-  /// keys where a sender takes the first and the second is minted, filed and
-  /// conveyed for nobody.
+  /// **Every configured algorithm, not the first**, since only a build that
+  /// implements one can mint material for it and a generation holds a key per
+  /// algorithm the fleet needs. A duplicate is dropped, because the second key
+  /// under one algorithm is minted, filed and conveyed for nobody.
   @visibleForTesting
   List<String> wantedKeyAlgorithms() {
     final configured = _atClient.getPreferences()?.keyEstablishmentAlgorithms ??
@@ -804,12 +570,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return wanted;
   }
 
+  /// Files every private this mint produced, then publishes the advertisement,
+  /// in that order and only while [lease] is still good.
+  ///
   /// [assertUpdatedAt] is the record's own previous stamp, asserted back so the
   /// write does not move it — [add]'s discipline, and nothing else's. A
   /// rotation and a cold-start mint pass nothing and take a fresh stamp, which
-  /// is what makes `updatedAt` mean *when this generation was minted*. Never a
-  /// locally computed time: a client's clock in that field is the comparison
-  /// trap wearing the server's costume.
+  /// is what makes `updatedAt` mean *when this generation was minted*; never a
+  /// locally computed time.
   Future<NskeyAdvertisement> _mint(
     String owner,
     String namespace,
@@ -822,21 +590,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
     final advertisementKey = nskeyAdvertisementKey(owner, namespace);
     advertisementKey.metadata.updatedAt = assertUpdatedAt;
-    // Signed with this client's APKAM keypair, so a peer can tell the key came
-    // from an enrollment of this atSign rather than from whoever served it.
-    // The APKAM public half must already be published, or the peer has nothing
-    // to check the signature against.
-    // Durable BEFORE the advertisement goes out. A key published ahead of its
-    // private leaves every sender sealing to something nobody can open, and no
-    // later repair recovers what was written in between — rotation replaces the
-    // key, it does not decrypt the past.
+    // NOTE: every private is made durable BEFORE the advertisement goes out. A
+    // key published ahead of its private leaves every sender sealing to
+    // something nobody can open, and no later repair recovers what was written
+    // in between.
     final filing = privateFiling;
     if (filing != null) {
-      // Every key this mint produced, each under its own id. A generation can
-      // hold a key per algorithm the fleet needs, and one filed under the
-      // generation's "primary" id would leave every other entry advertised
-      // with no private anywhere — peers sealing to something the owner
-      // cannot open.
       for (final key in prepared.minted) {
         final stored = await filing.store(
           namespace: namespace,
@@ -852,13 +611,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         }
       }
     } else {
-      // No filing and no key source to build one from, so this generation is
-      // published with its private held in memory and nowhere else. Said at
-      // `severe` and not refused: a fixture may legitimately mint into memory,
-      // and refusing here would also refuse the client that has genuinely been
-      // given nowhere to write. But it is the loudest failure this class has —
-      // an unwritable `AtKeysIo` already shouts one level down, and holding no
-      // key source at all is the worse of the two.
       _logger.severe('Minting the nskey for $owner:$namespace with nowhere to '
           'file its private: this client has no AtKeysIo and no filing was '
           'supplied, so the private is held in memory only. Peers will seal to '
@@ -866,24 +618,15 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
           'unreadable when this process ends');
     }
 
-    // The verification key a peer checks the (already computed) signature
-    // against. Still inside the lock: it is a network write, not the CPU work
-    // this section was trimmed of, and it must land before the advertisement
-    // that depends on it.
+    // NOTE: the verification key must land before the advertisement that
+    // depends on it, or a peer has nothing to check the signature against.
     await _signer.publishPublicSigningKey();
 
-    // The last thing before the write, and deliberately not earlier: what
-    // matters is whether the lease is still good at the moment of publishing,
-    // and everything above it — a keygen, a keyfile write, a signature — can
-    // take arbitrarily long on a suspended or loaded device.
-    //
-    // A slow winner whose lease has run out has to abandon rather than publish,
-    // because by then another enrollment has legitimately won the next election
-    // and is minting. The election bounds when enrollments *attempt*, not how
-    // long the winner *takes*, so without this the "only one eventually mints"
-    // requirement fails with every other part correct. The private that was
-    // just filed is harmless: nothing points at it, and the next mint files its
-    // own.
+    // NOTE: checked last, not earlier. A keygen, a keyfile write and a
+    // signature can each take arbitrarily long on a suspended or loaded
+    // device, and a winner whose lease ran out in that time must abandon
+    // rather than publish over the enrollment that has since won the next
+    // election.
     if (lease.isSpent) {
       throw StateError(
           'the mint lock for $owner:$namespace expired while this client was '
@@ -892,25 +635,13 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
           'own. Retry: the next attempt takes a fresh lock');
     }
 
-    // The atServer, and only the atServer. An advertisement is useful once a
-    // *peer* can fetch it, so it goes straight out rather than through a
-    // local-first put that would leave it unpublished until the next sync.
-    //
-    // Deliberately not written to local storage as well. A local write of a
-    // sync-eligible key appends the key's *name* to the client→server sync
-    // queue, and a drain sends whatever local storage holds at the moment it
-    // runs — so a drain landing between this update and that write pushes the
-    // **superseded** generation back over the one just published. Nothing
-    // corrects it: the atServer's newest value for the key is then the old
-    // generation, so this client pulls it back over its own copy and the queued
-    // push re-sends it. The atSign goes on advertising a key it rotated away
-    // from, which for a rotation that accompanied a revocation is the
-    // generation the revoked enrollment still holds.
-    //
-    // Local storage still ends up with this record: sync pulls it down as a
-    // server-originated change, and that is the one write path that never
-    // enqueues a push. [currentPublic] reads local first and falls back to the
-    // atServer, so it answers correctly in the window before that arrives.
+    // NOTE: the atServer, and never a local write as well. A local write of a
+    // sync-eligible key queues the key's *name*, and a drain sends whatever
+    // local storage holds when it runs — so a drain landing in that window
+    // pushes the superseded generation back over the one just published, and
+    // nothing corrects it. Local storage still ends up with this record: sync
+    // pulls it down as a server-originated change, which is the one write path
+    // that never enqueues a push.
     await _atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
       ..atKey = advertisementKey
       ..value = payload);
@@ -926,18 +657,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @override
   Future<NskeyAdvertisement?> currentPublic(
       String owner, String namespace) async {
-    // What this client minted itself, if anything — held in memory so the
-    // common case costs nothing. Falling through when it has minted *nothing*
-    // is the point: another of the owner's enrollments, or this one after a
-    // restart, holds no `_ownCurrent` entry while the advertisement sits on the
-    // owner's own atServer. Returning null here would report a published
-    // namespace as cold start, and a client that "fixed" that by minting would
-    // rotate the key out from under every peer that had already fetched it.
-    //
-    // The lookup below serves the owner's own advertisement exactly as it
-    // serves a peer's, signature check included — which is what makes the
-    // design's "one verify path, same-atSign and cross-atSign" true rather than
-    // aspirational.
+    // NOTE: falling through when this client has minted nothing is the point.
+    // Another of the owner's enrollments, or this one after a restart, holds
+    // no `_ownCurrent` entry while the advertisement sits on the owner's own
+    // atServer, and reporting a published namespace as a cold start invites a
+    // mint that rotates the key out from under every peer.
     final own = _ownCurrent[_scope(owner, namespace)];
     if (own != null) return own;
 
@@ -955,10 +679,6 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       if (value == null) return _staleOrNothing(cached);
       payload = value;
     } catch (_) {
-      // No advertisement: under eager publication that means the recipient has
-      // never used this namespace, which is the cold-start case. Keep any
-      // previously-fetched one rather than losing a working key to a blip —
-      // but only for as long as the grace allows.
       return _staleOrNothing(cached);
     }
 
@@ -970,34 +690,20 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// Reads [atKey] from local storage, falling back to the atServer when it is
   /// not held there.
   ///
-  /// Local first because [currentPublic] sits on the write path —
-  /// `CkManager.ensureCurrent` reaches it on every `put` — so a round trip by
-  /// default would break offline writes.
-  ///
-  /// The fallback is what makes it correct to publish the advertisement to the
-  /// atServer alone. Local storage is no longer where that record is written;
-  /// it arrives when sync pulls it down. Without the fallback, a client that
-  /// has just minted, or whose sibling enrollment minted a moment ago, reads
-  /// its own published namespace as a cold start for as long as that takes —
-  /// and a client that "fixed" a cold start by minting would rotate the key out
-  /// from under every peer that had already fetched it.
-  ///
-  /// What the atServer answers is filed locally on the way back, so a device
-  /// whose sync is disabled or paused pays the round trip once rather than on
-  /// every read.
-  ///
-  /// A general enough shape that it may belong on `AtClient`, most naturally as
-  /// an option on `GetRequestOptions` rather than a method of its own. Private
-  /// until a second caller wants it.
+  /// Local first because [currentPublic] sits on the write path, so a round
+  /// trip by default would break offline writes; the fallback is what keeps a
+  /// client that has just minted — or whose sibling enrollment minted a moment
+  /// ago — from reading its own published namespace as a cold start until sync
+  /// pulls the record down. What the atServer answers is filed locally on the
+  /// way back.
   Future<String?> _getLocalThenRemote(AtKey atKey) async {
     try {
       final local = await _atClient.get(atKey);
       if (local.value != null) return local.value as String;
     } on AtKeyNotFoundException {
-      // Absent locally is the ordinary state for a record this device has not
-      // synced yet, so it is a reason to ask the atServer rather than a
-      // failure. Both exception types, because the local keystore and the
-      // client's own validation raise different ones for the same absence.
+      // NOTE: absent locally is the ordinary state for a record this device
+      // has not synced, and the local keystore and the client's own validation
+      // raise different types for it.
     } on KeyNotFoundException {
       // As above.
     }
@@ -1011,22 +717,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// Files a value this client just fetched from the atServer into local
   /// storage, without offering it back to the atServer.
   ///
-  /// `cameFromServer: true` is the whole mechanism: it is the flag
-  /// `LocalSecondary._enqueueForSync` refuses on, so this write queues no
-  /// client→server push. An ordinary `put` here would re-create the defect the
-  /// minter's own local write was removed for — a queued entry carries the
-  /// key's *name*, so the push sends whatever local storage holds when it
-  /// drains, which can be a generation the atServer has already moved past.
+  /// `cameFromServer: true` is what keeps the write out of the client→server
+  /// sync queue: a queued entry carries the key's *name*, so a later drain
+  /// would send whatever local storage holds by then, which can be a generation
+  /// the atServer has already moved past.
   ///
-  /// **Our own atSign only.** A peer's advertisement is not ours to publish,
-  /// and a record written under its own name is exactly what a push would
-  /// offer; the shared-key path caches a peer's public key under
-  /// `cached:public:publickey@<peer>` for the same reason. For a peer the
-  /// [advertisementTtl] cache is the mechanism, and it is unchanged.
-  ///
-  /// Failure is logged and swallowed. This is an optimisation applied to a
-  /// read that already has its answer, so failing it would turn a working
-  /// fetch into a failed one.
+  /// **Our own atSign only** — a peer's advertisement is not ours to publish,
+  /// and for a peer the [advertisementTtl] cache is the mechanism. Failure is
+  /// logged and swallowed, since the read already has its answer.
   Future<void> _fileFetched(AtKey atKey, String value) async {
     if (atKey.sharedBy != _atClient.getCurrentAtSign()) return;
     try {
@@ -1065,44 +763,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       (await publishedRecord(owner, namespace))?.advertisement;
 
   /// What `(owner, namespace)` has published **on the atServer**, fetched with
-  /// both caches skipped, and the moment the atServer last stamped the record.
+  /// both caches skipped, and the atServer's own stamp on that record.
   ///
-  /// [currentPublic] answers a different question and must keep answering it
-  /// local-first: it is the sender's read, reached from `CkManager.ensureCurrent`
-  /// on every `put`, so a round trip there would sit on the write path and break
-  /// offline writes. This is the mint path's read, where the question is not
-  /// "what may I seal to" but "has another of this atSign's enrollments already
-  /// published a generation" — and a sibling's publication reaches local storage
-  /// only when sync gets round to it. That lag is the window in which a second
-  /// mint overwrites the first.
+  /// Null means the atServer says there is none; any other failure throws,
+  /// since a mint must not read an unreachable atServer as a cold start.
   ///
-  /// Both caches are skipped deliberately. `_ownCurrent` holds what *this*
-  /// client minted, and `_remote` what it fetched up to [advertisementTtl] ago;
-  /// neither can hold a generation a sibling published a moment ago, so a mint
-  /// that trusted either would be minting on a stale absence.
-  ///
-  /// `updatedAt` is the atServer's own stamp on the record, and not the
-  /// payload's `createdAt`, which the minting client's clock wrote — the two
-  /// are produced by different machines and comparing them is the trap this
-  /// design exists to avoid. It reads as *when this generation was minted* only
-  /// because [add] asserts the previous value back rather than taking a fresh
-  /// one. Null when the atServer served the record without one.
-  ///
-  /// Null means the atServer says there is none. Any other failure throws: a
-  /// mint must not read an unreachable atServer as a cold start, because that
-  /// is the reading that publishes a second key.
-  ///
-  /// ⚠️ **One exception, and only at this atSign's own address: an
-  /// advertisement that does not verify also reads as none.** For a peer's
-  /// address a failed verification is the substitution defence doing its job
-  /// and must propagate — sealing to a key nobody proved the peer minted is
-  /// the attack the signature exists to stop. For our own, the same failure
-  /// means the record we are responsible for is unusable, and the only client
-  /// that can replace it is this one. Throwing there left it unreplaceable by
-  /// anybody: both mint paths read through here, so a corrupt or hostile write
-  /// to our own advertisement could never be minted over. Returning null lets
-  /// the mint proceed and overwrite it, which is the whole point of holding
-  /// the key material.
+  /// ⚠️ **At this atSign's own address an advertisement that does not verify
+  /// also reads as none**, so a corrupt or hostile write can be minted over;
+  /// for a peer's address that failure propagates instead.
   Future<({NskeyAdvertisement advertisement, DateTime? updatedAt})?>
       publishedRecord(String owner, String namespace) async {
     final AtValue value;
@@ -1123,19 +791,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       advertisement = await verifier.verify(owner, value.value as String);
     } on Object catch (e) {
       if (owner != _atClient.getCurrentAtSign()) rethrow;
-      // Warning, not info: something wrote an advertisement to our own address
-      // that we cannot verify, and the next line replaces it. That is the
-      // right outcome and still worth a record of having happened.
       _logger.warning(
           'Our own advertisement at ${nskeyAdvertisementKey(owner, namespace)} '
           'does not verify ($e) — treating it as unpublished so a mint can '
           'replace it');
       return null;
     }
-    // Kept, because a verified fetch straight from the atServer is strictly
-    // fresher than whatever the sender-side cache holds: the next
-    // [currentPublic] for this scope answers from it instead of paying for a
-    // round trip of its own.
     _remote[_scope(owner, namespace)] =
         (advertisement: advertisement, fetchedAt: DateTime.now());
     return (advertisement: advertisement, updatedAt: value.metadata?.updatedAt);
@@ -1144,14 +805,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @override
   Future<NskeyDecapsulationKey?> privateHalf(
       String owner, String namespace, String nskeyKid) async {
-    // Memory first — this process minted it, or has already read it once.
     final held = _ownPrivates[_generation(owner, namespace, nskeyKid)];
     if (held != null) return held;
 
-    // Then the durable copy, which is what a restart or another of this
-    // atSign's enrollments actually has. `owner` is the nskey owner, and only
-    // this atSign's own privates are ever filed, so a request for a peer's
-    // private has nothing to find here and correctly returns null.
     if (owner != _atClient.getCurrentAtSign()) return null;
     final filed = await privateFiling?.read(namespace, nskeyKid);
     if (filed != null) {
@@ -1159,33 +815,20 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       return filed;
     }
 
-    // A generation of our own atSign that we do not hold: ask the other
-    // enrollments for it rather than failing forever. Fire-and-forget — the
-    // caller still gets its miss (and its typed error).
-    //
-    // ⚠️ **The asking side does not file.** This used to say "the answer is
-    // filed by the arrival path so a later read finds it", and there is no such
-    // arrival path mid-session: nothing subscribes to `receivedSecrets` to file
-    // an nskey private, and `NskeyPrivateFiling.filePending` runs at start.
-    // Whoever supplies `requestConveyance` owns waiting for the answer and
-    // filing it — `PqClientBootstrap` does, and without that the heal repaired
-    // the client only at its next start.
+    // NOTE: the asking side does not file. Whoever supplies `requestConveyance`
+    // owns waiting for the answer and filing it; nothing else does, so an ask
+    // wired without that repairs the client only at its next start.
     _askForMissingPrivate(namespace, nskeyKid);
     return null;
   }
 
   /// How this ring asks, supplied or derived.
   ///
-  /// Built on the miss rather than in the constructor, which is the whole
-  /// reason a default is possible at all: reaching the substrate eagerly would
-  /// construct it in every fixture that only ever reads. `forClient` is
-  /// per-client cached, so a ring that derives its own ask uses the **same**
-  /// `AtClientSecretSharing` the bootstrap holds rather than a rival one.
-  ///
-  /// Null when there is nowhere to file the answer. Asking without filing
-  /// leaves the reply in the in-memory secret store and repairs the client at
-  /// its next start rather than this one, which reads as a heal that worked
-  /// and did nothing.
+  /// Built on the miss rather than in the constructor, so a fixture that only
+  /// ever reads never constructs the substrate. Null when there is nowhere to
+  /// file the answer, since asking without filing leaves the reply in the
+  /// in-memory secret store and repairs the client at its next start rather
+  /// than this one.
   Future<void> Function(String namespace, String secretName)? get _ask {
     final supplied = _requestConveyance;
     if (supplied != null) return supplied;
@@ -1199,20 +842,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         logger: _logger);
   }
 
-  /// Whether a read miss on an own generation will broadcast a pull.
-  ///
-  /// The mechanism a test asserts instead of the substrate traffic: a ring
-  /// that answers false here cannot heal, however the rest of it is wired.
+  /// Whether a read miss on an own generation will broadcast a pull: a ring
+  /// that answers false cannot heal, however the rest of it is wired.
   @visibleForTesting
   bool get asksOnReadMiss => _ask != null;
 
   void _askForMissingPrivate(String namespace, String nskeyKid) {
     final ask = _ask;
     if (ask == null) return;
-    // One broadcast per generation per [askCooldown]: every conveyance of a
-    // synced backlog fails through here in a burst, and N identical requests
-    // buy nothing the first did not. Past the cooldown they do buy something
-    // — the first ask may have reached holders that could not serve it.
     final generation = _generation('own', namespace, nskeyKid);
     final asked = _askedConveyance[generation];
     if (asked != null && DateTime.now().difference(asked) < askCooldown) {
@@ -1225,8 +862,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       _logger.info('Asked the other enrollments for the nskey private '
           '$namespace:$nskeyKid; the answer is filed when a holder replies');
     }).catchError((Object e) {
-      // Clear the stamp so the next miss re-asks rather than waiting out a
-      // cooldown earned by a request that never went out.
+      // NOTE: clear the stamp, so the next miss re-asks rather than waiting out
+      // a cooldown earned by a request that never went out.
       _askedConveyance.remove(generation);
       _logger.info('Could not request the missing nskey private for '
           '$namespace:$nskeyKid, and the next read miss will ask again: $e');

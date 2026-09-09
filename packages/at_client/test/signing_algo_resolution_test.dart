@@ -10,10 +10,12 @@ import 'test_utils/mocks.dart';
 /// The signing algorithm is a fact about the enrollment's key material — you
 /// cannot sign ML-DSA with an RSA key — so the client must resolve it from
 /// the keyfile as an explicit init step, not as a side effect of building its
-/// own AtChops. The side-effect version had a hole: a client whose AtChops
-/// was injected (the auth path) never built one, so it signed the
-/// preference's rsa2048 default under an ML-DSA enrollment and every
-/// reconnect failed against the record-authoritative atServer.
+/// own AtChops.
+///
+/// A client whose AtChops is injected — the auth path — never builds one, so
+/// resolving there would leave it signing the preference's rsa2048 default
+/// under an ML-DSA enrollment and failing every reconnect against the
+/// record-authoritative atServer.
 void main() {
   final mockAtChopsKeys = MockAtChopsKeys();
 
@@ -39,8 +41,7 @@ void main() {
       'unit',
       preferences,
       remoteSecondary: MockRemoteSecondary(),
-      // Injected — so _createAtChops, whose keyfile read used to be the only
-      // place the algorithm was resolved, never runs.
+      // Injected, so _createAtChops never runs.
       // ignore: deprecated_member_use_from_same_package
       atChops: AtChopsImpl(mockAtChopsKeys),
       atKeysIo: await mlDsaKeyfile(atSign, enrollmentId),
@@ -66,12 +67,9 @@ void main() {
 
     // A keyfile with no typed entries at all — the flat-fields legacy shape.
     final io = InMemoryAtKeysIo();
-    // NB the preference above names the legacy era deliberately. A pqReady
-    // client holding a legacy enrollment does not "fall back" to rsa2048 — it
-    // RETROFITS, because the posture asks for a stronger authentication key
-    // than the enrollment holds and `retrofitIsDue` has no opt-out. That is a
-    // different behaviour with its own coverage; this test is about what the
-    // resolution answers when nothing is being upgraded.
+    // NOTE: the legacy posture above is deliberate — a pqReady client holding
+    // a legacy enrollment retrofits rather than falling back, which is a
+    // different behaviour.
     await io.write(atSign, AtKeys());
 
     final ac = await AtClientImpl.create(
@@ -99,10 +97,10 @@ void main() {
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
 
     final io = await mlDsaKeyfile(atSign, enrollmentId);
-    // Flat fields too, so this keyfile is the retrofitted shape: a legacy
+    // NOTE: the flat fields make this the retrofitted shape — a legacy
     // enrollment's RSA credentials beside the live enrollment's typed
-    // material. Without them toAtChops() throws and the two arms would
-    // differ by an exception rather than by which key was chosen.
+    // material. Without them toAtChops() throws and the arms differ by an
+    // exception rather than by which key was chosen.
     final stored = await io.read(atSign);
     stored
       ..apkamPublicKey = AtBytes.fromString(_flatApkamPublicKey)
@@ -128,13 +126,12 @@ void main() {
       enrollmentId: enrollmentId,
     ) as AtClientImpl;
 
-    // The first read threw, so nothing was recorded and the preference's
-    // rsa2048 stands as the algorithm — the documented, survivable fallback.
+    // The resolution read threw, so the preference's rsa2048 stands — the
+    // survivable fallback.
     expect(ac.signingAlgoType, SigningAlgoType.rsa2048);
 
-    // The keypair is a different question, and it is not survivable: the
-    // keyfile holds this enrollment's ML-DSA material, so serving the flat
-    // fields signs PKAM as the enrollment that owns them.
+    // The keypair is not survivable: serving the flat fields signs PKAM as the
+    // enrollment that owns them.
     final pkam =
         (ac.atChops as AtChopsImpl).atChopsKeys.atPkamKeyPair!.atPublicKey;
     expect(pkam.publicKey, isNot(_flatApkamPublicKey),
@@ -145,10 +142,10 @@ void main() {
 const _flatApkamPublicKey = 'ZmxhdC1hcGthbS1wdWJsaWM=';
 const _flatApkamPrivateKey = 'ZmxhdC1hcGthbS1wcml2YXRl';
 
-/// Fails the algorithm-resolution read and delegates every other — the
-/// transient keyfile failure `_resolveSigningAlgoFromKeyMaterial` catches and
-/// logs, leaving nothing recorded for a later reader to consult. The read
-/// before it decides the enrollment at construction and has to succeed.
+/// Fails the algorithm-resolution read and delegates every other.
+///
+/// The read before it decides the enrollment at construction and has to
+/// succeed, so it is the second read that throws.
 class _FailsFirstReadAtKeysIo extends WrittenAtKeysIo {
   _FailsFirstReadAtKeysIo(this._delegate);
 

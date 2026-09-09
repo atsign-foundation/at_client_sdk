@@ -1,15 +1,10 @@
 /// A checkpoint has to survive the key material an enrolment actually mints.
 ///
 /// `enroll` saves one so an interrupted enrolment can resume, and the material
-/// it saves is whatever the enrolment minted. Once that is TYPED — which it is
-/// under any posture whose `authenticationKeyAlgorithm` is post-quantum, and
-/// so under the shipped default — `AtKeys.toJson` refuses a document with no
-/// `atsign`, because such a document does not say whose keys it holds.
-///
-/// This went unnoticed because the only post-quantum enrolment test drives
-/// `sendEnrollRequest`, which never reaches a checkpoint: the save lives in
-/// `enroll`. So `at_activate enroll --posture pqActive` threw here, on a path
-/// nothing exercised.
+/// it saves is whatever the enrolment minted. Once that material is typed — as
+/// it is under any posture whose `authenticationKeyAlgorithm` is post-quantum
+/// — `AtKeys.toJson` refuses a document with no `atsign`, because such a
+/// document does not say whose keys it holds, so the checkpoint supplies one.
 library;
 
 import 'dart:io';
@@ -88,9 +83,8 @@ void main() {
   });
 
   test('legacy flat material still round-trips', () async {
-    // The negative control. Flat material never needed an atSign — it takes
-    // AtKeys.toJson's legacy branch — so a change made for typed material must
-    // not have disturbed it.
+    // The negative control: flat material takes AtKeys.toJson's legacy branch
+    // and needs no atSign.
     final checkpoint = EnrollmentCheckpoint(atSign);
     final response = AtEnrollmentResponse(enrollmentId, EnrollmentStatus.pending)
       ..atAuthKeys = (AtKeys()

@@ -51,8 +51,9 @@ import 'package:test/test.dart';
 /// **Recycle the virtualenv before believing a run.** The signing root
 /// survives a re-run against the same container — nothing deletes it, and the
 /// mint stands down the moment it reads one — while the private that matched
-/// it died with the last run's process. The precondition below fails loudly rather than skipping, since a
-/// silently-skipped root step is exactly what this file exists to catch.
+/// it died with the last run's process. The precondition below fails loudly
+/// rather than skipping, since a silently-skipped root step is exactly what
+/// this file exists to catch.
 void main() {
   late String atSign;
   late AtClient owner;
@@ -163,8 +164,7 @@ void main() {
     File(pathFor('e1')).copySync(pathFor('e1c'));
 
     final manager = await selfRetrofit(
-      // Mode B, explicitly: these rows test the PQ retrofit, and the
-      // parameter default is the rollout-window RSA mode.
+      // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
       // Its own store location: the owner client holds the atSign's, and a
@@ -186,8 +186,6 @@ void main() {
     expect(client.enrollmentId, isNot(session.enrollmentId));
     expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65);
 
-    // Checked, not assumed: if the atServer trimmed the grant, everything
-    // below would be testing the scoped path while reading green.
     final granted = (await client.enrollmentService!.fetchEnrollmentRequests())
         .where((e) => e.enrollmentId == client.enrollmentId)
         .firstOrNull
@@ -196,16 +194,14 @@ void main() {
         reason: 'the retrofit must have carried * and __manage across, or '
             'the root step below is not being exercised at all');
 
-    // The row: the root exists because the retrofit created it. Nothing in
-    // this test called mintIfAbsent.
+    // Nothing in this test called mintIfAbsent: the root exists because the
+    // retrofit created it.
     final root = await publishedRoot(client);
     expect(root, isNotNull,
         reason: 'a privileged retrofit publishes the atSign\'s signing root '
             'in-flow: it is auto-approved by the atServer with no approver '
             'client in the loop, so nothing else would ever convey it one');
 
-    // And it holds the matching private, in the same keyfile the legacy
-    // material lives in.
     final held =
         await PqSigningRoot(client, keysIo: session.atKeysIo).privateHalf(atSign);
     expect(held, isNotNull,
@@ -214,8 +210,6 @@ void main() {
             'enrollment on the atSign, and D1 builds no rotation to replace '
             'it with');
 
-    // Anchored, verified against the published record rather than an
-    // in-memory copy of it.
     final sharing = AtClientSecretSharing.forClient(client);
     expect(await PqSigningChain(client).readRootLink(client.enrollmentId!),
         isNotNull);
@@ -239,8 +233,7 @@ void main() {
     // original — that is what makes it a clone rather than another device.
     final cloneSession = await legacySession('e1c');
     final manager = await selfRetrofit(
-      // Mode B, explicitly: these rows test the PQ retrofit, and the
-      // parameter default is the rollout-window RSA mode.
+      // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: cloneSession,
       // Its own store location, as a clone on another host has: the owner
@@ -268,8 +261,6 @@ void main() {
             'enrollment id, which is the one defect the row exists to '
             'exclude');
 
-    // The row's first half: two clones of one keyfile, two distinct
-    // enrollments. Read off the atServer's own list rather than inferred.
     final approved = (await clone.enrollmentService!.fetchEnrollmentRequests())
         .where((e) => e.appName == 'rf-e1' && e.deviceName == 'rf-e1-$runId')
         .map((e) => e.enrollmentId)
@@ -279,29 +270,21 @@ void main() {
             'pre-PQ keyfile becomes its own enrollment, which is what lets '
             'an owner tell one device from another and revoke them apart');
 
-    // The second half: it did NOT mint a second root.
     expect(await publishedRoot(clone), rootBefore,
         reason: 'byte-identical. Two roots would be unrecoverable rather '
             'than untidy — half this atSign\'s enrollments would chain to a '
             'root the other half rejected, and nothing reconciles that');
 
-    // And its own keyfile has no root private of its own to show for it.
     final cloneRoot = PqSigningRoot(clone, keysIo: cloneSession.atKeysIo);
     expect(await cloneRoot.privateHalf(atSign), isNull,
         reason: 'the clone\'s keyfile is a copy taken before B1.1 ran, so it '
             'never held one — this is the precondition for the pull, not an '
             'assertion about it');
 
-    // The pull. The holder is B1.1's retrofitted enrollment; the atServer
-    // carries both legs, so nothing needs the two clients up simultaneously
-    // beyond this process.
-    //
-    // Each step is driven rather than waited for. Client start runs the same
-    // sequence fire-and-forget, so a test that raced it would be timing its
-    // own luck; driving it also pins the ORDER the start path depends on —
-    // bind before asking (a request sent under a kpid this client is about to
-    // stop using can never be answered), hydrate before sweeping (a sweep
-    // consumes the requests it cannot yet answer).
+    // The pull, driven step by step rather than waited for, in the order the
+    // start path depends on: bind before asking (a request sent under a kpid
+    // this client is about to stop using can never be answered), hydrate
+    // before sweeping (a sweep consumes the requests it cannot yet answer).
     final cloneSharing = AtClientSecretSharing.forClient(clone);
     await collectConveyedKeyMaterial(clone, cloneSession.atKeysIo);
     final asked = await cloneRoot.requestPrivateIfAbsent(
@@ -314,18 +297,14 @@ void main() {
             'enroll:listns fan-out; asking the namespace\'s key packages is '
             'the only route left to an enrollment that missed the conveyance');
 
-    // The holder is B1.1's retrofitted enrollment — the one that minted the
-    // root and advertised the key package this request was sealed to.
     final holder = privileged;
     final holderRoot = PqSigningRoot(holder, keysIo: privilegedKeysIo);
     final holderSharing = AtClientSecretSharing.forClient(holder);
 
-    // Hydrate BEFORE the holder sweeps, which is the order client start uses
-    // and the order this has to be driven in. A sweep consumes and deletes
-    // the requests it finds and answers them out of this store, so a holder
-    // that hydrates afterwards destroys precisely the request it was meant to
-    // serve — and the requester, having spent its broadcast, waits for an
-    // answer that no longer has anything to arrive from.
+    // NOTE: hydrate BEFORE the holder sweeps — a sweep consumes and deletes
+    // the requests it finds, so a holder that hydrates afterwards destroys
+    // precisely the request it was meant to serve, and the requester, having
+    // spent its broadcast, waits on an answer that can no longer come.
     expect(await holderRoot.hydrateStore(holderSharing, namespace), isTrue,
         reason: 'a holder answers out of its in-memory secret store, which a '
             'restart empties — without this re-prime at start the pull above '
@@ -357,7 +336,6 @@ void main() {
             'also proves what arrived is the real key rather than something '
             'a holder happened to send');
 
-    // Now it can anchor itself, under its own distinct enrollment id.
     expect(
         await PqSigningChain(clone).publishOwnRootLink(
             isFullyPrivileged: () async => true,
@@ -377,12 +355,9 @@ void main() {
 
     await mintLegacyEnrollment(label: 'e2', namespaces: {namespace: 'rw'});
 
-    // The escalation arm first: a scoped parent must not be able to hand
-    // itself the grants that would let it mint or hold the root.
     await expectLater(
         selfRetrofit(
-          // Mode B, explicitly: these rows test the PQ retrofit, and the
-          // parameter default is the rollout-window RSA mode.
+          // Explicit: the parameter default is the rollout-window RSA mode.
           signingAlgo: SigningAlgoType.mldsa65,
           session: await legacySession('e2'),
           preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
@@ -397,11 +372,9 @@ void main() {
             'fully privileged enrollment, and the retrofit would be a '
             'privilege-escalation verb rather than an upgrade');
 
-    // The scoped retrofit itself succeeds.
     final session = await legacySession('e2');
     final manager = await selfRetrofit(
-      // Mode B, explicitly: these rows test the PQ retrofit, and the
-      // parameter default is the rollout-window RSA mode.
+      // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
@@ -427,7 +400,6 @@ void main() {
             'granted this one * and __manage too, the two rows would be the '
             'same case tested twice');
 
-    // The row: the root is untouched and this enrollment holds none of it.
     expect(await publishedRoot(scoped), rootBefore);
     final scopedRoot = PqSigningRoot(scoped, keysIo: session.atKeysIo);
     expect(await scopedRoot.privateHalf(atSign), isNull);

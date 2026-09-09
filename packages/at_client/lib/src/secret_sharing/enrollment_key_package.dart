@@ -21,54 +21,20 @@ import 'package:meta/meta.dart' show experimental;
 /// Builds the signed key package that rides an `enroll:request`, and records
 /// its private half in the [AtKeys] the enrollment will persist.
 ///
-/// Pass the result to `AtEnrollmentRequest.metadataBuilder`. It runs once, at
-/// the only moment anything can ride the *creating* request: the APKAM keypair
-/// exists (at_auth has just generated it) and the enrollment record does not
-/// yet.
+/// Pass the result to `AtEnrollmentRequest.metadataBuilder`; it decides the
+/// key the enrollment advertises until its first startup, after which
+/// `KeyPackageMinting` reconciles `metadata.keyPackage` against the configured
+/// list. The KEM private half is added to the [AtKeys] at_auth flushes into the
+/// app's [AtKeysIo] on approval, landing in the same keyfile as the APKAM key,
+/// and the envelope omits the enrollment id because it is signed before the
+/// atServer assigns one.
 ///
-/// ⚠️ **The record's metadata is not write-once.**
-/// `KeyPackageMinting` amends `metadata.keyPackage` by the
-/// enrollment's own self-only `enroll:update`, so a package can gain a key and
-/// retire one. What this function still uniquely decides is the package the
-/// enrollment is *created* with — and so the key it advertises for the window
-/// before its first startup.
-///
-/// Two properties this relies on, both verified rather than assumed:
-///
-/// - **The KEM private half survives.** The material is added to the very
-///   `AtKeys` at_auth carries forward and flushes into the app's `AtKeysIo` on
-///   approval, so the private half lands in the same keyfile as the APKAM key.
-///   Publishing an encapsulation target whose private half nobody kept would
-///   leave every sender sealing to a key that can never be opened.
-/// - **The package needs no enrollment id.** It is signed before the atServer
-///   assigns one, and the payload never carried it — the enrollment record
-///   does, and a reader injects it back. So the envelope omits the claim
-///   rather than guessing at it; a verifier's authority is the signature
-///   checking out against that record's own `_apsk`.
-///
-/// [signingAlgo] names the algorithm of the APKAM keypair the handed
-/// `AtKeys` carries, and therefore how the envelope is signed: `rsa2048`
-/// (the default, today's OTP flow) or `mldsa65` for a self-retrofit, whose
-/// freshly minted ML-DSA keypair rides the same flat fields as base64 of
-/// the raw keys.
-///
-/// [keyEstablishmentAlgo] is the KEM the enrollment's encapsulation key is
-/// minted under — pass the **first** of
-/// `AtClientPreference.keyEstablishmentAlgorithms`, the primary. Singular
-/// here because an enrollment is created holding one key; the rest of the
-/// configured list is minted at the client's first startup. It is an explicit
-/// parameter rather than something read from a preference because this
-/// function has no client and cannot have one: it runs before the enrollment
-/// exists.
-///
-/// ⚠️ **This used to say "treat it as decided at this call", because the only
-/// later route into `metadata.keyPackage` was an `enroll:update` no client
-/// sent. One does as of 2026-08-19.** `KeyPackageMinting` reconciles the
-/// package against the configured list at every startup, so what this decides
-/// is the enrollment's *initial* key — the one it advertises until its first
-/// start, and the one a deployment running the default single-entry list keeps
-/// for good.
-///
+/// [signingAlgo] is the algorithm of the APKAM keypair the handed [AtKeys]
+/// carries, and therefore how the envelope is signed. [keyEstablishmentAlgo]
+/// is the KEM the encapsulation key is minted under: pass the **first** of
+/// `AtClientPreference.keyEstablishmentAlgorithms`, since an enrollment is
+/// created holding one key and the rest of that list is minted at the client's
+/// first startup.
 @experimental
 Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
   String atSign, {
@@ -104,17 +70,17 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
           'Supported: ${SecretSharingAlgos.keyAlgos}');
     }
 
-    // The SEED is what is filed, not the secret key. They are the same 32
-    // bytes for X-Wing, but ML-KEM's secret key is an expanded decapsulation
-    // key that nothing turns back into a public half — a keyfile holding one
-    // could never recover the package it was filed for.
+    // NOTE: the SEED is filed, not the secret key. They are the same bytes for
+    // X-Wing, but ML-KEM's secret key is an expanded decapsulation key that
+    // nothing turns back into a public half, so a keyfile holding one could
+    // never recover the package it was filed for.
     final Uint8List seed = kem.newSeed();
     final pair = await kem.keyPairFromSeed(seed);
     final String pub = base64Encode(pair.publicKey);
     final String kpid = PackageKey.computeKid(pub);
     final DateTime now = createdAt ?? DateTime.now().toUtc();
 
-    // Both halves share the kpid as their keyId, which is what ties the
+    // NOTE: both halves share the kpid as their keyId, which is what ties the
     // private half back to the package a sender sealed to.
     keys.addKey(CryptographicMaterial(
       keyId: kpid,
@@ -143,26 +109,19 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
     );
 
     return {
-      // toJson, not the envelope itself: this map is `EnrollParams.metadata`,
-      // which is JSON-encoded onto the wire and read back as a Map by every
-      // consumer. A Dart object here survives `jsonEncode` only because its
-      // default encodable calls `toJson` for you, and reaches every in-process
-      // reader as something they cannot index.
+      // NOTE: toJson, not the envelope itself — this map is
+      // `EnrollParams.metadata`, read back as a Map by every consumer, and a
+      // Dart object here reaches every in-process reader as something they
+      // cannot index.
       'keyPackage': signEnvelope(
         payload,
         type: EnvelopeType.keyPackage,
-        // One key: this signs a package for an enrollment that does not exist
-        // yet, so the only keypair in play is the one just minted for it.
-        //
-        // ⚠️ **Whichever key `_apsk` will advertise must be the one that signs
-        // here.** A peer verifies this package against that record before
-        // sealing any secret to the enrollment, so the two disagreeing means
-        // the enrollment is created and then receives nothing. Once the
-        // enrollment owns a signing key, that is the key on both sides: it is
-        // what signs what the enrollment attests to, and a key package is
-        // exactly such an attestation. The APKAM key signs here only while
-        // the enrollment has no signing key of its own, which is also the only
-        // time `_apsk` names it.
+        // NOTE: whichever key `_apsk` will advertise must be the one that signs
+        // here. A peer verifies this package against that record before sealing
+        // any secret to the enrollment, so the two disagreeing means the
+        // enrollment is created and then receives nothing. The APKAM key signs
+        // only while the enrollment has no signing key of its own, which is
+        // also the only time `_apsk` names it.
         keys: [
           if (advertisedSigningKey case final signing?)
             ApkamSigningKeys(

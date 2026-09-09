@@ -105,17 +105,15 @@ void main() {
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
       // create atclient instance
-      // Direct construction: no compiler names this site.
       var atClientPreference = AtClientPreference(posture: PqPosture.legacy)
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort;
 
-      // The enrollment id travels with the signer, or this client authenticates
-      // over LEGACY pkam - a bare `pkam:` naming no enrollment. This atSign was
-      // onboarded through enroll:request and so has no legacy credential at
-      // all, and the atServer refuses that authentication by name. Passing it
-      // is what `AtOnboardingServiceImpl._initAtClient` does on both of its
-      // paths; this site is hand-built and had to be told.
+      // NOTE: the enrollment id has to travel with the signer, or this client
+      // authenticates over LEGACY pkam - a bare `pkam:` naming no enrollment.
+      // This atSign was onboarded through enroll:request and so has no legacy
+      // credential at all, and the atServer refuses that authentication by
+      // name.
       final atClientManager = await AtClientManager(apkamAtSign)
           .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
               atChops: atAuth.atChops,
@@ -134,18 +132,6 @@ void main() {
       // this enrollment holds `*:rw` and `__manage:rw` and still does not.
       // Only a connection with no enrollment id at all reaches the unfiltered
       // owner view, which today means CRAM.
-      //
-      // This assertion used to read `contains(...), true` and passed because
-      // the client was built without its enrollment id and so authenticated
-      // as the owner by accident. Fixing that authentication is what exposed
-      // it.
-      //
-      // ⚠️ The authoritative pin for the filtering rule is server-side, in
-      // at_server's scan_verb_test.dart - including the discriminating case
-      // that a CRAM connection DOES see these keys. This pair is the
-      // CONSUMER's view of the same rule, kept here because the change is
-      // visible to clients. If the two ever disagree, at_server's is the one
-      // that decides.
       final enrollmentKey =
           '${atOnboardingResponse.enrollmentId}.new.enrollments.__manage$apkamAtSign';
       expect(scanResult?.contains(enrollmentKey), false,
@@ -984,7 +970,6 @@ void main() {
 /// Only ever handed to a [RemoteSecondary], which opens no local store, so
 /// this carries no storage path.
 AtClientPreference getClient2Preferences() {
-  // Direct construction: no compiler names this site.
   return AtClientPreference(posture: PqPosture.legacy)
     ..rootDomain = 'vip.ve.atsign.zone'
     ..rootPort = TestUtils.rootServerPort;

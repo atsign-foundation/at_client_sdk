@@ -139,10 +139,9 @@ void main() {
         clauses: ['a scoped E2 does not request the root at all'],
       );
 
-      // The reason the decline gives, which the return value cannot carry:
       // 0 is equally what an enrollment already holding the root returns and
-      // what one with no enrollment id returns, so an operator asking why a
-      // device never obtained it has only the log to tell the three apart.
+      // what one with no enrollment id returns, so the reason for a decline
+      // reaches an operator only through the log.
       provenIn(
         'packages/at_client/test/pq_signing_root_test.dart',
         'a restricted enrollment says why it is not asking',
@@ -155,11 +154,10 @@ void main() {
         clauses: ['logging that it is not entitled to hold it'],
       );
 
-      // The namespaced half of the row, and it is a different guarantee from
-      // the root: the root is withheld from a scoped enrollment entirely,
-      // while nskey privates are FILTERED to what it was granted. Cited at
-      // both layers deliberately — the sender is asserted not to send across
-      // the boundary, and the atServer is asserted to hold it anyway.
+      // The namespaced half of the row is a different guarantee from the root:
+      // the root is withheld from a scoped enrollment entirely, while nskey
+      // privates are FILTERED to what it was granted. Cited at both layers
+      // deliberately — the sender and the atServer each hold that boundary.
       provenIn(
         'packages/at_client/test/secret_sharing_approver_test.dart',
         'only secrets whose namespace the recipient enrollment is',
@@ -197,11 +195,10 @@ void main() {
       //       enrollment's typed material, and an authenticated verb over its
       //       own connection answers.
       //
-      // The row exists because B1.1's "PQ auth works" was true in the field
-      // while the enrollment could not run a verb: at_auth authenticates on its
-      // own connection, before the client exists, and every verb afterwards
-      // runs over a different one. Both retrofit ROUTES are cited, because the
-      // property is per-route and was proven for one while false for the other.
+      // at_auth authenticates on its own connection, before the client exists,
+      // and every verb afterwards runs over a different one — so "PQ auth
+      // works" is no evidence that the enrollment can run a verb. The property
+      // is per-route, which is why both retrofit ROUTES are cited.
       provenIn('tests/at_functional_test/test/pq_retrofitted_scope_test.dart',
           'UC-B1.4 · a retrofitted scoped enrollment runs an authenticated verb',
           proves:

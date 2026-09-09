@@ -10,17 +10,12 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 import 'package:at_commons/at_commons.dart' show AtBytes, AtRootDomain;
 import 'package:test/test.dart';
 
-/// The PQ-native activation stamp, at the unit level: what
-/// `makeActivationPqNative` puts on an `AtOnboardingRequest`, exercised by
-/// invoking the metadata builder it installs. The live CRAM onboard is
-/// `tests/at_functional_test/test/pq_native_onboard_live_test.dart`; this
-/// file pins the request-side plumbing that run cannot vary per arm.
+/// What `makeActivationPqNative` stamps on an `AtOnboardingRequest`, exercised
+/// through the metadata builder it installs.
 void main() {
   const atSign = '@alice';
 
-  /// The AtKeys the builder will be handed at onboard time: an ML-DSA APKAM
-  /// keypair in the flat fields, base64 of the raw keys — the shape the
-  /// PQ-native activation mints.
+  /// An ML-DSA APKAM keypair in AtKeys' flat fields, base64 of the raw keys.
   Future<(InMemoryAtKeysIo, String)> mlDsaKeys() async {
     final pair = await MlDsa65PureDartAlgo().generateKeyPair();
     final public = base64Encode(pair.publicKey);
@@ -32,18 +27,18 @@ void main() {
     return (io, public);
   }
 
-  // rsa2048 deliberately: every test below asserts the request comes back
-  // carrying mldsa65, and a fixture that started there would be green whether
-  // or not `makeActivationPqNative` moved it.
+  // NOTE: rsa2048 deliberately — every test below asserts the request comes
+  // back carrying mldsa65, and a fixture that started there would be green
+  // whether or not `makeActivationPqNative` moved it.
   AtOnboardingRequest request() => AtOnboardingRequest(atSign,
       signingAlgoType: SigningAlgoType.rsa2048,
       rootDomain: AtRootDomain('vip', 64));
 
   test('at pqActive the activation carries an ML-DSA-65 signing key', () async {
-    // The algorithm the enrollment will KEEP. Minting rsa2048 here would leave
-    // the first start finding ML-DSA missing, minting a second keypair and
-    // republishing `_apsk` — orphaning the key this activation advertised and
-    // breaking any link conveyed against that exact value.
+    // NOTE: this must mint the algorithm the enrollment will KEEP. Minting
+    // rsa2048 leaves the first start finding ML-DSA missing, minting a second
+    // keypair and republishing `_apsk` — orphaning the key this activation
+    // advertised and breaking any link conveyed against that exact value.
     final r = request();
     await makeActivationPqNative(r,
         atSign: atSign,
@@ -72,11 +67,10 @@ void main() {
   });
 
   test('the stamped key package verifies against the SIGNING key', () async {
-    // Ruling 98.3 as amended: a peer resolves this enrollment's `_apsk` to
-    // verify its key package before sealing anything to it, and `_apsk` names
-    // the signing key. Signing the package with the APKAM key instead would
-    // activate the atSign successfully and leave it unable to receive a
-    // secret from anyone.
+    // NOTE: `_apsk` names the signing key, and a peer resolves it to verify
+    // this key package before sealing anything to the enrollment. Signing the
+    // package with the APKAM key instead activates the atSign successfully and
+    // leaves it unable to receive a secret from anyone.
     final (io, apkamPublic) = await mlDsaKeys();
     final r = request();
     await makeActivationPqNative(r,
@@ -90,9 +84,6 @@ void main() {
         signerPublicKey: r.advertisedSigningKey!.publicKey,
         expecting: EnvelopeType.keyPackage);
 
-    // The differential. Without it this passes for a build that never moved
-    // the signer, since a package signed by the APKAM key is still a validly
-    // signed package — it just verifies against the wrong record.
     await expectLater(
       () => verifyEnvelope(envelope,
           signerPublicKey: jsonEncode(apskAdvertisement(keys: [
@@ -112,9 +103,9 @@ void main() {
   });
 
   test('the request and the builder carry the SAME keypair', () async {
-    // The failure this function exists to prevent, in its second form: a
-    // record naming one key and a package signed by another verifies against
-    // neither, and nothing says so until a peer silently declines to seal.
+    // NOTE: a record naming one key and a package signed by another verifies
+    // against neither, and nothing says so until a peer silently declines to
+    // seal.
     final (io, _) = await mlDsaKeys();
     final r = request();
     await makeActivationPqNative(r,

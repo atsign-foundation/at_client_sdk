@@ -76,9 +76,9 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
   void _handleSubmit() {
     final normalizedAtSign = _normalizedAtSignForSubmit();
     if (normalizedAtSign != null) {
-      // This dialog collects an atSign and a root domain; it does not collect a
-      // crypto position, and the field stays settable so a caller that has one
-      // states it on the request this returns.
+      // NOTE: [AtOnboardingRequest] requires a crypto position and this dialog
+      // collects none, so it names rsa2048; the field stays settable, and a
+      // caller with its own sets it on the request returned here.
       AtOnboardingRequest request = AtOnboardingRequest(
         normalizedAtSign,
         signingAlgoType: SigningAlgoType.rsa2048,

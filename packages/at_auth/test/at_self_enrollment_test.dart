@@ -384,7 +384,7 @@ void main() {
   });
 
   group('an enrollment that owns a signing key from birth', () {
-    // Ruling 98: rollout 1 moves the AUTHENTICATION key to ML-DSA and mints a
+    // Rollout 1 moves the AUTHENTICATION key to ML-DSA and mints a
     // fresh RSA-2048 SIGNING key, which is what `_apsk` advertises. The two
     // keys have different audiences — only the atServer verifies the auth key
     // and it is the operator's own, while every peer verifies the signing key
@@ -481,13 +481,6 @@ void main() {
   /// `primary` and answers a bare `pkam:` as it, so an `enroll:request` from
   /// such a connection is a retrofit of `primary` and is approved outright.
   /// The client therefore never approves its own request.
-  ///
-  /// ⚠️ **This group pinned the opposite until 2026-09-08**, when the
-  /// client's self-approval was removed after a live run showed the atServer
-  /// answering `approved`: it used to send a symmetric key wrapped to the
-  /// atSign's own encryption public key purely so it could approve itself
-  /// when the answer came back `pending`, and `pending` then had two causes
-  /// with two answers. It now has one answer whatever the session names.
   group('a client holding no enrollment does not approve its own request', () {
     late final AtEncryptionKeyPair encryptionKeyPair;
     late final String selfEncryptionKey;
@@ -608,9 +601,8 @@ void main() {
     });
 
     /// A `pending` answer means an atServer that does not auto-approve, which
-    /// this client does not support. It is denied and thrown whatever the
-    /// session names — the two arms that used to differ here now do not,
-    /// which is what removing the self-approval means.
+    /// this client does not support: it is denied and thrown whatever the
+    /// session names.
     test('a pending answer is denied and thrown, whatever the session names',
         () async {
       final (mock, session) = await fixture(enrollmentId: 'legacy-1');

@@ -107,25 +107,12 @@ class EnrollParams {
   String? apkamPublicKeySignature;
 
   /// Opaque, additive metadata the server stores verbatim on the enrollment
-  /// record. Carries the enrollment's key package (`metadata.keyPackage`) for
-  /// the secret-sharing substrate; the server has no opinion on its contents.
+  /// record, carrying the enrollment's key package (`metadata.keyPackage`)
+  /// for the secret-sharing substrate.
   ///
-  /// Which callers get it back is **not uniform, deliberately**.
-  /// `enroll:listns` returns it, and `enroll:fetch` returns it to any caller
-  /// its own gate admits. `enroll:list` returns it to a CRAM connection, to a
-  /// holder of `__manage:rw`, and to a caller holding no `__manage` at all —
-  /// that last one is given its own record whole.
-  ///
-  /// ⚠️ **The one caller it is withheld from is a `__manage:r` holder, and
-  /// not in the shape you would guess: it gets no metadata even for its OWN
-  /// record.** A read-only administrator cannot approve, so `enroll:list`
-  /// hands it the roster projection over the whole map, its own entry
-  /// included. Holding *less* privilege therefore discloses *more* of your own
-  /// record, and "may read the roster" is not "may read a key package".
-  ///
-  /// So `enroll:fetch` is more permissive than `enroll:list` on this field,
-  /// for exactly that caller. The atServer has a test pinning the
-  /// disagreement so it is not "fixed" in either direction.
+  /// Not every reader gets it back: `enroll:listns` and `enroll:fetch` return
+  /// it, and so does `enroll:list` except to a `__manage:r` holder, which is
+  /// given the roster projection over every record including its own.
   Map<String, dynamic>? metadata;
 
   List<EnrollmentStatus>? enrollmentStatusFilter;

@@ -5,10 +5,8 @@ import 'package:at_auth/at_auth.dart' show KeyEntryStatus, publicKeyKidOfBase64;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:meta/meta.dart' show experimental;
 
-/// Re-exported so that the three records advertising keys name one type for
-/// one field. It lives in at_auth because at_auth is the lower package and the
-/// `_apsk` advertisement composed there carries the same `status` — the same
-/// reason `publicKeyKid` lives there rather than here.
+/// Re-exported so that every record advertising keys names one type for the
+/// `status` field.
 export 'package:at_auth/at_auth.dart' show KeyEntryStatus;
 
 /// One public key advertised in a [KeyPackage].
@@ -28,8 +26,7 @@ class PackageKey {
   /// Whether this key is still offered for new operations — an open token,
   /// see [KeyEntryStatus].
   ///
-  /// Ask [offeredForNewOperations] rather than comparing the token: that is
-  /// the decision this field exists for on the sender's side, and it answers
+  /// Ask [offeredForNewOperations] rather than comparing the token: it answers
   /// correctly for a token this build has never heard of.
   final KeyEntryStatus status;
 
@@ -44,9 +41,7 @@ class PackageKey {
   /// A key held as raw material rather than as the base64 an advertisement
   /// carries — what a freshly minted KEM keypair hands back.
   ///
-  /// The [kid] this derives is identical to [publicKeyKid] over the same bytes,
-  /// because [computeKid] decodes before hashing; a caller that has bytes and a
-  /// caller that has text arrive at the same id.
+  /// Derives the same [kid] as the base64 constructor over the same bytes.
   PackageKey.fromBytes({
     required String use,
     required String alg,
@@ -55,23 +50,14 @@ class PackageKey {
   }) : this(use: use, alg: alg, pub: base64Encode(pub), status: status);
 
   /// The key material [pub] encodes.
-  ///
-  /// Every consumer that hands the key to a KEM wants the material — an
-  /// encapsulation is over bytes — while the wire carries base64. Decoding once
-  /// here rather than at each call site is the same reasoning that puts
-  /// [publicKeyKidOfBase64] beside `publicKeyKid`: a key decoded in two places
-  /// is a key that can be decoded two ways.
   late final Uint8List pubBytes = base64Decode(pub);
 
   /// First 8 bytes, hex-encoded, of the SHA-256 of the public key material,
   /// for a [pub] held as base64 — which is how a key package carries one.
   ///
-  /// Delegates to at_auth's [publicKeyKidOfBase64], the one derivation in the
-  /// tree: the `_apsk` advertisement, a key package and an nskey
-  /// advertisement all spell an entry the same way, and a kid computed two
-  /// ways is a verification failure with nothing to say for itself — both
-  /// sides compile, and the mismatch surfaces only as an envelope that will
-  /// not verify, or a sender sealing to a kid nobody listens on.
+  /// Delegates to at_auth's [publicKeyKidOfBase64] so that every record
+  /// advertising a key derives its id one way; a kid computed two ways
+  /// surfaces only as an envelope that will not verify.
   static String computeKid(String pub) => publicKeyKidOfBase64(pub);
 
   /// Whether a sender may seal to this key — see
@@ -81,13 +67,9 @@ class PackageKey {
   bool get offeredForNewOperations =>
       KeyEntryStatus.offersNewOperations(status);
 
-  /// `status` is emitted for any key that is not active and omitted for one
-  /// that is, because absent already means [KeyEntryStatus.active] and every
-  /// record written before rotation existed says it that way. Emitting the
-  /// default on every entry would move the bytes of every advertisement in the
-  /// protocol to state what their absence already states. Whatever token is
-  /// emitted is the one that was read: an older build republishing a record
-  /// must not weaken what its owner said about a key.
+  /// `status` is omitted for an active key, because its absence already means
+  /// [KeyEntryStatus.active]. Whatever token was read is emitted unchanged, so
+  /// that republishing a record cannot weaken what its owner said about a key.
   Map<String, Object?> toJson() => {
         'kid': kid,
         'use': use,
@@ -130,10 +112,9 @@ class PackageKey {
 /// published as ordinary at-keys. Per the ratified design the advertised key
 /// package is wrapped in an APKAM-signed envelope by its generating enrollment
 /// and verified against that enrollment's `_apsk`, so the encapsulation target
-/// is authenticated rather than merely server-vouched. The signed form is
-/// produced by `KeyPackageRegistration.signedKeyPackagePayload` and checked by
-/// [VerbEnrollmentDirectory]; a package that does not verify, or that is signed
-/// by an enrollment other than the one advertising it, is not sealed to.
+/// is authenticated rather than merely server-vouched. A package that does not
+/// verify, or that is signed by an enrollment other than the one advertising
+/// it, is not sealed to.
 ///
 /// [toJson] / [fromPayload] are the **inner** payload — the value stored at
 /// `metadata.keyPackage` is that payload wrapped in the signed envelope.
@@ -159,22 +140,13 @@ class KeyPackage {
   /// The sealing suites this package's holder can **open**, strongest first.
   ///
   /// `keys[].alg` says which KEM key a sender encapsulates to; it does not say
-  /// which envelope construction the holder can unwrap. Without this a sender
-  /// has no way to discover that, so it stamps the one suite it knows and a
-  /// second suite can only be introduced by upgrading every reader first —
-  /// release-ordering agility rather than negotiated agility.
-  ///
-  /// Required. It was once optional, with an absent field meaning "the one
-  /// suite that existed when this was written" — a hatch for a predecessor
-  /// that never shipped, and one that quietly spoke for holders who had said
-  /// nothing.
+  /// which envelope construction the holder can unwrap, so this is the only
+  /// place a sender can discover that.
   ///
   /// Derived from [keys] when the caller does not state it, never from the
-  /// build's own [SecretSharingAlgos.suites]. That list is what this client can
-  /// *produce and open given the right key*; what this package's holder can
-  /// open is fixed by the keys it actually advertises. Defaulting to the former
-  /// made a package advertising one KEM claim it could unwrap constructions
-  /// built on the other.
+  /// build's own [SecretSharingAlgos.suites]: that list is what this client can
+  /// produce and open given the right key, while what this package's holder can
+  /// open is fixed by the keys it actually advertises.
   final List<String> suites;
 
   /// [suites] defaults to what [keys] can open — see the field's own doc for
@@ -211,7 +183,7 @@ class KeyPackage {
   ///
   /// A sender with no overlap must not fall back to stamping its own
   /// preference: the holder would receive an envelope it cannot unwrap, and
-  /// the failure would arrive as an opaque AEAD error on the far side.
+  /// the failure arrives as an opaque AEAD error on the far side.
   String? bestSuiteFor(List<String> senderSuites) =>
       SecretSharingAlgos.bestSuiteBetween(senderSuites, suites);
 
@@ -219,9 +191,8 @@ class KeyPackage {
   /// enc-use key (the KEM public key a sender seals to). Null if the package
   /// advertises no active key for [SecretSharingAlgos.keyAlgos].
   ///
-  /// A package that has rotated advertises the superseded key as well, so that
-  /// envelopes still in flight to it can be opened; this is the address senders
-  /// use from now on, which is the new one.
+  /// A rotated package still advertises the superseded key so that envelopes
+  /// in flight to it can be opened; this names the new one.
   String? get kpid => bestKeyFor(SecretSharingAlgos.keyAlgos)?.kid;
 
   /// The first **active** key in [supportedAlgos] order (strongest first) that
@@ -229,11 +200,8 @@ class KeyPackage {
   /// [supportedAlgos] have no algorithm in common, or if every key they do have
   /// in common is retired.
   ///
-  /// Retired entries are skipped because this answers "which key should be used
-  /// now" for a sender, and a retired key is retained for opening what was
-  /// already sealed to it rather than for receiving anything more — see
-  /// [KeyEntryStatus]. A holder deciding whether it can open a given envelope
-  /// asks [keys] instead, which carries retired entries too.
+  /// A holder deciding whether it can open a given envelope asks [keys]
+  /// instead, which carries retired entries too.
   PackageKey? bestKeyFor(List<String> supportedAlgos,
       {String use = SecretSharingAlgos.useEnc}) {
     for (final alg in supportedAlgos) {
@@ -257,18 +225,11 @@ class KeyPackage {
   ///
   /// A key package riding `enroll:request` is built before the atServer has
   /// assigned an enrollment id, so there is no [KeyPackage] to build it from.
-  /// Nothing is lost by that: the id was never part of the payload — the
-  /// enrollment record carries it, and [fromPayload] injects it back on read.
-  /// [suites] defaults to what [keys] can actually open. An overstated claim
-  /// here is correctable, but only by the enrollment itself: `enroll:update`
-  /// reaches `metadata` and is self-only, so nobody else can repair a package
-  /// that advertises a construction its holder cannot open.
-  ///
-  /// ⚠️ **This used to add "no client sends that operation yet, so in practice
-  /// the value written at `enroll:request` is the one peers seal to".** One
-  /// does as of 2026-08-19: `KeyPackageMinting` republishes the package at
-  /// startup whenever the configured key-establishment list has changed, so
-  /// the value peers seal to is the latest published one, not the original.
+  /// The id is not part of the payload anyway — the enrollment record carries
+  /// it, and [fromPayload] injects it back on read. [suites] defaults to what
+  /// [keys] can actually open; an overstated claim here can be repaired only by
+  /// the enrollment itself, since `enroll:update` reaches `metadata` and is
+  /// self-only.
   static Map<String, Object?> payloadFor({
     required DateTime createdAt,
     required List<PackageKey> keys,
@@ -305,11 +266,9 @@ class KeyPackage {
     if (v is! int || createdAt is! String || keys is! List) {
       throw FormatException('KeyPackage: malformed payload $payload');
     }
-    // Required: a package that names no suites says nothing about what its
-    // holder can open, and guessing on its behalf is how a sender comes to
-    // seal something the holder cannot unwrap. A non-String ENTRY is still
-    // dropped rather than throwing, matching how unknown `keys` entries are
-    // handled — a newer writer may name suites this build has never heard of.
+    // NOTE: an absent `suites` list is rejected, but a non-String entry within
+    // it is dropped — a newer writer may name suites this build has never
+    // heard of.
     final declared = payload['suites'];
     if (declared is! List) {
       throw FormatException(

@@ -10,17 +10,10 @@ import 'proven_elsewhere.dart';
 ///
 /// **Every row here is the atServer saying no, so every one is proven live.**
 /// A mocked `AtLookUp` that accepts whatever it is handed makes a refusal's
-/// presence and its absence indistinguishable, and the at_auth unit suite
-/// stubs `executeCommand` to succeed — so these guards are invisible there by
-/// construction, not by oversight. The proofs live in the functional pack for
-/// the reason UC-B4.2 established: it runs against the virtualenv in CI as
-/// well as locally, and can drive more than one enrollment of one atSign in a
-/// single file.
-///
-/// ⚠️ **Three of these four rows were rewritten on 2026-08-18.** UC-G1.10
-/// claimed a rotation rewrites `_apsk`, which its own *When* forbids; UC-G1.12
-/// paired namespaces with an approval state that has no wire field at all; and
-/// UC-G1.13 promised two guards where its *Given* can only reach one.
+/// presence and its absence indistinguishable. The proofs live in the
+/// functional pack for the reason UC-B4.2 established: it runs against the
+/// virtualenv in CI as well as locally, and can drive more than one enrollment
+/// of one atSign in a single file.
 void main() {
   test('UC-G1.10 · rekey keeps the enrollment id', () {
     // GIVEN an approved enrollment authenticated on its own connection.

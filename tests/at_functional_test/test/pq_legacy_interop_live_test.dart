@@ -4,9 +4,8 @@
 @Tags(['pq'])
 library;
 
-// The substrate is deliberately marked @experimental and will be reshaped as
-// the group surface matures. Exercising it from another package is the point
-// of this file.
+// The substrate is @experimental; exercising it from another package is the
+// point of this file.
 // ignore_for_file: experimental_member_use
 
 import 'dart:io';
@@ -21,24 +20,20 @@ import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// UC-B4.2 — a legacy peer and a PQ-native atSign interoperate, both ways
-/// (project ON-1).
+/// UC-B4.2 — a legacy peer and a PQ-native atSign interoperate, both ways.
 ///
-/// The row this file exists for is the interop question, and it is a question
-/// about two atSigns: a pre-PQ `@alice` and a PQ-native `@bob` must be able to
-/// reach each other **by default**, because legacy key material outlives the
-/// atSign's own migration (`docs/projects/pq/decisions.md` 37). Toward alice,
-/// bob's app takes the explicit legacy fallback to her `public:publickey`;
-/// toward bob, alice's legacy app finds `public:publickey@bob` because even a
-/// PQ-native activation publishes one. The only atSign that refuses is the one
-/// that asked to, at activation, and it refuses loudly.
+/// A pre-PQ `@alice` and a PQ-native `@bob` must be able to reach each other
+/// **by default**, because legacy key material outlives the atSign's own
+/// migration. Toward alice, bob's app takes the explicit legacy fallback to her
+/// `public:publickey`; toward bob, alice's legacy app finds
+/// `public:publickey@bob` because even a PQ-native activation publishes one.
+/// The only atSign that refuses is the one that asked to, at activation, and it
+/// refuses loudly.
 ///
-/// **All three atSigns are minted here.** Borrowing a demo atSign for the
-/// legacy side would not do: every one of them is retrofitted, rooted or
-/// nskey-minted by some other file in this pack, so "pre-PQ" would be a claim
-/// about test ordering rather than about the atSign. A CRAM activation with
-/// the default signing algorithm produces the genuine article, and this file
-/// asserts the difference rather than assuming it.
+/// **All three atSigns are minted here.** Every demo atSign is retrofitted,
+/// rooted or nskey-minted by some other file in this pack, so a borrowed
+/// "pre-PQ" one would be a claim about test ordering rather than about the
+/// atSign.
 ///
 /// One-shot server state: CRAM activation works once per atSign per
 /// virtualenv, so these three are this file's alone (see `config.yaml`) and it
@@ -62,8 +57,8 @@ void main() {
         ..rootPort = rootDomain.rootPort
         ..namespace = namespace;
 
-  /// A CRAM activation with the default (RSA) signing algorithm — an atSign in
-  /// exactly the shape every atSign was in before this programme started.
+  /// A CRAM activation with the default (RSA) signing algorithm — a pre-PQ
+  /// atSign.
   Future<AtClient> onboardLegacy(String atSign) async {
     final atKeysIo = FileAtKeysIo(filePath: keysFilePath);
     final response = await AtAuth.create().onboard(
@@ -103,10 +98,10 @@ void main() {
     }
   }
 
-  // A record another atSign has to read NOW goes straight to the atServer,
-  // rather than waiting for sync to get round to it. The legacy shared-key
-  // conveyance is already written remote-first for the same reason, so leaving
-  // the data record local-first would put the pointer ahead of the value.
+  // A record another atSign has to read NOW goes straight to the atServer
+  // rather than waiting for sync. The legacy shared-key conveyance is already
+  // written remote-first, so a local-first data record would put the pointer
+  // ahead of the value.
   final remoteWrite = PutRequestOptions()..useRemoteAtServer = true;
   final remoteRead = GetRequestOptions()..useRemoteAtServer = true;
 
@@ -114,7 +109,7 @@ void main() {
   late AtClient pqClient;
 
   setUpAll(() async {
-    // AtAuth.onboard refuses if a keyfile already exists, and the runner
+    // NOTE: AtAuth.onboard refuses if a keyfile already exists, and the runner
     // clears only @srie's. Without this the file passes in isolation and fails
     // in the suite on a leftover from an earlier run.
     for (final atSign in [legacyPeer, pqNative, pqOptOut]) {
@@ -139,10 +134,9 @@ void main() {
   });
 
   test('the two atSigns really are a legacy one and a PQ-native one', () async {
-    // The premise the rest of the file rests on. Both arms of the same
-    // question, so "absent" on the legacy side means absent rather than
-    // "plookup did not work here" — the identical call returns a root on the
-    // PQ-native side.
+    // The premise the rest of the file rests on. Both arms are the same call,
+    // so "absent" on the legacy side means absent rather than "plookup did not
+    // work here".
     expect(await plookupOrNull(pqClient, 'pq_signing_root$pqNative'),
         contains('mldsa65'),
         reason: 'the PQ-native activation creates the atSign-level signing '
@@ -345,13 +339,12 @@ void main() {
           'encrypt to and fails, rather than writing something unreadable',
     );
 
-    // And the cost of having asked for it, which this run is the first to
-    // show: with no legacy material the atSign cannot write a PUBLIC record at
-    // all, because every public write is signed with the legacy RSA encryption
-    // private key. That takes out the `_apsk` anchor and the nskey
-    // advertisement — the records the post-quantum path itself needs — so the
-    // opt-out is not yet a usable configuration. Recorded as plan backlog
-    // 14.12; asserted here so the day it is fixed, this fails and says so.
+    // And the cost of having asked for it: with no legacy material the atSign
+    // cannot write a PUBLIC record at all, because every public write is signed
+    // with the legacy RSA encryption private key. That takes out the `_apsk`
+    // anchor and the nskey advertisement — the records the post-quantum path
+    // itself needs — so the opt-out is not yet a usable configuration, and this
+    // fails the day that is fixed.
     await expectLater(
       optOutClient.put(
           AtKey()

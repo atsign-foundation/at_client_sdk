@@ -14,13 +14,6 @@ import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:test/test.dart';
 
 /// Moving an arriving nskey private out of the transit buffer and into AtKeys.
-///
-/// The distinction being enforced is between material that can be recovered
-/// and material that cannot. A content key is a cache — a reader re-fetches it
-/// from its conveyance record. An nskey private is not: lose it and every
-/// conveyance record sealed to it is unopenable, taking every value those
-/// content keys protect with it. So it belongs where the never-lose contract
-/// is, not in a store an app might persist however it likes.
 void main() {
   const atSign = '@alice';
   const namespace = 'app_1.my_apps';
@@ -115,8 +108,6 @@ void main() {
       ),
     );
 
-    // Genuinely signed by this atSign, and genuinely an nskey private — just
-    // not the one peers are sealing to. Only correspondence catches that.
     expect(
         await filer.file(Secret(
             namespace: namespace,
@@ -155,12 +146,9 @@ void main() {
 
   test('the correspondence check follows the advertised KEM, not X-Wing',
       () async {
-    // Every arm above advertises X-Wing, where "derived through the
-    // advertised KEM" and "derived through X-Wing" are the same computation —
-    // so none of them can tell the two apart. Here they diverge: the public
-    // halves are different lengths (1216 against 1568), so a build that
-    // assumed X-Wing would compute the wrong bytes and REFUSE a private that
-    // corresponds exactly. The acceptance is the discriminating outcome.
+    // NOTE: the only arm advertising something other than X-Wing, so it is the
+    // only one that can tell "derived through the advertised KEM" apart from
+    // "derived through X-Wing".
     final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
     final seed = mlKem.newSeed();
     final pair = await mlKem.keyPairFromSeed(seed);
@@ -236,9 +224,8 @@ void main() {
 
   test('what is stored is the seed; read() expands, readSeed() does not',
       () async {
-    // ML-KEM is the arm where the two forms actually differ — X-Wing's seed
-    // and secretKey are the same bytes, which is the accident that let a
-    // conveyed decapsulation key pass for a seed until it reached ML-KEM.
+    // NOTE: under X-Wing a seed and a secret key are the same bytes, so ML-KEM
+    // is the only arm where the two forms differ.
     final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
     final seed = NskeySeed(kem.newSeed());
     final pair = await kem.keyPairFromSeed(seed.bytes);
@@ -264,16 +251,7 @@ void main() {
   });
 
   group('a key source that cannot be read is not an empty one', () {
-    // The three cases the readers have to keep apart. Two of them are ordinary
-    // and answer "holds nothing"; the third means the material may be present
-    // and unreadable, and answering "holds nothing" for it is what made a
-    // corrupt keyfile indistinguishable from a cold start — which, since the
-    // notification park landed, presents as a message held for a filing that
-    // can never arrive.
-
     test('a source holding nothing yet reads as a genuine absence', () async {
-      // Case 1: nothing written for this atSign. InMemoryAtKeysIo throws
-      // AtKeysNotInMemoryException, which is an AtKeysSourceAbsentException.
       final filing =
           NskeyPrivateFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign);
 
@@ -285,9 +263,6 @@ void main() {
 
     test('a readable source missing that entry also reads as absence',
         () async {
-      // Case 2: the source reads fine and simply has no such key. Same answer,
-      // and it must stay the same answer — this is the ordinary miss the
-      // self-heal is built on.
       final io = InMemoryAtKeysIo();
       await io.write(atSign, AtKeys());
       final filing = NskeyPrivateFiling(keysIo: io, atSign: atSign);
@@ -299,8 +274,6 @@ void main() {
     });
 
     test('an unreadable source is raised, not reported as absence', () async {
-      // Case 3, and the whole point. read/readSeed/readAllFor raise so the
-      // caller cannot mistake it for "holds nothing".
       final filing =
           NskeyPrivateFiling(keysIo: _UnreadableKeysIo(), atSign: atSign);
 
@@ -314,10 +287,9 @@ void main() {
 
     test('readAll alone tolerates it, because a client is built through it',
         () async {
-      // The deliberate exception: readAll's caller runs during client
-      // construction, and a client that cannot be built at all is worse than
-      // one that starts holding nothing. The failure is on the record at
-      // `severe` from the shared reader rather than swallowed at `finer`.
+      // NOTE: readAll alone tolerates an unreadable source, because its caller
+      // runs during client construction, where raising would leave the client
+      // unbuildable.
       final filing =
           NskeyPrivateFiling(keysIo: _UnreadableKeysIo(), atSign: atSign);
 
@@ -326,11 +298,10 @@ void main() {
   });
 }
 
-/// A key source that exists and cannot be parsed — the case that used to be
-/// indistinguishable from holding nothing.
+/// A key source that exists and cannot be parsed.
 ///
-/// `AtKeysParseException` deliberately, not `AtKeysSourceAbsentException`:
-/// the point of the split is that only the latter means absence.
+/// Raises `AtKeysParseException`, never `AtKeysSourceAbsentException`: only the
+/// latter means absence.
 class _UnreadableKeysIo extends WrittenAtKeysIo {
   @override
   Future<AtKeys> read(String atsign) async =>

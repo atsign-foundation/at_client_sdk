@@ -16,18 +16,10 @@ import 'test_utils/envelope_tamper.dart';
 /// `{payload, signatures: [{protected, signature}]}`, with `{alg, kid, v}`
 /// inside each protected header, modelled by [SignedEnvelope].
 ///
-/// The arms that matter most here are the ones a lazy suite collapses:
-///
-/// - **The RSA arm specifically.** An unpadded RSA-2048 signature is 342
-///   base64url chars — a length Dart's `base64Decode` throws on — while
-///   ML-DSA-65's 4412 decodes fine. A suite that only exercises ML-DSA goes
-///   green on code that cannot decode a single RSA signature.
-/// - **The claims are signed.** `alg` and `kid` live inside the protected
-///   header, so a relabel breaks the signature. That is asserted by tampering,
-///   not claimed.
-/// - **The array is an array.** One entry today, but an envelope carrying no
-///   `signatures` — or an empty one — must be refused rather than verifying
-///   vacuously.
+/// NOTE: the RSA arm carries its own weight — an unpadded RSA-2048 signature
+/// is 342 base64url chars, a length Dart's `base64Decode` throws on, while
+/// ML-DSA-65's 4412 decodes fine, so a suite exercising only ML-DSA goes green
+/// on code that cannot decode a single RSA signature.
 void main() {
   late AtPkamKeyPair rsaPair;
   late ({Uint8List publicKey, Uint8List secretKey}) mlDsaPair;
@@ -38,10 +30,10 @@ void main() {
     mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   });
 
-  // The kid a header must carry, recomputed from FIRST PRINCIPLES rather than
-  // by calling production's helper: SHA-256 of the key material, hex, first 16.
-  // Comparing the wire value against the function that produced it would pin
-  // nothing.
+  // NOTE: the kid a header must carry, recomputed from first principles —
+  // SHA-256 of the key material, hex, first 16 — rather than by calling
+  // production's helper. Comparing the wire value against the function that
+  // produced it would pin nothing.
   String kidOf(String pubB64) =>
       sha256.convert(base64Decode(pubB64)).toString().substring(0, 16);
 
@@ -86,9 +78,9 @@ void main() {
         expect(text.contains('='), isFalse,
             reason: 'RFC 7515 base64url is unpadded');
       }
-      // The measured trap: 256 signature bytes → 342 unpadded chars, a length
-      // the naive decode throws on. Assert the length so this test can never
-      // silently stop covering the throwing case.
+      // NOTE: 256 signature bytes → 342 unpadded chars, a length the naive
+      // decode throws on. The length is asserted so this arm cannot silently
+      // stop covering the throwing case.
       final signature = envelope.signature.signature;
       expect(signature.length, 342);
       expect(() => base64Decode(signature), throwsA(isA<FormatException>()),
@@ -121,8 +113,6 @@ void main() {
     });
 
     test('a tampered protected header fails: the claims are signed', () async {
-      // Same alg, same v, different kid. The claim is inside the signature,
-      // so a relabel cannot go unnoticed.
       final envelope =
           rsaEnvelope().claiming({'alg': 'RS256', 'kid': 'enroll-2', 'v': 1});
 
@@ -134,10 +124,8 @@ void main() {
     });
 
     test("alg cannot overrule the published key's declaration", () async {
-      // Relabelling the one signature as ML-DSA leaves the envelope with
-      // nothing the RSA-only _apsk can check: the claim does not select the
-      // routine, and the verifier does not quietly fall back to trying the RSA
-      // key against an entry that says it is not RSA.
+      // The claim does not select the routine: the verifier does not fall back
+      // to trying the RSA key against an entry that says it is not RSA.
       final envelope = rsaEnvelope()
           .claiming({'alg': 'ML-DSA-65', 'kid': 'enroll-1', 'v': 1});
 
@@ -151,11 +139,10 @@ void main() {
 
     test('no shared algorithm names BOTH documents, and does not fall back',
         () async {
-      // UC-G2.9's case rather than a relabelling: an `_apsk` advertising only
-      // RSA, handed an envelope signed under ML-DSA — what a peer that has not
-      // taken the transition sees. "No algorithm in common" on its own leaves
-      // a reader unable to tell which side is behind, so the message has to
-      // name what the envelope carries AND what the advertisement offers.
+      // UC-G2.9: an `_apsk` advertising only RSA, handed an envelope signed
+      // under ML-DSA. "No algorithm in common" alone leaves a reader unable to
+      // tell which side is behind, so the message names what the envelope
+      // carries AND what the advertisement offers.
       await expectLater(
           () => verifyEnvelope(mlDsaEnvelope(),
               signerPublicKey: rsaPair.atPublicKey.publicKey,
@@ -164,10 +151,8 @@ void main() {
               .having((e) => e.message, 'message', contains('"ML-DSA-65"'))
               .having((e) => e.message, 'message', contains('"rsa2048"'))));
 
-      // The control, and it is what makes the refusal attributable: the same
-      // envelope against an `_apsk` that does advertise ML-DSA verifies. A
-      // build that refused every ML-DSA envelope would satisfy the arm above
-      // and fail here.
+      // The control: a build that refused every ML-DSA envelope would satisfy
+      // the arm above and fail here.
       await verifyEnvelope(mlDsaEnvelope(),
           signerPublicKey: mlDsaApsk(), expecting: EnvelopeType.app);
     });
@@ -188,8 +173,7 @@ void main() {
 
   group('UC-G1.7 · the verifier takes the strongest and does not fall back',
       () {
-    /// An `_apsk` advertising both signing keys of one enrollment — the shape
-    /// a rollout-2 enrollment publishes.
+    /// An `_apsk` advertising both signing keys of one enrollment.
     String bothApsk() => jsonEncode({
           'v': 1,
           'keys': [
@@ -209,10 +193,9 @@ void main() {
     /// One envelope over one payload, signed by both keys — RSA listed FIRST,
     /// so a verifier taking `signatures.first` picks the weaker one.
     ///
-    /// Built by the **real writer**, not assembled here. It used to merge two
-    /// single-signature envelopes by hand, which made this whole group a test
-    /// of the fixture: it would have gone on passing against a writer that
-    /// could not emit two signatures at all.
+    /// Built by the real writer rather than assembled here: a hand-merged
+    /// fixture would go on passing against a writer that could not emit two
+    /// signatures at all.
     SignedEnvelope bothSigned() => signEnvelope(payload,
         keys: [rsaKeys(), mlDsaKeys()],
         enrollmentId: 'enroll-1',
@@ -239,10 +222,10 @@ void main() {
       expect(envelope.signatures[0].signature,
           isNot(envelope.signatures[1].signature));
 
-      // The property that makes the entries alternatives rather than a chain:
-      // one payload member, and each signature covers its own protected header
-      // joined to that same text. Re-encoding the payload per key would let
-      // two entries sign different bytes and both verify in isolation.
+      // The entries are alternatives rather than a chain: one payload member,
+      // each signature covering its own protected header joined to that same
+      // text. Re-encoding the payload per key would let two entries sign
+      // different bytes and both verify in isolation.
       for (final entry in envelope.signatures) {
         expect(envelope.payloadB64, isNotEmpty);
         expect(entry.protected, isNotEmpty);
@@ -257,9 +240,9 @@ void main() {
 
     test('a valid RSA signature does NOT rescue a corrupt ML-DSA one',
         () async {
-      // The row itself. Falling through to the signature that happens to check
-      // out hands the choice of algorithm to whoever tampered with the
-      // envelope, and reads as success in every log.
+      // Falling through to the signature that happens to check out hands the
+      // choice of algorithm to whoever tampered with the envelope, and reads
+      // as success in every log.
       final both = bothSigned();
       final ml = both.signatures[1];
       final corrupted = SignedEnvelope.fromJson({
@@ -328,10 +311,9 @@ void main() {
     });
 
     test('and however the ADVERTISEMENT is ordered', () async {
-      // The other half of "neither side's ordering alone decides", and the one
-      // this group never varied: every arm above publishes `_apsk` with RSA
-      // first, so a verifier resolving by the advertisement's order rather
-      // than by strength passes all of them.
+      // Neither side's ordering alone decides: every other arm publishes
+      // `_apsk` with RSA first, so a verifier resolving by the
+      // advertisement's order rather than by strength would pass all of them.
       String reversedApsk() => jsonEncode({
             'v': 1,
             'keys': ((jsonDecode(bothApsk()) as Map)['keys'] as List)
@@ -345,9 +327,8 @@ void main() {
       await verifyEnvelope(bothSigned(),
           signerPublicKey: reversedApsk(), expecting: EnvelopeType.app);
 
-      // Corrupt the RSA entry and leave ML-DSA intact. ML-DSA is the stronger,
-      // so it is what gets checked and the corrupt entry is never reached —
-      // under BOTH advertisement orderings. Resolving by the advertisement's
+      // ML-DSA is the stronger, so the corrupt RSA entry is never reached
+      // under either advertisement ordering. Resolving by the advertisement's
       // order instead would refuse the RSA-first one and accept the other.
       final both = bothSigned();
       final rsa = both.signatures.firstWhere((s) => s.alg == 'RS256');
@@ -497,8 +478,8 @@ void main() {
     });
 
     test('an empty signatures array is refused, not treated as unsigned', () {
-      // The arm that matters: an envelope nobody signed must not verify
-      // vacuously by having nothing to check.
+      // An envelope nobody signed must not verify vacuously by having nothing
+      // to check.
       expect(
           () => SignedEnvelope.fromJson(rsaEnvelope().withRawSignatures([])),
           throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
@@ -554,9 +535,8 @@ void main() {
       // that has no code for it.
       final envelope = rsaEnvelope().claiming({
         'alg': 'RS256',
-        // Carried, so the version is what this refusal is about: the type is
-        // checked first, and a header that dropped it would be refused before
-        // the version was ever read.
+        // Carried deliberately: the type is checked first, so a header that
+        // dropped it would be refused before the version was ever read.
         'typ': 'at-app+jws',
         'kid': 'enroll-1',
         'v': 2
@@ -572,12 +552,8 @@ void main() {
 
     test('a protected header with NO version is refused, naming the absence',
         () async {
-      // The other half of the version guard, and the one nothing covered.
-      // A released 3.14.0 envelope has no `v` at all, and the reason it never
-      // reaches here is that it does not parse — its signature is a flat
-      // sibling of the payload rather than an entry in a `signatures` array.
-      // This is the same absence arriving in a shape that DOES parse, which
-      // is the case a tolerant reader would quietly accept.
+      // A missing version arriving in a shape that DOES parse, which is the
+      // case a tolerant reader would quietly accept.
       final envelope = rsaEnvelope().claiming({
         'alg': 'RS256',
         // Carried deliberately: the type is checked before the version, so a
@@ -587,9 +563,8 @@ void main() {
         'kid': 'enroll-1',
       });
 
-      // The fixture really does omit it. Without this the test passes
-      // identically against a `claiming` that quietly kept the version, and
-      // the absence it names would never have been on the wire.
+      // The fixture really does omit it: without this the test passes
+      // identically against a `claiming` that quietly kept the version.
       expect(unb64u(envelope.signature.protected), isNot(contains('"v"')));
 
       await expectLater(
@@ -630,9 +605,10 @@ void main() {
 
     /// What a post-quantum-native enrollment publishes once it mints a signing
     /// key of its own: the new key active, and the ML-DSA APKAM
-    /// authentication key it used to sign with kept as `retired`. **Both
-    /// entries are mldsa65** — which is the case a verifier taking the first
-    /// entry for an algorithm gets wrong.
+    /// authentication key that signed before it kept as `retired`.
+    ///
+    /// Both entries are mldsa65 — the case a verifier taking the first entry
+    /// for an algorithm gets wrong.
     String apskWithRetained() => jsonEncode(apskAdvertisement(keys: [
           ApskSigningKey.forPublicKey(
               alg: SigningAlgoType.mldsa65,
@@ -644,10 +620,9 @@ void main() {
         ]));
 
     test('an envelope signed by the retained key still verifies', () async {
-      // The envelope this enrollment signed BEFORE it split authentication
-      // from signing. Envelopes are stored durably and verified whenever they
-      // are read, so this is not a historical curiosity — it is every record
-      // the enrollment wrote up to the moment it minted.
+      // Envelopes are stored durably and verified whenever they are read, so
+      // every record the enrollment signed with the retained key must keep
+      // verifying after it mints.
       final envelope = signEnvelope(payload,
           keys: [
             ApkamSigningKeys(
@@ -669,10 +644,9 @@ void main() {
     });
 
     test('a signature under neither key is still refused', () async {
-      // A key this enrollment never published must not verify. Since the
-      // signature NAMES its key, the refusal can say which key was asked for
-      // rather than counting attempts - which is what distinguishes "you named
-      // a key I do not advertise" from "your signature is bad".
+      // The signature NAMES its key, so the refusal can say which key was
+      // asked for rather than counting attempts — which is what distinguishes
+      // "you named a key I do not advertise" from "your signature is bad".
       final stranger = await MlDsa65PureDartAlgo().generateKeyPair();
       final envelope = signEnvelope(payload,
           keys: [
@@ -721,8 +695,8 @@ void main() {
 
     test('a reader verifying one type refuses an envelope signed for another',
         () async {
-      // The signature is perfectly good. That is the point: what fails is the
-      // claim that this document is the thing being asked for.
+      // The signature is perfectly good; what fails is the claim that this
+      // document is the thing being asked for.
       final envelope =
           signEnvelope(payload, keys: [rsaKeys()], type: EnvelopeType.app);
 
@@ -745,9 +719,8 @@ void main() {
     });
 
     test('an untyped header is refused rather than assumed', () async {
-      // What an envelope written before this existed looks like. There is no
-      // tolerant reading available: assuming a type is the confusion, so the
-      // absence has to fail.
+      // There is no tolerant reading available: assuming a type is the
+      // confusion, so the absence has to fail.
       final envelope = rsaEnvelope()
           .claiming({'alg': 'RS256', 'kid': 'enroll-1', 'v': envelopeVersion});
 

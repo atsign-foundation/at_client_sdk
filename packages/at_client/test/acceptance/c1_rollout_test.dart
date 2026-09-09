@@ -4,17 +4,9 @@ import 'proven_elsewhere.dart';
 
 /// Part C — the rollout, driven by flags (`acceptance.md` section 15).
 ///
-/// The capstone of the rollout-posture design (`decisions.md` 56.4): 4.0 is
-/// final-3.x code with different flag defaults, so the entire rollout must be
+/// 4.0 is final-3.x code with different flag defaults, so the whole rollout is
 /// drivable from this codebase by flag manipulation — each axis in isolation,
-/// and all of them at once as the grouped `PqPosture`. (Not "all seven": the
-/// count was correct when written and an eighth axis was added the same day.
-/// Re-derive from the type rather than restating a number.)
-///
-/// The envelope-shape axis (UC-C1.3) is gone because the envelope stopped
-/// having a second shape to roll out to, so there was no axis left to drive;
-/// the in-use signing set (UC-C1.7) took the vacated fifth slot. The count is
-/// five by coincidence rather than because the original five stand.
+/// and all of them at once as the grouped `PqPosture`.
 void main() {
   test('UC-C1.1 · the era axis: a postured client writes PQ by default', () {
     // GIVEN a client built with PqPosture.pqActive and no
@@ -69,10 +61,9 @@ void main() {
     provenIn('packages/at_client/test/disallow_legacy_encryption_test.dart',
         'a client configured to write legacy',
         proves: 'what the flag does once set: the legacy write is refused');
-    // The four above are unit arms against a mock, which never runs
-    // AtClientImpl's initialisation — so a posture that reached the constant
-    // and never reached a client would satisfy all of them. These two are the
-    // first live proof this row has had.
+    // NOTE: the four above are unit arms against a mock, which never runs
+    // AtClientImpl's initialisation — a posture that reached the constant and
+    // never reached a client would satisfy every one of them.
     provenIn('tests/at_functional_test/test/pq_stage_arm_test.dart',
         'UC-C1.2 · pqActive refuses a legacy write that the earlier stages take',
         proves: 'the refusal on a real constructed client, with the two '
@@ -94,16 +85,6 @@ void main() {
     // WHEN  the request is submitted with keyExchangeMode = pq.
     // THEN  no RSA-wrapped apkamSymmetricKey rides the wire; the approver
     //       mints and conveys instead.
-    //
-    // ⚠️ **This row read PROVEN while NOBODY applied the posture's value.**
-    // The citations below prove the two ends — the posture carries the mode,
-    // and at_auth honours the mode when it is given one — and until
-    // 2026-08-26 nothing joined them: `at_onboarding_cli`, the only production
-    // caller that submits an app enrolment, built the unnamed
-    // `AtEnrollmentRequest(...)`, whose initialiser hard-sets `legacy`. The
-    // GIVEN above names the gap honestly ("applied by whoever builds the
-    // request") and no citation covered that clause. Found by the citation
-    // audit; the first citation below is now that middle.
     provenIn(
         'packages/at_onboarding_cli/test/enroll_key_exchange_mode_test.dart',
         'PqPosture.pqActive submits a pq request',
@@ -163,9 +144,8 @@ void main() {
     // GIVEN nothing but AtClientPreference(posture: PqPosture.pqActive).
     // WHEN  a client, its signers, its enrollment submissions and its
     //       retrofits are built from that one preference.
-    // THEN  every axis runs the last stage's values — the pinned columns of
-    //       ruling 113's table — with each still individually overridable
-    //       (C1.1–C1.5 prove each arm).
+    // THEN  every axis runs the last stage's values, with each still
+    //       individually overridable (C1.1–C1.5 prove each arm).
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'pqActive is post-quantum by default',
         proves: 'every axis of the last stage, pinned as literals');
@@ -208,7 +188,6 @@ void main() {
         'legacy drives no upgrade',
         proves: 'the default stage\'s set is empty — no client mints until '
             'the posture says so');
-    // The two below are in that file's "the data signing set" group.
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'follows the posture, and an explicit set beats it both ways',
         proves: 'the per-axis override contract, in both directions',
@@ -219,7 +198,6 @@ void main() {
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'refuses an algorithm this build cannot sign an envelope under',
         proves: 'the refusal is at construction, where the algorithm is named');
-    // And the middle stage, which is where the two key axes come apart.
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'pqReady moves the credentials and not the data path',
         proves: 'the middle stage, pinned as literals: an ML-DSA '

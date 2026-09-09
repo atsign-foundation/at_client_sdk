@@ -5,12 +5,10 @@ import 'package:at_client/src/enroll/pq_native_onboard.dart'
 import 'package:at_auth/at_auth.dart' show AtOnboardingRequest;
 import 'package:test/test.dart';
 
-/// What a client holding NO enrollment asks its first one to be.
+/// What a client holding no enrollment asks its first one to be.
 ///
-/// Such a client can name no enrollment, so it has no record to read, and
-/// nothing can be carried over the way a retrofit of a named enrollment
-/// carries its predecessor's app, device and grants. These are the values it invents instead, and each
-/// one is a decision with a consequence on the atServer.
+/// It has no predecessor enrollment to carry an app, device and grants over
+/// from, so these are the values it invents instead.
 void main() {
   group('the identity a client with no enrollment asks for', () {
     test('it names the first-enrollment app', () {
@@ -32,16 +30,6 @@ void main() {
               'scoped first enrollment could not even approve a second one');
     });
 
-    /// ⛔ The property this file exists for.
-    ///
-    /// Sibling clones of one pre-enrollment keyfile each retrofit to their own
-    /// enrollment, and the atServer refuses a request naming an
-    /// `(appName, deviceName)` that an approved enrollment already holds —
-    /// measured against a live atServer, which answered *"Another enrollment
-    /// with id … exists with the app name: … and device name: … in approved
-    /// state"*. So a shared constant lets the FIRST device upgrade and leaves
-    /// every other one refused at every start, for ever, with nothing on the
-    /// device saying why.
     test('the device name is NOT the bare constant', () {
       expect(AtClientImpl.firstEnrollmentIdentity().deviceName,
           isNot(firstEnrollmentDeviceName),
@@ -64,9 +52,8 @@ void main() {
     });
   });
 
-  /// The constants are declared in at_client because two of its paths need
-  /// them, while at_auth carries the same values as field defaults on
-  /// [AtOnboardingRequest] — a default is not a constant this package can
+  /// at_auth carries the same values as field defaults on
+  /// [AtOnboardingRequest], and a default is not a constant this package can
   /// reference, so nothing but this pins the two together.
   group('the first-enrollment constants match at_auth\'s own defaults', () {
     final request =

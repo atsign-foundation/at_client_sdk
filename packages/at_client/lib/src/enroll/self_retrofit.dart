@@ -20,7 +20,7 @@ final _logger = AtSignLogger('selfRetrofit');
 /// Runs the whole PQ self-retrofit and hands back a manager whose current
 /// client runs under the NEW enrollment.
 ///
-/// The sequence, each half already proven on its own: submit an
+/// The sequence: submit an
 /// [AtSelfEnrollmentRequest] on the legacy [session]'s authenticated
 /// connection (auto-approved, no OTP; idempotent — a keyfile that already
 /// carries an enrollment of the requested algorithm reuses it, nothing is
@@ -29,18 +29,13 @@ final _logger = AtSignLogger('selfRetrofit');
 /// the new id via [AtClientManager.fromAuthSession].
 ///
 /// **The enrollment never changes under a live client _on this path_.** The
-/// switched-to
-/// client is a NEW instance under the `(atSign, enrollmentId)` cache key, so
-/// every per-client cache (secret sharing, key-package registration) starts
-/// fresh for the new identity by construction — nothing is re-keyed in
-/// place, and the old client is not mutated. ⚠️ **That is a claim about
-/// [retrofitIdentity] as a standalone switch, NOT an invariant of the SDK.**
-/// `AtClientImpl` retrofits itself at start-up through this same function and
-/// then DOES mutate in place — it assigns its own `enrollmentId` and rebuilds
-/// what derives from it. Safe there and only there, because it happens inside
-/// `_init`, before the client has been filed in the instance map or handed to
-/// any caller. Read as a global invariant, this sentence sends a reader
-/// looking for a stale cache entry that does not exist. The switch stops the
+/// switched-to client is a NEW instance under the `(atSign, enrollmentId)`
+/// cache key, so every per-client cache (secret sharing, key-package
+/// registration) starts fresh for the new identity and the old client is not
+/// mutated. ⚠️ That is not an invariant of the SDK: `AtClientImpl` retrofits
+/// itself at start-up through this same function and DOES mutate in place,
+/// which is safe only there, inside `_init`, before the client has been filed
+/// in the instance map or handed to any caller. The switch stops the
 /// [manager]'s current client and hands its store to the new one; a dedicated
 /// manager (the `AtClientManager(atSign)` constructor) has no client to stop,
 /// so it carries nothing, and the retrofitted client then needs a [storage] of
@@ -54,22 +49,20 @@ final _logger = AtSignLogger('selfRetrofit');
 /// **A fully privileged retrofit also runs the signing-root step in-flow.**
 /// The retrofit is auto-approved by the atServer with no approver client in
 /// the loop, so nothing conveys the root to it the way an approve does — its
-/// only routes are to mint (no root published yet) or to be given the private
-/// by another holder (the every-start pull, already built). The mint half has
-/// to happen here: when the atSign publishes no root, the switched-to
-/// enrollment mints and publishes it, files both halves in the same keyfile,
-/// and anchors itself. Privilege is read off the atServer's enrollment
-/// record, never the namespaces this call requested. A scoped retrofit skips
-/// the step entirely. A root-step failure does not fail the retrofit — the
-/// enrollment is live and usable without it, and re-running [selfRetrofit]
-/// (idempotent per keyfile) retries the step.
+/// only routes are to mint one, when the atSign publishes none, or to be given
+/// the private by another holder on the every-start pull. The mint half has to
+/// happen here: the switched-to enrollment mints and publishes the root, files
+/// both halves in the same keyfile, and anchors itself. Privilege is read off
+/// the atServer's enrollment record, never the namespaces this call requested,
+/// and a scoped retrofit skips the step entirely. A root-step failure does not
+/// fail the retrofit — the enrollment is live and usable without it, and
+/// re-running [selfRetrofit] (idempotent per keyfile) retries the step.
 ///
 /// [signingAlgo] is the **authentication** key's algorithm — the APKAM
 /// keypair the new enrollment proves possession of on a connection, not the
 /// key it signs envelopes with. The name is the wire field's
-/// (`EnrollParams.signingAlgo`), which has meant that since before an
-/// enrollment had signing keys of its own; renaming it is a multi-repo seam
-/// against a released atServer, so the name stays and this says what it does.
+/// (`EnrollParams.signingAlgo`); renaming it is a multi-repo seam against a
+/// released atServer, so the name stays and this says what it does.
 ///
 /// A per-operation parameter rather than a preference. When the caller names
 /// none, [AtClientPreference.authenticationKeyAlgorithm] decides: `rsa2048`
@@ -118,18 +111,14 @@ Future<AtClientManager> selfRetrofit({
     signingAlgo: signingAlgo,
   );
 
-  // The retrofit re-authenticates as a NEW enrollment of the same atSign over
-  // the SAME store, so the bundle has to cross the switch and the store has to
-  // be handed over. The manager does both: it is what stops the outgoing client
-  // and therefore the only thing that knows which client is being replaced.
+  // NOTE: a retrofit re-authenticates as a NEW enrollment of the same atSign
+  // over the SAME store, so the store has to be handed over — and the manager
+  // is what stops the outgoing client, so it is the only thing that knows which
+  // client is being replaced.
   final switched = await (manager ?? AtClientManager.getInstance())
       .fromAuthSession(newSession, preference,
           storage: storage, principalChange: true);
 
-  // The signing-root step (in-flow, privileged only): mint if the atSign
-  // publishes no root yet. Inside its own guard because the retrofit itself
-  // has already succeeded — the client is live and stays returned — and a
-  // root minted later heals nothing worse than a delay.
   try {
     final client = switched.atClient;
     final granted = (await EnrollmentServiceImpl(client, AtEnrollment.create())
@@ -156,13 +145,12 @@ Future<AtClientManager> selfRetrofit({
 /// Split out of [selfRetrofit] because a client that retrofits during its own
 /// startup cannot use that function: it ends in
 /// [AtClientManager.fromAuthSession], which builds *another* client, whose own
-/// initialisation would retrofit in turn. A client deciding its own identity
-/// needs the id, not a second client holding it.
+/// initialisation would retrofit in turn.
 ///
 /// The returned session's `enrollmentId` is the new enrollment. Its `atLookUp`
 /// is authenticated as that enrollment, and its `atKeysIo` reads a keyfile
-/// that now carries the new enrollment's typed key material — which is what
-/// lets a caller re-derive its AtChops and connections from the new identity.
+/// carrying the new enrollment's typed key material, which is what lets a
+/// caller re-derive its AtChops and connections from the new identity.
 ///
 /// See [selfRetrofit] for what [signingAlgo] means, why the advertised signing
 /// key is minted before the request, and why the KEM is decided at this call.
@@ -184,25 +172,20 @@ Future<AtAuthSession> retrofitIdentity({
         'the self-retrofit submits on the session\'s authenticated AtLookUp');
   }
 
-  // The preference's value, not the posture's. An app may set
-  // `authenticationKeyAlgorithm` beside a posture, and then that value is what
-  // the client mints under — reading `posture.authenticationKeyAlgorithm` here
-  // would retrofit under the posture's algorithm and never say so.
+  // NOTE: the preference's value, not the posture's — an app may set
+  // `authenticationKeyAlgorithm` beside a posture, and reading
+  // `posture.authenticationKeyAlgorithm` here would retrofit under the
+  // posture's algorithm and never say so.
   final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
 
-  // Minted here, before the request, because the enrollment must own it from
-  // its first byte: `_apsk` advertises this key and the key package is signed
-  // with it, so a client start that minted it later would leave a window in
-  // which the record names the authentication key — which no un-upgraded peer
-  // can read once that key is ML-DSA.
-  //
-  // The algorithm the in-use set names, not a constant. At `pqReady` that is
-  // rsa2048 — a verifier's fleet is not the operator's to upgrade, and a
-  // single active rsa2048 entry is the one `_apsk` spelling every deployed
-  // reader parses. At `pqActive` it is ML-DSA-65, whose readers ship in the
-  // same release line as the posture. Minting rsa2048 there would leave the
-  // new enrollment's first start finding ML-DSA missing, minting a second
-  // keypair and republishing the record this request just created.
+  // NOTE: minted before the request because the enrollment must own it from
+  // its first byte — `_apsk` advertises this key and the key package is signed
+  // with it, so minting it at a later client start would leave a window in
+  // which the record names the authentication key, which no un-upgraded peer
+  // can read once that key is ML-DSA. It takes the algorithm the in-use set
+  // names, not a constant: anything else leaves the new enrollment's first
+  // start finding the in-use algorithm missing, minting a second keypair and
+  // republishing the record this request just created.
   final advertisedSigningKey =
       await mintAdvertisedSigningKey(preference.dataSigningKeyAlgorithms);
 
@@ -222,16 +205,15 @@ Future<AtAuthSession> retrofitIdentity({
                   preference.keyEstablishmentAlgorithms.first)),
       atLookUp);
 
-  // Authenticate under the new enrollment: the retrofit response's session
-  // is the legacy one, and only authenticate() mints a session carrying the
-  // new id — the keyfile's own answer now that the successor's material is
-  // filed, with the chops and algorithm resolved from it.
+  // NOTE: the retrofit response's session is the legacy one; only
+  // authenticate() mints a session carrying the new id, resolving the chops and
+  // algorithm from the keyfile the successor's material was just filed in.
   final auth = await AtAuth.create()
       .authenticate(AtAuthRequest(session.atSign, atKeysIo: session.atKeysIo)
-        // Carried through deliberately: the switched-to client's start-time
-        // self-heal — the signing-root pull, the nskey pulls, the store
-        // hydration — all key off its namespace, and a client built without
-        // one runs none of them while looking perfectly healthy.
+        // NOTE: the switched-to client's start-time self-heal — the
+        // signing-root pull, the nskey pulls, the store hydration — all key off
+        // its namespace, and a client built without one runs none of them while
+        // looking perfectly healthy.
         ..namespace = session.namespace ?? preference.namespace
         ..rootDomain = session.rootDomain);
   if (auth.isSuccessful != true || auth.session == null) {

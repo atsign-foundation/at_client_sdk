@@ -7,9 +7,8 @@ import 'package:at_commons/at_commons.dart';
 /// material.
 ///
 /// Authentication rather than signing because PKAM proves possession of the
-/// APKAM keypair, and that keypair is no longer the same thing as the
-/// enrollment's attestation signing keys — `signingAlgorithmForEnrollment`
-/// reads the authentication role for exactly that reason.
+/// APKAM keypair, which is distinct from the enrollment's attestation signing
+/// keys; `signingAlgorithmForEnrollment` reads the authentication role.
 Future<InMemoryAtKeysIo> mlDsaKeyfile(
     String atSign, String enrollmentId) async {
   final now = DateTime.now().toUtc();

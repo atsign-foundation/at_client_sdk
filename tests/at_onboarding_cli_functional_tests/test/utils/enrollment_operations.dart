@@ -20,11 +20,9 @@ import 'virtualenv_ports.dart';
 /// `AtClientImpl.atClientInstanceMap` is static and keyed only by
 /// `(atSign, enrollmentId)` — so without [evictCachedAtClients] the service
 /// below silently reuses the caller's client and its storage path, and every
-/// operation runs against a store this class did not choose.
-///
-/// The `AtClientManager.getInstance().reset()` at the end of each method does
-/// not cover this: it runs after the damage, and it does not clear the static
-/// map. See [evictCachedAtClients] for why.
+/// operation runs against a store this class did not choose. The
+/// `AtClientManager.getInstance().reset()` each method ends with does not cover
+/// that: it runs afterwards, and it leaves the static map populated.
 class EnrollmentOperations {
   late String atsign;
   String storageDir = 'test/storage/temp';
@@ -72,12 +70,9 @@ class EnrollmentOperations {
       enrollmentId = enrollment.enrollmentId;
       encApkamSymmetricKey = enrollment.encryptedAPKAMSymmetricKey;
     }
-    // ⛔ `?? ''`, not `!`. A pq-mode request carries NO wrapped symmetric key —
-    // that absence is the signal `EnrollmentServiceImpl.approve` reads to mint
-    // one of its own and swap in `approvedWithMintedKey` — so the null
-    // assertion threw for every request built under the default posture once
-    // that default became pqReady. Empty lets the decision reach approve(),
-    // which is the code that does the right thing.
+    // NOTE: `?? ''`, not `!` — a pq-mode request carries no wrapped symmetric
+    // key, and that absence is what `EnrollmentServiceImpl.approve` reads to
+    // mint one of its own and swap in `approvedWithMintedKey`.
     EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
       enrollmentId: enrollmentId!,
       atSign: atsign,
@@ -153,7 +148,7 @@ class EnrollmentOperations {
       ..rootDomain = 'vip.ve.atsign.zone'
       ..rootPort = virtualenvRootPort
       ..cramSecret = cramKey
-      // A null here would fall through to the home directory's real keys dir.
+      // NOTE: a null here falls through to the home directory's real keys dir.
       ..atKeysFilePath = atKeysFilePath ?? testKeysFile(atsign);
   }
 }

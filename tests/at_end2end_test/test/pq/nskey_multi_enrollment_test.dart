@@ -28,11 +28,6 @@ import 'package:test/test.dart';
 /// Had the design sealed per enrollment instead, a sender would have to know
 /// the recipient's device list and re-seal whenever it changed, and a device
 /// approved after the send could never read what came before it.
-///
-/// Two things make this testable at all, both landed today: the enrollment
-/// fixture, and keying `AtClientImpl`'s instance cache by
-/// `(atSign, enrollmentId)` — before that, two "enrollments" of one atSign were
-/// the same client object and this would have read one client twice.
 void main() {
   late String alice;
   late String bob;
@@ -42,8 +37,8 @@ void main() {
   /// an earlier run or the conveyance below proves nothing.
   final sharedNamespace = 'multi${DateTime.now().microsecondsSinceEpoch}';
 
-  /// A namespace @bob's second enrollment is never granted, used to show what
-  /// an UNAUTHORISED enrollment of the recipient can reach. @bob publishes a
+  /// A namespace @bob's second enrollment is never granted, showing what an
+  /// UNAUTHORISED enrollment of the recipient can reach. @bob publishes a
   /// namespace key for it too, so the record withheld below is a post-quantum
   /// share exactly like the ones above and differs only in the grant.
   final withheldNamespace = 'held${DateTime.now().microsecondsSinceEpoch}';
@@ -69,7 +64,7 @@ void main() {
     // Both atSigns live at once, each with its own AtClientManager. Through
     // the singleton, bringing alice up would tear bob's client down — his
     // syncService is unset the moment the manager moves off him — and the
-    // failure would surface much later, far from its cause.
+    // failure would surface far from its cause.
     final clients = await ConcurrentClients.open(
         alice, bob, sharedNamespace, ConfigUtil.getYaml()['authType'],
             posture: legacyPlusPqProviders);
@@ -129,13 +124,9 @@ void main() {
     await E2ESyncService.getInstance()
         .syncData(aliceClient.syncService, atSign: alice);
 
-    // Verified rather than assumed: alice really wrote the PQ scheme. A legacy
-    // write would be readable by both enrollments for entirely different
-    // reasons and this test would pass for the wrong one.
     final asWritten = await aliceClient.get(shared);
-    // The sender is an authorised reader too, and the clause says every
-    // authorised reader on BOTH atSigns decrypts. She holds the content key
-    // she cut, so this is her own decrypt and not a plaintext copy.
+    // Alice holds the content key she cut, so this is her own decrypt and not
+    // a plaintext copy.
     expect(asWritten.value, plaintext,
         reason: 'alice reads back what she wrote — the sending atSign is one '
             'of the two the clause covers');
@@ -146,14 +137,13 @@ void main() {
 
     // The structural claim, read off the record: the content key was sealed to
     // a NAMESPACE key, naming the generation @bob published — not to any
-    // enrollment or key package. That is why enrollment count is irrelevant.
+    // enrollment or key package.
     final conveyanceKid = asWritten.metadata?.appMetadata?.additional?['ckKid'];
     expect(conveyanceKid, isNotNull);
     // Read off the wire rather than through get()/getMeta(), both of which
     // decrypt — and alice cannot open this conveyance, correctly: it is sealed
-    // to @bob's namespace key, not hers. What is being inspected is the
-    // metadata, which is atServer-visible plaintext by design, so asking the
-    // atServer for it directly is both possible and the more faithful check.
+    // to @bob's namespace key, not hers. The metadata being inspected is
+    // atServer-visible plaintext by design.
     final metaResponse = await aliceClient.getRemoteSecondary()!.executeCommand(
         'llookup:meta:$bob:$conveyanceKid.__ck.$sharedNamespace$alice\n',
         auth: true);
@@ -182,7 +172,6 @@ void main() {
       ..sharedWith = bob
       ..sharedBy = alice;
 
-    // Both of @bob's enrollments read the same record.
     await E2ESyncService.getInstance()
         .syncData(bobPrimary.syncService, atSign: bob);
     expect((await bobPrimary.get(inbound())).value, plaintext,
@@ -195,23 +184,18 @@ void main() {
 
     // ── The sending side, varied ─────────────────────────────────────────
     //
-    // Everything above holds alice fixed and varies bob. The clause also says
-    // "whichever of alice's enrollments wrote it", which is a claim about the
-    // SENDER: readability follows @bob's namespace key, so it cannot depend on
-    // which of alice's enrollments did the sealing. Nothing establishes that
-    // until a second alice client writes the same kind of record.
+    // Everything above holds alice fixed and varies bob. The clause is also a
+    // claim about the SENDER: readability follows @bob's namespace key, so it
+    // cannot depend on which of alice's enrollments did the sealing, and
+    // nothing establishes that until a second alice client writes one.
     final alicePreference = aliceClient.getPreferences()!;
     final aliceSecond = await enrolAndAuthenticate(
       approver: aliceClient,
       atSign: alice,
       namespace: sharedNamespace,
-      // A store of its own, unlike bobSecond above. It matters here and not
-      // there: a content key is a client-side cache, so an alice2 sharing
-      // alice1's store could seal with the key alice1 already minted and this
-      // would be alice1's conveyance under a second name. bobSecond needs no
-      // such separation — nskey privates are filed through `AtKeysIo`, and its
-      // enrollment carries an in-memory one of its own, so it cannot inherit
-      // bob's namespace private through a shared store either way.
+      // A store of its own: a content key is a client-side cache, so an alice2
+      // sharing alice1's store could seal with the key alice1 already minted,
+      // and this would be alice1's conveyance under a second name.
       preference: TestPreferences.getInstance().forCoLocatedClient(alice,
           posture: legacyPlusPqProviders, device: 'alice2-$runStamp'),
       rootDomain: alicePreference.rootDomain,
@@ -226,10 +210,8 @@ void main() {
         reason: 'and a different one from the client that wrote the first '
             'record');
 
-    // alice2 mints NOTHING for itself. A sender seals to the recipient's
-    // published namespace key, so it needs no generation of its own — and
-    // asserting that by not providing one is stronger than asserting it in
-    // prose.
+    // alice2 mints NOTHING for itself: a sender seals to the recipient's
+    // published namespace key, so it needs no generation of its own.
     final aliceSecondRing = PublishedNskeyKeyRing(aliceSecond.client);
     aliceSecond.client.getPreferences()!.crypto =
         CryptoConfig.nskey(keyRing: aliceSecondRing);
@@ -277,17 +259,11 @@ void main() {
 
     // ── And what an UNAUTHORISED enrollment of @bob can reach ─────────────
     //
-    // Everything above is about authorised readers. The other half of the
-    // clause is that a bob enrollment which was never granted the namespace
-    // cannot fetch the ciphertext at all — the atServer refuses it, rather
-    // than the record arriving and failing to open. That distinction is the
-    // whole point: a reader handed ciphertext it cannot decrypt today is a
-    // reader holding ciphertext, and `bobSecond` is granted `sharedNamespace`
-    // and nothing else.
-    //
-    // The same shape same-atSign is proven in the functional pack's
-    // `enrollment_namespace_gate_test.dart`; this is the cross-atSign half,
-    // where the record is INBOUND and owned by @alice.
+    // A bob enrollment never granted the namespace cannot fetch the ciphertext
+    // at all — the atServer refuses it, rather than the record arriving and
+    // failing to open. That distinction is the whole point: a reader handed
+    // ciphertext it cannot decrypt today is a reader holding ciphertext, and
+    // `bobSecond` is granted `sharedNamespace` and nothing else.
     await bobRing.mintAndPublish(withheldNamespace);
     await E2ESyncService.getInstance()
         .syncData(bobPrimary.syncService, atSign: bob);
@@ -304,10 +280,6 @@ void main() {
     await E2ESyncService.getInstance()
         .syncData(aliceClient.syncService, atSign: alice);
 
-    // The control, and it is not drawn from the property under test: a client
-    // authorised for everything reads this record. Without it, "bob2 could not
-    // read it" is equally explained by the record never having arrived.
-    //
     // ⚠️ Read through the client rather than by `llookup`. A record @alice
     // shares with @bob lives on ALICE's atServer, and `llookup` only ever
     // answers for records the atServer it is asked already holds — so an

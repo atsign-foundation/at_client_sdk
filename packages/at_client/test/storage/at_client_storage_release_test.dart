@@ -306,9 +306,8 @@ void main() {
 /// Records whether [_storage] was already attached when the client asked this
 /// source for key material, then refuses: attachment happens in `_init`, so
 /// reading `true` here proves the storage reached the client.
-/// Answers the construction-time read that decides the enrollment, then
-/// refuses the AtChops read — which comes after `_init` has attached the
-/// storage, the moment this records.
+/// The first read answers the construction-time identity lookup; the AtChops
+/// read that follows is the one refused.
 class _AttachWatchingKeysIo extends WrittenAtKeysIo {
   _AttachWatchingKeysIo(this._storage);
 

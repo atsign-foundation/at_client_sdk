@@ -6,22 +6,9 @@ import 'package:at_onboarding_cli/src/util/registrar_api_constants.dart';
 class AtOnboardingPreference extends AtClientPreference {
   /// Forwards every flag `AtClientPreference` fixes at construction.
   ///
-  /// Without this the class inherited the implicit no-arg constructor, and
-  /// since `posture`, `authenticationKeyAlgorithm` and
-  /// `dataSigningKeyAlgorithms` are all final in the superclass, **no CLI
-  /// application could set any of them** — not by assignment afterwards, which
-  /// the finality forbids, and not at construction, which took no arguments.
-  /// They are final for a reason worth keeping: what a client writes must not
-  /// change meaning mid-run. The mutable fields beside them (`crypto`,
-  /// `seedNamespaceKeys`, and this class's own) are unaffected and are
-  /// deliberately not repeated here.
-  ///
-  /// It reached every `at_cli_commons` consumer, because `CLIBase` accepts a
-  /// preference and falls back to `AtOnboardingPreference()`: an app could
-  /// hand one in, and the one it handed in could not differ from the default.
-  ///
-  /// Every parameter is optional and the superclass supplies each default, so
-  /// `AtOnboardingPreference()` means exactly what it always did.
+  /// These are final in the superclass — what a client writes must not change
+  /// meaning mid-run — so construction is the only place to set them. Each is
+  /// optional and defaulted by the superclass.
   AtOnboardingPreference({
     super.posture,
     super.authenticationKeyAlgorithm,

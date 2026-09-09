@@ -26,17 +26,12 @@ class FlutterEnrollmentService {
   final AtSignLogger _logger = AtSignLogger('FlutterEnrollmentService');
   final AtEnrollment _atEnrollment = AtEnrollment.create();
 
-  /// Injectable for tests, like [KeychainStorage.biometricStorage];
-  /// production uses the platform keychain.
   @visibleForTesting
   KeychainStorage keychainStorage = KeychainStorage();
 
-  /// Injectable for tests; production uses the platform keychain.
   @visibleForTesting
   KeychainAtKeysIo keychainAtKeysIo = KeychainAtKeysIo();
 
-  /// Injectable for tests; production takes the client from the constructor
-  /// or resolves it through [AtClientManager].
   @visibleForTesting
   AtClient? atClientOverride;
 
@@ -68,9 +63,8 @@ class FlutterEnrollmentService {
     bool waitForApproval = false,
   }) async {
     AtEnrollmentResponse? atEnrollmentResponse;
-    // authenticator: null - this submits an enrolment request, which the
-    // atServer accepts unauthenticated. There is no credential here to
-    // authenticate with, and that is correct rather than an omission.
+    // NOTE: an enrolment request is submitted unauthenticated — the requesting
+    // device holds no credential to authenticate with yet.
     final AtLookUp atLookup = AtLookUp.withSecureSocket(
       atSign: request.atSign,
       rootDomain: request.rootDomain,
@@ -124,14 +118,12 @@ class FlutterEnrollmentService {
       if (!await keychainStorage.validateEnrollment(request.atSign)) {
         throw Exception('Invalid enrollment');
       }
-      // Routed through at_client's EnrollmentService rather than at_auth
-      // directly: approving is also when this atSign's secrets are sealed to
-      // the new device's key package, and calling at_auth straight would
-      // approve an enrollment that can authenticate and decrypt nothing.
+      // NOTE: approving also seals this atSign's secrets to the enrollee's key
+      // package, which only the client's enrollment service does — an approval
+      // made through at_auth alone can authenticate but decrypt nothing.
       atEnrollmentResponse = await atClient.enrollmentService!.approve(request);
-      // The approver holds no enrollee key material: approve() returns only
-      // the id and status, and the enrollee files its own keys on its own
-      // device. Write only what is actually present.
+      // NOTE: the approver holds no enrollee key material — approve() answers
+      // with the id and status, and the enrollee files its own keys.
       final approvedKeys = atEnrollmentResponse.atAuthKeys;
       if (approvedKeys != null) {
         await keychainAtKeysIo.write(request.atSign, approvedKeys);
@@ -139,17 +131,14 @@ class FlutterEnrollmentService {
       await _forgetPendingRequest(request.atSign);
       // ignore: experimental_member_use
     } on EnrollmentConveyanceException {
-      // The server-side approval succeeded — only the conveyance to the new
-      // device was refused, so the enrollment is live and cannot decrypt.
-      // Finish the approval bookkeeping and surface the true state rather
-      // than re-reporting the success as a failed enrollment.
+      // NOTE: the approval itself succeeded and only the conveyance to the new
+      // device failed, so the enrollment is live but cannot decrypt — the
+      // pending record still has to go.
       await _forgetPendingRequest(request.atSign);
       rethrow;
     } catch (e) {
       throw Exception('Enrollment failed: $e');
     } finally {
-      // Every exit closes the connection, the two throwing ones included —
-      // otherwise a refused approval leaks the caller's AtLookUp.
       await atLookUp.close();
     }
     return atEnrollmentResponse;
@@ -157,10 +146,9 @@ class FlutterEnrollmentService {
 
   /// Drop the local record of a request that has now been decided.
   ///
-  /// Guarded on its own, because by the time it runs the atServer has already
-  /// recorded the decision: a keychain failure here is not a failed
-  /// enrollment and must not be reported as one. What it costs is a pending
-  /// row that lingers until [KeychainStorage.validateEnrollment] expires it.
+  /// Never throws: the atServer has already recorded the decision by the time
+  /// this runs, so a keychain failure costs only a pending row that lingers
+  /// until [KeychainStorage.validateEnrollment] expires it.
   Future<void> _forgetPendingRequest(String atSign) async {
     try {
       await keychainStorage.deleteEnrollmentData(atSign);

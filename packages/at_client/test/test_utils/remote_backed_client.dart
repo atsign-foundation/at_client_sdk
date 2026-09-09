@@ -12,31 +12,18 @@ import 'mocks.dart';
 /// back, and a fixture giving each client its own store would let a signature
 /// check pass against a key nobody else could see.
 ///
-/// ## Routing
+/// Without [localData] one map backs both stores, so the fixture cannot tell a
+/// local-first write from a remote-first one and a test that cares about
+/// routing has to assert the routing directly rather than the result. Pass
+/// [localData] and the two stores diverge as a real device's do: a local-first
+/// write lands only in [localData] and is invisible to every other client
+/// until [syncToRemote] runs, and a local-first read cannot see what a peer
+/// wrote remotely, so a wrong route fails on its results.
 ///
-/// By default one map backs both stores, so the fixture **cannot tell a
-/// local-first write from a remote-first one** and a test that cares about
-/// routing has to assert the routing directly rather than the result. That
-/// blind spot is how the `__ssenv` wake-up ordering bug survived, and how the
-/// nskey mint read local storage — where a sibling's publication is absent
-/// until sync catches up — while every unit test stayed green.
-///
-/// Pass [localData] to close it. The two stores then diverge exactly as a real
-/// device's do: a local-first write lands only in [localData] and is invisible
-/// to every other client until [syncToRemote] runs, and a local-first read
-/// cannot see what a peer wrote remotely. A wrong route then fails on its
-/// **results**, which is what makes the assertion about behaviour rather than
-/// about a recorded call.
-///
-/// It is opt-in because the nine callers that predate it assert routing
-/// directly and would otherwise have to model sync to keep passing — they
-/// specify the default, so the default did not move.
-///
-/// [remoteMetadata] is opt-in because most callers only care about values.
-/// Supply one — shared by every client in the test, exactly as [remoteData] is
-/// — when the behaviour under test writes or reads `Metadata`; without it a
-/// `get` returns an [AtValue] with none, and an assertion about metadata would
-/// fail for want of a fixture rather than for want of the feature.
+/// Supply [remoteMetadata] — shared by every client in the test, exactly as
+/// [remoteData] is — when the behaviour under test writes or reads `Metadata`;
+/// without it a `get` returns an [AtValue] with none, and an assertion about
+/// metadata fails for want of a fixture rather than for want of the feature.
 ///
 /// Callers must `registerFallbackValue(AtKey())` in `setUpAll`.
 MockAtClient buildRemoteBackedMockClient({
@@ -62,8 +49,6 @@ MockAtClient buildRemoteBackedMockClient({
   when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
   when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
 
-  // With no [localData] the two are the same map, which is the historical
-  // behaviour: every write is visible to every client immediately.
   final localValues = localData ?? remoteData;
   final localMeta = localData == null ? remoteMetadata : localMetadata;
 
@@ -89,9 +74,8 @@ MockAtClient buildRemoteBackedMockClient({
     final meta = remote ? remoteMetadata : localMeta;
     final value = values[keyString];
     if (value == null) {
-      // A local-first read of a key only the atServer holds is a miss, not a
-      // fall-through to the remote. Treating it as a hit is precisely the
-      // defect this fixture exists to be able to catch.
+      // NOTE: a local-first read of a key only the atServer holds is a miss,
+      // not a fall-through to the remote.
       throw AtKeyNotFoundException('$keyString not found');
     }
     return Future.value(AtValue()
@@ -108,10 +92,8 @@ MockAtClient buildRemoteBackedMockClient({
 /// Copies everything a local-first write left in [localData] up to
 /// [remoteData], the way sync eventually would.
 ///
-/// Deliberately one-way and whole-store: modelling per-key commit ids would
-/// make the fixture a sync implementation, and every defect this exists to
-/// catch is about *whether* a value has reached the atServer, never about the
-/// order in which several did.
+/// One-way and whole-store: what it models is whether a value has reached the
+/// atServer, never the order in which several did.
 void syncToRemote({
   required Map<String, String> localData,
   required Map<String, String> remoteData,

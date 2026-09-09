@@ -33,47 +33,22 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// hold, retiring every one it holds that the list no longer names, and
 /// republishing the package by `enroll:update`.
 ///
-/// This is the **writer** the multi-key receiver has been waiting for. The
-/// reader half shipped first, deliberately: `keyPackageMaterials` returns every
-/// held material, `EnvelopeAddressing.regexForAny` watches every address, and
-/// `pqOpen` takes the secret selected by `envelope.kid`. Until this class
-/// existed a package could never gain a key, so all of that answered at exactly
-/// one address and the plural machinery was untestable against a real second
-/// key.
-///
 /// **A key package is amended, never replaced.** The advertisement this
-/// publishes carries every key the enrollment holds — the ones it just minted,
-/// the ones it is keeping, and the ones it has retired — because the write
-/// rewrites `metadata.keyPackage` whole, so anything left out is withdrawn
-/// from the advertisement. A retired key stays advertised *as retired*:
-/// `KeyPackage.bestKeyFor` skips it so nothing new is sealed to it, while a
-/// peer holding an envelope still in flight can see whose key it was.
-/// Dropping the entry instead would strand that envelope with nothing to
-/// name.
+/// publishes carries every key the enrollment holds — minted, kept and retired
+/// alike — because the write rewrites `metadata.keyPackage` whole, so anything
+/// left out is withdrawn from the advertisement. A retired key stays
+/// advertised *as retired*, so nothing new is sealed to it while a peer
+/// holding an envelope still in flight can see whose key it was.
 ///
-/// ⚠️ **File first, then publish — the OPPOSITE order to
-/// `SigningKeyMinting`, and the asymmetry is the whole point.** Both classes
-/// mint a key, advertise it and file it, and each picks the order whose
-/// failure it can live with:
-///
-/// - Publish an encapsulation key before filing its private half and every
-///   sender that reads the advertisement in that window seals data to a key
-///   **nobody holds**. Those writes are stored and durable; no later repair
-///   opens them, because the decapsulation key never existed. That is data
-///   loss.
-/// - File it before publishing and the client holds a key nothing has been
-///   sealed to yet, which costs nothing: no sender can address it until it is
-///   advertised, and the next start publishes it.
-///
-/// A signing key inverts both arms — publishing early costs nothing, filing
-/// early permanently unverifies whatever gets signed in the window — which is
-/// why the two classes disagree. `NskeyPrivateFiling` files before publishing
-/// for this same reason.
+/// ⚠️ **File first, then publish.** Publishing an encapsulation key before
+/// filing its private half lets every sender that reads the advertisement in
+/// that window seal data to a key **nobody holds** — durable writes that no
+/// later repair opens, because the decapsulation key never existed. Filing
+/// first costs nothing: no sender can address the key until it is advertised,
+/// and the next start publishes it.
 ///
 /// **Inert unless something changed.** An enrollment created under the current
-/// list already holds every algorithm it names and finds nothing to do, which
-/// is every start after the first. What reaches the working part of this class
-/// is a deployment that has edited the list since the enrollment was created.
+/// list already holds every algorithm it names and finds nothing to do.
 @experimental
 class KeyPackageMinting with ApkamSigning {
   KeyPackageMinting(this.atClient, {AtEnrollment? enrollment})
@@ -92,14 +67,10 @@ class KeyPackageMinting with ApkamSigning {
   /// holds that the list no longer names. Returns both, each empty when there
   /// was nothing to do.
   ///
-  /// **The enrollment always ends holding at least one active key**, and that
-  /// is a property of the two lists rather than something checked. An
-  /// enrollment advertising nothing active would look entirely healthy —
-  /// authenticating normally, syncing normally — while silently receiving
-  /// nothing anyone sealed to it, so it is worth saying why it cannot happen:
-  /// the configured list is never empty, and any algorithm in it is either
-  /// absent (so a key is minted for it) or already active (so that key is not
-  /// among the superseded). A moving deployment mints before it retires.
+  /// **The enrollment always ends holding at least one active key**: the
+  /// configured list is never empty, and any algorithm in it is either absent
+  /// (so a key is minted for it) or already active (so that key is not among
+  /// the superseded).
   Future<({List<String> minted, List<String> retired})>
       reconcileKeyPackage() async {
     const nothing = (minted: <String>[], retired: <String>[]);
@@ -119,8 +90,6 @@ class KeyPackageMinting with ApkamSigning {
       return nothing;
     }
 
-    // enroll:update amends an enrollment record, and the atSign's own
-    // credential has none on a released atServer.
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
     final enrolment = atLookUp?.enrollmentId;
     if (enrolment == null || isAtSignCredential(enrolment)) {
@@ -147,21 +116,14 @@ class KeyPackageMinting with ApkamSigning {
     ];
     if (missing.isEmpty && superseded.isEmpty) return nothing;
 
-    // No guard here against retiring the last active key, because the shape of
-    // the two lists above already makes that unreachable and a guard that
-    // cannot fire reads as a safeguard while exercising nothing. `wanted` is
-    // non-empty (the preference refuses an empty list), so take any algorithm
-    // in it: either it is not active, and it is in `missing`, so a key is
-    // minted; or it is active, and that key is not in `superseded`, so a key
-    // is kept. Either way the enrollment ends with at least one active key.
-    // The mint runs before the write, so a mint that throws leaves the keyfile
-    // and the advertisement exactly as they were.
+    // NOTE: the mint runs before the write, so a mint that throws leaves the
+    // keyfile and the advertisement exactly as they were.
     final minted = [for (final algorithm in missing) await _mint(algorithm)];
 
-    // One atomic keyfile update for the whole change, never a hand-rolled
-    // read → mutate → write: a client's start files conveyed key material
-    // through this same keyfile, and whichever of the two flushed second
-    // would drop the other's addition.
+    // NOTE: one atomic keyfile update for the whole change, never a
+    // hand-rolled read → mutate → write: a concurrent start files conveyed key
+    // material through this same keyfile, and whichever flushed second would
+    // drop the other's addition.
     await io.update(AtUtils.fixAtSign(atSign).toAtsign(), (keys) {
       for (final key in minted) {
         keys.addKey(CryptographicMaterial(
@@ -177,35 +139,31 @@ class KeyPackageMinting with ApkamSigning {
           keyId: key.kpid,
           role: CryptographicMaterialRole.privateDecapsulation,
           algorithm: key.materialAlgo,
-          // The SEED, not the decapsulation key: they are the same bytes for
-          // X-Wing and not for ML-KEM, whose decapsulation key is expanded and
-          // which no seeded call reproduces from.
+          // NOTE: the SEED, not the decapsulation key — the same bytes for
+          // X-Wing but not for ML-KEM, whose decapsulation key is expanded.
           bytes: AtBytes(key.seed),
           createdAt: key.createdAt,
         ));
       }
-      // Both halves move to retired; neither is removed. The public one is
-      // what the advertisement goes on carrying, and the private one is what
-      // still opens everything already sealed to it.
-      // The kid IS the keyfile's keyId for this material: both are
+      // NOTE: the kid IS the keyfile's keyId for this material — both are
       // PackageKey.computeKid over the same public bytes, which is what ties
       // the two halves to the package a sender sealed to.
       for (final key in superseded) {
         if (advertised.tagged) {
           keys.retireKey(enrolment, key.kid);
         } else {
-          // Untagged material lives in the atSign's container, not this
-          // enrollment's, and retireKey looks only in the latter — it would
-          // find nothing and report nothing, leaving the key active in the
-          // keyfile while the advertisement below called it retired.
+          // NOTE: untagged material lives in the atSign's container, and
+          // retireKey looks only in the enrollment's — it would silently find
+          // nothing, leaving the key active in the keyfile while the
+          // advertisement below called it retired.
           keys.retireAtSignKey(key.kid);
         }
       }
       return true;
     });
 
-    // Published only after the filing, so no advertisement ever names a key
-    // whose private half this client does not already hold.
+    // NOTE: published only after the filing, so no advertisement ever names a
+    // key whose private half this client does not already hold.
     await _publish(
       enrolment,
       atLookUp!,
@@ -242,30 +200,23 @@ class KeyPackageMinting with ApkamSigning {
   /// Every encapsulation key [enrolment] advertises in [keys] — active and
   /// retired, in that order — as the entries a key package carries.
   ///
-  /// Read back from the keyfile rather than from the package that is being
-  /// replaced, because the keyfile is what this client can actually answer
-  /// with: an entry in the old advertisement whose private half is not here is
-  /// an address nothing opens, and republishing it would keep senders aiming
-  /// at it.
+  /// Read back from the keyfile rather than from the package being replaced:
+  /// an entry in the old advertisement whose private half is not here is an
+  /// address nothing opens, and republishing it would keep senders aiming at
+  /// it.
   ///
   /// Material whose algorithm this build does not implement is skipped, and
-  /// [CryptographicMaterialStatus.dead] material is left out entirely — retirement is as
-  /// close to deletion as a keyfile gets, and a dead key is not something to
-  /// go on advertising.
+  /// [CryptographicMaterialStatus.dead] material is left out entirely.
   ///
-  /// ⚠️ **Tagged material wins, and untagged material is the FALLBACK — the
-  /// same rule `keyPackageMaterials` encodes, and it is not optional.**
-  /// `enrollmentKeyPackageBuilder` files an enrollment's first key package
-  /// with **no enrollment id**: it runs before the atServer has assigned one.
-  /// So the ordinary state of a freshly created enrollment is one *untagged*
-  /// pair, and a reader that took only tagged material would see an enrollment
-  /// holding nothing, mint a duplicate key under the same algorithm, and
-  /// advertise a package beside the one already in the record.
+  /// ⚠️ **Tagged material wins and untagged material is the FALLBACK.** An
+  /// enrollment's first key package is filed with no enrollment id, before the
+  /// atServer has assigned one, so the ordinary state of a freshly created
+  /// enrollment is one *untagged* pair; a reader that took only tagged
+  /// material would see an enrollment holding nothing and mint a duplicate key
+  /// under the same algorithm.
   ///
-  /// The two sets never mix. A retrofitted keyfile carries the legacy
-  /// enrollment's untagged package beside this enrollment's tagged one, and
-  /// merging them would let this enrollment advertise a key another
-  /// enrollment's record was built on.
+  /// The two sets never mix: merging them would let this enrollment advertise
+  /// a key another enrollment's record was built on.
   @visibleForTesting
   static ({List<PackageKey> keys, bool tagged}) advertisedKeysIn(
       AtKeys keys, String enrolment) {
@@ -286,12 +237,10 @@ class KeyPackageMinting with ApkamSigning {
           use: SecretSharingAlgos.useEnc,
           alg: alg,
           pub: Uint8List.fromList(material.bytes.bytes),
-          // The keyfile's own token, carried across rather than collapsed to
-          // one of the two this build knows. Both vocabularies are open and
-          // they agree on `active`/`retired`; a third value written by a newer
-          // client says something narrower about the key than either, and
-          // rewriting it here would republish the record with that statement
-          // weakened.
+          // NOTE: the keyfile's own token, carried across rather than
+          // collapsed to one of the two this build knows — a third value
+          // written by a newer client says something narrower about the key,
+          // and rewriting it would republish the record with that weakened.
           status: KeyEntryStatus.of(material.status),
         ));
       }
@@ -305,9 +254,8 @@ class KeyPackageMinting with ApkamSigning {
     }
 
     final own = gather(tagged: true);
-    // Which set won decides which verb retires from it: tagged material lives
-    // in the enrollment's own container and untagged material in the atSign's,
-    // and `retireKey` on the wrong one finds nothing and silently does nothing.
+    // NOTE: `tagged` is reported because it decides which verb retires from
+    // the set — `retireKey` on the wrong container silently does nothing.
     return own.isNotEmpty
         ? (keys: own, tagged: true)
         : (keys: gather(tagged: false), tagged: false);
@@ -316,18 +264,16 @@ class KeyPackageMinting with ApkamSigning {
   /// Signs the amended package and sends it as the enrollment's own
   /// `enroll:update`.
   ///
-  /// ⚠️ **Whichever key `_apsk` advertises must be the one that signs here** —
-  /// the same rule `enrollmentKeyPackageBuilder` states, for the same reason. A
+  /// ⚠️ **Whichever key `_apsk` advertises must be the one that signs here.** A
   /// peer verifies this package against that record before sealing anything to
-  /// the enrollment, so the two disagreeing means the enrollment goes on
-  /// advertising a package nobody will act on. [ApkamSigning.signingKeys] is
-  /// what composes `_apsk`, so taking the keys from there is what keeps them
-  /// the same set rather than two derivations that agree today.
+  /// the enrollment, so the two disagreeing leaves the enrollment advertising a
+  /// package nobody will act on; the keys come from [ApkamSigning.signingKeys],
+  /// which is what composes `_apsk`.
   ///
-  /// Only `metadata` is named. The atServer merges it per key, so a sibling
-  /// entry some later build added survives a write from this one — and the
-  /// verb refuses `namespaces` and the approval state outright, so a key
-  /// package amendment cannot widen the enrollment's own grant.
+  /// Only `metadata` is named: the atServer merges it per key, so a sibling
+  /// entry survives a write from this one, and the verb refuses `namespaces`
+  /// and the approval state outright, so a key package amendment cannot widen
+  /// the enrollment's own grant.
   Future<void> _publish(
       String enrolment, AtLookUp atLookUp, List<PackageKey> keys) async {
     final payload = KeyPackage.payloadFor(
@@ -338,9 +284,8 @@ class KeyPackageMinting with ApkamSigning {
         EnrollmentUpdateRequest(
           enrollmentId: enrolment,
           metadata: {
-            // toJson, not the envelope: this is EnrollParams.metadata, which
-            // is JSON-encoded onto the wire and read back as a Map by every
-            // consumer.
+            // NOTE: toJson, not the envelope object — EnrollParams.metadata is
+            // JSON-encoded onto the wire and read back as a Map.
             'keyPackage': signEnvelope(
               payload,
               type: EnvelopeType.keyPackage,
@@ -355,9 +300,8 @@ class KeyPackageMinting with ApkamSigning {
     final kem = SecretSharingAlgos.kemFor(algorithm);
     final materialAlgo = SecretSharingAlgos.materialAlgoFor(algorithm);
     if (kem == null || materialAlgo == null) {
-      // Unreachable: AtClientPreference refuses a list naming an algorithm
-      // this build cannot mint. Throwing rather than asserting, because the
-      // two would have to have drifted apart for this to be reached.
+      // NOTE: unreachable — AtClientPreference refuses a list naming an
+      // algorithm this build cannot mint.
       throw ArgumentError.value(
           algorithm,
           'algorithm',
@@ -381,8 +325,7 @@ class KeyPackageMinting with ApkamSigning {
 class _MintedEncKey {
   final String alg;
 
-  /// The keyfile's spelling of [alg] — what `keyPackageMaterials` reads back
-  /// to recognise this as key-establishment material.
+  /// The keyfile's spelling of [alg].
   final CryptographicMaterialAlgorithm materialAlgo;
 
   final Uint8List seed;

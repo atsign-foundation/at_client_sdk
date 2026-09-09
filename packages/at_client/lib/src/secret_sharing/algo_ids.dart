@@ -23,24 +23,15 @@ class SecretSharingAlgos {
   static const String xWing = 'x-wing';
 
   /// Pure ML-KEM-1024 (FIPS 203), IANA HPKE KEM id `0x0042` — the **no-hybrid**
-  /// option.
+  /// option, and CNSA 2.0's mandated parameter set.
   ///
-  /// Chosen for its citation rather than its strength: used alone it is the
-  /// only key establishment here whose specification chain contains no draft,
-  /// where every hybrid has its combiner specified only in an IETF draft. It is
-  /// also CNSA 2.0's mandated parameter set, and CNSA 2.0 treats hybrids as
-  /// non-compliant.
-  ///
-  /// What it gives up is the hedge against ML-KEM falling to *classical*
-  /// cryptanalysis. It loses nothing against a quantum adversary, since a
+  /// Used alone it carries no hedge against ML-KEM falling to *classical*
+  /// cryptanalysis; against a quantum adversary it loses nothing, since a
   /// hybrid's traditional half is Shor-broken anyway.
   static const String mlKem1024 = 'ml-kem-1024';
 
   /// RFC 9180 HPKE Base mode over [xWing]: KEM `0x647A`, KDF HKDF-SHA256,
   /// AEAD ChaCha20-Poly1305. `pqSeal` version `0x02`.
-  ///
-  /// ChaCha rather than AES-GCM because it is the only AEAD the HPKE working
-  /// group publishes `0x647A` vectors for.
   static const String xWingRfc9180 = 'x-wing-rfc9180-v1';
 
   /// RFC 9180 HPKE Base mode over [mlKem1024]: KEM `0x0042`, KDF HKDF-SHA384,
@@ -51,9 +42,8 @@ class SecretSharingAlgos {
   /// A sender picks the first of these that the recipient's key package
   /// advertises.
   ///
-  /// Ordering is a *sender* preference over what a recipient offers, not a
-  /// judgement that one is stronger — the two are chosen for different
-  /// reasons, and which an atSign advertises is its own configuration.
+  /// The order is a *sender* preference over what a recipient offers; which
+  /// algorithms an atSign advertises is its own configuration.
   static const List<String> keyAlgos = [xWing, mlKem1024];
 
   /// Sealing suites this client can produce and open, strongest first.
@@ -64,25 +54,21 @@ class SecretSharingAlgos {
 
   /// The `pqSeal` envelope version a suite maps to.
   ///
-  /// The version byte names the whole suite on the wire, so this is the only
-  /// place the two vocabularies meet. An unknown suite returns null rather than
-  /// defaulting: sealing under a guessed construction produces a record the
-  /// recipient cannot open, and the failure would surface on their side.
+  /// Null for a suite this build does not know, rather than a default: sealing
+  /// under a guessed construction produces a record the recipient cannot open,
+  /// and the failure surfaces on their side.
   static int? sealVersionFor(String suite) => switch (suite) {
         xWingRfc9180 => 0x02,
         mlKem1024Rfc9180 => 0x03,
         _ => null,
       };
 
-  /// The sealing suite that goes with a key-establishment algorithm.
+  /// The preferred sealing suite for a key-establishment algorithm, or null
+  /// for an id this build does not implement.
   ///
-  /// The KEM fixes the suite: nothing can seal ML-KEM-1024 to an X-Wing
-  /// encapsulation key or the reverse, so a recipient's advertised `alg` is
-  /// what decides which construction a sender uses.
-  ///
-  /// This is the *preferred* suite for that KEM — what a sender picks when it
-  /// has a free choice. [openableSuitesFor] is the wider set the same key can
-  /// unwrap, which is what a holder advertises.
+  /// This is what a sender picks when it has a free choice;
+  /// [openableSuitesFor] is the wider set the same key can unwrap, which is
+  /// what a holder advertises.
   static String? suiteForKeyAlgo(String keyAlgo) => switch (keyAlgo) {
         xWing => xWingRfc9180,
         mlKem1024 => mlKem1024Rfc9180,
@@ -92,17 +78,9 @@ class SecretSharingAlgos {
   /// The construction two parties settle on: the first of [senderSuites] that
   /// [recipientSuites] also declares, or null when they share none.
   ///
-  /// The SENDER's list is the preference order, and the recipient's is a
-  /// membership test — which is what makes this negotiated agility rather than
-  /// release-ordered agility. A sender walks its own strongest-first list and
-  /// stops at the first thing the recipient has said it can open, so a new
-  /// construction reaches the wire as soon as both ends know it, in whatever
-  /// order they were upgraded.
-  ///
-  /// One function because it was two: the key-package path and the nskey path
-  /// each walked this, and a negotiation that disagrees with itself picks
-  /// different constructions for the same pair of parties depending on which
-  /// substrate is asking.
+  /// The sender's list is the preference order; the recipient's is only a
+  /// membership test. Every negotiation goes through here, so that the same
+  /// pair of parties agrees on one construction whichever substrate is asking.
   static String? bestSuiteBetween(
       List<String> senderSuites, List<String> recipientSuites) {
     for (final suite in senderSuites) {
@@ -113,18 +91,10 @@ class SecretSharingAlgos {
 
   /// Every suite a holder of a [keyAlgo] key can **open**, in [suites] order.
   ///
-  /// ⚠️ This is an ADVERTISEMENT list — what a holder claims it can unwrap —
-  /// and not a sender's preference order. A sender narrowing what it will
-  /// EMIT must not narrow this, or holders stop claiming constructions they
-  /// can still open.
-  ///
-  /// Wider than [suiteForKeyAlgo] because a KEM key opens every construction
-  /// built on that KEM, not only the one a sender would choose.
-  ///
-  /// An unrecognised [keyAlgo] yields nothing rather than everything. A holder
-  /// must never claim a suite on the strength of a key this build cannot
-  /// identify — the claim would be acted on by a sender, and the failure would
-  /// arrive on the holder's side as an AEAD error.
+  /// An advertisement list, not a sender's preference order: narrowing what a
+  /// sender will emit must not narrow this. An unrecognised [keyAlgo] yields
+  /// nothing rather than everything, so a holder never claims a suite on the
+  /// strength of a key this build cannot identify.
   static List<String> openableSuitesFor(String keyAlgo) => switch (keyAlgo) {
         xWing => const [xWingRfc9180],
         mlKem1024 => const [mlKem1024Rfc9180],
@@ -134,10 +104,9 @@ class SecretSharingAlgos {
   /// The suites a holder advertising [keyAlgos] can open, deduplicated and in
   /// [suites] order (strongest first).
   ///
-  /// This is what a key package's `suites` field must be derived from. Stating
-  /// the build's whole [suites] list instead would claim, on behalf of a holder
-  /// that advertises one KEM, that it can open constructions built on the
-  /// other — and nothing it holds can.
+  /// A key package's `suites` field is derived from this rather than from the
+  /// build's whole [suites] list: a holder advertising one KEM cannot open
+  /// constructions built on the other.
   static List<String> openableSuitesForAll(Iterable<String> keyAlgos) {
     final openable = keyAlgos.expand(openableSuitesFor).toSet();
     return [
@@ -146,16 +115,12 @@ class SecretSharingAlgos {
     ];
   }
 
-  /// The KEM implementation a key-establishment algorithm id names.
+  /// The pure-Dart KEM implementation a key-establishment algorithm id names,
+  /// or null for an id this build does not implement.
   ///
-  /// Pure-Dart backends specifically. The FFI ones return an opaque
-  /// process-lifetime handle as an ML-KEM secret key, and every key reached
-  /// through here has to survive a restart.
-  ///
-  /// Null for an id this build does not implement, so a caller cannot guess:
-  /// encapsulating under the wrong KEM produces a record the recipient can
-  /// never open, and the failure would surface on their side as an AEAD error
-  /// with nothing to point at.
+  /// Pure Dart because the FFI backends return an opaque process-lifetime
+  /// handle as an ML-KEM secret key, and every key reached through here has to
+  /// survive a restart.
   static AtKemAlgorithm? kemFor(String keyAlgo) => switch (keyAlgo) {
         xWing => XWingPureDartAlgo.instance,
         mlKem1024 => MlKem1024PureDartAlgo.instance,
@@ -165,39 +130,33 @@ class SecretSharingAlgos {
   /// The public key length [keyAlgo] requires, or null for an id this build
   /// does not implement.
   ///
-  /// Read from each KEM's own constant rather than restated here: a length
-  /// written down twice is a length that can disagree with the code enforcing
-  /// it. [AtKemAlgorithm] deliberately keeps lengths off itself, so this is
-  /// the one place that knows which concrete class answers for which id — and
-  /// it must stay in step with [kemFor], which a test over [keyAlgos] pins.
-  ///
-  /// A reader needs this because a key id proves nothing about length: it is
-  /// the digest of whatever bytes are carried, so it matches a forged key as
-  /// readily as a real one.
+  /// Callers need it because a key id proves nothing about length: it is the
+  /// digest of whatever bytes are carried, so it matches a forged key as
+  /// readily as a real one. Must stay in step with [kemFor].
   static int? publicKeyLengthFor(String keyAlgo) => switch (keyAlgo) {
         xWing => XWingPureDartAlgo.publicKeyLength,
         mlKem1024 => MlKem1024PureDartAlgo.publicKeyLength,
         _ => null,
       };
 
-  /// The KEM that opens an envelope produced under [suite].
+  /// The KEM that opens an envelope produced under [suite], or null for a
+  /// suite this build does not implement.
   ///
-  /// The receive path's counterpart to [kemFor]: `pqOpen` reads the version
-  /// byte itself, but the KEM instance is the caller's to supply, and an
-  /// envelope sealed under one KEM handed to the other fails as an
-  /// indistinguishable AEAD error.
+  /// `pqOpen` reads the version byte itself, but the KEM instance is the
+  /// caller's to supply, and an envelope sealed under one KEM handed to the
+  /// other fails as an indistinguishable AEAD error.
   static AtKemAlgorithm? kemForSuite(String suite) => switch (suite) {
         xWingRfc9180 => XWingPureDartAlgo.instance,
         mlKem1024Rfc9180 => MlKem1024PureDartAlgo.instance,
         _ => null,
       };
 
-  /// The `CryptographicMaterial.algorithm` token a keyfile names [keyAlgo] by.
+  /// The `CryptographicMaterial.algorithm` token a keyfile names [keyAlgo] by,
+  /// or null for an id this build does not implement.
   ///
-  /// A keyfile has its own vocabulary — `xwing`, `mlkem1024` — deliberately
-  /// shared with the pkam/enrollment `signingAlgo` literals rather than with
-  /// these protocol ids. This and [keyAlgoForMaterial] are the only places the
-  /// two meet.
+  /// A keyfile has its own vocabulary, shared with the pkam/enrollment
+  /// `signingAlgo` literals rather than with these protocol ids; this and
+  /// [keyAlgoForMaterial] are the only places the two meet.
   static CryptographicMaterialAlgorithm? materialAlgoFor(String keyAlgo) =>
       switch (keyAlgo) {
         xWing => CryptographicMaterialAlgorithm.xWing,
@@ -208,10 +167,9 @@ class SecretSharingAlgos {
   /// The protocol id for a keyfile's `algorithm` token, or null if this
   /// build does not know that token.
   ///
-  /// Null is how a key-package lookup tells a key it can use from one it
-  /// cannot: `algorithm` is an open string by contract — a keyfile
-  /// written by a newer client round-trips values this build has never seen —
-  /// so an unknown token means "not mine", not "malformed".
+  /// `algorithm` is an open string by contract, so an unknown token means
+  /// "not mine", not "malformed" — null is how a key-package lookup tells a
+  /// key it can use from one it cannot.
   static String? keyAlgoForMaterial(
           CryptographicMaterialAlgorithm materialAlgo) =>
       switch (materialAlgo) {

@@ -11,11 +11,6 @@ import 'package:test/test.dart';
 import 'test_utils/envelope_tamper.dart';
 
 /// The builder that puts a key package on `enroll:request`.
-///
-/// It runs at the one moment this is possible — the APKAM keypair exists and
-/// the enrollment record does not — so the two things worth pinning are that
-/// the private half it mints is kept somewhere durable, and that what it signs
-/// verifies against the APKAM key the atServer will publish as `_apsk`.
 void main() {
   const atSign = '@alice';
 
@@ -52,11 +47,6 @@ void main() {
             'never be opened');
     expect(private!.algorithm, CryptographicMaterialAlgorithm.xWing);
 
-    // The public half is stored too, under the same keyId, so the pair can be
-    // recovered together. Both are untagged at this point — the builder runs
-    // before the atServer has assigned an enrollment id — so they sit in the
-    // atSign's own container until the persist adopts them into the
-    // enrollment.
     final public =
         keys.getAtSignKey(kpid, CryptographicMaterialRole.publicEncapsulation);
     expect(public, isNotNull);
@@ -73,17 +63,14 @@ void main() {
     final advertised = (payload['keys'] as List).single as Map;
     final kpid = advertised['kid'] as String;
 
-    // Seal to the advertised public half, exactly as a sender would...
-    // The subject here is whether the filed private half matches the
-    // advertised public one, not the binding, so both ends say Uint8List(0)
-    // rather than borrowing a substrate's info.
+    // NOTE: both ends pass an empty info — the subject is whether the filed
+    // private half matches the advertised public one, not the binding.
     final sealed = await pqSeal(
       XWingPureDartAlgo.instance,
       base64Decode(advertised['pub'] as String),
       Uint8List.fromList(utf8.encode('a secret for the new device')),
       info: Uint8List(0),
     );
-    // ...and open it with the half that was filed away.
     final private = keys.getAtSignKey(
         kpid, CryptographicMaterialRole.privateDecapsulation)!;
     final opened = await pqOpen(
@@ -107,8 +94,6 @@ void main() {
     final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
     final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
 
-    // _apsk is populated by the atServer from the record's apkamPublicKey, so
-    // this is the key a verifier will actually check against.
     await verifyEnvelope(envelope,
         signerPublicKey: apkam.atPublicKey.publicKey,
         expecting: EnvelopeType.keyPackage);
@@ -120,8 +105,6 @@ void main() {
     final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
     final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
     final payload = Map<String, Object?>.from(envelope.payload as Map);
-    // Substitute an encapsulation target — the attack the signature exists to
-    // stop, since every structural field still agrees afterwards.
     final other = await XWingPureDartAlgo.instance.generateKeyPair();
     payload['keys'] = [
       {
@@ -139,11 +122,6 @@ void main() {
       throwsA(isA<AtSigningVerificationException>()),
     );
   });
-
-  // The builder used to take an envelopeVersion, so that a posture could
-  // choose the shape a key package froze into. The package rides the
-  // write-once metadata.keyPackage, which made picking the wrong one
-  // unrecoverable; there is one shape now, so there is nothing to pick.
 
   test('carries no enrollmentId claim — the atServer has not assigned one yet',
       () async {
@@ -166,12 +144,9 @@ void main() {
   });
 
   group('when the enrollment owns a signing key', () {
-    // Ruling 98.3, amended 2026-08-14: `_apsk` verifies the key package as
-    // well as the enrollment's envelopes, so whichever key the record names
-    // must be the key that signed the package. Once the enrollment owns a
-    // signing key, `_apsk` names THAT — so the package has to be signed with
-    // it and not with the APKAM keypair, or every peer refuses to seal to the
-    // enrollment and it receives no conveyed material at all.
+    // NOTE: `_apsk` names the enrollment's own signing key once it has one,
+    // so the package must be signed with that key and not with the APKAM
+    // keypair, or every peer refuses to seal to the enrollment.
     test('the package is signed by the signing key, not the APKAM key',
         () async {
       final (io, _, apkam) = await freshKeys();
@@ -185,14 +160,10 @@ void main() {
       ))(io);
       final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
 
-      // The peer's check with the peer's input: _apsk names the signing key.
       await verifyEnvelope(envelope,
           signerPublicKey: signing.atPublicKey.publicKey,
           expecting: EnvelopeType.keyPackage);
 
-      // The differential. Without it this passes for a build that never
-      // changed signer, because a package signed by the APKAM key is still a
-      // validly signed package — it just verifies against the wrong record.
       await expectLater(
         () => verifyEnvelope(envelope,
             signerPublicKey: apkam.atPublicKey.publicKey,
@@ -205,8 +176,6 @@ void main() {
     });
 
     test('without one, the APKAM key still signs it', () async {
-      // The `now` path, unchanged: no signing key of its own means the APKAM
-      // key both authenticates and signs, and _apsk names it.
       final (io, _, apkam) = await freshKeys();
 
       final metadata = await enrollmentKeyPackageBuilder(atSign)(io);

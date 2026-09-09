@@ -1,14 +1,9 @@
-// The behaviour, against a real atServer: a write that asks not to be recorded
-// leaves the commit log where it was, and one that does not ask moves it.
+// Against a real atServer: a write that asks not to be recorded leaves the
+// commit log where it was, and one that does not ask moves it.
 //
-// The unit pins prove the flag reaches the wire. Only this proves the atServer
-// acts on it — and the difference matters, because an atServer that does not
-// honour the flag accepts the command and records the commit anyway, with
-// nothing refused and no error returned. Without the control arm below, a run
-// where the flag is silently dropped is indistinguishable from one where it
-// worked.
-//
-// Deliberately untagged: this drives no post-quantum mechanism at all.
+// NOTE: an atServer that does not honour the flag accepts the command and
+// records the commit anyway, refusing nothing and returning no error, so the
+// control arm is what tells a silently dropped flag from a working one.
 library;
 
 import 'package:at_client/at_client.dart';
@@ -55,8 +50,8 @@ void main() async {
 
   group('a write can ask the atServer not to record it', () {
     test('an ordinary write moves the commit log', () async {
-      // The control, and it runs first on purpose: if this does not move, the
-      // measurement below means nothing and the instrument is what is broken.
+      // NOTE: the control runs first on purpose: if this does not move, the
+      // arm below means nothing and the instrument is what is broken.
       expect(await putAndMeasure(noCommit: false), greaterThan(0),
           reason: 'an ordinary write records a commit, so the atServer\'s '
               'latest commit id must advance');

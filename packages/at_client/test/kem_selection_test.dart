@@ -7,6 +7,9 @@ import 'package:test/test.dart';
 
 Uint8List _bytes(String s) => Uint8List.fromList(utf8.encode(s));
 
+/// Resolving an advertised algorithm id to the KEM, suite and seal version
+/// that open what was sealed under it, and the preference knob that decides
+/// which ids an enrollment advertises.
 void main() {
   group('an algorithm id resolves to the KEM that realises it', () {
     test('each id names a distinct implementation', () {
@@ -17,17 +20,16 @@ void main() {
     });
 
     test('an id this build does not implement is null, not a guess', () {
-      // Falling back to a default here would seal under a KEM the recipient
-      // never advertised, producing a record only they could discover was
-      // broken.
+      // NOTE: falling back to a default here would seal under a KEM the
+      // recipient never advertised.
       expect(SecretSharingAlgos.kemFor('kyber-1024-v9'), isNull);
       expect(SecretSharingAlgos.kemForSuite('x-wing-hpke-v9'), isNull);
     });
 
     test('each live suite maps to its own KEM, and the retired one to none',
         () {
-      // 'x-wing-hpke-v1' is spelled out rather than named: the constant is
-      // gone, and a holder can still put the string in its advertisement.
+      // NOTE: the retired suite id is spelled out because no constant names
+      // it, and a holder can still advertise the string.
       expect(SecretSharingAlgos.kemForSuite('x-wing-hpke-v1'), isNull,
           reason: 'a retired suite must resolve to no KEM, so an envelope '
               'claiming it is refused rather than decapsulated');
@@ -40,9 +42,6 @@ void main() {
   });
 
   group('the id → KEM → suite → version chain seals and opens', () {
-    // This is the whole contract the wiring rests on: given only a recipient's
-    // advertised algorithm id, a sender can pick a KEM and an envelope version
-    // that the recipient's key actually opens.
     for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
       test('$keyAlgo round-trips end to end', () async {
         final kem = SecretSharingAlgos.kemFor(keyAlgo)!;
@@ -65,10 +64,6 @@ void main() {
     }
 
     test('the two KEMs are not interchangeable', () async {
-      // The arms must genuinely differ or the round-trips above prove nothing:
-      // an envelope sealed under one KEM must not open under the other, which
-      // is exactly why the advertised id has to be followed rather than
-      // assumed.
       final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
       final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
 
@@ -78,9 +73,8 @@ void main() {
       expect(xWingPair.publicKey.length, isNot(mlKemPair.publicKey.length),
           reason: '1216 bytes against 1568 — they are not even the same shape');
 
-      // The subject is the KEM mismatch, so the binding is held constant at
-      // empty on both ends — a differing info would give the refusal below a
-      // second possible cause.
+      // NOTE: info is held empty on both ends, so the refusal below has the
+      // KEM mismatch as its only possible cause.
       final sealed = await pqSeal(mlKem, mlKemPair.publicKey, _bytes('secret'),
           info: Uint8List(0),
           version: SecretSharingAlgos.sealVersionFor(
@@ -116,17 +110,16 @@ void main() {
         SecretSharingAlgos.xWing,
       ]);
 
-      // The FIRST is the primary: it is what anything minting a single key —
-      // an nskey, or a fresh package key — uses. The rest are advertised by
-      // the enrollment's key package so peers can still reach it.
+      // NOTE: the first entry is what anything minting a single key uses; the
+      // rest are advertised by the key package so peers can still reach it.
       expect(preference.keyEstablishmentAlgorithms.first,
           SecretSharingAlgos.mlKem1024);
       expect(preference.keyEstablishmentAlgorithms, hasLength(2));
     });
 
     test('refuses an empty list, where the sender-side list permits one', () {
-      // The asymmetry is the point: sealing to nothing writes to nobody, but
-      // advertising nothing can RECEIVE nothing while looking healthy.
+      // NOTE: sealing to nothing writes to nobody, but advertising nothing
+      // can receive nothing while looking healthy.
       expect(
           () => AtClientPreference(keyEstablishmentAlgorithms: const []),
           throwsA(isA<ArgumentError>().having((e) => e.message.toString(),
@@ -146,8 +139,6 @@ void main() {
     });
 
     test('every advertised option resolves to an implementation', () {
-      // Guards the case where an id is added to `keyAlgos` and the mapping is
-      // not swept — the id would then be advertised and unusable.
       for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
         expect(SecretSharingAlgos.kemFor(keyAlgo), isNotNull,
             reason: '$keyAlgo is offered but has no implementation');

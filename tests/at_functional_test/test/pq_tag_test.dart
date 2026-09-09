@@ -1,18 +1,14 @@
 /// Guards the `pq` tag set in this pack.
 ///
-/// `dart_test.yaml` here declares the tag but deliberately carries no `paths:`
-/// allowlist, so — unlike `tests/at_end2end_test` — an untagged file still
-/// runs. What it does not do is appear in `--tags pq`, and that is the failure
-/// this file exists to catch: the acceptance suite's stage and matrix arms
-/// select on that tag, so a post-quantum test that nobody tagged is invisible
-/// to them while looking perfectly healthy in a full run.
+/// `dart_test.yaml` here declares the tag but carries no `paths:` allowlist, so
+/// an untagged file still runs; what it does not do is appear in `--tags pq`.
+/// The acceptance suite's stage and matrix arms select on that tag, so a
+/// post-quantum test nobody tagged is invisible to them while looking perfectly
+/// healthy in a full run.
 ///
 /// The set is *derived*, not listed, so it cannot drift: a file exercising a
 /// post-quantum mechanism must carry `@Tags(['pq'])`, and a file exercising
-/// none must not. Adding a PQ test therefore turns this red until it is
-/// tagged, which is the whole point.
-///
-/// Pure local file inspection; it talks to no atServer.
+/// none must not. Pure local file inspection; it talks to no atServer.
 library;
 
 import 'dart:io';
@@ -23,33 +19,20 @@ import 'package:test/test.dart';
 ///
 /// Deliberately the vocabulary of the mechanisms rather than of the file
 /// names: `pq_*` naming is a convention nobody enforces, and the two files
-/// that most needed the tag (`copied_keyfile_test`, `crypto_era_default_test`)
+/// that most need the tag (`copied_keyfile_test`, `crypto_era_default_test`)
 /// carry no `pq` in their names at all.
 ///
-/// ⚠️ **A bare `PqPosture` used to be in this list and had to come out.**
-/// Every client in this pack now names its posture — `TestUtils.getPreference`
-/// and `TestUtils.initAtClient` require one, so the compiler can name any test
-/// that has not chosen — and `PqPosture.legacy` is what a test that drives no
-/// post-quantum mechanism says. The symbol therefore appears in EVERY file in
-/// this pack and discriminates nothing; left in, it flagged the whole pack and
-/// failed this guard's own negative control. What still means "post-quantum"
-/// is a posture that is not the legacy one: `pqReady`, `pqActive`, or one
-/// built axis by axis. When the change landed the narrowed set flagged exactly
-/// the files that carry the tag, with none lost — which is the property, and
-/// it is what the two assertions below check on every run.
+/// ⚠️ **A bare `PqPosture` does not belong in this list.** Every client in this
+/// pack names its posture, and `PqPosture.legacy` is what a test that drives no
+/// post-quantum mechanism says, so the bare symbol appears in EVERY file here
+/// and discriminates nothing — it would flag the whole pack and fail this
+/// guard's own negative control. What means "post-quantum" is a posture that is
+/// not the legacy one: `pqReady`, `pqActive`, or one built axis by axis.
 ///
-/// ⚠️ **No counts here, deliberately.** This said "all 55 files" and "flags 34
-/// files, exactly the 34 that carry the tag". Both were true when written and
-/// both moved on 2026-08-26 when two reproduction harnesses were deleted; the
-/// guard re-derives its own denominator every run, so a number in the prose
-/// only ever rots.
-///
-/// ⚠️ **Those three posture clauses currently flag nothing on their own** —
-/// every one of the 34 also matches a mechanism symbol, so deleting them today
-/// would change no verdict. They are here for the test whose *only*
-/// post-quantum signal is the era it runs at, which is what classifying this
-/// pack by posture is expected to produce. Re-derive before removing them:
-/// find a file matching a posture clause and none of the others.
+/// ⚠️ **The three posture clauses may flag nothing on their own**, every file
+/// they match also matching a mechanism symbol. They are here for the test
+/// whose *only* post-quantum signal is the era it runs at. Re-derive before
+/// removing them: find a file matching a posture clause and none of the others.
 final _pqSymbols = RegExp(
     r'PqPosture\.pqReady|PqPosture\.pqActive|PqPosture\(|nskey|Nskey|'
     r'pqSeal|pqOpen|SigningAlgoType|keyPackage|KeyPackage|__ssenv|_apsk|'
@@ -63,9 +46,7 @@ bool _drivesPq(String source) => _pqSymbols.hasMatch(source);
 /// annotation only reaches the library when it sits **before** the `library;`
 /// directive. Put it after, and it legally attaches to the next import
 /// instead: `dart analyze` stays clean, the string is right there in the file,
-/// and `--tags pq` silently does not select it. Measured 2026-08-23 — moving
-/// one tag below `library;` turned that file's selection into "No tests match
-/// the requested tag selectors" with nothing else going red.
+/// and `--tags pq` silently does not select it, with nothing else going red.
 ///
 /// So this checks placement, not presence: the tag line must exist, a
 /// `library;` line must exist, and the tag must come first.
@@ -113,9 +94,9 @@ void main() {
   });
 
   test('the placement check rejects a tag the runner would ignore', () {
-    // The exact shape that fooled a presence-only check: the annotation is
+    // The exact shape a presence-only check accepts: the annotation is
     // present, spelled correctly, and attaches to the import rather than the
-    // library. If this ever passes, _isTagged has gone back to grepping.
+    // library. If this ever passes, _isTagged is grepping again.
     const misplaced = "// a comment\nlibrary;\n@Tags(['pq'])\nimport 'x.dart';";
     const correct = "// a comment\n@Tags(['pq'])\nlibrary;\nimport 'x.dart';";
     expect(_isTagged(misplaced), isFalse,

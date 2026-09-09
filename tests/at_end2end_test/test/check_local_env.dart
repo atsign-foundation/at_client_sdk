@@ -16,11 +16,12 @@ import 'package:test/test.dart';
 final _queue = Queue();
 
 /// The demo atSigns the suite authenticates as, with their legacy secondary
-/// ports in the virtualenv image. `@eve🛠` is checked as well as the first one
-/// because runLocal.sh reconfigures and RESTARTS its secondary: a restart that
-/// landed mid-load would sever the key install with nothing to retry it, and
-/// the failure would otherwise surface much later as an authentication error
-/// inside a test's setUpAll.
+/// ports in the virtualenv image.
+///
+/// `@eve🛠` is probed as well as the first one because runLocal.sh restarts its
+/// secondary: a restart landing mid-load severs the key install with nothing to
+/// retry it, and that surfaces much later as an authentication failure inside a
+/// test's setUpAll.
 const Map<String, int> atSigns = {
   '@alice🛠': 25000,
   '@eve🛠': 25010,
@@ -39,8 +40,8 @@ void main() {
         basePort == 64 ? entry.value : entry.value + (basePort + 1 - 25000);
 
     test('e2e virtualenv readiness ($atSign @ $secondaryPort)', () async {
-      // One queue serves every probe, so drain anything the previous one left
-      // behind rather than reading it as this atSign's answer.
+      // NOTE: one queue serves every probe, so drain what the previous one
+      // left behind rather than reading it as this atSign's answer.
       _queue.clear();
       final socket = await _connect(rootServer, secondaryPort,
           maxTries: 30, retryIntervalSecs: 3);

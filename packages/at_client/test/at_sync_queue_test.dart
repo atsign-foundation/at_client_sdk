@@ -22,10 +22,9 @@ void main() {
   });
 
   tearDown(() async {
-    // Both registries. The queue's box now lives on the instance owning
-    // `tmp.path`, which `Hive.close()` does not reach — leaving it open over a
-    // directory deleted below, so the next test would reopen the cached box
-    // and read this one's entries back.
+    // NOTE: `Hive.close()` does not reach the instance owning `tmp.path`, so
+    // without this its box stays open over the directory deleted below and the
+    // next test reads this one's entries back.
     await HiveInstances.closeAll();
     await Hive.close();
     if (tmp.existsSync()) {
@@ -237,14 +236,10 @@ void main() {
       await q.enqueue('k1', SyncQueueOp.updateAll);
       final pushed = q.readEntry('k1')!;
 
-      // Control: nothing replaced the entry, so the pushed version is the
-      // current version and the removal removes.
       expect(await q.removeIfUnchanged('k1', pushed.seq), isTrue);
       expect(q.readEntry('k1'), isNull);
       expect(q.size, 0);
 
-      // And a removal for a version that no longer exists reports false
-      // rather than throwing.
       expect(await q.removeIfUnchanged('k1', pushed.seq), isFalse);
       await q.close();
     });
@@ -255,20 +250,12 @@ void main() {
       final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q.open();
 
-      // The drain reads the entry it is about to push...
       await q.enqueue('k1', SyncQueueOp.updateAll);
       final pushed = q.readEntry('k1')!;
       expect(pushed.op, SyncQueueOp.updateAll);
 
-      // ...and while the push is in flight, a local delete replaces it.
-      // Same key, so this is one record being overwritten — the per-key
-      // dedup working as designed.
       await q.enqueue('k1', SyncQueueOp.delete);
 
-      // The drain's success-path removal must NOT take the delete with it.
-      // An unconditional remove here is how an awaited delete() used to
-      // vanish: the server kept the update, the queue read empty, and the
-      // client reported itself in sync.
       expect(await q.removeIfUnchanged('k1', pushed.seq), isFalse,
           reason: 'the entry the drain pushed is not the entry that is '
               'queued now, so the removal must decline');
@@ -278,7 +265,6 @@ void main() {
               'round');
       expect(survivor!.op, SyncQueueOp.delete);
 
-      // The next round pushes the delete and ITS removal succeeds.
       expect(await q.removeIfUnchanged('k1', survivor.seq), isTrue);
       expect(q.size, 0);
       await q.close();
@@ -291,9 +277,8 @@ void main() {
       final before = q1.readEntry('k1')!.seq;
       await q1.close();
 
-      // A new instance over the same box must stamp strictly newer seqs —
-      // a reissued seq would let removeIfUnchanged remove an entry the
-      // previous process's drain never pushed.
+      // NOTE: a reissued seq would let removeIfUnchanged remove an entry the
+      // drain never pushed.
       final q2 = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q2.open();
       await q2.enqueue('k2', SyncQueueOp.updateAll);

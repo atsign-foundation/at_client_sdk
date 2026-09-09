@@ -55,18 +55,15 @@ class TestSuiteInitializer {
   ///
   /// Without it `PqClientBootstrap` gets `keysIo: null`, builds no
   /// `NskeyPrivateFiling`, and every nskey private lives only in the ring's
-  /// memory — which the e2e suites discard constantly, because each atSign
-  /// switch stops the outgoing client and builds a new one. A client would
-  /// then adopt its own published advertisement holding no private for it, and
-  /// every read of something sealed to that generation fails with "no nskey
-  /// private held for ...". That is not a property of the product: it is what
-  /// a client with no key source is documented to be, and an application has
-  /// one.
+  /// memory — which each atSign switch discards, since it stops the outgoing
+  /// client and builds a new one. Such a client adopts its own published
+  /// advertisement holding no private for it, and every read of something
+  /// sealed to that generation fails with "no nskey private held for ...".
   ///
-  /// Seeded once per atSign and only when absent. `NskeyPrivateFiling.read`
+  /// Seeded once per atSign and only when absent: `NskeyPrivateFiling.read`
   /// answers null on any read failure, so a keyfile that does not exist looks
-  /// exactly like one holding no private — and re-seeding would discard every
-  /// private already filed, which is the whole point of it being durable.
+  /// exactly like one holding no private, and re-seeding would discard every
+  /// private already filed.
   Future<AtKeysIo> _nskeyKeyfileFor(
       String atSign, AtClientPreference preference) async {
     final keysIo = FileAtKeysIo(
@@ -87,13 +84,9 @@ class TestSuiteInitializer {
   /// another's — see `ConcurrentClients`. The singleton stops the outgoing
   /// client on every switch, so two atSigns cannot both be live under it.
   /// [posture] is required and has no default, so the compiler names every
-  /// caller. It is required even when [atClientPreference] is supplied: a
-  /// preference built elsewhere already carries a posture, and letting the
-  /// caller stay silent about it is what made this the invisible path — the
-  /// `??=` below applies `TestPreferences.getPreference` inside this library,
-  /// so a required parameter on that helper alone would leave every caller
-  /// here naming nothing. A supplied preference whose posture disagrees is
-  /// refused rather than silently preferred either way.
+  /// caller. It is required even when [atClientPreference] is supplied — a
+  /// preference built elsewhere already carries a posture, and one that
+  /// disagrees with this is refused rather than silently preferred either way.
   ///
   /// ⛔ See `TestPreferences.getPreference` for why the choice matters on this
   /// pack's long-lived atSigns.
@@ -147,11 +140,9 @@ class TestSuiteInitializer {
       }
       atClientPreference ??= TestPreferences.getInstance()
           .getPreference(atSign, posture: posture);
-      // Again here, and deliberately not only inside getPreference: a caller
-      // may hand in a preference it built itself, and that route reaches a
-      // live client without passing through the helper at all. This is the
-      // last point before setCurrentAtSign, so it is the one place every
-      // route has in common.
+      // Checked here as well as inside getPreference: a caller may hand in a
+      // preference it built itself, and this is the last point before
+      // setCurrentAtSign that every route has in common.
       TestPreferences.refuseDurableWritesToLongLivedAtSigns(
           atSign, atClientPreference);
       // Remember what this atSign authenticated with. Switching away and back
@@ -218,9 +209,9 @@ class TestSuiteInitializer {
   /// switch would reopen the store cold.
   ///
   /// [posture] is optional here, unlike on [testInitializer]: the atSign has
-  /// already been brought up, so the preference it was brought up under is
-  /// the answer. Naming one asks `TestPreferences` for that posture, which
-  /// refuses if it disagrees with the preference already built.
+  /// already been brought up, so the preference it came up under is the
+  /// answer. Naming one asks `TestPreferences` for that posture, which refuses
+  /// if it disagrees with the preference already built.
   Future<AtClientManager> switchToAtSign(String atSign, String namespace,
       {AtClientPreference? preference, PqPosture? posture}) async {
     final acm = AtClientManager.getInstance();
@@ -241,9 +232,9 @@ class TestSuiteInitializer {
   /// The preference [atSign] was brought up under, or one built at [posture]
   /// when a switch names one.
   ///
-  /// A posture is never invented here. `AtClientPreference.posture` is final
-  /// and decides what a client mints and publishes on the atSign, so a switch
-  /// back reuses what `testInitializer` chose rather than guessing at it.
+  /// `AtClientPreference.posture` is final and decides what a client mints and
+  /// publishes on the atSign, so a posture is never invented here: a switch
+  /// back reuses what `testInitializer` chose.
   AtClientPreference _preferenceFor(String atSign, PqPosture? posture) {
     final preferences = TestPreferences.getInstance();
     if (posture != null) {
@@ -299,17 +290,13 @@ class TestSuiteInitializer {
   /// `at_credentials.dart` is a four-line stub in every checkout — CI
   /// overwrites it from a secret — so on a developer machine that map is empty
   /// and `createAtChopsFromDemoKeys` throws a null check on its first line.
-  /// That blocked `enrollment_setup.dart` from running locally at all, even
-  /// though it takes its atSigns from `config.yaml` and the generated local
-  /// config names the demo atSigns this map covers.
   ///
   /// Guarded on empty, so CI is untouched: there the map already holds the
   /// atSigns the secret supplied, and this does nothing.
   ///
-  /// [AtTestCredentials] is the source rather than `at_demo_data` directly:
-  /// it already curates exactly this map for exactly these atSigns, and its
-  /// own comment offers it for local testing. Re-deriving it here would make
-  /// two places answer the same question.
+  /// [AtTestCredentials] is the source rather than `at_demo_data` directly: it
+  /// already curates exactly this map for exactly these atSigns, and
+  /// re-deriving it here would make two places answer the same question.
   static void _seedCredentialsForLocalRun() {
     if (AtCredentials.credentialsMap.isNotEmpty) return;
     AtCredentials.credentialsMap.addAll(AtTestCredentials.credentialsMap);

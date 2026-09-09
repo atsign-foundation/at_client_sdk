@@ -265,18 +265,10 @@ void main() {
     await received.future;
   });
 
-  /// `send()` had no live coverage at all, so nothing exercised the command it
-  /// puts on the wire — which is its own command, not the one `notify()` sends.
-  ///
-  /// Two things this catches that no unit test can: that the atServer accepts
-  /// the command this path builds, and that the name survives being split
-  /// across the AtKey's `key` and `namespace` fields. `send()` names a record
-  /// with a single string and the split is at the FIRST dot, so a regression
-  /// there puts a truncated key on the wire and no recipient regex matches it.
   test('send() delivers, and the name it puts on the wire is the whole name',
       () async {
-    // Run-unique: the id half separates this run's record from the last one's,
-    // which matters because the recipient matches on the namespace half.
+    // NOTE: the id must be unique per run — the recipient's regex matches the
+    // namespace half, so a fixed id would let an earlier run's record pass.
     final id = Uuid().v4();
     const sendNamespace = 'sendlive.wavi';
     final sentValue = 'send-live-${Random().nextInt(1000000)}';
@@ -295,8 +287,6 @@ void main() {
             idAndNamespace: '$id.$sendNamespace',
             body: sentValue);
 
-    // The sender's own atServer stored it, which is the command being accepted
-    // — a rejected notify would not be here to fetch.
     final stored = await AtClientManager.getInstance()
         .atClient
         .notificationService

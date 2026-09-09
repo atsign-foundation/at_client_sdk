@@ -1,25 +1,18 @@
 // Verifies test/vectors/jws_envelope.json with panva's `jose` — an
-// implementation that is not ours, which is the point: it turns "the signed
-// envelope is RFC 7515 general JSON serialization" from a claim into a
-// runnable check. jose is handed the envelope whole, exactly as written: the
-// shape carries no member of our own for a compliant verifier to ignore.
+// implementation that is not ours, which turns "the signed envelope is RFC
+// 7515 general JSON serialization" from a claim into a runnable check. jose is
+// handed the envelope whole, exactly as written: the shape carries no member
+// of our own for a compliant verifier to ignore.
 //
 //   cd tool && npm install --no-save jose && node verify_jws_vectors.mjs
 //
-// The RS256 arm runs on any Node jose supports. The ML-DSA-65 arm needs a
-// Node whose bundled OpenSSL is >= 3.5 (Node 24.2 bundles 3.0.16, so it
-// FAILs there at key import — the runtime, not the vector). Until such a
-// Node is at hand, verify that arm with an OpenSSL >= 3.5 CLI directly:
-// the signing input is ASCII(protected + '.' + payload), the signature is
-// base64url, and `openssl pkeyutl -verify -rawin` over an SPKI-wrapped
-// public key checks it — see docs/projects/pq/decisions.md 60.4 for the
-// exact run this was proven with. Exits non-zero on any failure.
-//
-// Re-confirmed 2026-08-12 against the general-serialization vectors: RS256
-// passes here under generalVerify, and the ML-DSA-65 arm verifies under
-// Homebrew OpenSSL 3.6.3 with a negative control (one flipped input byte must
-// FAIL — without that arm a "verified" from a broken rig is indistinguishable
-// from a real one).
+// The RS256 arm runs on any Node jose supports. The ML-DSA-65 arm needs a Node
+// whose bundled OpenSSL is >= 3.5; on an older one it FAILs at key import —
+// the runtime, not the vector. Where no such Node is at hand, check that arm
+// with an OpenSSL >= 3.5 CLI directly: the signing input is
+// ASCII(protected + '.' + payload), the signature is base64url, and
+// `openssl pkeyutl -verify -rawin` over an SPKI-wrapped public key checks it.
+// Exits non-zero on any failure.
 import { readFileSync } from 'node:fs';
 import { createPublicKey } from 'node:crypto';
 import { generalVerify } from 'jose';
@@ -38,9 +31,6 @@ const fail = (name, err) => {
 };
 
 async function verifyArm(name, envelope, key, expectedAlg) {
-  // generalVerify walks the `signatures` array and returns the entry it
-  // verified — the shape's own reader takes the first entry, and one entry is
-  // what a signer writes today.
   const { payload, protectedHeader } = await generalVerify(envelope, key);
   const decoded = Buffer.from(payload).toString('utf8');
   if (decoded !== expectedPayload) {

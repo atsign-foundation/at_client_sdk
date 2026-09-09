@@ -1,29 +1,26 @@
 # Which test files a bare `dart test` in this package runs.
 #
-# This suite's atSigns are LONG-LIVED. `config/config23.yaml` and
+# This suite's atSigns are LONG-LIVED: `config/config23.yaml` and
 # `config/config14.yaml` point at @ce2e1..@ce2e4 on root.atsign.wtf, real
 # atServers that are never recycled. Anything written there is written for
 # good — a post-quantum signing root, a published namespace key, an `_apsk`
 # record or a retrofitted enrollment all outlive the run that made them, and
-# nothing in D1 rotates a root back out. While the PQ design is still being settled,
-# none of that may be written to those atSigns.
+# nothing rotates a root back out. None of that may be written to those
+# atSigns.
 #
 # So the list below is an ALLOWLIST, not an exclusion, and that direction is
-# the point: a bare `dart test` runs exactly these files and nothing else.
-# A test file that nobody adds here does not run. If a new post-quantum test
-# lands and its author forgets every convention in this repo, the worst that
-# happens is that it never runs — it cannot reach @ce2e1..@ce2e4 by default.
-# An exclusion (`--exclude-tags pq`, a skipped directory) fails the other way:
-# forget the tag and the test runs against the real atServers.
+# the point: a bare `dart test` runs exactly these files and nothing else, and
+# a test file nobody adds here does not run. An exclusion (`--exclude-tags
+# pq`, a skipped directory) fails the other way — forget the tag and the test
+# runs against the real atServers.
 #
-# Post-quantum tests live in `test/pq/` and are run by their own CI job
-# against a virtualenv container it starts and throws away. Run them locally
-# with `./runLocal.sh` (both sets) or `dart test test/pq`; an explicit path on
-# the command line overrides this list.
+# Post-quantum tests live in `test/pq/` and run against a virtualenv container
+# that is started and thrown away. Run them locally with `./runLocal.sh` (both
+# sets) or `dart test test/pq`; an explicit path on the command line overrides
+# this list.
 #
-# `test/suite_manifest_test.dart` fails if any `*_test.dart` under `test/` is
-# neither listed here nor under `test/pq/`, so a file that would silently not
-# run turns into a red test instead.
+# `test/suite_manifest_test.dart` goes red for any `*_test.dart` under `test/`
+# that is neither listed here nor under `test/pq/`.
 paths:
   - test/suite_manifest_test.dart
   - test/enrollment_teardown_test.dart
@@ -42,9 +39,9 @@ tags:
   # under test/pq/ carries it, which makes `dart test test -x pq` a way to run
   # the non-PQ set over a directory rather than over this list.
   pq:
-  # The one row that needs a PINNED pre-PQ atServer rather than the current
-  # image: UC-B0.1 asserts a PQ client REFUSES to upgrade against a legacy
-  # server, so a current image would make it meaningless rather than red.
-  # `pqe2e_tests` excludes it (-x legacy-server); `legacy_server_tests` runs
-  # it alone against atsigncompany/virtualenv:vip-p3.15.0.
+  # For a row needing a PINNED pre-PQ atServer rather than the current image:
+  # UC-B0.1 asserts a PQ client REFUSES to upgrade against a legacy server, so
+  # a current image would make it meaningless rather than red. `pqe2e_tests`
+  # excludes it (-x legacy-server); `legacy_server_tests` runs it alone against
+  # atsigncompany/virtualenv:vip-p3.15.0.
   legacy-server:

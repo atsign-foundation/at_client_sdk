@@ -39,10 +39,9 @@ void main() {
 
     bool onboardingStatus = await onboardingService.onboard();
     expect(onboardingStatus, true);
-    // The onboard left a client for this atSign in the static cache at its own
-    // path; every CLI command below asks for a freshly minted one, and the
-    // cache key carries only `(atSign, enrollmentId)`. Evict, or those commands
-    // run against the onboard's client rather than their own.
+    // NOTE: the static client cache is keyed on `(atSign, enrollmentId)`
+    // alone, so without this eviction the CLI commands below run against the
+    // client the onboard left behind rather than the one they ask for.
     await evictCachedAtClients();
     // Set SPP
     List<String> args = [
@@ -243,11 +242,9 @@ void main() {
   });
 
   tearDownAll(() {
-    // Keyfiles now live under test/.tmp_keys/, which the helper purges at the
-    // start of each run — so there is nothing to delete here, and `storage`
-    // is no longer created at all. Guarded rather than removed because the
-    // CLI still puts its local-secondary storage here when a preference uses
-    // a relative path.
+    // Keyfiles live under the test keys dir, which is purged per run; this
+    // directory appears only when the CLI is given a relative local-secondary
+    // path, hence the guard.
     final storage = Directory('storage');
     if (storage.existsSync()) storage.deleteSync(recursive: true);
   });

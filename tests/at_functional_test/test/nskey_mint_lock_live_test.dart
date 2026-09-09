@@ -14,40 +14,28 @@ import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// The nskey mint interlock, watched on the wire rather than reasoned about.
+/// The nskey mint interlock, watched on the wire against a live atServer.
 ///
-/// Two claims, and until now both were **reasoned from the code**. The plan
-/// recorded the second as "not observed — reasoned from the code, not
-/// measured", and the first was covered only by a mock that models the
-/// refusal — and a mock cannot test a refusal it does not model.
+/// The atServer's refusal of a second create of `_nskeylock.<ns>@<atSign>` is
+/// the lock; a client that meets a lock held by another enrollment with
+/// nothing published refuses to mint rather than publishing a second
+/// generation over whatever the holder is about to write.
 ///
-/// 1. **The atServer refuses a second create of `_nskeylock.<ns>@<atSign>`.**
-///    That refusal *is* the lock. `pq_signing_root_mint_lock_test.dart` makes
-///    the same observation for `_rootlock@<atSign>`; this is the other lock in
-///    the design, and nothing had watched it.
-/// 2. **A client meeting a lock held by another enrollment, with nothing
-///    published, refuses to mint** rather than publishing a second generation
-///    over whatever the holder is about to write.
-///
-/// ⚠️ **Run-unique namespace, and the lock is deleted in a `finally`.** The
+/// ⚠️ **Run-unique namespace, and every lock is deleted in a `finally`.** The
 /// lock is an immutable record with a two-minute ttl that nothing releases, so
-/// a leftover would block minting for that namespace on this atSign for the
-/// rest of the run — and against a shared namespace it would block every other
-/// file too.
+/// a leftover blocks minting for that namespace on this atSign for the rest of
+/// the run — and against a shared namespace it would block every other file.
 ///
 /// ⚠️ **The other holder is simulated by the lock's VALUE, not by a second
-/// enrollment.** `MintLock` decides "is this my own lock" by comparing the
-/// record's value against its own holder id, and `mintAndPublish` deliberately
-/// passes `ownLockIsNotContention: true` so an enrollment re-entering its own
+/// enrollment.** `MintLock` decides whether a lock is its own by comparing the
+/// record's value against its own holder id, and `mintAndPublish` passes
+/// `ownLockIsNotContention: true` so an enrollment re-entering its own
 /// cooldown adopts rather than failing. Writing a foreign holder id is what
-/// makes this client take the loser path — the path a genuine sibling would
-/// put it on.
+/// puts this client on the loser path.
 void main() {
   TestUtils.isolateStorage('nskey_mint_lock_live_test');
   late AtClient atClient;
   late String atSign;
-  // Its own namespace: this file takes and holds a mint lock, which is exactly
-  // the state that stops another file minting.
   final namespace = 'mintlock${DateTime.now().microsecondsSinceEpoch}';
 
   setUpAll(() async {
@@ -80,8 +68,8 @@ void main() {
             'run-unique namespace above isolate this file\'s lock from every '
             'other file\'s');
 
-    // A leftover would make the FIRST take the refused one, and the test would
-    // pass for the wrong reason.
+    // NOTE: a leftover lock would make the FIRST take the refused one, and the
+    // test would pass for the wrong reason.
     await release();
 
     await take('first-holder');
@@ -101,31 +89,22 @@ void main() {
       await release();
     }
 
-    // The control. Without it the refusal above is equally well explained by
-    // this client being unable to write that record at all.
+    // NOTE: the control. Without it the refusal above is equally well
+    // explained by this client being unable to write that record at all.
     await take('after-release');
     await release();
   }, timeout: Timeout(Duration(minutes: 2)));
 
   test('two CONCURRENT mints by one enrolment publish one advertisement',
       () async {
-    // The width-2 case. `ownLockIsNotContention` exists so an enrolment
-    // re-entering its own cooldown LATER adopts rather than failing — but the
-    // lock's holder token is the enrolment id, an identity rather than an
-    // instance, so two racers of the SAME enrolment both read it back, both
-    // see their own id, and both conclude they hold it.
+    // The width-2 case: the lock's holder token is the enrolment id, an
+    // identity rather than an instance, so two racers of the SAME enrolment
+    // both read it back, both see their own id, and both conclude they hold it.
     //
-    // Reported by the at_talk demo session from a live wire capture: two
-    // advertisements 7.5ms apart, different kid, the second overwriting the
-    // first, both conveyed. A peer that fetched in that window holds a
-    // generation the owner may no longer be able to open.
-    //
-    // ⚠️ It has to be LIVE. The unit fixture accepts every lock write, so the
-    // refusal that triggers this never happens there — a mock cannot test a
-    // refusal it does not model, and faking it would be testing the fake.
-    //
-    // Its own namespace: the arms above leave this file's namespace with a
-    // published advertisement, which this one must not find.
+    // NOTE: this must run against a live atServer — a unit fixture accepts
+    // every lock write, so the refusal that triggers this never happens there.
+    // Its namespace is separate because the tests above leave this file's
+    // namespace with a published advertisement, which this one must not find.
     final raceNs = 'mintrace${DateTime.now().microsecondsSinceEpoch}';
     final raceLock =
         nskeyMintLockKey(atSign, raceNs, ttl: const Duration(minutes: 2));
@@ -133,8 +112,7 @@ void main() {
       ..atKey = raceLock
       ..force = true);
 
-    // ONE ring, so ONE MintLock — which is what a client has: the PQ startup
-    // step and `ensureReachable` both reach the bootstrap's single ring.
+    // NOTE: ONE ring, so ONE MintLock — which is what a client has.
     final ring = PublishedNskeyKeyRing(atClient);
     expect(await ring.publishedAdvertisement(atSign, raceNs), isNull,
         reason: 'the precondition: nothing published, so both racers have '
@@ -161,10 +139,9 @@ void main() {
   }, timeout: Timeout(Duration(minutes: 3)));
 
   test('a client that meets another holder\'s lock refuses to mint', () async {
-    // Failure mode 2 of the abandoned-startup row, which was reasoned from the
-    // code and never measured: a client that dies after its lock lands leaves
-    // one held with nothing published, and a successor must not mint over
-    // whatever the holder was about to write.
+    // A client that dies once its lock lands leaves one held with nothing
+    // published, and a successor must not mint over whatever the holder was
+    // about to write.
     await release();
     final ring = PublishedNskeyKeyRing(atClient);
 
@@ -173,8 +150,6 @@ void main() {
             'so the refusal below is the "lock held and nothing to adopt" '
             'case rather than an ordinary adoption');
 
-    // A holder id that is not this client's, which is what a sibling
-    // enrollment's lock looks like from here.
     await take('some-other-enrollment');
     try {
       await expectLater(
@@ -194,7 +169,7 @@ void main() {
       await release();
     }
 
-    // The control: the same client, the same call, accepted once the lock is
+    // NOTE: the control — the same client and call, accepted once the lock is
     // gone. Without it the refusal is equally well explained by this client
     // being unable to mint for this namespace at all.
     final minted = await ring.mintAndPublish(namespace);

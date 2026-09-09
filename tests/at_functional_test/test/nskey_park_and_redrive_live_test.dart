@@ -18,25 +18,20 @@ import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// Plan 14.30 / ruling 106.5, live: a notification whose nskey private has not
-/// been filed yet is **parked and re-driven**, not dropped.
+/// A notification whose nskey private has not been filed yet is parked and
+/// re-driven, not dropped.
 ///
-/// **The window is held open deliberately, and that is the whole design of this
-/// file.** It is ~116 ms wide in the wild — between an `unawaited` startup's
-/// second step and a notification — and two earlier attempts to catch it by
-/// racing both went green having never entered the park (one fell back to
-/// `legacy`, one had its own readiness wait close the gap). A race that cannot
-/// be reliably lost cannot be reliably tested, so
+/// The window between an `unawaited` startup's second step and a notification
+/// is far too narrow to lose a race for reliably, so
 /// `NskeyPrivateFiling.holdBeforeStore` blocks the filing until this test lets
 /// it go.
 ///
-/// **Why a second namespace.** Both clients are brought fully up on `nsA`
-/// first, so nothing here is racing a startup. `nsB` is then minted, and its
-/// private was therefore never conveyed to anyone — conveyance happens at
-/// approval, which is long past. The receiver has to pull it, and that pull is
-/// the filing this test holds.
+/// Both clients are brought fully up on `nsA`, so nothing here races a startup.
+/// `nsB` is minted afterwards, so its private was never conveyed to the
+/// receiver — conveyance happens at approval — and the receiver has to pull it.
+/// That pull is the filing this test holds.
 ///
-/// `parkedTotal` is asserted, not just arrival: a run that somehow delivered
+/// `parkedTotal` is asserted rather than arrival alone: a run that delivered
 /// without parking would otherwise look identical to a pass.
 void main() {
   TestUtils.isolateStorage('nskey_park_and_redrive_live_test');
@@ -44,18 +39,17 @@ void main() {
   late String atSign;
   late InMemoryAtKeysIo approverKeysIo;
 
-  // Unique per run: the atServer refuses a repeated (appName, deviceName), and
-  // an nskey mint takes a lock whose ttl also refuses a rotation, so a fixed
-  // namespace passes once and collides on the next run against the same VE.
+  // NOTE: unique per run. The atServer refuses a repeated (appName,
+  // deviceName), and an nskey mint takes a lock whose ttl refuses a rotation,
+  // so fixed names pass once and collide on the next run against the same VE.
   final runId = DateTime.now().microsecondsSinceEpoch;
   final nsA = 'nskeyparka$runId';
   final nsB = 'nskeyparkb$runId';
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    // The approver needs a keyfile or it holds no filed private to convey, and
-    // every enrollment starts with nothing — which would make this test pass
-    // for a reason that has nothing to do with the park.
+    // NOTE: the approver needs a keyfile or it holds no filed private to
+    // convey, and the test passes for a reason unrelated to the park.
     approverKeysIo = InMemoryAtKeysIo();
     await approverKeysIo.write(atSign, AtKeys());
     final manager = await TestUtils.initAtClient(atSign, nsA,
@@ -80,33 +74,27 @@ void main() {
       timeout: Timeout(Duration(minutes: 3)), () async {
     AtSignLogger.root_level = 'finest';
 
-    // nsA warms everything up: minted before the enrollments, so the sender
-    // seals PQ and both clients finish their startups against a namespace they
-    // genuinely hold.
+    // nsA is minted before the enrollments, so the sender seals PQ and both
+    // clients finish their startups against a namespace they genuinely hold.
     final ringA = PublishedNskeyKeyRing(approver,
         privateFiling:
             NskeyPrivateFiling(keysIo: approverKeysIo, atSign: atSign));
     approver.getPreferences()!.crypto = CryptoConfig.nskey(keyRing: ringA);
     await ringA.mintAndPublish(nsA);
 
-    // ⚠️ ORDER IS THE DESIGN HERE. The receiver is enrolled BEFORE nsB exists,
-    // so nsB's private is never conveyed to it — conveyance carries what the
-    // approver holds AT APPROVAL. The sender is enrolled after, so it holds
-    // nsB and can seal to it.
-    //
-    // The sender must also be able to SEE nsB's advertisement. `currentPublic`
-    // is local-first by design (it is on the write path, so a remote read would
-    // put a round trip on every put), which is why a namespace minted while a
-    // client is already running is invisible to it and the send silently falls
-    // back to legacy — measured three times before this ordering was found.
+    // NOTE: the order is the design. The receiver is enrolled BEFORE nsB
+    // exists, so nsB's private is never conveyed to it — conveyance carries
+    // what the approver holds at approval — and the sender is enrolled after,
+    // so it holds nsB and can seal to it. The sender must also be able to SEE
+    // nsB's advertisement: `currentPublic` is local-first, so a namespace
+    // minted while a client is already running is invisible to it and the send
+    // silently falls back to legacy.
     final receiver = await enrol('park-receiver');
     await (receiver.client as AtClientImpl).pqBootstrap!.startupComplete;
 
-    // ⚠️ The hold goes on BEFORE nsB exists. Installing it later lost the race:
-    // enrolling the sender conveys nsB's private, the receiver's sweep filed it
-    // before the notification was ever sent, and the re-drive then ran against
-    // an empty park. Measured — `PROBE redrive … parkedKeys=[]` arriving before
-    // the park.
+    // NOTE: the hold goes on BEFORE nsB exists. Installed later, enrolling the
+    // sender conveys nsB's private and the receiver's sweep files it before
+    // the notification is sent, leaving the re-drive an empty park.
     final filing = (receiver.client as AtClientImpl).pqBootstrap!.filing;
     expect(filing, isNotNull,
         reason: 'without a filing the receiver could not file a pulled private '
@@ -121,10 +109,6 @@ void main() {
 
     expect(identical(sender.client, receiver.client), isFalse,
         reason: 'two enrollments must be two clients');
-
-    // Hold the receiver's filing shut. Installed AFTER its startup, so nothing
-    // in the warm-up is blocked and the only filing this catches is the pull
-    // for nsB below.
 
     final key = AtKey()
       ..key = 'parked$runId'
@@ -152,27 +136,24 @@ void main() {
       await subscription.cancel();
     });
 
-    // Positive control: the atServer's stats notification proves the monitor is
-    // genuinely registered, so a later timeout means the park failed rather
+    // NOTE: the positive control. The atServer's stats notification proves the
+    // monitor is registered, so a later timeout means the park failed rather
     // than that nothing was ever listening.
     await monitorProvenLive.future.timeout(Duration(seconds: 60),
         onTimeout: () => throw StateError(
             'no notification of any kind reached the listener within 60s, so '
             'nothing below would be a statement about the park'));
 
-    // ⚠️ `cryptoProviderId` is REQUIRED here, and its absence is what made four
-    // earlier versions of this test vacuous. The era default is
-    // `readsNskeyWritesLegacy` — it reads the nskey path and **writes legacy** —
+    // NOTE: `cryptoProviderId` is required here. The era default is
+    // `readsNskeyWritesLegacy` — it reads the nskey path and writes legacy —
     // so a notify that does not ask for the PQ provider goes out legacy, the
     // receiver opens it with no nskey private involved, and the park is never
-    // entered. Every one of those runs looked like a product result.
+    // entered.
     await sender.client.notificationService.notify(
         NotificationParams.forUpdate(key,
             value: value, cryptoProviderId: symmetricAesGcmCryptoProviderId),
         waitForFinalDeliveryStatus: false);
 
-    // The notification must PARK — with the filing held, it cannot be opened,
-    // and this is deterministic rather than raced.
     final deadline = DateTime.now().add(Duration(seconds: 60));
     while (notifications.parkedTotal == 0 && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(Duration(milliseconds: 100));
@@ -185,8 +166,8 @@ void main() {
         reason: 'and it must not have been delivered yet: a value handed over '
             'before its key was filed would be ciphertext');
 
-    // Release the hold: the pull's answer can now be stored, and the filing
-    // signal is what releases the park.
+    // The pull's answer can now be stored, and the filing signal is what
+    // releases the park.
     release.complete();
 
     final delivered = await received.future.timeout(Duration(seconds: 120),

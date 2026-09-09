@@ -3,24 +3,15 @@
 # Render the acceptance ledger: every catalogue row, and whether the live test
 # it cites actually ran and passed in THIS set of runs.
 #
-# CI emits the ledger's inputs and uploads them as artefacts, but nothing in
-# the tree ever joined them — `packages/at_client/tool/acceptance_ledger.dart`
-# was invoked only by the usage comment inside itself, so every ledger so far
-# was reassembled by hand. This is that command.
-#
 # Usage:
 #   tools/acceptance_ledger.sh                 # unit sources only, no docker
 #   tools/acceptance_ledger.sh --with-live     # also run the live packs (slow)
 #   tools/acceptance_ledger.sh --out FILE      # default: acceptance-ledger.md
 #
-# WHAT THE VERDICTS MEAN, and why the default is not the whole picture.
-# A row is PROVEN only when EVERY test it cites ran and passed in a report you
-# supplied — worst verdict wins, because a row is not proven just because one
-# of its several citations happened to run. So the default run, which supplies
-# only the unit sources, reports NOT-EXERCISED for every row citing a live
-# pack. That is the tool being accurate about the runs it was given, not a
-# coverage regression, and the two numbers are not comparable. Use --with-live
-# before quoting a total anywhere.
+# A row is PROVEN only when EVERY test it cites ran and passed in a report
+# supplied to this run — worst verdict wins. Without --with-live every row
+# citing a live pack therefore reads NOT-EXERCISED, so that total is not
+# comparable with a --with-live total.
 
 set -uo pipefail
 
@@ -40,29 +31,23 @@ done
 
 CITATIONS="$ROOT/packages/at_client/citations.jsonl"
 
-# One image for every pack, so a mismatch cannot show up in the ledger as a
-# failing row. All three runners now default to `at_virtual_env:local` too, so
-# this agrees with them rather than fighting them; setting it here means a
-# ledger run cannot be split across images even if a runner's default drifts.
-#
-# It has to be an image that verifies ML-DSA PKAM: the CLI pack CRAM-onboards
-# an atSign with a post-quantum keypair, and against the published
+# NOTE: pinned here so a ledger run cannot be split across images even if a
+# runner's default drifts. It has to be an image that verifies ML-DSA PKAM: the
+# CLI pack CRAM-onboards an atSign with a post-quantum keypair, and against
 # `atsigncompany/virtualenv:vip` that fails as a server-side `AT0010 RangeError`
-# out of PKAM, which reads as a client bug. Override deliberately to measure
-# against a published build.
+# out of PKAM, which reads as a client bug.
 export VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"
 
-# ⚠️ `provenIn` APPENDS to this file. Two runs against the same path silently
-# double every citation — the ledger then reports "278 citations" for a
-# catalogue of 139, and the verdicts still look right because each duplicate
-# resolves the same way. Delete it here rather than trusting the caller.
+# NOTE: `provenIn` APPENDS to this file, so two runs against the same path
+# silently double every citation while the verdicts still look right. Delete it
+# here rather than trusting the caller.
 rm -f "$CITATIONS"
 
 REPORTS=()
 
-# Records the exit code without letting it decide anything: a suite that FAILED
-# is exactly when knowing which rows lost their proof matters most, so a red
-# run must still produce a ledger.
+# Reports a suite's exit code but always returns 0: a red run must still
+# produce a ledger, since that is when knowing which rows lost their proof
+# matters most.
 run_suite() {
   local label="$1"; shift
   echo "*** $label"
@@ -76,8 +61,8 @@ run_suite() {
 
 echo "*** Unit sources"
 
-# One run produces BOTH halves for at_client: the citations (every provenIn
-# call, recorded as it runs) and the report saying which of those tests passed.
+# One run produces both halves for at_client: the citations every provenIn call
+# records, and the report saying which of those tests passed.
 run_suite "at_client unit suite" env ACCEPTANCE_LEDGER="$CITATIONS" \
   bash -c 'cd "$0/packages/at_client" && dart test --concurrency=1 \
     --file-reporter json:acceptance-report.json' "$ROOT"

@@ -2,21 +2,12 @@
 /// these shadows the shared version silently — a local declaration wins over
 /// an import with no analyzer complaint — so the two drift apart unnoticed.
 ///
-/// Four families are deliberately NOT here, because their per-file versions
-/// carry behaviour rather than duplicating it, and moving them would change
-/// what their tests exercise:
-///
-/// - `MockAtClient` in most files is bare, while the version below bakes in a
-///   preference. A concrete override cannot be intercepted by `when(...)`, so
-///   adopting it would silently disable the `getPreferences` stubs that a
-///   dozen files rely on.
-/// - `MockAtClientImpl` and `MockLocalSecondary` in `notification_service_test`
-///   carry a keystore and several overrides the shared versions do not.
-/// - `MockSecondaryKeyStore` in `local_secondary_test` carries its own fixture
-///   keys.
-///
-/// Before adding a family here, check that every copy is genuinely identical:
-/// a copy that grew a method is an intentional difference, not a duplicate.
+/// Some mocks stay in the test file that uses them because they carry
+/// behaviour rather than duplicating one of these — a concrete override cannot
+/// be intercepted by `when(...)`, so adopting a shared version would silently
+/// disable a stub. Before moving a family here, check that every copy is
+/// genuinely identical: a copy that grew a method is an intentional
+/// difference, not a duplicate.
 library;
 
 import 'package:at_auth/at_auth.dart';
@@ -48,17 +39,11 @@ class FakeCryptoProvider extends Fake implements CryptoProvider {}
 class MockAtClientManager extends Mock implements AtClientManager {}
 
 class MockAtClient extends Mock implements AtClient {
-  /// [keyEstablishmentAlgorithms] is a constructor argument rather than
-  /// something a test sets afterwards because the field is final — and
-  /// `getPreferences()` is a concrete override here, so `when(() =>
-  /// client.getPreferences())` does not reach `noSuchMethod` and silently
-  /// stubs nothing. Both routes a test would reach for are closed; this is
-  /// the one that works.
-  /// [posture] is a constructor argument for the same reason: it is final on
-  /// the preference, and the preference itself is unreachable through
-  /// `when(...)`. A test needing a client that configures no post-quantum
-  /// providers names `PqPosture.legacy` here; the default stays `pqReady`,
-  /// which is `AtClientPreference`'s own.
+  /// Both are constructor arguments rather than something a test sets
+  /// afterwards because they are final on the preference, and
+  /// `getPreferences()` is a concrete override here — so
+  /// `when(() => client.getPreferences())` never reaches `noSuchMethod` and
+  /// stubs nothing.
   MockAtClient({List<String>? keyEstablishmentAlgorithms, PqPosture? posture})
       : _preference = AtClientPreference(
             posture: posture ?? PqPosture.pqReady,
@@ -77,8 +62,8 @@ class MockAtClient extends Mock implements AtClient {
 /// A client that refuses to encrypt new data with the legacy provider.
 ///
 /// Its own class rather than a cascade on [MockAtClient] because
-/// `disallowLegacyEncryption` is final and posture-only — a flag governing
-/// what a client may write must not be flippable mid-run.
+/// `disallowLegacyEncryption` is final and posture-only: a flag governing what
+/// a client may write must not be flippable mid-run.
 class StrictMockAtClient extends Mock implements AtClient {
   final AtClientPreference _preference =
       AtClientPreference(posture: PqPosture.pqActive);
@@ -88,20 +73,17 @@ class StrictMockAtClient extends Mock implements AtClient {
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
-  // AtClientImpl keeps a concrete resolved getter (the AtClient interface
-  // carries none); `implements` erases its body, and an unstubbed mocktail
-  // getter returns null into a non-nullable type. Restore the default.
+  // NOTE: `implements` erases the concrete getter AtClientImpl carries, and an
+  // unstubbed mocktail getter returns null into a non-nullable type.
   @override
   SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
 }
 
 /// `AtKeysIo` is `sealed`, but that only restricts direct subtyping of the
 /// base — `WrittenAtKeysIo` is an ordinary `abstract class`, so extending it
-/// outside at_auth is legal. `read` answers an empty document, because a
+/// outside at_auth is legal. `read` answers an empty document because a
 /// client reads its keys at construction to learn which enrollment it runs
-/// as; `write` throws so any accidental key write fails loudly. Deliberately
-/// does NOT override `flush` (not present on the at_auth version this branch
-/// compiles against).
+/// as; `write` throws so any accidental key write fails loudly.
 class StubAtKeysIo extends WrittenAtKeysIo {
   @override
   Future<AtKeys> read(String atSign) async => AtKeys();
@@ -146,16 +128,12 @@ List<String> approveListCommands() => [
 /// Stubs both `enroll:list` reads that `EnrollmentServiceImpl.approve` makes,
 /// answering [answer] to each.
 ///
-/// The two reads carry DIFFERENT status filters, and therefore different
-/// command strings, so a stub registered against one of them answers only that
-/// read. The other falls through to `noSuchMethod`, which returns null into a
+/// The two reads carry different status filters, and therefore different
+/// command strings, so a stub registered against one of them leaves the other
+/// falling through to `noSuchMethod`, which returns null into a
 /// `Future<String?>` and surfaces as a TypeError naming neither the stub nor
-/// the filter — which is what makes this worth a helper rather than two
-/// `when` calls per test.
-///
-/// Answering both with one value says nothing about which read is which. A
-/// test whose subject IS the difference between them should register the two
-/// [approveListCommands] itself.
+/// the filter. A test whose subject is the difference between the two reads
+/// should register the [approveListCommands] itself.
 void stubApproveListReads(RemoteSecondary secondary, String answer) {
   for (final command in approveListCommands()) {
     when(() => secondary.executeCommand(command, auth: true))

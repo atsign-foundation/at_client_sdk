@@ -1,7 +1,6 @@
 // `AtPkamKeyPair` is deprecated in the current at_chops and is what 3.14.0's
 // `AtChopsKeys.create` takes. The shared scenario has to compile against both,
-// so the deprecated spelling is the only one available to it — this is exactly
-// the intersection the library's contract describes.
+// so the deprecated spelling is the only one available to it.
 // ignore_for_file: deprecated_member_use
 
 import 'package:at_chops/at_chops.dart'
@@ -22,28 +21,21 @@ import 'package:at_demo_data/at_demo_data.dart'
 /// Everything about a client that does **not** depend on which at_client is
 /// resolved: which atSign, where its atServer is, where its storage goes.
 ///
-/// The stage lives outside this on purpose. `PqPosture` does not exist in
-/// 3.14.0, so a field naming one could not be in shared code at all — which is
-/// the constraint that keeps the two arms honest rather than an inconvenience.
+/// The stage lives outside this on purpose: `PqPosture` does not exist in
+/// 3.14.0, so a field naming one could not be in shared code at all.
 class ClientSpec {
   final String atSign;
   final String namespace;
   final String rootDomain;
   final int rootPort;
 
-  /// Per-run, per-atSign, per-stage. Two cells of the matrix sharing a Hive
-  /// directory would have the second read the first's local records and pass
-  /// without the atServer being involved at all.
+  /// Per-run, per-atSign, per-stage: two cells sharing a Hive directory would
+  /// have the second read the first's local records and pass without the
+  /// atServer being involved at all.
   final String storagePath;
 
   /// The enrollment this client authenticates as, or null for a client whose
   /// keyfile names none (which signs and advertises under `primary`).
-  ///
-  /// A String rather than anything richer because this type compiles against
-  /// both at_clients, and the id is all either needs: the current arm hands
-  /// it to `setCurrentAtSign` and the published arm has nothing to hand it
-  /// to — 3.14.0's clients in this matrix authenticate with the demo PKAM
-  /// keys and are `primary` by construction.
   final String? enrollmentId;
 
   const ClientSpec({
@@ -58,13 +50,9 @@ class ClientSpec {
 
 /// How an arm attaches its client to the manager.
 ///
-/// This is the **one** version-specific step, and it is a callback rather than
-/// a branch because the difference is not expressible in shared code: the
-/// current tree's `setCurrentAtSign` takes an `AtKeysIo` and 3.14.0's does
-/// not. It matters far more than its size suggests — a client with no key
-/// source performs zero post-quantum writes by design, so a `pqActive` arm
-/// attached without one would mint nothing and the whole stage would measure
-/// an inert client.
+/// A callback rather than a branch because the current tree's
+/// `setCurrentAtSign` takes an `AtKeysIo` and 3.14.0's does not — and an arm
+/// attached without a key source performs zero post-quantum writes by design.
 typedef Attach = Future<AtClientManager> Function(
     ClientSpec spec, AtClientPreference preference, AtChops atChops);
 
@@ -85,9 +73,8 @@ AtChops demoAtChops(String atSign) {
 
 /// Installs the demo atSign's key material into the local keystore.
 ///
-/// The same five records the functional pack's `AtEncryptionKeysLoader`
-/// installs. Without them a client authenticates but cannot encrypt to anyone,
-/// so every cell would fail at the first put for a reason having nothing to do
+/// Without these records a client authenticates but cannot encrypt to anyone,
+/// so every cell would fail at its first put for a reason having nothing to do
 /// with the stage under test.
 Future<void> installDemoKeys(AtClient client, String atSign) async {
   final local = client.getLocalSecondary()!;
@@ -104,10 +91,8 @@ Future<void> installDemoKeys(AtClient client, String atSign) async {
 
 /// Brings up a client for [spec] under [preference], attached by [attach].
 ///
-/// Its own [AtClientManager] rather than the singleton: a matrix cell runs a
-/// sender and a receiver as two processes, but nothing here should depend on
-/// that, and `getInstance().setCurrentAtSign` stops whichever client was
-/// current.
+/// Its own [AtClientManager] rather than the singleton, whose
+/// `setCurrentAtSign` stops whichever client was current.
 Future<AtClient> connect({
   required ClientSpec spec,
   required AtClientPreference preference,
@@ -121,8 +106,8 @@ Future<AtClient> connect({
 
 /// The default attach: what compiles against **both** at_clients.
 ///
-/// The published arm uses this unchanged. The current arm supplies its own,
-/// adding the `AtKeysIo` that 3.14.0 has no parameter for.
+/// An arm needing the `AtKeysIo` that 3.14.0 has no parameter for supplies its
+/// own instead.
 Future<AtClientManager> attachWithoutKeySource(
         ClientSpec spec, AtClientPreference preference, AtChops atChops) =>
     AtClientManager(spec.atSign)

@@ -39,24 +39,19 @@ final AtSignLogger _logger = AtSignLogger('EnrollmentSymmetricKey');
 ///
 /// Pass the result to `AtEnrollmentRequest.apkamSymmetricKeyResolver` whenever
 /// the request uses `EnrollmentKeyExchangeMode.pq`. It runs inside
-/// `waitForApproval`, once PKAM authentication has succeeded — which is both
-/// the earliest moment this enrollment can read anything and the earliest the
-/// approver could have written it.
+/// `waitForApproval`, once PKAM authentication has succeeded — the earliest
+/// moment this enrollment can read anything, and the earliest the approver
+/// could have written it.
 ///
-/// Deliberately built on [AtLookUp] rather than an `AtClient`: at this point in
-/// enrollment there is no client and cannot be one, because a client is
+/// Built on [AtLookUp] rather than an `AtClient` because a client is
 /// constructed *from* the keys this call is fetching the last piece of.
 ///
-/// Two things authenticate the result, and neither is optional:
-///
-/// - the envelope is `pqSeal`ed to this enrollment's key package, whose private
-///   half was minted before the request was sent and has never left this
-///   device, so nobody else can open it;
-/// - the envelope carries an APKAM signature over the whole of itself, checked
-///   against the signing enrollment's published `_apsk`. Without it, anyone who
-///   read the (public) key package could seal a symmetric key of their choosing
-///   to this enrollment and watch it unwrap its own encryption private key into
-///   garbage.
+/// Two things authenticate the result, neither optional: the envelope is
+/// `pqSeal`ed to this enrollment's key package, whose private half has never
+/// left this device, and it carries an APKAM signature over the whole of
+/// itself, checked against the signing enrollment's published `_apsk`. Without
+/// the signature, anyone who read the public key package could seal a symmetric
+/// key of their choosing to this enrollment.
 @experimental
 Future<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
   String atSign, {
@@ -66,17 +61,11 @@ Future<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
   return (AtKeys keys, AtLookUp atLookUp) async {
     final (kpid, secretKey, keyAlgo) = await _keyPackageHalves(keys);
 
-    // This never waits for the human. By the time it runs, waitForApproval's
-    // PKAM loop has already succeeded, which means the approval has happened —
-    // however many minutes or hours that took is behind us.
-    //
-    // What is left is a mechanical race inside the approver's single approve()
-    // call: the atServer marks the enrollment approved, which is what lets
-    // PKAM start succeeding, a moment before at_client finishes writing the
-    // envelope. That is one or two round trips, so arriving here before the
-    // envelope exists is ordinary rather than an error. [timeout] is headroom
-    // over that race, not a latency budget — if nothing has arrived by then
-    // the approver did not convey, and waiting longer recovers nothing.
+    // NOTE: [timeout] is headroom over a mechanical race inside the approver's
+    // single approve() call — the atServer marks the enrollment approved, which
+    // is what lets PKAM start succeeding, a moment before at_client finishes
+    // writing the envelope. It is not a latency budget, and it never waits for
+    // the human: the approval has already happened by the time this runs.
     final DateTime deadline = DateTime.now().toUtc().add(timeout);
     while (true) {
       for (final envelopeKey in await _envelopeKeys(atLookUp, kpid)) {
@@ -103,30 +92,18 @@ Future<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
 /// This enrollment's key-package id, the decapsulation key that opens anything
 /// sealed to it, and which KEM that key belongs to.
 ///
-/// The keyfile stores the **seed**, not the decapsulation key: they are the
-/// same bytes for X-Wing but not for ML-KEM, whose decapsulation key is
-/// expanded and which no seeded call reproduces from. So the seed is expanded
-/// here, once, rather than handed to `pqOpen` as if it were the key.
+/// The keyfile stores the **seed**, not the decapsulation key: the same bytes
+/// for X-Wing but not for ML-KEM, whose decapsulation key is expanded, so the
+/// seed is expanded here rather than handed to `pqOpen` as if it were the key.
 Future<(String, Uint8List, String)> _keyPackageHalves(AtKeys keys) async {
-  // The selection rule lives in keyPackageMaterials and is not restated here.
-  // Picking the first `privateDecapsulation` by hand got two things wrong on a
-  // keyfile holding more than one: it could take a co-tenant's package — a
-  // retrofitted file carries the legacy enrollment's beside this one's — and
-  // it could take an nskey private, which is filed under the same part type
-  // but arrives without a public half, so adopting it as this enrollment's
-  // recipient identity means polling an address nobody writes to until the
-  // enrollment times out. keyPackageMaterials requires both halves under one
-  // keyId, skips dead material, and orders active-then-newest.
-  //
-  // Scoped by the enrollment the keys name. By the time this runs the atServer
-  // has assigned an id and the submitter has adopted the builder's material
-  // under it, so the package is the enrollment's rather than the atSign's.
-  //
-  // The untagged fallback is for keyfiles written before that adoption
-  // existed, where the halves are still in the atSign's container: without it
-  // an enrollment already in the field could no longer open what was sealed
-  // to it. It is also the path a caller driving the providers directly takes,
-  // where no enrollment id is filed at all.
+  // NOTE: the selection rule lives in keyPackageMaterial and is not restated
+  // here. Picking the first `privateDecapsulation` by hand goes wrong on a
+  // keyfile holding more than one: it can take a co-tenant's package, or an
+  // nskey private, which is filed under the same part type but arrives without
+  // a public half, so adopting it means polling an address nobody writes to.
+  // The untagged fallback covers keyfiles whose halves are still in the
+  // atSign's container, and a caller driving the providers directly, where no
+  // enrollment id is filed at all.
   final CryptographicMaterial? private =
       keyPackageMaterial(keys, enrollmentId: keys.enrollmentId) ??
           keyPackageMaterial(keys);
@@ -160,8 +137,8 @@ Future<List<String>> _envelopeKeys(AtLookUp atLookUp, String kpid) async {
         jsonDecode(response.replaceFirst(RegExp('^data:'), '')) as List;
     return decoded.cast<String>();
   } catch (e) {
-    // A scan that fails is indistinguishable from one that finds nothing, and
-    // the caller polls either way; failing the enrollment on a transient
+    // NOTE: a scan that fails is indistinguishable from one that finds nothing,
+    // and the caller polls either way; failing the enrollment on a transient
     // atServer error would be the worse outcome.
     _logger.info('Scan for envelopes addressed to $kpid failed: $e');
     return const [];
@@ -194,19 +171,15 @@ Future<String?> _openIfSymmetricKey(
     return null;
   }
 
-  // Verify FIRST: the seal authenticates the payload bytes, but only the
+  // NOTE: verify FIRST — the seal authenticates the payload bytes, but only the
   // APKAM signature authenticates who sent them.
   try {
     await _verifyAgainstApsk(atLookUp, signedEnvelope, atSign);
   } catch (e) {
-    // Every way this can fail is a reason to skip THIS envelope, and none of
-    // them is a reason to fail the enrollment. The typed refusal is only one
-    // of them: an absent `_apsk` arrives as a thrown AT0015, and a malformed
-    // one throws a FormatException out of base64 — both from the same single
-    // operation, verifying this envelope's signature, and both previously
-    // escaping to kill the whole approval. A revoked enrollment produces the
-    // first, so one stale envelope of its making would fail every later
-    // enrollment that scanned past it.
+    // NOTE: every way this can fail is a reason to skip THIS envelope, not to
+    // fail the enrollment, and the typed refusal is only one of them: an absent
+    // `_apsk` arrives as a thrown AT0015 and a malformed one as a
+    // FormatException out of base64.
     _logger.warning('Envelope $envelopeKey failed signature verification, so '
         'it is not from an approved enrollment of $atSign; skipping: $e');
     return null;
@@ -220,17 +193,16 @@ Future<String?> _openIfSymmetricKey(
     return null;
   }
 
-  // The suite names the KEM, and resolving it is also the support check —
-  // a separate membership test against `SecretSharingAlgos.suites` would be a
-  // second list that has to agree with this one.
+  // NOTE: resolving the suite's KEM is also the support check; a separate
+  // membership test against `SecretSharingAlgos.suites` would be a second list
+  // that has to agree with this one.
   final AtKemAlgorithm? kem = SecretSharingAlgos.kemForSuite(envelope.suite);
   if (envelope.toKpid != kpid ||
       signedEnvelope.signerEnrollmentId != envelope.fromEnrollmentId ||
       kem == null ||
-      // The suite's KEM must be the one this key package's key belongs to.
-      // A sender that picked the other one produced something [secretKey]
-      // cannot decapsulate, and passing it to pqOpen anyway would report an
-      // AEAD failure rather than the addressing mistake it is.
+      // NOTE: a sender that picked the other KEM produced something [secretKey]
+      // cannot decapsulate, and pqOpen would report an AEAD failure rather than
+      // the addressing mistake it is.
       !identical(kem, SecretSharingAlgos.kemFor(keyAlgo))) {
     return null;
   }
@@ -259,11 +231,11 @@ Future<String?> _openIfSymmetricKey(
 /// Checks the envelope's APKAM signature against the `_apsk` the atServer
 /// published for the signing enrollment.
 ///
-/// A revoked enrollment's `_apsk` has been moved out from under this address
-/// by the atServer, so the lookup fails and with it the verification — which is
-/// the intended outcome, and the reason no separate revocation check is needed
-/// here. It fails by **throwing**, not by returning null, which is why the
-/// caller's skip has to catch more than the typed refusal.
+/// A revoked enrollment's `_apsk` has been moved out from under this address by
+/// the atServer, so the lookup fails and with it the verification — which is
+/// why no separate revocation check is needed here. It fails by **throwing**,
+/// not by returning null, so the caller's skip has to catch more than the typed
+/// refusal.
 Future<void> _verifyAgainstApsk(
   AtLookUp atLookUp,
   SignedEnvelope signedEnvelope,
@@ -275,10 +247,8 @@ Future<void> _verifyAgainstApsk(
         'Envelope names no enrollment, so there is no _apsk to check its '
         'signature against');
   }
-  // An absent `_apsk` does not come back null: the atServer answers AT0015 and
-  // at_lookup throws it. That is the revoked-enrollment case this doc
-  // comment describes, and the caller treats a throw from here the same way it
-  // treats the refusal below — see the skip in [_openIfSymmetricKey].
+  // NOTE: an absent `_apsk` does not come back null — the atServer answers
+  // AT0015 and at_lookup throws it.
   final String? response = await atLookUp
       .executeCommand('llookup:${apskUri(atSign, claimed)}\n', auth: true);
   final String? publicKey = response?.replaceFirst(RegExp('^data:'), '').trim();

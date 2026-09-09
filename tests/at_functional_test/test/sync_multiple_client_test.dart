@@ -370,8 +370,6 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
   atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
       currentAtSign,
       namespace,
-      // Direct construction: no compiler names this site, so the era is
-      // stated by hand and is what this test ran at before the default moved.
       AtClientPreference(posture: PqPosture.legacy)
         ..privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign]
         ..isLocalStoreRequired = false
@@ -468,8 +466,8 @@ bool assertConvergence(
 
 AtClientPreference _getAtClientPreference(String currentAtSign, String clientId,
     {required String hiveStoragePath, required String commitLogPath}) {
-  // Direct construction, and it is handed to initAtClient beside an explicit
-  // posture — which refuses a mismatch, so the two must agree.
+  // NOTE: initAtClient refuses a preference whose posture differs from the one
+  // it is passed, so this posture and the caller's must agree.
   var preference = AtClientPreference(posture: PqPosture.legacy);
   preference.hiveStoragePath = hiveStoragePath;
   preference.commitLogPath = commitLogPath;

@@ -71,19 +71,12 @@ abstract class NotificationService {
   /// [body]. Will encrypt [body] before sending if [shouldEncrypt] is true
   /// (default).
   ///
-  /// [idAndNamespace] is the record's whole name below the owner, and it is
-  /// **two things joined by a dot**: an id, then the namespace it belongs to.
-  /// `'order42.orders.my_app'` is the id `order42` in the namespace
-  /// `orders.my_app`, and lands on the wire as
-  /// `@recipient:order42.orders.my_app@sender`. At least one dot is required —
-  /// a value with none names an id in no namespace, which cannot be encrypted
-  /// for a recipient, so it throws [ArgumentError] rather than failing later
-  /// inside the crypto layer.
-  ///
-  /// The split is at the **first** dot: everything after it is the namespace.
-  /// That is what scopes the encryption key, so `'a.b.c'` encrypts under the
-  /// namespace `b.c`. [subscribeFiltered] matches this shape — its regex
-  /// allows exactly one dot-free id ahead of the namespace.
+  /// [idAndNamespace] is the record's whole name below the owner: an id and
+  /// the namespace it belongs to, joined by a dot. `'order42.orders.my_app'`
+  /// is the id `order42` in the namespace `orders.my_app`, and lands on the
+  /// wire as `@recipient:order42.orders.my_app@sender`. The split is at the
+  /// **first** dot, and the namespace is what scopes the encryption key, so at
+  /// least one dot is required — a value with none throws [ArgumentError].
   ///
   /// Returns the id of the notification, which can then be used when calling
   /// the [getStatus] and [fetch] functions.

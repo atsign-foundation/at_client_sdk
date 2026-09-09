@@ -1,5 +1,4 @@
-// The enrollment key-package surface is @experimental; driving it is how each
-// cell gets an enrollment of its own.
+// The enrollment key-package surface this file drives is @experimental.
 // ignore_for_file: experimental_member_use
 
 @Tags(['pq'])
@@ -19,66 +18,35 @@ import 'test_utils.dart';
 ///
 /// A posture is applied at construction and cannot move on a live client, so
 /// what a stage decides is only visible by building several clients and asking
-/// each the same question. That is what this file is: three clients on one
-/// atSign, one per stage, and the same write offered to each.
+/// each the same question: three clients on one atSign, one per stage, and the
+/// same write offered to each. Three enrollments rather than three preferences
+/// because `AtClientImpl` keys its client cache by `(atSign, enrollmentId)`
+/// and refuses to hand a cached client to a caller naming different rollout
+/// axes, so three postures need three cache keys.
 ///
-/// **Why three enrollments rather than three preferences.** `AtClientImpl`
-/// keys its client cache by `(atSign, enrollmentId)` and refuses to hand a
-/// cached client to a caller naming different rollout axes, because those axes
-/// are final at construction — `AtClientImpl.refuseChangedRolloutAxes`. Three
-/// postures therefore need three cache keys, and an enrollment each is how one
-/// atSign supplies them.
-///
-/// **What only a live run shows.** The unit suite pins every value below
-/// against a preference or a mock, and a mock never runs `AtClientImpl`'s
-/// initialisation — so a posture that reached the constant and never reached
-/// the client would pass all of them and this file would still fail. Here the
-/// posture has to survive enrolment, authentication and client construction
-/// before anything is asserted.
-///
-/// ⚠️ **The cells differ in the posture and in nothing else that is
-/// deliberate, with one exception that is stated rather than hidden:** all
-/// three enrollments are submitted in *pq* mode, because
-/// [enrolAndAuthenticate] builds only that kind. So the `keyExchangeMode` axis
-/// is held constant across the cells and is **not** what this file measures —
-/// the enrollment's mode and the client's posture are separate things here.
-/// Reading a result below as evidence about key exchange would be reading a
-/// constant as a variable.
+/// ⚠️ **The cells differ in the posture and in nothing else deliberate, with
+/// one stated exception:** all three enrollments are submitted in *pq* mode,
+/// because [enrolAndAuthenticate] builds only that kind. `keyExchangeMode` is
+/// therefore held constant across the cells and is **not** what this file
+/// measures.
 ///
 /// ⚠️ **Each pq cell runs under a DIFFERENT enrollment id from the one it was
-/// enrolled as, and both ids are real.** [enrolAndAuthenticate] hands back the
-/// id the atServer assigned to the OTP enrollment it submitted; two of the
-/// three clients then leave that enrollment behind before their constructor
-/// returns.
-///
-/// The OTP path has no algorithm to ask with. `AtEnrollmentRequest` carries no
-/// `signingAlgo` field, and the APKAM keypair that
-/// `EnrollmentSubmitter._handleAtEnrollmentRequest` submits comes from
-/// `AtChopsUtil.generateAtPkamKeyPair`, which takes a key size and nothing
-/// else and is RSA-2048 always — so an enrollment minted this way
-/// authenticates with RSA whichever posture ends up holding it. A pqReady or
-/// pqActive preference therefore arrives at
-/// `AtClientImpl._settleEnrollmentIdentity` holding rsa2048 and wanting
-/// mldsa65, `AtClientImpl.retrofitIsDue` says a retrofit is due, and the
-/// client self-enrols and comes up on a NEW enrollment id — all of it inside
-/// `AtClientImpl.create`.
-///
-/// So: `AtClient.enrollmentId` is the id a client is authenticated as,
-/// [EnrolledClient.enrollmentId] is the id it was enrolled as, and for the two
-/// pq cells they are different strings. Anything asserting what a client IS
-/// has to read the first. Reading the second compares ids that no client is
-/// running under, which passes just as happily and measures nothing.
+/// enrolled as, and both ids are real.** The OTP path has no algorithm to ask
+/// with and its APKAM keypair is RSA-2048 always, so a pqReady or pqActive
+/// preference finds rsa2048 where it wants mldsa65 and the client self-enrols
+/// onto a new id inside `AtClientImpl.create`. `AtClient.enrollmentId` is the
+/// id a client is authenticated as and [EnrolledClient.enrollmentId] is the id
+/// it was enrolled as; anything asserting what a client IS has to read the
+/// first, because reading the second compares ids no client is running under
+/// and passes just as happily.
 void main() {
   TestUtils.isolateStorage('pq_stage_arm_test');
-  // All three cells share one atSign on purpose: they are compared against
-  // each other, so anything that differs between them other than the posture
-  // is a second variable, and a per-cell atSign would be exactly that.
+  // All three cells share one atSign on purpose: anything that differs between
+  // them other than the posture is a second variable.
   //
   // ⚠️ The cost is three more enrollments on the suite's most-used identity,
   // and every `enroll:listns` walks the whole roster. Nothing here revokes or
-  // deletes, so the roster only grows — but if the enrollment tests start
-  // slowing, this file is one of the reasons and moving it to a less-used
-  // atSign costs nothing, because which atSign is not what it measures.
+  // deletes, so the roster only grows.
   final atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
   const namespace = 'wavi';
 
@@ -94,12 +62,11 @@ void main() {
   AtClient clientAt(String stage) => cells[stage]!.client;
 
   setUpAll(() async {
-    // The approver has to be able to CONVEY each enrollment's symmetric key,
-    // which means holding a registered key package of its own — pq mode has
-    // the approver mint and seal the key rather than unwrap one the enrollee
-    // sent. Without the `atKeysIo`, `AtClient.atKeysIo` is null and there is
-    // nowhere to file the package's private half, so `register()` has nothing
-    // to write and `approve` refuses by name.
+    // The approver has to be able to convey each enrollment's symmetric key,
+    // which means holding a registered key package of its own: pq mode has the
+    // approver mint and seal the key rather than unwrap one the enrollee sent.
+    // Without the `atKeysIo` there is nowhere to file the package's private
+    // half, so `register()` has nothing to write and `approve` refuses.
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final owner =
@@ -116,10 +83,10 @@ void main() {
         preference: TestUtils.getPreference(atSign, posture: entry.value),
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
-        // `(appName, deviceName)` is one-shot server state: a second run of
-        // this file against the same virtualenv must not collide with the
-        // first's, or every cell fails at setup for a reason that is not the
-        // thing under test.
+        // NOTE: `(appName, deviceName)` is one-shot server state — a second
+        // run of this file against the same virtualenv must not collide with
+        // the first's, or every cell fails at setup for a reason that is not
+        // the thing under test.
         deviceName: 'stagearm-${entry.key}-'
             '${DateTime.now().microsecondsSinceEpoch}',
     storage: TestUtils.storage,
@@ -128,9 +95,9 @@ void main() {
   });
 
   test('each stage reaches its own constructed client', () async {
-    // The Given for everything below. If a cell's client did not actually
-    // receive the stage's axes, every later assertion is about whatever the
-    // client did receive, and the file would be measuring a default.
+    // The precondition for everything below: a cell whose client never
+    // received the stage's axes would have every later assertion measuring
+    // whatever the client did receive.
     for (final entry in stages.entries) {
       final preference = clientAt(entry.key).getPreferences();
       expect(preference, isNotNull,
@@ -157,9 +124,9 @@ void main() {
         reason: 'the refusal flag must take both values across the three '
             'cells, or the differential below has only one arm');
 
-    // Read off the CLIENT rather than off the EnrolledClient. The cache key is
+    // Read off the CLIENT rather than off the EnrolledClient: the cache key is
     // the id the client is authenticated as *now*, and for two of these cells
-    // that is not the id their enrolment returned — see the note above [main].
+    // that is not the id their enrolment returned.
     final runningIds = {
       for (final stage in stages.keys) stage: clientAt(stage).enrollmentId
     };
@@ -173,11 +140,11 @@ void main() {
         reason: 'three distinct enrollment ids, or two cells share a client '
             'cache key and one of them is not the stage it claims');
 
-    // And the retrofit itself, which nothing else in this file would notice.
-    // A posture wanting a key the OTP path cannot mint must have MOVED its
-    // client off the enrollment it was handed; the posture wanting exactly
-    // what that path mints must have stayed. Both arms, because a changed id
-    // on its own would also be produced by handing a cell the wrong client.
+    // The retrofit itself. A posture wanting a key the OTP path cannot mint
+    // must have MOVED its client off the enrollment it was handed; the posture
+    // wanting exactly what that path mints must have stayed. Both arms,
+    // because a changed id alone would also be produced by handing a cell the
+    // wrong client.
     for (final entry in stages.entries) {
       final enrolledAs = cells[entry.key]!.enrollmentId;
       if (entry.value.authenticationKeyAlgorithm == SigningAlgoType.rsa2048) {
@@ -204,10 +171,9 @@ void main() {
       final resolved = CryptoConfig.forClient(clientAt(stage));
 
       // Both arms of the axis in one loop. A stage that configures the
-      // post-quantum providers resolves an inbound record stamped with one;
-      // a stage that does not must resolve NEITHER, which is what makes it a
-      // stand-in for a build predating those schemes rather than a current
-      // build writing old data.
+      // post-quantum providers resolves an inbound record stamped with one; a
+      // stage that does not must resolve NEITHER, which is what makes it a
+      // stand-in for a build predating those schemes.
       final configures = stages[stage]!.configuresPqProviders;
       final resolvable = configures ? isNotNull : isNull;
       expect(resolved.lookup(symmetricAesGcmCryptoProviderId), resolvable,
@@ -284,9 +250,8 @@ void main() {
       () async {
     // The end-to-end arm. It asks for legacy explicitly rather than reaching
     // the fallback, because `put` enforces a namespace unless the key is
-    // `local:` — so the namespace-less key above cannot travel this route, and
-    // a test that tried would fail in validation and never reach the crypto
-    // path it names.
+    // `local:`, so the namespace-less key above cannot travel this route and a
+    // test that tried would fail in validation before the crypto path.
     AtKey note() => AtKey()
       ..key = 'stagearm-note'
       ..namespace = namespace

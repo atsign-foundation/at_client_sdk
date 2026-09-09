@@ -17,12 +17,9 @@ import 'package:at_client/src/signing/envelope_signature.dart';
 Future<void> main() async {
   const payload = {'doc': 'JWS signed-envelope vector', 'n': 1};
 
-  // REUSE the committed key material when there is any. A format change has to
-  // re-sign these vectors, and minting fresh keys as well would rewrite every
-  // byte of the file - which destroys the one thing it is for during a review:
-  // the diff of a golden file is how a reviewer sees what moved on the wire
-  // without opening a single writer. With the keys held still, that diff is
-  // exactly the header change and the signatures over it.
+  // NOTE: reuse the committed key material when there is any. Minting fresh
+  // keys rewrites every byte of the golden file, so its diff no longer shows
+  // what moved on the wire.
   final existing = File('test/vectors/jws_envelope.json');
   final Map<String, dynamic>? prior = existing.existsSync()
       ? jsonDecode(existing.readAsStringSync()) as Map<String, dynamic>

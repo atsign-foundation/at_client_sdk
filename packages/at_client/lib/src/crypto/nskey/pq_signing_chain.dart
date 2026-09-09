@@ -24,10 +24,9 @@ import 'package:meta/meta.dart' show experimental;
 
 /// How far up the approval chain a verifier got.
 ///
-/// Graded rather than boolean because a bare `_apsk` is deliberately tolerated
-/// during the changeover: a boolean would force every caller either to reject
-/// enrollments that are valid today, or to lose the distinction that starts
-/// mattering the moment the changeover ends.
+/// Graded rather than boolean because a bare `_apsk` is tolerated during the
+/// changeover, and a caller has to be able to tell that apart from a chain
+/// that failed.
 @experimental
 enum ChainVerdict {
   /// Reached a root link that verifies against the atSign's signing root.
@@ -42,9 +41,8 @@ enum ChainVerdict {
   /// A link was present and wrong — a failed signature, a link describing
   /// another enrollment or another key, a cycle, or a chain too long to walk.
   ///
-  /// Deliberately not folded into [chained]. An absent link means nobody has
-  /// vouched yet; a bad one means something claimed to and the claim does not
-  /// hold, and reporting the second as the first would hide it.
+  /// Distinct from [chained]: an absent link means nobody has vouched yet, a
+  /// bad one means something claimed to and the claim does not hold.
   broken,
 }
 
@@ -69,24 +67,14 @@ class ChainResult {
 /// The approval chain: every enrollment's published `_apsk` value is signed
 /// by the enrollment that approved it, up to the atSign's signing root.
 ///
-/// The link is a plain APKAM-signed envelope, which is what makes the chain
-/// self-describing: the envelope already names the enrollment that signed it,
-/// and verifying it already resolves that enrollment's published `_apsk`. So a
-/// verifier walks upward without any approval graph having been published, and
-/// a forged parent claim simply fails the signature check against the parent it
-/// names.
-///
-/// **The parent signs and the child publishes.** `_apsk` writes are
-/// restricted to the owning enrollment's own
-/// authenticated connection, so the signer is not a permitted writer: the
-/// approver conveys the link over the substrate, and the child stamps it onto
-/// its own record on first run. Until the child runs, verifiers see a bare key,
-/// which the transition rule already tolerates.
+/// The parent signs and the child publishes, because `_apsk` writes are
+/// restricted to the owning enrollment's own authenticated connection: the
+/// approver conveys the link over the substrate, and until the child stamps
+/// it onto its own record verifiers see a bare key.
 @experimental
 class PqSigningChain {
-  /// One chain view per client. The wire vocabulary (the field names, the
-  /// secret name, [apskUri], the codecs) stays static — it belongs to the
-  /// protocol, not to any client.
+  /// One chain view per client; the wire vocabulary stays static because it
+  /// belongs to the protocol rather than to any client.
   PqSigningChain(this._atClient)
       : _logger =
             AtSignLogger('PqSigningChain (${_atClient.getCurrentAtSign()})');
@@ -106,18 +94,15 @@ class PqSigningChain {
 
   /// The `appMetadata.additional` field a **root** link lives in.
   ///
-  /// Its own field rather than a variant of [linkField]. A root link is not
-  /// another link with a different signer: it is ML-DSA-65 verified against
-  /// `public:pq_signing_root@<atSign>`, where every other link is RSA verified
-  /// against an `_apsk`. Different algorithm, different key source, different
-  /// lookup — so the field name settles which of the two a verifier is holding
-  /// before it reads anything else.
+  /// Its own field, not a variant of [linkField]: a root link is ML-DSA-65
+  /// verified against `public:pq_signing_root@<atSign>` where a chain link is
+  /// RSA verified against an `_apsk`, so the field name settles which of the
+  /// two a verifier is holding before it reads anything else.
   static const String rootLinkField = 'apskRootLink';
 
   /// Reserved [Secret] name for a conveyed **root** link.
   ///
-  /// Its own name for the same reason [rootLinkField] is its own field: which
-  /// flavour arrived decides which validation runs and which field is
+  /// Which flavour arrived decides which validation runs and which field is
   /// stamped, and the name settles that before anything is decoded.
   static const String rootLinkSecretName =
       '${PairwiseSecretSharing.perEnrollmentSecretPrefix}apskRootLink';
@@ -125,57 +110,29 @@ class PqSigningChain {
   /// Signature algorithm marker on a root link — the same `mldsa65` the root
   /// record and the keyfile use.
   ///
-  /// ⚠️ This said the record carried a hyphenated `ml-dsa-65` and that "both
-  /// spellings are frozen … the pins hold the two apart on purpose". That
-  /// stopped being true when the root record adopted the `_apsk` vocabulary:
-  /// [PqSigningRoot.rootKeyAlgo] is `SigningAlgoType.mldsa65`, and the pin in
-  /// `test/wire_literal_pins_test.dart` now asserts the opposite of what this
-  /// paragraph claimed it asserted — ML-DSA-65 has ONE spelling on the wire.
-  ///
-  /// Write-only today: both root-link verifiers dispatch through
+  /// Write-only: both root-link verifiers dispatch through
   /// `PqSigningRoot.verifierFor` on the algorithm of the *advertised entry*
   /// they are checking against, not on this field.
   static const String rootLinkAlgo = 'mldsa65';
 
   /// Top-level field naming the advertised root entry that signed the link.
   ///
-  /// **Top level, beside `alg`, never inside `payload`.** `payload` is the
-  /// signed region and it is shared verbatim with the chain link
-  /// ([linkPayload]); putting a root-only field in there would change what a
-  /// chain link signs. It is also not something the signature needs to cover:
-  /// a tampered kid narrows to the wrong key or to none, and the signature
-  /// then fails on its own.
-  ///
-  /// **Optional, and absent rather than null when unknown.** A link whose
-  /// signer could not name its own key is byte-identical to one written before
-  /// this field existed, which matters because `_sameLink` compares whole
-  /// documents to decide whether a republish is needed.
+  /// It sits beside `alg` and never inside `payload`, which is the signed
+  /// region shared verbatim with the chain link ([linkPayload]), and it is
+  /// omitted rather than null or empty when the signer cannot name its own
+  /// key.
   static const String rootLinkKidField = 'kid';
 
   /// The domain tag a root link's signature covers, ahead of the payload.
   ///
-  /// **A prefix on the signed bytes, not a field in `payload`.** The payload is
-  /// shared verbatim with the chain link ([linkPayload]) — that is what lets
-  /// one signer vouch for the same fact either way — so a field naming the
-  /// flavour could not go in there without either changing what a chain link
-  /// signs or making the two payloads differ. The prefix leaves the document
-  /// alone and still puts the flavour inside the signature.
-  ///
-  /// What it buys: a root-link signature is bytes no other thing this build
-  /// signs can produce, so it cannot be presented as one of them and none of
-  /// them can be presented as a root link. The chain link gets the same
-  /// property from [EnvelopeType.chainLink] in its protected header; the two
-  /// mechanisms differ because the documents do — one is a JWS with a header
-  /// to put it in, and the other is bare compact JSON.
-  ///
-  /// Frozen, and pinned in `test/wire_literal_pins_test.dart`.
+  /// A prefix on the signed bytes rather than a field in `payload`, which is
+  /// shared verbatim with the chain link ([linkPayload]), so a root link's
+  /// signature is bytes no other thing this build signs can produce. Frozen,
+  /// and pinned in `test/wire_literal_pins_test.dart`.
   static const String rootLinkDomain = 'at-root-link:';
 
-  /// The exact bytes a root link's signature covers.
-  ///
-  /// One definition for the signer and both verifiers, because the three
-  /// agreeing is the whole contract and three copies of a string concatenation
-  /// is three chances for them to stop.
+  /// The exact bytes a root link's signature covers, for the signer and both
+  /// verifiers alike.
   static Uint8List rootLinkSignableBytes(Map<String, Object?> payload) =>
       Uint8List.fromList(
           utf8.encode('$rootLinkDomain${signableTextOf(payload)}'));
@@ -186,27 +143,13 @@ class PqSigningChain {
   static String apskUri(String atSign, String enrollmentId) =>
       envelope_signature.apskUri(atSign, enrollmentId);
 
-  /// The payload a parent signs to vouch for [childEnrollmentId].
+  /// The payload a parent signs to vouch for [childEnrollmentId], binding the
+  /// enrollment id in alongside the key so the signature cannot be replayed
+  /// onto another enrollment's record.
   ///
-  /// Both fields are bound in, not just the key: a signature over the key
-  /// alone would verify equally well if replayed onto a different
-  /// enrollment's record, and the whole point of the link is to say *which*
-  /// enrollment this approver vouched for.
-  ///
-  /// ⚠️ **`apkamPublicKey` is a misleading name, and it is a remnant.** It
-  /// carries the child's whole `_apsk` record value. The name was accurate
-  /// when the field was written, on 2026-08-04: `_apsk` then held only the
-  /// APKAM public key, which the atServer publishes there at approval. It was
-  /// overtaken on 2026-08-13, when an enrollment gained signing keys of its
-  /// own. What the field holds today is whatever `apskValueOf` composed — the
-  /// bare public key when the enrollment advertises exactly one active
-  /// `rsa2048` entry, and the JSON advertisement naming every key and its
-  /// status otherwise. That single key is still the APKAM authentication
-  /// keypair's public half on a legacy enrollment, where authentication and
-  /// data signing are one keypair, and is a separate signing key on any other.
-  ///
-  /// **It is not corrected in place because it is a member of the signed
-  /// preimage**, so renaming it changes what verifies.
+  /// ⚠️ `apkamPublicKey` is a misleading name — the field carries the child's
+  /// whole `_apsk` record value — and it cannot be corrected, because it is a
+  /// member of the signed preimage and renaming it changes what verifies.
   static Map<String, Object?> linkPayload({
     required String childEnrollmentId,
     required String childApkamPublicKey,
@@ -217,16 +160,12 @@ class PqSigningChain {
         'apkamPublicKey': childApkamPublicKey,
       };
 
-  /// Signs a link vouching for [childEnrollmentId], for the approver to convey.
+  /// Signs a link vouching for [childEnrollmentId], over the child's published
+  /// `_apsk` value rather than the enrollment request, for the approver to
+  /// convey.
   ///
-  /// Reads the child's published `_apsk` value rather than the enrollment
-  /// request, so what is signed is exactly what a verifier will later resolve.
-  /// Signing a key taken from anywhere else would leave the two free to
-  /// disagree.
-  ///
-  /// Returns null when the child's `_apsk` is not readable, which is not worth
-  /// failing an approval over — the chain link is additive, and an enrollment
-  /// without one is simply unsigned, which verifiers already tolerate.
+  /// Returns null when that value is not readable, leaving the enrollment
+  /// unsigned rather than failing the approval.
   Future<SignedEnvelope?> signLinkFor(
     EnvelopeSigning signer,
     String childEnrollmentId,
@@ -254,26 +193,13 @@ class PqSigningChain {
     );
   }
 
-  /// Signs a **root** link vouching for [childEnrollmentId], for a fully
-  /// privileged client to convey.
+  /// Signs a **root** link vouching for [childEnrollmentId], over the child's
+  /// key as the atServer published it, anchoring that enrollment to the
+  /// signing root in one hop for a fully privileged client to convey.
   ///
-  /// The class that signs root links is decided by *privilege*, not by
-  /// possession: any fully privileged enrollment (`rw` on `*` and
-  /// `__manage`) anchors the enrollments it vouches for directly to the
-  /// signing root — one hop, verified against the published root — rather
-  /// than signing chain links attributed to itself. The caller supplies
-  /// [rootPrivate] because privilege is its gate and possession is its
-  /// responsibility; a privileged client that has not yet received the
-  /// private heals that by pulling, not by demoting to a chain link.
-  ///
-  /// Reads the child's key from the record the **atServer** published,
-  /// exactly as [signLinkFor] does and for the same reason. Returns null
-  /// when the child's `_apsk` is not readable.
-  /// [rootKid] names the advertised root entry [rootPrivate] is, when the
-  /// signer knows it. Passed together with the private rather than derived
-  /// here: the kid must name the key that actually signed, and a verifier
-  /// reading the record's active entry instead would disagree with the
-  /// signature whenever a holder has not yet healed.
+  /// Returns null when the child's `_apsk` is not readable; [rootKid] names
+  /// the advertised root entry [rootPrivate] is, and must name the key that
+  /// actually signed rather than whichever the record advertises.
   Future<Map<String, Object?>?> signRootLinkFor(
     String childEnrollmentId, {
     required Uint8List rootPrivate,
@@ -303,8 +229,7 @@ class PqSigningChain {
     );
   }
 
-  /// The published root-link shape over [payload]: the one codec
-  /// [publishOwnRootLink], [signRootLinkFor] and [_checkRootLink] agree on.
+  /// The published root-link shape over [payload].
   static Future<Map<String, Object?>> _rootLinkOver(
     Map<String, Object?> payload,
     Uint8List rootPrivate, {
@@ -317,35 +242,23 @@ class PqSigningChain {
     return {
       'v': 1,
       'alg': rootLinkAlgo,
-      // Omitted, never null and never empty, when the signer cannot name its
-      // own key: an absent field means "try every advertised root", and a
-      // present-but-empty one would have to mean the same thing in every
-      // reader that ever touches this document.
       if (kid != null && kid.isNotEmpty) rootLinkKidField: kid,
       'payload': payload,
       'signature': base64Encode(signature),
     };
   }
 
-  /// Stamps a conveyed [link] onto this enrollment's own `_apsk`.
+  /// Stamps a conveyed [link] onto this enrollment's own `_apsk`, rewriting
+  /// the record with its value unchanged and the link added to
+  /// `appMetadata.additional`.
   ///
-  /// Rewrites the record with its value unchanged and the link added to
-  /// `appMetadata.additional`. The value has to be re-sent because a put
-  /// replaces the record; what is sent back is the record's current state —
-  /// [current] when the caller already read it, else read here — so the key
-  /// published is the one already there rather than one this client believes
-  /// it should be.
-  ///
-  /// The provider id is the legacy one, which is accurate rather than a
-  /// placeholder: `_apsk` is a public plaintext key and no provider encrypts
-  /// it. Only `additional` carries anything new.
+  /// A caller that has already read the record passes it as [current], so its
+  /// checks and this write come from one snapshot.
   Future<void> publishLink(
     String enrollmentId,
     SignedEnvelope link, {
     AtValue? current,
   }) async {
-    // Resolved before the write: a link so malformed its signer cannot be
-    // read is refused here rather than published and then logged broken.
     final signer = link.signerEnrollmentId;
     await _publishInto(enrollmentId, linkField, link.toJson(),
         current: current);
@@ -356,16 +269,9 @@ class PqSigningChain {
   /// Adds [value] under [field] in this enrollment's `_apsk` `appMetadata`,
   /// leaving the record's value and any other field alone.
   ///
-  /// The record's current state is re-sent because a put replaces the record;
-  /// sending back what is already there means the key published stays the one
-  /// every verifier resolves rather than one this client believes it should
-  /// be. A caller that already read the record passes it as [current], so the
-  /// checks it made and the write here come from ONE snapshot — a separate
-  /// read would let the record change in between.
-  ///
-  /// Existing `additional` entries are carried forward, so the chain link and
-  /// the root link coexist on the same record instead of overwriting each
-  /// other.
+  /// A put replaces the record, so its current state is re-sent: [current]
+  /// when the caller has already read it, so its checks and this write come
+  /// from one snapshot, else a read here.
   Future<void> _publishInto(
     String enrollmentId,
     String field,
@@ -398,8 +304,7 @@ class PqSigningChain {
 
   /// The chain link an enrollment has published, or null if it has none.
   ///
-  /// An absent link is ordinary — the enrollment has not run since approval,
-  /// or predates the chain — so this reports absence rather than failing.
+  /// An absent link is ordinary, so this reports absence rather than failing.
   Future<SignedEnvelope?> readLink(
     String enrollmentId,
   ) async {
@@ -425,32 +330,18 @@ class PqSigningChain {
   }
 
   /// The link under [field] in an already-read `_apsk` [value], or null.
-  /// The in-hand flavour of [_readField], for callers that must make every
-  /// check against one snapshot of the record.
   static Map<String, Object?>? _fieldFrom(AtValue value, String field) {
     final link = value.metadata?.appMetadata?.additional?[field];
     if (link is Map) return link.cast<String, Object?>();
     return null;
   }
 
-  /// Signs and publishes this enrollment's **root** link, if it is entitled to
-  /// one and does not already have it. Returns whether it published.
-  ///
-  /// Self-signed rather than conveyed: [PqSigningRoot] puts the private in
-  /// every fully privileged enrollment, and those are exactly the enrollments
-  /// that get a root link — so the signer is always the record's own writer and
-  /// `_apsk`'s writes-only-from-its-own-connection rule never bites here. That
-  /// is the difference from a chain link, where the signer can never be the
-  /// writer.
+  /// Signs and publishes this enrollment's **root** link if it is entitled to
+  /// one and does not already have it, returning whether it published.
   ///
   /// [isFullyPrivileged] is required rather than inferred from holding the
-  /// private. The two should never diverge, and checking keeps the invariant —
-  /// only that class carries a root link — true if they ever do.
-  ///
-  /// Runs at mint and at every start. That one rule covers the minter, a
-  /// privileged peer that predates the root, one approved afterwards, one
-  /// approved by a non-root-holding approver, and a root minted late: the retro
-  /// case needs no migration because it is not a special case.
+  /// root private, so the invariant that only a fully privileged enrollment
+  /// carries a root link holds even if the two ever diverge.
   Future<bool> publishOwnRootLink({
     required Future<bool> Function() isFullyPrivileged,
     AtKeysIo? keysIo,
@@ -459,10 +350,6 @@ class PqSigningChain {
     final enrollmentId =
         AtClientSecretSharing.forClient(_atClient).enrollmentId;
 
-    // Possession is checked first because it is a local `AtKeys` read, where
-    // establishing privilege costs a round trip. An enrollment holding no root
-    // private cannot anchor itself whatever its privileges, so the cheap gate
-    // is also the one that eliminates almost every client at start.
     final signer =
         await PqSigningRoot(_atClient, keysIo: keysIo).signingKey(atSign);
     if (signer == null) return false;
@@ -514,19 +401,8 @@ class PqSigningChain {
   /// verifier can still follow: it describes the key [current] publishes, and
   /// its signature checks out under a root the atSign still advertises.
   ///
-  /// **Presence was the old question and it was the wrong one.** A link stops
-  /// holding when the root that signed it leaves the record, when the key it
-  /// vouches for is replaced, and when it was signed under a shape this build
-  /// no longer verifies — and in every one of those the record advertises an
-  /// anchor no verifier can follow, reported as `broken`, which reads as
-  /// tampering. This client is the only party that can put it right: the
-  /// conveyance path publishes what an approver sends, and no approver sends a
-  /// root link to an enrollment that already holds the private.
-  ///
-  /// **Only a definite failure re-anchors.** An unreadable root record answers
-  /// "holds", not "broken": it is a fact about this read rather than about the
-  /// link, and rewriting a good link on a transient failure would replace one
-  /// valid anchor with another for no reason.
+  /// Only a definite failure answers false; an unreadable root record answers
+  /// true, since that is a fact about the read rather than about the link.
   Future<bool> _rootLinkStillHolds(
     String atSign,
     String enrollmentId,
@@ -563,20 +439,11 @@ class PqSigningChain {
       _readField(enrollmentId, rootLinkField);
 
   /// Publishes the links this enrollment was conveyed — a root link, a chain
-  /// link, or both — if any is waiting and its key does not already carry it.
-  /// Returns whether anything was published.
+  /// link, or both — if any is waiting and its key does not already carry it,
+  /// returning whether anything was published.
   ///
-  /// Self-gating: an enrollment nobody vouched for has no link in its store and
-  /// this writes nothing, so it costs a client that will never have one an
-  /// in-memory lookup at start and no atServer traffic at all.
-  ///
-  /// A link that arrives *after* this runs is published at the next start
-  /// rather than immediately — the same trade the namespace-key seeding makes,
-  /// and acceptable for the same reason: until it lands the enrollment is
-  /// simply unsigned, which verifiers tolerate during the changeover.
-  ///
-  /// The two flavours coexist on the record ([linkField], [rootLinkField]) and
-  /// a verifier prefers the root one, so stamping both loses nothing.
+  /// A link that arrives *after* this runs is stamped at the next start rather
+  /// than immediately; until it lands the enrollment is simply unsigned.
   Future<bool> publishPendingLink() async {
     final rootPublished = await _publishPendingRootLink();
     final chainPublished = await _publishPendingChainLink();
@@ -587,11 +454,9 @@ class PqSigningChain {
   /// verifier will.
   ///
   /// The conveyance channel authenticates the *sender*, and the sender is not
-  /// the root — so the link is verified against the published signing root
+  /// the root, so the link is verified against the published signing root
   /// before it is stamped, plus the same two checks every link gets: it names
-  /// **this** enrollment, and it vouches for the key actually published. A
-  /// link that fails any of them is refused rather than published as
-  /// something no verifier could follow.
+  /// **this** enrollment, and it vouches for the key actually published.
   Future<bool> _publishPendingRootLink() async {
     final sharing = AtClientSecretSharing.forClient(_atClient);
     final atSign = _atClient.getCurrentAtSign()!;
@@ -677,16 +542,9 @@ class PqSigningChain {
 
   /// Stamps a conveyed chain link.
   ///
-  /// Three things are checked before anything is written, because this record
-  /// is the enrollment's published identity and a bad link on it is worse than
-  /// no link:
-  ///
-  /// - the link names **this** enrollment, so one conveyed for a sibling is
-  ///   never stamped here;
-  /// - it verifies against the parent it names, so a link that could never be
-  ///   verified downstream is not published as though it could;
-  /// - the key it vouches for is the key actually published, so a link that
-  ///   silently covers something else is refused.
+  /// Refused unless all three hold: the link names **this** enrollment, it
+  /// verifies against the parent it names, and it vouches for the key actually
+  /// published.
   Future<bool> _publishPendingChainLink() async {
     final sharing = AtClientSecretSharing.forClient(_atClient);
     final atSign = _atClient.getCurrentAtSign()!;
@@ -754,32 +612,19 @@ class PqSigningChain {
 
   /// Whether [a] and [b] are the same link, compared whole.
   ///
-  /// Used for BOTH link flavours, which is the point. A single-member
-  /// comparison of `['signature']` is right for a root link and wrong for a
-  /// chain link — the chain link is a signed envelope, whose signature lives
-  /// inside its `signatures` array, so the read is null on both sides,
-  /// `null == null` holds, and every existing link matches every new one. The
-  /// conveyed link is then never published, silently and with nothing to log,
-  /// because "already published" and "never published" are the same branch.
-  ///
-  /// The root-link version of that comparison was correct only because that
-  /// format happens to carry a top-level signature. Comparing whole is right
-  /// for both without depending on either shape, so the next shape change
-  /// cannot reintroduce this by moving a member.
+  /// Whole rather than by a signature member, because this serves both link
+  /// flavours: a chain link's signature lives inside its `signatures` array,
+  /// where a top-level `['signature']` comparison reads null on both sides and
+  /// silently makes every existing link match every new one.
   static bool _sameLink(Map<String, Object?> a, Map<String, Object?> b) =>
       const DeepCollectionEquality().equals(a, b);
 
-  /// Walks upward from [enrollmentId] and reports how far the chain holds.
+  /// Walks upward from [enrollmentId] — stopping at a root link verified
+  /// against `public:pq_signing_root@<atSign>`, else following chain links
+  /// from parent to parent — and reports how far the chain holds.
   ///
-  /// Stops at a root link verified against `public:pq_signing_root@<atSign>`.
-  /// Failing that it follows chain links from parent to parent, and reports
-  /// where it ran out.
-  ///
-  /// [maxDepth] and the visited set are not defensive padding: the chain is
-  /// assembled from records that a compromised enrollment partly controls, so
-  /// a cycle or an absurdly long chain is an input to expect rather than an
-  /// impossibility. Either ends the walk as [ChainVerdict.broken] — a chain
-  /// that cannot be walked is not a chain that is merely unanchored.
+  /// A cycle, or a chain longer than [maxDepth], ends the walk as
+  /// [ChainVerdict.broken] rather than as merely unanchored.
   Future<ChainResult> verifyChain(
     EnvelopeSigning verifier,
     String enrollmentId, {
@@ -852,9 +697,6 @@ class PqSigningChain {
       return 'the link on $enrollmentId vouches for '
           '${payload['childEnrollmentId']} instead';
     }
-    // The signature proves the parent said something; this proves it said it
-    // about the key actually published. Without it a genuine link could sit
-    // over a key it never covered.
     final published = await _publishedKey(atSign, enrollmentId);
     if (published != payload['apkamPublicKey']) {
       return 'the link on $enrollmentId vouches for a key other than the one '
@@ -921,25 +763,12 @@ class PqSigningChain {
   }
 
   /// Every root the record advertises that this build can check a signature
-  /// with — active first, then retired.
+  /// with — active first, then retired, since a root link is checked long
+  /// after it was signed.
   ///
-  /// **Retired entries are candidates.** A root link is verified long after it
-  /// was signed, and the whole point of keeping a retired entry advertised is
-  /// that what it signed goes on verifying. Checking only the active entry
-  /// would turn every superseded link into `broken` — reported as tampering —
-  /// the moment a successor appeared.
-  ///
-  /// **An entry whose status this build does not understand is NOT a
-  /// candidate.** Active and retired are the two statuses that vouch for what
-  /// a key already signed; a token from a newer client says something else,
-  /// and the likeliest something else — a key its owner has disowned — is one
-  /// whose signatures must stop checking out here rather than go on doing so.
-  /// A link signed with such a key reads as unverifiable, which is the
-  /// fail-closed answer.
-  ///
-  /// Empty for absent and unreadable alike: verification wants one answer,
-  /// "nothing to check against", and the distinction matters only to code that
-  /// mints or retires on it.
+  /// An entry whose status this build does not understand is not a candidate,
+  /// which is the fail-closed answer, and the list is empty for absent and
+  /// unreadable alike.
   Future<List<ApskSigningKey>> _rootCandidates(String atSign) async {
     try {
       final roots = await PqSigningRoot.publishedRoots(_atClient, atSign);
@@ -952,16 +781,10 @@ class PqSigningChain {
 
   /// The candidates a link narrows itself to.
   ///
-  /// A link carrying a [rootLinkKidField] names the key that signed it, so
-  /// only that entry is tried. **An unmatched kid narrows to nothing and the
-  /// link fails** — it does not fall back to trying everything, because a kid
-  /// that could be ignored whenever it named something unknown would pass
-  /// whenever any advertised key happened to verify, which makes the field
-  /// decoration rather than a claim.
-  ///
-  /// A link with no kid is tried against every candidate. That is what a link
-  /// written before this field existed looks like, and what a link from a peer
-  /// build that does not emit it looks like.
+  /// A [rootLinkKidField] names the key that signed the link, so only that
+  /// entry is tried and an unmatched kid narrows to nothing rather than
+  /// falling back to trying everything; a link with no kid is tried against
+  /// every candidate.
   static Iterable<ApskSigningKey> _narrowedTo(
     Map<String, Object?> link,
     Iterable<ApskSigningKey> candidates,
@@ -973,10 +796,9 @@ class PqSigningChain {
 
   /// Whether [signature] over [signable] verifies under any of [candidates].
   ///
-  /// An entry whose algorithm this build has no verifier for is **skipped**,
-  /// not failed: `PqSigningRoot.verifierFor` is the one place
-  /// `verifiableRootAlgos` becomes code, and a record may legitimately carry a
-  /// root a client predating that algorithm cannot check.
+  /// An entry whose algorithm this build has no verifier for is skipped, not
+  /// failed: a record may legitimately carry a root that a client predating
+  /// that algorithm cannot check.
   static Future<bool> _verifiesUnderAny(
     Uint8List signable,
     String signature,

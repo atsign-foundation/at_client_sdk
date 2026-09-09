@@ -158,8 +158,8 @@ void main() {
               namespaces: {'app_1': 'rw'}),
           approving);
 
-      // THE PREMISE: the two sources must disagree, or the test below passes
-      // for a reason that has nothing to do with which one authenticate read.
+      // NOTE: the two sources must disagree, or the test below passes for a
+      // reason that has nothing to do with which one authenticate read.
       final retrofitted = await keysIo.read('@alice'.toAtsign());
       // ignore: deprecated_member_use_from_same_package
       expect(retrofitted.enrollmentId, 'legacy-1');
@@ -192,9 +192,7 @@ void main() {
 
     test('a legacy keyfile authenticates as its flat stored enrollment',
         () async {
-      // UC-G1.1: the keys decide. A legacy keyfile — flat fields and a stored
-      // enrollmentId, no typed material — gives the resolver nothing, so the
-      // stored id is the one that reaches pkam.
+      // UC-G1.1: the keys decide.
       final atKeys = await fileAtKeysIo.read('@alice🛠'.toAtsign());
       expect(atKeys.resolveAuthenticatingEnrollment(), isNull,
           reason: 'the fixture holds no typed authentication material, so '
@@ -215,9 +213,8 @@ void main() {
 
     test('an ancient keyfile with no enrollment id authenticates as primary',
         () async {
-      // A keyfile written before enrollments existed: flat fields only, no
-      // stored id. `primary` is the atServer's name for that credential; the
-      // verb builder keeps it off the wire.
+      // For a keyfile with no stored id, `primary` is the atServer's name for
+      // that credential; the verb builder keeps it off the wire.
       final keysIo = InMemoryAtKeysIo();
       await keysIo.write(
           '@alice',

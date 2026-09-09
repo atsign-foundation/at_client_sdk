@@ -3,16 +3,11 @@
 /// Half this catalogue's rows are proven against a live atServer, in
 /// `tests/at_functional_test` or `tests/at_end2end_test`. Those are separate
 /// packages, so this suite — which runs inside `at_client`'s unit tests — can
-/// never observe them. Before this existed, a scenario proven live could never
-/// turn its own row green, and the burn-down read as a floor rather than a
-/// measure.
+/// never observe them.
 ///
 /// [provenIn] does **not** re-run the proof; it asserts the proof is still
-/// where the row says it is. That is a weaker claim, and the weakness is the
-/// honest part: what it buys is that the citation cannot rot silently. Rename
-/// or delete the live test and this goes red, naming the row that just lost its
-/// evidence — which is exactly how a live-proven row would otherwise decay into
-/// an unnoticed lie.
+/// where the row says it is. Rename or delete the live test and this goes red,
+/// naming the row that just lost its evidence.
 ///
 /// A citation is a judgement that the named test really does establish the
 /// scenario. Keep [proves] specific enough that the next reader can check that
@@ -28,18 +23,12 @@ import 'package:test/test.dart';
 
 import 'manifest.dart';
 
-/// Where [provenIn] records each citation it makes, when asked to.
+/// Environment variable naming a file each citation is appended to, one JSON
+/// object per line; unset, nothing is written.
 ///
-/// Unset, nothing is written and this file behaves exactly as it always has.
-/// Set to a path, every citation is appended as one JSON object per line, and
-/// `tool/acceptance_ledger.dart` joins those against the live packs' own
+/// `tool/acceptance_ledger.dart` joins those lines against the live packs'
 /// `--file-reporter json` output to say which rows were *actually exercised in
 /// a run* rather than which citations still resolve.
-///
-/// Recorded rather than parsed out of the source: a regex over `provenIn(`
-/// calls has to cope with the path sitting on the next line, which is the
-/// formatting most of them use, and a matcher that quietly misses a third of
-/// the corpus is how this project has been wrong before.
 const _ledgerEnv = 'ACCEPTANCE_LEDGER';
 
 /// Asserts the live proof for a scenario exists.
@@ -49,16 +38,11 @@ const _ledgerEnv = 'ACCEPTANCE_LEDGER';
 /// prose for a human, not matched against anything.
 /// [clauses] pins which of the row's THEN clauses this citation claims.
 ///
-/// Each entry is a distinctive fragment of one clause, and it must resolve to
-/// exactly one — no match and more than one are both errors, because a pin
-/// that resolves to nothing silently claims nothing while reading as coverage.
-/// Fragments rather than indexes: inserting a clause must not re-point every
-/// citation after it, and editing a clause's wording SHOULD break the pin, so
-/// that the edit is reviewed against the test that proves it.
-///
-/// Omit it and the row keeps its old all-or-nothing verdict, which is why
-/// leaving it off is not a failure — the ledger reports the row as having
-/// unpinned clauses rather than pretending they are covered.
+/// Each entry is a distinctive fragment of one clause and must resolve to
+/// exactly one: no match and more than one are both errors. Editing a clause's
+/// wording breaks the pin, so the edit is reviewed against the test that proves
+/// it. Omitted, the row keeps an all-or-nothing verdict and the ledger reports
+/// it as having unpinned clauses.
 void provenIn(String path, String testName,
     {required String proves, List<String> clauses = const []}) {
   final pinned = _resolveClauses(clauses);
@@ -70,24 +54,17 @@ void provenIn(String path, String testName,
           'either restore it or the row is no longer proven');
 
   final source = file.readAsStringSync();
-  // Matched against the SOURCE, so the name has to be spelled the way the
-  // source spells it: Dart escapes whichever quote encloses the literal. A
-  // single spelling misses every test whose name contains an apostrophe — 22
-  // files in this package alone — and the failure reads as a rename, which is
-  // the one diagnosis that sends a reader looking in the wrong place.
+  // NOTE: matched against the SOURCE, so the name must be spelled the way the
+  // source spells it — Dart escapes whichever quote encloses the literal, and
+  // a single spelling misses every test name containing an apostrophe.
   final spellings = [
     "'${testName.replaceAll("'", "\\'")}",
     '"${testName.replaceAll('"', '\\"')}',
   ];
-  // Adjacent string literals are ONE string to the compiler and two runs of
-  // characters here, so a test whose name wraps across them is not contiguous
-  // in the source this matches against. That cost two red rails on 2026-08-29,
-  // the second in a file already carrying a comment about the first — which is
-  // the tell that it wanted a fix rather than a rule.
-  //
-  // Joining them cannot make a RENAMED test match: it only removes join
-  // points, so every character of the name must still be present in order. The
-  // newline is required, so a same-line `''` is left alone.
+  // NOTE: adjacent string literals are ONE string to the compiler and two runs
+  // of characters here, so a test name wrapped across them is not contiguous in
+  // the source. Removing the join points cannot make a RENAMED test match:
+  // every character of the name must still be present, in order.
   final joined = source.replaceAll(RegExp(r"'\s*\n\s*'"), '');
   expect(spellings.any((s) => source.contains(s) || joined.contains(s)), isTrue,
       reason: 'this row cites "$testName" in $path, and no test there starts '
@@ -99,8 +76,7 @@ void provenIn(String path, String testName,
 /// Appends one citation, tagged with the scenario test that made it.
 ///
 /// The scenario's own name carries the use-case id (`UC-A3.1 · …`), so the
-/// ledger needs no separate row parameter and cannot disagree with the suite
-/// about which row a citation belongs to.
+/// ledger needs no separate row parameter.
 void _record(String path, String testName, String proves, List<int> clauses) {
   final out = Platform.environment[_ledgerEnv];
   if (out == null || out.isEmpty) return;
@@ -164,15 +140,11 @@ List<int> _resolveClauses(List<String> pins) {
 ///
 /// Some rows assert inline rather than citing anything: the mechanism is a
 /// transform over a document or a frame, so the whole proof fits in the
-/// scenario. Before this they could pin nothing — [provenIn] takes a path, and
-/// there is no other file to name — which meant the burn-down could never
-/// count them and the clause total was unreachable however complete those
-/// rows were.
+/// scenario.
 ///
 /// An inline proof runs inside `at_client`'s unit suite, so it is in-process
-/// by construction and never counts toward the server-proven column. That is
-/// the honest reading and not a limitation of the recording: there is no
-/// atServer in the loop.
+/// by construction and never counts toward the server-proven column: there is
+/// no atServer in the loop.
 void provenHere({required String proves, List<String> clauses = const []}) {
   final pinned = _resolveClauses(clauses);
   _record(

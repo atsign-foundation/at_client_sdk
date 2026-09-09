@@ -66,54 +66,32 @@ abstract class AtClient {
   Future<void> get pendingEmissions;
 
   /// Waits until other atSigns can seal data to [namespace] for this atSign,
-  /// doing whatever is missing, and reports **what happened**.
+  /// doing whatever is missing, and reports what happened.
   ///
-  /// Sending and receiving are not symmetric, and the difference is not
-  /// obvious: a client can send the moment it is up, because sending needs the
-  /// *recipient's* published key. Receiving needs this atSign's own key to be
-  /// published, and that happens in a startup step that is deliberately not
-  /// awaited — construction must not block on a network round trip. A process
-  /// that finishes its work and exits takes that step down wherever it had got
-  /// to, and nothing in this client sees a problem: the symptom appears on a
-  /// *peer*, which reports this atSign as having no published key. Diagnosed
-  /// from that end it names the wrong party.
+  /// Sending and receiving are not symmetric: sending needs the recipient's
+  /// published key, while receiving needs this atSign's own key published by a
+  /// startup step that is not awaited, so a process can finish its work and
+  /// exit while peers still see no published key for it. This is for the
+  /// caller that must not exit until it is reachable; nothing calls it for
+  /// you, and it is idempotent and cheap when there is nothing to do.
   ///
-  /// So this exists for the caller that must not exit until it is reachable —
-  /// a CLI tool, a cron job, a one-shot notifier, anything driven from a
-  /// script with piped stdin. **It is not a default and nothing calls it for
-  /// you**: an app that only ever sends should not pay for a mint it will
-  /// never use.
-  ///
-  /// Idempotent and cheap when there is nothing to do: it checks what is
-  /// published before it mints anything, and it is safe to call on every
-  /// start.
-  ///
-  /// ⚠️ **Do NOT call it concurrently with this client's own PQ startup, or
-  /// with itself.** This said the opposite until 2026-08-27 — that both would
-  /// re-read under the mint lock and the loser would adopt — and that is false
-  /// for two racers of the **same enrolment**. The lock's holder token is the
-  /// enrolment id, so a second concurrent mint is refused the lock, reads it
-  /// back, sees its *own* id, concludes it holds it, and mints: measured on a
-  /// live atServer as two advertisements 7.5ms apart carrying different key
-  /// material, the second overwriting the first. A peer that fetched in that
-  /// window holds a generation the owner may no longer be able to open. The
-  /// lock excludes a different enrolment, which is what it was built for; it
-  /// does not exclude this.
+  /// ⚠️ **Must NOT run concurrently with this client's own PQ startup, or with
+  /// itself.** The mint lock's holder token is the enrolment id, so a second
+  /// concurrent mint by the same enrolment reads the lock back, sees its own
+  /// id and mints anyway; the two advertisements carry different key material,
+  /// and a peer that fetched in between holds a generation the owner may no
+  /// longer be able to open.
   ///
   /// Answers rather than throws for the two cases that are configuration and
   /// not failure — a posture that does not seed, and a namespace this
   /// enrollment cannot hold a key for. Read
   /// [AtReachabilityResult.isReachable] rather than comparing the outcome.
   ///
-  /// ⛔ **The process may exit the moment this returns
-  /// [AtReachability.published] — nothing is left in flight.** That is the
-  /// whole point, given what it exists to fix. The advertisement is written
-  /// straight to the atServer with an awaited remote write, deliberately not a
-  /// local-first put that would leave it unpublished until the next sync, so
-  /// when this returns, a peer's `plookup` finds it. Conveying the private
-  /// half to this atSign's *other* enrollments is awaited too, and a failure
-  /// there is logged rather than fatal: those enrollments pull at their next
-  /// start, and it does not affect whether peers can seal here.
+  /// Nothing is left in flight when this returns [AtReachability.published]:
+  /// the advertisement is an awaited remote write rather than a local-first
+  /// put, so a peer's `plookup` finds it on return. Conveying the private half
+  /// to this atSign's other enrollments is awaited too, and a failure there is
+  /// logged rather than fatal — those enrollments pull at their next start.
   ///
   /// [timeout] bounds the whole operation, which may take several round
   /// trips. On [AtReachability.timedOut] nothing is known about whether the
@@ -156,19 +134,15 @@ abstract class AtClient {
 
   /// Whether this client has been stopped via `AtClientManager`.
   ///
-  /// Once true, this instance's background services have been torn down — the
-  /// keystore-event timers, the data-event stream, and the sync and
-  /// notification services — so it does no work of its own until it is resumed.
+  /// Once true, this instance's background services — the keystore-event
+  /// timers, the data-event stream, and the sync and notification services —
+  /// have been torn down, so it does no work of its own until it is resumed.
   ///
-  /// ⚠️ **A stopped instance is NOT removed from the internal cache.** Nothing
-  /// in this library removes an entry from it: the only write that cache ever
-  /// takes is the insert made when a client is first built. So a later
+  /// ⚠️ **A stopped instance is NOT removed from the internal cache.** A later
   /// `AtClientManager.setCurrentAtSign` for the same atSign hands back THIS
   /// instance, clears the flag, and wires fresh services onto it against the
-  /// still-open local keystore — which is what [stop] describes from the other
-  /// side. A caller expecting a stopped client to be discarded, or expecting
-  /// the next one for that atSign to be newly built with the preference it
-  /// passes, is expecting something that does not happen.
+  /// still-open local keystore, rather than building a new one with the
+  /// preference it was passed.
   bool get isStopped;
 
   /// Stops all background services for this atSign: cancels the

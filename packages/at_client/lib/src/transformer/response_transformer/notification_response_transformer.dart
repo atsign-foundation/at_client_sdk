@@ -51,12 +51,11 @@ class NotificationResponseTransformer
       ..sharedWith = atNotification.to
       ..sharedBy = atNotification.from;
 
-    // The key string still carries its namespace suffix, and nothing above
-    // splits it out — so `namespace` would stay null on every received
-    // notification. Crypto routing is `(owner, namespace)` scoped, and the
-    // nskey providers refuse a value without one, so a notification written on
-    // that path could never be read back. Split at the last dot, which is what
-    // AtKey.fromString does; toString() recomposes it unchanged.
+    // NOTE: the key string still carries its namespace suffix. Crypto routing
+    // is `(owner, namespace)` scoped and the nskey providers refuse a value
+    // without a namespace, so leaving it null makes such a notification
+    // unreadable. Splitting at the last dot matches AtKey.fromString, and
+    // toString() recomposes the key unchanged.
     final namespaceIndex = atKey.key.lastIndexOf('.');
     if (namespaceIndex > -1) {
       atKey.namespace = atKey.key.substring(namespaceIndex + 1);

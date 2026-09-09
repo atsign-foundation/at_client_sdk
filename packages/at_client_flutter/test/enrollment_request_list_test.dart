@@ -1,18 +1,12 @@
 /// The approval list's last hop tells the truth, and every client read goes
-/// through the service it was given.
+/// through the service the widget was given.
 ///
-/// A post-approval conveyance refusal means the enrollment is live and
-/// cannot decrypt — reporting it as `Failed to approve` invites a retry of
-/// an approval that already went through, and leaving the row listed says
-/// the request is still pending when it is not. And a pq-mode request wraps
-/// no symmetric key at all, so the row's approve action must not demand one.
-/// An injected service belongs to the caller: the widget neither disposes it
-/// nor reaches past it to [AtClientManager], so an app that owns its own
-/// client can use this widget.
+/// A conveyance refusal means the approval already went through, so the row
+/// is no longer pending and calling it a failure would invite a retry; a
+/// pq-mode request wraps no symmetric key; and an injected service belongs to
+/// the caller, who may still be using it.
 library;
 
-// The conveyance surface is deliberately marked @experimental and will be
-// reshaped as the group surface matures.
 // ignore_for_file: experimental_member_use
 
 import 'package:at_auth/at_auth.dart';
@@ -64,8 +58,8 @@ void main() {
   });
 
   setUp(() {
-    // Nothing here may reach the manager: every client read is expected to
-    // go through the injected service.
+    // The reset leaves AtClientManager.atClient throwing, so any client read
+    // that does not go through the injected service fails the test.
     AtClientManager.getInstance().reset();
 
     service = MockFlutterEnrollmentService();
@@ -76,8 +70,8 @@ void main() {
     when(
       () => service.getEnrollments(statusFilters: any(named: 'statusFilters')),
     ).thenAnswer((_) => Stream.value(request));
-    // The initial fetch; the stream above already delivers the request and
-    // the widget de-duplicates, so empty keeps the fixture single-sourced.
+    // The initial fetch is empty: the stream above is the only source of the
+    // request, and the widget de-duplicates.
     when(
       () => service.list(
         any(),
@@ -101,7 +95,7 @@ void main() {
         home: Scaffold(body: EnrollmentRequestList(enrollmentService: service)),
       ),
     );
-    await tester.pump(); // the stream delivers the pending request
+    await tester.pump();
   }
 
   testWidgets('a conveyance refusal shows the truth and clears the row', (
@@ -121,8 +115,8 @@ void main() {
     expect(find.text('Approve'), findsOneWidget);
 
     await tester.tap(find.text('Approve'));
-    await tester.pump(); // the handler runs
-    await tester.pump(); // the snackbar animates in
+    await tester.pump();
+    await tester.pump();
 
     expect(
       find.textContaining('Revoke it unless this is understood'),

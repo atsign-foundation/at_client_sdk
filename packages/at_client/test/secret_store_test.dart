@@ -53,16 +53,12 @@ void main() {
       final persistence = ReorderingPersistence();
       final store = SecretStore(persistence: persistence);
 
-      // Three puts, none awaited: each mutates the map and queues a save.
       final puts = [
         store.putSecret(Secret(namespace: 'myapp', name: 'a', value: '1')),
         store.putSecret(Secret(namespace: 'myapp', name: 'b', value: '2')),
         store.putSecret(Secret(namespace: 'myapp', name: 'c', value: '3')),
       ];
 
-      // Drain and release one save at a time. If saves were fired
-      // concurrently, more than one would be waiting here — and whichever
-      // finished last would decide what is stored, regardless of age.
       var released = 0;
       while (released < 3) {
         await pumpEventQueue();

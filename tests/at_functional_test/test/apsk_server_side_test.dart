@@ -8,8 +8,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-// The heal path itself, not a reimplementation of it: the question here is
-// what the production writer puts on the wire.
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
 import 'package:at_commons/at_builders.dart';
@@ -21,25 +19,8 @@ import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// The atServer's half of advertised-key verification.
-///
-/// The whole parent-signs / child-publishes arrangement rests on two
-/// properties of the atServer that the client cannot provide for itself, and
-/// which had never been watched:
-///
-/// - **`_apsk` exists without the enrolling client publishing it.** The
-///   atServer writes it at approval. If it did not, a verifier meeting a
-///   freshly approved enrollment would find no signing key to check its
-///   advertised encapsulation key against, and would have to either reject a
-///   legitimate peer or trust it unverified.
-/// - **`_apsk` is write-restricted to its own enrollment.** If any enrollment
-///   could overwrite another's, it could substitute its own signing key and
-///   then sign an advertised encapsulation key of its choosing on that
-///   enrollment's behalf — which is the entire attack the signature exists to
-///   stop.
-///
-/// Both need two genuine enrollments to test at all, since the interesting
-/// case is one enrollment reaching for another's record.
+/// The atServer's half of advertised-key verification: it publishes `_apsk`
+/// at approval, and refuses one enrollment a write to another's.
 void main() {
   TestUtils.isolateStorage('apsk_server_side_test');
   late AtClient approver;
@@ -85,8 +66,8 @@ void main() {
             'another\'s record; with one enrollment there is nothing to reach '
             'for and the refusal below would be meaningless');
 
-    // 1. Present without the victim ever having published it. Nothing in this
-    //    test wrote it — the atServer did, at approval.
+    // NOTE: nothing in this test wrote this record — the atServer did, at
+    // approval.
     final published = await approver
         .getRemoteSecondary()!
         .executeCommand('llookup:${apskKeyFor(victim.enrollmentId)}\n',
@@ -99,17 +80,12 @@ void main() {
     final original = published!.replaceFirst('data:', '').trim();
     expect(original, isNotEmpty);
 
-    // 2. The attacker, authenticated as its own enrollment, tries to overwrite
-    //    the victim's signing key with something it controls.
     final attackerLookup =
         AtLookupImpl(atSign, rootDomain, TestUtils.rootServerPort)
           ..enrollmentId = attacker.enrollmentId
           ..atChops = attacker.client.atChops;
 
     try {
-      // Control: this connection is genuinely authenticated as the attacker,
-      // so the refusal below is an authorization decision and not a broken
-      // connection or an unauthenticated caller.
       expect(
           await attackerLookup.pkamAuthenticate(
               enrollmentId: attacker.enrollmentId),
@@ -126,9 +102,9 @@ void main() {
             ..value = 'attacker-substituted-signing-key')
           .buildCommand();
 
-      // Matched on the reason, naming both the asking enrollment and the key
-      // it reached for. A bare throwsA would be satisfied by a malformed verb
-      // and the test would be green for the absence of an effect.
+      // NOTE: matched on the reason, naming both the asking enrollment and the
+      // key it reached for — a bare throwsA is satisfied by a malformed verb,
+      // leaving the test green for the absence of an effect.
       await expectLater(
           attackerLookup.executeCommand(overwrite),
           throwsA(predicate((e) =>
@@ -141,10 +117,6 @@ void main() {
               'sign advertised encapsulation keys on that enrollment\'s '
               'behalf — which is exactly what the signature exists to prevent');
 
-      // Control, on the same connection: the attacker CAN write its OWN
-      // _apsk-shaped key. Without this, the refusal above is equally explained
-      // by nobody being allowed to write _apsk at all, which would be a
-      // different (and much less interesting) property.
       final ownKey = (UpdateVerbBuilder()
             ..atKey = (AtKey()
               ..key = '_apsk.${attacker.enrollmentId}.'
@@ -160,9 +132,8 @@ void main() {
       await attackerLookup.close();
     }
 
-    // 3. And the record is unchanged. A server that errored after writing
-    //    would satisfy the check above and still have handed the attacker the
-    //    victim's identity.
+    // NOTE: a server that errored after writing would satisfy the refusal
+    // above and still have handed the attacker the victim's identity.
     final after = await approver
         .getRemoteSecondary()!
         .executeCommand('llookup:${apskKeyFor(victim.enrollmentId)}\n',
@@ -175,24 +146,13 @@ void main() {
             'serialized cannot make the comparison above vacuous');
   });
 
-  /// The heal path's wire form, which nothing had watched.
+  /// The heal path's wire form: an enrollment holding no signing key of its own
+  /// gets one at its next start and advertises it by `enroll:update`.
   ///
-  /// An enrollment created without a signing key of its own — every enrollment
-  /// a build predating enrollment-time minting made — gets one at its next
-  /// start, and the client advertises it by `enroll:update`. ⚠️ **Only an
-  /// enrollment that authenticates post-quantum is in that state now**: one
-  /// authenticating with rsa2048 and holding no typed signing material already
-  /// holds the key the set names, because there the two are one keypair. The **form** of
-  /// that advertisement is the whole question: a single active `rsa2048` key
-  /// has to travel as the bare string, because every deployed `_apsk` consumer
-  /// base64-decodes the value as an RSA key and fails on JSON.
-  ///
-  /// Two links, and only the first is a client-side claim a unit suite can
-  /// settle. That the client sends `apskLegacy` rather than `apsk` is pinned
-  /// in `packages/at_client/test/signing_key_minting_test.dart`. That **the
-  /// atServer honours `apskLegacy` on an update** — rather than only on the
-  /// enrolment request, which is the only place it had ever been sent — is a
-  /// claim about the server, and this is what measures it.
+  /// A single active `rsa2048` key has to travel as the bare string, because
+  /// every deployed `_apsk` consumer base64-decodes the value as an RSA key and
+  /// fails on JSON. The claim exercised here is the server's: that it honours
+  /// `apskLegacy` on an update, not only on the enrolment request.
   test('a healed enrollment advertises its signing key in the bare form',
       () async {
     final keysIo = InMemoryAtKeysIo();
@@ -200,26 +160,15 @@ void main() {
       approver: approver,
       atSign: atSign,
       namespace: namespace,
-      // One active rsa2048 signing key, which is what pqReady's default set
-      // holds, beside an ML-DSA authentication key.
-      //
-      // ⚠️ **Both axes are named, and the ML-DSA one is what makes this a heal
-      // at all.** On an enrollment whose authentication keypair is rsa2048 and
-      // which holds no typed signing material, that one keypair IS its data
-      // signing keypair — so it already holds what the set names and the mint
-      // is correctly a no-op. The heal path exists for the other shape: an
-      // enrollment authenticating post-quantum that was created before
-      // enrollment-time minting, where the two keys are genuinely different
-      // and the rsa2048 one is genuinely absent.
-      //
-      // The posture stays legacy so that key exchange does not also move to
-      // pq, which this test is not about.
-      //
-      // ⚠️ **`signingAlgo` is what makes the enrollment ML-DSA, not the
-      // preference axis beside it.** `enrolAndAuthenticate` mints the APKAM
-      // keypair from its own `signingAlgo` argument and never reads
-      // `authenticationKeyAlgorithm`; the axis is set too so the client's
-      // declared and actual algorithms agree.
+      // NOTE: `signingAlgo` is what makes the enrollment ML-DSA, not the
+      // preference axis beside it — `enrolAndAuthenticate` mints the APKAM
+      // keypair from its own argument and never reads
+      // `authenticationKeyAlgorithm`, which is set too so the client's declared
+      // and actual algorithms agree. ML-DSA authentication is what makes this a
+      // heal at all: with an rsa2048 authentication keypair and no typed
+      // signing material, that one keypair IS the data signing keypair, so the
+      // mint is correctly a no-op. The posture stays legacy so key exchange
+      // does not also move to pq, which this test is not about.
       signingAlgo: SigningAlgoType.mldsa65,
       preference: TestUtils.getPreference(atSign,
           authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
@@ -232,10 +181,6 @@ void main() {
     storage: TestUtils.storage,
   );
 
-    // The control: before the heal this enrollment holds no signing key, so
-    // whatever the record carries now is not what the assertion below is
-    // about. Without it the test would pass for an enrollment that had been
-    // advertising a bare RSA key since it was created.
     expect((await keysIo.read(atSign)).signingKeysFor(enrolled.enrollmentId),
         isEmpty,
         reason: 'this row is about the heal path, which exists only for an '
@@ -269,9 +214,8 @@ void main() {
     final sharing = AtClientSecretSharing.forClient(member.client);
     await sharing.register();
 
-    // The live enumeration the substrate's push and pull both depend on. It is
-    // refused outright for a client using the atSign's own keys, so until the
-    // two-enrollment fixture existed this could not be driven at all.
+    // NOTE: this enumeration is refused outright for a client using the
+    // atSign's own keys, so it can only be driven from a genuine enrollment.
     final members = await sharing.directory.listForNamespace(namespace);
 
     expect(members, isNotEmpty,

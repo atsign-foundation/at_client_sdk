@@ -6,20 +6,11 @@ import 'package:test/test.dart';
 /// A client that already exists keeps the rollout axes it was built under, and
 /// a caller handing over different ones is refused rather than ignored.
 ///
-/// Every axis here is final at construction — what a client writes must not
-/// change meaning mid-run — so a second preference naming a different one
-/// cannot be adopted. The only choice is between refusing and dropping it, and
-/// dropping it is what this used to do. After the auth/signing split that is
-/// not a flag being ignored: the stage decides which algorithm an enrollment
-/// authenticates with and which signing key it holds, so the caller runs on
-/// the wrong **key** and learns about it when a peer cannot verify it.
-///
-/// ⚠️ **Two paths hand back a client that already exists, and only one is the
-/// cache.** `AtClientManager.setCurrentAtSign` short-circuits on a same-atSign
-/// call carrying no override argument and returns without calling
-/// `AtClientImpl.create` at all — which is the ordinary path, so a guard on
-/// the cache alone would be loud where a caller passes an override and silent
-/// everywhere else.
+/// Two paths hand back a client that already exists, and only one is the cache:
+/// `AtClientManager.setCurrentAtSign` short-circuits on a same-atSign call
+/// carrying no override argument and returns without calling
+/// `AtClientImpl.create` at all, so a guard on the cache alone would miss the
+/// ordinary path.
 void main() {
   const atSign = '@alice';
 
@@ -36,11 +27,8 @@ void main() {
 
   /// The same, but holding a data signing key.
   ///
-  /// Needed wherever a row varies the AUTHENTICATION axis alone: an enrollment
-  /// with no data signing key signs with its authentication key, so an empty
-  /// set is coherent only beside rsa2048 authentication, and the constructor
-  /// refuses the pair. Both sides of such a comparison carry the same set, so
-  /// the authentication algorithm stays the only thing that differs.
+  /// The constructor refuses an empty signing set beside anything but rsa2048
+  /// authentication, so a row varying the authentication axis alone needs one.
   AtClientPreference signing({SigningAlgoType? authenticationKeyAlgorithm}) =>
       preference(
           authenticationKeyAlgorithm: authenticationKeyAlgorithm,
@@ -48,10 +36,9 @@ void main() {
 
   /// The smallest posture that refuses legacy writes.
   ///
-  /// It cannot be "the default with one flag flipped": `PqPosture` rejects
-  /// refusing legacy writes while still writing legacy by default, so
-  /// `writesPqByDefault` moves with it **by construction**. That is why the
-  /// rows below never expect this axis to be reported alone.
+  /// `PqPosture` rejects refusing legacy writes while still writing legacy by
+  /// default, so `writesPqByDefault` moves with it and the two are never
+  /// reported apart.
   final strict = PqPosture(
     authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
     dataSigningKeyAlgorithms: const {},
@@ -67,18 +54,14 @@ void main() {
 
   group('what counts as the same settings', () {
     test('two separately built default preferences are interchangeable', () {
-      // The case that decides the whole design. Callers hand over a FRESH
-      // preference object on every call — the e2e pack builds one per
-      // setCurrentAtSign — so an identity comparison would refuse every one
-      // of them, and this guard would be a break rather than a check.
+      // NOTE: callers hand over a fresh preference object on every call, so an
+      // identity comparison here would refuse every one of them.
       expect(preference().rolloutDifferencesFrom(preference()), isEmpty);
     });
 
     test('a hand-built posture equal to a constant is the same posture', () {
-      // PqPosture declares no ==, so comparing two of them compares identity,
-      // and a program that builds its own posture gets an instance that is
-      // not one of the three constants. Comparing the posture as an object
-      // would make this pair a mismatch, on a difference that does not exist.
+      // NOTE: PqPosture declares no ==, so comparing postures as objects
+      // compares identity and a hand-built one reads as a mismatch.
       final canonical = preference(posture: PqPosture.legacy);
       final built = preference(
           posture: PqPosture(
@@ -145,10 +128,6 @@ void main() {
     });
 
     test('the refusal never moves alone, and both halves are reported', () {
-      // Not two mistakes but one. `disallowLegacyEncryption` is posture-only
-      // and coupled to `writesPqByDefault`, so a diagnostic naming just the
-      // refusal would send a reader looking for a setting nobody could have
-      // written on its own.
       expect(
           preference().rolloutDifferencesFrom(preference(posture: strict)),
           containsAll([
@@ -158,11 +137,6 @@ void main() {
     });
 
     test('the two key axes move independently, and are reported that way', () {
-      // They were one enum until ruling 113, and pqReady is the stage that
-      // exists precisely because they must not move together. A caller naming
-      // the authentication algorithm alone has changed ONE axis, and a
-      // diagnostic that also named the signing set would send a reader looking
-      // for a setting nobody wrote.
       expect(
           signing().rolloutDifferencesFrom(
               signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
@@ -174,10 +148,6 @@ void main() {
     });
 
     test('a posture difference is named by what it means', () {
-      // The posture is compared through the three fields nothing else carries.
-      // Its other axes reach behaviour as authenticationKeyAlgorithm,
-      // dataSigningKeyAlgorithms and disallowLegacyEncryption, which is why
-      // they are listed beside it rather than instead of it.
       final differences = preference()
           .rolloutDifferencesFrom(preference(posture: PqPosture.pqActive));
 
@@ -208,15 +178,8 @@ void main() {
 
     test('a mixture of posture and explicit axis compares the effective value',
         () {
-      // An axis given explicitly beats the posture's, which is the documented
-      // contract. So these two agree on both key axes and differ only on what
-      // the posture itself carries.
-      //
-      // ⚠️ This used to LOWER pqActive's axes to legacy's values. A posture is
-      // a floor, so the comparison is made the other way now: the legacy-posture
-      // side is RAISED to the values pqActive carries. The property under test
-      // is unchanged — two preferences agreeing on both key axes and differing
-      // only in what the posture itself carries.
+      // NOTE: an axis given explicitly beats the posture's, so these two agree
+      // on both key axes and differ only in what the posture itself carries.
       final postured = preference(posture: PqPosture.pqActive);
       final plain = preference(
           authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
@@ -236,8 +199,8 @@ void main() {
   });
 
   group('the refusal a caller meets', () {
-    // stop(), not remove(): forgetting the entry leaves the client holding
-    // its storage location, which the next build is refused at.
+    // NOTE: stop() each client — clearing the map alone leaves it holding its
+    // storage location, which the next build is refused at.
     Future<void> dropClients() async {
       for (final client
           in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
@@ -273,9 +236,6 @@ void main() {
     });
 
     test('and the cache actually asks it', () async {
-      // The guard existing is not the guard running. What makes this row worth
-      // its cost is that it drives AtClientImpl.create twice, which is the
-      // production path a second AtClientManager takes.
       final first = await AtClientImpl.create(atSign, 'wavi', signing());
 
       await expectLater(
@@ -284,9 +244,8 @@ void main() {
           throwsA(isA<ArgumentError>().having(
               (e) => '$e', 'message', contains('authenticationKeyAlgorithm'))));
 
-      // The control, on the same cached client: an equal preference is handed
-      // back the client that already exists. Without this the row above passes
-      // for a build that refuses every second create.
+      // The control: without it the row above passes for a build that refuses
+      // every second create.
       expect(
           identical(
               await AtClientImpl.create(atSign, 'wavi', signing()), first),
@@ -294,11 +253,9 @@ void main() {
     });
 
     test('and the manager\'s same-atSign short-circuit asks it too', () async {
-      // The path the plan row did not name, and the ordinary one: with no
-      // override argument setCurrentAtSign returns the client it already has
-      // WITHOUT calling create, so a guard on the cache alone never runs here.
-      // A throw is therefore proof that this second site fired — nothing else
-      // on this path can raise one.
+      // NOTE: with no override argument setCurrentAtSign returns the client it
+      // already has without calling create, so a throw here is proof that the
+      // second guard fired — nothing else on this path can raise one.
       final manager = AtClientManager(atSign);
       await manager.setCurrentAtSign(atSign, 'wavi', preference());
 
@@ -311,11 +268,9 @@ void main() {
     });
 
     test('and so does setPreferences, which names its replacement', () async {
-      // The third door, and the one that would have made the other two a
-      // check in appearance only: naming the replacement does not make the
-      // change possible, because the substrate read these axes at a startup
-      // that has already run. Accepting them would leave the client REPORTING
-      // a stage it never applied.
+      // NOTE: the substrate read these axes at a startup that has already run,
+      // so accepting a replacement would leave the client reporting a stage it
+      // never applied.
       final client = await AtClientImpl.create(atSign, 'wavi', preference());
 
       expect(
@@ -324,16 +279,14 @@ void main() {
           throwsA(isA<ArgumentError>().having(
               (e) => '$e', 'message', contains('dataSigningKeyAlgorithms'))));
 
-      // The control: everything outside the rollout axes is still replaced,
-      // which is what this method is for.
+      // The control: everything outside the rollout axes is still replaced.
       client.setPreferences(preference()..syncBatchSize = 42);
       expect(client.getPreferences()!.syncBatchSize, 42);
     });
 
     test('a client with no preference at all is not refused', () {
-      // Nothing to disagree with. Refusing here would turn "this client has
-      // not finished being built" into a stage mismatch, which is a different
-      // failure with a much more misleading message.
+      // NOTE: refusing here would report a client that has not finished being
+      // built as a stage mismatch.
       expect(
           () => AtClientImpl.refuseChangedRolloutAxes(
               running: null,

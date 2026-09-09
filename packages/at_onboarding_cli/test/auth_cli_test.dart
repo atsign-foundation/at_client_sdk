@@ -252,26 +252,16 @@ AtKeys _getAtAuthKeysFromAtChopsKeys(AtChopsKeys atChopsKeys) {
   return atAuthKeys;
 }
 
-/// `--posture`, which replaced `--signingAlgoType`.
+/// Tests that `--posture` is honoured on every command, not on activation
+/// alone.
 ///
-/// Ruling 113's CLI section: honoured on **every** command, not activation
-/// alone. `--signingAlgoType` silently did nothing on every command but
-/// `onboard` ([#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161)),
-/// which is what that ruling exists to stop happening again.
-///
-/// ⚠️ **A parser that accepts an argument is not a client that runs under
-/// it**, and for a day this file only checked the first. `--posture` reached
-/// every parser while only `onboard` and `enroll` read the value — the other
-/// twelve commands built their client through `createAtClient`, which named no
-/// posture — so the argument reproduced the exact no-op it replaced, and these
-/// rows were green throughout. The last two rows are the missing half.
+/// A parser that accepts the argument is not a client that runs under it, so
+/// both halves are asserted.
 void postureArgumentTests() {
   final args = AuthCliArgs();
 
   group('the posture argument', () {
     test('every command parser accepts it, not activation alone', () {
-      // The specific defect #2161 recorded. Each of these is a command a user
-      // can run, and a posture means the same thing at all of them.
       final parsers = {
         'onboard': args.createOnboardCommandParser(),
         'status': args.createStatusCommandParser(),
@@ -295,27 +285,18 @@ void postureArgumentTests() {
           reason: 'the axes have to come with it, or naming a posture buys '
               'nothing');
 
-      // Latent, and deliberately kept as such: "the caller said nothing" and
-      // "the caller asked for legacy" are the same VALUE today, so this cannot
-      // fail now however the CLI resolves an unset argument. It arms itself at
-      // R-2, when the default moves and a CLI that restated `PqPosture.legacy`
-      // starts running the old stage through the flip. What discriminates
-      // today is the row below.
+      // NOTE: latent while an unset posture and legacy are the same value —
+      // this cannot fail until the default moves, and the row below is what
+      // discriminates until then.
       expect(AuthCliArgs.preferenceUnder(null).posture,
           same(AtOnboardingPreference().posture));
     });
 
     test('a posture constant is named where the roles are decided, nowhere else',
         () {
-      // `?? PqPosture.legacy` where a preference is BUILT is how an unset
-      // --posture quietly stopped meaning "no opinion", and that is what this
-      // catches. It used to say the three `postureNames` entries were the whole
-      // legitimate vocabulary; the CLI now states its own two role defaults
-      // rather than inheriting at_client's, so the vocabulary is those three
-      // plus the defaults — and the guard moved from counting mentions to
-      // naming the file allowed to hold them, which is strictly sharper: a
-      // construction site restating a default is now caught wherever it sits,
-      // not only when it pushes a total past three.
+      // NOTE: a `?? PqPosture.legacy` where a preference is built makes an
+      // unset --posture stop meaning "no opinion", so only the file that
+      // decides the role defaults may name a posture constant.
       final byFile = <String, List<String>>{};
       for (final path in const [
         'lib/src/cli/auth_cli.dart',
@@ -353,11 +334,8 @@ void postureArgumentTests() {
     });
 
     test('every command that builds a client passes the posture to it', () {
-      // The half a parser check cannot reach. `createAtClient` serves every
-      // command except onboard and enroll, and a call site that omits the
-      // argument leaves that command silently at the built-in default however
-      // loudly the user named one. Read from source because the alternative —
-      // driving each command — needs an atServer per row.
+      // NOTE: read from source because driving each command needs an atServer
+      // per row.
       final source = File('lib/src/cli/auth_cli.dart').readAsStringSync();
       final calls = RegExp(r'(?<![A-Za-z_])createAtClient\(')
           .allMatches(source)
@@ -391,9 +369,9 @@ void postureArgumentTests() {
     });
 
     test('each name resolves to its posture, as raw strings', () {
-      // Raw literals: these three strings are the CLI's published vocabulary,
-      // and reading them back off the map they are defined in would follow an
-      // accidental rename silently.
+      // NOTE: raw literals — these three strings are the CLI's published
+      // vocabulary, so reading them back off their own map would follow a
+      // rename silently.
       expect(AuthCliArgs.postureNames.keys.toList(),
           ['legacy', 'pqReady', 'pqActive']);
       expect(AuthCliArgs.postureNames['legacy'], same(PqPosture.legacy));
@@ -402,9 +380,8 @@ void postureArgumentTests() {
     });
 
     test('an unnamed posture stays null rather than resolving to legacy', () {
-      // `postureIn` is the RAW answer and deliberately keeps "the caller said
-      // nothing" distinct from any stage name. Which default that becomes is
-      // the role's decision, and the two roles below make opposite ones — so
+      // NOTE: `postureIn` keeps "the caller said nothing" distinct from any
+      // stage name; the two roles below default it in opposite directions, so
       // collapsing it here would make one of them unstateable.
       final parsed = args.createStatusCommandParser().parse([]);
       expect(AuthCliArgs.postureIn(parsed), isNull);
@@ -456,16 +433,10 @@ void postureArgumentTests() {
 
     test('a bare invocation is refused rather than treated as onboard',
         () async {
-      // The shim inserted `onboard` whenever the first argument was an option,
-      // so `auth -a @alice -c <secret>` activated an atSign without the word
-      // appearing anywhere. It is retired: a command is named or nothing runs.
-      // Driving `wrappedMain` reaches the refusal before any parsing of a
-      // command, so this needs no atServer.
+      // NOTE: `wrappedMain` reaches the refusal before any command is parsed,
+      // so this needs no atServer.
       expect(await wrappedMain(['-a', '@alice']), 1);
-      // The positive control: the same shape WITH the command still parses
-      // past this point. `status` is chosen because it takes no cram secret
-      // and no keyfile — a non-1 answer here would mean the refusal above was
-      // about something other than the missing command.
+      // The positive control.
       expect(await wrappedMain(['--version']), 0,
           reason: 'a leading option that is not a command must still be '
               'served, or the refusal has swallowed --version and --help too');

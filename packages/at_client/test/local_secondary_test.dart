@@ -93,9 +93,9 @@ void main() {
       await setupLocalStorage(storageDir, atSign);
     });
     tearDown(() async {
-      // Every client for this atSign, not just the bare-keyed one: the map is
-      // keyed (atSign, enrollmentId), so an enrolled client is filed under
-      // '$atSign|<id>' and would be left holding its storage location.
+      // NOTE: the instance map is keyed (atSign, enrollmentId), so an enrolled
+      // client is filed separately and holds its storage location until it is
+      // stopped.
       for (final client
           in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
         await (client as AtClientImpl).stop();
@@ -191,9 +191,9 @@ void main() {
   group('A group of local secondary execute verb tests', () {
     setUp(() async => await setupLocalStorage(storageDir, atSign));
     tearDown(() async {
-      // Every client for this atSign, not just the bare-keyed one: the map is
-      // keyed (atSign, enrollmentId), so an enrolled client is filed under
-      // '$atSign|<id>' and would be left holding its storage location.
+      // NOTE: the instance map is keyed (atSign, enrollmentId), so an enrolled
+      // client is filed separately and holds its storage location until it is
+      // stopped.
       for (final client
           in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
         await (client as AtClientImpl).stop();
@@ -367,9 +367,9 @@ void main() {
   group('writesInProgress tracker', () {
     setUp(() async => await setupLocalStorage(storageDir, atSign));
     tearDown(() async {
-      // Every client for this atSign, not just the bare-keyed one: the map is
-      // keyed (atSign, enrollmentId), so an enrolled client is filed under
-      // '$atSign|<id>' and would be left holding its storage location.
+      // NOTE: the instance map is keyed (atSign, enrollmentId), so an enrolled
+      // client is filed separately and holds its storage location until it is
+      // stopped.
       for (final client
           in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
         await (client as AtClientImpl).stop();
@@ -913,25 +913,22 @@ void main() {
     });
   });
 
-  /// The enrollment record is fetched from the atServer on first use. There is
-  /// no local cache: one used to be written here and could never be read back,
-  /// because the read looked for `local:<enrollmentId><atSign>` and the write
-  /// went to the atServer's own `<enrollmentId>.new.enrollments.__manage`
-  /// naming.
+  /// The enrollment record is fetched from the atServer on first use and
+  /// memoised; nothing caches it in local storage.
   group('fetching the enrollment record', () {
     late MockRemoteSecondary remote;
 
-    // ⚠️ The instance map is keyed by atSign, so without this eviction
-    // `AtClientImpl.create` hands back a client built by an earlier group —
-    // with that group's remote secondary, and with `enrollment` already
-    // memoised. Every stub below would then be measuring the wrong object.
+    // NOTE: the instance map is keyed by atSign, so without this eviction
+    // `AtClientImpl.create` hands back an earlier group's client — with that
+    // group's remote secondary and its memoised enrollment, so every stub
+    // below would be measuring the wrong object.
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
       await setupLocalStorage(storageDir, atSign);
     });
     tearDown(() async {
-      // stop() before dropping the entry: removing it only forgets the
-      // client, while the storage location stays claimed until it stops.
+      // NOTE: a client keeps its storage location claimed until it is stopped,
+      // so dropping the map entry alone is not enough.
       for (final client
           in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
         await (client as AtClientImpl).stop();
@@ -985,11 +982,6 @@ void main() {
       when(() => remote.executeCommand(any(), auth: true))
           .thenThrow(AtLookUpException('AT0014', 'the atServer said no'));
 
-      // Before this, both catch arms logged at `finer` and fell through to a
-      // `!` on the null result, so an unreachable atServer surfaced as "Null
-      // check operator used on a null value" from a line naming neither the
-      // enrollment nor the fetch — with the exception that explains it
-      // discarded at a level nobody runs at.
       await expectLater(
           () => c.getLocalSecondary()!.getEnrollmentDetails(),
           throwsA(isA<AtKeyNotFoundException>()
@@ -1011,13 +1003,10 @@ Future<void> setupLocalStorage(String storageDir, String atSign) async {
 Future<void> tearDownLocalStorage(String storageDir) async {
   try {
     // Close every Hive box BEFORE deleting storage (open file handles).
-    //
-    // BOTH registries, and both are needed. `Hive.close()` reaches only the
-    // package-global instance; the keystore's own boxes live on a per-path
-    // instance (at_persistence_secondary_server's `HiveInstances`), so
-    // closing just the global leaves them open over the directory deleted
-    // below. The next test then reopens the cached box and reads the previous
-    // test's values back — no error, just the wrong data.
+    // Both registries: `Hive.close()` reaches only the package-global
+    // instance, while the keystore's boxes live on a per-path `HiveInstances`
+    // instance and would stay open over the deleted directory, so the next
+    // test would read this one's values back out of the cached box.
     await HiveInstances.closeAll();
     await Hive.close();
 

@@ -5,8 +5,8 @@ void main() {
   test('the atSign\'s own credential is no id, an empty id, or primary', () {
     expect(isAtSignCredential(null), isTrue);
     expect(isAtSignCredential(''), isTrue);
-    // A raw literal: the name at_auth derives for a keyfile that predates
-    // enrollments, and the one the verb builder keeps off the wire.
+    // NOTE: a frozen raw literal — the credential name derived for a keyfile
+    // that carries no enrollment.
     expect(isAtSignCredential('primary'), isTrue);
   });
 

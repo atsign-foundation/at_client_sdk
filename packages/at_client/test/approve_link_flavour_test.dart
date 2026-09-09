@@ -1,5 +1,4 @@
-// The substrate is deliberately marked @experimental and will be reshaped as
-// the group surface matures.
+// The substrate is deliberately marked @experimental.
 // ignore_for_file: experimental_member_use
 
 import 'dart:convert';
@@ -40,10 +39,9 @@ class _FakePrivilege implements EnrollmentPrivilegeResolver {
 final rootSlot1 =
     '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
 
-/// Which link flavour an approval conveys is decided by the APPROVER's
-/// privilege: the fully privileged class (`rw` on `*` and `__manage`) signs
-/// root links — one hop, verified against the published signing root — and
-/// only a non-privileged approver leaves the provisional chain link.
+/// Which link flavour an approval conveys is decided by the approver's
+/// privilege: the fully privileged class signs root links, and only a
+/// non-privileged approver leaves the provisional chain link.
 void main() {
   const atSign = '@alice';
   const enrolleeId = 'scoped-1';
@@ -81,8 +79,7 @@ void main() {
   }
 
   /// Gives [client] the atSign's signing root — the private in its keys and
-  /// the record published. Built directly rather than through `mintIfAbsent`,
-  /// whose publish rides `executeVerb`, which this fixture does not model.
+  /// the record published.
   Future<void> giveRoot(MockAtClient client) async {
     final pair = await MlDsa65PureDartAlgo().generateKeyPair();
     final io = InMemoryAtKeysIo();
@@ -104,10 +101,7 @@ void main() {
     ]));
   }
 
-  /// Gives [client] a data signing key of its own and **no** signing root —
-  /// the middle arm: entitled, unpossessed, but able to sign something.
-  ///
-  /// A real keypair, because the link is actually signed with it.
+  /// Gives [client] a real data signing key of its own and no signing root.
   Future<void> giveSigningKey(MockAtClient client, String enrollmentId) async {
     final pair = RsaKeyPair.generate();
     final io = InMemoryAtKeysIo();
@@ -196,7 +190,6 @@ void main() {
     final (enrollee, enrollment) = await registeredEnrollee();
     final approver = buildMockClient('approver-1');
     await AtClientSecretSharing.forClient(approver).register();
-    // Deliberately neither giveRoot nor giveSigningKey.
 
     final status = await conveyanceFor(approver, privileged: true)
         .conveySecretsTo(enrollment, mintedApkamSymmetricKey: 'MINTED');
@@ -222,19 +215,10 @@ void main() {
   test(
       'a privileged approver with a data signing key but no root conveys a '
       'CHAIN link', () async {
-    // ⛔ The arm that changed. It conveyed nothing until 2026-08-30, on the
-    // grounds that possession heals by pulling and the sweep would anchor the
-    // enrollment then. Measured: `requestPrivateIfAbsent` has exactly one
-    // production caller, a startup step, and the sweep that would anchor a
-    // missed enrollment is a later startup step — so nothing re-attempts the
-    // link for an enrollment approved while its approver was unpossessed. It
-    // stays unsigned until some privileged root-holder next STARTS UP, which
-    // is unbounded for a long-running approver. Provisional beats absent.
     final (enrollee, enrollment) = await registeredEnrollee();
     final approver = buildMockClient('approver-1');
-    // Before register(), because giving the key replaces this client's
-    // AtKeysIo and a registration written to the old one would be discarded —
-    // and conveying a minted symmetric key needs the approver registered.
+    // NOTE: before register(), because giving the key replaces this client's
+    // AtKeysIo and a registration written to the old one would be discarded.
     await giveSigningKey(approver, 'approver-1');
     await AtClientSecretSharing.forClient(approver).register();
 

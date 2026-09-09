@@ -1,15 +1,8 @@
-/// The default 30-second budget is far too small here. These atSigns are
-/// long-lived CI atSigns whose commit logs reach hundreds of thousands of
-/// entries, and a fresh runner replays from commit id -1 while the enrollment
-/// verbs share the same connection. Measured 2026-08-20: every one of the four
-/// approvals timed out at exactly 30 seconds, and the failure then surfaced
-/// three minutes later as eight missing-keyfile errors in a different step.
-///
-/// Measured 2026-08-20 with a five-minute budget: **all four approvals passed,
-/// taking 4:59**. So this was slow rather than stuck — but 4:59 against 5:00 is
-/// not a margin, it is a coin toss, and the backlog these atSigns carry only
-/// grows. Fifteen minutes is chosen to be uninteresting rather than tight; a
-/// run that genuinely hangs still fails, just later.
+/// The default 30-second budget is far too small here: these long-lived CI
+/// atSigns carry commit logs of hundreds of thousands of entries, and a fresh
+/// runner replays from commit id -1 while the enrollment verbs share the same
+/// connection. Fifteen minutes is chosen to be uninteresting rather than
+/// tight; a run that genuinely hangs still fails, just later.
 @Timeout(Duration(minutes: 15))
 library;
 
@@ -20,8 +13,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-// Not in the barrel: `SyncService` exposes no way to stop syncing, and this
-// script needs one. See [_stopSync].
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
@@ -40,29 +31,13 @@ const String selfEncryptionKey = 'selfEncryptionKey';
 const String apkamSymmetricKey = 'apkamSymmetricKey';
 const String enrollmentId = 'enrollmentId';
 
-/// Asks the current client's sync to stop. This script never needs it.
+/// Stops the current client's sync, which this script never needs: enrollments
+/// are submitted and approved over the remote secondary, and replaying the
+/// commit logs these atSigns carry is pure cost.
 ///
-/// Enrollments are submitted and approved over the REMOTE secondary; nothing
-/// here reads local storage. So syncing is pure cost — and on the long-lived
-/// @ce2e atSigns the cost is large: their commit logs run to several hundred
-/// thousand entries and a CI runner starts with empty local storage, so every
-/// client replays from commit id -1.
-///
-/// ⚠️ **This helps less than it looks, and the measurement says so.** With it
-/// in place the records pulled inside one 30-second budget went UP, 3928 to
-/// 4940. Two reasons, both structural: `stop()` drains the queue and cancels
-/// the periodic timer but does **not** interrupt a run already in flight, and
-/// every `setCurrentAtSign` to a different atSign builds a brand-new
-/// `SyncServiceImpl` with `warmStartSync: true`, which syncs immediately. So
-/// stopping after the client exists is always too late for the run that has
-/// already started.
-///
-/// It is kept because it does stop the periodic timer and any later run, and
-/// removing it would restore load rather than remove a false claim. What it
-/// cannot do is make this script fast.
-///
-/// `SyncService` declares no way to stop, which is why this reaches for the
-/// implementation.
+/// ⚠️ Only the periodic timer and any later run stop — a sync already in flight
+/// runs to completion, and switching to another atSign builds a fresh sync
+/// service that starts immediately.
 Future<void> _stopSync() async {
   final syncService = AtClientManager.getInstance().atClient.syncService;
   if (syncService is SyncServiceImpl) {
@@ -90,7 +65,6 @@ void main() {
       await TestSuiteInitializer.getInstance().testInitializer(
           currentAtSign, namespace, 'pkam',
           enableInitialSync: false, posture: PqPosture.legacy);
-      // Switching back to an atSign restarts its sync, so stop it again.
       await _stopSync();
       // Set SPP into the Remote Secondary
       var atClient = AtClientManager.getInstance().atClient;
@@ -112,10 +86,8 @@ void main() {
           otp: otp,
           namespaces: {TestConstants.namespace: 'rw', '__config': 'rw'},
           signingAlgo: SigningAlgoType.rsa2048,
-          // These atSigns are never recycled and the teardown revokes rather
-          // than deletes, so without an expiry every run leaves another
-          // revoked record behind for good. Three hours outlasts a run by a
-          // wide margin while still retiring it the same day.
+          // Without an expiry, every run leaves another revoked enrollment on
+          // these never-recycled atSigns for good.
           apkamKeysExpiryDuration: const Duration(hours: 3));
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);

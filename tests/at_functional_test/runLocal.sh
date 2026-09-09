@@ -27,16 +27,14 @@ fi
 
 echo "*** Getting dependencies" && dart pub get
 
-# The virtualenv image. Defaults to the locally built PQ-capable build (the
-# published vip lags the PQ work); override with
-# VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip (or a pinned tag) to run against
-# a registry image. docker-compose.yaml reads this var.
+# The virtualenv image, read by docker-compose.yaml. Defaults to the locally
+# built PQ-capable image; set VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip (or
+# a pinned tag) to run against a registry image instead.
 export VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"
 
 cd test
 echo "*** docker compose down" && docker compose down
-# A locally built image is on no registry, so pulling it fails the run. Only
-# pull what could actually have come from one.
+# A locally built image is on no registry, so pulling it fails the run.
 if [[ "$VIRTUALENV_IMAGE" == *"/"* ]]; then
   echo "*** docker compose pull (${VIRTUALENV_IMAGE})" && docker compose pull
 else
@@ -52,24 +50,21 @@ echo "*** Executing pkamLoad" && docker exec test-virtualenv-1 supervisorctl sta
 # Wait for pkamLoad to have actually installed the PKAM public keys.
 #
 # `supervisorctl start` returns as soon as the program is running, and the
-# program sleeps 25 seconds before installing anything — so on its own it
-# guarantees nothing. check_test_env below is not this wait either: it proves
-# that ONE atSign (@sitaram🛠) has ONE record.
+# program sleeps 25 seconds before installing anything; check_test_env below
+# proves only that ONE atSign (@sitaram🛠) has ONE record. Starting the suite
+# before the keys are in fails every authentication with
+# "privatekey:at_pkam_publickey does not exist in keystore", presenting as
+# failures in whichever unrelated tests happened to run rather than as a setup
+# problem.
 #
-# When the suite starts before the keys are in, every authentication fails with
-# "privatekey:at_pkam_publickey does not exist in keystore" and it presents as
-# dozens of failures in whichever unrelated tests happened to run — sync,
-# notify, put — rather than as a setup problem. That misattribution is the
-# expensive part: the failing tests are not the broken thing.
-#
-# @srie and @sachin are deliberately NOT in this list. They are the
-# CRAM-onboardable atSigns, and their onboarding tests require them to have no
-# PKAM key yet, so pkamLoad leaves them out by design.
+# @srie and @sachin are deliberately NOT in this list: they are the
+# CRAM-onboardable atSigns, whose onboarding tests require them to have no PKAM
+# key yet.
 echo "*** Waiting for pkamLoad to install PKAM keys"
 for attempt in $(seq 1 60); do
-  # One exec per poll, listing whatever is still missing. A failed exec yields
-  # a non-empty result on purpose, so a container that went away keeps us
-  # waiting and then fails loudly rather than reading as "nothing missing".
+  # A failed exec yields a non-empty result on purpose, so a container that
+  # went away keeps us waiting and then fails loudly rather than reading as
+  # "nothing missing".
   if ! missing=$(docker exec test-virtualenv-1 sh -c '
       for a in "@alice🛠" "@bob🛠" "@sitaram🛠" "@eve🛠" "@denise"; do
         grep -q "cramAndPkamAuth successful for $a" /apps/logs/pkam.log \
@@ -103,10 +98,10 @@ echo "*** Running tests"
 # Let the test run fail through to cleanup (so a flake doesn't leave the
 # container up), then propagate its exit code.
 set +e
-# Opt-in machine-readable report for the acceptance ledger. Unset, the run is
-# byte-for-byte what it always was; set, the runner ALSO writes a JSON stream
-# that `packages/at_client/tool/acceptance_ledger.dart` joins against the
-# catalogue's citations to say which rows a run actually exercised.
+# Opt-in machine-readable report: with ACCEPTANCE_REPORT set, the runner also
+# writes a JSON stream that `packages/at_client/tool/acceptance_ledger.dart`
+# joins against the acceptance catalogue's citations to say which rows a run
+# exercised.
 REPORT_ARG=""
 if [[ -n "${ACCEPTANCE_REPORT:-}" ]]; then
   REPORT_ARG="--file-reporter json:${ACCEPTANCE_REPORT}"
@@ -116,16 +111,12 @@ dart test --concurrency=1 -r expanded ${REPORT_ARG}
 TEST_EXIT=$?
 set -e
 
-# This can block. The virtualenv container has been seen refusing to stop
-# ("Error while Stopping"), and compose then waits on it indefinitely — so a
-# run invoked under an outer wall-clock bound is killed HERE, after the tests
-# have already finished and reported. The exit code you get back is then the
-# timeout's, not the suite's.
-#
-# So when a bounded run returns non-zero, read the test output before
-# concluding anything failed: the suite prints its own "All tests passed!"
-# line before this point. Clear a stuck container with
-# `docker rm -f test-virtualenv-1`.
+# This can block: a virtualenv container that refuses to stop ("Error while
+# Stopping") makes compose wait on it indefinitely, so a run under an outer
+# wall-clock bound is killed HERE, after the suite has already finished and
+# reported, and the exit code returned is the timeout's rather than the
+# suite's. Read the test output before concluding a bounded run failed, and
+# clear a stuck container with `docker rm -f test-virtualenv-1`.
 echo "*** docker compose down" && (cd test && docker compose down)
 
 exit "$TEST_EXIT"

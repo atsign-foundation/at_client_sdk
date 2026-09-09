@@ -16,24 +16,9 @@ import 'test_utils/mocks.dart';
 /// A client that holds NO enrollment gives itself one — driven through
 /// `AtClientImpl.create`, not through the pieces.
 ///
-/// ⛔ **Why this exists beside the live proof.** The end-to-end behaviour is
-/// pinned by `tests/at_onboarding_cli_functional_tests`'
-/// `pq_pre_enrollment_retrofit_test.dart`, which needs Docker, a virtualenv and
-/// a CRAM secret that works once per image. Nothing in this package drove the
-/// decision at all: re-adding the `enrollmentId == null` return that this
-/// behaviour replaced would leave every unit test in at_client green, and only
-/// a live pack on a separate CI job would notice.
-///
-/// **What is asserted is the `enroll:request` the client puts on the wire**,
-/// not that it "tried". A test that asserted an attempt would be asserting the
-/// test double; the command carries the app, the device and the grants this
-/// client chose for itself, and those are the decisions worth pinning.
-///
-/// The retrofit does not COMPLETE here — re-authenticating under the new
-/// enrollment needs an atServer, and the unroutable root domain below makes
-/// that fail fast. That is deliberate: the failure lands in
-/// `_settleEnrollmentIdentity`'s own guard, which is the documented behaviour,
-/// and everything under test has already happened.
+/// What is asserted is the `enroll:request` the client puts on the wire, not
+/// that it tried: the command carries the app, the device and the grants this
+/// client chose for itself.
 void main() {
   late final AtEncryptionKeyPair encryptionKeyPair;
   late final AtPkamKeyPair pkamKeyPair;
@@ -41,8 +26,8 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(FakeLookupVerbBuilder());
-    // Real keys: the client wraps its new enrollment's symmetric key to this
-    // encryption public key, and a stub would not survive that.
+    // NOTE: real keys — the client wraps its new enrollment's symmetric key to
+    // this encryption public key, and a stub would not survive that.
     encryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
     pkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
     selfKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
@@ -67,9 +52,9 @@ void main() {
       AtClientPreference(posture: posture)
         ..hiveStoragePath = 'test/hive/$atSign'
         ..commitLogPath = 'test/hive/$atSign/commit'
-        // Unroutable on purpose: the retrofit's final step re-authenticates
-        // under the new enrollment, which needs a real atServer. Failing fast
-        // here keeps this test off the network and off any clock.
+        // NOTE: unroutable on purpose — the retrofit's final step
+        // re-authenticates under the new enrollment, and failing fast here
+        // keeps this test off the network and off any clock.
         ..rootDomain = '127.0.0.1'
         ..rootPort = 1;
 
@@ -104,8 +89,8 @@ void main() {
           .captured
           .cast<String>());
     } on TestFailure {
-      // verify() throws when the mock was never called, which is precisely
-      // what the legacy arm expects. An empty list says it.
+      // NOTE: verify() throws when the mock was never called, which is what
+      // the legacy arm expects; an empty list says it.
     }
     return captured;
   }
@@ -142,8 +127,8 @@ void main() {
             'request against an atServer that parked it');
   }, timeout: Timeout(Duration(minutes: 2)));
 
-  /// The control, and it can go red while the assertions above stay green: the
-  /// same keyfile, the same absence of an enrollment, only the posture differs.
+  /// The control: the same keyfile, the same absence of an enrollment, only
+  /// the posture differs.
   test('at a legacy posture the same client asks for nothing', () async {
     final commands = await commandsFromStartup('@bob', PqPosture.legacy);
 

@@ -11,31 +11,23 @@ import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// **Arm A of a two-file differential**: does a client's unawaited startup
-/// tail publish an nskey advertisement on its own?
+/// Arm A of a two-file differential: does a client's unawaited startup tail
+/// publish an nskey advertisement on its own?
 ///
 /// Its pair is `seeding_tail_abandoned_live_test.dart`, which runs the same
-/// construction and stops the tail. ⚠️ **The two arms are in separate files
-/// deliberately, and it is not stylistic**: `AtClientManager` is a per-isolate
-/// singleton that re-serves the client it already built, so a second arm in
-/// this file would be handed the client this one left running — with its
-/// bootstrap already finished. Separate files are separate isolates, which is
-/// the only way each arm gets a bootstrap that has not yet run. Keep the two
-/// namespaces run-unique and the posture identical, or the arms differ in more
-/// than the one thing under test.
-///
-/// ⚠️ **`nskey_seeding_live_test.dart` does not cover this**, though its doc
-/// comment says it exists to catch "whether the path runs at all — a client
-/// whose seeding silently never fired". It builds at `PqPosture.legacy`, where
-/// `seedNamespaceKeys` is **false**, and calls `NskeySeeding.seed()` by hand;
-/// a client whose startup tail never fires passes it. This file is the arm
-/// that would have gone red.
+/// construction and stops the tail. ⚠️ The two arms are in separate files
+/// deliberately: `AtClientManager` is a per-isolate singleton that re-serves
+/// the client it already built, so a second arm in this file would be handed
+/// the client this one left running, its bootstrap already finished. Separate
+/// files are separate isolates, which is the only way each arm gets a bootstrap
+/// that has not yet run. Keep the two namespaces run-unique and the posture
+/// identical, or the arms differ in more than the one thing under test.
 void main() {
   TestUtils.isolateStorage('seeding_tail_runs_live_test');
   late String atSign;
-  // Run-unique: against a namespace something has already minted for, seeding
-  // adopts the existing advertisement and every assertion below would hold for
-  // the absence of work rather than for the work.
+  // NOTE: run-unique — against a namespace something has already minted for,
+  // seeding adopts the existing advertisement and every assertion below holds
+  // for the absence of work rather than for the work.
   final namespace = 'seedalive${DateTime.now().microsecondsSinceEpoch}';
 
   setUpAll(() async {
@@ -57,8 +49,8 @@ void main() {
             'that does not seed, publishing nothing is correct behaviour and '
             'this arm would measure the posture instead of the tail');
 
-    // NOTHING calls seed() here, which is the whole point — the question is
-    // whether the tail AtClientImpl._init fired gets there on its own.
+    // NOTE: nothing calls seed() here — the question is whether the tail
+    // AtClientImpl._init fired gets there on its own.
     final ring = PublishedNskeyKeyRing(atClient);
     NskeyAdvertisement? advertised;
     for (var attempt = 0; attempt < 60; attempt++) {

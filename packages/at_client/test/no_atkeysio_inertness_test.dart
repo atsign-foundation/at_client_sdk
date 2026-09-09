@@ -1,23 +1,16 @@
 /// A client built without an `AtKeysIo` performs ZERO PQ writes at startup —
 /// and still gets the era read providers.
 ///
-/// This is the property that protects the long-lived cicd atServers: the e2e
-/// pack's non-PQ tests build clients through `setCurrentAtSign` with no
-/// `AtKeysIo`, and the split between PQ and non-PQ test files is sufficient
-/// on its own ONLY because such a client writes nothing PQ — no signing-root
-/// mint, no `_apsk` publish, no advertisement, no envelope. A signing root or
-/// a published nskey on a real atSign outlives the run that wrote it — nothing
-/// in D1 rotates a root back out — so a regression here poisons
-/// infrastructure, not a test run.
+/// The write half protects long-lived atServers: a keyless client mints no
+/// signing root, publishes no `_apsk`, advertises nothing and seals no
+/// envelope. A signing root or a published nskey on a real atSign outlives
+/// the run that wrote it, so a regression here poisons infrastructure rather
+/// than a test run.
 ///
-/// The read half matters equally: inert does not mean blind. A client with no
-/// key source must still ROUTE records other clients wrote — the era default
-/// registers the nskey read providers regardless — or every mixed deployment
-/// splits into clients that can write and clients that cannot read them.
-///
-/// The startup filer is fire-and-forget with no completion handle and, with
-/// no AtKeysIo, no terminal wire marker either — so the test waits for wire
-/// quiescence rather than a specific event.
+/// The read half matters equally — inert does not mean blind. A client with no
+/// key source must still ROUTE records other clients wrote, or every mixed
+/// deployment splits into clients that can write and clients that cannot read
+/// them.
 library;
 
 import 'dart:io';
@@ -34,10 +27,8 @@ import 'test_utils/recording_remote.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
-/// Captures every log line, so the test can wait on the terminal step's own
-/// message instead of guessing at wire quiescence — a keyless start may emit
-/// no wire events at all, and a fixed sleep says nothing about whether the
-/// chain had finished when the assertion ran.
+/// Captures every log line, so the test can wait on the terminal startup
+/// step's own message: a keyless start may emit no wire events at all.
 class _CapturingLogHandler implements LoggingHandler {
   final List<String> messages = [];
 
@@ -59,8 +50,8 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(_FakeVerbBuilder());
-    // Each test file runs in its own isolate, so no production logger exists
-    // yet; every one constructed from here on adopts this handler.
+    // NOTE: only loggers constructed after this adopt the handler; the file's
+    // own isolate means none exists yet.
     AtSignLogger.defaultLoggingHandler = log;
   });
 
@@ -80,11 +71,9 @@ void main() {
     } catch (_) {}
   });
 
-  /// Waits until the startup chain's LAST step has spoken: the privileged
-  /// anchoring sweep either skips (one of its "Not sweeping" log lines) or
-  /// proceeds (its enroll:list wire command — the regression path, whose
-  /// writes the assertions then catch). Fails at [timeout] with everything
-  /// observed.
+  /// Waits until the startup chain's last step has spoken — the privileged
+  /// anchoring sweep either skipping or issuing its `enroll:list`. Fails at
+  /// [timeout] with everything observed.
   Future<void> untilStartupChainDone(
       {Duration timeout = const Duration(seconds: 15)}) async {
     final deadline = DateTime.now().add(timeout);
@@ -106,12 +95,9 @@ void main() {
     final client = await AtClientImpl.create(
       atSign,
       'buzz',
-      // ⚠️ `pqReady`, named rather than defaulted. The 3.x default is `legacy`,
-      // which runs no post-quantum startup at all — so a bare preference would
-      // make this client inert for TWO reasons and the assertion below would
-      // hold whether or not the missing AtKeysIo was doing any work. The
-      // posture has to be one that WOULD write, so that the absent key source
-      // is the only thing stopping it.
+      // NOTE: `pqReady` is what keeps this test non-vacuous — the default
+      // posture runs no post-quantum startup at all, so the client would be
+      // inert whether or not the absent AtKeysIo mattered.
       AtClientPreference(posture: PqPosture.pqReady)
         ..hiveStoragePath = storageDir
         ..commitLogPath = '$storageDir/commit',
@@ -120,7 +106,7 @@ void main() {
       atChops: AtChopsImpl(AtChopsKeys.create(
           AtChopsUtil.generateAtEncryptionKeyPair(),
           AtChopsUtil.generateAtPkamKeyPair())),
-      // Deliberately NO atKeysIo — the shape every non-PQ e2e client has.
+      // Deliberately NO atKeysIo — its absence is the property under test.
     );
     await untilStartupChainDone();
 
@@ -136,10 +122,6 @@ void main() {
         reason: 'the atServer fixture should hold exactly what it started '
             'with: nothing');
 
-    // Inert is not blind: the era default still registers the read
-    // providers, so records other clients wrote route to a provider that
-    // knows how to refuse-or-read them, rather than falling through as
-    // legacy ciphertext.
     final config = CryptoConfig.forClient(client);
     expect(config.lookup(nskeyCryptoProviderId), isNotNull);
     expect(config.lookup(mlKemNskeyCryptoProviderId), isNotNull);

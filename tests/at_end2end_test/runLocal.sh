@@ -11,19 +11,18 @@ set -euo pipefail
 #   ./runLocal.sh 26000 test/pq        # post-quantum only
 #   ./runLocal.sh 26000 test -x pq     # everything except post-quantum
 #
-# The default EXCLUDES the `legacy-server` tag, because that row (UC-B0.1)
-# wants a PINNED PRE-PQ atServer and this script defaults to the newest local
-# build. Against a post-quantum image it does not fail usefully — it stops
-# testing anything. Run it deliberately, with the pin:
+# The default EXCLUDES the `legacy-server` tag: that row (UC-B0.1) wants a
+# PINNED PRE-PQ atServer, and against the newest local build it does not fail
+# usefully — it stops testing anything. Run it deliberately, with the pin:
 #
 #   VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip-p3.15.0 \
 #     ./runLocal.sh 26000 test/pq -t legacy-server
 #
-# The default path argument is `test`, which recurses into test/pq/ — so a bare
-# run covers both sets. CI does NOT do that: `dart_test.yaml` allowlists the
-# files a bare `dart test` may run, and the post-quantum ones are deliberately
-# not on it, because the CI e2e jobs point at the long-lived @ce2e atSigns.
-# Anything passed here overrides that allowlist.
+# The default path `test` recurses into test/pq/, so a bare run covers both
+# sets. CI does not: `dart_test.yaml` allowlists what a bare `dart test` may
+# run and leaves the post-quantum files off it, because the CI e2e jobs point
+# at the long-lived @ce2e atSigns. Anything passed here overrides that
+# allowlist.
 #
 # Generates atKeys + config/config.yaml (test/local_setup.dart) from at_demo_data
 # for the PKAM demo atSigns, then runs the tests. Both are gitignored.
@@ -48,10 +47,9 @@ export VE_TOP_PORT=$((BASE_PORT + 99))
 #
 #   VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip ./runLocal.sh
 #
-# The published image has lagged the PQ work for the whole of this branch — as
-# of 2026-08-08 its atServer cannot verify an ML-DSA PKAM signature, and the
-# symptom is a server-side `AT0010-Exception: RangeError (length): Invalid
-# value: Not in inclusive range 0..47: 48` out of pkamAuthenticate.
+# An atServer that cannot verify an ML-DSA PKAM signature fails server-side
+# with `AT0010-Exception: RangeError (length): Invalid value: Not in inclusive
+# range 0..47: 48` out of pkamAuthenticate.
 export VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"
 
 cd "$(dirname "$0")"
@@ -72,16 +70,13 @@ docker compose up -d
 cd ..
 
 # `supervisorctl status` exits non-zero whenever ANY program is not RUNNING,
-# and pkamLoad is deliberately STOPPED until it is started below - so the exit
-# code says nothing about readiness here, and waiting on it burns the full 60
-# seconds every run before giving up and continuing anyway. Wait for the
-# atDirectory instead, which is the thing everything after this needs, and say
-# so out loud if it never arrives.
+# and pkamLoad is deliberately STOPPED until it is started below, so its exit
+# code says nothing about readiness. Wait for the atDirectory instead, which is
+# what everything after this needs.
 echo "*** Waiting for supervisor"
-# Captured to a variable and grepped separately, NOT piped. This script runs
-# under `set -o pipefail`, so `supervisorctl status | grep -q` takes
-# supervisorctl's exit code - the very 3 that made the exit code useless here -
-# and the match is thrown away. The pipeline reads as a grep and behaves as an
+# NOTE: captured to a variable and grepped separately, NOT piped. Under
+# `set -o pipefail` a `supervisorctl status | grep -q` takes supervisorctl's
+# exit code and throws the match away, so it reads as a grep and behaves as an
 # exit-code check.
 ready=
 for i in $(seq 1 30); do
@@ -107,8 +102,6 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
-# The probe covers the reconfigured atSign as well as the first one, so a load
-# that missed it fails here rather than inside a test's setUpAll.
 echo "*** Waiting for virtualenv readiness" && dart run test/check_local_env.dart
 
 echo "*** Generating atKeys + config" && dart run test/local_setup.dart
@@ -119,10 +112,9 @@ echo "*** Running e2e tests (${TEST_PATHS[*]})"
 # Let the test run fail through to cleanup (so a flake doesn't leave the
 # container up), then propagate its exit code.
 set +e
-# Opt-in machine-readable report for the acceptance ledger. Unset, the run is
-# byte-for-byte what it always was; set, the runner ALSO writes a JSON stream
-# that `packages/at_client/tool/acceptance_ledger.dart` joins against the
-# catalogue's citations to say which rows a run actually exercised.
+# Opt-in machine-readable report: with ACCEPTANCE_REPORT set, the runner also
+# writes a JSON stream that `packages/at_client/tool/acceptance_ledger.dart`
+# joins against the catalogue's citations to say which rows a run exercised.
 REPORT_ARG=""
 if [[ -n "${ACCEPTANCE_REPORT:-}" ]]; then
   REPORT_ARG="--file-reporter json:${ACCEPTANCE_REPORT}"

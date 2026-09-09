@@ -2,13 +2,9 @@
 ///
 /// The ledger's whole value is that it can tell a row whose proof RAN from one
 /// whose proof merely still exists, so a defect in that join does not look like
-/// a defect — it looks like a coverage report. This exists because the first
-/// version shipped exactly that: `startsWith` against a reported name, which
-/// silently missed every test inside a `group`, scored 28 PROVEN where the
-/// truth was 62, and was believable because the rows it dropped were ones whose
-/// proof plausibly lives elsewhere.
+/// a defect — it looks like a coverage report.
 ///
-/// So the cases below pin both directions. A matcher that is too strict
+/// The cases below pin both directions. A matcher that is too strict
 /// under-reports and reads as missing coverage; one that is too loose reports
 /// rows as proven by tests that never mention them, which is worse, because
 /// nothing downstream would ever question a green.
@@ -26,8 +22,6 @@ void main() {
   group('namesMatch', () {
     test('matches a test inside a group, which the runner reports prefixed',
         () {
-      // The exact regression. `provenIn` cites the test's own name; the runner
-      // reports "<group> <name>". Anything anchored at the start fails here.
       expect(
           namesMatch('A group of at client impl create tests test preference',
               'test preference'),
@@ -38,8 +32,6 @@ void main() {
     });
 
     test('matches a citation that is a prefix of the test name', () {
-      // provenIn matches the START of a test name by design, so a citation is
-      // routinely shorter than the test it names.
       expect(
           namesMatch(
               'the readiness query says yes once the destination has '
@@ -49,9 +41,6 @@ void main() {
     });
 
     test('does not match an unrelated test in the same file', () {
-      // The other direction, and the dangerous one: a matcher loose enough to
-      // pair any citation with any test would report the catalogue fully proven
-      // by a run that proved none of it.
       expect(
           namesMatch('the legacy escape hatch is shut by default',
               'says yes once the destination has published a key'),
@@ -83,17 +72,11 @@ void main() {
     });
 
     test('NOT-EXERCISED when no report covers the cited file', () {
-      // The state a citation alone can never express, and the reason this tool
-      // exists. It must not be reported as a failure: nothing is broken, the
-      // run simply did not include that pack.
       expect(verdictFor(_cite('never_reported_test.dart', 'whatever'), passed),
           'NOT-EXERCISED');
     });
 
     test('NOT-EXERCISED when the file ran but the cited test did not', () {
-      // A renamed or deleted test inside a file that still runs. Reporting the
-      // row PROVEN here — because *something* in the file passed — is the
-      // over-matching failure, and it would be invisible.
       expect(
           verdictFor(
               _cite('cited_test.dart', 'a name nothing here carries'), passed),
@@ -133,16 +116,10 @@ void main() {
     });
 
     test('an unpinned citation claims no clause, not every clause', () {
-      // The default has to be "claims nothing at the clause level". Reading an
-      // empty list as "the whole row" would report every clause of every
-      // legacy citation as proven the day pinning was introduced, which is the
-      // one outcome that would make the new column worthless.
       expect(_cite('cited_test.dart', 'the cited test name').clauses, isEmpty);
     });
 
     test('a pinned clause is only proven if its citation is', () {
-      // The ledger counts a clause proven when a PROVEN citation pins it. A
-      // citation that ran and failed pins the same clause and must not.
       final c = _cite('cited_test.dart', 'the cited test name', clauses: [2]);
       expect(verdictFor(c, passed), 'PROVEN');
       expect(verdictFor(c, failed), 'FAILED');

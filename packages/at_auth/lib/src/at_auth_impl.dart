@@ -124,9 +124,7 @@ class AtAuthImpl implements AtAuth {
   /// If both are provided, atAuthRequest.atAuthKeys will be used.
   ///
   /// The enrollment authenticated as is the keys' own answer,
-  /// [AtKeys.enrollmentToAuthenticateAs]: the one enrollment holding active
-  /// typed authentication material, else the flat stored id, else
-  /// [EnrollmentConstants.primaryEnrollmentId].
+  /// [AtKeys.enrollmentToAuthenticateAs], never a caller-supplied id.
   ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {

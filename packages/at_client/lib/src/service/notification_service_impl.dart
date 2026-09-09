@@ -69,32 +69,23 @@ class NotificationServiceImpl extends NotificationService {
   /// been filed yet, keyed by the generation they are waiting for.
   ///
   /// A conveyed private is filed asynchronously, so a value sealed to it can
-  /// arrive first. Dropping it there is data loss: the record sits on the
-  /// atServer for its ttl and the key lands milliseconds later, so nothing
-  /// re-delivers what was already discarded.
-  ///
-  /// **In memory, and lost on restart** — deliberately. A park that outlived
-  /// the process would need the notification and its ordering position to be
-  /// durable, and a restart re-drives from the watermark anyway.
+  /// arrive first, and dropping it would be data loss: nothing re-delivers a
+  /// notification once discarded. In memory, so a restart loses the park and
+  /// re-drives from the watermark instead.
   final Map<FiledNskeyPrivate, List<_ParkedNotification>> _parked = {};
 
-  /// Bounds the park. A held notification that is never re-driven is the same
-  /// data loss with a longer fuse, so the park is not allowed to grow without
-  /// limit or to hold anything indefinitely: the oldest entry is dropped —
-  /// **at `warning`, naming what was lost** — once either bound is reached.
+  /// The most notifications the park may hold; the oldest is dropped, at
+  /// `warning`, once it is full.
   @visibleForTesting
   static int maxParked = 64;
 
   /// How long a notification may sit parked waiting for the key that opens
   /// it.
   ///
-  /// ⚠️ **The ordering is the contract, not the number.** This must exceed
-  /// [NskeyPrivateFiling.conveyanceWait], the window a pull gives a holder to
-  /// answer. Below it, a notification is dropped while the key it is waiting
-  /// for is still legitimately in flight, and the drop is attributed to the
-  /// sender rather than to this timer. It was two minutes against a five
-  /// minute wait, in two files that never mentioned each other, which is why
-  /// nothing could go red on the inversion.
+  /// Must exceed [NskeyPrivateFiling.conveyanceWait]: below that, a
+  /// notification is dropped while the key it waits for is still legitimately
+  /// in flight, and the drop is attributed to the sender rather than to this
+  /// timer.
   @visibleForTesting
   static Duration parkTtl =
       NskeyPrivateFiling.conveyanceWait + const Duration(minutes: 1);
@@ -103,19 +94,10 @@ class NotificationServiceImpl extends NotificationService {
 
   /// Subscribes to the filing signal, if this client's key ring emits one.
   ///
-  /// Subscribed at construction rather than when the first notification parks:
-  /// the stream is broadcast and therefore not replayed, so a subscription
-  /// taken after the read that failed could miss the very filing it needs.
-  /// ⚠️ Resolves through [CryptoConfig.forClient], **not**
-  /// `getPreferences().crypto`. An app that names no config gets the era
-  /// default, whose ring is supplied by the client's PQ bootstrap — the raw
-  /// preference carries none, so reading it directly finds null and silently
-  /// subscribes to nothing. Measured live: notifications parked correctly and
-  /// were never re-driven, because this had never subscribed.
-  ///
-  /// Idempotent and re-attempted at park time: the bootstrap wires the ring
-  /// asynchronously, so a service constructed first would otherwise never
-  /// subscribe at all.
+  /// Idempotent, and re-attempted at park time because the bootstrap wires the
+  /// ring asynchronously. The ring comes from [CryptoConfig.forClient], not
+  /// from `getPreferences().crypto`, which carries none when the app names no
+  /// config and would leave this silently subscribed to nothing.
   void _listenForFilings() {
     if (_filingSubscription != null) return;
     final ring = CryptoConfig.forClient(atClient).keyRing;
@@ -129,21 +111,14 @@ class NotificationServiceImpl extends NotificationService {
   int get parkedCount =>
       _parked.values.fold<int>(0, (sum, entries) => sum + entries.length);
 
-  /// How many have been parked over this service's life.
+  /// How many notifications have been parked over this service's life.
   ///
-  /// Cumulative because [parkedCount] is zero again as soon as the re-drive
-  /// runs, so a test that only checked it could not tell a notification that
-  /// was parked and released from one that never needed parking. A live test
-  /// of this path is racing a ~100 ms window, and without this it goes green
-  /// whenever it loses the race — which is the silent failure to guard.
+  /// Cumulative, because [parkedCount] drops back to zero as soon as the
+  /// re-drive runs.
   @visibleForTesting
   int parkedTotal = 0;
 
   /// Transforms [n] for one subscriber and delivers it if the regex matches.
-  ///
-  /// Shared by the arrival path and the re-drive so the two cannot diverge on
-  /// the regex rule — a parked notification must reach exactly the subscribers
-  /// the live one would have.
   Future<void> _deliver(AtNotification n, NotificationConfig config,
       StreamController controller) async {
     final transformed =
@@ -164,9 +139,9 @@ class NotificationServiceImpl extends NotificationService {
       namespace: e.namespace,
       nskeyKid: e.nskeyKid
     );
-    // The ring may only have been wired after this service was built, and a
-    // park with nothing listening for the filing is a notification held until
-    // its ttl and then dropped.
+    // NOTE: the ring may only have been wired after this service was built,
+    // and a park with nothing listening for the filing is a notification held
+    // until its ttl and then dropped.
     _listenForFilings();
     final entries = _parked.putIfAbsent(key, () => []);
     entries.add(_ParkedNotification(n, config, controller, DateTime.now()));
@@ -176,9 +151,9 @@ class NotificationServiceImpl extends NotificationService {
     _evictParkedOverBounds();
   }
 
-  /// Enforces both park bounds. Anything dropped here is logged at `warning`
-  /// naming what was lost — a silently discarded notification is
-  /// indistinguishable from one that was never sent.
+  /// Enforces both park bounds, naming at `warning` whatever it drops — a
+  /// silently discarded notification is indistinguishable from one that was
+  /// never sent.
   void _evictParkedOverBounds() {
     final now = DateTime.now();
     for (final entry in _parked.entries.toList()) {
@@ -223,8 +198,6 @@ class NotificationServiceImpl extends NotificationService {
       try {
         await _deliver(parked.notification, parked.config, parked.controller);
       } catch (e) {
-        // Warning, and it names the notification: this was the retry, so a
-        // failure here is the point at which the value is genuinely lost.
         logger.warning('Re-driving parked notification '
             '${parked.notification.key} failed, and nothing retries it '
             'again: $e');
@@ -307,9 +280,9 @@ class NotificationServiceImpl extends NotificationService {
             lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
             namespace: atClient.getPreferences()!.namespace)
         .build();
-    // Here, not at the first park: the filing stream is broadcast and is not
-    // replayed, so subscribing only once a notification has already failed to
-    // decrypt could miss the very filing that would release it.
+    // NOTE: here, not at the first park — the filing stream is broadcast and
+    // not replayed, so subscribing only once a notification has already failed
+    // to decrypt could miss the very filing that would release it.
     _listenForFilings();
   }
 
@@ -318,9 +291,9 @@ class NotificationServiceImpl extends NotificationService {
   /// The watermark is a `local:` record — never synced, and already encrypted
   /// at rest by the keystore — so there is nothing for value-level encryption
   /// to protect. Saying so explicitly keeps these writes off the shared-data
-  /// crypto path, which is where a client that refuses legacy encryption used
-  /// to have them refused: every post-quantum provider declines a local key,
-  /// and the fallback from that decline is legacy.
+  /// crypto path, where every post-quantum provider declines a local key and
+  /// the fallback from that decline is legacy, which a client refusing legacy
+  /// then refuses outright.
   ///
   /// A fresh instance per call: [PutRequestOptions] is mutable and the put
   /// pipeline may rewrite the options it is handed.
@@ -330,12 +303,10 @@ class NotificationServiceImpl extends NotificationService {
   /// What gets persisted as the watermark: the notification minus its payload
   /// and its metadata blob.
   ///
-  /// Only `epochMillis` is ever read back — see [getLastNotificationTime] —
-  /// and the remaining fields are kept because they cost little and make the
-  /// record legible to someone working out why a monitor replayed from where
-  /// it did. `value` and `metadata` are dropped: `value` is the notification
-  /// payload, bounded only by [AtClientPreference.maxDataSize], rewritten on
-  /// every notification, and held here without value-level encryption.
+  /// Only `epochMillis` is ever read back — see [getLastNotificationTime]. The
+  /// payload is dropped because it is bounded only by
+  /// [AtClientPreference.maxDataSize], rewritten on every notification, and
+  /// held here without value-level encryption.
   static String _watermarkValue(AtNotification n) => jsonEncode(n.toJson()
     ..remove('value')
     ..remove('metadata'));
@@ -476,11 +447,10 @@ class NotificationServiceImpl extends NotificationService {
       value: 'placeholder',
       metadata: Metadata(),
     );
-    // Best-effort, like the other two writes of this key. The watermark is an
-    // optimisation — it exists so a restart does not replay history — so
-    // failing to seed it costs one replayed window. Letting the failure out of
-    // here would reach `Monitor.stayConnected`, which treats anything thrown
-    // during its connect sequence as a failed connection and retries forever.
+    // NOTE: best-effort. A failure escaping here reaches
+    // `Monitor.stayConnected`, which treats anything thrown during its connect
+    // sequence as a failed connection and retries forever; not seeding the
+    // watermark costs one replayed window.
     try {
       await atClient.put(lastReceivedNotificationAtKey, _watermarkValue(n),
           putRequestOptions: _watermarkPutOptions);
@@ -514,9 +484,6 @@ class NotificationServiceImpl extends NotificationService {
 
     unawaited(_filingSubscription?.cancel());
     _filingSubscription = null;
-    // Anything still parked is now unreachable: its subscriber's controller is
-    // about to close. Say what is being lost rather than letting it vanish with
-    // the object.
     final stranded = _parked.values.fold<int>(0, (sum, l) => sum + l.length);
     if (stranded > 0) {
       logger.warning('Discarding $stranded parked notification(s) on shutdown: '
@@ -551,8 +518,8 @@ class NotificationServiceImpl extends NotificationService {
         }
         // Saves latest notification id to the keys if its not a stats notification.
         if (n.id != '-1') {
-          // stop() may have landed during the previous write and closed the
-          // store this one goes to.
+          // NOTE: stop() may have landed during the previous write and closed
+          // the store this one goes to.
           if (isStopped) return;
           try {
             await atClient.put(
@@ -562,45 +529,25 @@ class NotificationServiceImpl extends NotificationService {
             logger.warning('Failed to save last received notification ID: $e');
           }
         }
-        // ⚠️ A `for` loop, not `_streamListeners.forEach`. `Map.forEach` takes
-        // a **void** callback and discards the Future an `async` one returns,
-        // so every `await` below ran detached: transforms for successive
-        // notifications interleaved and the enclosing `for (var n in notifs)`
-        // ran ahead of them.
-        //
-        // What awaiting buys is ORDERED delivery, which the values depend on:
-        // a content key is conveyed before the value citing it, and a
-        // subscriber that processes them out of order sees a value it cannot
-        // open. It also means a transform whose Future is abandoned can no
-        // longer produce no delivery, no drop and no log line at once.
-        //
-        // No test demonstrates the old behaviour losing a notification. It was
-        // changed because the discarded Future is a defect on its face, and
-        // because a live failure that looked like it (a self notification the
-        // monitor received and the subscriber never saw) sent three
-        // investigations here. That failure turned out to be something else
-        // entirely, and this change did not fix it.
-        //
-        // `.toList()` because the map may now be mutated while this awaits —
-        // a subscriber registering or cancelling mid-notification would
-        // otherwise throw ConcurrentModificationError.
+        // NOTE: a `for` loop, not `_streamListeners.forEach` — `Map.forEach`
+        // takes a void callback and discards the Future an `async` one
+        // returns, so every await below would run detached and delivery would
+        // not stay ordered. Order is what the values depend on: a content
+        // key is conveyed before the value citing it, and a subscriber that
+        // processes them out of order sees a value it cannot open. `.toList()`
+        // because a subscriber registering or cancelling mid-notification
+        // would otherwise throw ConcurrentModificationError.
         for (final entry in _streamListeners.entries.toList()) {
           final notificationConfig = entry.key;
           final streamController = entry.value;
           try {
             await _deliver(n, notificationConfig, streamController);
           } on NskeyPrivateUnavailableException catch (e) {
-            // Not a failure: the private is conveyed at approval and filed
-            // asynchronously, so this value is openable as soon as it lands.
-            // Dropping it here loses a message whose key arrives moments later.
             _park(e, n, notificationConfig, streamController);
           } catch (e) {
-            // Warning, not finer. A notification that cannot be transformed is
-            // dropped here and never retried — nothing re-delivers it when the
-            // missing piece arrives. At finer the subscriber saw an absence
-            // indistinguishable from one that was never sent, which is how a
-            // conveyance racing its own announcement stayed invisible through
-            // a green unit suite and a green e2e suite alike.
+            // NOTE: `warning`, not `finer` — this notification is dropped here
+            // and never retried, and a silent drop is indistinguishable to the
+            // subscriber from one that was never sent.
             logger.warning('Dropping notification ${n.key} for subscriber '
                 '(regex "${notificationConfig.regex}"): $e');
           }
@@ -614,13 +561,9 @@ class NotificationServiceImpl extends NotificationService {
 
   /// The record's name below the owner, from whichever parameter carried it.
   ///
-  /// Rejects a name with no interior dot rather than letting it through. Such a
-  /// name has no namespace, so no post-quantum scheme can serve it and the
-  /// write falls back to legacy — which a client that refuses legacy then
-  /// declines, three layers below the call, in a message about encryption
-  /// rather than about the argument. An id in no namespace is not something
-  /// this method can send, and saying so here is the only place a caller can
-  /// act on it.
+  /// Throws [ArgumentError] unless exactly one parameter is supplied and the
+  /// name has an interior dot: a name with no namespace has nothing for the
+  /// notification to be encrypted under.
   static String _requireOneName(String? idAndNamespace, String? namespace) {
     final name = idAndNamespace ?? namespace;
     if (idAndNamespace != null && namespace != null) {
@@ -663,19 +606,12 @@ class NotificationServiceImpl extends NotificationService {
     final String key = '$to:$name$atSign';
     final AtKey atKey = AtKey.fromString(key);
     atKey.metadata.namespaceAware = false;
-    // The name is an id and a namespace joined by a dot, so the split is at the
-    // FIRST dot — everything after it is the namespace, and the namespace is
-    // what scopes the encryption key.
-    //
-    // `AtKey.fromString` cannot be left to do this: it cuts at the LAST dot, so
-    // it hands back `a.b` + `c` where the caller said `a` + `b.c`, and for a
-    // two-segment name it leaves no namespace at all — which every
-    // post-quantum provider declines, sending the write to legacy.
-    //
-    // Overwriting the two fields does not disturb the ciphertext binding: it is
-    // computed over the name and namespace rejoined, precisely because writer
-    // and reader split it differently, so both sides still derive
-    // `$name`.
+    // NOTE: the split has to be at the FIRST dot, because everything after it
+    // is the namespace and the namespace is what scopes the encryption key.
+    // `AtKey.fromString` cuts at the LAST dot instead, handing back `a.b` +
+    // `c` where the caller said `a` + `b.c`, and leaving a two-segment name
+    // with no namespace at all. Rewriting the two fields does not disturb the
+    // ciphertext binding, which is computed over them rejoined.
     final int dot = name.indexOf('.');
     atKey
       ..key = name.substring(0, dot)
@@ -683,9 +619,6 @@ class NotificationServiceImpl extends NotificationService {
     final String notifPayload;
     body = body.trim();
     if (body.isNotEmpty && shouldEncrypt) {
-      // Same fallback as the put pre-pass and as notify(NotificationParams):
-      // an app that opted into reaching a recipient under legacy meant its
-      // data, not one verb. Stamped only once the routing is settled.
       String providerId;
       try {
         providerId = await CryptoRuntime(atClient).prepareWrite(atKey,
@@ -722,13 +655,10 @@ class NotificationServiceImpl extends NotificationService {
       atKey.metadata.ttl = ttl;
     }
 
-    // The same builder every other notification path goes through. This method
-    // used to compose the command itself, which is how it came to resolve its
-    // own namespace and get it wrong.
-    //
-    // [NotifyVerbBuilder.useAtKeyToString] is required, not incidental: the
-    // field-by-field form writes `:${atKey.key}`, and the name here is split
-    // across `key` and `namespace`, so it would put only the id on the wire.
+    // NOTE: [NotifyVerbBuilder.useAtKeyToString] is required, not incidental.
+    // The field-by-field form writes only the key, and the name here is split
+    // across `key` and `namespace`, so the namespace would never reach the
+    // wire.
     final builder = NotifyVerbBuilder()
       ..atKey = atKey
       ..ttln = expiration.inMilliseconds
@@ -1123,9 +1053,9 @@ class NotificationServiceImpl extends NotificationService {
 
 /// One notification held back, with everything needed to deliver it later.
 ///
-/// Holds the subscriber's [StreamController] rather than looking it up at
-/// re-drive time: a subscriber that cancelled while its notification was parked
-/// must not have someone else's controller handed its value.
+/// Holds the subscriber's [StreamController] rather than looking one up at
+/// re-drive time, so a value cannot be handed to a controller other than the
+/// one its subscriber registered.
 class _ParkedNotification {
   final AtNotification notification;
   final NotificationConfig config;

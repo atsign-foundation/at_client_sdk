@@ -21,22 +21,13 @@ import 'package:uuid/uuid.dart';
 
 import 'test_utils.dart';
 
-/// The namespace boundary a scoped enrollment is held to, enforced by the
-/// atServer.
+/// The namespace boundary a scoped enrollment is held to — UC-A2.3 — enforced
+/// at the atServer `__ssenv` namespace-delivery gate rather than by a
+/// client-side refusal alone.
 ///
-/// `acceptance.md` UC-A2.3 is explicit that this boundary is *"enforced at the
-/// atServer `__ssenv` namespace-delivery gate, not by a client-side refusal
-/// alone"*, and the distinction is the whole point: `shareAllSecretsWith`
-/// filters by approved namespace before sending, but a filter in the sender is
-/// worth nothing against a client that simply asks for the record itself. Only
-/// the atServer can actually stop that, and until this ran, nothing had watched
-/// it try.
-///
-/// The control matters more than the refusal here. A scoped enrollment failing
-/// to read a record proves nothing on its own — the record might not exist, the
-/// name might be wrong, the connection might be broken. So the approver reads
-/// the same record back on the same atSign, and the two arms differ in exactly
-/// one thing: which enrollment is asking.
+/// Every refusal is paired with the approver reading the same record on the
+/// same atSign, so the two arms differ in exactly one thing: which enrollment
+/// is asking.
 void main() {
   TestUtils.isolateStorage('enrollment_namespace_gate_test');
   late AtClient atClient;
@@ -88,7 +79,7 @@ void main() {
         },
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
         // pq is the key exchange; the enrollment still authenticates with an
-        // RSA-2048 APKAM keypair. The gate under test is the namespace one.
+        // RSA-2048 APKAM keypair.
         signingAlgo: SigningAlgoType.rsa2048,
       ),
       AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
@@ -119,10 +110,6 @@ void main() {
       'it was not granted', () async {
     final scoped = await enrolScoped({granted: 'rw'});
 
-    // Checked, not assumed. If the atServer widened the grant, the two arms
-    // below would be a comparison of one case with itself, and it would read
-    // green — the same trap the privileged-vs-scoped test upstream guards
-    // against.
     expect(EnrollmentServiceImpl.isFullyPrivileged(scoped.grantedNamespaces),
         isFalse,
         reason: 'this must be a SCOPED enrollment; a privileged one is '
@@ -132,8 +119,6 @@ void main() {
             'allowed, or the positive arm below proves nothing either');
     expect(scoped.grantedNamespaces?.keys, isNot(contains(withheld)));
 
-    // Two envelope-shaped records on the same atSign, addressed to this
-    // enrollment's key package, differing only in namespace.
     AtKey envelope(String ns) => AtKey()
       ..key = 'probe${Uuid().v4().hashCode}.${scoped.kpid}.__ssenv'
       ..namespace = ns
@@ -149,10 +134,6 @@ void main() {
             ..value = 'envelope-payload');
     }
 
-    // Control, and the assertion the refusal below depends on: BOTH records
-    // exist and are readable by a client authorised for everything. Without
-    // this, "the scoped enrollment could not read it" is equally explained by
-    // the record never having been written.
     for (final key in [allowed, forbidden]) {
       expect(
           await atClient
@@ -164,8 +145,6 @@ void main() {
               'than a gate');
     }
 
-    // Now ask as the scoped enrollment. Chops from the APKAM keypair alone —
-    // PKAM needs nothing else, and this enrollment has nothing else yet.
     final enrolleeLookup =
         AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
           ..enrollmentId = scoped.enrollmentId
@@ -185,7 +164,6 @@ void main() {
               'enrollment that cannot connect would fail both arms below and '
               'tell us nothing about namespaces');
 
-      // The positive arm. Its namespace was granted, so the channel is open.
       expect(
           await enrolleeLookup.executeCommand('llookup:${allowed.toString()}\n',
               auth: true),
@@ -194,13 +172,8 @@ void main() {
               'namespace it WAS granted, or the gate is not a boundary but a '
               'wall and approval-time conveyance could never reach it');
 
-      // The negative arm. Same client, same connection, same verb — only the
-      // namespace differs.
-      // Matched on the reason, not merely on throwing: a bare throwsA would be
-      // satisfied by a dropped connection or a malformed key, and this test
-      // would then be green for the absence of an answer rather than for the
-      // gate. The atServer names the enrollment and the key it refused, which
-      // is exactly what makes the refusal attributable.
+      // NOTE: matched on the refusal's own wording, not merely on throwing — a
+      // bare throwsA is satisfied by a dropped connection or a malformed key.
       await expectLater(
           enrolleeLookup.executeCommand('llookup:${forbidden.toString()}\n',
               auth: true),
@@ -223,13 +196,9 @@ void main() {
   test(
       'a scoped enrollment can read and write the namespace it was granted, '
       'and neither in the one it was not', () async {
-    // The envelope arm above is about DELIVERY — whether conveyed key
-    // material reaches an enrollment. This one is about ordinary records,
-    // which is the half an application sees, and it is a separate claim: the
-    // `__ssenv` channel could have been special-cased without the same gate
-    // standing over `dataprobe.wh…@alice`. Both verbs, because "read/write"
-    // is two authorisations and the atServer answers them separately —
-    // observed refusing `llookup` and `update` under different wording.
+    // Ordinary records rather than the `__ssenv` delivery channel, which could
+    // have been special-cased on its own, and both verbs, because read and
+    // write are two authorisations the atServer answers separately.
     final scoped = await enrolScoped({granted: 'rw'});
 
     expect(EnrollmentServiceImpl.isFullyPrivileged(scoped.grantedNamespaces),
@@ -254,10 +223,6 @@ void main() {
         ..value = 'data-payload');
     }
 
-    // The control the refusals rest on, and it is not drawn from the property
-    // under test: an enrollment authorised for everything reads BOTH records
-    // on this atSign. Without it, "the scoped enrollment could not read it"
-    // is equally explained by the record never having been written.
     for (final key in [allowed, forbidden]) {
       expect(
           await atClient
@@ -303,11 +268,8 @@ void main() {
               'read/write, and an enrollment that can only read would satisfy '
               'a test asserting only the read');
 
-      // Matched on the reason rather than merely on throwing: a bare throwsA
-      // is satisfied by a dropped connection or a malformed key, and the test
-      // would then be green for the absence of an answer. The atServer names
-      // the enrollment, the key and — this is the part that separates the two
-      // arms — the VERB it refused.
+      // NOTE: matched on the refusal's own wording, including the verb, which
+      // is what keeps the read and write arms distinguishable.
       await expectLater(
           enrolleeLookup.executeCommand('llookup:${forbidden.toString()}\n',
               auth: true),

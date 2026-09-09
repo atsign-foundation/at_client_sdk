@@ -7,13 +7,9 @@ import 'test_utils/mocks.dart';
 
 /// Cold start — writing to a destination that has never used the namespace.
 ///
-/// There is nothing to seal to and no post-quantum fallback: the only
-/// atSign-level key is a signing root, which cannot receive an encapsulation.
-/// So the write fails, and the three things that matter are that it fails *by
-/// name* (an app must be able to say "@bob hasn't enabled this" rather than
-/// report an encryption error), that the same question can be asked *before*
-/// anything is composed, and that the legacy escape hatch stays shut unless the
-/// app deliberately opened it.
+/// There is nothing to seal to, so the write fails *by name*: an app must be
+/// able to say "@bob hasn't enabled this" rather than report an encryption
+/// error.
 void main() {
   const alice = '@alice';
   const bob = '@bob';

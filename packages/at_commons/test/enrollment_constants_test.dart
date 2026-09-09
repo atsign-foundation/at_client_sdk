@@ -17,7 +17,6 @@ void main() {
     });
 
     test('at the START of the key, where the name IS the namespace', () {
-      // NOTE: a dot-only anchor missed these; the guard never saw them.
       expect(idOf('abc.a.__e@alice'), 'abc');
       expect(idOf('x.r.__e@alice'), 'x');
       expect(idOf('y.d.__e@alice'), 'y');

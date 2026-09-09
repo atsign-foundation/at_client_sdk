@@ -17,30 +17,18 @@ import 'package:test/test.dart';
 /// Cold start ends the moment the recipient publishes — UC-B4.1 and UC-B4.4.
 ///
 /// `nskey_recipient_not_ready_test.dart` holds the refusal; this holds the
-/// recovery, which is the arm that was silently false.
-///
-/// **What makes it hard to test by accident.** The refusal itself warms a
-/// negative cache: `NskeyResolver` remembers misses, and a client builds one
-/// resolver for its whole life, so the sender's own failed write is what made
-/// it blind to the recipient afterwards. Measured live 2026-08-27 — the write,
-/// the readiness query and the exception text were all wrong together, and
-/// nothing short of a new client could clear it. `resolve` no longer answers
-/// null on the strength of a remembered miss.
-///
-/// So the first `put` below is not setup. It is the thing that creates the
-/// state under test, and a version of this file without it passes against a
-/// build that still has the defect.
+/// recovery. The refusal itself warms a negative cache — `NskeyResolver`
+/// remembers misses and a client builds one resolver for its whole life — so
+/// the first `put` below is not setup: it creates the state under test, and a
+/// version of this file without it says nothing about a remembered miss.
 ///
 /// ⛔ **The writer is the THIRD atSign, deliberately, and this file is separate
 /// from its sibling for the same reason.** A successful nskey write publishes
 /// the writer's signing root, and `retrofit_e2e_test.dart` asserts that
-/// `firstAtSign` has **no** published root — that row is about the root being
-/// created by the retrofit. Written as a second test inside the sibling file it
-/// took two unrelated rows down with it, and the symptom was a failure in
-/// `retrofit_e2e_test.dart` naming a virtualenv that had in fact been recycled.
-/// `thirdAtSign` is consumed by no other file in this package. The recipient
-/// stays `secondAtSign`, whose part here — publishing an nskey for a
-/// run-unique namespace — is additive and is what its neighbours already do.
+/// `firstAtSign` has **no** published root. `thirdAtSign` is consumed by no
+/// other file in this package. The recipient stays `secondAtSign`, whose part
+/// here — publishing an nskey for a run-unique namespace — is additive and is
+/// what its neighbours already do.
 void main() {
   late String writer;
   late String recipient;
@@ -49,17 +37,12 @@ void main() {
   /// Asserts the recipient has published nothing the resolver could find for
   /// [ns] — at [ns] **and at every ancestor it walks up to**.
   ///
-  /// ⛔ Checking only the exact namespace is not the premise these rows need,
-  /// and getting that wrong cost a CI red on 2026-08-27. `NskeyResolver` walks
-  /// most-specific-first — `a.b.c` then `b.c` then `c` — so a key the recipient
-  /// holds at the *app* namespace satisfies a write into any child of it. The
-  /// pq pack's siblings do mint the app namespace for this recipient, so a row
-  /// whose premise looks only at the leaf is asserting something the pack
-  /// falsifies, and it fails at its conclusion rather than at its premise.
-  ///
-  /// ⚠️ It became reachable only once `resolve` stopped answering from a
-  /// remembered miss: before that a second write reused the first one's miss
-  /// and never re-walked to the ancestor.
+  /// ⛔ Checking only the exact namespace is not the premise these rows need.
+  /// `NskeyResolver` walks most-specific-first — `a.b.c` then `b.c` then `c` —
+  /// so a key the recipient holds at the *app* namespace satisfies a write into
+  /// any child of it, and this pack's siblings do mint the app namespace for
+  /// this recipient. A premise that looks only at the leaf asserts something
+  /// the pack falsifies, and fails at its conclusion rather than its premise.
   Future<void> expectRecipientHasNothingFor(
       PublishedNskeyKeyRing ring, String ns) async {
     for (final level in NskeyResolver.candidates(ns)) {
@@ -94,8 +77,8 @@ void main() {
     final writerRing = PublishedNskeyKeyRing(writerClient);
     writerClient.getPreferences()!.crypto =
         CryptoConfig.nskey(keyRing: writerRing);
-    // The writer's own key, so a refusal below is the recipient's absence and
-    // not the writer's — UC-A3.3 is a different row.
+    // NOTE: the writer's own key, so a refusal below is the recipient's
+    // absence and not the writer's (UC-A3.3).
     await writerRing.mintAndPublish(ns);
 
     AtKey toRecipient(String name) => AtKey()
@@ -106,7 +89,6 @@ void main() {
 
     await expectRecipientHasNothingFor(writerRing, ns);
 
-    // The refusal — and the call that warms the negative cache.
     await expectLater(
         writerClient.put(toRecipient('cold'), 'before the recipient is ready'),
         throwsA(isA<NamespaceKeyUnavailableException>()),
@@ -122,10 +104,9 @@ void main() {
     await E2ESyncService.getInstance()
         .syncData(recipientClient.syncService, atSign: recipient);
 
-    // CONTROL. A key ring that never probed, on the writer's own client and
-    // over the same connection. It can stay green while every assertion below
-    // goes red, which is what makes it a control rather than a restatement:
-    // it separates "the recipient published" from "the writer can see it".
+    // CONTROL: a key ring that never probed, on the writer's own client and
+    // over the same connection, so it can stay green while every assertion
+    // below goes red.
     expect(
         await PublishedNskeyKeyRing(writerClient).currentPublic(recipient, ns),
         isNotNull,
@@ -137,7 +118,6 @@ void main() {
         reason: 'an app asking "can I reach them yet" is asking about now, so '
             'the readiness query must not answer from a remembered miss');
 
-    // The clause: the recipient's key appearing is the whole trigger.
     expect(await writerClient.put(toRecipient('warm'), 'after they are ready'),
         isTrue,
         reason: 'the FIRST write after the recipient\'s key appears must go '
@@ -152,9 +132,6 @@ void main() {
             'downgrading — a legacy write would have "succeeded" too, so the '
             'assertion above alone does not distinguish the two');
 
-    // The row's shape arms. The CK is conveyed ONCE as its own record rather
-    // than riding inline on the value, which is the whole difference from the
-    // monolithic legacy model.
     final ckKid = written.metadata?.appMetadata?.additional?['ckKid'];
     expect(ckKid, isNotNull,
         reason: 'the value cites a content key it does not carry');
@@ -163,16 +140,14 @@ void main() {
         reason: 'and does not carry it inline: at/symmetric/AES/GCM encrypts '
             'the data, at/nskey conveys the key, and those are two records');
 
-    // Sync first: `put` is local-first, so the conveyance record exists on the
-    // device before it exists on the atServer, and the lookup below asks the
-    // atServer. Without this the row fails as "does not exist in keystore",
-    // which reads like the conveyance was never written.
+    // NOTE: sync first — `put` is local-first, so the conveyance record
+    // reaches the atServer only here, and the lookup below asks the atServer.
     await E2ESyncService.getInstance()
         .syncData(writerClient.syncService, atSign: writer);
 
-    // Read off the wire rather than through get(), which decrypts — the writer
-    // cannot open a conveyance sealed to the recipient, correctly. The
-    // metadata is atServer-visible plaintext by design.
+    // NOTE: read off the wire rather than through get(), which decrypts — the
+    // writer cannot open a conveyance sealed to the recipient. The metadata is
+    // atServer-visible plaintext by design.
     final metaResponse = await writerClient
         .getRemoteSecondary()!
         .executeCommand('llookup:meta:$recipient:$ckKid.__ck.$ns$writer\n',
@@ -200,11 +175,9 @@ void main() {
   test(
       'UC-B4.1: with the fallback opted in, the cold write goes legacy and the '
       'first write after the key appears is PQ', () async {
-    // The clause's parenthetical, and the arm that made both rows read as
-    // specification defects rather than gaps. "Cold start OR THE FALLBACK, IF
-    // OPTED-IN, ends for bob without any action from alice" — an app that
-    // opened the escape hatch never sees a refusal, so nothing tells it the
-    // recipient has arrived. The write simply has to start going out PQ.
+    // An app that opened the escape hatch never sees a refusal, so nothing
+    // tells it the recipient has arrived: the write simply has to start going
+    // out PQ.
     final ns = 'fallback${DateTime.now().microsecondsSinceEpoch}';
 
     final clients = await ConcurrentClients.open(
@@ -230,8 +203,8 @@ void main() {
 
     await expectRecipientHasNothingFor(writerRing, ns);
 
-    // No refusal — the app opted out of being told. This is also the write
-    // that warms the remembered miss.
+    // No refusal — the app opted out of being told. This write also warms the
+    // remembered miss.
     expect(await writerClient.put(toRecipient('cold'), 'before'), isTrue);
     final cold = await writerClient.get(toRecipient('cold'));
     expect(cold.metadata?.appMetadata?.providerId, legacyCryptoProviderId,
@@ -242,8 +215,8 @@ void main() {
         reason: 'and it is the monolithic model: the per-value key rides with '
             'the value rather than being conveyed as its own record');
 
-    // CONTROL. A second write, still before the recipient publishes, is still
-    // legacy — so the flip below is the key appearing, not the second write.
+    // CONTROL: a second write, still before the recipient publishes, so the
+    // flip below is the key appearing rather than the second write.
     expect(
         await writerClient.put(toRecipient('control'), 'also before'), isTrue);
     expect(
@@ -274,7 +247,6 @@ void main() {
             'so if this stayed legacy it would stay legacy forever without '
             'anything saying so');
 
-    // And what the fallback already wrote is untouched.
     expect(
         (await writerClient.get(toRecipient('cold')))
             .metadata

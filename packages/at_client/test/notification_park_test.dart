@@ -31,9 +31,8 @@ class _FakeMonitor extends Fake implements Monitor {
       const Stream.empty();
 }
 
-/// Refuses to decrypt until [filed] is set — the live shape exactly: the
-/// private is conveyed at approval and lands a fraction of a second after the
-/// value sealed to it.
+/// Refuses to decrypt until [filed] is set, the way a private conveyed at
+/// approval lands a fraction of a second after the value sealed to it.
 class _WaitingProvider extends CryptoProvider {
   @override
   final String id = 'waiting-provider';
@@ -122,7 +121,6 @@ void main() {
       ..crypto = CryptoConfig(
         defaultProviderId: waiting.id,
         providers: [waiting, _HopelessProvider()],
-        // The ring the service subscribes to for filings.
         keyRing: ring,
       ));
     return await NotificationServiceImpl.create(atClient,
@@ -210,13 +208,8 @@ void main() {
   });
 
   test('the park outlasts the conveyance it is waiting for', () {
-    // The ordering is the contract, not either number. The park held a
-    // notification for 2 minutes while the pull that fetches its key gave a
-    // holder 5, so a conveyance that succeeded slowly still lost the
-    // notification — and the drop was attributed to the sender.
-    //
-    // The two values lived as literals in different files that never named
-    // each other, which is why nothing could go red when they inverted.
+    // NOTE: the ordering is the contract, not either number, and the two
+    // values are literals in different files that never name each other.
     expect(NotificationServiceImpl.parkTtl,
         greaterThan(NskeyPrivateFiling.conveyanceWait),
         reason: 'a park that expires before the pull it is waiting on gives '

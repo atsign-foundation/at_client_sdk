@@ -3,11 +3,11 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:test/test.dart';
 
+/// When a posture drives an enrollment onto stronger key material, each row
+/// reading its algorithm off the posture constant so a posture that changes
+/// algorithm moves the row with it.
 void main() {
   group('Whether a posture is due a retrofit', () {
-    /// The three cells of ruling 113's posture matrix, read off the postures
-    /// themselves rather than restated, so a posture whose algorithm changes
-    /// moves this test with it.
     test('legacy drives no retrofit from a legacy enrollment', () {
       expect(
           AtClientImpl.retrofitIsDue(
@@ -38,9 +38,6 @@ void main() {
               'key moves between those stages, and that is minted unilaterally');
     });
 
-    /// Ruling 1: a posture is a floor and never a downgrade. This is the arm
-    /// that matters for an app pinned to an older at_client — it must not be
-    /// able to drag a moved atSign back.
     test('no posture can downgrade an enrollment that has already moved', () {
       for (final posture in [
         PqPosture.legacy,

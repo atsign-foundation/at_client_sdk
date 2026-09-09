@@ -73,27 +73,21 @@ AtKey nskeyMintLockKey(String owner, String namespace,
 /// How long a mint lock is held.
 ///
 /// **The only thing that releases a lock**, since the winner deliberately does
-/// not delete it — so this is a cooldown on holding another election, not the
-/// crash backstop it was described as while a successful mint cleared the lock
-/// on its way out. It is still what stops a holder that dies mid-mint blocking
-/// its own atSign forever; it is simply no longer the exceptional path.
+/// not delete it — so it is both a cooldown on holding another election and
+/// what stops a holder that dies mid-mint blocking its own atSign forever.
 ///
 /// It is also the winner's own budget: a holder carries the matching
 /// [MintLease] and refuses to publish once this has elapsed, so an overrunning
 /// mint abandons rather than writing over the enrollment that won the next
 /// election.
 ///
-/// ⚠️ **Not one value for every lock any more, and this comment said it was.**
-/// Sizing purely against "how long a mint can legitimately take" ignores the
-/// other thing the ttl decides: how long a client that took the lock and
-/// exited before publishing is refused on its next start. Where the caller
-/// opts out of [MintLock]'s own-lock check, that refusal lasts the whole ttl
-/// with nothing minting anywhere — see [signingRootMintLockTtl], which is
-/// sized against that instead.
-///
-/// This value still governs the **nskey** lock, where the cost of a long
-/// cooldown is bounded: `mintAndPublish` passes `ownLockIsNotContention`, so a
-/// client meeting its own token proceeds rather than waiting the ttl out.
+/// ⚠️ Sizing a lock purely against "how long a mint can legitimately take"
+/// ignores the other thing the ttl decides: how long a client that took the
+/// lock and exited before publishing is refused on its next start. This value
+/// governs the **nskey** lock, where that cost is bounded — `mintAndPublish`
+/// passes `ownLockIsNotContention`, so a client meeting its own token proceeds
+/// rather than waiting the ttl out. [signingRootMintLockTtl] is sized against
+/// the other risk.
 const Duration mintLockTtl = Duration(minutes: 2);
 
 /// How long the **signing root's** mint lock is held.
@@ -108,10 +102,9 @@ const Duration mintLockTtl = Duration(minutes: 2);
 ///
 /// **The floor is how long a mint may legitimately take**, because the winner
 /// carries the matching `MintLease` and abandons rather than publishing once
-/// it is spent. Measured at **25ms** for keygen, filing and the publish call
-/// with the network mocked (`pq_signing_root_test.dart`, three runs), so this
-/// leaves room for several round trips on a slow link and a far slower CPU. An
-/// overrun costs a retry at the next start, not damage.
+/// it is spent — keygen, filing and the publish call, with room for several
+/// round trips on a slow link and a far slower CPU. An overrun costs a retry
+/// at the next start, not damage.
 const Duration signingRootMintLockTtl = Duration(seconds: 15);
 
 /// The leading segment of the current-CK pointer record:
@@ -140,13 +133,11 @@ const String pqSigningRootRecordName = 'pq_signing_root';
 
 /// The at-key the signing root is published under.
 ///
-/// **Mutable**, like the nskey advertisement beside it. The root is an
+/// **Mutable**, like the nskey advertisement beside it: the root is an
 /// ordinary signing key, so retiring one entry and advertising its successor
-/// is a rewrite of this record — which an
-/// immutable record makes unimplementable. What immutability
-/// was actually doing here is stopping two of the owner's privileged
-/// enrollments each minting a root, and that job moves to
-/// [pqSigningRootMintLockKey].
+/// is a rewrite of this record, which an immutable record makes
+/// unimplementable. Stopping two of the owner's privileged enrollments each
+/// minting a root is [pqSigningRootMintLockKey]'s job instead.
 AtKey pqSigningRootKey(String atSign) => AtKey()
   ..key = pqSigningRootRecordName
   ..sharedBy = atSign
@@ -220,8 +211,6 @@ AtKey ckConveyanceKey(AtKey value, String ckKid, String ckNs) => AtKey()
 /// both scope to alice, and an outbound share `@bob:…@alice` scopes to bob.
 ({String nskeyOwner, String ckKid, String ckNs})? parseCkConveyanceKey(
     String key) {
-  // `@recipient:` on an inbound conveyance, and `@owner` on every one. What
-  // is left is `<ckKid>.__ck.<ckNs>`.
   var body = key.trim();
   if (body.startsWith('cached:')) body = body.substring('cached:'.length);
   String? recipient;
@@ -261,10 +250,7 @@ String nskeyKeyfileIdFor(String namespace, String nskeyKid) =>
 // ---------------------------------------------------------------------------
 // Provider ids — the `appMetadata.providerId` every record is stamped with,
 // and what routes a read back to the scheme that wrote it. As frozen as the
-// record names: a stored record cites its id forever. The fourth id,
-// `legacyCryptoProviderId`, is deliberately not here — it names the
-// pre-pluggable default scheme, not nskey vocabulary, and lives beside
-// `CryptoConfig`, which is what consumes it.
+// record names above: a stored record cites its id forever.
 // ---------------------------------------------------------------------------
 
 /// Wire id of the CK-conveyance provider.
@@ -278,17 +264,14 @@ String nskeyKeyfileIdFor(String namespace, String nskeyKid) =>
 /// reader registers every scheme it supports, values route by their own id so
 /// old ones never stop opening, and a writer can *decide* whether a recipient
 /// can read a scheme instead of guessing.
-/// [mlKemNskeyCryptoProviderId] is the second one, and it coexists with this
-/// one exactly as this doc anticipated.
 const String nskeyCryptoProviderId = 'at/nskey/XWING/AES/GCM';
 
 /// Wire id of the CK-conveyance provider for the **no-hybrid** KEM.
 ///
-/// The second id the [nskeyCryptoProviderId] doc anticipated, and the reason
-/// it is a second id rather than a field: a record routes back to its provider
-/// by this string on every read, so a conveyance sealed under either KEM keeps
-/// opening for as long as its id resolves — no flag day, and no reader that
-/// has to guess.
+/// A second id rather than a field on [nskeyCryptoProviderId]: a record routes
+/// back to its provider by this string on every read, so a conveyance sealed
+/// under either KEM keeps opening for as long as its id resolves — no flag
+/// day, and no reader that has to guess.
 const String mlKemNskeyCryptoProviderId = 'at/nskey/MLKEM1024/AES/GCM';
 
 /// The role prefix every CK-conveyance scheme shares, whatever its algorithms.

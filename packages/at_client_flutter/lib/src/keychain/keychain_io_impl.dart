@@ -25,21 +25,17 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
         'AtsignKey not found in keychain for atSign: $atSign',
       );
     }
-    // An entry written by an older release carries its atSign only in the
-    // metadata, and `AtKeys.toJson` refuses to serialize typed material
-    // without `atsign` — so without this backfill the first flush of a key
-    // package or nskey private onto a pre-existing entry would throw.
+    // NOTE: an entry may carry its atSign only in the metadata, and
+    // `AtKeys.toJson` refuses to serialize typed material without `atsign`.
     atsignKey.atsign ??= atSign.toAtsign();
     return atsignKey;
   }
 
   @override
   Future<void> write(String atSign, AtKeys atKeys) async {
-    // Create-only, like every other WrittenAtKeysIo. The underlying store
-    // APPENDS, and `read` answers with the first matching entry — so writing
-    // an atSign that already has one used to leave two entries with only the
-    // older reachable. A second onboard of the same atSign would then look
-    // like it had worked while every later read returned the superseded keys.
+    // NOTE: create-only. The underlying store appends and `read` answers with
+    // the first matching entry, so a second write for the same atSign would
+    // leave the newer keys unreachable.
     if (await _existing(atSign) != null) {
       throw AtKeysFileOverwriteException(
         'Tried writing $atSign to the keychain, but failed since it already '
@@ -54,10 +50,6 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
   Future<void> flush(Atsign atsign, AtKeys atKeys) async {
     final atSign = atsign.toString();
     _stampAtSign(atSign, atKeys);
-    // The keychain holds `AtKeys.toJson()` in the clear — the OS keystore is
-    // the protection — so both sides of the assurance check are plaintext and
-    // the ciphertext-comparison problem the `.atKeys` file has does not arise
-    // here.
     await keychainStorage.updateAtKeysInKeychain(
       atSign: atSign,
       keys: atKeys,
@@ -70,14 +62,11 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
 
   /// Records the owner on the typed `atsign` field, which `AtKeys.toJson`
   /// requires before it will serialize typed material, and on the `metadata`
-  /// entry an older release wrote instead — the one the keychain still falls
-  /// back to for entries that predate the typed field.
+  /// entry the keychain falls back to.
   ///
-  /// Neither is overwritten once set. The metadata entry is a legacy value the
-  /// never-lose assurance holds to be preserved, so restamping it in the
-  /// canonical spelling would have every flush onto an entry stored under a
-  /// different spelling refused as a lost value — and the spelling does not
-  /// need to match, because the keychain compares normalized.
+  /// Neither is overwritten once set: the metadata entry is one the never-lose
+  /// assurance holds to be preserved, and the keychain compares atSigns
+  /// normalized, so the stored spelling need not match.
   void _stampAtSign(String atSign, AtKeys atKeys) {
     final normalized = atSign.toAtsign();
     if (atKeys.atsign != null && atKeys.atsign != normalized) {

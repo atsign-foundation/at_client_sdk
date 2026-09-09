@@ -14,33 +14,28 @@ import 'package:meta/meta.dart' show experimental, protected;
 
 /// One of this APKAM keypair's enc keypairs, as it is persisted.
 ///
-/// [encSeed] is the base64 of the KEM's secret **seed**; the public key and the
-/// decapsulation key both re-derive from it deterministically. The seed rather
-/// than the secret key, because the two are only the same thing for X-Wing.
-/// ML-KEM's secret key is an expanded decapsulation key that no seeded call
-/// reproduces, so a keyfile holding one could never recover the public half —
-/// see `AtKemAlgorithm.keyPairFromSeed`.
+/// [encSeed] is the base64 of the KEM's secret **seed**, not its secret key:
+/// the public key and the decapsulation key both re-derive from the seed, and
+/// the two are the same thing only for X-Wing — ML-KEM's secret key is an
+/// expanded decapsulation key no seeded call reproduces, so a keyfile holding
+/// one could never recover the public half.
 ///
-/// [keyAlgo] says which KEM the seed belongs to, and it must be stored
-/// alongside it: 32 bytes and 64 bytes are both valid seeds for *some* backend,
-/// so the bytes alone do not identify one, and expanding a seed under the wrong
-/// KEM yields a key whose kpid nobody is writing to.
+/// [keyAlgo] must be stored alongside the seed: 32 bytes and 64 bytes are both
+/// valid seeds for *some* backend, so the bytes alone do not identify one, and
+/// expanding a seed under the wrong KEM yields a key whose kpid nobody is
+/// writing to.
 ///
-/// [status] is what makes holding more than one useful. A retired key is not
-/// advertised for new traffic and nothing is sealed to it from now on, but it
-/// is still expanded and still opens envelopes already addressed to it — which
-/// is the whole reason it is kept.
+/// [status] is what makes holding more than one useful: nothing new is sealed
+/// to a retired key, but it is still expanded and still opens envelopes
+/// already addressed to it.
 @experimental
 class PersistedEncKey {
   final String encSeed;
 
-  /// An id from [SecretSharingAlgos.keyAlgos]. Defaults to the hybrid, which
-  /// is what every seed written before this field existed was.
+  /// An id from [SecretSharingAlgos.keyAlgos]; defaults to the hybrid.
   final String keyAlgo;
 
-  /// Defaults to [KeyEntryStatus.active], which is what every seed written
-  /// before this field existed was — there was only ever one. An open token:
-  /// ask [offeredForNewOperations] rather than comparing it.
+  /// An open token: ask [offeredForNewOperations] rather than comparing it.
   final KeyEntryStatus status;
 
   /// Whether this is the key the enrollment advertises and is addressed at —
@@ -63,12 +58,10 @@ class PersistedEncKey {
 /// (one set per keyfile), so a copied keyfile shares them — a copy is the same
 /// recipient identity, which is the intended per-APKAM granularity.
 ///
-/// A **list**, because rotating an enc key has to be non-lossy. `envelopeTtl`
-/// is seven days, so at the moment a client starts advertising a new key there
-/// is up to a week of traffic still addressed to the old one; a client that
-/// held only the new key could not open any of it. The superseded key is
-/// therefore retained as [KeyEntryStatus.retired] and expanded alongside the
-/// active one.
+/// A **list**, because rotating an enc key has to be non-lossy: up to
+/// `envelopeTtl` of traffic is still addressed to the old key at the moment a
+/// client starts advertising a new one, so the superseded key is retained as
+/// [KeyEntryStatus.retired] and expanded alongside the active one.
 @experimental
 class PersistedApkamKeys {
   /// Exactly one entry should be [KeyEntryStatus.active] per algorithm — that
@@ -86,15 +79,12 @@ class PersistedApkamKeys {
 }
 
 /// One enc keypair this client holds, expanded from its persisted seed.
-///
-/// Private because it carries the decapsulation key: the mixin hands out the
-/// public half freely and the secret half only through [
-/// KeyPackageRegistration.encKeyFor], which answers for a specific kid.
 class _HeldEncKey {
   final Uint8List seed;
   final Uint8List publicKey;
 
-  /// What `pqOpen` takes — not the seed, which for ML-KEM is a different thing.
+  /// The decapsulation key — not the seed, which for ML-KEM is a different
+  /// thing.
   final Uint8List secretKey;
 
   final String keyAlgo;
@@ -161,11 +151,9 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// The key this client currently advertises and is addressed at: the
   /// strongest active one in [SecretSharingAlgos.keyAlgos] order.
   ///
-  /// The same rule [KeyPackage.bestKeyFor] applies to the advertised package,
-  /// and it has to stay the same rule. If this side and the package disagreed
-  /// the client would listen at one address while telling peers to write to
-  /// another, and nothing would ever arrive — the drift
-  /// [PairwiseSecretSharing] warns about, from the holder's side.
+  /// Must stay the same rule [KeyPackage.bestKeyFor] applies to the advertised
+  /// package: if the two disagreed the client would listen at one address while
+  /// telling peers to write to another, and nothing would ever arrive.
   _HeldEncKey get _activeEncKey {
     if (_encKeys.isEmpty) {
       throw StateError('register() has not been called');
@@ -194,13 +182,11 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// Null if this client holds no such key.
   ///
   /// By kid rather than "the current one", because a retired key still opens
-  /// what was sealed to it before it was retired, and that is the only reason
-  /// it is still held. The envelope names the key it was sealed to; this
-  /// answers whether that is a key this client has.
+  /// what was sealed to it before it was retired, which is the only reason it
+  /// is still held.
   ///
-  /// Not the seed: this is what `pqOpen` takes, and for ML-KEM the two differ.
-  /// It is derived from the persisted seed at [register] time so a caller never
-  /// has to know which.
+  /// Not the seed — for ML-KEM the two differ. It is derived from the persisted
+  /// seed at [register] time so a caller never has to know which.
   @protected
   ({Uint8List secretKey, String keyAlgo})? encKeyFor(String kid) {
     for (final held in _encKeys) {
@@ -214,10 +200,9 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// Every address this client can be reached at — the active key's and every
   /// retired key's.
   ///
-  /// A sweep filters on these rather than on [kpid] alone. A sender that read
+  /// A sweep filters on these rather than on [kpid] alone: a sender that read
   /// the package before a rotation addresses the superseded key, and an
-  /// envelope this client never scans for is one it never opens however
-  /// willing [encKeyFor] is to open it.
+  /// envelope this client never scans for is one it never opens.
   Set<String> get heldKpids => {for (final held in _encKeys) held.kid};
 
   /// Which KEM [encPublicKey] belongs to — an id from
@@ -232,10 +217,8 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// that key's algorithm, because its kpid is the address its enrollment
   /// already advertised.
   ///
-  /// Singular where the preference is now a list, because this answers "what
-  /// would this client mint if it held nothing" — one key. Reconciling the
-  /// enrollment's package against the whole list is `KeyPackageMinting`'s job,
-  /// which runs at startup once a client exists.
+  /// Singular where the preference is a list, because this answers what this
+  /// client would mint if it held nothing — one key.
   String get configuredKeyAlgo =>
       atClient.getPreferences()?.keyEstablishmentAlgorithms.first ??
       SecretSharingAlgos.xWing;
@@ -256,7 +239,7 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// `suites` is derived from the advertised keys rather than stated, so it can
   /// never claim a construction this holder's own keys cannot decapsulate.
   KeyPackage get myKeyPackage {
-    // Reading the active key first so that a client holding nothing usable
+    // NOTE: read the active key first so that a client holding nothing usable
     // throws here rather than advertising a package with no address in it.
     _activeEncKey;
     return KeyPackage(
@@ -269,12 +252,11 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// This key package wrapped in an APKAM-signed envelope — the value to store
   /// at `metadata.keyPackage` when the package rides `enroll:request`.
   ///
-  /// A key package *is* an encapsulation target: whoever's enc public key
-  /// ends up here is who the atSign's other clients seal their secrets to. So
-  /// it is advertised signed, and [VerbEnrollmentDirectory] verifies the
-  /// signature against this enrollment's `_apsk` before treating the key as
-  /// this enrollment's. Without that, the target is only as trustworthy as
-  /// whatever served the enrollment record.
+  /// A key package *is* an encapsulation target: whoever's enc public key ends
+  /// up here is who the atSign's other clients seal their secrets to. So it is
+  /// advertised signed and verified against this enrollment's `_apsk` before
+  /// the key is treated as this enrollment's; without that the target is only
+  /// as trustworthy as whatever served the enrollment record.
   ///
   /// Throws [StateError] until [register] has generated the enc keypair.
   Future<SignedEnvelope> signedKeyPackagePayload() async =>
@@ -330,10 +312,9 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
 
   /// One persisted entry, expanded back into the keypair it names.
   ///
-  /// A loaded key keeps its OWN algorithm, whatever the preference now says.
-  /// Its kpid is the address this enrollment already advertised, and re-minting
-  /// under a different KEM would move that address to one nobody is writing to
-  /// — the client would scan for envelopes that are being sent somewhere else.
+  /// A loaded key keeps its OWN algorithm, whatever the preference says: its
+  /// kpid is the address this enrollment already advertised, and re-minting
+  /// under a different KEM would move that address to one nobody is writing to.
   /// Changing the preference therefore takes effect on the next enrollment, not
   /// on this one.
   Future<_HeldEncKey> _expandEncKey(PersistedEncKey entry) async {
@@ -347,10 +328,6 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
     return _heldFrom(base64Decode(entry.encSeed), entry.keyAlgo, entry.status);
   }
 
-  /// The SEED is what is persisted and what everything re-derives from. Storing
-  /// the secret key instead is correct only for X-Wing, whose secret key IS its
-  /// seed; ML-KEM's is an expanded decapsulation key that nothing turns back
-  /// into a public half.
   Future<_HeldEncKey> _heldFrom(
       Uint8List seed, String algo, KeyEntryStatus status) async {
     final kp = await _kemFor(algo).keyPairFromSeed(seed);

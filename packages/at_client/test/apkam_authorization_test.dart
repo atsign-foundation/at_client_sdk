@@ -8,17 +8,9 @@ import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
 /// Supplies the enrollment record the client would otherwise fetch, through
-/// `LocalSecondary.enrollment` — the seam already declared `@visibleForTesting`
-/// for exactly this.
+/// the `@visibleForTesting` seam on `LocalSecondary`.
 ///
-/// ⚠️ These tests used to seed a keystore entry at
-/// `local:<enrollmentId><atSign>` instead, which read like a cache warm-up and
-/// was not one: **nothing in production writes that key.** The fixture stood
-/// for a state the SDK never reaches, and it meant the fetch-and-parse path
-/// underneath every authorization check below was never exercised here.
-///
-/// It is exercised now, but elsewhere and deliberately so: the fetch is
-/// `local_secondary_test.dart`'s subject, not this file's. Supplying the
+/// The fetch itself is `local_secondary_test.dart`'s subject; supplying the
 /// record here keeps these tests about authorization.
 void seedEnrollment(AtClient client, Map<String, String> namespace) => client
     .getLocalSecondary()!
@@ -269,9 +261,9 @@ void main() {
           .executeVerb(verbBuilder, sync: false);
       expect(reservedKeyUpdateResult, isNotNull);
       expect(reservedKeyUpdateResult!.startsWith('data:'), true);
-      // Every client for this atSign, not just the bare-keyed one: the map is
-      // keyed (atSign, enrollmentId), so an enrolled client is filed under
-      // '$atSign|<id>' and would be left holding its storage location.
+      // NOTE: the instance map is keyed (atSign, enrollmentId), so stopping
+      // only the bare-keyed client leaves every enrolled one still holding its
+      // storage location.
       for (final client
           in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
         await (client as AtClientImpl).stop();
@@ -478,9 +470,9 @@ void main() {
           await atClient.getLocalSecondary()!.executeVerb(verbBuilder);
       expect(updateReservedKeyResult, isNotNull);
       expect(updateReservedKeyResult!.startsWith('data:'), true);
-      // Every client for this atSign, not just the bare-keyed one: the map is
-      // keyed (atSign, enrollmentId), so an enrolled client is filed under
-      // '$atSign|<id>' and would be left holding its storage location.
+      // NOTE: the instance map is keyed (atSign, enrollmentId), so stopping
+      // only the bare-keyed client leaves every enrolled one still holding its
+      // storage location.
       for (final client
           in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
         await (client as AtClientImpl).stop();
@@ -607,9 +599,9 @@ void main() {
       expect(scanJson.contains('@alice:location@alice'), true);
       expect(scanJson.contains('@alice:phone.wavi@alice'), true);
       expect(scanJson.contains('@bob:shared_key@alice'), true);
-      // Every client for this atSign, not just the bare-keyed one: the map is
-      // keyed (atSign, enrollmentId), so an enrolled client is filed under
-      // '$atSign|<id>' and would be left holding its storage location.
+      // NOTE: the instance map is keyed (atSign, enrollmentId), so stopping
+      // only the bare-keyed client leaves every enrolled one still holding its
+      // storage location.
       for (final client
           in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
         await (client as AtClientImpl).stop();
@@ -653,10 +645,10 @@ Future<void> tearDownLocalStorage(String storageDir) async {
         in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
       await c.stop();
     }
-    // Both registries: the keystore's boxes live on a per-path instance that
-    // Hive.close() does not reach, and would stay open over the directory
-    // deleted below — the next test then reopens the cached box and reads
-    // this one's values back, with nothing thrown.
+    // NOTE: both registries. The keystore's boxes live on a per-path instance
+    // that Hive.close() does not reach, so they stay open over the directory
+    // deleted below and the next test reads this one's values back from the
+    // cached box, with nothing thrown.
     await HiveInstances.closeAll();
     await Hive.close();
     AtClientImpl.atClientInstanceMap.clear();

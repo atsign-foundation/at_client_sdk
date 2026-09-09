@@ -8,14 +8,6 @@ import 'proven_elsewhere.dart';
 /// key it **signs** documents with. These four rows are about the at-rest
 /// keyfile: which enrollment a file authenticates as, what a retrofit leaves
 /// behind, and what opening a legacy file must not do to it.
-///
-/// ⚠️ **Every row in this cluster was rewritten on 2026-08-18**, and three of
-/// the four were describing code that had been deleted or reversed. They were
-/// written 2026-08-11 as a forward specification and the subsystem was rebuilt
-/// underneath them on 08-13 and 08-14, while nothing compared the two — the
-/// catalogue's regexes hard-coded `UC-[ABC]`, so this cluster was invisible to
-/// every check in this directory. Widening that class is what makes these rows
-/// real; the rows existing never did.
 void main() {
   test('UC-G1.1 · the keys name the enrollment', () {
     // GIVEN a keyfile.

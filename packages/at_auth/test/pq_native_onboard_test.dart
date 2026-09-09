@@ -194,10 +194,10 @@ void main() {
   /// UC-G3.1's third door.
   ///
   /// Three paths create an enrollment holding a data signing keypair, and
-  /// at_auth files the private half at three separate points. Two were pinned
-  /// — `enrollment_test.dart` and `at_self_enrollment_test.dart` each carry
-  /// "the signing key is FILED, not merely advertised". This one, the
-  /// activation, was driven by no test in any pack until 2026-08-31.
+  /// at_auth files the private half at three separate points.
+  /// `enrollment_test.dart` and `at_self_enrollment_test.dart` each carry "the
+  /// signing key is FILED, not merely advertised"; this one covers the third,
+  /// the activation.
   ///
   /// ⚠️ **`packages/at_client/test/pq_native_onboard_test.dart` looks like
   /// coverage and is not**: it asserts the activation REQUEST carries the key,

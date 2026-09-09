@@ -14,61 +14,36 @@ final _logger = AtSignLogger('CkManager');
 
 /// Keeps a current content key in place for each destination a client writes to.
 ///
-/// Content keys are scoped **per recipient**, so the "no current CK" case is not
-/// a one-off bootstrap — it fires the first time a client writes to any new
-/// destination, and again whenever that destination rotates its nskey. This is
-/// what makes `put` work at all: without it `at/symmetric/AES/GCM` has nothing
-/// to encrypt under and refuses the write.
-///
-/// It lives above both providers deliberately. Minting a CK means *writing the
-/// conveyance record*, and that cannot happen inside `encrypt` — by then the put
-/// pipeline is mid-flight building a verb builder. So it runs as a preparation
-/// step before the pipeline starts, via [CryptoProvider.prepareForWrite].
+/// Content keys are scoped per recipient, and minting one writes a conveyance
+/// record, which cannot happen inside `encrypt` — so this runs before the put
+/// pipeline starts, via [CryptoProvider.prepareForWrite].
 class CkManager {
   final ContentKeyCache cache;
   final NskeyKeyRing keyRing;
 
-  /// Finds which level of a nested namespace holds the nskey to seal to. Shared
-  /// with the data provider so both ends of a write agree on where the content
-  /// key lives, and so the walk's miss-memory is warmed once rather than twice.
+  /// Finds which level of a nested namespace holds the nskey to seal to, shared
+  /// with the data provider so both ends of a write agree on where it lives.
   final NskeyResolver resolver;
 
   /// Remembers which CK is current for each destination, so a cold write
-  /// resumes it rather than cutting another. Null disables that — every cold
-  /// write then mints, which is correct but leaves a permanent conveyance
-  /// record behind each time.
+  /// resumes it rather than cutting another. Null disables that: every cold
+  /// write then mints, leaving a permanent conveyance record behind each time.
   final CurrentCkPointer? pointer;
 
   /// Which of a destination's advertised KEM keys this client is willing to
-  /// seal to, strongest first — `AtClientPreference.sealsToKeyAlgorithms`.
-  ///
-  /// Defaulted here, and only here, because a caller building a manager
-  /// without a preference in hand has no basis to choose: everything this
-  /// build can seal under refuses nobody, which is the behaviour a caller that
-  /// said nothing meant. A client passes its preference's list, and a narrowed
-  /// one is the deployment choosing to refuse.
+  /// seal to, strongest first. Defaults to everything this build can seal
+  /// under; a narrowed list is a deployment choosing to refuse.
   final List<String> sealsToKeyAlgorithms;
 
   /// Asked, on the write path, whether the current content key should be
   /// replaced before anything else is written under it.
-  ///
-  /// Defaulted to [rotateCkAfterOneWeek] here for the same reason
-  /// [sealsToKeyAlgorithms] is defaulted: a caller building a manager without
-  /// an application's configuration in hand has no basis to choose, and the
-  /// SDK's own answer is what an application that said nothing meant.
   final CkRotationPolicy ckRotationPolicy;
 
-  /// Asked, before a content key is conveyed to a namespace key **this atSign
-  /// owns**, whether that namespace key should be replaced first.
+  /// Asked, before a content key is conveyed to a namespace key this atSign
+  /// owns, whether that namespace key should be replaced first.
   ///
-  /// Supplied by the client rather than built here, because replacing one needs
-  /// the substrate that conveys the successor to every authorised enrollment
-  /// and this class holds only what it needs to seal. Null asks nothing, which
-  /// is what a manager built without a client does.
-  ///
-  /// Only where the destination is this atSign: a content key is sealed to the
-  /// *destination's* namespace key, and a sender cannot replace a peer's.
-  /// Returns whether a replacement happened, so the caller knows to re-resolve.
+  /// Null asks nothing, and the answer says whether a replacement happened, so
+  /// the caller knows to re-resolve.
   Future<bool> Function(String namespace)? rotateOwnNamespaceKeyIfAsked;
 
   CkManager(
@@ -82,43 +57,30 @@ class CkManager {
             NskeyResolver(keyRing, sealsToKeyAlgorithms: sealsToKeyAlgorithms);
 
   /// Ensure `(destination, namespace)` has a current CK sealed to the
-  /// destination's *live* nskey generation, minting and conveying one if not.
+  /// destination's live nskey generation, minting and conveying one if not.
   ///
-  /// The re-fetch is the point, not an optimisation. A sender never sees a
-  /// recipient's decapsulation fail, so an advertised-generation check here is
-  /// the only way it learns of a rotation; without it a peer keeps sealing to a
-  /// generation a revoked enrollment can still open, and revocation silently
-  /// fails for everything inbound.
+  /// The destination's advertised generation is re-fetched on every call: a
+  /// sender never sees a recipient's decapsulation fail, so that check is the
+  /// only way it learns of a rotation.
   Future<void> ensureCurrent(CryptoContext context, AtKey valueKey,
       {bool? useRemoteAtServer}) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
     final namespace = valueKey.namespace;
     if (owner == null || owner.isEmpty || namespace == null) return;
 
-    // Most-specific-first: a composed namespace resolves to whichever level
-    // actually holds a key, and everything below is scoped to that level.
     final advertised = await resolver.resolve(owner, namespace);
     if (advertised == null) {
-      // No level of the namespace has an nskey, so the destination has never
-      // used or authorised it and there is nothing at the atSign level to fall
-      // back to. Failing here, in the pre-pass, is what makes the cold start
-      // recoverable: the caller has not yet committed to a scheme, so it can
-      // still route the write to legacy if the app opted into that.
-      // Discovering it mid-pipeline would leave only a hard failure.
+      // NOTE: failing in this pre-pass is what keeps a cold start recoverable —
+      // the caller can still route the write to legacy, which it could not do
+      // mid-pipeline.
       throw NamespaceKeyUnavailableException(owner, namespace);
     }
     final ckNs = advertised.namespace;
     final current = cache.current(owner, ckNs);
     if (current != null &&
         cache.currentNskeyKid(owner, ckNs) == advertised.nskeyKid) {
-      // The generation has not moved, so the only thing left that can make this
-      // key stale is the application's own policy. Asked here rather than
-      // anywhere earlier: everything above decides whether a CK exists at all,
-      // and there is nothing to have an opinion about until one does.
-      //
-      // A cut-time is recorded whenever a CK becomes current, so its absence
-      // means this cache entry predates that — treated as "no opinion" rather
-      // than as age zero, which would say a key is fresh when nothing knows.
+      // NOTE: with no recorded cut time the policy is not asked at all, rather
+      // than told the key is fresh.
       final cutAt = cache.currentCutAt(owner, ckNs);
       if (cutAt == null) return;
       final replace = await ckRotationPolicy(CkRotationContext(
@@ -133,32 +95,18 @@ class CkManager {
           '$owner:$ckNs, replacing ${current.ckKid} cut at $cutAt');
     }
 
-    // Nothing cached — but this process may simply have restarted. Recovering
-    // the CK it was already writing under, from the conveyance record it wrote
-    // itself, is what stops every restart cutting a fresh key and leaving one
-    // more record that can never be cleaned up.
     if (current == null) {
       final resumed = await _resumeCurrent(
           context, valueKey, owner, ckNs, advertised.nskeyKid);
       if (resumed) return;
     }
 
-    // Either there is no CK for this destination, or the one we have was sealed
-    // to a generation the destination has since rotated away from — so a
-    // conveyance is about to happen either way.
-    //
-    // Which makes this the moment to ask whether the namespace key itself
-    // should be replaced, where this atSign owns it: doing it now costs ONE
-    // conveyance, because the fresh content key is then sealed to the fresh
-    // generation. Asking earlier would put the question on every write; asking
-    // later would seal to a generation about to be superseded.
     var target = advertised;
     final rotate = rotateOwnNamespaceKeyIfAsked;
     if (rotate != null && owner == context.atClient.getCurrentAtSign()) {
       if (await rotate(ckNs)) {
-        // Re-resolve rather than assume: the rotation published a new
-        // generation, and sealing to the one read before it would hand every
-        // peer a content key conveyed to a key this atSign has moved off.
+        // NOTE: the rotation published a new generation; sealing to the one
+        // read before it would convey to a key this atSign has moved off.
         final refreshed = await resolver.resolve(owner, ckNs);
         if (refreshed != null) target = refreshed;
       }
@@ -171,28 +119,11 @@ class CkManager {
   /// Rotates the content key for the destination [valueKey] addresses: cuts a
   /// fresh CK, conveys it, and makes it what new writes encrypt under.
   ///
-  /// **The cheap forward-secrecy lever, and the only one that reaches data
-  /// already written.** It is O(1) — one conveyance record, which every
-  /// authorised client unwraps with the namespace nskey private it already
-  /// holds — and it rides ordinary sync rather than the per-enrollment
-  /// substrate. Rotating the nskey *keypair* is the other lever entirely: it
-  /// costs one conveyance per enrollment, buys post-compromise security, and
-  /// leaves every earlier CK readable. Conflating them is the mistake
-  /// `design.md` §1.7 spends its first paragraph on.
-  ///
-  /// [deleteSuperseded] is the forward-secrecy knob, and **default off** is a
-  /// deliberate policy rather than caution: retaining the superseded `__ck`
-  /// record is what lets a late-joining enrollment read history, which is the
-  /// legacy-like behaviour most apps expect. Turning it on deletes the record
-  /// that carries the old CK, and from then on nothing can unwrap it — the
-  /// nskey private cannot help, because no sealed copy of that CK survives.
-  /// Data written under it becomes undecryptable **by design**.
-  ///
-  /// What it does not reach: a client that already decapsulated the old CK
-  /// holds the plaintext key in memory or in its own cache, and only observing
-  /// the deletion evicts it. So coarse forward secrecy is bounded by eviction
-  /// *reachability* — a client that never resyncs keeps reading. The deletion
-  /// is the trusted-computing base, not a guarantee about every device.
+  /// [deleteSuperseded] deletes the record carrying the old CK, so nothing can
+  /// unwrap it again and data written under it becomes undecryptable by design.
+  /// It is off by default, because retaining that record is what lets a
+  /// late-joining enrollment read history. A client that already decapsulated
+  /// the old CK keeps reading until it observes the deletion.
   ///
   /// Returns the CK new writes now use.
   Future<ContentKey> rotateContentKey(
@@ -211,17 +142,12 @@ class CkManager {
 
     final advertised = await resolver.resolve(owner, namespace);
     if (advertised == null) {
-      // Nothing to seal the successor to. Distinct from the write path only in
-      // that there is no legacy fallback to offer here — a rotation is not a
-      // write the app can reroute.
       throw NamespaceKeyUnavailableException(owner, namespace);
     }
     final ckNs = advertised.namespace;
 
-    // Read before the successor displaces it. The pointer is consulted as well
-    // as the cache because the process that cut the superseded CK may have
-    // been a different one — a rotation from a freshly started client would
-    // otherwise supersede nothing and leave the old conveyance in place.
+    // NOTE: the pointer is consulted as well as the cache because the process
+    // that cut the superseded CK may have been a different one.
     final superseded = cache.current(owner, ckNs)?.ckKid ??
         (await pointer?.read(context.atClient, owner, ckNs))?.ckKid;
 
@@ -230,10 +156,8 @@ class CkManager {
         keyAlgo: advertised.alg, useRemoteAtServer: useRemoteAtServer);
 
     if (deleteSuperseded && superseded != null && superseded != ck.ckKid) {
-      // After the successor is durable, never before: a client whose write
-      // failed between the two would otherwise be left with the old CK deleted
-      // and no new one — every value written under the old key unreadable and
-      // nothing to write the next one under.
+      // NOTE: after the successor is durable, never before — a failure between
+      // the two would leave the old CK deleted and no new one to write under.
       await _deleteConveyance(context, valueKey, owner, ckNs, superseded);
     }
     return ck;
@@ -250,30 +174,23 @@ class CkManager {
     required String keyAlgo,
     bool? useRemoteAtServer,
   }) async {
-    // The conveyance routes to at/nskey, whose encrypt seals the CK and caches
-    // it. That write needs no preparation of its own, which is what stops this
-    // recursing.
+    // NOTE: this must not recurse — the conveyance write routes to at/nskey,
+    // which asks for no preparation of its own.
     final ck = ContentKey(_freshKeyBytes());
     await context.atClient.put(
       SymmetricAesGcmProvider.conveyanceKeyFor(valueKey, ck.ckKid, ckNs),
       ck.toBase64(),
       putRequestOptions: PutRequestOptions()
-        // The destination's advertised KEM decides which conveyance provider
-        // writes this, and the id is what routes the record back to the same
-        // one on every future read.
         ..cryptoProviderId =
             nskeyProviderIdFor(keyAlgo) ?? nskeyCryptoProviderId
-        // The value about to be written cites this record, so it must not
-        // outrun it. A remote-only value paired with a local-first conveyance
-        // reaches the recipient before its key does.
+        // NOTE: the value about to be written cites this record, so it must not
+        // outrun it — a remote-only value with a local-first conveyance reaches
+        // the recipient before its key does.
         ..useRemoteAtServer = useRemoteAtServer ?? false,
     );
 
-    // Only now — the record carrying this CK is durable, so a reader can get
-    // it. Promoting before the write returns would leave a failed conveyance
-    // as the current key: the guard above would then skip conveying on every
-    // retry, and every value written afterwards would cite a CK that was never
-    // sent. The write throws on failure, so this is not reached.
+    // NOTE: promoted only once the record is durable — a failed conveyance left
+    // as the current key would make every later value cite a CK never sent.
     cache.putAsCurrent(owner, ckNs, ck, nskeyKid);
     await pointer?.write(context.atClient, owner, ckNs, ck.ckKid, nskeyKid);
     return ck;
@@ -282,11 +199,8 @@ class CkManager {
   /// Deletes the conveyance record carrying [ckKid] and drops the key from
   /// this client's cache.
   ///
-  /// Both halves matter and neither is sufficient: deleting the record stops
-  /// anyone unwrapping the CK again, and evicting stops *this* client from
-  /// going on using the copy it has already unwrapped. Other clients evict when
-  /// they observe the deletion syncing, which is what makes eviction a
-  /// fleet-wide property rather than a local one.
+  /// Neither half is sufficient alone: the deletion stops anyone unwrapping the
+  /// CK again, the eviction stops this client using the copy it already has.
   Future<void> _deleteConveyance(CryptoContext context, AtKey valueKey,
       String owner, String ckNs, String ckKid) async {
     try {
@@ -294,10 +208,6 @@ class CkManager {
           SymmetricAesGcmProvider.conveyanceKeyFor(valueKey, ckKid, ckNs));
       cache.evict(owner, ckNs, ckKid);
     } catch (e) {
-      // Loud: forward secrecy was asked for and not delivered. The successor
-      // is in place, so writes are correct from here on — but the old key is
-      // still unwrappable by anyone who can read the record, and a caller that
-      // believes it rotated for FS has to know it did not.
       _logger.severe('Rotated the content key for $owner:$ckNs but could NOT '
           'delete the superseded conveyance $ckKid, so data written under it '
           'remains decryptable by anyone who can read that record — the '
@@ -309,28 +219,21 @@ class CkManager {
   /// if the pointer names one and it is still sealed to [nskeyKid].
   ///
   /// Returns whether the cache now holds a current CK. A pointer to a stale
-  /// generation is ignored rather than repaired: the destination has rotated,
-  /// so a fresh CK is exactly what should be cut.
+  /// generation is ignored rather than repaired, so a fresh CK gets cut.
   Future<bool> _resumeCurrent(CryptoContext context, AtKey valueKey,
       String owner, String ckNs, String nskeyKid) async {
     final remembered = await pointer?.read(context.atClient, owner, ckNs);
     if (remembered == null || remembered.nskeyKid != nskeyKid) return false;
 
-    // Reading the conveyance record routes back through the at/nskey provider,
-    // which decapsulates and caches the CK as a side effect.
+    // NOTE: reading the conveyance record routes back through the at/nskey
+    // provider, which decapsulates and caches the CK as a side effect.
     DateTime? conveyedAt;
     try {
       final record = await context.atClient.get(
           SymmetricAesGcmProvider.conveyanceKeyFor(
               valueKey, remembered.ckKid, ckNs));
-      // The atServer's date for the record that carries this CK — when it was
-      // conveyed, which is when it was cut. Taken here because this is the one
-      // path that recovers a CK this process did not cut, and it is already
-      // reading the record; every other route knows the cut time first hand.
       conveyedAt = record.metadata?.createdAt?.toUtc();
     } catch (e) {
-      // The record is gone or will not open. Minting is the right answer, and
-      // the caller does that next.
       _logger.info('Could not resume content key ${remembered.ckKid} for '
           '$owner:$ckNs, so cutting a fresh one: $e');
       return false;

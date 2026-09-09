@@ -112,11 +112,6 @@ void main() {
             'and dropping the approval filter reddens the pair',
         clauses: ['pushed **every generation its approver holds**'],
       );
-
-      // The sender-side half — a peer re-plookups and cuts a fresh CK when the
-      // advertised nskeyKid changes — is `ensureCurrent`'s rotation check,
-      // covered by ck_manager_test.dart's generation tests and exercised live
-      // by nskey_cross_atsign_test.dart's rotation case.
     });
 
     test('UC-A5.2 · per-enrollment auth revocation', () {
@@ -162,22 +157,14 @@ void main() {
       //       rotation (UC-A5.1b) to deny new-data keys. Only that first arm is
       //       pinned here.
       //
-      // ⛔ The cascade clause is the atServer's, sentence by sentence, and its
-      //    own suite pins each in both tiers - so unprovableClauses carries it
-      //    rather than a fixture here re-asserting it. The client half was a
-      //    sentence inside that clause until 2026-09-09 and is now a clause of
-      //    its own, pinned below.
-      //
-      // ⚠️ This comment said that clause was ruled and not yet built, and read
-      //    the cascade as reaching what an enrollment SELF-ENROLLED, until
-      //    2026-09-08. The atServer never follows the replacement edge: a
-      //    successor is its predecessor's sibling, and is settled at its own
-      //    first authentication instead.
-      //
-      // ⚠️ This comment required the EXCLUSION SET to be the whole subtree,
-      //    walked client-side, until 2026-08-31. That was the wrong layer: an
-      //    exclusion set binds only the client that computes it, while approval
-      //    state is consulted by every roster query on every client.
+      // NOTE: the cascade is the atServer's, sentence by sentence, and its own
+      //       suite pins each in both tiers, so unprovableClauses carries it
+      //       rather than a fixture here. The atServer never follows the
+      //       replacement edge: a successor is its predecessor's sibling,
+      //       settled at its own first authentication. And the exclusion set is
+      //       the ONE revoked id, never a client-walked subtree — an exclusion
+      //       set binds only the client that computes it, while approval state
+      //       is consulted by every roster query on every client.
       provenIn('packages/at_client/test/nskey_rotation_test.dart',
           'rotates every granted namespace, excluding the revoked id',
           proves: 'the exclusion set the client hands every push: exactly the '
@@ -313,12 +300,12 @@ void main() {
           proves: 'that the default is a closure that says no rather than a '
               'null, which is what lets every call site ask unconditionally');
 
-      // ⛔ "There is no third ask" is deliberately UNPINNED. It is an absence
-      // — that `AtClient.ensureReachable` cannot reach the policy, because it
-      // returns alreadyReachable in exactly the branch where a generation is
-      // published and that is the only branch `seedNamespace` consults the
-      // policy in. Read at both ends on 2026-08-31 and true, but no test
-      // asserts it and one would have to drive a whole AtClientImpl to try.
+      // NOTE: "there is no third ask" is deliberately UNPINNED, being an
+      //       absence: `AtClient.ensureReachable` cannot reach the policy,
+      //       because it returns alreadyReachable in exactly the branch where a
+      //       generation is published, and that is the only branch
+      //       `seedNamespace` consults the policy in. Asserting it would mean
+      //       driving a whole AtClientImpl.
     });
 
     test(

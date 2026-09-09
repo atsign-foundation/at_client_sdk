@@ -27,15 +27,12 @@ import 'package:meta/meta.dart' show experimental;
 /// kpid-addressed envelopes converge idempotently via [SecretStore.putIfNewer]
 /// — but a single instance avoids redundant registration and double delivery.)
 ///
-/// > **⚠ Experimental.** The recipient key package a sender seals to is
-/// > discovered via the gated `enroll:listns` verb, and is APKAM-signed by the
+/// > **⚠ Experimental.** A recipient key package is APKAM-signed by the
 /// > enrollment that generated it and verified against that enrollment's
-/// > `_apsk` before anything is sealed to it — so a tampering atServer cannot
-/// > substitute the encapsulation target under an honest `_apsk`. What remains
-/// > is that the atServer serves the `_apsk` too, so the **operator** of the
-/// > atSign's own atServer is still in the confidentiality boundary; removing
-/// > that needs an anchor the operator does not control (key transparency).
-/// > Durable storage of received secrets is also still an app-supplied hook.
+/// > `_apsk` before anything is sealed to it, but the atServer serves the
+/// > `_apsk` too — so the **operator** of the atSign's own atServer is still
+/// > inside the confidentiality boundary. Durable storage of received secrets
+/// > is an app-supplied hook.
 @experimental
 class AtClientSecretSharing
     with
@@ -84,12 +81,8 @@ class AtClientSecretSharing
   /// Direct construction creates an independent instance with its own
   /// enc keypair. Use [forClient] unless that is what you want (tests,
   /// custom compositions).
-  /// The gate starts null — fail closed — and the production composition
-  /// installs the record-backed resolver: `PqClientBootstrap` wires
-  /// [PairwiseSecretSharing.perEnrollmentSecretRequestGate] to the client's
-  /// injected `EnrollmentPrivilegeResolver` when the client is built, so the
-  /// substrate answers privilege questions through the one seam instead of
-  /// reaching up into the service layer itself.
+  /// [PairwiseSecretSharing.perEnrollmentSecretRequestGate] starts null — fail
+  /// closed — until a composition installs a resolver.
   AtClientSecretSharing(
     this.atClient, {
     this.publicKeyCacheSettings = const (

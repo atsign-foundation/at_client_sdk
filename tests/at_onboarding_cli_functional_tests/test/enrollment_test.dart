@@ -119,19 +119,11 @@ void main() {
       // 4.2 send enroll request for second client with valid otp
       logger.info(
           'OnboardingEnrollmentTest: sending enroll request with new OTP');
-      // ⛔ `legacy` is NAMED here, not inherited, because this test is a test
-      // OF the legacy approve wire: `_notificationCallback` below hand-builds
-      // the `enroll:approve:{…}` command, RSA-decrypting the wrapped symmetric
-      // key out of the notification and re-wrapping the encryption private and
-      // self keys under it. A pq request carries no wrapped key at all, so
-      // there is nothing for that code to decrypt and it cannot be made to
-      // work by tolerating a null — the whole shape is the RSA path.
-      //
-      // It broke when the default posture became pqReady, whose key-exchange
-      // mode is pq, and it broke silently in the sense that no unit suite runs
-      // this pack. Naming the mode says what the test is for, and leaves the
-      // default path to `pq_native_enroll_test.dart`, which approves through
-      // the shipped CLI rather than by hand.
+      // NOTE: `legacy` is named because this test is a test OF the legacy
+      // approve wire — `_notificationCallback` hand-builds `enroll:approve`,
+      // RSA-decrypting the wrapped symmetric key out of the notification and
+      // re-wrapping the encryption private and self keys under it. A pq
+      // request carries no wrapped key, so that code has nothing to decrypt.
       var enrollResponse = await onboardingService_2.sendEnrollRequest(
           'buzz', 'iphone', totp, namespaces,
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
@@ -299,11 +291,10 @@ void main() {
             totp,
             namespaces,
             retryInterval: Duration(seconds: 5),
-            // Legacy NAMED, for the same reason as the approve test above:
-            // this test asserts the RSA-wrapped key is present in the
-            // notification (`encryptedApkamSymmetricKey`, isNotEmpty) and then
-            // hand-builds the deny wire. A pq request carries no wrapped key,
-            // so the assertion is about the legacy shape by construction.
+            // Legacy named for the same reason as the approve test above: this
+            // one asserts the RSA-wrapped key is present in the notification
+            // and then hand-builds the deny wire, so it is about the legacy
+            // shape by construction.
             keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
           ),
           throwsA(predicate((dynamic e) =>
@@ -370,20 +361,12 @@ void main() {
       // Await has NOT been added below to ensure that the onboardingService.enroll()
       // method call does not starve the rest of the test; but still will be
       // waiting for enrollment approval in the background
-      // ⛔ Legacy NAMED. These two tests assert NAMESPACE AUTHORISATION — what
-      // an approved enrolment may read — and the key-exchange mode is not
-      // their subject. They were budgeted for the legacy handshake, and a pq
-      // enrolment does not fit that budget: after approval the enrollee must
-      // still COLLECT the symmetric key the approver encapsulated to its key
-      // package, polling for the envelope, on top of this test's own 10s wait
-      // before it approves. Under the pqReady default that overran the 30s
-      // test timeout.
-      //
-      // Naming legacy keeps these testing authorisation deterministically. The
-      // pq enrolment path has its own live coverage in
-      // `pq_native_enroll_test.dart`, which approves through the shipped CLI.
-      // ⚠️ The latency itself is a finding, not just a test-budget problem —
-      // see the plan's "a pq enrolment costs a post-approval round trip" row.
+      // NOTE: `legacy` is named because this test asserts what an approved
+      // enrolment may read, not the key exchange. A pq enrolment adds a
+      // post-approval round trip - the enrollee polls for the envelope holding
+      // the symmetric key the approver encapsulated to its key package - which
+      // on top of the 10s wait below overruns the 30s test timeout. The pq
+      // enrolment path is covered by `pq_native_enroll_test.dart`.
       Future<AtEnrollmentResponse> enrollRequestResponse =
           onboardingService.enroll(
         appName,
@@ -495,20 +478,12 @@ void main() {
       // Await has NOT been added below to ensure that the onboardingService.enroll()
       // method call does not starve the rest of the test; but still will be
       // waiting for enrollment approval in the background
-      // ⛔ Legacy NAMED. These two tests assert NAMESPACE AUTHORISATION — what
-      // an approved enrolment may read — and the key-exchange mode is not
-      // their subject. They were budgeted for the legacy handshake, and a pq
-      // enrolment does not fit that budget: after approval the enrollee must
-      // still COLLECT the symmetric key the approver encapsulated to its key
-      // package, polling for the envelope, on top of this test's own 10s wait
-      // before it approves. Under the pqReady default that overran the 30s
-      // test timeout.
-      //
-      // Naming legacy keeps these testing authorisation deterministically. The
-      // pq enrolment path has its own live coverage in
-      // `pq_native_enroll_test.dart`, which approves through the shipped CLI.
-      // ⚠️ The latency itself is a finding, not just a test-budget problem —
-      // see the plan's "a pq enrolment costs a post-approval round trip" row.
+      // NOTE: `legacy` is named because this test asserts what an approved
+      // enrolment may read, not the key exchange. A pq enrolment adds a
+      // post-approval round trip - the enrollee polls for the envelope holding
+      // the symmetric key the approver encapsulated to its key package - which
+      // on top of the 10s wait below overruns the 30s test timeout. The pq
+      // enrolment path is covered by `pq_native_enroll_test.dart`.
       Future<AtEnrollmentResponse> enrollRequestResponse =
           onboardingService.enroll(
         appName,

@@ -28,19 +28,16 @@ class NotificationRequestTransformer
   @override
   Future<NotifyVerbBuilder> transform(
       NotificationParams notificationParams) async {
-    // Before anything looks at the key, give it its namespace. Provider
-    // selection is namespace-sensitive — the nskey path is (owner, namespace)
-    // scoped and declines a key without one — so choosing a provider first
-    // would silently pick legacy for every key that relies on the preference
-    // default, and the put path (which resolves the namespace first) would
-    // then encrypt the very same key differently.
+    // NOTE: provider selection is namespace-sensitive — the nskey path is
+    // (owner, namespace) scoped and declines a key without one — so the
+    // namespace has to be resolved before a provider is chosen.
     _resolveNamespace(notificationParams);
 
     if (_shouldRouteThroughProvider(notificationParams)) {
-      // Not stamped until the routing is settled, exactly as the put pre-pass
-      // does it: the catch below may re-route this notification to legacy, and
-      // a key already stamped with the provider that then declined would claim
-      // a scheme its value was never sealed under.
+      // NOTE: the provider id is stamped only once routing has settled — the
+      // catch below may re-route to legacy, and a key stamped with a provider
+      // that then declined would claim a scheme its value was never sealed
+      // under.
       String providerId;
       try {
         providerId = await CryptoRuntime(_atClient).prepareWrite(
@@ -50,13 +47,6 @@ class NotificationRequestTransformer
             stampProviderId: false);
       } on NamespaceKeyUnavailableException catch (e) {
         if (!CryptoRuntime.mayFallBackToLegacy(atClientPreference)) rethrow;
-        // The app said it would rather reach this recipient under legacy than
-        // not at all, and that is a statement about its data rather than about
-        // which verb it happened to use. ⚠️ Until 2026-08-27 the fallback
-        // existed on `put` and nowhere else, so the same preference produced a
-        // legacy put and an `undelivered` notification for the same recipient
-        // and namespace — with an exception telling the app to opt into the
-        // path it had already opted into.
         _logger.warning('falling back to legacy encryption for the '
             'notification of ${notificationParams.atKey.key}: ${e.message}');
         providerId = await CryptoRuntime(_atClient).prepareWrite(
@@ -118,8 +108,6 @@ class NotificationRequestTransformer
     } else {
       AtKey ak = notificationParams.atKey;
 
-      // The namespace was resolved in transform(); this only re-parses the key
-      // so the builder gets a normalised copy.
       if (_isNamespaceAware(notificationParams)) {
         ak = AtKey.fromString(ak.toString());
       }
@@ -142,12 +130,8 @@ class NotificationRequestTransformer
       notificationParams.messageType == MessageTypeEnum.key &&
       notificationParams.atKey.metadata.namespaceAware;
 
-  /// Fill in the preference's namespace, and fold a key that already carries a
-  /// different one into the app namespace — in place, on the caller's AtKey.
-  ///
-  /// This ran inside the builder step until provider selection moved ahead of
-  /// it. Both need the namespace, and the builder needs it *after* whatever
-  /// encryption chose, so it has to happen before either.
+  /// Fills in the preference's namespace, and folds a key that already carries
+  /// a different one into the app namespace — in place, on the caller's AtKey.
   void _resolveNamespace(NotificationParams notificationParams) {
     if (!_isNamespaceAware(notificationParams)) return;
     final ak = notificationParams.atKey;
@@ -160,33 +144,17 @@ class NotificationRequestTransformer
     }
   }
 
-  /// Copy the record's own metadata onto the builder.
-  ///
-  /// Everything a *reader* needs to interpret the value has to travel: the
-  /// crypto routing, and the fields that decide how the payload is decoded.
-  /// `isBinary`, `encoding` and `dataSignature` were missing, which is the same
-  /// silent-drop shape as the sync push that dropped `appMetadata` — a
-  /// provider branches on `isBinary` to choose its wire format, so losing it
-  /// makes a binary notification decode as text.
-  ///
-  /// The timestamps and `sharedKeyStatus` are deliberately *not* copied: the
-  /// atServer derives those on receipt, exactly as the sync push leaves them
-  /// out. Sending a client's idea of `createdAt` would be the client asserting
-  /// something the server owns.
-  /// Carries the caller's metadata onto the builder, minus what the sender has
-  /// no business asserting.
+  /// Carries the caller's metadata onto the builder, minus the fields the
+  /// receiving atServer owns.
   ///
   /// Copying wholesale and then clearing is the deliberate polarity: a field
-  /// added to [Metadata] later travels by default, and only the exclusions —
-  /// which are the atServer's to set, not a client's to claim — have to be
-  /// maintained. The hand-rolled inclusion list this replaces dropped
-  /// `immutable` and `appMetadata` for exactly as long as nobody noticed.
+  /// added to [Metadata] later travels by default, and only the exclusions have
+  /// to be maintained.
   void _addMetadataToBuilder(
       NotifyVerbBuilder builder, NotificationParams notificationParams) {
     builder.atKey.metadata = notificationParams.atKey.metadata.copy()
-      // Derived on the receiving atServer from ttb/ttl/ttr, and stamped there
-      // on write. A sender asserting them would be describing a record it does
-      // not own the clock for.
+      // Derived by the receiving atServer from ttb/ttl/ttr, and stamped there
+      // on write.
       ..availableAt = null
       ..expiresAt = null
       ..refreshAt = null
@@ -194,8 +162,7 @@ class NotificationRequestTransformer
       ..updatedAt = null
       // Set by the atServer as it resolves the shared key, not by the sender.
       ..sharedKeyStatus = null
-      // Local read-model flags. They describe how *this* client holds the
-      // record, and mean nothing to the receiver.
+      // Local read-model flags; they mean nothing to the receiver.
       ..isCached = false
       ..isHidden = false
       ..namespaceAware = true;

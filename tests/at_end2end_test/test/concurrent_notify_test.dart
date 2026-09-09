@@ -1,6 +1,6 @@
-/// Longer than every inner timeout in this file put together, so those
-/// decide and their diagnostics can print. At the 30-second default the
-/// 60-second `onTimeout` below can never fire.
+/// Longer than every inner timeout here, so those decide and can print their
+/// diagnostics: at the 30-second default the 60-second `onTimeout` below could
+/// never fire.
 @Timeout(Duration(minutes: 5))
 library;
 
@@ -13,26 +13,14 @@ import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
-/// The notification **receive** path, over a live monitor, for the first time.
+/// The notification receive path over a live monitor: the sender stamps
+/// `appMetadata.providerId`, a real atServer delivers to a real monitor, and
+/// the receiver routes by that id to hand the test back a decrypted value.
 ///
-/// Both halves of it have been implemented and unit-covered for a while: the
-/// sender stamps `appMetadata.providerId` and the receiver routes by it through
-/// `CryptoRuntime.decryptForNotification`. What could never be shown is that a
-/// real atServer delivers to a real monitor and the value comes out decrypted,
-/// because `AtClientManager` is a singleton whose `setCurrentAtSign` stops the
-/// outgoing client and unsets its `notificationService`. The existing
-/// `notify_test.dart` works around exactly that: it switches atSigns and polls
-/// `notifyList`, which reads the atServer's queue rather than exercising the
-/// monitor or the decryption path at all.
-///
-/// `ConcurrentClients` removes the workaround by giving each atSign its own
-/// `AtClientManager`, so both stay live and a subscription taken on one survives
-/// the other coming up.
-///
-/// The same claim over the nskey data path is `test/pq/nskey_notify_test.dart`.
-/// It lives apart because it publishes namespace keys, and this suite's CI
-/// atSigns are long-lived: nothing that writes post-quantum material may run
-/// against them while the design is still being settled.
+/// `AtClientManager` is a singleton whose `setCurrentAtSign` stops the outgoing
+/// client and unsets its `notificationService`, so `ConcurrentClients` gives
+/// each atSign its own manager and a subscription taken on one survives the
+/// other coming up.
 void main() {
   late String alice;
   late String bob;
@@ -51,10 +39,9 @@ void main() {
             posture: PqPosture.legacy);
     addTearDown(clients.close);
 
-    // Asserted, not assumed. If the second client coming up had torn the first
-    // one down, the notify below would fail somewhere unrelated and the monitor
-    // would simply never fire — which reads as a product defect rather than a
-    // harness one.
+    // NOTE: without these, a second client that tore the first one down would
+    // show up as a monitor that never fires, reading as a product defect
+    // rather than a harness one.
     expect(clients.first.getCurrentAtSign(), alice);
     expect(clients.second.getCurrentAtSign(), bob);
     expect(clients.first.isStopped, isFalse);
@@ -69,8 +56,8 @@ void main() {
       ..metadata = (Metadata()..ttr = 60000);
     const value = 'delivered over a live monitor';
 
-    // Listener before trigger: subscribe returns a broadcast stream and does
-    // not replay what it emitted before subscription.
+    // NOTE: listener before trigger — subscribe returns a broadcast stream and
+    // does not replay what it emitted before subscription.
     final received = Completer<AtNotification>();
     final subscription = clients.second.notificationService
         .subscribe(regex: 'concurrent$id', shouldDecrypt: true)
@@ -79,16 +66,11 @@ void main() {
     });
     addTearDown(subscription.cancel);
 
-    // Subscribing is not the listener being ready: `subscribe()` returns its
-    // stream at once, while the monitor attaches to the atServer
-    // asynchronously. A notification the atServer accepts before it attaches
-    // is reported `delivered` and is not handed to a monitor that attaches
-    // afterwards; only `fetchOfflineNotifications` goes back for it, and this
-    // pack does not set it.
-    //
-    // Polled rather than awaited on `currentListenerStateStream`, which does
-    // not replay: a monitor attaching between the flag check and the
-    // subscription would be missed.
+    // NOTE: subscribing is not the listener being ready — the monitor attaches
+    // asynchronously, and a notification the atServer accepts before it
+    // attaches is reported `delivered` and never handed to it. Polled rather
+    // than awaited on `currentListenerStateStream`, which does not replay an
+    // attach happening between the check and the subscription.
     final notifications = clients.second.notificationService;
     final attachDeadline = DateTime.now().add(Duration(seconds: 30));
     while (!notifications.listening) {

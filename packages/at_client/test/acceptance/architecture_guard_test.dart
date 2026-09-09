@@ -1,17 +1,12 @@
 /// Guards asserted against the SOURCE TREE rather than against behaviour.
 ///
-/// These read library source and check what it contains. That is a legitimate
-/// thing to want — some invariants are about which code path exists at all,
-/// and no runtime assertion can see "nobody has hand-rolled a second one of
-/// these" — but it fails for a different reason from everything else in this
-/// directory. A rename breaks a grep while the behaviour is intact, and when
-/// that grep lives inside an acceptance row, the suite reports that the
-/// scenario failed. It did not; the guard's assumption about the source did.
+/// These read library source and check what it contains, the only way to
+/// assert that a code path does not exist at all. They fail differently from
+/// everything else in this directory — a rename breaks the grep while the
+/// behaviour is intact — so they are declared as guards rather than burn-down
+/// rows in `manifest.dart`.
 ///
-/// So they live here, and this file is a guard rather than a scenario: its
-/// tests are not burn-down rows and are declared as such in `manifest.dart`.
-///
-/// Catalogue: `docs/projects/pq/acceptance.md`.
+/// Catalogue: the PQ acceptance catalogue.
 library;
 
 import 'dart:io';
@@ -22,17 +17,11 @@ import 'manifest.dart';
 
 void main() {
   test('metadata reaches the wire through one serializer', () {
-    // One serializer serves both the stored key and the notification frame.
-    // The regression this guards was a SECOND, hand-rolled serializer that
-    // fell behind the shared one, and the symptom was silent: appMetadata
-    // stopped reaching the atServer, so every cross-atSign read fell back to
-    // legacy for every provider with no error anywhere.
-    //
-    // The behavioural half — that appMetadata is on the wire and carries the
-    // provider id — is asserted by the `appMetadata.providerId is
-    // authoritative on keys and frames` row in `cross_cutting_test.dart`.
-    // What cannot be asserted at runtime is the absence of a rival
-    // serializer, which is the only reason this is a source-text check.
+    // One serializer serves both the stored key and the notification frame. A
+    // second, hand-rolled one falls behind it silently: appMetadata stops
+    // reaching the atServer and every cross-atSign read falls back to legacy,
+    // with no error anywhere. The absence of a rival serializer is what no
+    // runtime assertion can see, which is why this is a source-text check.
     final lib = Directory('${repoRoot().path}/packages/at_client/lib/src');
     for (final path in const [
       'service/sync_service_impl.dart',
@@ -44,16 +33,6 @@ void main() {
               'stopped reaching the atServer once already');
     }
 
-    // `notification_service_impl.dart` used to be in that list. It no longer
-    // calls the fragment builder at all — every notification it sends is now
-    // composed by `NotifyVerbBuilder`, which calls it — so requiring the name
-    // to appear there would force the hand-rolled command back.
-    //
-    // The guard is stronger stated this way round: what it is really for is
-    // the absence of a rival serializer, and `send()` composing its own
-    // `notify:` command was exactly that. It is the reason `send()` resolved
-    // its own namespace and got it wrong, having never reached the transformer
-    // that resolves one.
     expect(
         File('${lib.path}/service/notification_service_impl.dart')
             .readAsStringSync(),
@@ -66,15 +45,11 @@ void main() {
   test('the verifier has no accept lever for signatures', () {
     // A verifier resolves the strongest algorithm the two documents share and
     // applies no floor to the result, so it cannot decline an algorithm it
-    // implements. The reason is an absence: nothing anywhere lets a verifier
-    // say which algorithms it will accept a SIGNATURE under.
-    //
-    // Deliberately source-shaped rather than behavioural. The behavioural form
-    // — "an envelope under the weaker advertised algorithm is accepted" —
-    // would stay GREEN on the day the accept lever landed, because such a
+    // implements: nothing anywhere lets a verifier say which algorithms it will
+    // accept a SIGNATURE under. Source-shaped deliberately — the behavioural
+    // form would stay GREEN on the day an accept lever landed, since such a
     // lever cannot ship default-deny without refusing every envelope already
-    // stored. A guard that cannot fail for the reason it exists is worse than
-    // none. This one goes red the moment the parameter or the field appears.
+    // stored. This one goes red the moment the parameter or the field appears.
     final root = repoRoot().path;
     final signing = File('$root/packages/at_client/lib/src/signing/'
             'envelope_signature.dart')
@@ -83,9 +58,6 @@ void main() {
             'at_client_preference.dart')
         .readAsStringSync();
 
-    // Positive control first: a grep for a name nothing uses passes trivially,
-    // so the entry point is asserted PRESENT before anything is asserted
-    // absent about its parameters.
     final decl = RegExp(r'Future<void> verifyEnvelope\(([^)]*)\)', dotAll: true)
         .firstMatch(signing);
     expect(decl, isNotNull,
@@ -104,10 +76,9 @@ void main() {
             'narrow what it will accept. When step 3 lands, this is where the '
             'set arrives and this guard is the prompt to make the clause true');
 
-    // The preference's algorithm-typed fields, named exhaustively. Six today:
-    // four final ones set at construction and two mutable legacy ones. None is
-    // an accept side for signatures - the only accept-shaped field in the
-    // class, disallowLegacyEncryption, exempts reads by design.
+    // The preference's algorithm-typed fields, named exhaustively. None is an
+    // accept side for signatures; the one accept-shaped field in the class,
+    // disallowLegacyEncryption, exempts reads by design.
     const algorithmFields = <String>[
       'dataSigningKeyAlgorithms',
       'authenticationKeyAlgorithm',
@@ -143,11 +114,6 @@ void main() {
     // absence is the invariant, and no runtime assertion can see it: a path
     // that is never taken and a path that does not exist look identical from
     // outside.
-    //
-    // The positive halves are what stop the absence being vacuous. A grep for
-    // a name nothing uses any more passes trivially, so the capability is
-    // asserted PRESENT at its declaration and at both production call sites
-    // before it is asserted absent in the signing root.
     const capability = 'pushSecretToNamespaceMembers';
     const declaredIn = 'secret_sharing/pairwise_secret_sharing.dart';
     const callers = <String>[
@@ -182,8 +148,7 @@ void main() {
             'hold it is to ask for it');
 
     // Nor may anything wrap the fan-out: a delegating method elsewhere would
-    // let the signing root push while naming nothing the check above greps
-    // for, and the absence would still read as clean.
+    // let the signing root push while naming nothing the check above greps for.
     final unexpected = <String>[];
     for (final entity in lib.listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -202,11 +167,6 @@ void main() {
   });
 
   test('every test file here is declared as a scenario file or a guard', () {
-    // The burn-down count used to be "every *_test.dart except
-    // catalogue_test.dart", so any file added to this directory joined the
-    // row count by existing — and the only way to add a guard without
-    // inflating the number the README is pinned to was to not add one. Both
-    // lists are declarations now, and this is what keeps them honest.
     expect(undeclaredTestFiles(), isEmpty,
         reason: 'a test file here is neither a declared scenario file nor a '
             'declared guard. Add it to scenarioFiles in manifest.dart if its '

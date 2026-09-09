@@ -5,30 +5,24 @@ import 'package:test/test.dart';
 /// The accepted incompatibility between at_client **3.14.0** and this tree,
 /// pinned in both directions.
 ///
-/// Step 3 replaced the released envelope — a flat
-/// `{payload, signature, hashingAlgo, signingAlgo, enrollmentId}` map — with
-/// RFC 7515 general serialization, and deleted the envelope as a
-/// `PqPosture` axis, so no stage emits the old shape. Neither build can
-/// read the other's envelope.
-///
-/// gkc ruled that **accepted rather than fixed**
-/// (`docs/projects/pq/decisions.md` 95 rulings 2–3, amended 2026-08-14), on
-/// reachability: the released reader is same-atSign only, hangs off
+/// The released envelope is a flat
+/// `{payload, signature, hashingAlgo, signingAlgo, enrollmentId}` map and this
+/// tree emits RFC 7515 general serialization, so neither build can read the
+/// other's. The break is accepted rather than fixed, on reachability: the
+/// released reader is same-atSign only, hangs off
 /// `AtClientSecretSharing.forClient` which nothing in 3.14.0 constructs, is
 /// `@experimental`, and its own dartdoc opens "not yet suitable for production
 /// secrets".
 ///
 /// **An accepted break has to stay visible.** A break nobody asserts is
-/// indistinguishable from one that quietly changed shape, and the ruling above
-/// rests on knowing exactly what a released peer does with what this tree
-/// emits. These are raw-literal pins on purpose: asserting through the
-/// constants that produce the messages would follow a reworded refusal
-/// silently, which is the whole failure a pin exists to stop.
+/// indistinguishable from one that quietly changed shape. These are
+/// raw-literal pins on purpose: asserting through the constants that produce
+/// the messages would follow a reworded refusal silently, which is the whole
+/// failure a pin exists to stop.
 void main() {
-  /// Exactly what at_client 3.14.0's `wrapAndSign` emits — read from
-  /// `lib/src/mixins/envelope_signing.dart` in the published archive, not
-  /// reconstructed from memory of it. The payload is the raw object; the
-  /// signature, algorithms and signer id are flat siblings of it.
+  /// Exactly what at_client 3.14.0's `wrapAndSign` emits: the payload is the
+  /// raw object, and the signature, algorithms and signer id are flat siblings
+  /// of it.
   Map<String, Object?> releasedEnvelope() => {
         'payload': {'hello': 'world'},
         'signature': 'QUJD',
@@ -53,7 +47,7 @@ void main() {
             (e) => e.toString(),
             'message',
             // RAW LITERAL, frozen: this is the message a released peer's
-            // envelope produces here, and decisions.md 95 cites it.
+            // envelope produces here.
             contains('an envelope must carry its payload as a string'))),
         reason: '3.14.0 carries the payload as a raw object, and this reader '
             'requires the base64url string RFC 7515 signs over',

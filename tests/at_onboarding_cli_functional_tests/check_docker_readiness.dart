@@ -19,12 +19,9 @@ void main() {
     String response = '';
     print('waiting for up to 2 minutes for signing_publickey$atsign');
 
-    // Bounded, and asserted below. Unbounded, a virtualenv that never comes up
-    // spins here until the five-minute test timeout and reports that instead
-    // of what was actually missing — and with no expectation after the loop, a
-    // future edit letting it exit early would leave this test GREEN while the
-    // environment was not ready, which is the failure this file exists to
-    // prevent.
+    // NOTE: the loop is bounded, so whatever it exits with must be asserted
+    // below — without that, an early exit leaves this test green on a
+    // virtualenv that never came up.
     const int maxTries = 40;
     int attempt = 0;
     while ((response.isEmpty || response == 'data:null\n') &&

@@ -14,18 +14,8 @@ import 'test_utils/envelope_tamper.dart';
 
 /// Every form a published `_apsk` comes in, and the verify that reads them.
 ///
-/// Two forms, because which one a record holds depends on what wrote it: the
-/// **bare** RSA string, published by every released client, by a connection
-/// with no enrollment id, and by the atServer for a plain-legacy enrollment;
-/// and the **array**, composed by an enrolling client and written verbatim by
-/// the atServer at approval. A reader accepts both.
-///
-/// Two properties carry the design. The **key's own declaration is
-/// authoritative** — a lie in the envelope's `signingAlgo` can never select a
-/// weaker routine than the published key calls for. And the **array is
-/// unmistakable** — an old bare-RSA parser meeting one fails loudly rather
-/// than mis-reading it, which is precisely why a plain-legacy enrollment
-/// publishes the bare form instead.
+/// A reader accepts both the bare RSA string and the array, and takes the
+/// algorithm from the key's own declaration rather than the envelope's claim.
 void main() {
   const payload = 'the signable text';
 
@@ -40,11 +30,8 @@ void main() {
     });
 
     test('a bare value reads as exactly ONE active rsa2048 entry', () {
-      // The clause UC-G1.5 turns on and the one nothing asserted: not merely
-      // that the bare form is read, but that it is read as a SINGLE active
-      // entry. A reader that produced two, or one marked retired, would still
-      // satisfy the verbatim test above while changing what a verifier
-      // selects on.
+      // UC-G1.5: the bare form reads as a SINGLE active entry, which is what
+      // a verifier selects on.
       const bare = 'MIIBIjANBgkq-not-really-but-bare';
       final parsed = parseApskValue(bare);
 
@@ -97,10 +84,8 @@ void main() {
     });
 
     test('the STRONGEST advertised algorithm wins, not the first listed', () {
-      // The weaker key is listed first, so taking `advertised.first` — which
-      // is what this did until the strength order existed — picks RSA. The
-      // order entries arrive in is the signer's choice, and letting it decide
-      // hands the algorithm to whoever wrote the advertisement.
+      // NOTE: the listing order is the advertisement writer's choice, so a
+      // reader that takes the first entry hands it the algorithm.
       final parsed = parseApskValue('{"v":1,"keys":['
           '{"kid":"k1","use":"sign","alg":"rsa2048","pub":"AAEC"},'
           '{"kid":"k2","use":"sign","alg":"mldsa65","pub":"CCEC"}]}');
@@ -123,9 +108,6 @@ void main() {
 
     test('a retired signing key is still read, because it verifies history',
         () {
-      // `_apsk` retains a key so envelopes it already signed keep verifying.
-      // Skipping retired entries here would refuse exactly the history that
-      // retirement exists to preserve. Nothing in this path signs.
       final parsed = parseApskValue('{"v":1,"keys":['
           '{"kid":"k1","use":"sign","alg":"rsa2048","pub":"AAEC",'
           '"status":"retired"}]}');
@@ -135,13 +117,9 @@ void main() {
     });
 
     test('a status this build cannot read is NOT a verification candidate', () {
-      // The asymmetry with the test above, and the reason `status` is an open
-      // token rather than a two-valued enum. `retired` says "withdrawn from
-      // new use, still vouches for the past". A token this build has never
-      // seen says something else, and the likeliest something else - a key
-      // whose owner has disowned it - is precisely one whose signatures must
-      // STOP checking out here. Reading it as `retired`, which is what this
-      // did until 2026-08-22, left an older build verifying forgeries.
+      // NOTE: a status token this build cannot read is not `retired` — the
+      // likeliest meaning is a key its owner has disowned, whose signatures
+      // must stop checking out here.
       final parsed = parseApskValue('{"v":1,"keys":['
           '{"kid":"k1","use":"sign","alg":"mldsa65","pub":"AAEC",'
           '"status":"revoked"},'
@@ -156,9 +134,6 @@ void main() {
 
     test('an advertisement of nothing verifiable is refused, not half-read',
         () {
-      // Same rule as an advertisement of algorithms this build does not know:
-      // empty means refuse outright rather than fall back to a key derived
-      // some other way.
       expect(
           () => parseApskValue('{"v":1,"keys":['
               '{"kid":"k1","use":"sign","alg":"mldsa65","pub":"AAEC",'
@@ -171,8 +146,6 @@ void main() {
         ApskSigningKey.forPublicKey(alg: SigningAlgoType.mldsa65, pub: 'AAEC')
       ]));
 
-      // What an old parser does with the value: treat it as base64 RSA key
-      // material. It must throw, never quietly produce a key.
       expect(() => base64Decode(array), throwsA(isA<FormatException>()),
           reason: 'NoPorts and its peers parse _apsk as a bare RSA key today; '
               'the array must fail their parse loudly, never mis-read — which '
@@ -182,15 +155,9 @@ void main() {
   });
 
   group('the writer still emits the bare form', () {
-    // UC-G1.5's writer arm, and it asserts the OPPOSITE of what that row said
-    // until 2026-08-18. The row read "the current build never emits that
-    // shape"; the build emits it deliberately, under the default posture,
-    // because a single active rsa2048 entry is exactly what an un-upgraded
-    // peer can still parse. Only a second key, or a non-rsa2048 key, forces
-    // the array.
-    // Valid base64: `ApskSigningKey.forPublicKey` derives each entry's `kid`
-    // by decoding the key, so a placeholder that is not base64 fails in the
-    // composer rather than in the assertion.
+    // NOTE: valid base64 — `ApskSigningKey.forPublicKey` derives each entry's
+    // `kid` by decoding the key, so a placeholder that is not base64 fails in
+    // the composer rather than in the assertion.
     final pub = base64Encode(utf8.encode('rsa-public-half'));
 
     ApkamSigningKeys rsa(String p) => ApkamSigningKeys(
@@ -208,9 +175,6 @@ void main() {
 
     test('a second key forces the array — so the assertion above discriminates',
         () {
-      // The control. Without it the test above is satisfied by a writer that
-      // can only ever emit the bare form, and the rule it names would be
-      // untested rather than proven.
       final value = apskValueOf(apskEntries(
           signing: [rsa(pub), rsa(base64Encode(utf8.encode('second')))],
           withdrawn: const [],
@@ -231,10 +195,6 @@ void main() {
     });
 
     test('a withdrawn key is advertised with the status it was handed', () {
-      // The composer decides what the record says about every key the
-      // enrollment has ever used, because the advertisement is rewritten whole
-      // on every publish. It used to stamp every withdrawn entry `retired`,
-      // which is only correct for the tokens it can read.
       final entries = apskEntries(signing: [
         ApkamSigningKeys(
             algorithm: SigningAlgoType.mldsa65,
@@ -257,12 +217,10 @@ void main() {
     });
 
     test('but the verify reader will not check a signature against it', () {
-      // The asymmetry, deliberately, and pinned so nobody unifies the two
-      // readers: at_auth's `apskSigningKeys` KEEPS an entry whose status it
-      // cannot read, because the writers above republish what it returns and
-      // deleting the entry would withdraw the key. at_client's verify reader
-      // DROPS it, because trusting a signature made with a key its owner may
-      // have disowned is the one outcome nothing recovers from.
+      // NOTE: the two readers differ deliberately — at_auth's
+      // `apskSigningKeys` keeps an entry whose status it cannot read, because
+      // the writers republish what it returns and dropping the entry would
+      // withdraw the key; at_client's verify reader drops it.
       final value = apskValueOf(apskEntries(signing: [
         ApkamSigningKeys(
             algorithm: SigningAlgoType.mldsa65,
@@ -285,9 +243,6 @@ void main() {
     });
 
     test('what it emits bare reads back as what it wrote', () {
-      // The round trip, which is the property the row is really about: this
-      // writer's output is this reader's input, and a change to either that
-      // did not move the other would show up here.
       final value = apskValueOf(apskEntries(
           signing: const [], withdrawn: const [], authentication: rsa(pub)));
       final parsed = parseApskValue(value);
@@ -317,8 +272,8 @@ void main() {
         ],
         type: EnvelopeType.app);
 
-    /// What a 4.x enrollment's signer produces: the same envelope shape,
-    /// signed ML-DSA-65, naming that algorithm in its protected header.
+    /// An envelope signed ML-DSA-65, naming that algorithm in its protected
+    /// header.
     SignedEnvelope mlDsaEnvelope() => signEnvelope(payload,
         keys: [
           ApkamSigningKeys(
@@ -331,8 +286,7 @@ void main() {
 
     /// [envelope] with its protected header replaced, so a test can make the
     /// envelope claim an algorithm its key does not match. The header is
-    /// inside the signature, so this is a re-stamp rather than an edit — and
-    /// it is the only way to build the mismatch at all.
+    /// inside the signature, so this re-stamps rather than edits.
     SignedEnvelope claimingAlg(SignedEnvelope envelope, String alg) =>
         envelope.claiming({'alg': alg, 'v': 1});
 
@@ -352,9 +306,6 @@ void main() {
     });
 
     test('an array ML-DSA _apsk verifies an ML-DSA envelope', () async {
-      // The whole approval path in one assertion: this is the value the
-      // atServer publishes from what the enrolling client composed, and the
-      // approver verifies the advertised key package against exactly it.
       await verifyEnvelope(mlDsaEnvelope(),
           signerPublicKey: mlDsaApsk(), expecting: EnvelopeType.app);
     });

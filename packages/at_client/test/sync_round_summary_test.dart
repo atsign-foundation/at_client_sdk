@@ -11,6 +11,8 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
 
+/// An AtClient whose atSign and preferences come from concrete overrides, so
+/// no `when(...)` in a test can replace them.
 class MockAtClient extends Mock implements AtClient {
   @override
   String? getCurrentAtSign() => '@alice';
@@ -19,6 +21,8 @@ class MockAtClient extends Mock implements AtClient {
   AtClientPreference getPreferences() => AtClientPreference();
 }
 
+/// A notification service that subscribes every listener to [notifications],
+/// through a concrete override no test can stub.
 class MockNotificationServiceImpl extends Mock
     implements NotificationServiceImpl {
   /// What the atServer sends over the monitor; a test pushes into it.

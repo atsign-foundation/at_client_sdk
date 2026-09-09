@@ -218,8 +218,8 @@ class _SecondScreenState extends State<SecondScreen> {
     } else if (!receiver!.contains('@')) {
       receiver = '@${receiver!}';
     }
-    // As above: absence arrives as a thrown exception rather than a null, so
-    // this preserves the old behaviour exactly.
+    // NOTE: absence arrives as a thrown exception rather than a null, so
+    // reaching the return means the atSign was found.
     await CacheableSecondaryAddressFinder('root.atsign.org', 64)
         .findSecondary(receiver!);
     return true;

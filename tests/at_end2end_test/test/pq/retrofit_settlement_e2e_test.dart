@@ -25,23 +25,9 @@ import 'package:test/test.dart';
 
 /// UC-B1.1's settlement, read off the atServer's own records.
 ///
-/// A retrofit's successor settles what it replaced at its FIRST authentication
-/// on a connection it opened itself: a predecessor that is approved and not
-/// fully privileged is revoked as superseded, the successor is stamped
-/// `predecessorSettledAt`, and nothing else moves — the predecessor's own
-/// expiry above all, since there is no cap any more. `retrofit_e2e_test`
-/// B1.2 carries the other half, a ROOT predecessor keeping its life, which is
-/// what lets a clone of the first enrollment's keyfile still retrofit.
-///
-/// Three legacy enrollments are minted with deliberately different lifetimes
-/// and only one is retrofitted. The other two are the control: without them,
-/// "revoked" and "unchanged" would be equally explained by something that
-/// touches every enrollment on the atSign. Every comparison is between two
-/// values the atServer produced, never against this process's clock.
-///
-/// The settlement is **per predecessor**, which is what makes this safe on an
-/// atSign other tests share — nothing here revokes a credential it did not
-/// mint.
+/// Three legacy enrollments are minted and only one is retrofitted; the other
+/// two are the control, and the settlement is per predecessor, so nothing here
+/// touches a credential it did not mint.
 void main() {
   late String atSign;
   late AtClient owner;
@@ -52,8 +38,8 @@ void main() {
   final runId = DateTime.now().microsecondsSinceEpoch;
   String pathFor(String label) => 'test/testData/cap-$label-$runId.atKeys';
 
-  /// The keyfile as it was before [retrofit] touched it — what an un-upgraded
-  /// copy holds. The live keyfile names the successor once retrofitted.
+  /// The keyfile as an un-upgraded copy still holds it — the live one names the
+  /// successor once retrofitted.
   String preRetrofitPathFor(String label) => '${pathFor(label)}.pre-retrofit';
   AtRootDomain rootDomain() => AtRootDomain(
       ConfigUtil.getYaml()['root_server']['url'],
@@ -96,12 +82,8 @@ void main() {
   /// What the atServer reports for enrollment [id]: its status, its effective
   /// expiry as `expiresAt`, and the settlement stamp when it carries one.
   ///
-  /// ⛔ **Through `enroll:list`, and it cannot go back to reading the record
-  /// key directly.** The record lives at `<id>.new.enrollments.__manage@<atSign>`,
-  /// and a data verb on that key is refused to every enrollment but its owner —
-  /// including the atSign's own legacy client, which authenticates with no id
-  /// and is therefore answered as the enrollment named `primary`. The roster
-  /// carries every status, a revoked record included.
+  /// Read through `enroll:list`: the atServer denies a data verb on the record
+  /// key itself to every enrollment but its owner.
   Future<Map<String, dynamic>> enrollmentMeta(String id) async {
     final response = await owner
         .getRemoteSecondary()!
@@ -124,10 +106,9 @@ void main() {
   DateTime? expiryOf(Map<String, dynamic> meta) =>
       meta['expiresAt'] == null ? null : DateTime.parse(meta['expiresAt']);
 
-  /// Authenticates as the LEGACY enrollment: from the pre-retrofit snapshot
-  /// once one exists, which is exactly what an un-upgraded copy of the keyfile
-  /// does. The keys name the enrollment, so the live keyfile would resolve the
-  /// successor after a retrofit.
+  /// Authenticates as the LEGACY enrollment, from the pre-retrofit snapshot
+  /// once one exists: the keys name the enrollment, so the live keyfile would
+  /// resolve the successor after a retrofit.
   Future<AtAuthResponse> authenticateLegacy(String label) async {
     final snapshot = preRetrofitPathFor(label);
     final path = File(snapshot).existsSync() ? snapshot : pathFor(label);
@@ -138,12 +119,10 @@ void main() {
   }
 
   /// Retrofits [label] and gives the successor one authentication of its own,
-  /// which is what settles the predecessor. The submission alone does not.
+  /// which is what settles the predecessor; the submission alone does not.
   ///
-  /// Returns the SUCCESSOR's enrollment id, because that is the record the
-  /// atServer stamps: `predecessorSettledAt` is written on the successor in
-  /// the same act that revokes the predecessor, so the successor's stamp is
-  /// the witness that the settlement ran over its parent.
+  /// Returns the SUCCESSOR's enrollment id: `predecessorSettledAt` is written
+  /// there, in the same act that revokes the predecessor.
   Future<String> retrofit(String label) async {
     File(pathFor(label)).copySync(preRetrofitPathFor(label));
     final session = (await AtAuth.create().authenticate(AtAuthRequest(atSign,
@@ -152,12 +131,9 @@ void main() {
           ..rootDomain = rootDomain()))
         .session!;
     final manager = await selfRetrofit(
-      // Mode B explicitly: this row is about the PQ retrofit, and the
-      // parameter default is the rollout-window RSA mode.
+      // Explicit because the parameter default is the RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
-      // A store of its own: the owner client holds the atSign's, and a
-      // dedicated manager carries nothing across.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'cap-$label-$runId'),
       appName: 'cap-$label',
@@ -169,9 +145,6 @@ void main() {
         SigningAlgoType.mldsa65,
         reason: 'the retrofit itself must have succeeded, or the settlement '
             'is being attributed to a retrofit that never happened');
-    // The settlement is run by the successor's FIRST authentication on a
-    // connection it opened itself — never by the submission — so the
-    // successor is made to use one.
     expect(
         await manager.atClient
             .getRemoteSecondary()!
@@ -208,8 +181,6 @@ void main() {
     final longBefore = await enrollmentMeta(longId);
     final noneBefore = await enrollmentMeta(noneId);
 
-    // The fixture is checked rather than assumed: three approved parents with
-    // three different lifetimes, so "untouched" below is measurable on each.
     for (final before in [shortBefore, longBefore, noneBefore]) {
       expect(before['status'], 'approved');
       expect(before['predecessorSettledAt'], isNull,
@@ -222,15 +193,11 @@ void main() {
     expect(expiryOf(noneBefore), isNull,
         reason: 'the third parent must have NO expiry, or the arm that says '
             'it gains none is about a value that was already there');
-    // Both authenticate before anything happens: the "before" of the
-    // before/after pair the lockout below turns on.
     expect((await authenticateLegacy('short')).isSuccessful, isTrue);
     expect((await authenticateLegacy('long')).isSuccessful, isTrue);
 
     final shortSuccessor = await retrofit('short');
 
-    // The successor is the witness: stamped, pointing at its predecessor, and
-    // approved in its own right.
     final successorMeta = await enrollmentMeta(shortSuccessor);
     expect(successorMeta['predecessorSettledAt'], isNotNull,
         reason: 'the settlement ran over this parent — otherwise the revoked '
@@ -242,10 +209,7 @@ void main() {
     expect(successorMeta['status'], 'approved',
         reason: 'settling the predecessor must not touch the successor');
 
-    // ARM 1 — the predecessor is revoked, as superseded, and NOTHING else on
-    // it moves: the expiry it was minted with is the expiry it keeps. There is
-    // no cap; a server that still capped would pull a one-hour lifetime in
-    // or push it out, and either shows here.
+    // ARM 1 — the retrofitted predecessor.
     final shortAfter = await enrollmentMeta(shortId);
     expect(shortAfter['status'], 'revoked',
         reason: 'a predecessor that is approved and not fully privileged is '
@@ -258,9 +222,7 @@ void main() {
         reason: 'revocation leaves the predecessor\'s own expiry exactly where '
             'it was — the cap this replaced would have moved it');
 
-    // ARM 2 — the control. The settlement lands on the enrollment its own
-    // successor came from and nowhere else: the un-retrofitted parents keep
-    // their status and their expiry, and the one with none gains none.
+    // ARM 2 — the control: the two enrollments that never retrofitted.
     final longAfter = await enrollmentMeta(longId);
     final noneAfter = await enrollmentMeta(noneId);
     expect(longAfter['status'], 'approved',
@@ -271,10 +233,9 @@ void main() {
         reason: 'a parent with no expiry gains none: nothing caps, nothing '
             'stamps a lifetime onto a credential that had none');
 
-    // ARM 3 — the lockout, immediately: the revoked parent's keyfile no longer
-    // authenticates, while an un-retrofitted sibling minted at the same
-    // moment still does. Named rather than `throwsA(anything)`: a bare
-    // catch-all would pass for a malformed keyfile or an unreachable atServer.
+    // ARM 3 — the lockout. The predicate names AT0027 rather than accepting
+    // any throw, which would pass for a malformed keyfile or an unreachable
+    // atServer.
     await expectLater(
         authenticateLegacy('short'),
         throwsA(predicate(

@@ -1,8 +1,7 @@
-# The image defaults to the PUBLISHED one so CI is right without setting
-# anything. A local run that needs a build the registry does not have yet opts
-# in with VIRTUALENV_IMAGE=at_virtual_env:local — the post-quantum activation
-# test needs an atServer that verifies ML-DSA PKAM, which the published image
-# has lagged throughout this branch. Same pattern as the e2e pack's compose.
+# The image defaults to the published one, so CI needs no setting. A local run
+# that needs a build the registry does not carry opts in with
+# VIRTUALENV_IMAGE=at_virtual_env:local — the post-quantum activation test needs
+# an atServer that verifies ML-DSA PKAM.
 # A distinct project and container name, plus base-port templating, let this run
 # alongside the functional and e2e virtualenvs. Unset, the legacy ports stand.
 name: at_onboarding_cli_functional_tests

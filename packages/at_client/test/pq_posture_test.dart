@@ -3,15 +3,13 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
-/// The rollout posture: every rollout axis as one value, three constants that
-/// name the stages the release programme moves through, and the contract that
-/// an explicitly set axis always beats the group it came from.
+/// The rollout posture: every rollout axis as one value, the constants naming
+/// the stages of the ladder, and the contract that an explicitly set axis beats
+/// the group it came from.
 ///
-/// The three postures' values are pinned here as literals because they ARE the
-/// release contract — apps plan deployments around what a stage means — and a
-/// pin that read the values back through the type would follow an accidental
-/// edit silently. An intended change edits the pin in the same commit, and
-/// that edit is the review.
+/// The postures' values are pinned as raw literals because they ARE the release
+/// contract; a pin that read them back through the type would follow an
+/// accidental edit silently.
 void main() {
   group('the posture values are the release contract', () {
     test('legacy drives no upgrade', () {
@@ -36,19 +34,6 @@ void main() {
 
     test('legacy is the only stage that configures no post-quantum providers',
         () {
-      // The contract the ladder states: exactly one stage stands in for a
-      // build that predates the providers, and it is the earliest.
-      //
-      // ⚠️ This row replaced one asserting that no stage reads post-quantum
-      // data without also moving the key exchange, whose stated reason — that
-      // a legacy key-exchange enrollment advertises no key package and so
-      // could be conveyed nothing — is FALSE, though not for the reason first
-      // given. A key package is advertised in every mode, because that rides
-      // `enroll:request` rather than a client start, so the RECORD is the same
-      // whatever the key-exchange mode. What a legacy client does not do is
-      // collect anything sealed to it: a posture configuring no post-quantum
-      // providers runs none of the startup. The assertion happened to hold; its reason did
-      // not, and a pin defended by a false reason is worse than no pin.
       final withoutProviders = [
         PqPosture.legacy,
         PqPosture.pqReady,
@@ -85,22 +70,10 @@ void main() {
     });
 
     test('pqActive is post-quantum by default', () {
-      // The eight axes pinned here, as raw literals, like the two above: this
-      // is the stage an app adopts when it wants tomorrow's defaults today,
-      // and reading a value back through the type would follow an accidental
-      // edit silently.
-      //
-      // ⚠️ **NOT "every axis", which this said until 2026-08-26, and NOT
-      // "seven", which it said until 2026-08-29** — `configuresPqProviders`
-      // was added without sweeping either count. `PqPosture` carries ten
-      // fields; derive it with
-      // `grep -c '^  final ' lib/src/preference/pq_posture.dart` rather than
-      // reading it here. The two that hold the same value at every
-      // released stage — `sealsToKeyAlgorithms` and
+      // NOTE: not every axis is pinned here. The two holding the same value at
+      // every released stage — `sealsToKeyAlgorithms` and
       // `keyEstablishmentAlgorithms` — are pinned once each in the 'seal-to
-      // list' group below, across every stage, rather than once per stage
-      // here. `keyEstablishmentAlgorithms` had NO pin at all until a mutation
-      // showed the whole suite staying green while it changed.
+      // list' group below, across every stage, rather than once per stage here.
       const p = PqPosture.pqActive;
       expect(p.authenticationKeyAlgorithm, SigningAlgoType.mldsa65);
       expect(p.dataSigningKeyAlgorithms, {SigningAlgoType.mldsa65},
@@ -116,9 +89,8 @@ void main() {
     });
 
     test('and it changes exactly two things against pqReady', () {
-      // The claim ruling 113 makes about the last step of the ladder. Read
-      // back against pqReady rather than re-listed, because "exactly two" is
-      // a statement about the pair, not about either posture alone.
+      // "Exactly two" is a statement about the pair, so the axes are read back
+      // against pqReady rather than re-listed.
       const p = PqPosture.pqActive;
       const before = PqPosture.pqReady;
 
@@ -131,9 +103,10 @@ void main() {
       expect(p.keyExchangeMode, before.keyExchangeMode);
       expect(p.configuresPqProviders, before.configuresPqProviders);
       expect(p.mintLegacyMaterial, before.mintLegacyMaterial);
-      // Refusing legacy writes is what "the PQ path is the default" means from
-      // the other side, so it moves WITH writesPqByDefault rather than being a
-      // third thing - and the class rejects the combination where it does not.
+      // NOTE: refusing legacy writes is what "the PQ path is the default"
+      // means from the other side, so it moves WITH writesPqByDefault rather
+      // than counting as a third change - and the class rejects the
+      // combination where it does not.
       expect(
           p.disallowLegacyEncryption, isNot(before.disallowLegacyEncryption));
     });
@@ -141,7 +114,7 @@ void main() {
     test('legacy material is minted at every released stage', () {
       // Pinned as a group because the reason is a property of the set, not of
       // any one member: the ecosystem floor decides when an atSign can stop
-      // holding legacy keys, and no client-side stage can know that.
+      // holding legacy keys, and no client-side stage knows that.
       for (final p in [
         PqPosture.legacy,
         PqPosture.pqReady,
@@ -199,7 +172,7 @@ void main() {
     test('the coupling is one-way — writing PQ without refusing legacy is fine',
         () {
       // The inverse is a real deployment: write post-quantum where you can and
-      // fall back where you must, which is what the era default does today.
+      // fall back where you must.
       expect(
           PqPosture(
             authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
@@ -220,14 +193,10 @@ void main() {
   group('the preference applies the posture at construction', () {
     test('a bare preference runs the legacy posture', () {
       // The shipped default, pinned as a raw expectation rather than derived
-      // from the constant, so moving the default is an edit here and that edit
-      // is the review. The ladder is 3.x legacy, 4.x pqReady, 5.x pqActive.
-      //
-      // ⚠️ This read `pqReady` between 2026-08-26 and 2026-09-08. The default
-      // moved back a stage so that what an app gets when it names nothing is
-      // the CONTROL arm: no post-quantum machinery in the picture, so anything
-      // the project breaks can be reproduced without it. A developer who wants
-      // a later stage names one.
+      // from the constant, so moving the default is an edit here. What an app
+      // gets when it names nothing is the CONTROL arm: no post-quantum
+      // machinery in the picture, so anything it breaks can be reproduced
+      // without it. A developer who wants a later stage names one.
       final preference = AtClientPreference();
       expect(preference.posture, same(PqPosture.legacy),
           reason: 'the default stage is the default — an app that names '
@@ -250,11 +219,11 @@ void main() {
     });
 
     test('disallowLegacyEncryption has no per-preference override', () {
-      // The deliberate asymmetry of ruling 113: the algorithm lists keep an
-      // escape hatch and this does not, because a safety flag whose override
-      // defeats its purpose is not the same kind of thing as deployment
-      // policy. There is no constructor argument to test, so what is asserted
-      // is that the posture is the only thing that moves it.
+      // A deliberate asymmetry: the algorithm lists keep an escape hatch and
+      // this does not, because a safety flag whose override defeats its purpose
+      // is not the same kind of thing as deployment policy. There is no
+      // constructor argument to test, so what is asserted is that the posture
+      // is the only thing that moves it.
       expect(AtClientPreference().disallowLegacyEncryption, false);
       expect(
           AtClientPreference(posture: PqPosture.pqReady)
@@ -265,12 +234,10 @@ void main() {
               .disallowLegacyEncryption,
           true);
       // Naming the other axes explicitly does not move it either, which is
-      // what makes this posture-only rather than merely posture-defaulted.
-      //
-      // A legal mixture, because the coherence rules bind the axes: the
-      // authentication algorithm is the posture's own, and a signing set
-      // WEAKER than the posture is deliberately still allowed — pqActive with
-      // {rsa2048} mints rsa2048 and keeps `_apsk` bare, which is coherent.
+      // what makes this posture-only rather than merely posture-defaulted. The
+      // mixture is legal: a signing set WEAKER than the posture is deliberately
+      // still allowed — pqActive with {rsa2048} mints rsa2048 and keeps `_apsk`
+      // bare, which is coherent.
       expect(
           AtClientPreference(
                   posture: PqPosture.pqActive,
@@ -305,11 +272,9 @@ void main() {
           ..commitLogPath = 'test/hive/path';
 
     test('refuses a crypto config that registers them', () {
-      // The guard was written and left unexercised: every existing `.crypto =`
-      // site in the repo either sits on a configuring posture or registers a
-      // non-post-quantum id, so the whole refusal could be deleted with the
-      // unit suite and all three live packs staying green. This is the row
-      // that fails if it is.
+      // NOTE: the only row that fails if the refusal is deleted — every other
+      // `.crypto =` site either sits on a configuring posture or registers a
+      // non-post-quantum id.
       expect(
           () => at(PqPosture.legacy).crypto =
               CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()),
@@ -350,10 +315,10 @@ void main() {
     });
 
     test('the declined set covers every provider the SDK builds', () {
-      // The set states an enumeration duty in its dartdoc and nothing enforced
-      // it: a fourth post-quantum scheme added without touching the set would
-      // pass the refusal silently, handing a pre-capability client exactly the
-      // provider it is meant not to have. This is that duty, checked.
+      // The enumeration duty the set states in its dartdoc, checked: a fourth
+      // post-quantum scheme added without touching the set would pass the
+      // refusal silently, handing a pre-capability client exactly the provider
+      // it is meant not to have.
       final built = CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing())
           .providers
           .map((p) => p.id)
@@ -368,9 +333,9 @@ void main() {
     });
 
     test("an app's own provider is not declined", () {
-      // The extension seam survives: only the ids this SDK ships for the
-      // post-quantum path are refused, so an app registering a provider of its
-      // own on the earliest stage is unaffected.
+      // The extension seam: only the ids this SDK ships for the post-quantum
+      // path are refused, so an app registering a provider of its own on the
+      // earliest stage is unaffected.
       expect(
           () => at(PqPosture.legacy).crypto =
               const CryptoConfig(defaultProviderId: legacyCryptoProviderId),
@@ -384,14 +349,12 @@ void main() {
           AtClientPreference(posture: PqPosture.pqReady)
               .authenticationKeyAlgorithm,
           SigningAlgoType.mldsa65);
-      // Named against `pqReady`, not against a bare preference. The default is
+      // Named against `pqReady`, not against a bare preference: the default is
       // `legacy`, whose data signing set is EMPTY, and the coherence rule
-      // refuses an empty set beside a post-quantum authentication key: with no
+      // refuses an empty set beside a post-quantum authentication key. With no
       // signing key of its own the enrollment signs with its authentication
       // key, and `_apsk` must be able to state that key in the bare form every
-      // deployed reader parses, which only rsa2048 can. So this arm names the
-      // posture whose set has a member — the axis override is what it is about,
-      // not what the default happens to be.
+      // deployed reader parses, which only rsa2048 can.
       expect(
           AtClientPreference(
                   posture: PqPosture.pqReady,
@@ -403,12 +366,9 @@ void main() {
     });
 
     test('but an explicit value may not be WEAKER than the posture', () {
-      // ⛔ This read the other way until 2026-08-30, pinning `pqReady` beside an
-      // explicit rsa2048 as supported, for 'a deployment whose atServer cannot
-      // verify ML-DSA PKAM yet'. No such deployment has a holder: nothing
-      // released carries post-quantum key material. A posture is a floor, and
-      // an app that must not move names PqPosture.legacy instead of keeping a
-      // stronger posture and weakening an axis it is made of.
+      // A posture is a floor: an app that must not move names
+      // PqPosture.legacy, rather than keeping a stronger posture and weakening
+      // an axis it is made of.
       expect(
           () => AtClientPreference(
               posture: PqPosture.pqReady,
@@ -417,8 +377,8 @@ void main() {
     });
 
     test('it is a separate axis from the data signing keys', () {
-      // The two moved together while they were one enum, and pqReady is the
-      // stage that exists precisely because they must not.
+      // pqReady is the stage that exists precisely because the two must be
+      // able to move apart.
       const p = PqPosture.pqReady;
       expect(p.authenticationKeyAlgorithm, SigningAlgoType.mldsa65);
       expect(
@@ -486,8 +446,7 @@ void main() {
           throwsArgumentError);
       // The two this build does sign under, named as literals: a set derived
       // from what canSignEnvelopeWith answers would follow the signer's
-      // capability silently, and what an app may ask for is a claim about
-      // this release.
+      // capability silently.
       for (final signable in [
         SigningAlgoType.mldsa65,
         SigningAlgoType.rsa2048
@@ -500,8 +459,7 @@ void main() {
     });
 
     test('the set a caller keeps cannot be added to afterwards', () {
-      // Final at construction is worth nothing if the contents are not: the
-      // check runs once, and a set the caller still holds a reference to
+      // The check runs once, so a set the caller still holds a reference to
       // would otherwise be a way past it.
       final requested = <SigningAlgoType>{SigningAlgoType.rsa2048};
       final preference =
@@ -519,8 +477,7 @@ void main() {
     test('every released stage names the same list, as a raw literal', () {
       // Raw ids rather than SecretSharingAlgos.keyAlgos: reading the value
       // back through the constant it is defaulted from would follow an edit to
-      // that constant silently, and what a released stage seals to is a claim
-      // about this release. Order is meaning - it decides which of a
+      // that constant silently. Order is meaning - it decides which of a
       // recipient's advertised keys is picked.
       for (final p in [
         PqPosture.legacy,
@@ -531,24 +488,13 @@ void main() {
       }
     });
 
-    /// The OTHER key-establishment axis, and until 2026-08-26 no test pinned
-    /// it for any posture.
-    ///
-    /// ⚠️ **Proven by mutation, not suspected:** changing
-    /// `PqPosture.pqActive.keyEstablishmentAlgorithms` from `[x-wing]` to
-    /// `[ml-kem-1024]` left the whole at_client suite — 1573 tests — green.
-    /// Found by the citation audit while checking UC-C1.6's "all seven axes".
-    ///
-    /// It is not interchangeable with [sealsToKeyAlgorithms] above and the
-    /// two are easy to conflate: that one is what this client will seal *to*,
-    /// a sender-side preference among what a recipient offers. This one is
-    /// what this atSign **advertises for others to seal to it**, so it decides
-    /// the algorithm of the encapsulation key minted at the next mint — and an
-    /// accidental edit changes what every peer encrypts to this atSign with.
-    ///
-    /// Raw ids for the same reason the list above uses them: reading the value
-    /// back through `SecretSharingAlgos.xWing` would follow an edit to that
-    /// constant silently.
+    // NOTE: the other key-establishment axis, easily conflated with
+    // sealsToKeyAlgorithms above. That one is what this client will seal *to*,
+    // a sender-side preference among what a recipient offers; this one is what
+    // this atSign advertises for others to seal to it, so it decides the
+    // algorithm of the encapsulation key minted at the next mint — an
+    // accidental edit changes what every peer encrypts to this atSign with.
+    // Raw ids for the same reason the list above uses them.
     test('every released stage advertises the same key-establishment list', () {
       for (final p in [
         PqPosture.legacy,
@@ -564,10 +510,8 @@ void main() {
     });
 
     test('the stages agree because it is a deployment choice, not a stage', () {
-      // Ruling 50.3, restated as an assertion: which KEM an atSign will use is
-      // where it is deployed, not how far through the rollout it is. If a
-      // future stage ever differs here, that ruling moved and this row is the
-      // place it has to be argued.
+      // Which KEM an atSign will use is a property of where it is deployed,
+      // not of how far through the rollout it is.
       expect(PqPosture.pqActive.sealsToKeyAlgorithms,
           PqPosture.legacy.sealsToKeyAlgorithms);
     });
@@ -586,9 +530,8 @@ void main() {
     });
 
     test('reordering it is a different client, not an equal one', () {
-      // Unlike the signing set, where membership is the whole meaning. Here
-      // the order decides which of two advertised keys a sender picks, so two
-      // lists holding the same ids in a different order behave differently.
+      // Unlike the signing set, where membership is the whole meaning: here
+      // the order decides which of two advertised keys a sender picks.
       final strongestFirst = AtClientPreference();
       final reversed = AtClientPreference(
           sealsToKeyAlgorithms:
@@ -622,6 +565,5 @@ void main() {
     });
   });
 
-  // The envelope shape was an axis here until it stopped being a choice:
-  // there is one shape, so a posture has nothing to say about it.
+  // There is one envelope shape, so a posture has nothing to say about it.
 }

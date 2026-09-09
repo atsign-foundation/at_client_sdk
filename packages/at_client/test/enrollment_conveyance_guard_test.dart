@@ -40,13 +40,6 @@ final rootSlot1 =
 
 /// Conveying an enrollment's symmetric key seals it from the *approver's* own
 /// key package, so an approver that never registered one cannot do it.
-///
-/// This became reachable only with the reversal: an approver with no secrets
-/// to convey never got as far as sealing anything, and now every pq approval
-/// does. Left alone it surfaced as a bare `Bad state: register() has not been
-/// called` from inside the substrate, thrown *after* the enrollment had
-/// already been approved — so the device was live and would never receive its
-/// key, and the message said nothing about either fact.
 void main() {
   const atSign = '@alice';
   const enrolleeId = 'enrollee-1';
@@ -67,8 +60,8 @@ void main() {
   /// approver to mint and convey.
   void stubPendingEnrollment(AtClient approver, Object keyPackage) {
     final key = '$enrolleeId.new.enrollments.__manage$atSign';
-    // Resolve the secondary first: nesting the call inside `when` would
-    // register the stub against getRemoteSecondary itself.
+    // NOTE: resolve the secondary first — nesting the call inside `when`
+    // would register the stub against getRemoteSecondary itself.
     final secondary = approver.getRemoteSecondary()!;
     stubApproveListReads(
         secondary,
@@ -99,11 +92,11 @@ void main() {
               atSign: atSign));
 
   /// A client whose posture configures no post-quantum providers has neither
-  /// the providers to mint, seal and convey nor a reason to: it stands in for a
-  /// build that predates the substrate. Approving anyway would flip the record
-  /// to approved and then fail, leaving a device authorised and holding none of
-  /// the material it was authorised for — and the request is spent, so no later
-  /// approval repairs it.
+  /// the providers to mint, seal and convey nor a reason to.
+  ///
+  /// Approving anyway would flip the record to approved and then fail, leaving
+  /// a device authorised and holding none of the material it was authorised
+  /// for, with the request spent.
   group('a client configuring no post-quantum providers', () {
     test('refuses a request that asks it to mint, and leaves it pending',
         () async {
@@ -123,11 +116,6 @@ void main() {
 
     test('but still approves a request that carries its own wrapped key',
         () async {
-      // ⛔ The control, and the reason the refusal is keyed on the ABSENCE of a
-      // wrapped symmetric key rather than on the advertised key package: a
-      // package rides every mode. Approving legacy requests is the whole of
-      // what such a client is for, so a refusal that caught this too would
-      // take away its job rather than the job it cannot do.
       final approver = buildMockClient('approver-2', posture: PqPosture.legacy);
       final secondary = approver.getRemoteSecondary()!;
       stubApproveListReads(
@@ -158,9 +146,6 @@ void main() {
     });
 
     test('and a PQ-capable posture is refused neither', () async {
-      // The control for all three: the same calls on a client whose posture
-      // does configure the providers. Without it, a build that refused every
-      // approval and every sweep would satisfy the rows above.
       final approver = buildMockClient('approver-3');
       await AtClientSecretSharing.forClient(approver).register();
       stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson());
@@ -193,8 +178,6 @@ void main() {
 
     await approveWith(approver);
 
-    // The envelope is the observable: a key addressed to the enrollee's
-    // package, carrying the reserved secret name.
     final envelopes = remoteData.keys.where((k) => k.contains('.__ssenv.'));
     expect(envelopes, isNotEmpty,
         reason: 'this is the whole point of the reversal — without an '
@@ -206,10 +189,6 @@ void main() {
     final sharing = AtClientSecretSharing.forClient(approver);
     await sharing.register();
 
-    // Model what an enrollment holds after being conveyed its own key
-    // material: it lands in the very store shareAllSecretsWith iterates,
-    // because putIfNewer accepts reserved names so that system secrets can
-    // flow between a client's enrollments at all.
     await sharing.secretStore.putSecret(
         Secret(
             namespace: 'buzz',
@@ -224,9 +203,8 @@ void main() {
     final shared = await sharing.shareAllSecretsWith(await recipient.register(),
         approvedNamespaces: {'buzz': 'rw'});
 
-    // The count is the observable, not the envelope bodies: those are sealed,
-    // so grepping them for the secret's plaintext would pass whether or not it
-    // was forwarded.
+    // NOTE: the envelopes are sealed, so their bodies cannot show whether the
+    // secret was forwarded — the count is the observable.
     expect(shared, 1,
         reason: 'the app secret goes and the per-enrollment one does not — '
             'material addressed to a single enrollment must not reach the '
@@ -261,9 +239,9 @@ void main() {
       remoteData.clear();
       final approver = await rootHoldingApprover();
       final key = '$enrolleeId.new.enrollments.__manage$atSign';
-      // Built once: `enroll:list` is read twice per approval, and registering
-      // a fresh enrollee on each call would publish a different `_apsk` and
-      // sign the package with a different key each time.
+      // NOTE: built once — `enroll:list` is read twice per approval, and a
+      // fresh enrollee each time would publish a different `_apsk` and sign
+      // the package with a different key.
       final keyPackage = await advertisedKeyPackage();
       final secondary = approver.getRemoteSecondary()!;
       stubApproveListReads(
@@ -320,10 +298,9 @@ void main() {
       () async {
     final approver = buildMockClient('approver-1');
     await AtClientSecretSharing.forClient(approver).register();
-    // Inside the signatures entry: a top-level `signature` member is not
-    // where the verifier looks, so overwriting one would leave the real
-    // signature intact and the "tampered" package would verify. The type is
-    // what makes that spelling impossible now.
+    // NOTE: the verifier reads the signature inside the signatures entry, so
+    // overwriting a top-level `signature` member would leave the real one
+    // intact and the "tampered" package would still verify.
     final tampered = (await advertisedKeyPackage())
         .withEntryMember('signature', b64u('not the signature'));
     stubPendingEnrollment(approver, tampered.toJson());
@@ -343,8 +320,6 @@ void main() {
 
   test('the guard does not fire when there is nothing to convey', () async {
     final approver = buildMockClient('approver-1');
-    // Same enrollment, except it wrapped its own key: the legacy path, where
-    // this approver mints nothing and so needs no package of its own.
     final key = '$enrolleeId.new.enrollments.__manage$atSign';
     final secondary = approver.getRemoteSecondary()!;
     stubApproveListReads(
