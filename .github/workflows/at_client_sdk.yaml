@@ -426,8 +426,7 @@ jobs:
   # out of AtLookupImpl.pkamAuthenticate — the atServer choking on an ML-DSA
   # public key. That signature means the image, not the client.
   #
-  # The sequence below mirrors tests/at_end2end_test/runLocal.sh, including the
-  # per-atSign grace-hours step and its ordering constraint.
+  # The sequence below mirrors tests/at_end2end_test/runLocal.sh.
   pqe2e_tests:
     runs-on: ubuntu-latest
     env:
@@ -495,33 +494,6 @@ jobs:
             echo "atDirectory did not reach RUNNING within 60s"
             exit 1
           fi
-
-      # One atSign gets a zero-hour self-enrollment grace so the retirement row
-      # can watch a capped legacy enrollment actually age out instead of waiting
-      # 30 days. Per-secondary rather than the container-wide
-      # apkamSelfEnrollmentGraceHours env var, which every secondary would
-      # inherit: at grace 0 a retrofit kills its parent within a millisecond,
-      # and the clone rows need a parent that survives its sibling's retrofit.
-      # Each secondary's `config` is a symlink to one shared directory, so
-      # replacing the symlink with a private copy is what makes the setting
-      # local to this atSign. The env var must stay unset for the yaml to be
-      # read at all (env beats yaml in AtSecondaryConfig).
-      #
-      # BEFORE pkamLoad, deliberately. Restarting a secondary mid-load severs
-      # whatever key install was in flight against it and nothing retries — the
-      # atSign would come up with no public key and every test on it would fail
-      # at authentication, a long way from this step.
-      - name: Set apkamSelfEnrollmentGraceHours=0 for @eve🛠
-        run: |
-          docker exec e2e_virtualenv sh -c "
-            set -e
-            d='/atsign/secondary/eve🛠'
-            rm -f \"\$d/config\"
-            mkdir -p \"\$d/config\"
-            cp /atsign/secondary/base/config/config.yaml \"\$d/config/config.yaml\"
-            printf '\nenrollment:\n  apkamSelfEnrollmentGraceHours: 0\n' >> \"\$d/config/config.yaml\"
-          "
-          docker exec e2e_virtualenv supervisorctl restart '25010_@eve🛠'
 
       - name: Run PKAM
         run: |
@@ -649,33 +621,6 @@ jobs:
             echo "atDirectory did not reach RUNNING within 60s"
             exit 1
           fi
-
-      # One atSign gets a zero-hour self-enrollment grace so the retirement row
-      # can watch a capped legacy enrollment actually age out instead of waiting
-      # 30 days. Per-secondary rather than the container-wide
-      # apkamSelfEnrollmentGraceHours env var, which every secondary would
-      # inherit: at grace 0 a retrofit kills its parent within a millisecond,
-      # and the clone rows need a parent that survives its sibling's retrofit.
-      # Each secondary's `config` is a symlink to one shared directory, so
-      # replacing the symlink with a private copy is what makes the setting
-      # local to this atSign. The env var must stay unset for the yaml to be
-      # read at all (env beats yaml in AtSecondaryConfig).
-      #
-      # BEFORE pkamLoad, deliberately. Restarting a secondary mid-load severs
-      # whatever key install was in flight against it and nothing retries — the
-      # atSign would come up with no public key and every test on it would fail
-      # at authentication, a long way from this step.
-      - name: Set apkamSelfEnrollmentGraceHours=0 for @eve🛠
-        run: |
-          docker exec e2e_virtualenv sh -c "
-            set -e
-            d='/atsign/secondary/eve🛠'
-            rm -f \"\$d/config\"
-            mkdir -p \"\$d/config\"
-            cp /atsign/secondary/base/config/config.yaml \"\$d/config/config.yaml\"
-            printf '\nenrollment:\n  apkamSelfEnrollmentGraceHours: 0\n' >> \"\$d/config/config.yaml\"
-          "
-          docker exec e2e_virtualenv supervisorctl restart '25010_@eve🛠'
 
       - name: Run PKAM
         run: |
