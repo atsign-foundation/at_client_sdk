@@ -278,6 +278,30 @@ void main() {
       //    mint went plural on 2026-08-28, and this body now carries several
       //    clause pins.
       provenIn(
+        'tests/at_functional_test/test/nskey_rotation_live_test.dart',
+        'UC-G2.5 · a revocation whose rotation did not happen is rotated at '
+            'the next start',
+        proves:
+            'the deciding clause, against a real atServer: a live revocation '
+            'with no rotation behind it, and a client that reads the namespace '
+            'moment and the record stamp — both stamped by that atServer — and '
+            'replaces the generation without asking any other client. Its '
+            'second half is what makes the trigger arm once rather than '
+            'forever: the rotation takes a fresh stamp, so the same revocation '
+            'no longer reads as later than it',
+        clauses: ['without coordinating with another'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_seeding_test.dart',
+        'a revocation later than the generation replaces it, unasked',
+        proves:
+            'the same decision at the unit level, with the arm the live test '
+            'cannot show: the rotation policy is never consulted, and that '
+            'fixture\'s policy answers NO — so a build that asked it would '
+            'rotate nothing while every live assertion still passed',
+        clauses: ['without coordinating with another'],
+      );
+      provenIn(
         'packages/at_client/test/nskey_minting_test.dart',
         'the published advertisement emits its exact wire shape — raw literals',
         proves:

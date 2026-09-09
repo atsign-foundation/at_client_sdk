@@ -163,6 +163,41 @@ void main() {
       expect(requests[2].namespace, jsonDecode(enrollValue3)['namespace']);
     });
 
+    test('fetchEnrollmentRequests carries the enrollment\'s status', () async {
+      // The atServer serves it on every roster row and the model was dropping
+      // it, so a caller reading a roster could not tell an approved enrollment
+      // from a revoked one without asking again.
+      const currentAtsign = '@apkamstatus';
+      const enrollKey =
+          'abcdef02-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$currentAtsign';
+      const enrollValue = '{"appName":"buzz","deviceName":"pixel",'
+          '"namespace":{"buzz":"rw"},"status":"revoked"}';
+      final listCommand = (EnrollVerbBuilder()
+            ..operation = EnrollOperationEnum.list)
+          .buildCommand();
+      final secondary = MockRemoteSecondary();
+      when(() => secondary.executeCommand(listCommand, auth: true))
+          .thenAnswer((_) async => 'data:{"$enrollKey":$enrollValue}');
+
+      final client = await AtClientImpl.create(
+          currentAtsign,
+          'buzz',
+          AtClientPreference()
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/commit',
+          remoteSecondary: secondary);
+      client.enrollmentService =
+          EnrollmentServiceImpl(client, AtEnrollment.create());
+
+      final request =
+          (await client.enrollmentService!.fetchEnrollmentRequests()).single;
+
+      expect(request.status, 'revoked');
+      expect(request.appName, 'buzz',
+          reason: 'the control: the rest of the record parsed, so the status '
+              'above is the field arriving rather than the whole response');
+    });
+
     test('fetchEnrollmentRequests carries the advertised key package',
         () async {
       // The metadata the enrolling app put on its enroll:request, stored

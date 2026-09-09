@@ -17,6 +17,7 @@ import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show ckConveyanceKey;
 import 'package:at_client/src/crypto/nskey/nskey_rotation.dart';
+import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -707,5 +708,57 @@ void main() {
     expect(await owner.filing.read(ns, before.nskeyKid), isNotNull,
         reason: 'while the owner still opens everything sealed to the '
             'superseded generation');
+  });
+
+  test(
+      'UC-G2.5 · a revocation whose rotation did not happen is rotated at the '
+      'next start', () async {
+    // The backstop for the composed lever above. `revokeEnrollmentAndRotate`
+    // revokes and then rotates, so this exists for the case where the second
+    // half does not happen — a lost mint lock, a process that died, one
+    // namespace of several. Nothing else ever notices: the revoked enrollment
+    // is off every roster and still holds the live generation's private, so it
+    // goes on opening everything sealed under it.
+    //
+    // Its own namespace, for the reason the composed test gives: a warm one
+    // would be ADOPTED rather than minted here, and this asserts about the
+    // generation this owner published.
+    final ns = 'bck$runId.$namespace';
+    final owner = await holder('bck-owner', namespaces: operatorGrants);
+    final target = await holder('bck-target', namespaces: {ns: 'rw'});
+
+    final before = await owner.ring.mintAndPublish(ns);
+    await pastTheCooldown();
+
+    // Revoked and NOT rotated — the half-finished state, produced by driving
+    // the revoke alone rather than through the lever that composes the two.
+    await owner.enrolled.client.enrollmentService!.revoke(
+        EnrollmentRequestDecision.revoked(
+            target.enrolled.enrollmentId, atSign));
+
+    final seeding = NskeySeeding(
+      atClient: owner.enrolled.client,
+      ring: owner.ring,
+      sharing: owner.sharing,
+      privateFiling: owner.filing,
+    );
+
+    expect(await seeding.rotateIfRevoked(atSign, ns), isTrue,
+        reason: 'the atServer reports a revocation touching this namespace '
+            'later than the moment it stamped the advertisement, and that is '
+            'the whole of what a client needs to decide alone');
+    final after = await owner.ring.publishedAdvertisement(atSign, ns);
+    expect(after?.nskeyKid, isNot(before.nskeyKid),
+        reason: 'a fresh generation is published, which is what denies the '
+            'revoked enrollment the keys protecting anything written now');
+
+    // The control, and the half only a real atServer can show: the rotation
+    // took a fresh server stamp, so the same revocation is no longer later
+    // than it. Without that discipline this would rotate again at every start
+    // for the life of the atSign.
+    await pastTheCooldown();
+    expect(await seeding.rotateIfRevoked(atSign, ns), isFalse);
+    expect((await owner.ring.publishedAdvertisement(atSign, ns))?.nskeyKid,
+        after?.nskeyKid);
   });
 }

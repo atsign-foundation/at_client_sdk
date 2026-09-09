@@ -9,15 +9,23 @@ class Enrollment {
   Map<String, dynamic>? namespace;
   String? encryptedAPKAMSymmetricKey;
 
+  /// The approval state the atServer holds for this enrollment.
+  ///
+  /// Served by `enroll:list` and by `enroll:fetch`. A roster read through
+  /// `enroll:listns` holds approved enrollments only, so a member read from
+  /// there tells a caller nothing this field adds.
+  String? status;
+
   /// The opaque metadata this enrollment carried on its `enroll:request`,
   /// stored verbatim by the atServer.
   ///
-  /// ⚠️ **Null on an `enroll:fetch` result.** That verb returns exactly
-  /// `appName`, `deviceName`, `namespace`, `encryptedAPKAMSymmetricKey` and
-  /// `status`; it does not carry the metadata, so reading a key package off a
-  /// fetch gets null. It comes back from `enroll:list`, which returns the
-  /// record whole, and from `enroll:listns`, which returns it for every
-  /// approved enrollment in a namespace.
+  /// ⚠️ **Null on an `enroll:fetch` result from an atServer older than
+  /// at_secondary_server 3.16.5**, which added `metadata` to that verb's
+  /// projection; before it a fetch answered with `appName`, `deviceName`,
+  /// `namespace`, `encryptedAPKAMSymmetricKey` and `status` alone, so reading a
+  /// key package off one got null. It comes back from `enroll:list`, which
+  /// returns the record whole, and from `enroll:listns`, which returns it for
+  /// every approved enrollment in a namespace.
   ///
   /// `metadata.keyPackage` is the enrolling app's APKAM-signed X-Wing key
   /// package — the target an approver seals this atSign's secrets to. It is
@@ -32,6 +40,7 @@ class Enrollment {
       ..deviceName = json['deviceName']
       ..namespace = json['namespace']
       ..encryptedAPKAMSymmetricKey = json['encryptedAPKAMSymmetricKey']
+      ..status = json['status']
       ..metadata = json['metadata'] is Map<String, dynamic>
           ? json['metadata'] as Map<String, dynamic>
           : null;
@@ -44,6 +53,7 @@ class Enrollment {
     map['deviceName'] = deviceName;
     map['namespace'] = namespace;
     map['encryptedAPKAMSymmetricKey'] = encryptedAPKAMSymmetricKey;
+    map['status'] = status;
     if (metadata != null) map['metadata'] = metadata;
 
     return map;

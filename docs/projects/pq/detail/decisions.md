@@ -13686,14 +13686,18 @@ anyone asserting a *locally computed* time on either path restores the trap.
 does not notice a revocation until it restarts. The revoker rotates immediately
 and this is the backstop for when it could not.
 
-**What each side owes.** at_server: the revocation event log of point 1 and the
-per-namespace moment derived from it and served by `enroll:infons` — **both
-built**, on a branch that is not on the remote. Verify rather than taking it
-from here: the netting in `EnrollmentManager.lastRevocationForNamespace`, and
-the wire behaviour in `enroll:infons`'s arm of
-`tests/at_functional_test/test/apkam_self_enrollment_test.dart`. at_client:
-`status` on the `Enrollment` model, the `:uAt` discipline of point 6, and the
-check in `seed()`. None of the at_client half is built.
+**What each side owes: nothing, since 2026-09-09.** at_server: the revocation
+event log of point 1 and the per-namespace moment derived from it and served by
+`enroll:infons` — **both built**, and on `origin/trunk` since `105aff94`
+(2026-08-31). Verify rather than taking it from here: the netting in
+`EnrollmentManager.lastRevocationForNamespace`, and the wire behaviour in
+`enroll:infons`'s arm of `apkam_self_enrollment_test.dart`. at_client: `status`
+on the `Enrollment` model, the `:uAt` discipline of point 6, and the check in
+`seed()` — **all three built 2026-09-09**, as `Enrollment.status`,
+`PublishedNskeyKeyRing.publishedRecord` feeding `add`'s asserted stamp, and
+`NskeySeeding.rotateIfRevoked`.
+⚠️ **This said the atServer's half was on a branch that is not on the remote,
+and that none of the at_client half was built, until 2026-09-09.**
 ⚠️ **This paragraph said at_server owed "the derived per-namespace scalar on
 `enroll:listns`, which is not built", until 2026-08-31**, and both halves were
 wrong: the scalar is served by `enroll:infons` — point 3 already said so, so the

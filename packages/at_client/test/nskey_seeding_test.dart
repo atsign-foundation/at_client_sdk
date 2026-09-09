@@ -3,13 +3,19 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
+import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
+import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'fake_enrollment_directory.dart';
 import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {}
+
+class FakeSecret extends Fake implements Secret {}
 
 /// Which namespaces a client seeds at start.
 ///
@@ -21,7 +27,10 @@ class MockAtClient extends Mock implements AtClient {}
 void main() {
   const atSign = '@alice';
 
-  setUpAll(() => registerFallbackValue(AtKey()));
+  setUpAll(() {
+    registerFallbackValue(AtKey());
+    registerFallbackValue(FakeSecret());
+  });
 
   NskeySeeding seeding(
       {String? enrollmentId,
@@ -346,6 +355,187 @@ void main() {
     });
   });
 
+  group('a revocation the revoker could not finish rotates at the next start',
+      () {
+    const ns = 'my_apps';
+    final generation = NskeyAdvertisement.single(
+      publicKey: Uint8List.fromList(List<int>.filled(1216, 7)),
+      alg: SecretSharingAlgos.xWing,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    final successor = NskeyAdvertisement.single(
+      publicKey: Uint8List.fromList(List<int>.filled(1216, 11)),
+      alg: SecretSharingAlgos.xWing,
+      createdAt: DateTime.utc(2026, 5, 5),
+    );
+
+    /// Seeding whose namespace answer, published record and record stamp are
+    /// all dictated. [revokedAt] is what the atServer reports for the
+    /// namespace; [stamp] is what it reports for the advertisement record.
+    ({
+      NskeySeeding seeding,
+      _RingRotating ring,
+      FakeEnrollmentDirectory directory,
+      List<NskeyRotationContext> asked,
+    }) revocable({
+      DateTime? revokedAt,
+      DateTime? stamp,
+      bool published = true,
+      bool unreadable = false,
+      String? enrollmentId = 'enroll-a',
+    }) {
+      final base = seeding(
+          enrollmentId: enrollmentId,
+          preferenceNamespace: ns,
+          enrollmentNamespaces: {ns: 'rw'});
+      final directory = FakeEnrollmentDirectory();
+      if (revokedAt != null) {
+        // The shape a revocation really leaves: an enrollment that held the
+        // namespace, revoked at a moment the atServer stamped.
+        directory.authorize(ns, 'enroll-b');
+        directory.revoke('enroll-b', at: revokedAt);
+      }
+      if (unreadable) directory.unreadableNamespaces.add(ns);
+
+      final sharing = MockSharing();
+      when(() => sharing.directory).thenReturn(directory);
+      when(() => sharing.secretStore).thenReturn(SecretStore());
+      when(() => sharing.pushSecretToNamespaceMembers(any(),
+              excludeEnrollmentIds: any(named: 'excludeEnrollmentIds')))
+          .thenAnswer((_) async => 1);
+
+      final asked = <NskeyRotationContext>[];
+      final ring = _RingRotating(
+          base.atClient,
+          published ? (advertisement: generation, updatedAt: stamp) : null,
+          successor);
+      return (
+        seeding: NskeySeeding(
+          atClient: base.atClient,
+          ring: ring,
+          sharing: sharing,
+          privateFiling:
+              _SeededFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign),
+          rotationPolicy: (context) {
+            asked.add(context);
+            return false;
+          },
+        ),
+        ring: ring,
+        directory: directory,
+        asked: asked,
+      );
+    }
+
+    test('a revocation later than the generation replaces it, unasked',
+        () async {
+      // The backstop: `revokeEnrollmentAndRotate` revokes and then rotates, so
+      // this exists for the rotation that did not complete — a lost lock, a
+      // process that died. Nothing else would ever notice, and until it
+      // happens the revoked enrollment opens everything sealed to the
+      // generation it still holds.
+      final w = revocable(
+          stamp: DateTime.utc(2026, 2, 1), revokedAt: DateTime.utc(2026, 3, 1));
+
+      expect(await w.seeding.rotateIfRevoked(atSign, ns), isTrue);
+
+      expect(w.ring.rotations, [ns]);
+      expect(w.asked, isEmpty,
+          reason: 'unconditional, and this fixture\'s policy answers NO: a '
+              'revocation is an obligation, while the lever it would have '
+              'asked governs discretionary rotation and its shipped default '
+              'declines. Asking would leave the mechanism inert for everyone '
+              'who has not opted in');
+    });
+
+    test('a revocation the published generation already answers does not',
+        () async {
+      // The control for the arm above, differing in the ORDER of the two
+      // moments and nothing else: this generation was minted after the
+      // revocation, so it is already the answer to it.
+      final w = revocable(
+          stamp: DateTime.utc(2026, 4, 1), revokedAt: DateTime.utc(2026, 3, 1));
+
+      expect(await w.seeding.rotateIfRevoked(atSign, ns), isFalse);
+      expect(w.ring.rotations, isEmpty);
+    });
+
+    test('no revocation does not even read what is published', () async {
+      final w = revocable();
+
+      expect(await w.seeding.rotateIfRevoked(atSign, ns), isFalse);
+      expect(w.ring.reads, 0,
+          reason: 'the namespace answer is asked first and settles it, so the '
+              'common case — nothing was ever revoked — costs one round trip '
+              'rather than two');
+      expect(w.directory.lastRevokedAtQueries, [ns],
+          reason: 'and it really did ask, so the zero above is a short circuit '
+              'rather than a fixture that asked nothing');
+    });
+
+    test('an unreadable namespace answer rotates nothing', () async {
+      // Establishing no cause is not the same as establishing there is none:
+      // a client that cannot read the answer has nothing to act on.
+      final w = revocable(unreadable: true, stamp: DateTime.utc(2026, 2, 1));
+
+      expect(await w.seeding.rotateIfRevoked(atSign, ns), isFalse);
+      expect(w.ring.rotations, isEmpty);
+    });
+
+    test('a record whose stamp cannot be read rotates anyway', () async {
+      // The safe direction of the two: a revocation moment WAS returned, and
+      // the record cannot say it came first.
+      final w = revocable(stamp: null, revokedAt: DateTime.utc(2026, 3, 1));
+
+      expect(await w.seeding.rotateIfRevoked(atSign, ns), isTrue);
+      expect(w.ring.rotations, [ns]);
+    });
+
+    test('nothing published is a cold start rather than a rotation', () async {
+      final w =
+          revocable(published: false, revokedAt: DateTime.utc(2026, 3, 1));
+
+      expect(await w.seeding.rotateIfRevoked(atSign, ns), isFalse);
+      expect(w.ring.rotations, isEmpty,
+          reason: 'the mint that follows produces a generation no earlier '
+              'revocation can be later than, and rotating nothing is what a '
+              'ring with nothing published refuses anyway');
+    });
+
+    for (final credential in [null, EnrollmentConstants.primaryEnrollmentId]) {
+      test(
+          'a client running as the atSign\'s own credential (${credential ?? 'no id'}) never asks',
+          () async {
+        // Both spellings of that credential, because both reach here: the
+        // namespace list a client with one gets is its preference's namespace,
+        // not a roster it read. There is no enrollment record for the atServer
+        // to answer about, and the verb is APKAM-gated.
+        final w = revocable(
+            enrollmentId: credential,
+            stamp: DateTime.utc(2026, 2, 1),
+            revokedAt: DateTime.utc(2026, 3, 1));
+
+        expect(await w.seeding.rotateIfRevoked(atSign, ns), isFalse);
+        expect(w.directory.lastRevokedAtQueries, isEmpty);
+        expect(w.ring.rotations, isEmpty);
+      });
+    }
+
+    test('seed() rotates instead of seeding the namespace', () async {
+      final w = revocable(
+          stamp: DateTime.utc(2026, 2, 1), revokedAt: DateTime.utc(2026, 3, 1));
+
+      expect(await w.seeding.seed(), {ns},
+          reason: 'a namespace this start published fresh material for, which '
+              'is what the returned set names');
+      expect(w.ring.rotations, [ns]);
+      expect(w.ring.reads, 1,
+          reason: 'the rotation ends the namespace\'s turn: a second read '
+              'would be seedNamespace running behind it, putting the policy a '
+              'question about a generation minted seconds earlier');
+    });
+  });
+
   group('an add conveys only what it newly minted — UC-G2.6 c4', () {
     Future<NskeyAdvertisement> advertisement(List<String> algos,
         {DateTime? createdAt}) async {
@@ -429,10 +619,9 @@ class _RingAdding extends PublishedNskeyKeyRing {
   final NskeyAdvertisement _widened;
 
   @override
-  Future<NskeyAdvertisement?> publishedAdvertisement(
-          String owner, String namespace,
-          {bool useCache = true}) async =>
-      _current;
+  Future<({NskeyAdvertisement advertisement, DateTime? updatedAt})?>
+      publishedRecord(String owner, String namespace) async =>
+          (advertisement: _current, updatedAt: null);
 
   @override
   Future<NskeyAdvertisement?> add(String namespace) async => _widened;
@@ -470,10 +659,9 @@ class _RingPublishingLate extends PublishedNskeyKeyRing {
   int reads = 0;
 
   @override
-  Future<NskeyAdvertisement?> publishedAdvertisement(
-          String owner, String namespace,
-          {bool useCache = true}) async =>
-      reads++ == 0 ? null : _published;
+  Future<({NskeyAdvertisement advertisement, DateTime? updatedAt})?>
+      publishedRecord(String owner, String namespace) async =>
+          reads++ == 0 ? null : (advertisement: _published, updatedAt: null);
 
   /// Nothing to add, so `_addMissing` returns immediately and the only thing
   /// these tests can observe is whether the rotation policy was asked.
@@ -489,8 +677,52 @@ class _RingAnswering extends PublishedNskeyKeyRing {
   final NskeyAdvertisement? _published;
 
   @override
-  Future<NskeyAdvertisement?> publishedAdvertisement(
-          String owner, String namespace,
-          {bool useCache = true}) async =>
-      _published;
+  Future<({NskeyAdvertisement advertisement, DateTime? updatedAt})?>
+      publishedRecord(String owner, String namespace) async {
+    final published = _published;
+    return published == null
+        ? null
+        : (advertisement: published, updatedAt: null);
+  }
 }
+
+/// A ring whose published record — generation and record stamp both — is
+/// dictated, and whose rotate records the namespace rather than minting one.
+class _RingRotating extends PublishedNskeyKeyRing {
+  _RingRotating(super.atClient, this._record, this._successor);
+
+  final ({NskeyAdvertisement advertisement, DateTime? updatedAt})? _record;
+  final NskeyAdvertisement _successor;
+
+  /// The namespaces a rotation was actually driven for.
+  final List<String> rotations = [];
+
+  /// How many times the published record was read, so "it did not even look"
+  /// is distinguishable from "it looked and decided against".
+  int reads = 0;
+
+  @override
+  Future<({NskeyAdvertisement advertisement, DateTime? updatedAt})?>
+      publishedRecord(String owner, String namespace) async {
+    reads++;
+    return _record;
+  }
+
+  @override
+  Future<({NskeyAdvertisement rotated, NskeyAdvertisement superseded})> rotate(
+      String namespace) async {
+    rotations.add(namespace);
+    return (rotated: _successor, superseded: _record!.advertisement);
+  }
+}
+
+/// Filing that answers every seed read, so a dictated rotation can convey.
+class _SeededFiling extends NskeyPrivateFiling {
+  _SeededFiling({required super.keysIo, required super.atSign});
+
+  @override
+  Future<NskeySeed?> readSeed(String namespace, String nskeyKid) async =>
+      NskeySeed(Uint8List.fromList(List<int>.filled(32, 9)));
+}
+
+class MockSharing extends Mock implements PairwiseSecretSharing {}

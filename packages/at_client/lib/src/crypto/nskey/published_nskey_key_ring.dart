@@ -589,6 +589,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// its own identity, `createdAt` included — so a peer sealing under an
   /// algorithm that was already there notices nothing and re-cuts nothing.
   ///
+  /// **Which is why it asserts the record's `updatedAt` back.** The write
+  /// rewrites one record, so left alone it would take a fresh server stamp and
+  /// a revoke-then-add sequence would leave that stamp later than the
+  /// revocation it should have triggered a rotation for — the trigger disarmed
+  /// by an operation that produced no new generation at all.
+  ///
   /// **Why it exists at all.** Only a build that *implements* an algorithm can
   /// mint material for it, so a client cannot mint on another version's behalf
   /// however much it knows about the fleet. A generation therefore assembles
@@ -643,15 +649,19 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       // window between the two would leave this client about to publish an
       // advertisement built from a generation that no longer exists —
       // silently rolling the rotation back.
-      final fresh = await publishedAdvertisement(owner, namespace);
-      if (fresh == null || !_sameGeneration(fresh, current)) {
+      final fresh = await publishedRecord(owner, namespace);
+      if (fresh == null || !_sameGeneration(fresh.advertisement, current)) {
         _logger.info('Not adding to the nskey for $owner:$namespace: the '
             'generation changed between deciding to add and taking the lock, '
             'so the prepared material belongs to a generation that is gone. '
             'The next start re-decides against whatever is published then');
         return null;
       }
-      return _mint(owner, namespace, lease, prepared);
+      // The stamp this read carried, asserted back over the write below. It
+      // comes from the same read that decided the generation is unchanged, so
+      // no window sits between the value and the assertion of it.
+      return _mint(owner, namespace, lease, prepared,
+          assertUpdatedAt: fresh.updatedAt);
     });
 
     if (added == null) {
@@ -794,16 +804,24 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return wanted;
   }
 
+  /// [assertUpdatedAt] is the record's own previous stamp, asserted back so the
+  /// write does not move it — [add]'s discipline, and nothing else's. A
+  /// rotation and a cold-start mint pass nothing and take a fresh stamp, which
+  /// is what makes `updatedAt` mean *when this generation was minted*. Never a
+  /// locally computed time: a client's clock in that field is the comparison
+  /// trap wearing the server's costume.
   Future<NskeyAdvertisement> _mint(
     String owner,
     String namespace,
     MintLease lease,
-    _PreparedMint prepared,
-  ) async {
+    _PreparedMint prepared, {
+    DateTime? assertUpdatedAt,
+  }) async {
     final advertisement = prepared.advertisement;
     final payload = prepared.signedPayload;
 
     final advertisementKey = nskeyAdvertisementKey(owner, namespace);
+    advertisementKey.metadata.updatedAt = assertUpdatedAt;
     // Signed with this client's APKAM keypair, so a peer can tell the key came
     // from an enrollment of this atSign rather than from whoever served it.
     // The APKAM public half must already be published, or the peer has nothing
@@ -1041,8 +1059,13 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return null;
   }
 
+  /// The generation [publishedRecord] reads, without its record stamp.
+  Future<NskeyAdvertisement?> publishedAdvertisement(
+          String owner, String namespace) async =>
+      (await publishedRecord(owner, namespace))?.advertisement;
+
   /// What `(owner, namespace)` has published **on the atServer**, fetched with
-  /// both caches skipped.
+  /// both caches skipped, and the moment the atServer last stamped the record.
   ///
   /// [currentPublic] answers a different question and must keep answering it
   /// local-first: it is the sender's read, reached from `CkManager.ensureCurrent`
@@ -1057,6 +1080,13 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// client minted, and `_remote` what it fetched up to [advertisementTtl] ago;
   /// neither can hold a generation a sibling published a moment ago, so a mint
   /// that trusted either would be minting on a stale absence.
+  ///
+  /// `updatedAt` is the atServer's own stamp on the record, and not the
+  /// payload's `createdAt`, which the minting client's clock wrote — the two
+  /// are produced by different machines and comparing them is the trap this
+  /// design exists to avoid. It reads as *when this generation was minted* only
+  /// because [add] asserts the previous value back rather than taking a fresh
+  /// one. Null when the atServer served the record without one.
   ///
   /// Null means the atServer says there is none. Any other failure throws: a
   /// mint must not read an unreachable atServer as a cold start, because that
@@ -1073,8 +1103,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// to our own advertisement could never be minted over. Returning null lets
   /// the mint proceed and overwrite it, which is the whole point of holding
   /// the key material.
-  Future<NskeyAdvertisement?> publishedAdvertisement(
-      String owner, String namespace) async {
+  Future<({NskeyAdvertisement advertisement, DateTime? updatedAt})?>
+      publishedRecord(String owner, String namespace) async {
     final AtValue value;
     try {
       value = await _atClient.get(
@@ -1108,7 +1138,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     // round trip of its own.
     _remote[_scope(owner, namespace)] =
         (advertisement: advertisement, fetchedAt: DateTime.now());
-    return advertisement;
+    return (advertisement: advertisement, updatedAt: value.metadata?.updatedAt);
   }
 
   @override

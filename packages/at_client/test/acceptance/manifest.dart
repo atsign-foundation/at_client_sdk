@@ -148,10 +148,10 @@ const unprovableClauses = <String, String>{
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 230;
+const provenClauseCount = 231;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 92;
+const serverProvenClauseCount = 93;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///
@@ -166,8 +166,6 @@ const liveProofOwed = <String, String>{
       'feasible and additive for the same reason: the advertisements here are composed and signed inside the test. A live arm would publish one carrying an unusable entry and prove the atServer returns it unchanged, which is what a sender actually reads',
   'UC-G2.3':
       'feasible and additive for the same reason: the _apsk values here are hand-built strings. A live arm would publish one carrying an unknown alg and prove the atServer serves it to a verifier verbatim',
-  'UC-G2.5':
-      'a live test is feasible and the row is part-proven in-process. ⚠️ This entry said the mint produces ONE key, so "carries nothing forward" was trivially true of it — false since the plural mint landed 2026-08-28, which nskey_rotation_test proves over two algorithms. What is left of the row is c5 alone — the revocation trigger, waiting on a mechanism neither side has built. ⚠️ This listed c2, c4, c6 and c7 until 2026-08-31: c2 and c7 have since been closed by new arms, the old c4 was withdrawn, and the withdrawal renumbered everything after it, so the clause meant by the old c6 is now c5',
   'UC-G2.7':
       'every citation is in-process and a live test is feasible; the retired-key arms all run over hand-built advertisements rather than one an atServer served',
   'UC-G2.8':

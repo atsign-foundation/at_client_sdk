@@ -629,6 +629,58 @@ void main() {
           'metadata': keyPackage == null ? {} : {'keyPackage': keyPackage},
         };
 
+    /// The namespace-facts verb, beside the roster one and gated identically.
+    /// A revoked enrollment leaves no trace on a roster — `enroll:listns`
+    /// answers with approved enrollments only — so this is the only thing a
+    /// client can ask to learn that one happened.
+    group('lastRevokedAt', () {
+      void stubInfons(AtClient atClient, String response) {
+        final secondary = atClient.getRemoteSecondary()!;
+        // The command is the pin: a stub keyed on the exact string, so a build
+        // that sent anything else would find no answer here and throw.
+        when(() =>
+                secondary.executeCommand('enroll:infons:myapp\n', auth: true))
+            .thenAnswer((_) async => response);
+      }
+
+      test('asks enroll:infons and parses the moment it answers with',
+          () async {
+        final atClient = buildMockClient('enroll-self');
+        stubInfons(
+            atClient, 'data:{"lastRevokedAt":"2026-03-04T05:06:07.008Z"}');
+
+        final at =
+            await VerbEnrollmentDirectory(atClient).lastRevokedAt('myapp');
+
+        expect(at, DateTime.utc(2026, 3, 4, 5, 6, 7, 8));
+        expect(at!.isUtc, isTrue,
+            reason:
+                'it is compared with the atServer\'s stamp on a record, and '
+                'a local-time DateTime would compare wrongly by the offset');
+      });
+
+      test('a namespace nothing has been revoked in answers null', () async {
+        final atClient = buildMockClient('enroll-self');
+        stubInfons(atClient, 'data:{"lastRevokedAt":null}');
+
+        expect(await VerbEnrollmentDirectory(atClient).lastRevokedAt('myapp'),
+            isNull);
+      });
+
+      test(
+          'an answer this build cannot read throws rather than reading as none',
+          () async {
+        // Null is "nothing was revoked", which is the answer that means do
+        // nothing. A shape nobody can read must not arrive as that.
+        final atClient = buildMockClient('enroll-self');
+        stubInfons(atClient, 'data:[]');
+
+        await expectLater(
+            VerbEnrollmentDirectory(atClient).lastRevokedAt('myapp'),
+            throwsA(isA<AtValueException>()));
+      });
+    });
+
     test(
         'listForNamespace parses members + signed key packages and honours '
         'exclude', () async {

@@ -64,6 +64,11 @@ void main() {
     Map<String, String?> values,
     Map<String, DateTime> verbTimes,
     Map<String, String> advertised,
+
+    /// The `updatedAt` the atServer serves with the advertisement record, by
+    /// namespace. Absent unless a test sets one, so every other test reads the
+    /// record exactly as before.
+    Map<String, DateTime> advertisedStamps,
     List<GetRequestOptions?> advertisementReads,
 
     /// [takeDelay] makes the lock's own take slow, which is the only way to
@@ -87,6 +92,7 @@ void main() {
     // The atServer's copy of `public:__nskey.<ns>@alice`, by namespace. A test
     // writes into it to stand for another enrollment having published.
     final advertised = <String, String>{};
+    final advertisedStamps = <String, DateTime>{};
     // How each advertisement read was asked for. A mocktail stub cannot tell a
     // local-first get from a remote one on its own — both arrive here — so the
     // options are what the remote-only claim is pinned against.
@@ -118,7 +124,10 @@ void main() {
           .add(inv.namedArguments[#getRequestOptions] as GetRequestOptions?);
       final serving = advertised[key.namespace];
       if (serving == null) throw AtKeyNotFoundException('$key');
-      return AtValue()..value = serving;
+      final stamp = advertisedStamps[key.namespace];
+      return AtValue()
+        ..value = serving
+        ..metadata = stamp == null ? null : (Metadata()..updatedAt = stamp);
     });
 
     when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
@@ -150,6 +159,7 @@ void main() {
       values: values,
       verbTimes: verbTimes,
       advertised: advertised,
+      advertisedStamps: advertisedStamps,
       advertisementReads: advertisementReads,
     );
   }
@@ -285,6 +295,67 @@ void main() {
     expect(keys.single['use'], 'enc');
     expect(keys.single['alg'], 'x-wing');
     expect(keys.single['kid'], advertisement.nskeyKid);
+  });
+
+  group('the record stamp says when the generation was minted', () {
+    // `updatedAt` on `public:__nskey.<ns>@alice` is what a client compares a
+    // revocation moment against, and it only means "when this generation was
+    // minted" because an add puts the atServer's own previous value back while
+    // a rotation lets it stamp afresh. Both directions are pinned: asserting on
+    // a rotation would freeze the trigger, and not asserting on an add would
+    // disarm it.
+    const stamped = '2026-03-04T05:06:07.000008Z';
+    final stamp = DateTime.parse(stamped);
+
+    /// The `update` command each `__nskey` write emitted, in order.
+    List<String> advertisementCommands(List<Object> builders) => builders
+        .whereType<UpdateVerbBuilder>()
+        .where((b) => b.atKey.key == '__nskey')
+        .map((b) => b.buildCommand())
+        .toList();
+
+    test('an add asserts it back — raw literal', () async {
+      final c = client();
+      final ring =
+          PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+      await ring.mintAndPublish(namespace);
+      // The atServer's stamp on what was just published, which the add must
+      // hand back rather than let a fresh one replace.
+      c.advertisedStamps[namespace] = stamp;
+      when(() => c.client.getPreferences())
+          .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: const [
+        SecretSharingAlgos.xWing,
+        SecretSharingAlgos.mlKem1024,
+      ]));
+
+      final widened = await ring.add(namespace);
+
+      expect(widened?.keys, hasLength(2),
+          reason: 'the add really added, so the command below is an add\'s and '
+              'not a second mint\'s');
+      final commands = advertisementCommands(c.builders);
+      expect(commands, hasLength(2));
+      expect(commands.last, contains(':uAt:$stamped'),
+          reason: 'the at-protocol fragment, raw: `:uAt:` is what the atServer '
+              'parses, and it carries the value the record already had');
+    });
+
+    test('and a rotation does not — the control', () async {
+      final c = client();
+      final ring =
+          PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+      await ring.mintAndPublish(namespace);
+      c.advertisedStamps[namespace] = stamp;
+
+      await ring.rotate(namespace);
+
+      final commands = advertisementCommands(c.builders);
+      expect(commands, hasLength(2));
+      expect(commands.last, isNot(contains(':uAt:')),
+          reason: 'a rotation takes a fresh server stamp, which is what makes '
+              'the comparison mean anything. Same fixture, same served stamp, '
+              'same record as the arm above — only the operation differs');
+    });
   });
 
   test('a mint that cannot store its private publishes nothing', () async {

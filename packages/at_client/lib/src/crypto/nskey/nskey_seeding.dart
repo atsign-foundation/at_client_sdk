@@ -132,7 +132,11 @@ class NskeySeeding {
       namespace != '*' && namespace != '__manage' && namespace.isNotEmpty;
 
   /// Mints and publishes for every authorised namespace that has no key yet,
-  /// then conveys each new private. Returns the namespaces minted.
+  /// then conveys each new private. Returns the namespaces this start published
+  /// fresh material for — a cold-start mint, or a rotation a revocation owed.
+  ///
+  /// The revocation check rides this loop because the namespace list is what it
+  /// needs and this is where that list is already fetched.
   Future<Set<String>> seed() async {
     final owner = atClient.getCurrentAtSign();
     if (owner == null) return const {};
@@ -140,6 +144,14 @@ class NskeySeeding {
     final minted = <String>{};
     for (final namespace in await authorisedNamespaces()) {
       try {
+        // Before the seed, not after: a rotation mints every algorithm this
+        // client is configured for, so an add behind one would find nothing
+        // missing and the policy question would be put against a generation
+        // minted seconds ago.
+        if (await rotateIfRevoked(owner, namespace)) {
+          minted.add(namespace);
+          continue;
+        }
         if (await seedNamespace(owner, namespace)) minted.add(namespace);
       } catch (e) {
         // One namespace failing must not stop the others: a partly seeded
@@ -359,6 +371,97 @@ class NskeySeeding {
       _logger.warning('The rotation policy asked for a fresh namespace key for '
           '$owner:$namespace and it did not happen; the published generation '
           'is unchanged and the next start will ask again: $e');
+      return false;
+    }
+  }
+
+  /// Rotates [namespace] when a revocation has touched an enrollment granted it
+  /// since that namespace's advertisement was last rotated. Returns whether it
+  /// did.
+  ///
+  /// **Unconditional, and deliberately not [rotationPolicy]'s question.** That
+  /// lever governs discretionary rotation and its shipped default declines, so
+  /// asking it here would leave the mechanism inert for every application that
+  /// has not opted in. A revocation is an obligation rather than a preference:
+  /// the revoked enrollment holds the current generation's private, and only a
+  /// fresh generation cuts it off from what is sealed next. This is the backstop
+  /// for the revoke that could not finish its own rotation — a lost lock, a
+  /// process that died, one namespace of several — after which nothing else
+  /// would ever notice.
+  ///
+  /// **Both moments are stamped by the atServer**: the revocation's, and the
+  /// advertisement record's `updatedAt`. Comparing a server-stamped revocation
+  /// with the generation's own `createdAt` would compare two machines, and it
+  /// fails silently in the dangerous direction — a minting client whose clock
+  /// runs fast produces a generation that looks newer than a revocation that
+  /// actually followed it, so the rotation never fires.
+  ///
+  /// **Establishing no cause rotates nothing**: a client running as the
+  /// atSign's own credential, which has no enrollment to ask as, an unreadable
+  /// namespace answer, or no substrate to convey a successor over. A published
+  /// record whose stamp cannot be read while a revocation moment WAS returned
+  /// does rotate — of the two directions that is the safe one. Nothing
+  /// published is a cold start rather than a failure: the mint that follows
+  /// produces a generation no earlier revocation can be later than.
+  @experimental
+  Future<bool> rotateIfRevoked(String owner, String namespace) async {
+    final substrate = sharing;
+    final filing = privateFiling;
+    if (substrate == null || filing == null) return false;
+
+    // The predicate [authorisedNamespaces] uses, for the same reason: the
+    // atSign's own credential is not an enrollment the atServer will answer
+    // about, and the verb is APKAM-gated.
+    if (isAtSignCredential(
+        atClient.getRemoteSecondary()?.atLookUp.enrollmentId)) {
+      return false;
+    }
+
+    final DateTime? revokedAt;
+    try {
+      revokedAt = await substrate.directory.lastRevokedAt(namespace);
+    } catch (e) {
+      _logger.warning('Could not read whether a revocation has touched '
+          '$owner:$namespace, so nothing is rotated for it this start — a '
+          'revoked enrollment that still holds this generation goes on '
+          'reading until a start establishes otherwise: $e');
+      return false;
+    }
+    if (revokedAt == null) return false;
+
+    final ({NskeyAdvertisement advertisement, DateTime? updatedAt})? record;
+    try {
+      record = await ring.publishedRecord(owner, namespace);
+    } catch (e) {
+      _logger.warning('A revocation touched $owner:$namespace at $revokedAt, '
+          'and what it published could not be read, so nothing is rotated '
+          'this start: $e');
+      return false;
+    }
+    if (record == null) return false;
+
+    final rotatedAt = record.updatedAt;
+    if (rotatedAt != null && !revokedAt.isAfter(rotatedAt)) return false;
+
+    _logger.info('Rotating $owner:$namespace: a revocation touched it at '
+        '$revokedAt, and what is published there was stamped '
+        '${rotatedAt ?? 'at a moment the atServer did not report'}');
+    try {
+      await NskeyRotation(
+        atClient: atClient,
+        ring: ring,
+        privateFiling: filing,
+        sharing: substrate,
+      ).rotateNamespaceKey(namespace);
+      return true;
+    } catch (e) {
+      // The commonest cause is the mint lock: another enrollment is rotating
+      // this namespace for the same reason. The next start asks again, and
+      // until one succeeds the revoked enrollment can still open what is
+      // sealed to the published generation.
+      _logger.warning('A revocation touched $owner:$namespace at $revokedAt '
+          'and the rotation it owes did not happen; the published generation '
+          'is unchanged and the next start asks again: $e');
       return false;
     }
   }

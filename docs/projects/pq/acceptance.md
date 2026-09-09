@@ -44,14 +44,15 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 - **PROVEN** — a scenario in `packages/at_client/test/acceptance/` asserts it
   and runs. ⚠️ **It is a statement about the ROW, never about its clauses.** A
-  row is PROVEN when a scenario claims it; whether each individual THEN clause
-  is pinned is the burn-down's question, and the two are far apart — **four G2
-  rows are wholly unpinned and all four read PROVEN here**: UC-G2.5, UC-G2.6,
-  UC-G2.9 and UC-G2.11, because the mechanisms they describe are unbuilt. ⚠️
-  **This said "UC-G2.5 and UC-G2.6" and quoted both as saying *"WHOLLY UNPINNED,
-  deliberately"* — an undercount, and a misquote: only UC-G2.5's scenario uses
-  that phrase.** A cold read was misled by this definition even after it was
-  written, so the definition alone is not doing the job.
+  row is PROVEN when a scenario claims it, however many of its THEN clauses
+  nothing pins; which clauses are pinned is the burn-down's question, and the
+  answer is a measurement rather than a list — the acceptance suite prints it,
+  and `clauseCoverageOf` in `packages/at_client/test/acceptance/manifest.dart`
+  answers it per row. ⚠️ **This named four G2 rows as "wholly unpinned" while
+  reading PROVEN, and by 2026-09-09 none of the four was** — UC-G2.5 and
+  UC-G2.6 pinned every clause, UC-G2.11 all three, UC-G2.9 two of three. A list
+  of rows here is a second home for a figure the tree already carries, and it
+  went stale without anything going red.
 - **BLOCKED** — its scenario exists but is skipped against a named constant in
   `blockers.dart`, so something is recorded as owing it.
 - **WITHDRAWN** — the catalogue withdrew the row and kept the heading, so the
@@ -3981,13 +3982,15 @@ is where its missing lever lives.
     was returned, it rotates.** A client that cannot read the namespace answer at
     all rotates **nothing**: it has established no cause.
 
-    ⛔ **RULED AND NOT YET BUILT on the at_client side; BUILT on the atServer's,
-    on a branch that is not on the remote.** The atServer writes a durable
+    ⛔ **BUILT on both sides, 2026-09-09.** The atServer writes a durable
     revocation event per enrollment a revoke touches, and derives from the log
-    the per-namespace moment `enroll:infons` serves. On this side nothing is
-    built: the `Enrollment` model drops `status`, which the wire already
-    carries, and no client reads the advertisement's `updatedAt` or keeps an add
-    from moving it.
+    the per-namespace moment `enroll:infons` serves. On this side
+    `Enrollment.fromJSON` keeps `status`, an `add` asserts the advertisement
+    record's own `updatedAt` back while a rotation takes a fresh one, and
+    `NskeySeeding.rotateIfRevoked` puts the comparison at every client start.
+    ⚠️ **This said "RULED AND NOT YET BUILT on the at_client side; BUILT on the
+    atServer's, on a branch that is not on the remote" until 2026-09-09.** The
+    atServer's half reached `origin/trunk` in `105aff94` on 2026-08-31.
     ⚠️ **This said the atServer stamps `revokedAt` on the enrollment, and that
     the derived scalar was unbuilt, until 2026-08-31.** The field was removed in
     favour of the event log — an enrollment record's ttl IS the APKAM
@@ -4087,28 +4090,36 @@ is where its missing lever lives.
   client now re-derives the same comparison per namespace at every start.
   Reporting the moment per namespace narrows it; it does not remove it.
 
-  ⛔ **What is owed, and by whom.** at_server: the revocation event log, and the
+  ⛔ **Nothing is owed here now.** at_server: the revocation event log, and the
   per-namespace moment derived from it and served by `enroll:infons` — **both
-  built**. at_client: `status` on the `Enrollment` model, the discipline that an
-  `add` preserves the advertisement's `updatedAt` while a rotation does not, and
-  the check in `seed()`. None of the at_client half is built.
+  built**, on `origin/trunk`. at_client: `status` on the `Enrollment` model, the
+  discipline that an `add` preserves the advertisement's `updatedAt` while a
+  rotation does not, and the check in `seed()` — **all three built 2026-09-09**.
   ⚠️ **This said at_server owed the `revokedAt` field, and that the derived
   moment on `enroll:listns` was not built, until 2026-08-31.** The field is
   gone, the moment is served by `enroll:infons`, and both server halves are
   built.
-  ⚠️ **"Built" here means on at_server's working branch, not on `origin/trunk`**,
-  where none of it exists. A statement in this row that the atServer does not do
-  something is a statement about `origin/trunk`.
+  ⚠️ **It then said none of the at_client half was built, and that "built" of
+  the atServer meant its working branch rather than `origin/trunk`, until
+  2026-09-09.** Both are `origin/trunk` statements now.
   The subtree walk this row used to ask for is neither owed nor unbuilt — it is
   **retired**, by [ruling 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31),
   which moves it into the atServer's revoke.
 
   ⚠️ **A client that starts and then runs for weeks does not notice until it
   restarts**, and two clients get no check at all: one running as the atSign's
-  own credential — no enrollment id, or `primary` — returns before fetching
-  anything, and one whose fetch throws discards the list.
+  own credential — no enrollment id, or `primary` — and one whose fetch throws
+  discards the list.
   That is accepted rather than overlooked — the revoker rotates immediately, and
   this path is the backstop for when it could not.
+  ⚠️ **The first exclusion is now a REFUSAL rather than a consequence, and the
+  reason it was accepted has moved.** It was accepted because such a client
+  "returns before fetching anything", so there was no fetch for the check to
+  ride; the check as built makes its own `enroll:infons` call, and a
+  legacy-PKAM connection to a migrated atServer authenticates as `primary`, so
+  the verb would answer one. `NskeySeeding.rotateIfRevoked` skips it anyway, to
+  keep this clause true. Whether it should is [an open
+  question](implementation-plan.md#p2--should-be-done-if-there-is-time).
 
 ### 17.6 UC-G2.6 — A client adds its own missing algorithm to the current generation
 

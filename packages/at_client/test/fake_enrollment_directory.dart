@@ -1,4 +1,5 @@
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_commons/at_commons.dart' show AtValueException;
 
 /// In-memory [EnrollmentDirectory] for tests.
 ///
@@ -52,9 +53,34 @@ class FakeEnrollmentDirectory implements EnrollmentDirectory {
   /// Drops [enrollmentId] from every namespace roster, modelling
   /// `enroll:revoke` — the atServer's `enroll:listns` returns **approved**
   /// enrollments only, so a revoked one stops appearing to anybody.
-  void revoke(String enrollmentId) {
-    for (final access in _nsAccess.values) {
-      access.remove(enrollmentId);
+  ///
+  /// [at] is the moment the atServer would have stamped on the revocation
+  /// event, which [lastRevokedAt] then reports for every namespace the
+  /// enrollment held.
+  void revoke(String enrollmentId, {DateTime? at}) {
+    for (final entry in _nsAccess.entries) {
+      if (entry.value.remove(enrollmentId) != null && at != null) {
+        _lastRevokedAt[entry.key] = at;
+      }
     }
+  }
+
+  final Map<String, DateTime> _lastRevokedAt = {};
+
+  /// Set to have [lastRevokedAt] throw for [namespace], modelling an atServer
+  /// that cannot answer.
+  final Set<String> unreadableNamespaces = {};
+
+  /// Every namespace [lastRevokedAt] was asked about, so a test can tell "it
+  /// asked and the answer was none" from "it never asked".
+  final List<String> lastRevokedAtQueries = [];
+
+  @override
+  Future<DateTime?> lastRevokedAt(String namespace) async {
+    lastRevokedAtQueries.add(namespace);
+    if (unreadableNamespaces.contains(namespace)) {
+      throw AtValueException('enroll:infons for $namespace is unreadable');
+    }
+    return _lastRevokedAt[namespace];
   }
 }

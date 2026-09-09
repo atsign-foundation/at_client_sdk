@@ -1006,7 +1006,8 @@ class LocalSecondary implements Secondary {
       ..deviceName = enrollmentDetailsMap['deviceName']
       ..namespace = enrollmentDetailsMap['namespace']
       ..encryptedAPKAMSymmetricKey =
-          enrollmentDetailsMap['encryptedAPKAMSymmetricKey'];
+          enrollmentDetailsMap['encryptedAPKAMSymmetricKey']
+      ..status = enrollmentDetailsMap['status'];
 
     if (enrollment == null) {
       throw AtKeyNotFoundException(

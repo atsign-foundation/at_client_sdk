@@ -966,11 +966,15 @@ void main() {
                 'appName': 'buzz',
                 'deviceName': 'pixel',
                 'namespace': {'buzz': 'rw'},
+                'status': 'approved',
               })}');
 
       final first = await c.getLocalSecondary()!.getEnrollmentDetails();
       expect(first!.appName, 'buzz');
       expect(first.namespace, {'buzz': 'rw'});
+      expect(first.status, 'approved',
+          reason: 'the verb answers with it and this parse is hand-written, so '
+              'it drops whatever it is not told to keep');
 
       await c.getLocalSecondary()!.getEnrollmentDetails();
       verify(() => remote.executeCommand(any(), auth: true)).called(1);

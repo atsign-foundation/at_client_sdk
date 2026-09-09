@@ -82,7 +82,8 @@ class NamespaceMember {
 /// Discovery of key packages lives behind this seam so the secret-sharing
 /// substrate above it is independent of the wire protocol and fully
 /// unit-testable with a fake. The concrete [VerbEnrollmentDirectory] talks to
-/// the gated `enroll:listns` verb; tests substitute their own implementation.
+/// the gated `enroll:listns` and `enroll:infons` verbs; tests substitute their
+/// own implementation.
 ///
 /// There is no registration method: a key package is conveyed into its
 /// enrollment record by riding `enroll:request` as opaque
@@ -98,9 +99,24 @@ abstract class EnrollmentDirectory {
     String namespace, {
     Set<String> excludeEnrollmentIds = const {},
   });
+
+  /// The latest moment a revocation touched an enrollment granted [namespace],
+  /// null when none ever has.
+  ///
+  /// A fact about the namespace rather than about any member, which is why it
+  /// is not a field on a roster row. It is stamped by the atServer, so it is
+  /// comparable with the atServer's stamp on a record and with nothing a client
+  /// computed. It can move **backwards**: an un-revoke withdraws its own
+  /// enrollment's revocation, so a caller holding a previous value asks whether
+  /// this one CHANGED, never whether it grew.
+  ///
+  /// Throws when the answer cannot be read, which a caller must not read as
+  /// "nothing was revoked" — the two lead opposite ways.
+  Future<DateTime?> lastRevokedAt(String namespace);
 }
 
-/// [EnrollmentDirectory] backed by the atServer's `enroll:listns` verb.
+/// [EnrollmentDirectory] backed by the atServer's `enroll:listns` and
+/// `enroll:infons` verbs, which take the same authorisation.
 ///
 /// **Wire shape:** the server returns one flat record per approved enrollment
 /// authorised for the namespace (1:1:1 — no nested `apkam[]` array). Each
@@ -183,6 +199,29 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
       ));
     }
     return members;
+  }
+
+  @override
+  Future<DateTime?> lastRevokedAt(String namespace) async {
+    final String? raw = await atClient
+        .getRemoteSecondary()
+        ?.executeCommand('enroll:infons:$namespace\n', auth: true);
+    final decoded = _data(raw);
+    if (decoded is! Map) {
+      // Thrown rather than answered with null, for the reason the interface
+      // gives: null is "nothing has been revoked", which is the answer that
+      // says do nothing, and an unreadable one must not be mistaken for it.
+      throw AtValueException('enroll:infons for $namespace returned a '
+          '${decoded.runtimeType} where a map of namespace facts was expected');
+    }
+    final lastRevokedAt = decoded['lastRevokedAt'];
+    if (lastRevokedAt == null) return null;
+    if (lastRevokedAt is! String) {
+      throw AtValueException('enroll:infons for $namespace answered with a '
+          '${lastRevokedAt.runtimeType} lastRevokedAt where an ISO-8601 '
+          'timestamp was expected');
+    }
+    return DateTime.parse(lastRevokedAt).toUtc();
   }
 
   /// The key package inside [advertised], if its APKAM signature checks out as

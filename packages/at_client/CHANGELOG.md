@@ -24,6 +24,31 @@
   posture that does configure the providers collects everything waiting.
   Keyed on the axis rather than on `PqPosture.legacy` by identity, so a
   deployment that builds its own provider-less posture gets the same client.
+- feat: a revocation whose rotation did not complete is rotated at the next
+  client start. `revokeEnrollmentAndRotate` revokes and then rotates, so a lost
+  mint lock or a process that died can leave a revoked enrollment still holding
+  the namespace key that protects everything written from now on, with nothing
+  ever noticing. Each start now asks the atServer, per authorised namespace, for
+  the latest moment a revocation touched an enrollment granted it
+  (`enroll:infons`, at_secondary_server 3.16.x), and replaces the generation
+  when that is later than the moment the atServer stamped the namespace's
+  advertisement. Both moments come from the atServer, so no two clocks are
+  compared. The rotation is unconditional — it does not consult
+  `NskeyRotationPolicy`, whose shipped default declines — and a client that
+  establishes no cause rotates nothing: one running as the atSign's own
+  credential has no enrollment to ask as, and an unreadable answer is not the
+  same as "nothing was revoked". New: `NskeySeeding.rotateIfRevoked`,
+  `EnrollmentDirectory.lastRevokedAt` and `PublishedNskeyKeyRing.publishedRecord`,
+  which reads the advertisement with its record stamp.
+- fix: `PublishedNskeyKeyRing.add` asserts the advertisement record's existing
+  `updatedAt` back rather than letting the write take a fresh one, so that stamp
+  means *when this generation was minted*. Without it a revoke-then-add sequence
+  moved the stamp past the revocation and disarmed the trigger above. A rotation
+  still takes a fresh stamp, which is what arms it again.
+- fix: `Enrollment.status` is populated from `enroll:list` and `enroll:fetch`.
+  The atServer serves it on every enrollment record and both client-side parsers
+  dropped it, so a caller reading a roster could not tell an approved enrollment
+  from a revoked one without asking again.
 - perf: a sync round that a stats notification triggered reads the atServer's
   commit id from the cache that notification promoted, instead of fetching
   it again with a `stats` verb; app-triggered rounds, the warm start and the
