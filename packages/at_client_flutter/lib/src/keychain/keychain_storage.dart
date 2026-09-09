@@ -52,8 +52,7 @@ class KeychainStorage {
     return null;
   }
 
-  // Agreed migration sequencing (PR #2200):
-  //
+  // Current behaviour:
   // 1.x.x (current):
   //   if `:` is absent and `_` is present, copy `_` to `:` but leave `_`.
   //
@@ -73,7 +72,6 @@ class KeychainStorage {
     // See migration sequencing comment above.
     // 1.x.x: only copy `_` to `:`, leave `_` in place.
 
-    // it's called "improper" because it used the wrong delimiter `_`
     final keychainStorageImproperName = await _getImproperAtKeysStoreName();
     String? improperDataString;
     try {
