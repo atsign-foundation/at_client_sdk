@@ -110,14 +110,22 @@ class EnrollParams {
   /// record. Carries the enrollment's key package (`metadata.keyPackage`) for
   /// the secret-sharing substrate; the server has no opinion on its contents.
   ///
-  /// Which verbs return it is **not uniform, deliberately**. `enroll:listns`
-  /// and `enroll:list` return it, but `enroll:list` only to a caller whose own
-  /// `__manage` grant is writable — a read-only administrator is given the
-  /// roster projection, which omits it. `enroll:fetch` returns it to any
-  /// caller its own gate admits, which includes that read-only administrator.
-  /// So fetch is the more permissive of the two on this field, and the
-  /// atServer has a test pinning that disagreement so it is not "fixed" in
-  /// either direction.
+  /// Which callers get it back is **not uniform, deliberately**.
+  /// `enroll:listns` returns it, and `enroll:fetch` returns it to any caller
+  /// its own gate admits. `enroll:list` returns it to a CRAM connection, to a
+  /// holder of `__manage:rw`, and to a caller holding no `__manage` at all —
+  /// that last one is given its own record whole.
+  ///
+  /// ⚠️ **The one caller it is withheld from is a `__manage:r` holder, and
+  /// not in the shape you would guess: it gets no metadata even for its OWN
+  /// record.** A read-only administrator cannot approve, so `enroll:list`
+  /// hands it the roster projection over the whole map, its own entry
+  /// included. Holding *less* privilege therefore discloses *more* of your own
+  /// record, and "may read the roster" is not "may read a key package".
+  ///
+  /// So `enroll:fetch` is more permissive than `enroll:list` on this field,
+  /// for exactly that caller. The atServer has a test pinning the
+  /// disagreement so it is not "fixed" in either direction.
   Map<String, dynamic>? metadata;
 
   List<EnrollmentStatus>? enrollmentStatusFilter;
