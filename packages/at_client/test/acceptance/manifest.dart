@@ -126,6 +126,10 @@ const liveProofExempt = <String, String>{
 ///
 /// Keyed `<use case> c<n>`, because the unit is a clause and not a row.
 const unprovableClauses = <String, String>{
+  'UC-A5.3 c2':
+      'every sentence of it is the atServer\'s: the transitive cascade, the roster it empties, and the three refusals (un-revoking behind an unapproved approver, a revoke that would remove the caller, one that would leave no permanent fully privileged enrollment). at_server pins each by name in BOTH its tiers — `the cascade is transitive, not one level deep` and `a revoke whose cascade would remove the caller is refused` carry the core, and its `apkam_self_enrollment_test.dart` holds the rest beside them. A pin here would build the subtree on this side and re-assert their behaviour through a fixture this side controls, which goes green for the wrong reason the day the cascade breaks in a shape that fixture does not construct (gkc, 2026-09-09). The client half of the old clause is now c3 and IS pinned',
+  'UC-A5.3 c4':
+      'the same, and with no client half at all: the successor is its predecessor\'s sibling, the cascade never follows the replacement edge, the predecessor\'s children move onto the successor at its first authentication, and an approved predecessor that is not fully privileged is revoked as superseded — all four are at_server\'s, pinned there as `revoking a predecessor does NOT revoke what replaced it`, `the successor is still in its APPROVER\'s cascade`, `a retrofit INHERITS its predecessor\'s approver` and the settle-at-first-auth group. Its closing sentence — that a compromised keyfile already replaced is answered by revoking the successor — is operator guidance rather than a behaviour anything can assert (gkc, 2026-09-09)',
   'UC-G2.9 c3':
       'it asserts that step 3\'s verifier-side accept lever DOES NOT EXIST. Building the lever falsifies the clause; pinning the absence counts it proven for describing a hole, which gkc declined for this row\'s c1 and c2 the same day. The absence IS guarded — architecture_guard_test.dart\'s "the verifier has no accept lever for signatures", cited from the row deliberately without a clauses: list — so nothing is unwatched; the clause simply has no route to proven. Kept as written (gkc, 2026-08-31) rather than withdrawn, with objective 1 restated around it',
 };
@@ -148,10 +152,10 @@ const unprovableClauses = <String, String>{
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 231;
+const provenClauseCount = 232;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 93;
+const serverProvenClauseCount = 94;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///

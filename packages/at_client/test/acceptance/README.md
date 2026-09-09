@@ -142,7 +142,7 @@ git grep -cP '^#{2,4} +(?:[\d.]+ +)?UC-[ABCG]\d+\.\d+[a-z]? +— ' \
 | A2 · enrollments              | A2.1 ✅, A2.2 ✅, A2.3 ✅, A2.4 ✅, A2.5 ⏳, A2.6 ⏳ | KE-2 |
 | A3 · self data                | A3.1 ✅, A3.2 ✅, A3.3 ✅, A3.4 ✅, A3.5 ✅ | —      |
 | A4 · shared data              | A4.1 ✅, A4.2 ✅, A4.3 ✅, A4.4 ✅, A4.5 ✅, A4.6 ✅, A4.7 ✅ | — |
-| A5 · rotation & revocation    | A5.1(a) ✅, A5.1(b) ✅, A5.2 ✅, A5.3 ⏳ | its cascade clause |
+| A5 · rotation & revocation    | A5.1(a) ✅, A5.1(b) ✅, A5.2 ✅, A5.3 ✅ | —            |
 | B0 · atServer prerequisite    | B0.1 ✅                           | —            |
 | B1 · retrofit                 | B1.1 ✅, B1.2 ✅, B1.3 ✅, B1.4 ✅, B1.5 ✅, B1.6 ✅, B1.7 ✅ | — |
 | B2 · retirement & lockout     | B2.1 ✅, B2.2 ✅                    | —            |

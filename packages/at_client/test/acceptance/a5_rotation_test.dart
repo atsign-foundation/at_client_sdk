@@ -162,11 +162,11 @@ void main() {
       //       rotation (UC-A5.1b) to deny new-data keys. Only that first arm is
       //       pinned here.
       //
-      // ⛔ The row's cascade clause - that revoking E2 revokes every enrollment
-      //    approved beneath it, so that subtree leaves every roster while the
-      //    client's exclusion set stays the ONE id named - is BUILT and
-      //    unpinned here: nothing in this repo revokes an approver with an
-      //    approval subtree beneath it. The cited test exercises no cascade.
+      // ⛔ The cascade clause is the atServer's, sentence by sentence, and its
+      //    own suite pins each in both tiers - so unprovableClauses carries it
+      //    rather than a fixture here re-asserting it. The client half was a
+      //    sentence inside that clause until 2026-09-09 and is now a clause of
+      //    its own, pinned below.
       //
       // ⚠️ This comment said that clause was ruled and not yet built, and read
       //    the cascade as reaching what an enrollment SELF-ENROLLED, until
@@ -178,6 +178,14 @@ void main() {
       //    walked client-side, until 2026-08-31. That was the wrong layer: an
       //    exclusion set binds only the client that computes it, while approval
       //    state is consulted by every roster query on every client.
+      provenIn('packages/at_client/test/nskey_rotation_test.dart',
+          'rotates every granted namespace, excluding the revoked id',
+          proves: 'the exclusion set the client hands every push: exactly the '
+              'one id named, over an atSign granted four namespaces and two '
+              'rotations. `everyElement` is the point - a build that widened '
+              'the set from the atServer\'s cascade, or from a client-side '
+              'walk, would put a second id in one of them',
+          clauses: ['exclusion set stays the ONE']);
       provenIn('tests/at_functional_test/test/nskey_rotation_live_test.dart',
           'UC-A5.3 · revokeEnrollmentAndRotate revokes first',
           proves: 'the composition run against a live atServer by a privileged '
@@ -190,6 +198,7 @@ void main() {
               'asserted directly in test/nskey_rotation_test.dart.',
           clauses: [
             'E2\'s APKAM keypair is cut at auth',
+            'exclusion set stays the ONE',
           ]);
     });
 

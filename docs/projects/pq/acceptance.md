@@ -1278,13 +1278,25 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     and to arbitrary depth, all of them **losing** `approved` in the same act.
     `enroll:listns` returns approved enrollments only, so that subtree is off
     every roster at once — the rotation's conveyance cannot reach it and no
-    holder will serve it the published generation. The client's exclusion set
-    stays the **one** enrollment named. The atServer refuses to un-revoke an
-    enrollment whose predecessor **exists and** is not currently `approved`; it
-    refuses a revoke whose cascade would remove **the caller**; and it refuses
-    one that would leave no permanent fully privileged enrollment. See
+    holder will serve it the published generation. The atServer refuses to
+    un-revoke an enrollment whose predecessor **exists and** is not currently
+    `approved`; it refuses a revoke whose cascade would remove **the caller**;
+    and it refuses one that would leave no permanent fully privileged
+    enrollment. See
     [`decisions.md` 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
     and [133](detail/decisions.md#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08).
+    ⚠️ **Every sentence of this clause is the atServer's**, and its own suite
+    pins each by name in both tiers — which is why nothing here proves it and
+    the entry in `unprovableClauses` says so. The client half was a sentence in
+    this clause until 2026-09-09 and is now the one below, so that it can be
+    pinned rather than carried by a clause this side cannot establish.
+  - ⛔ **The client's exclusion set stays the ONE enrollment named**, whatever
+    the atServer's cascade took with it. An exclusion set is advisory and
+    per-caller: it binds the client that computes it and nothing else, and
+    cannot bind a holder that has only the atServer's word to go on. Approval
+    state is authoritative and is consulted by every roster query on every
+    client, which is why `revokeEnrollmentAndRotate` revokes first and leaves
+    the walk to the atServer.
   - ⛔ **A self-enrolled successor is NOT in that set, and revoking a replaced
     enrollment does nothing to what replaced it.** The successor copies its
     predecessor's `parentEnrollmentId`, so the two are siblings, and the

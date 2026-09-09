@@ -320,6 +320,14 @@ void main() {
       print('REACHABLE  provable clauses: $reachable of $clauses   '
           'proven: $proven   still to prove: ${reachable - proven}');
 
+      // The other side of that subtraction, named rather than left to be asked:
+      // "232 of 235" invites "and the other three?", and the answer is a list
+      // this suite already holds. Printed from the same map the denominator is
+      // computed from, so the names and the count cannot drift apart.
+      // ignore: avoid_print
+      print('UNPROVABLE ${unprovableClauses.length}, and why is in '
+          'manifest.dart: ${(unprovableClauses.keys.toList()..sort()).join(', ')}');
+
       expect(proven <= reachable, isTrue,
           reason: 'more clauses are proven than are reachable, which means '
               'something in unprovableClauses is pinned after all');
