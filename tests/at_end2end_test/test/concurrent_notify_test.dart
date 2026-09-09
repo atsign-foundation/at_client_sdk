@@ -15,7 +15,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/concurrent_clients.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -85,30 +84,37 @@ void main() {
     });
     addTearDown(subscription.cancel);
 
-    // ── TEMPORARY probe, 2026-09-09 ──────────────────────────────────────
-    // This test began failing the moment the enrollment approval got fast.
-    // Measured across four runs: it passed with 349s and 416s between @ce2e4's
-    // approval and this test, and failed with 84s and 69s. The old ten-minute
-    // approval had been buying it settling time, so something here needs more
-    // than about 85 seconds after an enrollment is approved.
+    // ⚠️ **Subscribing is not the listener being ready, and that distinction is
+    // the whole of this test.** `subscribe()` returns its stream at once, but
+    // the monitor attaches to the atServer asynchronously — measured 2026-09-09,
+    // 424ms after the send had already begun. A notification the atServer
+    // accepts while no monitor is attached is not delivered to one that
+    // attaches later, and this pack does not set `fetchOfflineNotifications`,
+    // so nothing goes back for it. The send reports `delivered` either way.
     //
-    // What was missing was WHERE. `notify()` hung silently — not one log line
-    // between the monitor starting and the timeout — because the pack runs at
-    // `info` and every verb this sends is logged at `finer`. Raising it for
-    // this file prints the SENDING lines, so the next run names the last verb
-    // that got a response instead of going quiet.
-    AtSignLogger.root_level = 'finer';
-    final watch = Stopwatch()..start();
-    print('PROBE notify: starting, wall clock ${DateTime.now().toUtc()}');
+    // This test passed for two months without the wait, on slack it never asked
+    // for: the enrollment approval took ten minutes, so these clients had been
+    // live for five before the test ran and the monitor was long attached.
+    // Making the approval fast removed the slack and the race surfaced at once
+    // — it was never the approval's to hide.
+    //
+    // Polled rather than awaited on `currentListenerStateStream`: that stream
+    // does not replay, so a monitor attaching between the flag check and the
+    // subscription would be missed. A test about a race should not open one.
+    final notifications = clients.second.notificationService;
+    final attachDeadline = DateTime.now().add(Duration(seconds: 30));
+    while (!notifications.listening) {
+      if (DateTime.now().isAfter(attachDeadline)) {
+        throw StateError(
+            "$bob's monitor did not attach within 30s of subscribing, so the "
+            'notification below would race it. This is the harness waiting for '
+            'the wire, not a product timeout.');
+      }
+      await Future.delayed(Duration(milliseconds: 100));
+    }
+
     final result = await clients.first.notificationService
-        .notify(NotificationParams.forUpdate(key, value: value))
-        .timeout(Duration(seconds: 90),
-            onTimeout: () => throw StateError(
-                'PROBE notify() did not RETURN within 90s — so the send is '
-                'what blocks, not the delivery. The last SENDING line above '
-                'names the verb it is waiting on.'));
-    print('PROBE notify: returned ${result.notificationStatusEnum} '
-        'in ${watch.elapsedMilliseconds}ms');
+        .notify(NotificationParams.forUpdate(key, value: value));
     expect(result.notificationStatusEnum, NotificationStatusEnum.delivered);
 
     final notification = await received.future.timeout(
@@ -119,8 +125,6 @@ void main() {
           'running or this client\'s notificationService was replaced — the '
           'latter is what the singleton used to do.'),
     );
-    print('PROBE notify: notification arrived at '
-        '${watch.elapsedMilliseconds}ms from the send');
 
     expect(notification.from, alice);
     expect(notification.to, bob);
