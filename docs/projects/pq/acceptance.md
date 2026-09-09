@@ -284,6 +284,12 @@ here these objects exist only as test vocabulary.
 
 ### 1.0 Overloaded words — `legacy`, `primary`, `owner`
 
+Three words in this set carry more than one meaning, and two of them are
+wire literals. Each sub-section says what the word means here and what to
+write when another sense is in scope.
+
+#### 1.0.1 `legacy`
+
 ⚠️ **`legacy` is the most overloaded word in this document set, and three of its
 senses are columns in the tables immediately below.** It is never one constant,
 so a bare `legacy` in a clause is ambiguous unless the axis is named. Each sense
@@ -325,7 +331,7 @@ replacement the **successor** — say those, because a retrofit has two
 enrollments and "the legacy one" picks out neither reliably once the successor
 exists.
 
-### `primary` is an enrollment id, and never an adjective
+#### 1.0.2 `primary` is an enrollment id, and never an adjective
 
 **`primary` is the root enrollment the atServer constructs**, so that the auth
 credentials an atSign held *before enrollments existed* have a consistent name
@@ -340,7 +346,7 @@ not *the primary key*, not *the primary reason*, not as the replacement for
 reads as a reference to that enrollment. Say *main*, *chief*, *first* or
 *governing* instead.
 
-### `owner` is a person, not a credential and not a connection
+#### 1.0.3 `owner` is a person, not a credential and not a connection
 
 **The atSign owner is whoever owns the atSign — a person or an entity.** That
 is the only thing the bare word means here.
