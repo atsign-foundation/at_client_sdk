@@ -155,10 +155,7 @@ void main() {
         () => mockBiometricStorageFile.read(),
       ).thenAnswer((_) async => atKeysData);
 
-      expect(
-        () async => keyChainStorage.deleteAllAtKeysData(),
-        returnsNormally,
-      );
+      await keyChainStorage.deleteAllAtKeysData();
       final result = await keyChainStorage.readAtKeysData();
       expect(result, isNull);
     });
