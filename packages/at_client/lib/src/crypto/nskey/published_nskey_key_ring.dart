@@ -24,6 +24,7 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 final _logger = AtSignLogger('PublishedNskeyKeyRing');
@@ -865,8 +866,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       // NOTE: clear the stamp, so the next miss re-asks rather than waiting out
       // a cooldown earned by a request that never went out.
       _askedConveyance.remove(generation);
-      _logger.info('Could not request the missing nskey private for '
-          '$namespace:$nskeyKid, and the next read miss will ask again: $e');
+      logSwallowed(
+          _logger,
+          e,
+          'Could not request the missing nskey private for '
+          '$namespace:$nskeyKid, and the next read miss will ask again: $e',
+          routine: true);
     }));
   }
 }

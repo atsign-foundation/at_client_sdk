@@ -16,6 +16,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
+import 'package:at_client/src/util/swallowed_error.dart';
 
 /// Contains methods to execute verb on local secondary storage using [executeVerb]
 /// Set [AtClientPreference.isLocalStoreRequired] to true and other preferences that your app needs.
@@ -305,7 +306,10 @@ class LocalSecondary implements Secondary {
       // The sync service then peeks our queue and pushes batches.
       _atClient.syncService.sync();
     } catch (e, st) {
-      _logger.warning('$atKey is queued for sync, but the sync service could '
+      logSwallowed(
+          _logger,
+          e,
+          '$atKey is queued for sync, but the sync service could '
           'not be asked to drain, so it waits for the next trigger or for the '
           'periodic safety net: $e\n$st');
     }

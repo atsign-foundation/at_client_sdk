@@ -38,6 +38,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
+import 'package:at_client/src/util/swallowed_error.dart';
 
 class NotificationServiceImpl extends NotificationService {
   final Map<NotificationConfig, StreamController> _streamListeners =
@@ -539,7 +540,8 @@ class NotificationServiceImpl extends NotificationService {
                 lastReceivedNotificationAtKey, _watermarkValue(n),
                 putRequestOptions: _watermarkPutOptions);
           } catch (e) {
-            logger.warning('Failed to save last received notification ID: $e');
+            logSwallowed(
+                logger, e, 'Failed to save last received notification ID: $e');
           }
         }
         // NOTE: a `for` loop, not `_streamListeners.forEach` — `Map.forEach`
