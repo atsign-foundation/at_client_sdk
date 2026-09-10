@@ -184,6 +184,125 @@ void main() {
       }
     });
 
+    group('updateView', () {
+      test('matches update at the same keystream position, at any chunk size',
+          () {
+        final AESKey key = AESKey.generate(32);
+        final InitialisationVector iv = InitialisationVector.random(16);
+        final Uint8List plaintext = Uint8List.fromList(
+            List<int>.generate(4096, (int i) => i & 0xff));
+
+        final AesCtrFfiCipher control = makeCipher(key, iv);
+        final Uint8List expected;
+        try {
+          expected = control.update(plaintext);
+        } finally {
+          control.dispose();
+        }
+
+        for (final int chunk in <int>[1, 7, 16, 1000, 4096]) {
+          final AesCtrFfiCipher cipher = makeCipher(key, iv);
+          try {
+            final BytesBuilder actual = BytesBuilder();
+            for (int i = 0; i < plaintext.length; i += chunk) {
+              final int end = (i + chunk).clamp(0, plaintext.length);
+              // BytesBuilder copies on add(), which is the one sanctioned
+              // way to consume a view before the next call invalidates it.
+              actual.add(
+                  cipher.updateView(Uint8List.sublistView(plaintext, i, end)));
+            }
+            expect(actual.takeBytes(), expected,
+                reason:
+                    'updateView diverged from update at chunk size $chunk');
+          } finally {
+            cipher.dispose();
+          }
+        }
+      });
+
+      test('grows the buffer correctly for a chunk past the 256 KiB floor',
+          () {
+        final AESKey key = AESKey.generate(32);
+        final InitialisationVector iv = InitialisationVector.random(16);
+        final Uint8List plaintext = Uint8List.fromList(
+            List<int>.generate(600 * 1024, (int i) => i & 0xff));
+
+        final AesCtrFfiCipher control = makeCipher(key, iv);
+        final Uint8List expected;
+        try {
+          expected = control.update(plaintext);
+        } finally {
+          control.dispose();
+        }
+
+        final AesCtrFfiCipher cipher = makeCipher(key, iv);
+        try {
+          final Uint8List view = cipher.updateView(plaintext);
+          expect(view.length, plaintext.length);
+          expect(Uint8List.fromList(view), expected);
+        } finally {
+          cipher.dispose();
+        }
+      });
+
+      test('stays correct across geometric buffer growth', () {
+        // Walks the buffer through several reallocations, including past
+        // the 256 KiB floor, the same way the `update` growth test does.
+        final AESKey key = AESKey.generate(32);
+        final InitialisationVector iv = InitialisationVector.random(16);
+        final Uint8List plaintext = Uint8List.fromList(
+            List<int>.generate(600 * 1024, (int i) => i & 0xff));
+
+        final AesCtrFfiCipher control = makeCipher(key, iv);
+        final Uint8List expected;
+        try {
+          expected = control.update(plaintext);
+        } finally {
+          control.dispose();
+        }
+
+        final AesCtrFfiCipher cipher = makeCipher(key, iv);
+        try {
+          final BytesBuilder actual = BytesBuilder();
+          int offset = 0;
+          for (int size = 1; offset < plaintext.length; size *= 2) {
+            final int end = (offset + size).clamp(0, plaintext.length);
+            actual.add(cipher
+                .updateView(Uint8List.sublistView(plaintext, offset, end)));
+            offset = end;
+          }
+          expect(actual.takeBytes(), expected);
+        } finally {
+          cipher.dispose();
+        }
+      });
+
+      test('a view is invalidated by the next update call (documented '
+          'contract)', () {
+        final AesCtrFfiCipher cipher =
+            makeCipher(AESKey.generate(32), InitialisationVector.random(16));
+        try {
+          final Uint8List firstView = cipher.updateView(_hex(_nistPlaintextHex));
+          final Uint8List firstSnapshot = Uint8List.fromList(firstView);
+
+          // Same-size call reuses the buffer without reallocating, so the
+          // outstanding view now aliases the second call's output.
+          final Uint8List secondView = cipher.updateView(_hex(_nistPlaintextHex));
+
+          expect(firstView, equals(secondView),
+              reason: 'a same-size call must reuse outBuf in place, so an '
+                  'outstanding view aliases the exact memory the next call '
+                  'writes to — not merely differ from it');
+          expect(firstView, isNot(equals(firstSnapshot)),
+              reason: 'the view should have changed under the caller once a '
+                  'second update ran — this is exactly the hazard the '
+                  'contract warns about');
+        } finally {
+          cipher.dispose();
+        }
+      });
+    });
+
     group('lifecycle', () {
       test('update after dispose throws', () {
         final AesCtrFfiCipher cipher =

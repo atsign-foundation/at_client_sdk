@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:math' show max;
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_iv.dart';
@@ -71,18 +72,21 @@ final class AesCtrFfiCipher {
           'got ${iv.ivBytes.length} bytes');
     }
 
+    // isLeaf: true on the hot-path calls — none of them re-enter Dart, so the
+    // native call can skip the safepoint transition. Would become illegal if
+    // any of these ever called back into Dart.
     final ctxNew =
         lib.lookupFunction<EvpCipherCtxNewNative, EvpCipherCtxNewDart>(
-            'EVP_CIPHER_CTX_new');
+            'EVP_CIPHER_CTX_new', isLeaf: true);
     final ctxFree =
         lib.lookupFunction<EvpCipherCtxFreeNative, EvpCipherCtxFreeDart>(
-            'EVP_CIPHER_CTX_free');
+            'EVP_CIPHER_CTX_free', isLeaf: true);
     final encryptInitEx =
         lib.lookupFunction<EvpEncryptInitExNative, EvpEncryptInitExDart>(
             'EVP_EncryptInit_ex');
     final encryptUpdate =
         lib.lookupFunction<EvpEncryptUpdateNative, EvpEncryptUpdateDart>(
-            'EVP_EncryptUpdate');
+            'EVP_EncryptUpdate', isLeaf: true);
 
     final Pointer<EVP_CIPHER_CTX> ctx = ctxNew();
     if (ctx == nullptr) throw StateError('EVP_CIPHER_CTX_new failed');
@@ -143,6 +147,34 @@ final class AesCtrFfiCipher {
     return Uint8List.fromList(_state.outBuf.asTypedList(_state.outLen.value));
   }
 
+  /// Transforms [input] like [update], but returns a view directly onto the
+  /// native output buffer instead of copying it — no per-chunk allocation.
+  ///
+  /// **The returned view is valid only until the next call to [update] or
+  /// [updateView] on this instance.** That call may reuse or grow `outBuf`,
+  /// so anything holding the view past it is reading freed or overwritten
+  /// memory. The one sanctioned consumer is a synchronous `Socket.add`,
+  /// which copies the bytes before this method can be called again; do not
+  /// store the view, pass it across an `await`, or hand it to anything
+  /// asynchronous. Everything else should use [update].
+  Uint8List updateView(Uint8List input) {
+    if (_state.released) {
+      throw StateError('AesCtrFfiCipher.updateView called after dispose');
+    }
+    if (input.isEmpty) return Uint8List(0);
+    checkInlLength(input.length, 'input', 'EVP_EncryptUpdate');
+
+    _state.ensureCapacity(input.length);
+    _state.inBuf.asTypedList(input.length).setAll(0, input);
+
+    if (_encryptUpdate(_state.ctx, _state.outBuf, _state.outLen, _state.inBuf,
+            input.length) <=
+        0) {
+      throw AtEncryptionException('AES-CTR (FFI) transform failed');
+    }
+    return _state.outBuf.asTypedList(_state.outLen.value);
+  }
+
   /// Releases the context and every scratch buffer. Safe to call repeatedly.
   void dispose() {
     if (_state.released) return;
@@ -181,12 +213,12 @@ final class _NativeState {
   final EvpCipherCtxFreeDart _ctxFree;
   final Pointer<Int32> outLen = calloc<Int32>();
 
-  /// Scratch buffers reused across `update` calls.
+  /// Scratch buffers reused across `update`/`updateView` calls.
   ///
   /// A socket delivers many small chunks, and a `calloc`/`free` pair per chunk
   /// is precisely the fixed per-call cost that makes FFI lose to pure-Dart at
-  /// small sizes. These grow to the largest chunk seen and are wiped by
-  /// [release].
+  /// small sizes. These grow geometrically (see [ensureCapacity]) and are
+  /// wiped by [release].
   Pointer<Uint8> inBuf = nullptr;
   Pointer<Uint8> outBuf = nullptr;
   int _bufLen = 0;
@@ -195,12 +227,19 @@ final class _NativeState {
 
   _NativeState(this.ctx, this._ctxFree);
 
+  /// Chunks arriving off a socket are bounded well under [_minCapacity], so
+  /// growing geometrically (and never below it) means the first growth is
+  /// normally the last: later chunks all fit the buffer [updateView] already
+  /// handed a view into, so that view never dangles in practice.
+  static const int _minCapacity = 256 * 1024;
+
   void ensureCapacity(int length) {
     if (length <= _bufLen) return;
+    final int newLen = <int>[length, _bufLen * 2, _minCapacity].reduce(max);
     _freeBuffers();
-    inBuf = calloc<Uint8>(length);
-    outBuf = calloc<Uint8>(length);
-    _bufLen = length;
+    inBuf = calloc<Uint8>(newLen);
+    outBuf = calloc<Uint8>(newLen);
+    _bufLen = newLen;
   }
 
   void release() {
