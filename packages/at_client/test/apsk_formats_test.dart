@@ -1,0 +1,407 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:at_auth/at_auth.dart'
+    show ApskSigningKey, KeyEntryStatus, apskAdvertisement, apskSigningKeys;
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/signing/apsk_composition.dart'
+    show apskEntries, apskValueOf;
+import 'package:at_client/src/signing/envelope_signature.dart';
+import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
+import 'package:test/test.dart';
+
+import 'test_utils/envelope_tamper.dart';
+
+/// Every form a published `_apsk` comes in, and the verify that reads them.
+///
+/// A reader accepts both the bare RSA string and the array, and takes the
+/// algorithm from the key's own declaration rather than the envelope's claim.
+void main() {
+  const payload = 'the signable text';
+
+  group('parseApskValue', () {
+    test('a bare value is an RSA key, verbatim', () {
+      final parsed = parseApskValue('MIIBIjANBgkq-not-really-but-bare');
+
+      expect(parsed.signingAlgo, SigningAlgoType.rsa2048);
+      expect(parsed.publicKey, 'MIIBIjANBgkq-not-really-but-bare',
+          reason: 'the bare form is what every published _apsk carries today, '
+              'and what NoPorts parses — it must round-trip untouched');
+    });
+
+    test('a bare value reads as exactly ONE active rsa2048 entry', () {
+      // UC-G1.5: the bare form reads as a SINGLE active entry, which is what
+      // a verifier selects on.
+      const bare = 'MIIBIjANBgkq-not-really-but-bare';
+      final parsed = parseApskValue(bare);
+
+      expect(parsed.keys, hasLength(1));
+      expect(parsed.keys.single.alg, SigningAlgoType.rsa2048);
+      expect(parsed.keys.single.status, KeyEntryStatus.active);
+      expect(parsed.keys.single.pub, bare);
+    });
+
+    test('a structured value that advertises no keys is refused', () {
+      expect(
+          () => parseApskValue('{"v":1,"signingAlgo":"mldsa65","pub":"AAEC"}'),
+          throwsA(isA<AtSigningVerificationException>()),
+          reason: 'the array is the only structured form; anything else that '
+              'starts with { advertises no key this build can read, and a '
+              'guessed algorithm turns a key mismatch into silent acceptance '
+              'of whatever the server sent');
+    });
+
+    test('an array value names the algorithm of the key it advertises', () {
+      final array = jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(alg: SigningAlgoType.mldsa65, pub: 'AAEC')
+      ]));
+
+      final parsed = parseApskValue(array);
+      expect(parsed.signingAlgo, SigningAlgoType.mldsa65);
+      expect(parsed.publicKey, 'AAEC',
+          reason: 'this is the form an enrollment publishes, so it is the one '
+              'an approver meets when verifying a freshly advertised key '
+              'package');
+    });
+
+    test('an array of nothing understood is refused, not fallen back from', () {
+      expect(
+          () => parseApskValue('{"v":1,"keys":['
+              '{"kid":"k1","use":"sign","alg":"post2030","pub":"AAEC"}]}'),
+          throwsA(isA<AtSigningVerificationException>()),
+          reason: 'no downgrade and no fallback to a derivable legacy key — '
+              'the signature means something only if the verifier used the '
+              'key the signer published');
+    });
+
+    test('an array skips what it cannot use and reads what it can', () {
+      final parsed = parseApskValue('{"v":1,"keys":['
+          '{"kid":"k1","use":"sign","alg":"post2030","pub":"AAEC"},'
+          '{"kid":"k2","use":"sign","alg":"rsa2048","pub":"CCEC"}]}');
+
+      expect(parsed.signingAlgo, SigningAlgoType.rsa2048);
+      expect(parsed.publicKey, 'CCEC');
+    });
+
+    test('the STRONGEST advertised algorithm wins, not the first listed', () {
+      // NOTE: the listing order is the advertisement writer's choice, so a
+      // reader that takes the first entry hands it the algorithm.
+      final parsed = parseApskValue('{"v":1,"keys":['
+          '{"kid":"k1","use":"sign","alg":"rsa2048","pub":"AAEC"},'
+          '{"kid":"k2","use":"sign","alg":"mldsa65","pub":"CCEC"}]}');
+
+      expect(parsed.signingAlgo, SigningAlgoType.mldsa65);
+      expect(parsed.publicKey, 'CCEC');
+    });
+
+    test('and the same advertisement in the other order reads the same', () {
+      final parsed = parseApskValue('{"v":1,"keys":['
+          '{"kid":"k2","use":"sign","alg":"mldsa65","pub":"CCEC"},'
+          '{"kid":"k1","use":"sign","alg":"rsa2048","pub":"AAEC"}]}');
+
+      expect(parsed.signingAlgo, SigningAlgoType.mldsa65);
+      expect(parsed.publicKey, 'CCEC',
+          reason: 'the verdict must not depend on listing order at all — a '
+              'test that only pins the weak-first case would pass on a reader '
+              'that simply took the last entry');
+    });
+
+    test('a retired signing key is still read, because it verifies history',
+        () {
+      final parsed = parseApskValue('{"v":1,"keys":['
+          '{"kid":"k1","use":"sign","alg":"rsa2048","pub":"AAEC",'
+          '"status":"retired"}]}');
+
+      expect(parsed.signingAlgo, SigningAlgoType.rsa2048);
+      expect(parsed.publicKey, 'AAEC');
+    });
+
+    test('a status this build cannot read is NOT a verification candidate', () {
+      // NOTE: a status token this build cannot read is not `retired` — the
+      // likeliest meaning is a key its owner has disowned, whose signatures
+      // must stop checking out here.
+      final parsed = parseApskValue('{"v":1,"keys":['
+          '{"kid":"k1","use":"sign","alg":"mldsa65","pub":"AAEC",'
+          '"status":"revoked"},'
+          '{"kid":"k2","use":"sign","alg":"rsa2048","pub":"CCEC"}]}');
+
+      expect(parsed.keys.map((k) => k.kid), ['k2'],
+          reason: 'the revoked entry is not offered to the verifier at all');
+      expect(parsed.signingAlgo, SigningAlgoType.rsa2048,
+          reason: 'and it does not win the strength contest either - an '
+              'entry that is dropped cannot select the algorithm');
+    });
+
+    test('an advertisement of nothing verifiable is refused, not half-read',
+        () {
+      expect(
+          () => parseApskValue('{"v":1,"keys":['
+              '{"kid":"k1","use":"sign","alg":"mldsa65","pub":"AAEC",'
+              '"status":"revoked"}]}'),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('the array form is unmistakable to a bare-RSA consumer', () {
+      final array = jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(alg: SigningAlgoType.mldsa65, pub: 'AAEC')
+      ]));
+
+      expect(() => base64Decode(array), throwsA(isA<FormatException>()),
+          reason: 'NoPorts and its peers parse _apsk as a bare RSA key today; '
+              'the array must fail their parse loudly, never mis-read — which '
+              'is why a plain-legacy enrollment publishes the bare form and '
+              'not this');
+    });
+  });
+
+  group('the writer still emits the bare form', () {
+    // NOTE: valid base64 — `ApskSigningKey.forPublicKey` derives each entry's
+    // `kid` by decoding the key, so a placeholder that is not base64 fails in
+    // the composer rather than in the assertion.
+    final pub = base64Encode(utf8.encode('rsa-public-half'));
+
+    ApkamSigningKeys rsa(String p) => ApkamSigningKeys(
+        algorithm: SigningAlgoType.rsa2048, publicKey: p, privateKey: 'priv');
+
+    test('one active rsa2048 key is spelled bare, not as the array', () {
+      final value = apskValueOf(apskEntries(
+          signing: const [], withdrawn: const [], authentication: rsa(pub)));
+
+      expect(value, pub);
+      expect(value, isNot(startsWith('{')),
+          reason: 'a bare-RSA consumer base64-decodes this value; JSON where '
+              'a bare key would do breaks everything already deployed');
+    });
+
+    test('a second key forces the array — so the assertion above discriminates',
+        () {
+      final value = apskValueOf(apskEntries(
+          signing: [rsa(pub), rsa(base64Encode(utf8.encode('second')))],
+          withdrawn: const [],
+          authentication: null));
+
+      expect(value, startsWith('{'));
+    });
+
+    test('and a non-rsa2048 key forces it too', () {
+      final value = apskValueOf(apskEntries(signing: [
+        ApkamSigningKeys(
+            algorithm: SigningAlgoType.mldsa65,
+            publicKey: base64Encode(utf8.encode('mldsa-public-half')),
+            privateKey: 'priv')
+      ], withdrawn: const [], authentication: null));
+
+      expect(value, startsWith('{'));
+    });
+
+    test('a withdrawn key is advertised with the status it was handed', () {
+      final entries = apskEntries(signing: [
+        ApkamSigningKeys(
+            algorithm: SigningAlgoType.mldsa65,
+            publicKey: base64Encode(utf8.encode('mldsa-public-half')),
+            privateKey: 'priv')
+      ], withdrawn: [
+        (
+          algorithm: SigningAlgoType.rsa2048,
+          publicKey: pub,
+          status: KeyEntryStatus.of('revoked')
+        )
+      ], authentication: null);
+
+      expect(entries.map((e) => e.status).toList(),
+          [KeyEntryStatus.active, 'revoked'],
+          reason: 'raw literal on the right: the composer writes the token '
+              'through rather than substituting one it knows');
+      expect(jsonDecode(apskValueOf(entries))['keys'][1]['status'], 'revoked',
+          reason: 'and that is what lands on the record');
+    });
+
+    test('but the verify reader will not check a signature against it', () {
+      // NOTE: the two readers differ deliberately — at_auth's
+      // `apskSigningKeys` keeps an entry whose status it cannot read, because
+      // the writers republish what it returns and dropping the entry would
+      // withdraw the key; at_client's verify reader drops it.
+      final value = apskValueOf(apskEntries(signing: [
+        ApkamSigningKeys(
+            algorithm: SigningAlgoType.mldsa65,
+            publicKey: base64Encode(utf8.encode('mldsa-public-half')),
+            privateKey: 'priv')
+      ], withdrawn: [
+        (
+          algorithm: SigningAlgoType.rsa2048,
+          publicKey: pub,
+          status: KeyEntryStatus.of('revoked')
+        )
+      ], authentication: null));
+
+      expect(apskSigningKeys(jsonDecode(value)).map((k) => k.alg).toList(),
+          [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048],
+          reason: 'the writers\' reader keeps it, or republishing deletes it');
+      expect(parseApskValue(value).keys.map((k) => k.alg).toList(),
+          [SigningAlgoType.mldsa65],
+          reason: 'the verifier\'s reader does not');
+    });
+
+    test('what it emits bare reads back as what it wrote', () {
+      final value = apskValueOf(apskEntries(
+          signing: const [], withdrawn: const [], authentication: rsa(pub)));
+      final parsed = parseApskValue(value);
+
+      expect(parsed.keys, hasLength(1));
+      expect(parsed.keys.single.alg, SigningAlgoType.rsa2048);
+      expect(parsed.keys.single.status, KeyEntryStatus.active);
+      expect(parsed.keys.single.pub, pub);
+    });
+  });
+
+  group('verifyEnvelope, every published form', () {
+    late AtPkamKeyPair rsaPair;
+    late ({Uint8List publicKey, Uint8List secretKey}) mlDsaPair;
+
+    setUpAll(() async {
+      rsaPair = AtChopsUtil.generateAtPkamKeyPair();
+      mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
+    });
+
+    SignedEnvelope rsaEnvelope() => signEnvelope(payload,
+        keys: [
+          ApkamSigningKeys(
+              algorithm: SigningAlgoType.rsa2048,
+              publicKey: rsaPair.atPublicKey.publicKey,
+              privateKey: rsaPair.atPrivateKey.privateKey)
+        ],
+        type: EnvelopeType.app);
+
+    /// An envelope signed ML-DSA-65, naming that algorithm in its protected
+    /// header.
+    SignedEnvelope mlDsaEnvelope() => signEnvelope(payload,
+        keys: [
+          ApkamSigningKeys(
+              algorithm: SigningAlgoType.mldsa65,
+              publicKey: base64Encode(mlDsaPair.publicKey),
+              privateKey: base64Encode(mlDsaPair.secretKey))
+        ],
+        enrollmentId: 'enroll-pq',
+        type: EnvelopeType.app);
+
+    /// [envelope] with its protected header replaced, so a test can make the
+    /// envelope claim an algorithm its key does not match. The header is
+    /// inside the signature, so this re-stamps rather than edits.
+    SignedEnvelope claimingAlg(SignedEnvelope envelope, String alg) =>
+        envelope.claiming({'alg': alg, 'v': 1});
+
+    /// The `_apsk` an ML-DSA enrollment publishes: what its client composed,
+    /// written verbatim by the atServer at approval.
+    String mlDsaApsk() => jsonEncode(apskAdvertisement(keys: [
+          ApskSigningKey.forPublicKey(
+              alg: SigningAlgoType.mldsa65,
+              pub: base64Encode(mlDsaPair.publicKey))
+        ]));
+
+    test('a bare RSA _apsk verifies an RSA envelope — today\'s traffic',
+        () async {
+      await verifyEnvelope(rsaEnvelope(),
+          signerPublicKey: rsaPair.atPublicKey.publicKey,
+          expecting: EnvelopeType.app);
+    });
+
+    test('an array ML-DSA _apsk verifies an ML-DSA envelope', () async {
+      await verifyEnvelope(mlDsaEnvelope(),
+          signerPublicKey: mlDsaApsk(), expecting: EnvelopeType.app);
+    });
+
+    test('an array RSA _apsk refuses an envelope claiming ML-DSA-65', () async {
+      final apsk = jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.rsa2048, pub: rsaPair.atPublicKey.publicKey)
+      ]));
+      final envelope = claimingAlg(rsaEnvelope(), 'ML-DSA-65');
+
+      await expectLater(
+          () => verifyEnvelope(envelope,
+              signerPublicKey: apsk, expecting: EnvelopeType.app),
+          throwsA(isA<AtSigningVerificationException>()),
+          reason: 'the array carries the algorithm explicitly, so the claim '
+              'cannot select a routine the published key does not call for');
+    });
+
+    test('signEnvelope signs ML-DSA when asked, and the result verifies',
+        () async {
+      final envelope = signEnvelope(payload,
+          keys: [
+            ApkamSigningKeys(
+                algorithm: SigningAlgoType.mldsa65,
+                publicKey: base64Encode(mlDsaPair.publicKey),
+                privateKey: base64Encode(mlDsaPair.secretKey))
+          ],
+          enrollmentId: 'enroll-pq',
+          type: EnvelopeType.app);
+      final entry = envelope.signature;
+      expect(entry.alg, 'ML-DSA-65');
+      expect(base64Decode(base64.normalize(entry.signature)).length, 3309,
+          reason: 'an ML-DSA-65 signature is 3309 bytes — an RSA-sized '
+              'signature here means the sign dispatch ignored the algorithm '
+              'the keys name');
+
+      final apsk = mlDsaApsk();
+      await verifyEnvelope(envelope,
+          signerPublicKey: apsk, expecting: EnvelopeType.app);
+
+      await expectLater(
+          () => verifyEnvelope(envelope.withPayloadJson('a different text'),
+              signerPublicKey: apsk, expecting: EnvelopeType.app),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('signEnvelope refuses an algorithm it has no signing code for', () {
+      expect(
+          () => signEnvelope(payload,
+              keys: [
+                ApkamSigningKeys(
+                    algorithm: SigningAlgoType.ecc_secp256r1,
+                    publicKey: 'x',
+                    privateKey: 'y')
+              ],
+              type: EnvelopeType.app),
+          throwsA(isA<ArgumentError>()));
+    });
+
+    test('a tampered ML-DSA envelope fails', () async {
+      final apsk = mlDsaApsk();
+      final envelope = mlDsaEnvelope().withPayloadJson('a different text');
+
+      await expectLater(
+          () => verifyEnvelope(envelope,
+              signerPublicKey: apsk, expecting: EnvelopeType.app),
+          throwsA(isA<AtSigningVerificationException>()),
+          reason: 'control: the ML-DSA branch must actually verify, or the '
+              'happy path above proves routing and nothing else');
+    });
+
+    test(
+        'an envelope claiming rsa2048 against an ML-DSA _apsk is '
+        'refused', () async {
+      final apsk = mlDsaApsk();
+
+      await expectLater(
+          () => verifyEnvelope(rsaEnvelope(),
+              signerPublicKey: apsk, expecting: EnvelopeType.app),
+          throwsA(isA<AtSigningVerificationException>()),
+          reason: 'the key\'s declaration is authoritative — the claim cannot '
+              'select a weaker routine than the published key calls for');
+    });
+
+    test('an envelope claiming ML-DSA-65 against a bare RSA key is refused',
+        () async {
+      final envelope = claimingAlg(rsaEnvelope(), 'ML-DSA-65');
+
+      await expectLater(
+          () => verifyEnvelope(envelope,
+              signerPublicKey: rsaPair.atPublicKey.publicKey,
+              expecting: EnvelopeType.app),
+          throwsA(isA<AtSigningVerificationException>()),
+          reason: 'a bare key is RSA by definition; an envelope claiming '
+              'otherwise is lying about something, and the lie fails');
+    });
+  });
+}

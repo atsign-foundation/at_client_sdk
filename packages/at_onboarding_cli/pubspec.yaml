@@ -20,8 +20,11 @@ dependencies:
   meta: ^1.16.0
   path: ^1.9.0
   zxing2: ^0.2.0
-  at_auth: ^4.0.0-rc1
+  at_auth: ^4.0.0-rc2
   at_chops: ^3.0.0
+  # The prerelease lower bound is deliberate: this package uses PqPosture,
+  # which no stable at_client carries, and a caret on a stable version does not
+  # accept a prerelease.
   at_client: ^3.15.0-rc1
   at_commons: ^5.6.0
   at_lookup: ^3.6.0

@@ -6,15 +6,32 @@ import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
+import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_client/at_client.dart';
 
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:test/test.dart';
 
-class TestUtils {
-  static final ObjectLifeCycleOptions optionsTtlOneMinute =
-      ObjectLifeCycleOptions(timeToLive: Duration(minutes: 1));
+/// Legacy in every axis but with the post-quantum providers configured — the
+/// combination the post-quantum tests in this pack need, and one no deployment
+/// should have.
+///
+/// Deliberately not one of `PqPosture`'s named constants: the rollout ladder
+/// does not offer it as a stage.
+final legacyPlusPqProviders = PqPosture(
+  authenticationKeyAlgorithm: PqPosture.legacy.authenticationKeyAlgorithm,
+  dataSigningKeyAlgorithms: PqPosture.legacy.dataSigningKeyAlgorithms,
+  seedNamespaceKeys: PqPosture.legacy.seedNamespaceKeys,
+  keyExchangeMode: PqPosture.legacy.keyExchangeMode,
+  writesPqByDefault: PqPosture.legacy.writesPqByDefault,
+  configuresPqProviders: true,
+  disallowLegacyEncryption: PqPosture.legacy.disallowLegacyEncryption,
+  mintLegacyMaterial: PqPosture.legacy.mintLegacyMaterial,
+  sealsToKeyAlgorithms: PqPosture.legacy.sealsToKeyAlgorithms,
+  keyEstablishmentAlgorithms: PqPosture.legacy.keyEstablishmentAlgorithms,
+);
 
+class TestUtils {
   static AtSignLogger logger = AtSignLogger(' TestUtils ');
 
   /// Root server port for the virtualenv under test. Defaults to 64; a
@@ -27,13 +44,19 @@ class TestUtils {
 
   /// Names this test file, giving its clients storage no other file opens.
   ///
-  /// Call once, first thing in `main()`. Every bundle it hands out is closed
-  /// in a `tearDownAll` registered here, since these bundles are borrowed and
-  /// the client only detaches from them.
+  /// Call once, first thing in `main()`. A `tearDownAll` registered here stops
+  /// every client still running in the isolate and then closes every bundle
+  /// it handed out, since these bundles are borrowed and a client only
+  /// detaches from them.
   static void isolateStorage(String testFile) {
     final storage = FunctionalStorage(testFile);
     _storage = storage;
     tearDownAll(() async {
+      // NOTE: a client stopped after its store closed keeps syncing into
+      // `Box not found` until the isolate dies, so stop before closing.
+      for (final client in List.of(AtClientImpl.atClientInstanceMap.values)) {
+        await client.stop();
+      }
       await storage.closeAll();
       if (identical(_storage, storage)) _storage = null;
     });
@@ -48,14 +71,46 @@ class TestUtils {
           'has no storage of its own'));
 
   /// The bundle every client this file builds for [atSign] shares.
-  static AtClientStorage storageFor(String atSign) =>
-      storage.forAtSign(atSign);
+  static AtClientStorage storageFor(String atSign) => storage.forAtSign(atSign);
 
-  /// A preference carrying no storage path: what opens the store is the
-  /// bundle passed to `setCurrentAtSign`, and a call site that forgets one
-  /// fails loudly here rather than quietly opening the shared directory.
-  static AtClientPreference getPreference(String atsign) {
-    var preference = AtClientPreference();
+  /// A bundle for a second live principal on [atSign] — an enrolled client
+  /// running beside the owner client that approved it. See
+  /// [FunctionalStorage.forPrincipal] for why a retrofit does NOT come here.
+  static AtClientStorage storageForPrincipal(String atSign, String label) =>
+      storage.forPrincipal(atSign, label);
+
+  /// Whatever `AtClientPreference` currently defaults its posture to.
+  ///
+  /// For the tests whose subject IS that default, and only those: it follows
+  /// the SDK, so a release moving the default moves what such a test
+  /// exercises.
+  static PqPosture get sdkDefaultPosture => AtClientPreference().posture;
+
+  /// A preference for [atsign] at [posture], carrying no storage path: what
+  /// opens the store is the bundle passed to `setCurrentAtSign`, so a call
+  /// site that forgets one fails loudly there rather than quietly opening the
+  /// shared directory.
+  ///
+  /// [keyEstablishmentAlgorithms] is what this atSign mints and advertises;
+  /// [sealsToKeyAlgorithms] is the order in which, as a sender, it picks among
+  /// the keys a recipient advertises.
+  ///
+  /// ⚠️ One atSign in one process holds one posture: every axis here is final
+  /// at construction and `setCurrentAtSign` refuses a preference differing
+  /// from the running client's, so two tests sharing an atSign share a
+  /// posture.
+  static AtClientPreference getPreference(String atsign,
+      {required PqPosture posture,
+      SigningAlgoType? authenticationKeyAlgorithm,
+      Set<SigningAlgoType>? dataSigningKeyAlgorithms,
+      List<String>? keyEstablishmentAlgorithms,
+      List<String>? sealsToKeyAlgorithms}) {
+    var preference = AtClientPreference(
+        posture: posture,
+        authenticationKeyAlgorithm: authenticationKeyAlgorithm,
+        dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
+        keyEstablishmentAlgorithms: keyEstablishmentAlgorithms,
+        sealsToKeyAlgorithms: sealsToKeyAlgorithms);
     preference.rootDomain = 'vip.ve.atsign.zone';
     preference.rootPort = rootServerPort;
     preference.decryptPackets = false;
@@ -82,17 +137,38 @@ class TestUtils {
     return digest.toString();
   }
 
-  /// [storage] overrides this file's bundle, for a caller that has none —
-  /// a child isolate is a fresh heap, so [isolateStorage]'s static is null
-  /// there and the isolate has to build its own from what it was handed.
+  /// Builds this file's client for [currentAtSign] in [namespace] at
+  /// [posture], with its encryption keys loaded.
+  ///
+  /// A [preference] built at a different posture is refused rather than
+  /// silently winning; passing [atKeysIo] also forces `setCurrentAtSign` past
+  /// its same-atSign short-circuit; and [storage] is for a caller with no
+  /// file-level bundle, such as a child isolate, where [isolateStorage]'s
+  /// static is null.
   static Future<AtClientManager> initAtClient(
       String currentAtSign, String namespace,
-      {AtClientPreference? preference, AtClientStorage? storage}) async {
-    AtSignLogger.root_level = 'shout';
-    preference ??= TestUtils.getPreference(currentAtSign);
+      {required PqPosture posture,
+      AtClientPreference? preference,
+      AtKeysIo? atKeysIo,
+      AtClientStorage? storage}) async {
+    // NOTE: `shout` hides `warning`, the level at which a notification dropped
+    // in the delivery loop logs, making a drop and a non-arrival print the same
+    // nothing. A test wanting the monitor's frame-by-frame detail must set
+    // `finest` AFTER this call, which resets the level.
+    AtSignLogger.root_level = 'info';
+    if (preference != null && preference.posture != posture) {
+      throw ArgumentError(
+          'the supplied AtClientPreference for $currentAtSign was built at a '
+          'different posture from the one named here. Every posture axis is '
+          'final at construction, so this call cannot reconcile them — name '
+          'the posture the preference was built with, or build it at the '
+          'posture you want.');
+    }
+    preference ??= TestUtils.getPreference(currentAtSign, posture: posture);
     final encryptionKeysLoader = AtEncryptionKeysLoader.getInstance();
     var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, preference,
+        atKeysIo: atKeysIo,
         atChops: encryptionKeysLoader.createAtChopsFromDemoKeys(currentAtSign),
         storage: storage ?? storageFor(currentAtSign));
     // Set the preferences again because (1) setCurrentAtSign might do nothing

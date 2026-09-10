@@ -1,64 +1,98 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_end2end_test/config/config_util.dart';
-import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
+/// The receiver's cached copy of another atSign's shared data, and what a read
+/// does when that copy is gone.
+///
+/// Every verb runs on an atServer, so values are written and read as plaintext
+/// (the client is what encrypts a shared value, and it is not in this path);
+/// the `bypassCache` flag is not itself exercised, only the atServer path it
+/// also reaches once the cached copy is deleted.
 void main() async {
   late String sharedByAtSign;
   late String sharedWithAtSign;
   final namespace = TestConstants.namespace;
   var uuid = Uuid();
+
   setUpAll(() async {
     sharedByAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedByAtSign, namespace, authType);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        sharedByAtSign, namespace, authType,
+        posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        sharedWithAtSign, namespace, authType,
+        posture: PqPosture.legacy);
   });
 
-  Future<void> setAtSignOneAutoNotify(bool autoNotify) async {
-    //  reset the autoNotify to true
-    await TestSuiteInitializer.getInstance()
-        .switchToAtSign(sharedByAtSign, namespace);
-
-    var configResult = await AtClientManager.getInstance()
-        .atClient
-        .getRemoteSecondary()!
-        .executeCommand('config:set:autoNotify=$autoNotify\n', auth: true);
-    if (configResult == null) {
-      fail('failed to set auto config to $autoNotify');
-    }
-    expect(configResult.contains('data:ok'), true);
+  /// Makes [atSign] the current atSign and returns its client, which is used
+  /// only for its authenticated connection to that atSign's atServer.
+  ///
+  /// Switching rebuilds the client with credentials; `setCurrentAtSign` alone
+  /// leaves one that cannot authenticate an APKAM enrollment.
+  Future<AtClient> as(String atSign) async {
+    final atClientManager = await TestSuiteInitializer.getInstance()
+        .switchToAtSign(atSign, namespace, posture: PqPosture.legacy);
+    return atClientManager.atClient;
   }
 
-  /// The purpose of this test is to verify the following:
-  /// 1. Share a key from sharedByAtSign to sharedWithAtSign with ttr, with autoNotify:true
-  /// 2. Perform lookup from sharedWithAtSign  and assert on value - initial value should be returned.
-  /// 3. Set the autoNotify to false using the config verb
-  /// 4. Update the existing key to a new value
-  /// 4. lookup with bypass_cache set to true should return the updated value
-  /// 5. lookup with bypass_cache set to false should return the old value
-  test('A test to verify bypassCache', () async {
+  /// Runs [command] on [client]'s atServer and returns the data it answered
+  /// with, or null when the atServer refused because the key is absent.
+  ///
+  /// Absence is the only refusal turned into a value; every other error
+  /// propagates rather than being waited out as "not there yet".
+  Future<String?> run(AtClient client, String command) async {
+    try {
+      final response = await client
+          .getRemoteSecondary()!
+          .executeCommand(command, auth: true);
+      return response?.replaceFirst('data:', '').trim();
+    } on Object catch (e) {
+      final text = '$e';
+      if (text.contains('AT0015') ||
+          text.toLowerCase().contains('key not found') ||
+          text.contains('does not exist')) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  /// Polls [read] until it returns [expected], then returns. Fails with what
+  /// it last saw rather than timing out silently.
+  Future<void> pollUntil(
+    String what,
+    Future<String?> Function() read,
+    String expected, {
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    String? last;
+    while (DateTime.now().isBefore(deadline)) {
+      last = await read();
+      if (last == expected) return;
+      await Future.delayed(Duration(milliseconds: 500));
+    }
+    fail('$what: waited $timeout for "$expected" and last saw "$last"');
+  }
+
+  test('a read with no cached copy is answered from the publisher', () async {
     int uniqueId = uuid.v4().hashCode;
     String keyEntity = 'test_bypass_cached_key-$uniqueId';
     String initialValue = 'initial_value-$uniqueId';
     String updatedValue = 'updated_value-$uniqueId';
 
-    // Use a long TTL (5 minutes) — the test does a put on the
-    // publisher, then later does a bypassCache=true lookup that
-    // proxies back to the publisher. With our polling deadline of
-    // 60s plus the surrounding setCurrentAtSign / sync hops, the
-    // total test run can exceed 60s; a 60s TTL would have the
-    // publisher's atServer expire the key before the bypassCache
-    // lookup arrives, causing
-    // `remoteLookUp: remote atServer returned String value 'null'`.
-    final AtKey testByPassCacheAtKey = AtKey()
+    // NOTE: the ttl must outlast several atSign switches and two polls; a key
+    // that expires on the publisher first surfaces as an empty answer rather
+    // than as anything about caching.
+    final AtKey sharedKey = AtKey()
       ..key = keyEntity
       ..sharedWith = sharedWithAtSign
       ..namespace = namespace
@@ -67,153 +101,61 @@ void main() async {
         ..ttr = 1000
         ..ttl = 5 * TestConstants.oneMinuteMillis);
 
-    // CRITICAL: register the autoNotify=true reset via addTearDown so
-    // it runs even if this test times out. A `finally` block won't
-    // reliably run when the dart test framework cancels the test
-    // future on timeout — leaving `autoNotify=false` persisted on the
-    // sharedBy atServer for the next CI run, which then breaks every
-    // downstream test that depends on auto-notify firing the cross-
-    // server cache notify (deletion_key CCD, sharing_key TTR).
-    addTearDown(() async {
-      try {
-        await setAtSignOneAutoNotify(true);
-      } catch (e) {
-        // Best-effort; the next test (or the next run's setUp) will
-        // re-attempt if needed.
-      }
-    });
+    String write(String value) => (UpdateVerbBuilder()
+          ..atKey = sharedKey
+          ..value = value)
+        .buildCommand();
 
-    // Ensure autoNotify is set to true to begin with
-    await setAtSignOneAutoNotify(true);
+    final String cachedKey = (AtKey()
+          ..key = keyEntity
+          ..sharedWith = sharedWithAtSign
+          ..sharedBy = sharedByAtSign
+          ..namespace = namespace
+          ..metadata = (Metadata()..isCached = true))
+        .toString();
 
-    // Set sharedBy atSign as currentAtSign and Put the initial value
-    await TestSuiteInitializer.getInstance()
-        .switchToAtSign(sharedByAtSign, namespace);
+    // NOTE: the publisher's key, not the receiver's cached copy of it — naming
+    // the cached copy here would answer the lookup from the cache and take the
+    // decision away from the atServer.
+    final String lookupKey = '$keyEntity.$namespace$sharedByAtSign';
 
-    // Per-key gate: register the listener BEFORE the put so the
-    // push event for this key can't fire before the listener is in
-    // place. `put` internally calls `syncService.sync()` after
-    // enqueueing, which can run to completion (and emit its
-    // SyncProgress event) before any subsequent line of test code
-    // runs — registering the listener after the put would miss
-    // that event and the gate would hang until timeout.
-    // `awaitKeyPushed` runs its registration synchronously before
-    // returning its Future, so capturing it here is sufficient.
-    var pushedInitialValue = E2ESyncService.getInstance().awaitKeyPushed(
-        AtClientManager.getInstance().atClient.syncService,
-        testByPassCacheAtKey);
-    var putResult = await AtClientManager.getInstance()
-        .atClient
-        .put(testByPassCacheAtKey, initialValue);
-    expect(putResult, true);
-    await pushedInitialValue;
+    var publisher = await as(sharedByAtSign);
+    expect(await run(publisher, 'config:set:autoNotify=true\n'), 'ok',
+        reason: 'without auto-notify nothing fills the cache, and the poll '
+            'below would time out saying the value never arrived');
 
-    // Cross-server propagation: publisher's atServer auto-notifies
-    // the receiver's atServer (autoNotify=true at this point). That
-    // path is separate from the at_client sync queue we just gated,
-    // so still wait for it.
-    await Future.delayed(Duration(seconds: 5));
+    expect(await run(publisher, write(initialValue)), isNotNull,
+        reason: 'the update is answered with a commit id');
 
-    // Switch to sharedWithAtSign
-    await TestSuiteInitializer.getInstance()
-        .switchToAtSign(sharedWithAtSign, namespace);
+    var receiver = await as(sharedWithAtSign);
+    await pollUntil('the receiver caches the created value',
+        () => run(receiver, 'llookup:$cachedKey\n'), initialValue);
+    expect(await run(receiver, 'lookup:$lookupKey\n'), initialValue,
+        reason: 'with a cached copy present the receiver atServer answers '
+            'from it, and it holds what the publisher wrote');
 
-    await E2ESyncService.getInstance()
-        .syncData(AtClientManager.getInstance().atClient.syncService);
+    publisher = await as(sharedByAtSign);
+    expect(await run(publisher, write(updatedValue)), isNotNull);
 
-    var getKey = AtKey()
-      ..key = keyEntity
-      ..sharedBy = sharedByAtSign;
-    var getResult = await AtClientManager.getInstance().atClient.get(getKey);
-    expect(getResult.value, initialValue);
-    // Since the put request has a ttr in metadata, a cached key will be created.
-    // When a cached key is available, value will be fetched from a cached key.
-    // Hence isCached should be true.
-    expect(getResult.metadata!.isCached, true);
+    // NOTE: auto-notify is asynchronous, so the delete below must wait for the
+    // update to reach the cache — a notification arriving after the delete
+    // recreates the cached copy, and the final lookup is then answered from a
+    // cache holding the right value for the wrong reason.
+    receiver = await as(sharedWithAtSign);
+    await pollUntil('the receiver caches the updated value',
+        () => run(receiver, 'llookup:$cachedKey\n'), updatedValue);
 
-    // Switch back to sharedByAtSign to update the value of the key.
-    await TestSuiteInitializer.getInstance()
-        .switchToAtSign(sharedByAtSign, namespace);
+    expect(await run(receiver, 'delete:$cachedKey\n'), isNotNull,
+        reason: 'the atServer exempts cached data from its delete rules, so a '
+            'receiver may always drop another atSign\'s cached copy');
 
-    // Set autoNotify to false so that the update doesn't propagate to sharedWith AtSign automatically
-    await setAtSignOneAutoNotify(false);
+    expect(await run(receiver, 'llookup:$cachedKey\n'), isNull,
+        reason: 'the llookup must find nothing. Anything else means the copy '
+            'survived its own deletion, and the lookup below would be '
+            'answered from a cache rather than by the publisher');
 
-    // Per-key gate: register the listener BEFORE the put (see
-    // explanation at the initialValue gate above) — `put` may
-    // trigger sync to completion before any subsequent line runs,
-    // so post-put registration races the very event we're trying
-    // to observe.
-    //
-    // This gate is the primary fix for the historical flake — the
-    // prior `syncData` gate could return on an unrelated prior
-    // sync event's commit-id match, leaving N+2 still queued; the
-    // receiver-side bypassCache lookup then polled for 60s against
-    // a publisher atServer that still held `initialValue`.
-    var pushedUpdatedValue = E2ESyncService.getInstance().awaitKeyPushed(
-        AtClientManager.getInstance().atClient.syncService,
-        testByPassCacheAtKey);
-    var newPutResult = await AtClientManager.getInstance()
-        .atClient
-        .put(testByPassCacheAtKey, updatedValue);
-    expect(newPutResult, true);
-    await pushedUpdatedValue;
-
-    // As atSignTwo
-    await TestSuiteInitializer.getInstance()
-        .switchToAtSign(sharedWithAtSign, namespace);
-
-    // Sync - after this we still should have the old value
-    await E2ESyncService.getInstance()
-        .syncData(AtClientManager.getInstance().atClient.syncService);
-
-    // Get result with bypassCache set to false
-    // Since bypassCache is set to false, the value from the returned from the
-    // cached key. So the initial value should be returned.
-    getKey = AtKey()
-      ..key = keyEntity
-      ..sharedBy = sharedByAtSign;
-    getResult = await AtClientManager.getInstance().atClient.get(getKey,
-        getRequestOptions: GetRequestOptions()..bypassCache = false);
-    expect(getResult.value, initialValue);
-    expect(getResult.metadata!.isCached, true);
-
-    // Get result with bypassCache set to true
-    // Since bypassCache is set to true, a lookup should be performed to the
-    // sharedBy AtSign and updated value should be fetched.
-    // syncData on sharedBy returning success confirms the SDK acked
-    // the put, but on long-running real atServers there can be tail
-    // latency between the publisher's atServer committing the value
-    // and that value being readable via the receiver atServer's
-    // outbound `lookup:` (the path bypassCache=true takes). Poll the
-    // lookup until we observe updatedValue, with a generous timeout,
-    // so this test isn't flaky on cross-server propagation tail.
-    getKey = AtKey()
-      ..key = keyEntity
-      ..sharedBy = sharedByAtSign;
-    final pollDeadline = DateTime.now().add(Duration(seconds: 60));
-    while (true) {
-      getResult = await AtClientManager.getInstance().atClient.get(getKey,
-          getRequestOptions: GetRequestOptions()..bypassCache = true);
-      if (getResult.value == updatedValue) break;
-      if (!DateTime.now().isBefore(pollDeadline)) break;
-      await Future.delayed(Duration(seconds: 1));
-    }
-    expect(getResult.value, updatedValue);
-    expect(getResult.metadata!.isCached, false);
-    // Sync - after this we should now have the new value
-    await E2ESyncService.getInstance()
-        .syncData(AtClientManager.getInstance().atClient.syncService);
-
-    // Get Result with byPassCache set to false again
-    // should also now return the new value, since cached value will have been updated with the
-    // results of the remote lookup, and the cached value will have been synced to the client
-    getKey = AtKey()
-      ..key = keyEntity
-      ..sharedBy = sharedByAtSign;
-    var getResultWithFalse = await AtClientManager.getInstance().atClient.get(
-        getKey,
-        getRequestOptions: GetRequestOptions()..bypassCache = false);
-    expect(getResultWithFalse.value, updatedValue);
-    expect(getResultWithFalse.metadata!.isCached, true);
+    expect(await run(receiver, 'lookup:$lookupKey\n'), updatedValue,
+        reason: 'with no cached copy the receiver atServer performs a fresh '
+            'outbound lookup to the publisher, which holds the updated value');
   }, timeout: Timeout(Duration(minutes: 3)));
 }

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:flutter/material.dart';
 
@@ -131,10 +131,14 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
     try {
       _logger.info('Initiating simulated request for $appName');
 
-      final atLookup = AtLookupImpl(
-        currentAtSign,
-        atClient.getPreferences()!.rootDomain,
-        atClient.getPreferences()!.rootPort,
+      final atLookup = AtLookUp.withSecureSocket(
+        atSign: currentAtSign,
+        rootDomain: AtRootDomain(
+          atClient.getPreferences()!.rootDomain,
+          atClient.getPreferences()!.rootPort,
+        ),
+        transport: secureSocketTransport(SecureSocketConfig()),
+        authenticator: null,
       );
 
       // STEP 1: Generate an OTP using the MANAGER client

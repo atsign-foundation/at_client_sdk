@@ -1,13 +1,214 @@
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show pqCryptoProviderIds;
+import 'package:at_client/src/preference/pq_posture.dart';
+import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show canSignEnvelopeWith;
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:version/version.dart';
 
 /// Class to hold attributes for client preferences.
-/// Set the preferences for your application and pass it to [AtClientManager.setCurrentAtSign].
+/// Set the preferences for your application and pass it to
+/// `AtClientManager.setCurrentAtSign`.
 class AtClientPreference {
+  /// Never encrypt *new* data with the legacy (pre-post-quantum) provider:
+  /// take a post-quantum path, or refuse the write.
+  ///
+  /// ⚠️ Set by [posture] alone — no constructor argument and no setter — and
+  /// it overrides [allowLegacyCryptoFallback], which says the opposite.
+  final bool disallowLegacyEncryption;
+
+  /// How far into the post-quantum rollout this client runs — every rollout
+  /// axis set as a group, and a floor an explicit axis may raise but not lower.
+  ///
+  /// ⚠️ An existing enrollment holding an authentication key weaker than this
+  /// asks for is retrofitted at the next start, with no opt-out; an app that
+  /// must not move names [PqPosture.legacy].
+  final PqPosture posture;
+
+  /// Which algorithms this client keeps an **active signing key** for — the
+  /// keys that sign what its enrollment attests to, which is a different job
+  /// from the APKAM authentication key that proves possession on a connection.
+  ///
+  /// ⚠️ Empty is not "unsigned": the enrollment signs with its APKAM
+  /// authentication key, whose public half stays published as its signing key.
+  final Set<SigningAlgoType> dataSigningKeyAlgorithms;
+
+  /// The algorithm this client's APKAM **authentication** key is minted under
+  /// when a retrofit names none — the key that proves possession on a
+  /// connection, which only the atServer verifies.
+  ///
+  /// Not to be confused with [dataSigningKeyAlgorithms], which is what the
+  /// enrollment signs *content* with and which every peer verifies.
+  final SigningAlgoType authenticationKeyAlgorithm;
+
+  /// The key-establishment algorithms this client will **seal to**, strongest
+  /// first — which of a recipient's advertised keys it is willing to use, where
+  /// [keyEstablishmentAlgorithms] is what this atSign publishes.
+  ///
+  /// ⚠️ Narrowing it is choosing to refuse: a recipient advertising only a
+  /// dropped algorithm is refused rather than downgraded.
+  final List<String> sealsToKeyAlgorithms;
+
+  AtClientPreference(
+      {this.posture = PqPosture.legacy,
+      SigningAlgoType? authenticationKeyAlgorithm,
+      Set<SigningAlgoType>? dataSigningKeyAlgorithms,
+      List<String>? sealsToKeyAlgorithms,
+      List<String>? keyEstablishmentAlgorithms})
+      : disallowLegacyEncryption = posture.disallowLegacyEncryption,
+        authenticationKeyAlgorithm =
+            authenticationKeyAlgorithm ?? posture.authenticationKeyAlgorithm,
+        dataSigningKeyAlgorithms = _signableOrRefuse(
+            dataSigningKeyAlgorithms ?? posture.dataSigningKeyAlgorithms),
+        sealsToKeyAlgorithms = _sealableOrRefuse(
+            sealsToKeyAlgorithms ?? posture.sealsToKeyAlgorithms),
+        keyEstablishmentAlgorithms = _advertisableOrRefuse(
+            keyEstablishmentAlgorithms ?? posture.keyEstablishmentAlgorithms) {
+    seedNamespaceKeys = posture.seedNamespaceKeys;
+
+    // NOTE: in this body a bare parameter name is the caller's nullable value,
+    // null exactly when the caller named none, while `this.`-qualified it is
+    // the resolved field.
+
+    if (this.dataSigningKeyAlgorithms.isEmpty &&
+        this.authenticationKeyAlgorithm != SigningAlgoType.rsa2048) {
+      throw ArgumentError.value(
+          this.authenticationKeyAlgorithm,
+          'authenticationKeyAlgorithm',
+          'an enrollment holding no data signing key signs with its '
+              'authentication key, and that key is what `_apsk` advertises — so '
+              'it must be one the bare form can state, which is rsa2048. Give '
+              'dataSigningKeyAlgorithms a member, or authenticate with rsa2048');
+    }
+
+    final asked = authenticationKeyAlgorithm;
+    if (asked != null &&
+        asked != posture.authenticationKeyAlgorithm &&
+        SigningAlgoType.strongestOf(
+                {asked, posture.authenticationKeyAlgorithm}) ==
+            posture.authenticationKeyAlgorithm) {
+      throw ArgumentError.value(
+          asked,
+          'authenticationKeyAlgorithm',
+          'is weaker than ${posture.authenticationKeyAlgorithm.name}, which '
+              'this posture names. A posture is a floor: name a posture that '
+              'wants ${asked.name}, or PqPosture.legacy to stay where you are');
+    }
+  }
+
+  /// Where [other] would change what a **running** client does — one line per
+  /// differing axis, empty when the two are interchangeable.
+  ///
+  /// Compared by value rather than identity, and only over the axes fixed at
+  /// construction: the mutable [seedNamespaceKeys] and [crypto] are excluded.
+  List<String> rolloutDifferencesFrom(AtClientPreference other) {
+    final differences = <String>[];
+
+    void compare(String axis, Object? asked, Object? running) {
+      if (asked != running)
+        differences.add('$axis (asked $asked, running $running)');
+    }
+
+    compare('posture.writesPqByDefault', other.posture.writesPqByDefault,
+        posture.writesPqByDefault);
+    compare('posture.configuresPqProviders',
+        other.posture.configuresPqProviders, posture.configuresPqProviders);
+    compare('posture.keyExchangeMode', other.posture.keyExchangeMode.name,
+        posture.keyExchangeMode.name);
+    compare('authenticationKeyAlgorithm', other.authenticationKeyAlgorithm.name,
+        authenticationKeyAlgorithm.name);
+    compare('disallowLegacyEncryption', other.disallowLegacyEncryption,
+        disallowLegacyEncryption);
+    // NOTE: order is meaning in both lists — it picks the algorithm — so they
+    // are compared as strings rather than as sets.
+    compare('sealsToKeyAlgorithms', '${other.sealsToKeyAlgorithms}',
+        '$sealsToKeyAlgorithms');
+    compare('keyEstablishmentAlgorithms', '${other.keyEstablishmentAlgorithms}',
+        '$keyEstablishmentAlgorithms');
+
+    final asked = other.dataSigningKeyAlgorithms;
+    final running = dataSigningKeyAlgorithms;
+    if (asked.length != running.length || !asked.containsAll(running)) {
+      // NOTE: rendered strongest-first because a Set iterates in insertion
+      // order, so two equal sets would otherwise print differently.
+      String spell(Set<SigningAlgoType> algorithms) =>
+          '{${SigningAlgoType.strongestFirst.where(algorithms.contains).map((a) => a.name).join(', ')}}';
+      differences.add('dataSigningKeyAlgorithms (asked ${spell(asked)}, '
+          'running ${spell(running)})');
+    }
+    return differences;
+  }
+
+  /// [algorithms] unmodifiable, or an [ArgumentError] naming the first member
+  /// this build cannot seal under.
+  ///
+  /// Unmodifiable because the check runs once, and a list the caller retains
+  /// would otherwise be a way past it.
+  static List<String> _sealableOrRefuse(List<String> algorithms) {
+    for (final algorithm in algorithms) {
+      if (!SecretSharingAlgos.keyAlgos.contains(algorithm)) {
+        throw ArgumentError.value(algorithm, 'sealsToKeyAlgorithms',
+            'this build seals to ${SecretSharingAlgos.keyAlgos.join(', ')}');
+      }
+    }
+    return List.unmodifiable(algorithms);
+  }
+
+  /// [algorithms] unmodifiable, or an [ArgumentError] — naming the first
+  /// member this build cannot mint a key for, or refusing an empty list.
+  ///
+  /// Empty is refused where [_sealableOrRefuse] permits it: a client that seals
+  /// to nothing writes to nobody, while an atSign advertising nothing can
+  /// **receive** nothing and looks like a working enrollment that silently
+  /// never gets its data.
+  static List<String> _advertisableOrRefuse(List<String> algorithms) {
+    if (algorithms.isEmpty) {
+      throw ArgumentError.value(
+          algorithms,
+          'keyEstablishmentAlgorithms',
+          'an atSign advertising no key-establishment key can receive nothing '
+              'sealed to it. Name at least one of '
+              '${SecretSharingAlgos.keyAlgos.join(', ')}');
+    }
+    for (final algorithm in algorithms) {
+      if (!SecretSharingAlgos.keyAlgos.contains(algorithm)) {
+        throw ArgumentError.value(algorithm, 'keyEstablishmentAlgorithms',
+            'this build mints ${SecretSharingAlgos.keyAlgos.join(', ')}');
+      }
+    }
+    return List.unmodifiable(algorithms);
+  }
+
+  /// [algorithms] unmodifiable, or an [ArgumentError] naming the first member
+  /// this build produces no envelope signature for.
+  ///
+  /// Unmodifiable because the field is only as final as its contents: an app
+  /// holding the set it passed could otherwise add an algorithm afterwards and
+  /// get past the check.
+  static Set<SigningAlgoType> _signableOrRefuse(
+      Set<SigningAlgoType> algorithms) {
+    for (final algorithm in algorithms) {
+      if (!canSignEnvelopeWith(algorithm)) {
+        final signable = SigningAlgoType.strongestFirst
+            .where(canSignEnvelopeWith)
+            .map((signableAlgorithm) => signableAlgorithm.name)
+            .join(', ');
+        throw ArgumentError.value(algorithm.name, 'dataSigningKeyAlgorithms',
+            'this build signs under $signable');
+      }
+    }
+    return Set.unmodifiable(algorithms);
+  }
+
   /// Local device path of hive storage, used when no [AtClientStorage] is
-  /// supplied to [AtClient.create] or [AtClientManager.setCurrentAtSign].
+  /// supplied to [buildAtClient] or [AtClientManager.setCurrentAtSign].
   ///
   /// Setting this leaves the client owning its store: it opens the store and
   /// closes it again when it stops. Supplying a bundle instead chooses the
@@ -166,7 +367,14 @@ class AtClientPreference {
 
   AtClientParticulars atClientParticulars = AtClientParticulars();
 
-  /// signing algorithm to use for pkam authentication
+  /// Signing algorithm to use for pkam authentication.
+  ///
+  /// Consulted only for a legacy enrollment whose keyfile carries no typed
+  /// signing material; where typed material exists the client resolves the
+  /// algorithm from the keyfile and this value never overrides it.
+  @Deprecated('The signing algorithm is resolved from the enrollment\'s key '
+      'material; this value is only a fallback for legacy keyfiles with no '
+      'typed signing material')
   SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
 
   /// hashing algorithm to use for pkam authentication
@@ -179,11 +387,60 @@ class AtClientPreference {
   /// local and remote.
   RemoteLocalPref remoteLocalPref = RemoteLocalPref.localOnly;
 
-  /// Configures the crypto provider used for encrypted puts and reads.
+  /// Configures the crypto providers used for encrypted puts and reads.
   ///
-  /// Defaults to the legacy Atsign encryption provider. Custom providers are
-  /// initialized by [AtClientImpl] before sync and notification services start.
-  CryptoConfig crypto = const CryptoConfig.legacy();
+  /// The default, [CryptoConfig.eraDefault], is whatever this SDK release
+  /// encrypts with; assign one only to register a custom provider or to hold a
+  /// named scheme deliberately.
+  ///
+  /// ⚠️ Assigning a config that registers a [pqCryptoProviderIds] provider is
+  /// refused when [posture] configures none, and the check runs at assignment
+  /// only — [CryptoConfig.providers] is held by reference.
+  CryptoConfig get crypto => _crypto;
+
+  set crypto(CryptoConfig config) {
+    if (!posture.configuresPqProviders) {
+      final refused =
+          config.providers.map((p) => p.id).where(pqCryptoProviderIds.contains);
+      if (refused.isNotEmpty) {
+        throw ArgumentError.value(
+            refused.join(', '),
+            'crypto',
+            'this preference runs a posture that configures no post-quantum '
+                'providers, and this config registers them. A client cannot '
+                'both stand in for a build that predates these schemes and be '
+                'given them. Name a posture that configures them, or a config '
+                'that does not register them');
+      }
+    }
+    _crypto = config;
+  }
+
+  CryptoConfig _crypto = const CryptoConfig.eraDefault();
+
+  /// Whether a write that cannot go out under [crypto]'s scheme may fall back
+  /// to legacy encryption instead of failing with
+  /// [NamespaceKeyUnavailableException].
+  ///
+  /// ⚠️ Off by default: the fallback is a silent downgrade to RSA, and it is
+  /// forward-only — the first write after the destination publishes a key is
+  /// post-quantum, but records already written under it stay legacy.
+  bool allowLegacyCryptoFallback = false;
+
+  /// Whether this client mints and publishes namespace keys at start.
+  ///
+  /// Defaulted from [posture] and assignable afterwards, unlike the axes fixed
+  /// at construction; minting publishes a permanent, discoverable record.
+  bool seedNamespaceKeys = false;
+
+  /// Which key-establishment algorithms this atSign **mints and advertises** —
+  /// ids from [SecretSharingAlgos.keyAlgos], strongest-preferred first, where
+  /// [sealsToKeyAlgorithms] is which of a recipient's this client will use.
+  ///
+  /// ⚠️ The first entry is the one anything minting a single key takes, so
+  /// reordering changes what this atSign mints at its next start; dropping an
+  /// entry retires that key rather than deleting it.
+  final List<String> keyEstablishmentAlgorithms;
 }
 
 /// Default preference on how to handle get, put and delete requests with

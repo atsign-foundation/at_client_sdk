@@ -1,0 +1,177 @@
+# sdk.md — the at_client_sdk workspace: packages, release train, toolchain, test harnesses
+
+Format and rules: [`README.md`](README.md).
+
+## Test harnesses — the virtual environment
+
+### `at_virtual_env:local` and `at_ephemeral:local` are different environments built by different tools
+
+**Is:** the **virtual environment (VE)** is what every at_client_sdk live pack
+talks to; the **ephemeral environment (EE)** is a separate thing. They are built
+from separate trees in the at_server repo and carry separate tags:
+
+| | built from | tag |
+|---|---|---|
+| VE | `tools/build_virtual_environment/ve/Dockerfile`, over `ve_base/Dockerfile` | `at_virtual_env:local` |
+| EE | `tools/build_ephemeral_environment/buildee.sh` | `at_ephemeral:local` |
+
+`buildee.sh` says so in its own header — *"build an ephemeral environment (EE)
+image from THIS working tree"*. It is the better-instrumented of the two and the
+obvious thing to reach for, which is exactly why it gets offered when what is
+wanted is a VE. `ve/Dockerfile.vip` and `ve/Dockerfile.canary_to_vip` exist but
+are not on the local-build path.
+
+`tools/build_virtual_environment/install_PKAM_Keys/` is the `pkamLoad` step whose
+presence or absence distinguishes the live packs' runners.
+
+**Matters because:** a request for "a build of the environment" answered with the
+EE produces an image the packs never load, and no error says so — the packs go on
+using whatever `at_virtual_env:local` already held.
+
+**Evidence:**
+- `at_server@45846a7b` -> `tools/build_ephemeral_environment/buildee.sh` -> `build an ephemeral environment (EE) image`
+- `at_server@45846a7b` -> `tools/build_ephemeral_environment/buildee.sh` -> `at_ephemeral:local`
+- `at_server@45846a7b` -> `tests/at_functional_test/runLocal.sh` -> `cd ${repoDir}/tools/build_virtual_environment/ve`
+- `at_server@45846a7b` -> `tests/at_functional_test/runLocal.sh` -> `docker build -f ./Dockerfile -t at_virtual_env:local .`
+
+**Checked:** `at_server origin/trunk @ 45846a7b`, 2026-09-01
+
+### Nothing in at_client_sdk builds the VE image; three at_server runners rebuild it unconditionally
+
+**Is:** all three at_client_sdk runners — `tests/at_functional_test/runLocal.sh`,
+`tests/at_end2end_test/runLocal.sh`,
+`tests/at_onboarding_cli_functional_tests/runLocal.sh` — contain **zero**
+`docker build` lines. They default `VIRTUALENV_IMAGE` to `at_virtual_env:local`
+and skip `docker compose pull` for it, because a local image is on no registry.
+
+In **at_server**, three scripts `docker build -t at_virtual_env:local`
+unconditionally on every run: `tests/at_functional_test/runLocal.sh:75`,
+`tests/at_end2end_test/runLocal.sh:135`, and
+`tests/at_functional_test/runDualCompare.sh:62`.
+
+⚠️ The relative paths `tests/at_functional_test/runLocal.sh` and
+`tests/at_end2end_test/runLocal.sh` exist in **both** repos, so a claim about
+"the runner at that path" is ambiguous until the repo is named.
+
+**Matters because:** the tag is a shared mutable name on one Docker daemon with a
+single writer that is not us. Whoever ran at_server's tests last decides which
+server our live packs are talking to, and nothing we run changes it. A pack that
+went green may have been measuring a server nobody intended.
+
+**Evidence:**
+- `.` -> `tests/at_functional_test/runLocal.sh` -> `VIRTUALENV_IMAGE:-at_virtual_env:local`
+- `.` -> `tests/at_functional_test/runLocal.sh` -> `docker compose pull SKIPPED`
+- `.` -> `tests/at_functional_test/runLocal.sh` -> `docker build` x0
+- `.` -> `tests/at_end2end_test/runLocal.sh` -> `docker build` x0
+- `.` -> `tests/at_onboarding_cli_functional_tests/runLocal.sh` -> `docker build` x0
+- `at_server@45846a7b` -> `tests/at_functional_test/runLocal.sh` -> `docker build -f ./Dockerfile -t at_virtual_env:local .`
+- `at_server@45846a7b` -> `tests/at_end2end_test/runLocal.sh` -> `docker build -f ./Dockerfile -t at_virtual_env:local .`
+- `at_server@45846a7b` -> `tests/at_functional_test/runDualCompare.sh` -> `docker build -f ./Dockerfile -t at_virtual_env:local .`
+
+**Checked:** at_client_sdk `b566b6759` and `at_server origin/trunk @ 45846a7b`,
+2026-09-01
+
+### The VE image's OCI labels are inherited from its base and name the wrong commit
+
+**Is:** the VE `docker build` passes no `--label`, so the image inherits the
+label set of `atsigncompany/vebase:latest`. Read on this daemon, the image under
+`at_virtual_env:local` reported:
+
+```
+org.opencontainers.image.revision = 6940764672e028c59ac4d5407668cb423ee25dec
+org.opencontainers.image.title    = at_server
+org.opencontainers.image.description = Base image for Atsign Virtual Environment
+org.opencontainers.image.created  = 2026-08-31T07:01:58.036Z
+```
+
+while the image's own `.Created` was `2026-08-31T18:40:38.302Z`. That revision is
+a **real merge commit on at_server trunk** (`Merge pull request #2777`), not the
+commit the binaries inside were compiled from.
+
+Two tells that the label set is inherited rather than the image's own:
+`description` still reads *"Base image for …"*, and the `created` **label lags
+the image's `.Created`** — 11h38m here. An inherited label cannot postdate the
+image it labels.
+
+⛔ Neither tell is a verdict on the revision: a build that overrides *only*
+`revision` leaves `created` inherited and still lagging, so the pair rejects an
+image whose revision is correct. `buildee.sh` is that shape — it sets `revision`,
+`source`, `com.atsign.ee.branch`, `com.atsign.ee.platform` and no `created`.
+A label in a namespace no upstream base uses (`com.atsign.ve.*`) is the only
+structurally uninheritable answer.
+
+**Matters because:** this is worse than an unlabelled image. It answers
+confidently, plausibly, and wrongly — a genuine, current, on-trunk sha — so a
+provenance check written the obvious way concludes "known-good trunk build" about
+an image that is neither trunk nor any committed branch.
+
+**Evidence:**
+- `at_server@45846a7b` -> `tools/build_ephemeral_environment/buildee.sh` -> `--label "com.atsign.ee.branch=`
+- `at_server@45846a7b` -> `tools/build_virtual_environment/ve/Dockerfile` -> `--label` x0
+
+**Evidence (not rail-checkable — live daemon and repo state, stated so the rail's
+silence is not mistaken for coverage):**
+`docker image inspect at_virtual_env:local --format '{{json .Config.Labels}}'` and
+`--format '{{.Created}}'`; `git -C ../at_server rev-list --parents -n1 69407646`
+returns three words (a merge), and `git merge-base --is-ancestor 69407646 origin/trunk`
+succeeds.
+**Checked:** at_client_sdk `b566b6759`, `at_server origin/trunk @ 45846a7b`,
+2026-09-01. The image read was the one present on this machine that day; its
+labels move when at_server rebuilds.
+
+### Most of what ships into the VE image is invisible to git, so a git-based provenance label cannot describe it
+
+**Is:** `tools/build_virtual_environment/ve/Dockerfile:14` is `COPY ./contents /`
+— the whole directory, into the image root. The runner that fills it
+(`tests/at_functional_test/runLocal.sh:62-70`) only `mkdir -p` and `cp`; there is
+no `rm -rf` anywhere in it, so `contents/` is an **accumulator** and whatever has
+ever been placed there ships.
+
+Measured on this machine 2026-09-01 — 7 files, of which **6 are gitignored**:
+
+```
+IGNORED  2026-03-05  contents/.DS_Store
+IGNORED  2026-04-27  contents/atsign/.DS_Store
+TRACKED  2026-07-07  contents/atsign/entrypoint.sh
+IGNORED  2026-08-31  contents/atsign/root/{root,pubspec.yaml}
+IGNORED  2026-08-31  contents/atsign/secondary/{secondary,pubspec.yaml}
+```
+
+The two `.DS_Store`s are months old and are copied into `/` and `/atsign/` on
+every build anyone has ever run. The compiled `secondary` and `root` are build
+outputs, not sources.
+
+⛔ **Consequence for any provenance scheme keyed on git state.** A digest over
+`git diff HEAD` plus `git ls-files --others --exclude-standard` sees **one** of
+those seven files. So a VE built without recompiling ships the previous run's
+binary while a tree-derived label truthfully names a clean checkout — precisely,
+checkably wrong, and invisible to the digest and to any post-build recompute of
+it, because both key on git-visible state.
+
+So a correct tree label means *"the tree the build ran against was this"*, never
+*"the binaries in this image were compiled from it"*.
+
+⚠️ **This is a limit of the build as it stands, not a permanent one.** Hashing
+each artefact and reading it back **from inside the built image** closes it —
+which is what `buildee.sh` already does for the EE, verifying ELF magic by
+`docker run` against the built image rather than reasoning about what was copied
+in. at_server intends to clean `contents/` and add artefact hashes; when that
+lands, re-check this nugget before quoting it, or it will go on warning about a
+label that has become trustworthy.
+
+**Matters because:** it is the reason to distrust a *correct-looking* label, and
+it survives every fix to the labels themselves. It is also the local instance of
+a trap this tree has hit before — git-based tooling silently skipping ignored
+files, so two git-based instruments agreeing is not corroboration.
+
+**Evidence:**
+- `at_server@45846a7b` -> `tools/build_virtual_environment/ve/Dockerfile` -> `COPY ./contents /`
+- `at_server@45846a7b` -> `tests/at_functional_test/runLocal.sh` -> `mkdir -p tools/build_virtual_environment/ve/contents/atsign/root`
+- `at_server@45846a7b` -> `tests/at_functional_test/runLocal.sh` -> `rm -rf` x0
+
+**Evidence (not rail-checkable — a working-tree observation on this machine,
+not a property of any commit):** the table is
+`find tools/build_virtual_environment/ve/contents -type f` classified with
+`git ls-files --error-unmatch` and `git check-ignore -q`.
+**Checked:** at_client_sdk `b0ff55744`, `at_server origin/trunk @ 45846a7b`,
+2026-09-01

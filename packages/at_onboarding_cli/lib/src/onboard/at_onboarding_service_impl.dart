@@ -1,5 +1,9 @@
 // ignore_for_file: unnecessary_null_comparison
 
+// The PQ activation surface is @experimental, and this CLI ships from the
+// same workspace.
+// ignore_for_file: experimental_member_use
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -8,7 +12,14 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_client/at_client_mixins.dart'
+    show
+        enrollmentApkamSymmetricKeyResolver,
+        enrollmentKeyPackageBuilder,
+        makeActivationPqNative,
+        mintAdvertisedSigningKey,
+        mintSigningRootAfterActivation;
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
 import 'package:at_server_status/at_server_status.dart';
@@ -31,7 +42,22 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   bool _isAtsignOnboarded = false;
   AtSignLogger logger = AtSignLogger('OnboardingCli');
   AtOnboardingPreference atOnboardingPreference;
+  // NOTE: narrowing this to AtLookupMuxable breaks the assignment from
+  // `RemoteSecondary.atLookUp`, which is typed AtLookUp, and narrows the
+  // public `set atLookUp(AtLookUp?)` this class overrides, which is breaking.
   AtLookUp? _atLookUp;
+
+  /// A lookup with no authenticator: [_installAuthenticator] supplies one
+  /// afterwards from whichever credential the CLI holds.
+  AtLookupMuxable _newLookUp() => AtLookUp.withSecureSocket(
+        atSign: _atSign,
+        rootDomain: AtRootDomain(
+          atOnboardingPreference.rootDomain,
+          atOnboardingPreference.rootPort,
+        ),
+        transport: secureSocketTransport(SecureSocketConfig()),
+        authenticator: null,
+      );
 
   /// The object which controls what types of AtClients, NotificationServices
   /// and SyncServices get created when we call [AtClientManager.setCurrentAtSign].
@@ -114,7 +140,15 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           storagePath: atOnboardingPreference.storagePath!,
           closedByClient: true);
 
-  Future<void> _initAtClient(AtChops atChops, {String? enrollmentId}) async {
+  /// Builds the client for this atSign, authenticating with [atChops].
+  ///
+  /// [atKeysIo] is the key source the client keeps for everything [atChops]
+  /// cannot answer — resolving its PKAM algorithm from the key material,
+  /// filing conveyed privates, sourcing per-algorithm signing keys — and is
+  /// null where there is no source to hand across, as on the enrollment path
+  /// whose keyfile is written afterwards.
+  Future<void> _initAtClient(AtChops atChops,
+      {String? enrollmentId, AtKeysIo? atKeysIo}) async {
     AtClientManager atClientManager = AtClientManager.getInstance();
     if (atOnboardingPreference.skipSync) {
       atServiceFactory = ServiceFactoryWithNoOpSyncService();
@@ -122,19 +156,93 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     await atClientManager.setCurrentAtSign(
         _atSign, atOnboardingPreference.namespace, atOnboardingPreference,
         atChops: atChops,
+        atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         serviceFactory: atServiceFactory,
         enrollmentId: enrollmentId,
         storage: _storageForClient());
 
+    // NOTE: read before the `??=` below erases the distinction between the
+    // two flows.
+    final serviceBuiltTheLookup = _atLookUp != null;
+
     // ??= to support mocking
     _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
-    _atLookUp?.enrollmentId = enrollmentId;
-    _atLookUp?.signingAlgoType = atOnboardingPreference.signingAlgoType;
-    _atLookUp?.hashingAlgoType = atOnboardingPreference.hashingAlgoType;
-    atClient ??= atClientManager.atClient;
+
+    /// The keypair the connection signs its PKAM challenge with, taken from
+    /// the same source as the enrollment id and the algorithm beside it.
+    final AtChops authenticationSigner;
+
+    if (serviceBuiltTheLookup) {
+      // Enrolment: the APKAM keypair was minted under the posture's axis and
+      // the keyfile that will hold it is written later, so there is no key
+      // material to resolve from and the preference is the only source.
+      _atLookUp!.enrollmentId = enrollmentId;
+      _atLookUp!.signingAlgoType =
+          atOnboardingPreference.authenticationKeyAlgorithm;
+      authenticationSigner = atChops;
+    } else {
+      // Authentication: the lookup just adopted is the client's own, and the
+      // client has already read the keyfile, which outranks any preference —
+      // you cannot sign ML-DSA with an RSA key.
+      //
+      // NOTE: the enrollment id, the algorithm and the signer must all come
+      // from the client. A client that retrofitted during its own init
+      // authenticates as a different enrollment from the one the keyfile
+      // named when this call started, and at_chops refuses an algorithm
+      // declared over a keypair of another. They are asserted rather than
+      // left alone because a cached client short-circuits
+      // `AtClientImpl.create` without rebuilding its RemoteSecondary, so its
+      // lookup carries whatever the previous caller left on it.
+      final client = atClientManager.atClient;
+      _atLookUp!.enrollmentId = client.enrollmentId ?? enrollmentId;
+      _atLookUp!.signingAlgoType = AtClientImpl.signingAlgoOf(client);
+      authenticationSigner = client.atChops ?? atChops;
+    }
+    // NOTE: neither key material nor a posture says how a challenge is
+    // hashed, so this axis is the preference's on both paths; asserting it is
+    // what resets a cached client's lookup after a caller that ran with
+    // another value.
+    _atLookUp!.hashingAlgoType = atOnboardingPreference.hashingAlgoType;
+
+    _adoptBuiltClient(atClientManager.atClient);
+    // NOTE: the caller's on both flows, not [authenticationSigner]. at_auth's
+    // EnrollmentApprover reads this field for enrollment crypto, where the
+    // encryption keypair and the APKAM symmetric key matter rather than the
+    // APKAM signing keypair, and a retrofitted client's AtChops carries no
+    // APKAM symmetric key.
     _atLookUp!.atChops = atChops;
+    final lookUp = _atLookUp;
+    if (lookUp is AtLookupMuxable) {
+      lookUp.authenticator = authenticatorFor(
+        _keysIo(),
+        _atSign,
+        enrollmentId: lookUp.enrollmentId,
+        chops: authenticationSigner,
+      );
+    }
   }
+
+  /// Points [atClient] at [built] when this service holds none, or holds one
+  /// the manager has since stopped; a client somebody injected stays.
+  void _adoptBuiltClient(AtClient built) {
+    final held = atClient;
+    if (held == null || (held is AtClientImpl && held.isStopped)) {
+      atClient = built;
+    }
+  }
+
+  /// Where this CLI's keys live, for READING them during authentication.
+  ///
+  /// The passphrase is not optional here: this source is handed to an
+  /// authenticator that reads the keyfile on every authentication, and a
+  /// password-protected keyfile cannot be read without it.
+  AtKeysIo _keysIo() => FileAtKeysIo(
+        filePath: atOnboardingPreference.atKeysFilePath != null
+            ? (_) => atOnboardingPreference.atKeysFilePath!
+            : null,
+        passPhrase: atOnboardingPreference.passPhrase,
+      );
 
   @override
   @Deprecated('Use getter')
@@ -152,11 +260,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     AtFileUtil.ensureWritable(File(atOnboardingPreference.atKeysFilePath!));
 
     // Ensure we have an AtLookUp instance and send from: command if using proxy
-    AtLookupImpl atLookUpImpl = AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
+    final atLookUpImpl = _newLookUp();
 
     await _sendFromCommandIfUsingProxy(atLookUpImpl, context: 'onboard');
 
@@ -196,17 +300,40 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
 
     atAuth ??= AtAuth.create();
-    var atOnboardingRequest = AtOnboardingRequest(_atSign);
+    // NOTE: the preference is what `authenticate()` stamps on the connection,
+    // so minting under anything else hands at_chops a key of one algorithm and
+    // a declaration of another.
+    var atOnboardingRequest = AtOnboardingRequest(_atSign,
+        signingAlgoType: atOnboardingPreference.authenticationKeyAlgorithm);
     atOnboardingRequest.rootDomain = AtRootDomain(
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     atOnboardingRequest.retryOptions =
         RetryOptions(maxRetries: maxRetries, retryDelay: retryInterval);
-    atOnboardingRequest.atKeysIo = FileAtKeysIo(
+    final atKeysIo = FileAtKeysIo(
       filePath: atOnboardingPreference.atKeysFilePath != null
           ? (_) => atOnboardingPreference.atKeysFilePath!
           : null,
       passPhrase: atOnboardingPreference.passPhrase,
     );
+    atOnboardingRequest.atKeysIo = atKeysIo;
+
+    // NOTE: matched on mldsa65 exactly, not on "anything but rsa2048" —
+    // ecc_secp256r1 is a third, classical option this package supports, and
+    // treating it as post-quantum would silently mint an ML-DSA APKAM for a
+    // caller who asked for an elliptic-curve one. The activation itself is
+    // all-or-nothing: an ML-DSA APKAM without a key package produces an atSign
+    // no sender can address until that enrollment sends an `enroll:update` for
+    // itself.
+    final bool pqNative = atOnboardingPreference.authenticationKeyAlgorithm ==
+        SigningAlgoType.mldsa65;
+    if (pqNative) {
+      await makeActivationPqNative(atOnboardingRequest,
+          atSign: _atSign.toString(),
+          dataSigningKeyAlgorithms:
+              atOnboardingPreference.dataSigningKeyAlgorithms,
+          keyEstablishmentAlgo:
+              atOnboardingPreference.keyEstablishmentAlgorithms.first);
+    }
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(
       atOnboardingRequest,
@@ -224,9 +351,34 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       if (autoCompleteActivation) {
         await completeActivation();
       }
+      if (pqNative) {
+        await _mintSigningRoot(atOnboardingResponse, atKeysIo);
+      }
     }
     _isAtsignOnboarded = atOnboardingResponse.isSuccessful;
     return _isAtsignOnboarded;
+  }
+
+  /// Creates the atSign-level signing root, which needs a client and so cannot
+  /// happen until the activation is done.
+  ///
+  /// Done while this process still holds the first enrollment, the one the
+  /// atServer grants `__manage`, which is what entitles it to create the root.
+  Future<void> _mintSigningRoot(
+      AtOnboardingResponse response, AtKeysIo atKeysIo) async {
+    final session = response.session;
+    if (session == null) {
+      logger.warning(
+          '$_atSign activated post-quantum but the activation returned no '
+          'session, so its signing root was not created here; the next start '
+          'retries it');
+      return;
+    }
+    final manager = await AtClientManager.getInstance().fromAuthSession(
+        session, atOnboardingPreference,
+        storage: _storageForClient());
+    _adoptBuiltClient(manager.atClient);
+    await mintSigningRootAfterActivation(manager.atClient, atKeysIo: atKeysIo);
   }
 
   @override
@@ -245,7 +397,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     File? atKeysFile,
     Duration? apkamKeysExpiryDuration,
     bool allowOverwrite = false,
-    SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
+    SigningAlgoType? signingAlgo,
+    EnrollmentKeyExchangeMode? keyExchangeMode,
   }) async {
     // Fails early if the filePath already exists (or) isn't writable
     if (atKeysFile != null) {
@@ -267,6 +420,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         namespaces,
         apkamKeysExpiryDuration: apkamKeysExpiryDuration,
         signingAlgo: signingAlgo,
+        keyExchangeMode: keyExchangeMode,
       );
       logger.finer('EnrollmentResponse from server: $enrollmentResponse');
       await enrollCheckpoint.save(
@@ -336,30 +490,75 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<AtEnrollmentResponse> sendEnrollRequest(String appName,
       String deviceName, String otp, Map<String, String> namespaces,
       {Duration? apkamKeysExpiryDuration,
-      SigningAlgoType signingAlgo = SigningAlgoType.rsa2048}) async {
+      SigningAlgoType? signingAlgo,
+      EnrollmentKeyExchangeMode? keyExchangeMode}) async {
+    // NOTE: the preference is what `authenticate()` stamps on the connection,
+    // so minting under anything else hands at_chops a key of one algorithm and
+    // a declaration of another.
+    final algo =
+        signingAlgo ?? atOnboardingPreference.authenticationKeyAlgorithm;
     if (appName == null || deviceName == null) {
       throw AtEnrollmentException(
           'appName and deviceName are mandatory for enrollment');
     }
 
-    _atLookUp ??= AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
+    _atLookUp ??= _newLookUp();
 
-    AtEnrollmentRequest newClientEnrollmentRequest = AtEnrollmentRequest(
-        atSign: _atSign,
-        appName: appName,
-        deviceName: deviceName,
-        namespaces: namespaces,
-        otp: otp,
-        signingAlgo: signingAlgo);
+    final mode =
+        keyExchangeMode ?? atOnboardingPreference.posture.keyExchangeMode;
+
+    // NOTE: `_apsk` must advertise a data signing key this enrollment owns
+    // rather than its APKAM authentication key. Otherwise the first start
+    // mints one and drops the advertised value: the key package stops
+    // verifying, and any link an approver conveyed against it stops matching.
+    final advertisedSigningKey = await mintAdvertisedSigningKey(
+        atOnboardingPreference.dataSigningKeyAlgorithms);
+
+    // NOTE: a pq request needs both callbacks and carries no wrapped key; a
+    // legacy request carries the wrapped key and needs neither. The mode is
+    // therefore the constructor rather than a field, so that no request can be
+    // built in a shape at_auth has to refuse at runtime.
+    final AtEnrollmentRequest newClientEnrollmentRequest;
+    if (mode == EnrollmentKeyExchangeMode.pq) {
+      newClientEnrollmentRequest = AtEnrollmentRequest.pq(
+          atSign: _atSign,
+          appName: appName,
+          deviceName: deviceName,
+          namespaces: namespaces,
+          otp: otp,
+          signingAlgo: algo,
+          advertisedSigningKey: advertisedSigningKey,
+          // NOTE: the builder signs the key package with the keypair this
+          // request advertises, so it must be told the same `algo` and the
+          // same advertised key. A package signed by anything else verifies
+          // against a record that does not name its signer, so a peer that
+          // resolves `_apsk` before sealing a secret seals nothing.
+          metadataBuilder: enrollmentKeyPackageBuilder(_atSign,
+              signingAlgo: algo,
+              advertisedSigningKey: advertisedSigningKey,
+              // An enrollment is created holding one encapsulation key; the
+              // rest of the list is minted at the client's first startup.
+              keyEstablishmentAlgo:
+                  atOnboardingPreference.keyEstablishmentAlgorithms.first),
+          apkamSymmetricKeyResolver:
+              enrollmentApkamSymmetricKeyResolver(_atSign));
+    } else {
+      newClientEnrollmentRequest = AtEnrollmentRequest(
+          atSign: _atSign,
+          appName: appName,
+          deviceName: deviceName,
+          namespaces: namespaces,
+          otp: otp,
+          signingAlgo: algo,
+          // Advertised whatever the mode, and without a key package: the mode
+          // decides only whether a package exists, while `_apsk` is what every
+          // peer verifies signatures against.
+          advertisedSigningKey: advertisedSigningKey);
+    }
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
         apkamKeysExpiryDuration;
 
-    AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
-        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+    final atLookUpImpl = _newLookUp();
 
     if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
@@ -386,238 +585,46 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     bool logProgress = true,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
   }) async {
-    _atLookUp ??= AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
+    _atLookUp ??= _newLookUp();
 
     if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
       await _sendFromCommandIfUsingProxy(_atLookUp!, context: 'awaitApproval');
     }
 
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(
-        AtEncryptionKeyPair.create(
-            enrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!
-                .toString(),
-            ''),
-        AtPkamKeyPair.create(
-            enrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
-            enrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString()));
-    atChopsKeys.apkamSymmetricKey =
-        AESKey(enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString());
-
-    // Create AtChops instance and assign it to the lookup for PKAM authentication
-    AtChopsImpl atChops = AtChopsImpl(atChopsKeys);
-    _atLookUp!.atChops = atChops;
+    // NOTE: later steps re-authenticate on this connection, so the lookup must
+    // know which enrollment it authenticates as; the delegate passes the id
+    // per call and never stamps it.
     _atLookUp!.enrollmentId = enrollmentResponse.enrollmentId;
 
-    // Pkam auth will be attempted asynchronously until enrollment is approved
-    // or denied or times out. If denied or timed out, an exception will be
-    // thrown
-    await _waitForPkamAuthSuccess(
-      _atLookUp!,
-      enrollmentResponse.enrollmentId,
-      retryInterval,
-      logProgress: logProgress,
-      maxRetries: maxRetries,
-    );
+    // The delegate validates and addresses by both fields, so a response
+    // resumed from a checkpoint gets them restored from what this service
+    // already knows.
+    // ignore: deprecated_member_use
+    enrollmentResponse.atSign ??= _atSign;
+    // ignore: deprecated_member_use
+    enrollmentResponse.rootDomain ??= AtRootDomain(
+        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
 
-    // Fetches encrypted "defaultEncryptionPrivateKey" from server. The first
-    // argument holds the "defaultEncryptionPrivateKey" and the second argument
-    // hold the Initialization Vector(IV) to decrypt the data.
-    // Defaults to null to support legacy IV for backward compatibility.
-    (String, String?) encryptedPrivateKey =
-        await _getEncryptionPrivateKeyFromServer(
-            enrollmentResponse.enrollmentId, _atLookUp!);
-
-    var decryptedEncryptionPrivateKey = EncryptionUtil.decryptValue(
-        encryptedPrivateKey.$1,
-        enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString(),
-        ivBase64: encryptedPrivateKey.$2);
-
-    // Fetches encrypted "selfEncryptionKey" from server. The first
-    // argument holds the "selfEncryptionKey" and the second argument
-    // hold the Initialization Vector(IV) to decrypt the data.
-    // Defaults to null to support legacy IV for backward compatibility.
-    (String, String?) selfEncryptionKey = await _getSelfEncryptionKeyFromServer(
-        enrollmentResponse.enrollmentId, _atLookUp!);
-    var decryptedSelfEncryptionKey = EncryptionUtil.decryptValue(
-        selfEncryptionKey.$1,
-        enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString(),
-        ivBase64: selfEncryptionKey.$2);
-
-    enrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey =
-        AtBytes.fromString(decryptedEncryptionPrivateKey);
-    enrollmentResponse.atAuthKeys!.defaultSelfEncryptionKey =
-        AtBytes.fromString(decryptedSelfEncryptionKey);
-  }
-
-  /// Retrieves the encryption private key and its associated initialization vector (IV)
-  /// from the server for a given enrollment.
-  ///
-  /// The `privateKeyCommand` is constructed using the `enrollmentIdFromServer` and
-  /// `AtConstants.defaultEncryptionPrivateKey` with the format:
-  /// `'keys:get:keyName:<enrollmentId>.<defaultPrivateKey>.__manage$_atSign'`.
-  ///
-  /// This method sends a command to the `atLookUp` service to retrieve the private key data
-  /// from the server, then parses the JSON result to extract the private key (`value`) and
-  /// the IV (`iv`).
-  ///
-  /// Throws an [AtEnrollmentException] if:
-  /// - The private key returned from the server is `null` or empty.
-  /// - There is an exception during command execution.
-  ///
-  /// Returns:
-  /// - A tuple containing:
-  ///   - `encryptionPrivateKeyFromServer` - The encrypted private key string from the server.
-  ///   - `encryptionPrivateKeyIV` - The associated IV string, if present.
-  Future<(String, String?)> _getEncryptionPrivateKeyFromServer(
-      String enrollmentIdFromServer, AtLookUp atLookUp) async {
-    var privateKeyCommand =
-        'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultEncryptionPrivateKey}.__manage$_atSign\n';
-    String encryptionPrivateKeyFromServer;
-    String? encryptionPrivateKeyIV;
+    _atEnrollment ??= AtEnrollment.create();
+    final forward = _atEnrollment!.progressStream.listen(_psc.add);
     try {
-      var getPrivateKeyResult =
-          await atLookUp.executeCommand(privateKeyCommand, auth: true);
-      getPrivateKeyResult =
-          getPrivateKeyResult?.replaceFirst(RegExp(r'^data:'), '');
-      var privateKeyResultJson = jsonDecode(getPrivateKeyResult!);
-      encryptionPrivateKeyFromServer = privateKeyResultJson['value'];
-      encryptionPrivateKeyIV = privateKeyResultJson['iv'];
-      if (encryptionPrivateKeyFromServer == null ||
-          encryptionPrivateKeyFromServer.isEmpty) {
-        throw AtEnrollmentException('$privateKeyCommand returned null/empty');
-      }
-    } on Exception catch (e) {
-      throw AtEnrollmentException(
-          'Exception while getting encrypted private key/self key from server: $e');
-    }
-    return (encryptionPrivateKeyFromServer, encryptionPrivateKeyIV);
-  }
-
-  /// Retrieves the self-encryption key and its associated initialization vector (IV)
-  /// from the server for a given enrollment.
-  ///
-  /// The `selfEncryptionKeyCommand` is constructed using the `enrollmentIdFromServer`
-  /// and `AtConstants.defaultSelfEncryptionKey` in the format:
-  /// `'keys:get:keyName:<enrollmentId>.<defaultSelfEncryptionKey>.__manage$_atSign'`.
-  ///
-  /// This method sends a command to the `atLookUp` service to retrieve the self-encryption key data
-  /// from the server, then parses the JSON result to extract the key (`value`) and
-  /// the IV (`iv`).
-  ///
-  /// Throws an [AtEnrollmentException] if:
-  /// - The self-encryption key returned from the server is `null` or empty.
-  /// - There is an exception during the command execution.
-  ///
-  /// Parameters:
-  /// - `enrollmentIdFromServer` - The enrollment ID used to request the self-encryption key.
-  /// - `atLookUp` - The [AtLookUp] instance to execute the server command.
-  ///
-  /// Returns:
-  /// - A tuple containing:
-  ///   - `selfEncryptionKeyFromServer` - The self-encryption key string retrieved from the server.
-  ///   - `selfEncryptionKeyIV` - The associated IV string, if present.
-  Future<(String, String?)> _getSelfEncryptionKeyFromServer(
-      String enrollmentIdFromServer, AtLookUp atLookUp) async {
-    var selfEncryptionKeyCommand =
-        'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultSelfEncryptionKey}.__manage$_atSign\n';
-    String selfEncryptionKeyFromServer;
-    String? selfEncryptionKeyIV;
-    try {
-      var getSelfEncryptionKeyResult =
-          await atLookUp.executeCommand(selfEncryptionKeyCommand, auth: true);
-      getSelfEncryptionKeyResult =
-          getSelfEncryptionKeyResult?.replaceFirst(RegExp(r'^data:'), '');
-      var selfEncryptionKeyResultJson = jsonDecode(getSelfEncryptionKeyResult!);
-      selfEncryptionKeyFromServer = selfEncryptionKeyResultJson['value'];
-      selfEncryptionKeyIV = selfEncryptionKeyResultJson['iv'];
-      if (selfEncryptionKeyFromServer == null ||
-          selfEncryptionKeyFromServer.isEmpty) {
-        throw AtEnrollmentException(
-            '$selfEncryptionKeyCommand returned null/empty');
-      }
-    } on Exception catch (e) {
-      throw AtEnrollmentException(
-          'Exception while getting encrypted private key/self key from server: $e');
-    }
-    return (selfEncryptionKeyFromServer, selfEncryptionKeyIV);
-  }
-
-  /// Retries PKAM auth until an enrollment is approved/denied/expired
-  Future<void> _waitForPkamAuthSuccess(
-    AtLookUp atLookUp,
-    String enrollmentIdFromServer,
-    Duration retryInterval, {
-    bool logProgress = true,
-    required int maxRetries,
-  }) async {
-    int retryAttempt = 0;
-    while (true) {
-      retryAttempt++;
-      logger.info('Attempting pkam auth');
-      if (logProgress) {
-        _addProgress('PKAM', 'attempting PKAM auth', ProgressEventType.info);
-        await waitBriefly();
-      }
-      bool pkamAuthSucceeded = false;
-      try {
-        // _attemptPkamAuth returns boolean value true when authentication is successful.
-        // Returns UnAuthenticatedException when authentication fails.
-        pkamAuthSucceeded = await atLookUp.pkamAuthenticate(
-            enrollmentId: enrollmentIdFromServer);
-      } on UnAuthenticatedException catch (e) {
-        // Error codes AT0401 and AT0026 indicate authentication failure due to unapproved enrollment. Retry until the enrollment is approved.
-        // The variable _pkamAuthSucceeded is false, allowing for PKAM authentication retries.
-        // Avoid checking "retryAttempt > _maxActivationRetries" here, as we want to continue retrying until enrollment is approved.
-        // The check for "retryAttempt > _maxActivationRetries" should only occur when the secondary server is unreachable due to network issues.
-        if (e.message.contains('error:AT0401') ||
-            e.message.contains('error:AT0026')) {
-          logger.info('Pkam auth failed: ${e.message}');
-        }
-        // Error code AT0025 represents Enrollment denied. Therefore, no need to retry; throw exception.
-        else if (e.message.contains('error:AT0025')) {
-          throw AtEnrollmentException(
-              'The enrollment: $enrollmentIdFromServer is denied');
-        }
-      } catch (e) {
-        String message =
-            'Exception occurred when authenticating the atSign: $_atSign caused by ${e.toString()}';
-        if (retryAttempt > maxRetries) {
-          message += ' Activation failed after $maxRetries attempts';
-          logger.severe(message);
-          rethrow;
-        }
-        logger.severe(message);
-      }
-      if (pkamAuthSucceeded) {
-        if (logProgress) {
-          _addProgress(
-              'PKAM',
-              'Enrollment has been approved'
-                  ' (PKAM auth success)',
-              ProgressEventType.success);
-        }
-        logger.info('Authentication succeeded - request was approved');
-        return;
-      } else {
-        if (logProgress) {
-          _addProgress(
-              'PKAM',
-              'Auth failed, not yet approved.'
-                  ' Will retry in ${retryInterval.inSeconds} seconds',
-              ProgressEventType.info);
-        }
-        logger.info('Will retry pkam in ${retryInterval.inSeconds} seconds');
-        await Future.delayed(retryInterval); // Delay and retry
-      }
+      await _atEnrollment!.waitForApproval(
+        enrollmentResponse,
+        atLookup: _atLookUp,
+        retryInterval: retryInterval,
+        logProgress: logProgress,
+        maxRetries: maxRetries,
+      );
+    } finally {
+      await forward.cancel();
     }
   }
 
   /// Write newly created encryption key-pairs into atKeys file
+  ///
+  /// The keyfile is written by [FileAtKeysIo], the same store [authenticate]
+  /// reads it back through.
   Future<File> _generateAtKeysFile(
     AtKeys atAuthKeys, {
     String? enrollmentId,
@@ -632,58 +639,44 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
     }
 
-    if (atKeysFile.existsSync() && !allowOverwrite) {
-      throw StateError('atKeys file ${atKeysFile.path} already exists');
+    if (atKeysFile.existsSync()) {
+      if (!allowOverwrite) {
+        throw StateError('atKeys file ${atKeysFile.path} already exists');
+      }
+      // NOTE: `write` is create-only by contract and `flush` never loses, so
+      // neither of them means "replace"; the old file goes first, at the
+      // caller's request.
+      await atKeysFile.delete();
     }
 
     logger.finer('Generating keys file at ${atKeysFile.path}'
         ' with enrollmentId $enrollmentId');
 
-    final atKeysMap = <String, String>{
-      AuthKeyType.aesEncryptedPkamPublicKey: EncryptionUtil.encryptValue(
-        atAuthKeys.apkamPublicKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      ),
-      AuthKeyType.aesEncryptedEncryptionPublicKey: EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPublicKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      ),
-      AuthKeyType.aesEncryptedEncryptionPrivateKey: EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPrivateKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      ),
-      AuthKeyType.selfEncryptionKey:
-          atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      _atSign: atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      AuthKeyType.apkamSymmetricKey: atAuthKeys.apkamSymmetricKey!.toString()
-    };
-
     if (enrollmentId != null) {
-      atKeysMap['enrollmentId'] = enrollmentId;
+      atAuthKeys.enrollmentId = enrollmentId;
+    }
+    // NOTE: every .atKeys file carries the self-encryption key a second time
+    // under the atSign itself. Nothing in this repo reads it back, but a
+    // reader that expects it must keep finding it.
+    final selfEncryptionKey = atAuthKeys.defaultSelfEncryptionKey;
+    if (selfEncryptionKey != null) {
+      atAuthKeys.metadata[_atSign] = selfEncryptionKey.toString();
+    }
+    if (atOnboardingPreference.authMode != PkamAuthMode.keysFile) {
+      // In a SIM or another secure element the private half cannot be read,
+      // and this file does not carry it.
+      atAuthKeys.apkamPrivateKey = null;
     }
 
-    if (atOnboardingPreference.authMode == PkamAuthMode.keysFile) {
-      atKeysMap[AuthKeyType.aesEncryptedPkamPrivateKey] =
-          EncryptionUtil.encryptValue(atAuthKeys.apkamPrivateKey!.toString(),
-              atAuthKeys.defaultSelfEncryptionKey!.toString());
-    }
-
-    atKeysFile.createSync(recursive: true);
-    IOSink fileWriter = atKeysFile.openWrite();
-    String encodedAtKeysString = jsonEncode(atKeysMap);
+    await FileAtKeysIo(
+      filePath: (_) => atKeysFile!.path,
+      passPhrase: atOnboardingPreference.passPhrase,
+    ).write(_atSign, atAuthKeys);
 
     if (atOnboardingPreference.passPhrase != null) {
-      AtEncrypted atEncrypted = await AtKeysCrypto.fromHashingAlgorithm(
-              atOnboardingPreference.hashingAlgoType)
-          .encrypt(encodedAtKeysString, atOnboardingPreference.passPhrase!);
-      encodedAtKeysString = atEncrypted.toString();
       stdout.writeln(
           '${chalk.blue('[Information]')} Encrypted atKeys file with the given pass phrase');
     }
-    //generating .atKeys file at path provided in onboardingConfig
-    fileWriter.write(encodedAtKeysString);
-    await fileWriter.flush();
-    await fileWriter.close();
     await AtFileUtil.setSecureFilePermissions(atKeysFile.path);
     stdout.writeln(
         '${chalk.green('[Success]')} Your .atKeys file saved at ${atKeysFile.path}\n');
@@ -693,54 +686,73 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   /// Back-up encryption keys to local secondary
   /// #TODO remove this method in future when all keys are read from AtChops
+  ///
+  /// Every field here is optional, and each absence is a legitimate shape: a
+  /// PQ-native enrollment files its APKAM as typed material under the
+  /// enrollment id and leaves the flat `apkamPublicKey`/`apkamPrivateKey`
+  /// empty, and an atSign activated with `mintLegacyMaterial: false` has no
+  /// RSA encryption keypair and no self-encryption key at all.
   Future<void> _persistKeysLocalSecondary(AtKeys atAuthKeys) async {
-    //backup keys into local secondary
-    bool? response = await atClient?.getLocalSecondary()?.putValue(
-        AtConstants.atPkamPublicKey, atAuthKeys.apkamPublicKey!.toString());
-    logger.finer('PkamPublicKey persist to localSecondary: status $response');
+    Future<void> persist(String name, String key, AtBytes? value) async {
+      if (value == null) {
+        logger.finer('$name absent from the keyfile; nothing to persist to '
+            'localSecondary');
+        return;
+      }
+      final response =
+          await atClient?.getLocalSecondary()?.putValue(key, value.toString());
+      logger.finer('$name persist to localSecondary: status $response');
+    }
+
+    await persist('PkamPublicKey', AtConstants.atPkamPublicKey,
+        atAuthKeys.apkamPublicKey);
     // Save the PKAM private key only when the auth mode is keyFile.
     // In SIM or other secure element modes, the private key cannot be
     // read and therefore won't be included in the keys file.
     if (atOnboardingPreference.authMode == PkamAuthMode.keysFile) {
-      response = await atClient?.getLocalSecondary()?.putValue(
-          AtConstants.atPkamPrivateKey, atAuthKeys.apkamPrivateKey!.toString());
-      logger
-          .finer('PkamPrivateKey persist to localSecondary: status $response');
+      await persist('PkamPrivateKey', AtConstants.atPkamPrivateKey,
+          atAuthKeys.apkamPrivateKey);
     }
-    response = await atClient?.getLocalSecondary()?.putValue(
+    await persist(
+        'EncryptionPublicKey',
         '${AtConstants.atEncryptionPublicKey}$_atSign',
-        atAuthKeys.defaultEncryptionPublicKey!.toString());
-    logger.finer(
-        'EncryptionPublicKey persist to localSecondary: status $response');
-    response = await atClient?.getLocalSecondary()?.putValue(
-        AtConstants.atEncryptionPrivateKey,
-        atAuthKeys.defaultEncryptionPrivateKey!.toString());
-    logger.finer(
-        'EncryptionPrivateKey persist to localSecondary: status $response');
-    response = await atClient?.getLocalSecondary()?.putValue(
-        AtConstants.atEncryptionSelfKey,
-        atAuthKeys.defaultSelfEncryptionKey!.toString());
+        atAuthKeys.defaultEncryptionPublicKey);
+    await persist('EncryptionPrivateKey', AtConstants.atEncryptionPrivateKey,
+        atAuthKeys.defaultEncryptionPrivateKey);
+    await persist('SelfEncryptionKey', AtConstants.atEncryptionSelfKey,
+        atAuthKeys.defaultSelfEncryptionKey);
   }
 
   @override
-  Future<bool> authenticate({String? enrollmentId}) async {
+  Future<bool> authenticate(
+      {@Deprecated('the keyfile names the enrollment; a disagreeing value is '
+          'logged at shout level and ignored')
+      String? enrollmentId}) async {
     atAuth ??= AtAuth.create();
-    var atAuthRequest = AtAuthRequest(_atSign,
-        atKeysIo: FileAtKeysIo(
-            filePath: !atOnboardingPreference.atKeysFilePath.isNull
-                ? (_) => atOnboardingPreference.atKeysFilePath!
-                : null,
-            passPhrase: atOnboardingPreference.passPhrase))
-      ..enrollmentId = enrollmentId
+    // Held in a local so the client gets the same source auth read from,
+    // rather than a second store built over the same path.
+    final atKeysIo = FileAtKeysIo(
+        filePath: !atOnboardingPreference.atKeysFilePath.isNull
+            ? (_) => atOnboardingPreference.atKeysFilePath!
+            : null,
+        passPhrase: atOnboardingPreference.passPhrase);
+    var atAuthRequest = AtAuthRequest(_atSign, atKeysIo: atKeysIo)
       ..rootDomain = AtRootDomain(
           atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     var atAuthResponse = await atAuth!.authenticate(atAuthRequest);
     logger.finer('Auth response: $atAuthResponse');
     if (atAuthResponse.isSuccessful &&
         atOnboardingPreference.atKeysFilePath != null) {
+      final authenticatedAs =
+          atAuthResponse.atAuthKeys!.enrollmentToAuthenticateAs();
+      if (enrollmentId != null && enrollmentId != authenticatedAs) {
+        logger.shout('$_atSign was asked to authenticate as enrollment '
+            '$enrollmentId, but its keyfile authenticates as '
+            '$authenticatedAs; using $authenticatedAs');
+      }
       logger.finer('Calling persist keys to local secondary');
       await _initAtClient(atAuth!.atChops!,
-          enrollmentId: atAuthResponse.atAuthKeys!.enrollmentId);
+          enrollmentId: authenticatedAs, atKeysIo: atKeysIo);
       await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys!);
     }
 
@@ -786,8 +798,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<bool> isOnboarded() async {
     if (_isUsingProxy) {
       // When using a proxy, try a simple lookup command that doesn't require auth
-      AtLookUp atLookUp = AtLookupImpl(_atSign,
-          atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+      final atLookUp = _newLookUp();
       await _sendFromCommandIfUsingProxy(atLookUp, context: 'isOnboarded');
 
       try {
@@ -848,7 +859,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<void> close() async {
     logger.info('Closing');
     if (_atLookUp != null &&
-        (_atLookUp as AtLookupImpl).isConnectionAvailable()) {
+        _atLookUp is AtLookupMuxable &&
+        (_atLookUp as AtLookupMuxable).isConnectionAvailable()) {
       await _atLookUp!.close();
     }
     if (atClient != null) {

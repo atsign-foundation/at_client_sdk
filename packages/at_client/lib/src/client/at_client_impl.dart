@@ -2,18 +2,49 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeysIo;
+import 'package:at_auth/at_auth.dart'
+    show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys;
+import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
+import 'package:at_client/src/enroll/pq_native_onboard.dart'
+    show firstEnrollmentAppName, firstEnrollmentDeviceName;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/at_reachability.dart';
+import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
+    show NskeySeeding;
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/service/enrollment_service.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_client/src/util/encryption_util.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
+import 'package:at_client/src/client/pq_client_bootstrap.dart';
+import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
+import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_client/src/storage/hive_at_client_storage.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
+import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_client/src/signing/resolved_signing_algo.dart'
+    as resolved_algo;
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
@@ -47,17 +78,13 @@ class AtClientImpl implements AtClient {
   /// keystore was injected, storage is not required, or [stop] has released it.
   AtClientStorage? _storage;
 
-  /// Storage handed to this client by its caller, if any. A client that was
-  /// given one never closes it: the caller owns its lifetime and may hand the
-  /// same store to a later client.
+  /// Storage handed to this client by its caller, if any. Whether this client
+  /// closes it on [stop] is the bundle's own [AtClientStorage.closedByClient].
   AtClientStorage? _injectedStorage;
 
-  /// Whether this client built [_storage] itself and so closes it on [stop];
-  /// injected storage is only detached.
-  bool _ownsStorage = false;
   bool _storageReleased = false;
 
-  @visibleForTesting
+  /// The store this client attached to, or null before [_init] runs.
   AtClientStorage? get storage => _storage;
   @visibleForTesting
   LocalSecondary? localSecondary;
@@ -102,24 +129,6 @@ class AtClientImpl implements AtClient {
   @override
   AtKeysIo? get atKeysIo => _atKeysIo;
 
-  /// Builds a [RemoteSecondary] carrying this client's identity and
-  /// credentials, so every one this client opens is configured alike rather
-  /// than assembled independently at each site.
-  ///
-  /// [atLookUp] injects an already-built lookup; passing none lets
-  /// [RemoteSecondary] open its own connection, which is what a site wanting a
-  /// connection separate from the client's shared one does.
-  @visibleForTesting
-  RemoteSecondary buildRemoteSecondary({AtLookUp? atLookUp}) => RemoteSecondary(
-        _atSign,
-        _preference!,
-        atChops: atChops,
-        atLookUp: atLookUp,
-        privateKey: _preference!.privateKey,
-        enrollmentId: enrollmentId,
-        atKeysIo: _atKeysIo,
-      );
-
   /// Keeps track of CryptoProviders registered with this AtClient
   // ---------------------------------------------------------------------------
   // DataEvent stream — fires on every successful keystore mutation that
@@ -152,6 +161,52 @@ class AtClientImpl implements AtClient {
     final c = Completer<void>();
     _drainWaiters.add(c);
     return c.future;
+  }
+
+  @override
+  Future<AtReachabilityResult> ensureReachable(String namespace,
+          {Duration timeout = const Duration(seconds: 30)}) =>
+      _ensureReachable(namespace).timeout(timeout,
+          onTimeout: () => const AtReachabilityResult(AtReachability.timedOut));
+
+  Future<AtReachabilityResult> _ensureReachable(String namespace) async {
+    final atSign = getCurrentAtSign();
+    final bootstrap = _pqBootstrap;
+    if (atSign == null || bootstrap == null) {
+      return AtReachabilityResult(AtReachability.failed,
+          error: StateError('this client has not finished initialising, so it '
+              'has no key ring to publish with'));
+    }
+
+    if (!NskeySeeding.isSeedable(namespace)) {
+      return const AtReachabilityResult(AtReachability.notAuthorised);
+    }
+
+    try {
+      // NOTE: the atServer's copy, not local storage — a key another
+      // enrollment published a moment ago is absent locally until sync catches
+      // up, and reading that absence as a cold start publishes a second key
+      // over the first.
+      if (await bootstrap.ring.publishedAdvertisement(atSign, namespace) !=
+          null) {
+        return const AtReachabilityResult(AtReachability.alreadyReachable);
+      }
+
+      if (_preference?.seedNamespaceKeys != true) {
+        return const AtReachabilityResult(AtReachability.postureDoesNotSeed);
+      }
+
+      // NOTE: safe here only because `MintLock` holds an in-flight guard for
+      // the ring this client uses. The lock itself excludes a different
+      // enrolment only: two racers of the SAME one both read the lock back,
+      // both see their own id, and both mint.
+      await bootstrap.seeding
+          .seedNamespace(atSign, namespace, askRotationPolicy: false);
+      return const AtReachabilityResult(AtReachability.published);
+    } catch (e) {
+      _logger.warning('Could not make $atSign reachable for $namespace: $e');
+      return AtReachabilityResult(AtReachability.failed, error: e);
+    }
   }
 
   /// Pushes [e] onto [dataEvents] asynchronously (microtask-scheduled).
@@ -193,6 +248,14 @@ class AtClientImpl implements AtClient {
   // other's one-shot timer and an in-flight arm can't re-arm after stop().
   int _expiryArmGen = 0;
 
+  /// Floor on the expiry timer's delay after a sweep that removed nothing.
+  ///
+  /// `nextExpiryAt()` reports expiries already past as well as future ones, so
+  /// a record the client cannot delete arms `Duration.zero` again on every
+  /// pass and the timer spins at event-loop speed. The floor keeps the retry —
+  /// a refusal can be transient — at one pass per interval.
+  static const Duration _fruitlessExpirySweepBackoff = Duration(seconds: 30);
+
   // ---------------------------------------------------------------------------
   // Event-driven availability timer. Symmetric counterpart to the
   // expiry timer above — arms at LocalSecondary.nextAvailableAt(); on
@@ -214,12 +277,23 @@ class AtClientImpl implements AtClient {
   set syncService(SyncService syncService) {
     _syncService = syncService;
     _finalizer.attach(_syncService!, 'SyncService for $_atSign');
+
+    // NOTE: the eviction listener cannot be registered where the providers are
+    // built — that runs during construction, before the sync service exists.
+    // Sync is what carries a conveyance record's deletion to the clients that
+    // already unwrapped the content key, so the deletion becomes an eviction
+    // here.
+    final cache = CryptoConfig.forClient(this).contentKeyCache;
+    if (cache != null) {
+      syncService.addProgressListener(ContentKeyEviction(cache));
+    }
+    _pqBootstrap?.sharing.attachToServices();
   }
 
   @override
   SyncService get syncService {
     if (_syncService == null) {
-      _logger.info('AtClient ($_atSign) isStopped: $isStopped');
+      _logger.finer('AtClient ($_atSign) isStopped: $isStopped');
       throw StateError('SyncService has not yet been set');
     }
     return _syncService!;
@@ -234,12 +308,13 @@ class AtClientImpl implements AtClient {
       _notificationService!,
       'NotificationService for $_atSign',
     );
+    _pqBootstrap?.sharing.attachToServices();
   }
 
   @override
   NotificationService get notificationService {
     if (_notificationService == null) {
-      _logger.info('AtClient ($_atSign) isStopped: $isStopped');
+      _logger.finer('AtClient ($_atSign) isStopped: $isStopped');
       throw StateError('notificationService has not yet been set');
     }
     return _notificationService!;
@@ -251,7 +326,7 @@ class AtClientImpl implements AtClient {
   set enrollmentService(EnrollmentService? enrollmentService) {
     _enrollmentService = enrollmentService;
     if (enrollmentService != null) {
-      _logger.info('AtClient ($_atSign) isStopped: $isStopped');
+      _logger.finer('AtClient ($_atSign) isStopped: $isStopped');
       _finalizer.attach(enrollmentService, 'EnrollmentService for $_atSign');
     }
   }
@@ -267,23 +342,212 @@ class AtClientImpl implements AtClient {
   @override
   EncryptionService? get encryptionService => _encryptionService;
 
-  static late AtSignLogger _logger;
+  late final AtSignLogger _logger;
+
+  /// For the few static contexts (the service [Finalizer]) that cannot use
+  /// the per-instance logger.
+  static final AtSignLogger _staticLogger = AtSignLogger('AtClientImpl');
+
+  PqClientBootstrap? _pqBootstrap;
+
+  /// This client's PQ startup — the owner of the one key ring, filing,
+  /// secret-sharing and signing-root instance set, and of the ordered
+  /// fire-and-forget startup steps. Null only for a client whose `_init` has
+  /// not run. Await its `startupComplete` to know the startup tail has
+  /// finished — tests do; production code must not.
+  @experimental
+  PqClientBootstrap? get pqBootstrap => _pqBootstrap;
 
   @override
   String? enrollmentId;
 
+  /// The PKAM signing algorithm this client's connections authenticate with.
+  ///
+  /// Resolved from the enrollment's key material at init
+  /// ([_resolveSigningAlgoFromKeyMaterial]) — the algorithm is a fact about
+  /// the key you hold, not a preference; the preference's value is the
+  /// fallback for a legacy enrollment with no typed material. Every
+  /// connection the client owns — verb, monitor, sync — must sign with this,
+  /// or a reconnect re-authenticates with the wrong routine against the
+  /// record-authoritative atServer.
+  ///
+  /// Not on the [AtClient] interface, since adding a member there breaks every
+  /// external `implements AtClient`; interface-typed callers use
+  /// [signingAlgoOf].
+  SigningAlgoType get signingAlgoType => resolved_algo.signingAlgoOf(this);
+
+  /// The PKAM signing algorithm [atClient]'s connections authenticate with:
+  /// the key-material resolution when one was recorded at init, else the
+  /// preference. For callers holding the [AtClient] interface, which carries
+  /// no such member (see [signingAlgoType]).
+  static SigningAlgoType signingAlgoOf(AtClient atClient) =>
+      resolved_algo.signingAlgoOf(atClient);
+
+  /// Every client this PROCESS has built, keyed by [instanceKey] — the
+  /// `(atSign, enrollmentId)` pair, since two enrollments of one atSign are
+  /// different principals and must not share a client.
+  ///
+  /// Static, so entries outlive any individual [AtClientManager] and survive
+  /// `AtClientManager.reset()`. [create] consults it before building anything,
+  /// which is why passing different arguments for an atSign already built does
+  /// not produce a different client — see [create].
+  ///
+  /// ⚠️ **Clearing an entry does not stop what it held.** Removing a client
+  /// drops the reference and nothing else, so its keystore timers, data-event
+  /// stream, sync and notification services and open Hive boxes all keep
+  /// running, unreferenced.
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
 
-  /// Whether a live client is already filed for [atSign].
+  /// Instance keys this process has seen superseded, old key to new key.
   ///
-  /// [atClientInstanceMap] is keyed by atSign, so two enrollments of one
-  /// atSign share an entry. [stop] removes the entry, freeing the atSign.
+  /// A self-retrofit replaces the enrollment a client authenticates as, and the
+  /// old id does not stop existing: the atServer caps it rather than deleting
+  /// it, and any caller that captured it earlier still holds it. Without this,
+  /// naming the old id misses the cache and builds a **second** client for the
+  /// same enrollment — a second connection, a second `_init`, a second startup
+  /// tail taking the same mint locks — which is then filed over the first,
+  /// leaving the original alive and unreachable.
+  ///
+  /// A separate map rather than an alias entry in [atClientInstanceMap]: an
+  /// alias would make one client look like two to the enrolled-client count in
+  /// [_resolveCacheKey], whose whole job is to tell "exactly one enrolled
+  /// client" from "several".
+  @visibleForTesting
+  static final Map<String, String> supersededInstanceKeys = <String, String>{};
+
+  /// Follows [asked] through any supersessions to the key a client is actually
+  /// filed under.
+  ///
+  /// Only ever moves to a key [atClientInstanceMap] holds: a supersession
+  /// whose target has been evicted leaves the caller where it started rather
+  /// than sending it to a key nothing answers for.
+  static String _currentInstanceKey(String asked) {
+    var key = asked;
+    final seen = <String>{asked};
+    while (true) {
+      final next = supersededInstanceKeys[key];
+      if (next == null ||
+          !atClientInstanceMap.containsKey(next) ||
+          !seen.add(next)) {
+        return key;
+      }
+      key = next;
+    }
+  }
+
+  /// The cache key for a client of [atSign] authenticated as [enrollmentId].
+  ///
+  /// **Identity here is `(atSign, enrollmentId)`, not the atSign alone.** A
+  /// client authenticated as one enrollment is a different principal from one
+  /// authenticated as another, or as the atSign's own keys: it holds a
+  /// different APKAM keypair, is granted different namespaces, and the atServer
+  /// answers `enroll:listns` for it and not for the others. Keying on the
+  /// atSign alone hands every caller the first client built for that atSign,
+  /// so a second enrollment of one atSign cannot exist in a process.
+  ///
+  /// A null [enrollmentId] keeps the bare atSign as the key — the
+  /// overwhelmingly common case, a client using the atSign's own keys.
+  static String instanceKey(String atSign, String? enrollmentId) =>
+      enrollmentId == null ? atSign : '$atSign|$enrollmentId';
+
+  /// The key [create] should look under, given what the caller named.
+  ///
+  /// A caller that names no enrollment usually means *this atSign's client*
+  /// rather than *a client belonging to no enrollment*. Taking `null`
+  /// literally hands it a brand-new client carrying no key material, which
+  /// does not fail here: it fails much later, on the first verb, as
+  /// `PKAM Keypair required for signing`.
+  ///
+  /// So an unnamed enrollment falls back to the atSign's client when there is
+  /// exactly ONE. **Only one.** Two enrollments of an atSign are two
+  /// principals, and silently picking either would hand a caller credentials
+  /// it did not ask for, so with several this refuses and says which ids are
+  /// available.
+  static String _resolveCacheKey(String atSign, String? enrollmentId) {
+    final asked = _currentInstanceKey(instanceKey(atSign, enrollmentId));
+    if (enrollmentId != null || atClientInstanceMap.containsKey(asked)) {
+      return asked;
+    }
+    final enrolled = atClientInstanceMap.keys
+        .whereType<String>()
+        .where((key) => key.startsWith('$atSign|'))
+        .toList();
+    if (enrolled.isEmpty) return asked;
+    if (enrolled.length == 1) return enrolled.single;
+    throw ArgumentError.value(
+        enrollmentId,
+        'enrollmentId',
+        'no enrollment id was given for $atSign, and ${enrolled.length} '
+            'enrolled clients exist for it '
+            '(${enrolled.map((k) => k.split('|').last).join(', ')}). '
+            'They are different principals, so name the one you want.');
+  }
+
+  /// Throws when [asked] names different rollout axes from the client that is
+  /// already running under [cacheKey] — the posture, the signing rollout, the
+  /// in-use signing set or the legacy-encryption refusal.
+  ///
+  /// Every one of those is final at construction, so a client that already
+  /// exists cannot adopt them, and ignoring them is worse than refusing: the
+  /// stage decides which algorithm an enrollment authenticates with and which
+  /// signing key it holds, so a caller whose preference was ignored runs on
+  /// the wrong **key** and finds out when a peer cannot verify it.
+  ///
+  /// Static and shared because two paths hand back a client that already
+  /// exists, and only one of them is this class: `AtClientManager`'s
+  /// same-atSign short-circuit returns without calling [create] at all.
+  ///
+  /// An [ArgumentError], not an [AtClientException]: this is a caller
+  /// programming error — two places in one app disagreeing about the stage —
+  /// rather than anything the atServer or the network did.
+  static void refuseChangedRolloutAxes({
+    required AtClientPreference? running,
+    required AtClientPreference asked,
+    required String cacheKey,
+  }) {
+    if (running == null) return;
+    final differences = running.rolloutDifferencesFrom(asked);
+    if (differences.isEmpty) return;
+    throw ArgumentError.value(
+        differences.join('; '),
+        'preference',
+        'the client for $cacheKey is already running under different rollout '
+            'settings, and they are final at construction — it cannot adopt '
+            'these. Stop that client before building one with different '
+            'settings, or give this preference the settings it is running '
+            'under. Ignoring the difference would leave this caller writing, '
+            'signing and enrolling under a stage it thinks it has left');
+  }
+
+  /// Whether a live client is already filed for [atSign], under any enrollment.
+  ///
+  /// [atClientInstanceMap] is keyed by `(atSign, enrollmentId)` — see
+  /// [instanceKey] — so one atSign can hold several entries, one per enrolled
+  /// principal, and any of them means the atSign is live. [stop] removes an
+  /// entry; the atSign is free when the last one goes.
   static bool holdsLiveClient(String atSign) =>
-      atClientInstanceMap.containsKey(AtUtils.fixAtSign(atSign));
+      liveClientsFor(atSign).isNotEmpty;
+
+  /// Every client filed for [atSign], under any enrollment.
+  ///
+  /// One atSign can hold several entries, one per enrolled principal, so a
+  /// caller wanting "the client for this atSign" has to match the whole family
+  /// rather than the bare atSign key.
+  static List<AtClientImpl> liveClientsFor(String atSign) {
+    final fixed = AtUtils.fixAtSign(atSign);
+    return [
+      for (final entry in atClientInstanceMap.entries)
+        if (entry.key is String &&
+            ((entry.key as String) == fixed ||
+                (entry.key as String).startsWith('$fixed|')) &&
+            entry.value is AtClientImpl)
+          entry.value as AtClientImpl
+    ];
+  }
 
   static final Finalizer<String> _finalizer = Finalizer((service) {
-    _logger.finer('Outgoing $service has been garbage collected');
+    _staticLogger.finer('Outgoing $service has been garbage collected');
   });
 
   // Cache key combines (namespace, eventSource). Two collections on
@@ -335,6 +599,37 @@ class AtClientImpl implements AtClient {
     return c;
   }
 
+  /// Returns the client for `(currentAtSign, enrollmentId)`, building one only
+  /// if this process has not built one already.
+  ///
+  /// ⚠️ **On a cache hit almost every argument here is ignored, silently.** The
+  /// cache is static and keyed only by that pair, so a second call naming the
+  /// same atSign and enrollment hands back the FIRST client — built with the
+  /// first caller's preference, storage path, collaborators and key source.
+  /// What the second caller passed is dropped without a log line, and the only
+  /// thing adopted from it is `preferences.crypto`, so that providers added
+  /// after first creation take effect.
+  ///
+  /// Concretely, on a cache hit these do nothing: [remoteSecondary],
+  /// [encryptionService], [localSecondaryKeyStore], [atChops], [atKeysIo],
+  /// [atLookUp], and every field of [preferences] except `crypto`. A
+  /// preference naming a different storage location is among them: a storage
+  /// bundle refuses a second open at a location already open, but on a cache
+  /// hit nothing opens, so the path is dropped.
+  ///
+  /// One mismatch is **refused** rather than ignored: a preference naming
+  /// different rollout axes — see [refuseChangedRolloutAxes]. A test or an app
+  /// that needs a genuinely different client must not rely on passing
+  /// different arguments here.
+  ///
+  /// With [atKeysIo] the enrollment is the keys' own answer,
+  /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
+  /// logged at shout level and ignored.
+  ///
+  /// Nothing in this library ever removes an entry from that cache, so a client
+  /// that has been stopped is returned from here and restarted rather than
+  /// rebuilt, and this method cannot hand back a second, genuinely separate
+  /// client for one atSign at all.
   static Future<AtClient> create(
     String currentAtSign,
     String? namespace,
@@ -353,11 +648,49 @@ class AtClientImpl implements AtClient {
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
-    // Fetch cached AtClientImpl for re-use, or create a new one and init it
+    if (storage != null && localSecondaryKeyStore != null) {
+      throw ArgumentError.value(
+          'storage and localSecondaryKeyStore',
+          'storage',
+          'a storage bundle carries the keystore AND the sync queue, so an '
+              'injected keystore replaces it rather than combining with it. '
+              'Supply one or the other for $currentAtSign');
+    }
+
+    if (atKeysIo != null) {
+      final logger = AtSignLogger('AtClientImpl ($currentAtSign)');
+      AtKeys? keys;
+      try {
+        keys = await atKeysIo.read(currentAtSign);
+      } on Exception catch (e) {
+        logger.warning('Could not read the keys for $currentAtSign, so which '
+            'enrollment they authenticate as is unknown; running as '
+            '${enrollmentId ?? "the atSign's own credential"}: $e');
+      }
+      if (keys != null && !keys.holdsAuthenticationMaterial) {
+        logger.finer('The keys for $currentAtSign hold no authentication '
+            'material, so they name no enrollment; running as '
+            '${enrollmentId ?? "the atSign's own credential"}');
+      } else if (keys != null) {
+        final derived = keys.enrollmentToAuthenticateAs();
+        if (enrollmentId != null && enrollmentId != derived) {
+          logger.shout('$currentAtSign was asked to run as enrollment '
+              '$enrollmentId, but its keys authenticate as $derived; using '
+              '$derived');
+        }
+        enrollmentId = derived;
+      }
+    }
+    // Fetch cached AtClientImpl for re-use, or create a new one and init it.
+    final cacheKey = _resolveCacheKey(currentAtSign, enrollmentId);
     AtClientImpl? atClientImpl;
-    if (atClientInstanceMap.containsKey(currentAtSign)) {
-      atClientImpl = atClientInstanceMap[currentAtSign];
-      await atClientImpl!.start();
+    if (atClientInstanceMap.containsKey(cacheKey)) {
+      atClientImpl = atClientInstanceMap[cacheKey];
+      refuseChangedRolloutAxes(
+          running: atClientImpl!.getPreferences(),
+          asked: preferences,
+          cacheKey: cacheKey);
+      await atClientImpl.start();
       // Re-using a cached AtClient skips _init. Adopt the supplied preference's
       // crypto config so providers (and a changed defaultProviderId) added
       // after first creation take effect; CryptoRuntime resolves against the
@@ -394,8 +727,13 @@ class AtClientImpl implements AtClient {
       }
     }
 
-    atClientInstanceMap[currentAtSign] = atClientImpl;
-    return atClientInstanceMap[currentAtSign];
+    // NOTE: not [cacheKey] — `_init` may have settled a different enrollment
+    // than the caller asked for, and filing under the requested id would leave
+    // the cache holding a client under an enrollment it no longer
+    // authenticates as.
+    final filedKey = instanceKey(currentAtSign, atClientImpl.enrollmentId);
+    atClientInstanceMap[filedKey] = atClientImpl;
+    return atClientInstanceMap[filedKey];
   }
 
   AtClientImpl._(
@@ -439,25 +777,24 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
+    // NOTE: an explicit step, never a side effect of building AtChops — a
+    // client whose AtChops was injected never builds one, and it must not
+    // sign the preference's rsa2048 default under an ML-DSA enrollment.
+    await _resolveSigningAlgoFromKeyMaterial();
     if (_preference!.isLocalStoreRequired) {
       AtSyncQueue? syncQueue;
       if (_localSecondaryKeyStore == null) {
-        // A caller that supplied storage picked the backend and the location,
-        // and the bundle itself says whether `stop()` closes it. Otherwise
-        // build the default Hive store under the preference's path and own it.
         final injected = _injectedStorage;
         final AtClientStorage storage;
         if (injected != null) {
           storage = injected;
-          _ownsStorage = injected.closedByClient;
         } else {
           final storagePath = preference!.hiveStoragePath;
           if (storagePath == null) {
             throw Exception('Please set local storage path');
           }
-          storage =
-              HiveAtClientStorage(atSign: _atSign, storagePath: storagePath);
-          _ownsStorage = true;
+          storage = HiveAtClientStorage(
+              atSign: _atSign, storagePath: storagePath, closedByClient: true);
         }
         await storage.attach(this);
         _storage = storage;
@@ -505,6 +842,9 @@ class AtClientImpl implements AtClient {
     // Using ??= because we may be injecting a RemoteSecondary
     _remoteSecondary ??= buildRemoteSecondary(atLookUp: atLookUp);
 
+    // NOTE: must run before anything deriving from the enrollment id is built.
+    await _settleEnrollmentIdentity();
+
     // Using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
     _encryptionService!.remoteSecondary = _remoteSecondary;
@@ -513,6 +853,105 @@ class AtClientImpl implements AtClient {
     putRequestTransformer.atClient = this;
 
     _cascadeSetTelemetryService();
+
+    // NOTE: built before the crypto config adopts its era default — the
+    // config's nskey providers read through the bootstrap's key ring, the same
+    // ring the startup steps mint into and file from.
+    //
+    // A stage that configures no post-quantum providers runs NONE of the
+    // startup: no wire write, no subscription, no change to the keyfile. Keyed
+    // on the axis rather than on `posture == PqPosture.legacy`, so a
+    // deployment that builds its own posture with the providers off gets the
+    // same client.
+    _pqBootstrap = PqClientBootstrap(
+      this,
+      keysIo: _atKeysIo,
+      gates: (_preference?.posture.configuresPqProviders ?? true)
+          ? const PqStartupGates()
+          : const PqStartupGates.inert(),
+      privilege: EnrollmentRecordPrivilegeResolver(this,
+          listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
+              .fetchEnrollmentRequests),
+      sweepUnanchoredEnrollments: () =>
+          EnrollmentServiceImpl(this, AtEnrollment.create())
+              .sweepUnanchoredEnrollments(),
+    );
+
+    _adoptEraCryptoDefault();
+
+    _announceLegacyEncryptionPosture();
+
+    // NOTE: the PQ startup is deliberately not awaited — neither a round trip
+    // nor a publish is something a client's startup should wait on or fail
+    // for, and anything a step missed is retried at the next start. A caller
+    // needing the tail to have run awaits [pqBootstrap]'s `startupComplete`,
+    // which means casting to `AtClientImpl`.
+    unawaited(_pqBootstrap!.startup());
+  }
+
+  /// Gives this client the era's crypto default: normally the nskey providers
+  /// wired for reading, with writes still going out legacy — or, for a posture
+  /// that does not read post-quantum data, no post-quantum providers at all.
+  ///
+  /// An app that names its own `CryptoConfig` still wins — `adoptEraDefault`
+  /// leaves it alone.
+  ///
+  /// The key ring is given this client's `AtKeys` so it can find a private
+  /// that was **conveyed** to this enrollment or that survived a restart.
+  /// Without that the ring sees only what this process minted itself, so every
+  /// restart would read as "this atSign cannot open its own namespace".
+  ///
+  /// Built once per client because these providers hold per-atSign state; a
+  /// shared instance would let two atSigns see each other's cached content
+  /// keys. The ring is the bootstrap's, so a private the seeding step just
+  /// minted is visible to the very next read.
+  void _adoptEraCryptoDefault() {
+    final writesPq = _preference?.posture.writesPqByDefault ?? false;
+    // NOTE: the `?? true` cannot fire — `_preference!` is dereferenced earlier
+    // in construction, so a client reaching here always has one. Do not read
+    // it as "a client with no preference keeps the providers".
+    final readsPq = _preference?.posture.configuresPqProviders ?? true;
+    if (!readsPq) {
+      CryptoConfig.adoptEraDefault(this, const CryptoConfig.legacy());
+      return;
+    }
+    final sealsTo =
+        _preference?.sealsToKeyAlgorithms ?? SecretSharingAlgos.keyAlgos;
+    CryptoConfig.adoptEraDefault(
+      this,
+      writesPq
+          ? CryptoConfig.nskey(
+              keyRing: _pqBootstrap!.ring, sealsToKeyAlgorithms: sealsTo)
+          : CryptoConfig.readsNskeyWritesLegacy(
+              keyRing: _pqBootstrap!.ring, sealsToKeyAlgorithms: sealsTo),
+    );
+  }
+
+  /// Says out loud, at every client creation, whether this client may still
+  /// write legacy-encrypted data.
+  ///
+  /// Loud because the default is the unsafe one: data written under a scheme
+  /// that is harvestable now and openable later, by an app whose author never
+  /// knew it had a choice.
+  void _announceLegacyEncryptionPosture() {
+    if (_preference?.disallowLegacyEncryption == true) {
+      _logger.info('disallowLegacyEncryption is set: this client refuses to '
+          'encrypt new data with the legacy provider. Legacy reads are '
+          'unaffected.');
+      if (_preference?.allowLegacyCryptoFallback == true) {
+        _logger.shout(
+            'allowLegacyCryptoFallback is set alongside disallowLegacyEncryption '
+            'and has no effect — the cold-start fallback is a legacy write, so '
+            'a destination with no post-quantum key is refused rather than '
+            'reached.');
+      }
+      return;
+    }
+    _logger.info(
+        'disallowLegacyEncryption is false, so this client may still encrypt '
+        'new data with the legacy (RSA/AES) provider — harvestable now, '
+        'openable by a quantum computer later. It becomes the default in '
+        'at_client 4.0; set it on AtClientPreference to opt in early.');
   }
 
   /// Arms (or re-arms) the one-shot expiry [Timer] at the
@@ -521,7 +960,11 @@ class AtClientImpl implements AtClient {
   ///
   /// A timestamp in the past arms a `Duration.zero` timer that fires
   /// on the next microtask — effectively immediate.
-  Future<void> _armExpiryTimer() async {
+  /// [afterFruitlessSweep] is set by [_onExpiryFire] when the sweep it just
+  /// ran removed no keys. A past expiry then cannot be cleared by firing
+  /// again immediately, so the delay is floored at
+  /// [_fruitlessExpirySweepBackoff] rather than zero.
+  Future<void> _armExpiryTimer({bool afterFruitlessSweep = false}) async {
     final gen = ++_expiryArmGen;
     _expiryTimer?.cancel();
     _expiryTimer = null;
@@ -532,7 +975,24 @@ class AtClientImpl implements AtClient {
     if (gen != _expiryArmGen || _isStopped) return;
     if (when == null) return;
     final wait = when.difference(DateTime.timestamp());
-    _expiryTimer = Timer(wait.isNegative ? Duration.zero : wait, _onExpiryFire);
+    _expiryTimer = Timer(
+        expiryTimerDelay(wait, afterFruitlessSweep: afterFruitlessSweep),
+        _onExpiryFire);
+  }
+
+  /// How long to wait before the next expiry sweep, given [untilNextExpiry]
+  /// (negative when the earliest expiry is already past).
+  ///
+  /// A past expiry normally means "sweep now", and the sweep clears the
+  /// record so the next one is in the future. When the sweep removed nothing
+  /// ([afterFruitlessSweep]) that reasoning does not hold: firing again
+  /// immediately re-runs the same computation over the same state, forever.
+  /// See [_fruitlessExpirySweepBackoff].
+  @visibleForTesting
+  static Duration expiryTimerDelay(Duration untilNextExpiry,
+      {required bool afterFruitlessSweep}) {
+    if (!untilNextExpiry.isNegative) return untilNextExpiry;
+    return afterFruitlessSweep ? _fruitlessExpirySweepBackoff : Duration.zero;
   }
 
   /// Drives one expiry sweep and re-arms the timer for the next.
@@ -543,13 +1003,16 @@ class AtClientImpl implements AtClient {
   /// each put before the corresponding [DataEvent] microtask runs).
   Future<void> _onExpiryFire() async {
     _expirySweepInFlight = true;
+    // NOTE: a throwing sweep counts as fruitless too — it cannot have moved
+    // the earliest expiry. See [_fruitlessExpirySweepBackoff].
+    var removed = 0;
     try {
-      await localSecondary?.deleteExpiredKeys();
+      removed = await localSecondary?.deleteExpiredKeys() ?? 0;
     } catch (e, st) {
       _logger.warning('Expiry sweep failed: $e\n$st');
     } finally {
       _expirySweepInFlight = false;
-      await _armExpiryTimer();
+      await _armExpiryTimer(afterFruitlessSweep: removed == 0);
     }
   }
 
@@ -631,7 +1094,18 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stop() => _stop(keepStorageOpen: false);
+
+  /// Stops this client and hands back its storage, left open for a successor
+  /// whatever its [AtClientStorage.closedByClient] says; the successor closes
+  /// it. Null when this client held none, or was already stopped.
+  Future<AtClientStorage?> stopHandingOverStorage() async {
+    final storage = _storage;
+    await _stop(keepStorageOpen: true);
+    return storage;
+  }
+
+  Future<void> _stop({required bool keepStorageOpen}) async {
     if (_isStopped) {
       _logger.info('stop() called: but client is already stopped. Ignoring.');
       return;
@@ -641,21 +1115,23 @@ class AtClientImpl implements AtClient {
     _logger.info('stop() called: stopping at_client for $_atSign');
 
     await _stopBackgroundProcesses();
-    await _releaseStorage();
-    if (identical(atClientInstanceMap[_atSign], this)) {
-      atClientInstanceMap.remove(_atSign);
-    }
+    await _releaseStorage(keepOpen: keepStorageOpen);
+    // NOTE: by identity, not by key — the map is keyed (atSign, enrollmentId),
+    // so a client filed under an enrollment is not found under the bare atSign
+    // and would be left in the map, stopped, for the next caller to restart.
+    atClientInstanceMap.removeWhere((_, client) => identical(client, this));
   }
 
-  /// Drops this client's claim on its storage, closing it if this client built
-  /// it. A stopped client keeps nothing open and cannot be restarted.
-  Future<void> _releaseStorage() async {
+  /// Drops this client's claim on its storage, closing a client-closed bundle
+  /// unless [keepOpen]. A stopped client keeps nothing open and cannot be
+  /// restarted.
+  Future<void> _releaseStorage({bool keepOpen = false}) async {
     final storage = _storage;
     if (storage == null) return;
     _storageReleased = true;
     try {
       await storage.detach(this);
-      if (_ownsStorage) await storage.close();
+      if (!keepOpen && storage.closedByClient) await storage.close();
     } catch (e) {
       _logger.warning('Error while releasing storage: $e');
     }
@@ -663,6 +1139,9 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> _stopBackgroundProcesses() async {
+    // NOTE: first, so a stopped client publishes nothing further — the PQ
+    // startup halts at its next step boundary.
+    _pqBootstrap?.stop();
     try {
       _expiryTimer?.cancel();
       _expiryTimer = null;
@@ -746,8 +1225,49 @@ class AtClientImpl implements AtClient {
     return _remoteSecondary;
   }
 
+  /// Builds a [RemoteSecondary] that authenticates as **this client**: the
+  /// enrollment id settled at init, and the PKAM signing algorithm resolved
+  /// from that enrollment's key material rather than the preference's
+  /// deprecated default.
+  ///
+  /// Every site in this class that opens a connection goes through here: one
+  /// that builds its own signs the challenge with the wrong routine, which
+  /// under an ML-DSA enrollment throws out of at_chops rather than failing
+  /// authentication.
+  ///
+  /// [atLookUp] injects an already-built lookup; passing none lets
+  /// [RemoteSecondary] open its own connection, separate from the client's
+  /// shared one.
+  @visibleForTesting
+  RemoteSecondary buildRemoteSecondary({AtLookUp? atLookUp}) => RemoteSecondary(
+        _atSign,
+        _preference!,
+        atChops: atChops,
+        atLookUp: atLookUp,
+        privateKey: _preference!.privateKey,
+        enrollmentId: enrollmentId,
+        signingAlgoType: signingAlgoType,
+        atKeysIo: _atKeysIo,
+      );
+
+  @override
+
+  /// Replaces this client's preference — everything except the rollout axes,
+  /// which are **refused** when they differ.
+  ///
+  /// `posture`, `authenticationKeyAlgorithm`, `dataSigningKeyAlgorithms` and
+  /// `disallowLegacyEncryption` are final at construction — the substrate
+  /// reads them once, at a startup that has already run by the time anyone can
+  /// call this — so accepting them here would leave the client *reporting* a
+  /// stage it never applied.
+  ///
+  /// Everything else is replaced, `crypto` included.
   @override
   void setPreferences(AtClientPreference preference) async {
+    refuseChangedRolloutAxes(
+        running: _preference,
+        asked: preference,
+        cacheKey: instanceKey('$_atSign', enrollmentId));
     _preference = preference;
   }
 
@@ -811,17 +1331,46 @@ class AtClientImpl implements AtClient {
     if (atKey.metadata.namespaceAware) {
       atKey.namespace ??= preference?.namespace;
     }
-    var builder = DeleteVerbBuilder()..atKey = atKey;
+    var builder = DeleteVerbBuilder()
+      ..atKey = atKey
+      ..noCommit = deleteRequestOptions?.noCommit ?? false;
 
-    var deleteResult = await executeUpdateOrDelete(
-      builder,
-      SecondaryManager.getRemoteLocalPrefForOp(
-        deleteRequestOptions?.useRemoteAtServer,
-        preference?.remoteLocalPref,
-      ),
+    final prefForOp = SecondaryManager.getRemoteLocalPrefForOp(
+      deleteRequestOptions?.useRemoteAtServer,
+      preference?.remoteLocalPref,
     );
+    _refuseNoCommitWithoutRemote(
+        deleteRequestOptions?.noCommit ?? false, prefForOp);
+
+    var deleteResult = await executeUpdateOrDelete(builder, prefForOp);
 
     return deleteResult != null;
+  }
+
+  /// Where a put goes: a `local:` key never leaves the device, and everything
+  /// else is decided by the caller's preference.
+  RemoteLocalPref _routingFor(
+          AtKey atKey, bool? useRemoteAtServer) =>
+      atKey.isLocal
+          ? RemoteLocalPref.localOnly
+          : SecondaryManager.getRemoteLocalPrefForOp(
+              useRemoteAtServer, preference?.remoteLocalPref);
+
+  /// Refuses a write that asks not to be recorded but is not going to the
+  /// atServer.
+  ///
+  /// The flag is part of a command the atServer parses, and a local write
+  /// sends no command: the record would take a local commit entry and sync
+  /// would push it later under a command carrying no flag, so the commit would
+  /// happen anyway.
+  void _refuseNoCommitWithoutRemote(bool noCommit, RemoteLocalPref prefForOp) {
+    if (noCommit && prefForOp != RemoteLocalPref.remoteOnly) {
+      throw IllegalArgumentException(
+          'noCommit asks the atServer not to record this operation, so the '
+          'operation has to reach the atServer. Set useRemoteAtServer as '
+          'well, or drop noCommit — as written it would silently record the '
+          'commit it was asked to avoid.');
+    }
   }
 
   Future<String?> executeUpdateOrDelete(
@@ -1073,6 +1622,11 @@ class AtClientImpl implements AtClient {
     dynamic value,
     PutRequestOptions? putRequestOptions,
   ) async {
+    // NOTE: refused before any work — on a client with no local store, doing
+    // the encryption first never reaches this answer, dying on the missing
+    // secondary instead.
+    _refuseNoCommitWithoutRemote(putRequestOptions?.noCommit ?? false,
+        _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
@@ -1110,6 +1664,34 @@ class AtClientImpl implements AtClient {
     if (!validationResult.isValid) {
       throw AtKeyException(validationResult.failureReason);
     }
+    // NOTE: the provider that will encrypt this write acts before the pipeline
+    // starts — minting a content key means writing a conveyance record, and
+    // that cannot happen once the transformer is mid-way through building a
+    // verb builder. A `local:` record is excluded: it is never synced to the
+    // atServer, the keystore already encrypts it at rest, and every
+    // post-quantum provider declines a local key.
+    var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
+    if (!atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt) {
+      try {
+        await CryptoRuntime(this).prepareWrite(
+          atKey,
+          requestedProviderId: options.cryptoProviderId,
+          // Any record the provider writes here is one this write will cite, so
+          // it has to travel the same route this write does.
+          useRemoteAtServer: options.useRemoteAtServer,
+          // Not stamped here: the catch below may re-route this write to
+          // legacy, and a key stamped with the provider that then declined
+          // would claim a scheme its value was never sealed under.
+          stampProviderId: false,
+        );
+      } on NamespaceKeyUnavailableException catch (e) {
+        if (!mayFallBackToLegacy(_preference)) rethrow;
+        _logger.warning(
+            'falling back to legacy encryption for ${atKey.key}: ${e.message}');
+        options = _copyOptionsForLegacyFallback(options);
+      }
+    }
+
     var tuple = Tuple<AtKey, dynamic>()
       ..one = atKey
       ..two = value;
@@ -1124,7 +1706,10 @@ class AtClientImpl implements AtClient {
     UpdateVerbBuilder putBuilder = await putRequestTransformer.transform(
       tuple,
       encryptionPrivateKey: encryptionPrivateKey,
-      requestOptions: putRequestOptions,
+      // NOTE: `options`, not `putRequestOptions` — a legacy fallback is
+      // expressed by rewriting the options, and the transformer is where the
+      // provider is finally selected.
+      requestOptions: options,
     );
     // Validate the size of the value after encryption/encoding
     // Since AtClientPreference is mandatory argument in create method, _preference
@@ -1135,16 +1720,8 @@ class AtClientImpl implements AtClient {
       );
     }
 
-    RemoteLocalPref remoteLocalPref;
-    if (atKey.isLocal) {
-      remoteLocalPref = RemoteLocalPref.localOnly;
-    } else {
-      remoteLocalPref = SecondaryManager.getRemoteLocalPrefForOp(
-        putRequestOptions?.useRemoteAtServer,
-        preference?.remoteLocalPref,
-      );
-    }
-    var putResponse = await executeUpdateOrDelete(putBuilder, remoteLocalPref);
+    var putResponse = await executeUpdateOrDelete(
+        putBuilder, _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
 
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
@@ -1231,6 +1808,215 @@ class AtClientImpl implements AtClient {
     return result ??= '';
   }
 
+  /// Resolves this client's PKAM signing algorithm from the enrollment's key
+  /// material — the authoritative source; you cannot sign ML-DSA with an RSA
+  /// key. A null resolution (a legacy flat-fields enrollment, or no keyfile
+  /// source at all) leaves the preference's value as the fallback.
+  Future<void> _resolveSigningAlgoFromKeyMaterial() async {
+    final id = enrollmentId;
+    if (_atKeysIo == null || id == null || isAtSignCredential(id)) return;
+    try {
+      final keys = await _atKeysIo!.read(_atSign);
+      resolved_algo.recordResolvedSigningAlgo(
+          this, keys.signingAlgorithmForEnrollment(id));
+    } on Exception catch (e) {
+      _logger.warning(
+          'Could not resolve the signing algorithm for enrollment $id from '
+          'key material: $e. Connections will authenticate with the '
+          // ignore: deprecated_member_use_from_same_package
+          'preference value (${_preference?.signingAlgoType}).');
+    }
+  }
+
+  /// Whether an enrollment authenticating with [held] must move to satisfy a
+  /// posture asking for [wanted].
+  ///
+  /// **A posture is a floor, never a downgrade.** Key material wins, so
+  /// `PqPosture.legacy` means "do not drive an upgrade" rather than "return to
+  /// legacy", and cannot un-retrofit an atSign that has already moved.
+  ///
+  /// "Stronger" is at_chops' own total order rather than a judgement made
+  /// here: a signer and a verifier that disagreed about it would negotiate
+  /// against themselves.
+  @visibleForTesting
+  static bool retrofitIsDue(
+          {required SigningAlgoType wanted, required SigningAlgoType held}) =>
+      held != wanted && SigningAlgoType.strongestOf({wanted, held}) == wanted;
+
+  /// What a client holding NO enrollment asks its first one to be.
+  ///
+  /// Nothing can be carried over — the client names no enrollment, so it has
+  /// no record to read an app, a device or a grant from — so the constants
+  /// name it and it asks for everything. That is not an escalation: the
+  /// connection making the request has proved possession of the atSign's own
+  /// root credential and is already unscoped.
+  ///
+  /// ⛔ **The device name is per device, NOT the bare constant.** The atServer
+  /// refuses a request naming an `(appName, deviceName)` that an approved
+  /// enrollment already holds, so a shared constant would let the FIRST clone
+  /// of a pre-enrollment keyfile upgrade and leave every other one refused at
+  /// every start. Fresh per call, so a failed attempt's pending record cannot
+  /// block the retry either.
+  @visibleForTesting
+  static ({String appName, String deviceName, Map<String, String> grants})
+      firstEnrollmentIdentity() => (
+            appName: firstEnrollmentAppName,
+            deviceName: '$firstEnrollmentDeviceName-${Uuid().v4()}',
+            grants: const {'*': 'rw', '__manage': 'rw'},
+          );
+
+  /// Settles the enrollment this client runs as, before anything that derives
+  /// from it is built.
+  ///
+  /// A posture is a floor. When it asks for a stronger authentication key than
+  /// the client's credential holds, the client retrofits itself and comes up
+  /// on the new enrollment. Whether to retrofit is **derived from key
+  /// material, never stored**, and there is no preference opt-out.
+  ///
+  /// **A client holding NO enrollment is included, and its credential is the
+  /// atSign's own.** A pre-enrollment atSign authenticates with the flat
+  /// `at_pkam_publickey`, which at_lookup signs with rsa2048, so a
+  /// post-quantum posture moves it exactly as it moves a legacy enrollment.
+  /// What differs is only where the new enrollment's name and grants come from
+  /// — see [firstEnrollmentIdentity] — and that the atServer parks the request
+  /// `pending`, which at_auth approves over the same connection.
+  ///
+  /// **Sequenced here rather than moved afterwards.** The monitor, the sync
+  /// service's own `RemoteSecondary` and the encryption service are all built
+  /// from this client's enrollment id *after* `_init` returns, so settling it
+  /// first makes every one of them correct by construction. A connection
+  /// missed by a live retrofit goes on working for the atServer's 720-hour
+  /// grace.
+  ///
+  /// Nothing is fatal, errors included: a client that cannot retrofit comes up
+  /// on the credential it already had and tries again next start.
+  /// `retrofitIdentity` is idempotent per keyfile, which is what makes
+  /// every-start safe.
+  Future<void> _settleEnrollmentIdentity() async {
+    final id = enrollmentId;
+    final keysIo = _atKeysIo;
+    if (keysIo == null) return;
+    final ownKeys = isAtSignCredential(id);
+    final subject = ownKeys ? 'this atSign\'s own keys' : id!;
+
+    final wanted = _preference!.authenticationKeyAlgorithm;
+    SigningAlgoType held;
+    if (ownKeys) {
+      // A pre-enrollment atSign authenticates with the flat
+      // `at_pkam_publickey`, which at_lookup signs with rsa2048.
+      held = SigningAlgoType.rsa2048;
+    } else {
+      try {
+        // NOTE: a null resolution is not "unknown" — it is the flat fields'
+        // RSA keypair, which at_lookup signs with `rsa2048`.
+        held = (await keysIo.read(_atSign)).authenticationAlgorithmFor(id) ??
+            SigningAlgoType.rsa2048;
+      } on Exception catch (e) {
+        _logger.warning('Could not read key material for enrollment $id, so '
+            'whether a retrofit is due cannot be decided. Coming up on $id: $e');
+        return;
+      }
+    }
+
+    if (!retrofitIsDue(wanted: wanted, held: held)) return;
+
+    _logger.info('$subject authenticates with ${held.name} and this '
+        'posture requires ${wanted.name}; retrofitting');
+
+    try {
+      final String appName;
+      final String deviceName;
+      final Map<String, String> grants;
+      if (ownKeys) {
+        final first = firstEnrollmentIdentity();
+        appName = first.appName;
+        deviceName = first.deviceName;
+        grants = first.grants;
+      } else {
+        // NOTE: from the enrollment record rather than the preference — the
+        // new enrollment reuses them verbatim, because losing authority is a
+        // downgrade that would land silently, a namespace at a time.
+        final enrollment = await localSecondary?.getEnrollmentDetails();
+        final recordApp = enrollment?.appName;
+        final recordDevice = enrollment?.deviceName;
+        if (enrollment == null || recordApp == null || recordDevice == null) {
+          _logger.warning('Enrollment $id is due a retrofit, but its record '
+              'does not name an app and device to carry over. Coming up on '
+              '$id.');
+          return;
+        }
+        appName = recordApp;
+        deviceName = recordDevice;
+        grants = (enrollment.namespace ?? const <String, dynamic>{})
+            .map((namespace, access) => MapEntry(namespace, '$access'));
+      }
+
+      final newSession = await retrofitIdentity(
+        session: AtAuthSession(
+          atSign: _atSign,
+          rootDomain:
+              AtRootDomain(_preference!.rootDomain, _preference!.rootPort),
+          atKeysIo: keysIo,
+          namespace: _preference!.namespace,
+          // Null for a pre-enrollment atSign, which is how at_auth decides it
+          // must approve its own request.
+          enrollmentId: id,
+          atLookUp: _remoteSecondary!.atLookUp,
+        ),
+        preference: _preference!,
+        appName: appName,
+        deviceName: deviceName,
+        namespaces: grants,
+      );
+
+      final newId = newSession.enrollmentId;
+      if (newId == null || newId == id) {
+        _logger.warning('The retrofit of $subject returned no new enrollment '
+            'id. Coming up on $subject.');
+        return;
+      }
+
+      // NOTE: recorded before anything else, so a caller naming the id it
+      // captured earlier reaches THIS client rather than building a duplicate.
+      supersededInstanceKeys[instanceKey(_atSign, id)] =
+          instanceKey(_atSign, newId);
+      enrollmentId = newId;
+      await _rederiveFromEnrollment(previousEnrollmentId: id);
+      _logger
+          .info('Retrofitted $subject to $newId; this client runs as $newId');
+    } on Exception catch (e) {
+      _logger.warning('The retrofit of $subject did not complete, so this '
+          'client comes up on $subject and the next start will try again: $e');
+    } on Error catch (e, stackTrace) {
+      // NOTE: an escaping Error would fail construction, and it is reachable —
+      // `retrofitIdentity` throws `ArgumentError` for a session with no
+      // AtLookUp, and an `AtKeysIo` is free to throw from `read`.
+      _logger.severe('The retrofit of $subject failed with an error rather '
+          'than an exception, which names a defect rather than a passing '
+          'condition. This client comes up on $subject: $e\n$stackTrace');
+    }
+  }
+
+  /// Rebuilds everything `_init` derives from the enrollment id, after it has
+  /// changed. The old connection is closed explicitly: left open it stays
+  /// authenticated as the superseded enrollment for the atServer's grace
+  /// period.
+  Future<void> _rederiveFromEnrollment(
+      {required String? previousEnrollmentId}) async {
+    await _resolveSigningAlgoFromKeyMaterial();
+    _atChops = await _createAtChops(_atSign);
+
+    final previous = _remoteSecondary;
+    _remoteSecondary = buildRemoteSecondary();
+    try {
+      await previous?.atLookUp.close();
+    } on Exception catch (e) {
+      _logger.warning('The connection authenticated as '
+          '${previousEnrollmentId ?? "the atSign itself"} could not be closed; '
+          'it will idle out: $e');
+    }
+  }
+
   Future<AtChops> _createAtChops(String atSign) async {
     // When the client was handed an AtKeysIo *source* (and no live
     // AtChops/AtLookUp was injected by auth), derive our own PKAM+encryption
@@ -1239,7 +2025,13 @@ class AtClientImpl implements AtClient {
     // socket — parity with the AtChops auth used to inject.
     if (_atKeysIo != null) {
       final keys = await _atKeysIo!.read(atSign);
-      return keys.toAtChops();
+      // NOTE: AtKeys decides which keypair this enrollment owns. A
+      // typed-material enrollment authenticates with its own signing keypair
+      // while the flat fields still carry the original enrollment's RSA
+      // credentials, so reading those here would sign PKAM with the wrong key.
+      // Not the algorithm `_resolveSigningAlgoFromKeyMaterial` recorded: that
+      // records nothing when its own read throws.
+      return keys.authenticationFor(enrollmentId).chops;
     }
     AtEncryptionKeyPair? atEncryptionKeyPair;
     AtPkamKeyPair? atPkamKeyPair;
@@ -1277,13 +2069,35 @@ class AtClientImpl implements AtClient {
     return chops;
   }
 
+  /// Whether a write to a destination with no post-quantum key may go out
+  /// legacy instead of failing.
+  ///
+  /// Two switches saying opposite things: `allowLegacyCryptoFallback` is
+  /// "reach this recipient however you can", `disallowLegacyEncryption` is
+  /// "never write legacy". The second wins. Refusing here rather than at
+  /// encryption keeps the error the one the caller can act on — the
+  /// destination has no post-quantum key.
+  @visibleForTesting
+  static bool mayFallBackToLegacy(AtClientPreference? preference) =>
+      CryptoRuntime.mayFallBackToLegacy(preference);
+
+  /// [options] with the crypto provider pinned to legacy, leaving the caller's
+  /// object untouched — it may be a shared instance, and one write's fallback
+  /// must not become every later write's default.
+  static PutRequestOptions _copyOptionsForLegacyFallback(
+          PutRequestOptions options) =>
+      PutRequestOptions()
+        ..useRemoteAtServer = options.useRemoteAtServer
+        ..shouldEncrypt = options.shouldEncrypt
+        ..cryptoProviderId = legacyCryptoProviderId;
+
   /// Fails fast at construction if the configured default provider id can't be
   /// resolved — neither among `AtClientPreference.crypto.providers` nor the
   /// built-in legacy provider. Crypto resolution itself is done by
   /// [CryptoRuntime] against the live `preference.crypto`, so there is no
   /// per-client registry to populate.
   void _validateDefaultCryptoProvider() {
-    final config = _preference!.crypto;
+    final config = CryptoConfig.forClient(this);
     final id = config.defaultProviderId;
     if (config.lookup(id) == null && id != legacyCryptoProviderId) {
       throw CryptoProviderNotRegistered(
@@ -1313,6 +2127,9 @@ class AtClientImpl implements AtClient {
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
+    // NOTE: its own connection, because it hands the socket raw bytes and then
+    // closes it; built the same way as the client's, so it authenticates as
+    // the same enrollment with the same routine.
     var remoteSecondary = buildRemoteSecondary();
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');

@@ -399,7 +399,6 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   set heartbeatResponseTimeout(Duration value);
 }
 
-
 /// How an [AtLookupMuxable] makes connections: the three factories
 /// `AtLookupImpl` has always accepted, bundled into one value.
 ///

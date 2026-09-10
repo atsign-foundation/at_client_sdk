@@ -17,18 +17,16 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    final preference = TestUtils.getPreference(atSign)
-      ..crypto = CryptoConfig(
-        defaultProviderId: 'legacy',
-        providers: [
-          TestProvider('test'),
-        ],
-      );
-    atClientManager = await TestUtils.initAtClient(
-      atSign,
-      namespace,
-      preference: preference,
-    );
+    final preference =
+        TestUtils.getPreference(atSign, posture: PqPosture.legacy)
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'legacy',
+            providers: [
+              TestProvider('test'),
+            ],
+          );
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        preference: preference, posture: PqPosture.legacy);
     atClientManager.atClient.syncService.sync();
   });
 

@@ -81,7 +81,10 @@ void main() {
       );
       expect(client.getCurrentAtSign(), atSign);
       expect(
-        AtClientImpl.atClientInstanceMap[atSign],
+        AtClientImpl.atClientInstanceMap[AtClientImpl.instanceKey(
+          atSign,
+          client.enrollmentId,
+        )],
         same(client),
         reason:
             'AtClientImpl.create files every client it builds, this one '

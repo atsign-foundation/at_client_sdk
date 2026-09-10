@@ -224,7 +224,11 @@ projects **S-5** (at_auth 4.0.0 — the `at_auth_io.dart` barrel, dropping the
 at [`../pq/implementation-plan.md`](../pq/implementation-plan.md) — ⚠️ this cited
 **lines 312–339**, and a line number is not an address: that plan was restructured
 on 2026-08-26 and the range now lands on unrelated prose. Find S-5 and S-6 by name
-in [`../pq/detail/implementation-plan.md`](../pq/detail/implementation-plan.md).
+in `docs/projects/pq/detail/implementation-plan.md`, which holds the discharged
+gate bodies. ⚠️ **That file is not on trunk and never has been** (0 commits touching
+`docs/projects/pq/detail` on `origin/trunk`, 2026-09-07) — it exists only on
+`gkc-pq-d1-spike`, so this was a live link on the spike and a dead one from the moment
+these docs landed on trunk in #2207. It is deliberately not a link here for that reason.
 That
 plan explicitly names *this* effort as the separate "wasm-port" that owns
 `at_lookup` and `at_chops`.

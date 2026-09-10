@@ -2,6 +2,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_client_flutter/src/services/auth_service.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_commons/at_commons.dart';
 import 'package:flutter_test/flutter_test.dart' show TestWidgetsFlutterBinding;
 import 'package:mocktail/mocktail.dart';
@@ -84,6 +85,7 @@ void main() {
       AuthService authService = AuthService(atAuth: mockAtAuth);
       AtOnboardingRequest atOnboardingRequest = AtOnboardingRequest(
         "@alice",
+        signingAlgoType: SigningAlgoType.rsa2048,
         atKeysIo: mockFileAtKeysIo,
       );
 
