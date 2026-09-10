@@ -198,7 +198,8 @@ class SyncServiceImpl implements SyncService {
   }
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
-    _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
+    _logger = AtSignLogger('SyncService'
+        ' (${_atClient.getCurrentAtSign()}:${_atClient.enrollmentId})');
     // _logger.level = 'info';
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
