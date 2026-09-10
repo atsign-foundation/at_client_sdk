@@ -1,4 +1,3 @@
-version: '3.7'
 services:
   at_virtualenv:
     container_name: at_virtualenv
