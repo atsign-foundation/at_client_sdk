@@ -28,7 +28,18 @@ class MockAtChopsKeys extends Mock implements AtChopsKeys {}
 class MockSecondaryAddressFinder extends Mock
     implements SecondaryAddressFinder {}
 
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+/// A [RemoteSecondary] mock whose `closeConnection()` answers with a completed
+/// future, as the real one does.
+///
+/// Stubbed in the constructor rather than given a concrete body: a concrete
+/// override never reaches `noSuchMethod`, so mocktail would record no call and
+/// the teardown verification in `at_client_termination_test.dart` would assert
+/// nothing while still passing. A test wanting different behaviour re-stubs it.
+class MockRemoteSecondary extends Mock implements RemoteSecondary {
+  MockRemoteSecondary() {
+    when(() => closeConnection()).thenAnswer((_) async {});
+  }
+}
 
 class MockLocalSecondary extends Mock implements LocalSecondary {}
 

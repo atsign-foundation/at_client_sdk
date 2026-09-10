@@ -3018,6 +3018,19 @@ hunting for a constructor argument that never existed in a release. -->
   question — privilege is a property of an enrollment that is currently
   approved, so a revoked record answering it would grant authority the
   atServer no longer honours.
+- fix: `stop()` and the atSign switch that calls it no longer report success
+  after a teardown step failed to run. Each step caught everything and logged
+  it at `warning`, so a `TypeError` — a field holding the wrong type, meaning
+  the step never happened — was indistinguishable from a socket that was
+  already gone. A failure is now separated from a defect: an `Exception` is
+  logged and stepped over, because the remaining steps must still run, while
+  an `Error` is held with the stack of where it was raised and thrown once
+  every step has had its turn. Storage is released and the client removed from
+  the instance map first, so a defect cannot leave storage claimed or a
+  stopped client discoverable. The sync and notification services are now
+  type-tested rather than cast: neither interface declares `stop()`, so a
+  field holding null or another implementation is a legal state with nothing
+  to stop, and the cast turned that into the very defect the catch then hid.
 
 ## 3.14.0
 - feat (experimental): per-APKAM same-atSign secret-sharing substrate —
