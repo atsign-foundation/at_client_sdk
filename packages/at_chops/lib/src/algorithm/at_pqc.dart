@@ -66,11 +66,12 @@ abstract final class AtPqc {
   /// That interchangeability holds only for a 16-byte IV. Any other IV makes
   /// the choice of backend observable, and in both directions: the pure-Dart
   /// path substitutes 16 zero bytes for a missing IV and right-pads a shorter
-  /// one into the counter block, while the FFI path rejects both with an
-  /// [AtEncryptionException]. Callers that reach this method with an IV they
-  /// did not choose — one parsed from a record, or from an older writer — get
-  /// a failure that depends on whether the host has libcrypto. Pass exactly
-  /// 16 bytes.
+  /// one into the counter block, while the FFI path rejects both — with
+  /// [AtEncryptionException] on encrypt, [AtDecryptionException] on decrypt;
+  /// the two are siblings, so catching one does not catch the other. Callers
+  /// that reach this method with an IV they did not choose — one parsed from
+  /// a record, or from an older writer — get a failure that depends on
+  /// whether the host has libcrypto. Pass exactly 16 bytes.
   static SymmetricEncryptionAlgorithm<Uint8List, Uint8List> aesCtr(
           AESKey key) =>
       _aesCtrSupported
