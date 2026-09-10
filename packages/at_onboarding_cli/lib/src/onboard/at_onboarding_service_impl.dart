@@ -482,10 +482,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     );
   }
 
-  Future<void> waitBriefly({int millis = 500}) async {
-    await Future.delayed(Duration(milliseconds: millis));
-  }
-
   @override
   Future<AtEnrollmentResponse> sendEnrollRequest(String appName,
       String deviceName, String otp, Map<String, String> namespaces,
@@ -568,7 +564,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     logger.finer('sendEnrollRequest: submitting enrollment request');
     _addProgress(
         'Enroll', 'submitting enrollment request', ProgressEventType.info);
-    await waitBriefly();
 
     AtEnrollmentResponse response =
         await _atEnrollment!.submit(newClientEnrollmentRequest, atLookUpImpl);

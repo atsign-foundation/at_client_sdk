@@ -1,5 +1,12 @@
 ## 1.17.0-rc1
 
+- fix: `sendEnrollRequest` no longer sleeps 500ms after announcing itself on
+  the progress stream. The pause existed so the CLI's narration did not scroll
+  past unread, but it delayed the enrollment submission rather than pacing the
+  display where the reader is, and every automated caller paid it too. The
+  progress events are unchanged. `AtOnboardingServiceImpl.waitBriefly` is
+  removed with it; it was public but on no interface, and its only caller was
+  the line above.
 - **BREAKING:** an invocation with no command is refused instead of being
   treated as `onboard`. `auth -a <atSign> -c <secret>` activated an atSign
   without the word appearing anywhere; it now prints the command list and
