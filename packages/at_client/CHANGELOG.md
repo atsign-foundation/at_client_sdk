@@ -3045,12 +3045,14 @@ hunting for a constructor argument that never existed in a release. -->
   and a condition at the level it always used. Sixteen sites — the PQ startup's
   steps, the envelope listener and its sweeps, the notification watermark, the
   conveyance read, the collection envelope fetches and the sync trigger —
-  caught everything and logged it at `warning`, so a `TypeError` sat among the
-  conditions and read as one. A `TypeError` is a value of the wrong type
-  reaching the call, which is a bug rather than anything the network or the
-  store can produce; every other error stays a condition, `StateError`
-  included, because this codebase raises it for a store that is not open yet
-  and a service that is not wired yet. The errors are still swallowed: these
+  caught everything and logged it at `warning`, so a defect sat among the
+  conditions and read as one. Two errors are defects, and both mean the same
+  thing — a null reached a place that needed a value: a `TypeError` is a value
+  of the wrong type arriving at the call, and a `NoSuchMethodError` is a member
+  invoked on a null receiver. Neither is anything the network or the store can
+  produce. Every other error stays a condition, `StateError` included, because
+  this codebase raises it for a store that is not open yet and a service that
+  is not wired yet. The errors are still swallowed: these
   paths run on background triggers with nobody to hand an error to, and one
   escaping into the zone a timer fired in can take the isolate down.
 - fix: `setSPP` without an expiry logs at `warning` rather than `shout`.
