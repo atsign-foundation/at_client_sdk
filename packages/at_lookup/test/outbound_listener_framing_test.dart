@@ -18,10 +18,10 @@
 /// reply terminator - deliberately, because a `data:` value may contain
 /// `\n@` and inspecting those bytes would truncate it (the last test here is
 /// that control). Disambiguating the two needs a delimiter the protocol does
-/// not have yet; atsign-foundation/at_server#2764 adds one by prompting after
-/// every notification, and that is the fix. Measured shape, for whoever picks
-/// it up: `data:ok\n@alice@notification: {...}\n` in a single chunk yields
-/// no reply and no notification.
+/// not have yet - an atServer that terminated every notification the way it
+/// terminates a reply would supply one. Measured shape, for whoever picks it
+/// up: `data:ok\n@alice@notification: {...}\n` in a single chunk yields no
+/// reply and no notification.
 library;
 
 import 'dart:async';

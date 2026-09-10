@@ -596,10 +596,10 @@ void main() {
     // socket has connected, PKAMed and written `monitor:`, and the atServer's
     // inbound stream is a BROADCAST stream with no backlog, so a notification
     // enqueued in that window is never delivered to that connection at all.
-    // `currentListenerState == listening` is the gate: at_lookup confirms the
-    // registration with a `noop:0` behind `monitor:`. Every key the monitor
-    // delivers is still recorded, so a failure can say whether it received
-    // everything except the thing under test. See [awaitMonitorListening].
+    // `listening` is the gate - see [awaitMonitorListening] for what that
+    // does and does not prove. Every key the monitor delivers is still
+    // recorded, so a failure can say whether it received everything except
+    // the thing under test.
     final listener = cells['r-pqActive']!.client.notificationService
         as NotificationServiceImpl;
 

@@ -54,9 +54,10 @@ final legacyPlusPqProviders = PqPosture(
 /// deliberately (gkc, 2026-09-10) rather than keep paying for the gate that
 /// was sufficient: waiting for a notification to actually arrive, where the
 /// only guaranteed one is the atServer's stats tick every 15s, cost ~7.5s a
-/// time and was the largest single cost in this pack.
-/// atsign-foundation/at_server#2764 makes `monitor:` answerable, and that is
-/// what turns this back into a proof.
+/// time and was the largest single cost in this pack. Nothing here depends on
+/// an atServer version: `listening` means the same against every one of them.
+/// What would turn this back into a proof is an atServer that answers
+/// `monitor:` at all.
 Future<void> awaitMonitorListening(NotificationServiceImpl notifications,
     {Duration timeout = const Duration(seconds: 60)}) async {
   bool stateIsListening() =>
