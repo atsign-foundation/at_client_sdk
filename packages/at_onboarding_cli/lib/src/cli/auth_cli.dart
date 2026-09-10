@@ -439,6 +439,7 @@ Future<int> status(ArgResults ar) async {
     // held here.
     final AtLookUp al = AtLookUp.withSecureSocket(
       atSign: atSign,
+      secondaryAddressFinder: saf,
       rootDomain: rootDomain,
       transport: secureSocketTransport(SecureSocketConfig()),
       authenticator: null,

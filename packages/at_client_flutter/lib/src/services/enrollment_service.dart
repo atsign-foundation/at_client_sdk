@@ -68,6 +68,10 @@ class FlutterEnrollmentService {
     final AtLookUp atLookup = AtLookUp.withSecureSocket(
       atSign: request.atSign,
       rootDomain: request.rootDomain,
+      secondaryAddressFinder: CacheableSecondaryAddressFinder(
+        request.rootDomain.rootDomain,
+        request.rootDomain.rootPort,
+      ),
       transport: secureSocketTransport(SecureSocketConfig()),
       authenticator: null,
     );
