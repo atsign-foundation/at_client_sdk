@@ -2,6 +2,14 @@
 /// these shadows the shared version silently — a local declaration wins over
 /// an import with no analyzer complaint — so the two drift apart unnoticed.
 ///
+/// ⚠️ Several mocks here stub a member in their CONSTRUCTOR. That makes
+/// `thenReturn(MockX())` unsafe: the mock is built while the enclosing `when`
+/// is still mid-registration, and mocktail refuses a nested `when` with
+/// *Cannot call `when` within a stub response*. Build it on its own line and
+/// pass the variable. The failure is immediate and names itself, so the suite
+/// is the guard - but it surfaces on whichever test runs next, not on the line
+/// at fault.
+///
 /// Some mocks stay in the test file that uses them because they carry
 /// behaviour rather than duplicating one of these — a concrete override cannot
 /// be intercepted by `when(...)`, so adopting a shared version would silently
@@ -17,9 +25,35 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 
-class MockAtLookUp extends Mock implements AtLookUp {}
+/// A lookup that answers every command with null until a test says otherwise.
+///
+/// `executeCommand` returns `Future<String?>`, so the VALUE was always allowed
+/// to be null; what an unstubbed member could not supply was the future. This
+/// answers the future and keeps the null, which says "nothing came back" -
+/// true of a mock with no atServer behind it, and better than answering a
+/// command with content no test chose.
+///
+/// ⚠️ Null is not universally safe to answer: a caller is free to treat an
+/// unreadable response as an error rather than as an absence, and
+/// `VerbEnrollmentDirectory.listForNamespace` deliberately does. This default
+/// is kept because every path measured in this suite handles it; a test whose
+/// caller does not must model the response itself, which supersedes this.
+void _answerCommandsWithNothing(AtLookUp lookUp) {
+  when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
+      .thenAnswer((_) async => null);
+}
 
-class MockAtLookupImpl extends Mock implements AtLookupImpl {}
+class MockAtLookUp extends Mock implements AtLookUp {
+  MockAtLookUp() {
+    _answerCommandsWithNothing(this);
+  }
+}
+
+class MockAtLookupImpl extends Mock implements AtLookupImpl {
+  MockAtLookupImpl() {
+    _answerCommandsWithNothing(this);
+  }
+}
 
 class MockAtChops extends Mock implements AtChops {}
 
@@ -38,6 +72,14 @@ class MockSecondaryAddressFinder extends Mock
 class MockRemoteSecondary extends Mock implements RemoteSecondary {
   MockRemoteSecondary() {
     when(() => closeConnection()).thenAnswer((_) async {});
+    // A real RemoteSecondary always has a lookup, and it carries no
+    // enrollment id unless one was named - so a client built on this is fully
+    // privileged, which is what the fixtures that stub their own lookup also
+    // choose. Only the lookup itself is answered: what it would send is the
+    // fixture's business, and a test needing that supersedes this.
+    final atLookUp = MockAtLookupImpl();
+    when(() => atLookUp.enrollmentId).thenReturn(null);
+    when(() => this.atLookUp).thenReturn(atLookUp);
   }
 }
 

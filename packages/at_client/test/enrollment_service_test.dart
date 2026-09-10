@@ -250,7 +250,8 @@ void main() {
           'abcdef01-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$atSign';
       final commands = approveListCommands();
       final secondary = MockRemoteSecondary();
-      when(() => secondary.atLookUp).thenReturn(MockAtLookUp());
+      final lookUp = MockAtLookUp();
+      when(() => secondary.atLookUp).thenReturn(lookUp);
       when(() => secondary.executeCommand(commands.first, auth: true))
           .thenAnswer((_) async => 'data:{"$enrollKey":$pendingValue}');
       when(() => secondary.executeCommand(commands.last, auth: true))

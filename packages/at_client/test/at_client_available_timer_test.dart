@@ -49,7 +49,8 @@ void main() {
     // NOTE: LocalSecondary asks the sync service to drain after every
     // eligible write, so an unstubbed one answers null into a non-nullable
     // SyncService and the write reports that instead of triggering.
-    when(() => atClient.syncService).thenReturn(_MockSyncService());
+    final syncService = _MockSyncService();
+    when(() => atClient.syncService).thenReturn(syncService);
 
     events = <DataEvent>[];
     local = LocalSecondary(

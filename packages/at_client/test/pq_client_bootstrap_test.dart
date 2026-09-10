@@ -77,7 +77,8 @@ void main() {
     when(() => client.getCurrentAtSign()).thenReturn('@bootstrap🛠');
     when(() => client.enrollmentId).thenReturn(null);
     when(() => client.getPreferences()).thenReturn(null);
-    when(() => client.syncService).thenReturn(MockSyncService());
+    final syncService = MockSyncService();
+    when(() => client.syncService).thenReturn(syncService);
 
     // NOTE: the startup steps read the atSign's own records and watch for
     // envelopes. Answering an empty scan is what a fresh atSign looks like -
