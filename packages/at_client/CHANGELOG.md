@@ -3031,6 +3031,16 @@ hunting for a constructor argument that never existed in a release. -->
   type-tested rather than cast: neither interface declares `stop()`, so a
   field holding null or another implementation is a legal state with nothing
   to stop, and the cast turned that into the very defect the catch then hid.
+- fix: a write whose sync trigger failed no longer reports that the write was
+  not queued. `LocalSecondary` queued the write and then asked the sync
+  service to drain, both inside one `try`, so any failure of the second was
+  logged as `failed to enqueue <key>` at `shout` — naming the durable half,
+  which had already succeeded. Measured over the unit suite, 79 of those lines
+  were the trigger and none of them was a genuine enqueue failure. The two are
+  now separate: a write that cannot be queued is still shouted about and named,
+  because nothing will push it until the periodic safety net finds it, while a
+  write that is queued but could not ask for a drain says so, and says that it
+  waits for the next trigger. Neither failure fails the write.
 
 ## 3.14.0
 - feat (experimental): per-APKAM same-atSign secret-sharing substrate —

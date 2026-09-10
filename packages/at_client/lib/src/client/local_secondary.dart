@@ -283,20 +283,31 @@ class LocalSecondary implements Secondary {
   }) async {
     if (cameFromServer) return;
     if (!shouldEnqueueForSync(atKey, op)) return;
+    // NOTE: two operations, so two try blocks. Queueing the write is the
+    // durable half; asking the sync service to drain is a best-effort nudge on
+    // top of it. One catch across both reported every trigger failure as a
+    // failure to enqueue, which names the wrong half: the write was already
+    // safely queued.
     try {
       final q = await _ensureSyncQueueOpen();
       await q.enqueue(atKey, op);
+    } catch (e, st) {
+      // The write is not queued, so nothing will push it until the box
+      // becomes accessible again and the periodic safety-net timer finds it.
+      _logger.shout('failed to enqueue $atKey for sync: $e\n$st');
+      return;
+    }
+
+    try {
       // Trigger SyncServiceImpl to drain. Today this enqueues a
       // sync request via the existing request-coalescing layer
       // (`_addSyncRequestToQueue` → microtask → `processSyncRequests`).
       // The sync service then peeks our queue and pushes batches.
       _atClient.syncService.sync();
     } catch (e, st) {
-      // Failing to enqueue is a serious correctness problem (the
-      // write WILL eventually be picked up by the periodic 30s
-      // safety-net timer if the queue's box becomes accessible
-      // again, but the immediate sync trigger is gone). Log loudly.
-      _logger.shout('failed to enqueue $atKey for sync: $e\n$st');
+      _logger.warning('$atKey is queued for sync, but the sync service could '
+          'not be asked to drain, so it waits for the next trigger or for the '
+          'periodic safety net: $e\n$st');
     }
   }
 
