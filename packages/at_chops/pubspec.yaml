@@ -19,7 +19,7 @@ dependencies:
   elliptic: ^0.3.10
   pointycastle: ^3.9.1
   at_commons: ^5.6.0
-  at_utils: ^3.0.19
+  at_utils: ^4.0.0
   cryptography: ^2.7.0
   meta: ^1.9.0
   better_cryptography: ^1.0.0+1

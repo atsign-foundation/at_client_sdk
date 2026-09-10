@@ -66,11 +66,12 @@ explicit `at_utils_io.dart` import, if it also uses `FileLoggingHandler` /
 `StdErrLoggingHandler` / `CLILoggingHandler` — audit call sites before assuming
 `at_logger.dart` alone is enough).
 
-Separately, `at_utils: ^4.0.0` needs bumping in ~11 workspace pubspecs once published:
-`at_chops`, `at_auth`, `at_cli_commons`, `at_client_flutter`, `at_contact`, `at_policy`,
-`at_lookup`, `at_client`, `at_onboarding_cli`, both `tests/*` packages. `resolution:
-workspace` means this is not urgent for local dev (path resolution wins), but it is
-required before any of those packages can publish against a real `at_utils` release.
+Separately, `at_utils: ^4.0.0` needed bumping in 22 workspace pubspecs, not the ~11
+originally estimated — **done**, in the same commit as the version bump. `resolution:
+workspace` means the constraint mismatch isn't latent for local dev the way this section
+originally assumed: pub workspaces still validate every declared constraint against the
+member's actual version, so the stale `^3.x` ranges failed `dart pub get` immediately,
+not just at publish time.
 
 ## Exit
 
@@ -109,12 +110,30 @@ required before any of those packages can publish against a real `at_utils` rele
 - No open question on chalkdart's own fix — it is upstream's package, not ours; getting
   it "off the neutral path" here means changing which of *our* files import it, not
   patching chalkdart itself.
-- `at_client_flutter/examples/dockerstats/lib/main_smoke.dart` isn't in the pub
-  workspace, so it resolves `at_utils` from pub.dev unless overridden. Added a
-  `dependency_overrides` entry pointing at the local `at_utils` (consistent with the
-  other five packages in that pubspec), so its `at_utils_io.dart` import resolves
-  locally. (The file also has a pre-existing, unrelated `FileAtKeysIo` undefined-method
-  error, confirmed present before this change — not introduced here.)
+- `at_client_flutter/examples/dockerstats` was the first of **six** standalone
+  (non-workspace) example pubspecs that resolve `at_utils` from pub.dev unless
+  overridden: also `at_client/example`, `at_client_flutter/example`,
+  `at_client_flutter/examples/todos`, `at_chat_flutter/example`, and
+  `at_policy/example`. Each already overrode its other local packages (`at_client`,
+  `at_onboarding_cli`, etc.) to path but not `at_utils` itself — so once those
+  overridden packages started declaring `at_utils: ^4.0.0`, pub.dev had nothing to
+  offer and resolution failed. Added the same `at_utils: path: ...` override to all
+  six, consistent with their siblings. (The dockerstats file also has a pre-existing,
+  unrelated `FileAtKeysIo` undefined-method error, confirmed present before this
+  change — not introduced here.)
+- **New blocker, not anticipated by this doc:** `at_persistence_secondary_server`
+  (external, published from `atsign-foundation/at_server`, not a workspace member) pins
+  `at_utils: ^3.0.19` in its own pubspec, and nothing in this repo can edit that. Every
+  workspace member that depends on it — `at_client`, `at_onboarding_cli`,
+  `at_functional_test`, and the root itself — failed to resolve against local `at_utils`
+  4.0.0 until this was addressed. Stopgap: pushed
+  `st/at_persistence-at_utils-4.0.0-compat` to `at_server`, widening its
+  `at_persistence_secondary_server` constraint to `at_utils: ">=3.0.19 <5.0.0"` (audited:
+  nothing in that package touches any symbol the barrel split removed, so it's a
+  constraint-only change), and added a `git`-ref `dependency_overrides` entry for
+  `at_persistence_secondary_server` in the root `pubspec.yaml` pointing at that branch.
+  **This is temporary** — it needs a real `at_persistence_secondary_server` release with
+  the widened constraint before this override can come out.
 
 ## Changelog
 

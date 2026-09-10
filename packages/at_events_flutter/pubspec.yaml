@@ -20,7 +20,7 @@ dependencies:
   at_contacts_group_flutter: ^4.0.17
   at_location_flutter: ^3.1.14
   at_lookup: ^3.0.49
-  at_utils: ^3.0.19
+  at_utils: ^4.0.0
   flutter:
     sdk: flutter
   fluttertoast: ^8.2.2

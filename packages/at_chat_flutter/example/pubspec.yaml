@@ -36,7 +36,7 @@ dependencies:
     path: ../
   at_client_flutter: ^0.1.0
   at_auth: ^3.0.0
-  at_utils: ^3.0.19
+  at_utils: ^4.0.0
   path_provider: ^2.1.1
   flutter_keychain: ^2.4.0
 
@@ -48,6 +48,8 @@ dependencies:
 dependency_overrides:
   at_client:
      path: ../../at_client/
+  at_utils:
+     path: ../../at_utils/
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 # The following section is specific to Flutter.

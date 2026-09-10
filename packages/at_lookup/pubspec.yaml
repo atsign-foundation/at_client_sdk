@@ -10,7 +10,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  at_utils: ^3.0.19
+  at_utils: ^4.0.0
   at_commons: ^5.16.0
   mutex: ^3.0.0
   meta: ^1.16.0

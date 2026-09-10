@@ -16,7 +16,7 @@ dependency_overrides:
     path: ../../at_chops
 
 dependencies:
-  at_utils: ^3.0.2
+  at_utils: ^4.0.0
   at_commons: ^5.5.0
   at_lookup: ^3.0.5
 

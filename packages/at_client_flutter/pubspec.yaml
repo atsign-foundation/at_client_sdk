@@ -16,7 +16,7 @@ dependencies:
   biometric_storage: ^5.0.1
   collection: ^1.18.0
   at_commons: ^5.8.0
-  at_utils: ^3.4.0
+  at_utils: ^4.0.0
   at_chops: ^3.0.0
   at_lookup: ^3.5.0
   # Floor set by WrittenAtKeysIo.update, which the keychain store's flush makes
