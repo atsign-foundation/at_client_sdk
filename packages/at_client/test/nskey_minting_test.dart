@@ -15,6 +15,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
 
 /// A bare mock, shadowing the shared one in `test_utils/mocks.dart` whose
 /// concrete `getPreferences()` override cannot be stubbed.
@@ -79,7 +80,7 @@ void main() {
     final advertisedStamps = <String, DateTime>{};
     final advertisementReads = <GetRequestOptions?>[];
     final chops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+        AtChopsKeys.create(null, pkamKeyPairFor(atSign, 'enroll-a')));
 
     when(() => atClient.atChops).thenReturn(chops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);

@@ -23,6 +23,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -66,7 +67,7 @@ void main() {
 
   setUp(() async {
     atChops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+        AtChopsKeys.create(null, pkamKeyPairFor(atSign, enrollmentId)));
     keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys(atsign: atSign.toAtsign()));
     updates = [];

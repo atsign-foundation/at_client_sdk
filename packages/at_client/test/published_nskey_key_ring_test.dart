@@ -10,6 +10,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
 
 /// Discovery of another atSign's advertised nskey.
 ///
@@ -48,7 +49,7 @@ void main() {
 
   setUp(() {
     bobChops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+        AtChopsKeys.create(null, pkamKeyPairFor(bob, 'enroll-bob')));
     bobSigner =
         AtClientEnvelopeSigner(signingClient(bob, 'enroll-bob', bobChops));
   });
@@ -83,8 +84,8 @@ void main() {
     final fetches = <int>[];
     final atClient = MockAtClient();
     when(() => atClient.getCurrentAtSign()).thenReturn(alice);
-    when(() => atClient.atChops).thenReturn(AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+    when(() => atClient.atChops).thenReturn(
+        AtChopsImpl(AtChopsKeys.create(null, pkamKeyPairFor(alice, null))));
     // One answer for both gets the ring drives — the advertisement itself and
     // the `_apsk` the verify checks it against — branching on the key, because
     // a mocktail named-argument matcher also matches the argument's absence.
@@ -213,8 +214,8 @@ void main() {
       final localSecondary = MockLocalSecondary();
       when(() => atClient.getCurrentAtSign()).thenReturn(alice);
       when(() => atClient.getLocalSecondary()).thenReturn(localSecondary);
-      when(() => atClient.atChops).thenReturn(AtChopsImpl(
-          AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+      when(() => atClient.atChops).thenReturn(
+          AtChopsImpl(AtChopsKeys.create(null, pkamKeyPairFor(alice, null))));
 
       // How each advertisement read asked. A mocktail stub cannot tell a
       // local-first get from a remote one on its own, so the options are what
@@ -370,6 +371,9 @@ void main() {
     test('an advertisement signed by another atSign is rejected', () async {
       // Bob's advertisement, but the `_apsk` served for him is somebody else's
       // — which is what a substituted key looks like from the sender's side.
+      // NOTE: generated rather than taken from the shared cache. This key's
+      // job is to NOT be bob's, so it must not be keyed by anything that
+      // could ever collide with him.
       final mallory = AtChopsImpl(
           AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
       final c = client(
