@@ -206,6 +206,10 @@ void main() {
                   'counter block rather than rejecting it');
           await expectLater(makeAlgo(key).encrypt(plain, iv: iv),
               throwsA(isA<AtEncryptionException>()));
+          await expectLater(makeAlgo(key).decrypt(plain, iv: iv),
+              throwsA(isA<AtDecryptionException>()),
+              reason: 'the decrypt direction rejects with its own sibling '
+                  'exception, not AtEncryptionException');
         });
       }
 
