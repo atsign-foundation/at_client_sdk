@@ -269,7 +269,6 @@ class EnrollmentHandshake {
       _logger.info('Attempting pkam auth');
       if (logProgress) {
         _progress.add('PKAM', 'attempting PKAM auth', ProgressEventType.info);
-        await _waitBriefly();
       }
       bool pkamAuthSucceeded = false;
       bool reachedAtServer = true;
@@ -354,7 +353,4 @@ class EnrollmentHandshake {
     }
   }
 
-  Future<void> _waitBriefly({int millis = 500}) async {
-    await Future.delayed(Duration(milliseconds: millis));
-  }
 }

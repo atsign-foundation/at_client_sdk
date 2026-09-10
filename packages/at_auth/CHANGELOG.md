@@ -1,5 +1,15 @@
 ## 4.0.0-rc2
 
+- fix: `waitForApproval` no longer sleeps 500ms before every PKAM attempt when
+  `logProgress` is set. The pause paced a text CLI's progress output so its
+  lines did not scroll past unread, but it sat in the handshake rather than in
+  the consumer, so every caller paid it — a Flutter app that renders progress
+  on its own frame schedule, and any automated enrolment, as much as the CLI.
+  Measured at 500ms of the 549ms a fully approved enrolment spent in
+  `waitForApproval`. The progress events themselves are unchanged: the stream
+  is broadcast and delivers without the pause. Retry pacing is unaffected —
+  `retryInterval` is awaited separately, so a pending enrollment still polls on
+  its stated interval rather than in a tight loop.
 - feat: `FileAtKeysIo` keeps a copy of the keyfile at the moment its shape
   stops being the flat one every published build reads. The `.bak` beside it
   is rolling — the next write replaces it, and a client's startup makes
