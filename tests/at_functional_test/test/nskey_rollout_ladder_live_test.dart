@@ -52,10 +52,16 @@ void main() {
 
   /// Short enough to wait out, long enough that no mint here races its own
   /// expiry — a keygen, a keyfile write, a signature and two round trips.
-  const shortLockTtl = Duration(seconds: 5);
+  ///
+  /// A mint or rotation against a local virtualenv measured at most 35ms, so
+  /// this leaves ample room; the holder's `MintLease` abandons rather than
+  /// publishing if the ttl elapses first.
+  const shortLockTtl = Duration(seconds: 1);
 
+  /// Past the ttl rather than exactly it: the atServer counts from when it
+  /// stores the record, a gap that measured at most ~100ms locally.
   Future<void> waitOutTheLock() =>
-      Future.delayed(shortLockTtl + const Duration(seconds: 1));
+      Future.delayed(shortLockTtl + const Duration(milliseconds: 500));
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];

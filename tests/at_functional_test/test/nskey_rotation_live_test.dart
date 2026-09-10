@@ -61,15 +61,21 @@ void main() {
   /// after a cold-start mint takes the lock, a rotation of the same namespace
   /// is refused until it lapses — long enough that no mint here races its own
   /// expiry, short enough to wait out.
-  const shortLockTtl = Duration(seconds: 5);
+  ///
+  /// The floor is the winner's own budget: a holder carries the matching
+  /// `MintLease` and abandons rather than publishing once the ttl has elapsed,
+  /// so this must outlast a mint. A mint or rotation against a local
+  /// virtualenv measured at most 35ms, which this leaves ample room over.
+  const shortLockTtl = Duration(seconds: 1);
 
   /// Waits until the lock a mint just took has expired.
   ///
-  /// A second past the ttl, because the atServer starts counting when it
-  /// stores the record — after this client sent it — so waiting exactly the
-  /// ttl can land a moment early.
+  /// Past the ttl rather than exactly it, because the atServer starts counting
+  /// when it stores the record — after this client sent it — so waiting the
+  /// ttl alone can land a moment early. That gap measured at most ~100ms
+  /// against a local virtualenv.
   Future<void> pastTheCooldown() =>
-      Future.delayed(shortLockTtl + const Duration(seconds: 1));
+      Future.delayed(shortLockTtl + const Duration(milliseconds: 500));
 
   Future<EnrolledClient> enrol(String device,
           {AtKeysIo? atKeysIo, Map<String, String>? namespaces}) =>
