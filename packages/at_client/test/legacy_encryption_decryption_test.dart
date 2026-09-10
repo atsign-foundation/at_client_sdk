@@ -35,6 +35,7 @@ void main() {
     atClient = await AtClientImpl.create(
         currentAtSign, namespace, atClientPreference,
         remoteSecondary: mockRemoteSecondary, atChops: atChops);
+    atClient.syncService = MockSyncService();
 
     // During decryption, fetches the encryption public key from local keystore.
     // So, store the encryption public key into local secondary keystore.

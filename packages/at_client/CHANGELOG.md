@@ -3058,6 +3058,15 @@ hunting for a constructor argument that never existed in a release. -->
   the line contradicted itself by carrying the word "WARNING" while logging a
   level above `severe`. The text loses that prefix and gains the space it was
   missing between the sentence and the default.
+- fix: a client reports the key material it found in its own local store once,
+  and at a level that says which situation it is in. It used to log a warning
+  for each of the two keypairs it failed to read, so every client built before
+  onboarding produced two warnings about the ordinary state — 244 of them in
+  the unit suite alone, which is where the lines that mean something were
+  sitting. A store holding neither keypair is now one `info` line; a store
+  holding one and not the other is a `warning`, because onboarding does not
+  produce half a store and such a client fails at whichever key it needs
+  first. Each individual miss keeps its detail at `finer`.
 
 ## 3.14.0
 - feat (experimental): per-APKAM same-atSign secret-sharing substrate —

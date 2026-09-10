@@ -2106,9 +2106,7 @@ class AtClientImpl implements AtClient {
         );
       }
     } on KeyNotFoundException catch (e) {
-      _logger.warning(
-        '_createAtChops  - Exception while getting encryption key pair from local secondary: ${e.toString()}',
-      );
+      _logger.finer('No encryption key pair in $atSign\'s local store: $e');
     }
     try {
       var pkamPublicKey = await localSecondary!.getPkamPublicKey();
@@ -2118,10 +2116,26 @@ class AtClientImpl implements AtClient {
         atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
       }
     } on KeyNotFoundException catch (e) {
-      _logger.warning(
-        '_createAtChops  - Exception while getting pkam key pair from local secondary: ${e.toString()}',
-      );
+      _logger.finer('No PKAM key pair in $atSign\'s local store: $e');
     }
+
+    // NOTE: said once, after both reads, because what matters is what this
+    // client ended up holding rather than which lookup missed. A store with
+    // neither keypair is the ordinary state before onboarding; a store with
+    // one of the two is a broken store, and only that is worth a warning.
+    // Each miss keeps its own detail at `finer`.
+    if (atEncryptionKeyPair == null && atPkamKeyPair == null) {
+      _logger.info('$atSign\'s local store holds no key material, so this '
+          'client holds none: it authenticates and decrypts nothing until the '
+          'store is populated.');
+    } else if (atEncryptionKeyPair == null || atPkamKeyPair == null) {
+      _logger.warning('$atSign\'s local store holds '
+          '${atPkamKeyPair == null ? 'an encryption' : 'a PKAM'} key pair but '
+          'not the other. A half-populated store is not a state onboarding '
+          'produces, and this client will fail at whichever of the two it '
+          'needs first.');
+    }
+
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     AtChopsImpl chops = AtChopsImpl(atChopsKeys);
     return chops;

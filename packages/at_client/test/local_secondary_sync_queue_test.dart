@@ -15,6 +15,8 @@ import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/mocks.dart';
+
 import 'test_utils/recorded_logs.dart';
 
 void main() {
@@ -35,6 +37,7 @@ void main() {
       preference,
       atClientManager: atClientManager,
     );
+    atClient.syncService = MockSyncService();
     return LocalSecondary(atClient, syncQueue: syncQueue);
   }
 
