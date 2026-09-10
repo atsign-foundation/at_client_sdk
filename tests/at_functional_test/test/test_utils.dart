@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -8,6 +9,7 @@ import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
 import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
 
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:test/test.dart';
@@ -30,6 +32,60 @@ final legacyPlusPqProviders = PqPosture(
   sealsToKeyAlgorithms: PqPosture.legacy.sealsToKeyAlgorithms,
   keyEstablishmentAlgorithms: PqPosture.legacy.keyEstablishmentAlgorithms,
 );
+
+/// Waits until [notifications] reports a listening monitor on BOTH of its
+/// public signals: `currentListenerStateStream` has emitted `listening`, and
+/// `currentListenerState` reads `listening`.
+///
+/// `subscribe()` returns long before the monitor's socket has connected,
+/// authenticated and written `monitor:`, and the atServer's inbound stream is
+/// a broadcast with no backlog - so a notification created in that window is
+/// never delivered on that connection and the send still reports `delivered`.
+/// A gate is therefore mandatory before notifying anything.
+///
+/// Requiring both is what makes it a gate rather than a glimpse: the stream
+/// is where the transition is observable, and the state is what a caller
+/// reads afterwards. An emission followed by an immediate drop would satisfy
+/// the stream alone.
+///
+/// ⚠️ What this proves is that at_lookup got `monitor:` out without error,
+/// NOT that the atServer registered it - the atServer answers `monitor:` with
+/// nothing at all, so no client can currently tell the two apart. Accepted
+/// deliberately (gkc, 2026-09-10) rather than keep paying for the gate that
+/// was sufficient: waiting for a notification to actually arrive, where the
+/// only guaranteed one is the atServer's stats tick every 15s, cost ~7.5s a
+/// time and was the largest single cost in this pack.
+/// atsign-foundation/at_server#2764 makes `monitor:` answerable, and that is
+/// what turns this back into a proof.
+Future<void> awaitMonitorListening(NotificationServiceImpl notifications,
+    {Duration timeout = const Duration(seconds: 60)}) async {
+  bool stateIsListening() =>
+      notifications.currentListenerState ==
+      NotificationListenerState.listening;
+
+  final reached = Completer<void>();
+  // Attached BEFORE the state is read, so a transition landing between the
+  // two is caught here rather than waited for forever.
+  final sub = notifications.currentListenerStateStream.listen((state) {
+    if (state == NotificationListenerState.listening &&
+        stateIsListening() &&
+        !reached.isCompleted) {
+      reached.complete();
+    }
+  });
+  try {
+    // Already listening: the emission happened before this call, and the
+    // state is the durable half of the same fact.
+    if (stateIsListening()) return;
+    await reached.future.timeout(timeout,
+        onTimeout: () => throw StateError(
+            'the monitor never reached `listening` within $timeout, so '
+            'at_lookup never got `monitor:` out; notifying now would repeat '
+            'the race this gate exists to close'));
+  } finally {
+    await sub.cancel();
+  }
+}
 
 class TestUtils {
   static AtSignLogger logger = AtSignLogger(' TestUtils ');

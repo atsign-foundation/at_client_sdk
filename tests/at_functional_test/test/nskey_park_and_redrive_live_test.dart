@@ -74,7 +74,7 @@ void main() {
   test(
       'a notification that outruns its key is parked, then delivered when it lands',
       timeout: Timeout(Duration(minutes: 3)), () async {
-    AtSignLogger.root_level = 'finest';
+    AtSignLogger.root_level = 'info';
 
     // nsA is minted before the enrollments, so the sender seals PQ and both
     // clients finish their startups against a namespace they genuinely hold.
@@ -124,11 +124,9 @@ void main() {
         receiver.client.notificationService as NotificationServiceImpl;
     final seen = <String>[];
     final received = Completer<AtNotification>();
-    final monitorProvenLive = Completer<void>();
     final subscription =
         notifications.subscribe(shouldDecrypt: true).listen((n) {
       seen.add(n.key);
-      if (!monitorProvenLive.isCompleted) monitorProvenLive.complete();
       if (n.key.contains('parked$runId') && !received.isCompleted) {
         received.complete(n);
       }
@@ -138,13 +136,21 @@ void main() {
       await subscription.cancel();
     });
 
-    // NOTE: the positive control. The atServer's stats notification proves the
-    // monitor is registered, so a later timeout means the park failed rather
-    // than that nothing was ever listening.
-    await monitorProvenLive.future.timeout(Duration(seconds: 60),
-        onTimeout: () => throw StateError(
-            'no notification of any kind reached the listener within 60s, so '
-            'nothing below would be a statement about the park'));
+    // NOTE: the monitor has to be REGISTERED before the notify below, or the
+    // atServer creates the notification while nothing is subscribed to its
+    // inbound stream and the park is never entered. See
+    // [awaitMonitorListening].
+    await awaitMonitorListening(notifications);
+
+
+    // NOTE: subscribed BEFORE the notify that causes the park.
+    // `parkedEvents` is broadcast and does not replay, so attaching
+    // afterwards would race the very park it is waiting for.
+    final parked = Completer<int>();
+    final parkedSubscription = notifications.parkedEvents.listen((total) {
+      if (!parked.isCompleted) parked.complete(total);
+    });
+    addTearDown(parkedSubscription.cancel);
 
     // NOTE: `cryptoProviderId` is required here. The era default is
     // `readsNskeyWritesLegacy` — it reads the nskey path and writes legacy —
@@ -156,11 +162,10 @@ void main() {
             value: value, cryptoProviderId: symmetricAesGcmCryptoProviderId),
         waitForFinalDeliveryStatus: false);
 
-    final deadline = DateTime.now().add(Duration(seconds: 60));
-    while (
-        notifications.parkedTotal == 0 && DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(Duration(milliseconds: 100));
-    }
+    await parked.future.timeout(Duration(seconds: 60),
+        onTimeout: () => throw StateError(
+            'nothing was parked within 60s, so the notification was either '
+            'delivered without parking or dropped'));
     expect(notifications.parkedTotal, greaterThan(0),
         reason: 'with the filing held the receiver cannot hold the private, so '
             'the notification must be HELD rather than delivered or dropped — '

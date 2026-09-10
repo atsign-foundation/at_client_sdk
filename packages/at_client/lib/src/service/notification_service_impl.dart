@@ -118,6 +118,17 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   int parkedTotal = 0;
 
+  final StreamController<int> _parkedController =
+      StreamController<int>.broadcast();
+
+  /// Emits the running [parkedTotal] each time a notification is parked.
+  ///
+  /// Broadcast, and it does not replay: a listener attached after a park sees
+  /// only later ones, so a caller waiting for a specific park subscribes
+  /// before whatever causes it.
+  @visibleForTesting
+  Stream<int> get parkedEvents => _parkedController.stream;
+
   /// Transforms [n] for one subscriber and delivers it if the regex matches.
   Future<void> _deliver(AtNotification n, NotificationConfig config,
       StreamController controller) async {
@@ -149,6 +160,7 @@ class NotificationServiceImpl extends NotificationService {
     logger.info('Parked notification ${n.key}: waiting for the nskey private '
         'for ${key.owner}:${key.namespace} generation ${key.nskeyKid}');
     _evictParkedOverBounds();
+    if (!_parkedController.isClosed) _parkedController.add(parkedTotal);
   }
 
   /// Enforces both park bounds, naming at `warning` whatever it drops — a
@@ -497,6 +509,7 @@ class NotificationServiceImpl extends NotificationService {
       }
     });
     _streamListeners.clear();
+    if (!_parkedController.isClosed) _parkedController.close();
   }
 
   final notificationParser = NotificationResponseParser();
