@@ -23,8 +23,13 @@ import 'package:ffi/ffi.dart';
 /// not mix the two on one channel.
 ///
 /// Encryption and decryption are the same operation in CTR, so there is one
-/// class and one direction per instance — construct a second instance, with
-/// the same key and IV, for the other end.
+/// class and one direction per instance. The instance that decrypts a stream
+/// takes the same key and IV as the one that encrypted it.
+///
+/// **A duplex channel is two streams, and each needs its own IV.** Running
+/// both directions of a tunnel from one (key, IV) pair XORs the two plaintexts
+/// together under a single keystream, which recovers both from the ciphertext
+/// alone. Derive or transmit a separate IV per direction.
 ///
 /// ## Ownership
 ///

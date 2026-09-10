@@ -11,29 +11,45 @@
 /// Three contenders per row:
 ///
 /// - **at_chops FFI** — one long-lived [AesCtrFfiCipher], as a tunnel uses it.
-/// - **DartAesCtr (stream)** — `encryptStream`, throttle and all. This is the
-///   real replaced behaviour: `Cipher.encryptStream` sleeps 1 ms every 4 MB to
-///   yield the event loop. Stripping it would flatter the FFI number.
+/// - **DartAesCtr (stream)** — `encryptStream`, throttle and all:
+///   `Cipher.encryptStream` sleeps 1 ms every 4 MB to yield the event loop,
+///   and stripping it would flatter the FFI number. This arm is
+///   `package:cryptography`, not the `better_cryptography` fork behind
+///   [AESEncryptionAlgo] — it models the streaming consumer being replaced,
+///   not at_chops's own one-shot fallback.
 /// - **DartAesCtr (raw)** — the same primitive driven chunk by chunk with no
 ///   stream machinery, so the primitive-vs-primitive comparison stays visible.
+///
+/// Every cell is sampled [repetitions] times, interleaved across sizes and
+/// contenders rather than measured one size at a time. Repeated runs of a
+/// contiguous size-at-a-time pass disagree by several times on the same cell,
+/// and by more than the chunk-size difference the table exists to show, so
+/// such a pass reports position-in-run as though it were chunk size. The cause
+/// of that drift is not established here, so the table prints the median and
+/// the observed spread instead of assuming it away: **a row whose spread is
+/// comparable to the gap between rows says nothing about chunk size.**
 library;
 
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:cryptography/dart.dart';
 
-/// Bytes pushed through each contender in a timed pass.
-const int totalBytes = 256 * 1024 * 1024;
+/// Bytes pushed through each contender in one timed sample.
+const int totalBytes = 64 * 1024 * 1024;
 
 /// A warmup pass at a fraction of [totalBytes] — enough to reach steady state
 /// and to fault in the cipher's scratch buffers, without paying for a second
 /// full run of everything.
 const int warmupBytes = 16 * 1024 * 1024;
+
+/// Timed samples per cell. Three is the fewest that gives a median.
+const int repetitions = 3;
 
 const List<int> chunkSizes = <int>[1024, 4096, 16384, 65536];
 
@@ -51,60 +67,92 @@ void main() async {
   final Uint8List ivBytes =
       Uint8List.fromList(List<int>.generate(16, (int i) => i * 11 & 0xff));
 
+  final int warmupChunk = chunkSizes.reduce(max);
+  _ffiPass(warmupBytes, warmupChunk, lib, keyBytes, ivBytes);
+  await _dartStreamPass(warmupBytes, warmupChunk, keyBytes, ivBytes);
+  await _dartRawPass(warmupBytes, warmupChunk, keyBytes, ivBytes);
+
+  final Map<int, List<double>> ffi = _emptySamples();
+  final Map<int, List<double>> dartStream = _emptySamples();
+  final Map<int, List<double>> dartRaw = _emptySamples();
+
+  for (int rep = 1; rep <= repetitions; rep++) {
+    for (final int size in chunkSizes) {
+      stderr.write('\rsample $rep/$repetitions at ${size ~/ 1024} KB     ');
+      ffi[size]!.add(_ffiPass(totalBytes, size, lib, keyBytes, ivBytes));
+      dartStream[size]!
+          .add(await _dartStreamPass(totalBytes, size, keyBytes, ivBytes));
+      dartRaw[size]!
+          .add(await _dartRawPass(totalBytes, size, keyBytes, ivBytes));
+    }
+  }
+  stderr.writeln('\r                              ');
+
   stdout
     ..writeln('Host:      ${Platform.operatingSystemVersion}')
     ..writeln('Dart:      ${Platform.version}')
     ..writeln('libcrypto: $libPath')
     ..writeln('Ceiling:   ${_opensslCeiling()}')
-    ..writeln('Pass:      ${totalBytes ~/ (1024 * 1024)} MB')
+    ..writeln('Sample:    ${totalBytes ~/ (1024 * 1024)} MB '
+        '× $repetitions, interleaved; median (spread)')
     ..writeln()
     ..writeln(
         '| Chunk | at_chops FFI | DartAesCtr (stream) | DartAesCtr (raw) |')
     ..writeln('|---|---|---|---|');
 
-  final Map<int, double> ffi = <int, double>{};
-  final Map<int, double> dartStream = <int, double>{};
-
   for (final int size in chunkSizes) {
-    _ffiPass(warmupBytes, size, lib, keyBytes, ivBytes);
-    ffi[size] = _ffiPass(totalBytes, size, lib, keyBytes, ivBytes);
-
-    await _dartStreamPass(warmupBytes, size, keyBytes, ivBytes);
-    dartStream[size] =
-        await _dartStreamPass(totalBytes, size, keyBytes, ivBytes);
-
-    await _dartRawPass(warmupBytes, size, keyBytes, ivBytes);
-    final double raw = await _dartRawPass(totalBytes, size, keyBytes, ivBytes);
-
     stdout.writeln('| ${size ~/ 1024} KB '
-        '| ${ffi[size]!.toStringAsFixed(0)} MB/s '
-        '| ${dartStream[size]!.toStringAsFixed(0)} MB/s '
-        '| ${raw.toStringAsFixed(0)} MB/s |');
+        '| ${_cell(ffi[size]!)} '
+        '| ${_cell(dartStream[size]!)} '
+        '| ${_cell(dartRaw[size]!)} |');
   }
 
   stdout
     ..writeln()
-    ..writeln(_verdict(ffi, dartStream));
+    ..writeln(_verdict(_medians(ffi), _medians(dartStream)));
+}
+
+Map<int, List<double>> _emptySamples() =>
+    <int, List<double>>{for (final int s in chunkSizes) s: <double>[]};
+
+Map<int, double> _medians(Map<int, List<double>> samples) => samples
+    .map((int size, List<double> s) => MapEntry<int, double>(size, _median(s)));
+
+/// The reported figure. A mean would let one slow sample move the row.
+double _median(List<double> samples) {
+  final List<double> sorted = List<double>.of(samples)..sort();
+  final int mid = sorted.length ~/ 2;
+  return sorted.length.isOdd
+      ? sorted[mid]
+      : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/// Median plus half-range, so a reader can tell a resolved row from noise.
+String _cell(List<double> samples) {
+  final double lo = samples.reduce(min);
+  final double hi = samples.reduce(max);
+  final double half = 100 * (hi - lo) / (hi + lo);
+  return '${_median(samples).toStringAsFixed(0)} MB/s '
+      '(±${half.toStringAsFixed(0)}%)';
 }
 
 /// The line the stream adapter's design depends on: below a crossover, the
 /// adapter has to coalesce chunks or route them to pure-Dart.
 String _verdict(Map<int, double> ffi, Map<int, double> dartStream) {
-  final List<int> losses = chunkSizes
-      .where((int size) => ffi[size]! <= dartStream[size]!)
-      .toList();
+  final List<int> sizes = List<int>.of(chunkSizes)..sort();
+  final List<int> losses =
+      sizes.where((int size) => ffi[size]! <= dartStream[size]!).toList();
   if (losses.isEmpty) {
-    final double worst = chunkSizes
-        .map((int size) => ffi[size]! / dartStream[size]!)
-        .reduce((double a, double b) => a < b ? a : b);
+    final double worst =
+        sizes.map((int size) => ffi[size]! / dartStream[size]!).reduce(min);
     return 'VERDICT: no crossover — FFI wins at every size tested, by '
         '${worst.toStringAsFixed(1)}x at worst. No coalescing needed.';
   }
   final int largestLoss = losses.last;
-  final Iterable<int> wins = chunkSizes.where((int s) => s > largestLoss);
+  final Iterable<int> wins = sizes.where((int s) => s > largestLoss);
   return 'VERDICT: FFI loses at or below ${largestLoss ~/ 1024} KB, and wins '
-      'from ${wins.isEmpty ? 'nowhere up to 64 KB' : '${wins.first ~/ 1024} KB'} '
-      'up. The adapter must coalesce to ${largestLoss ~/ 1024} KB, or route '
+      '${wins.isEmpty ? 'at no size tested' : 'from ${wins.first ~/ 1024} KB up'}'
+      '. The adapter must coalesce to ${largestLoss ~/ 1024} KB, or route '
       'smaller chunks to pure-Dart.';
 }
 

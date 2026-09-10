@@ -18,15 +18,19 @@ import 'package:ffi/ffi.dart';
 /// malleable and carries no tag; a caller needing integrity must add its own
 /// MAC, or use [AesGcm256FfiAlgo] instead.
 ///
-/// One deliberate divergence from the pure-Dart path: [AESEncryptionAlgo]
-/// substitutes 16 zero bytes for a missing IV ("the bad old days"), and this
-/// class rejects one. Pass an explicit IV and the two stay interchangeable.
+/// Wire format and padding semantics are identical to [AESEncryptionAlgo]
+/// (the pure-Dart counterpart) so the two implementations are interoperable:
+/// data encrypted by one decrypts correctly with the other. Both use PKCS7
+/// padding, despite CTR being a stream cipher, to maintain backward
+/// compatibility.
 ///
-/// Wire format, nonce handling, and padding semantics are identical to
-/// [AESEncryptionAlgo] (the pure-Dart counterpart) so the two
-/// implementations are interoperable: data encrypted by one decrypts
-/// correctly with the other. Both use PKCS7 padding, despite CTR being a
-/// stream cipher, to maintain backward compatibility.
+/// Nonce handling is the one place they differ, and it is a deliberate
+/// narrowing. [AESEncryptionAlgo] accepts any IV: it substitutes 16 zero
+/// bytes for a missing one ("the bad old days") and right-pads a shorter one
+/// into the counter block. This class requires exactly [ivLength] bytes and
+/// throws otherwise, because a short IV read through a native pointer is an
+/// out-of-bounds read rather than a wrong answer. The two are interchangeable
+/// for every 16-byte IV and for no other.
 ///
 /// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
 /// resulting [DynamicLibrary] via [AesCtrFfiAlgo.fromLib].
