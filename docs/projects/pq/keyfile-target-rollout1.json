@@ -1,0 +1,101 @@
+{
+  "aesPkamPublicKey": "<392 chars>",
+  "aesPkamPrivateKey": "<1624 chars>",
+  "aesEncryptPublicKey": "<392 chars>",
+  "aesEncryptPrivateKey": "<1624 chars>",
+  "selfEncryptionKey": "vR+w/lx9qitj/W2+SfFxbjeRM8VdaYGsxG6lxYCVQ0w=",
+  "apkamSymmetricKey": "irtq9qRr1GSIqIj8skjUldQ4Jp/fYTp1iZr7mwdIqxU=",
+  "enrollmentId": "33fe17a2-47e4-41b3-a545-b8270c0fd29d",
+  "version": 1,
+  "atsign": "@alice🛠",
+  "atsignKeys": [
+    {
+      "keyId": "root:mldsa65:1",
+      "material": [
+        {
+          "role": "privateSigning",
+          "algorithm": "mldsa65",
+          "createdAt": "2026-08-14T11:35:13.904039Z",
+          "status": "active",
+          "bytes": "<5376 chars>"
+        },
+        {
+          "role": "publicVerification",
+          "algorithm": "mldsa65",
+          "createdAt": "2026-08-14T11:35:13.904039Z",
+          "status": "active",
+          "bytes": "<2604 chars>"
+        }
+      ]
+    }
+  ],
+  "enrollments": [
+    {
+      "enrollmentId": "11baac2f-17c4-4cfa-a0db-01738c091d33",
+      "namespaces": {
+        "buzz": "rw"
+      },
+      "appName": "<the apkam app name>",
+      "deviceName": "<the apkam device name>",
+      "keys": [
+        {
+          "keyId": "auth:mldsa65:1",
+          "material": [
+            {
+              "role": "privateAuthentication",
+              "algorithm": "mldsa65",
+              "createdAt": "2026-08-14T11:35:13.695060Z",
+              "status": "active",
+              "bytes": "<5376 chars>"
+            },
+            {
+              "role": "publicAuthentication",
+              "algorithm": "mldsa65",
+              "createdAt": "2026-08-14T11:35:13.695060Z",
+              "status": "active",
+              "bytes": "<2604 chars>"
+            }
+          ]
+        },
+        {
+          "keyId": "sign:rsa2048:1",
+          "material": [
+            {
+              "role": "privateSigning",
+              "algorithm": "rsa2048",
+              "createdAt": "2026-08-14T11:35:16.923932Z",
+              "status": "active",
+              "bytes": "<1624 chars>"
+            },
+            {
+              "role": "publicVerification",
+              "algorithm": "rsa2048",
+              "createdAt": "2026-08-14T11:35:16.923932Z",
+              "status": "active",
+              "bytes": "<392 chars>"
+            }
+          ]
+        },
+        {
+          "keyId": "cb84bc741ec5b268",
+          "material": [
+            {
+              "role": "publicEncapsulation",
+              "algorithm": "xwing",
+              "createdAt": "2026-08-14T11:35:13.675610Z",
+              "status": "active",
+              "bytes": "<1624 chars>"
+            },
+            {
+              "role": "privateDecapsulation",
+              "algorithm": "xwing",
+              "createdAt": "2026-08-14T11:35:13.675610Z",
+              "status": "active",
+              "bytes": "2FBSDNJblbkTJMpRZbUPBzn5D1QifCqPazNLwc2+OGk="
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

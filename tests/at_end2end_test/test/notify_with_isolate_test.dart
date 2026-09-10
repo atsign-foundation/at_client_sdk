@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
@@ -36,7 +37,8 @@ void main() {
     await TestSuiteInitializer.getInstance().testInitializer(
         currentAtSign, TestConstants.namespace, authType,
         enableInitialSync: false,
-        atClientPreference: getAtClientPreferences(currentAtSign));
+        atClientPreference: getAtClientPreferences(currentAtSign),
+        posture: PqPosture.legacy);
 
     NotificationResult notificationResult = await AtClientManager.getInstance()
         .atClient
@@ -59,7 +61,8 @@ Future<void> initSharedAtSign(SendPort mainIsolateSendPort) async {
   await TestSuiteInitializer.getInstance().testInitializer(
       sharedWithAtSign, TestConstants.namespace, authType,
       enableInitialSync: false,
-      atClientPreference: getAtClientPreferences(sharedWithAtSign));
+      atClientPreference: getAtClientPreferences(sharedWithAtSign),
+      posture: PqPosture.legacy);
 
   AtClientManager.getInstance()
       .atClient
@@ -74,11 +77,18 @@ Future<void> initSharedAtSign(SendPort mainIsolateSendPort) async {
   });
 }
 
+/// Builds the client preferences for a spawned isolate, which cannot reach the
+/// `TestPreferences` singleton, so the posture is named here.
 AtClientPreference getAtClientPreferences(String atSign) {
-  var atClientPreference = AtClientPreference();
+  var atClientPreference = AtClientPreference(posture: PqPosture.legacy);
   atClientPreference.hiveStoragePath = 'test/hive/$atSign';
   atClientPreference.commitLogPath = 'test/hive/$atSign/commit/';
   atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
-  atClientPreference.rootPort = ConfigUtil.getYaml()['root_server']['port'] ?? 64;
+  atClientPreference.rootPort =
+      ConfigUtil.getYaml()['root_server']['port'] ?? 64;
+  // NOTE: the one route in this pack that reaches a live client without going
+  // through TestPreferences, so the guard is invoked by hand.
+  TestPreferences.refuseDurableWritesToLongLivedAtSigns(
+      atSign, atClientPreference);
   return atClientPreference;
 }

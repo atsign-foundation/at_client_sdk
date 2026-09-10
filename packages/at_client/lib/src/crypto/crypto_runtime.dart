@@ -1,20 +1,161 @@
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
+
+final AtSignLogger _logger = AtSignLogger('CryptoRuntime');
 
 /// Routes encryption/decryption to the [CryptoProvider] named by an [AtKey]'s
 /// `appMetadata.providerId`.
 class CryptoRuntime {
   static const String legacyProviderId = legacyCryptoProviderId;
 
+  /// Whether this client may route a write to legacy when the destination has
+  /// no post-quantum key.
+  ///
+  /// Two preferences, and they can disagree: `allowLegacyCryptoFallback` says
+  /// "reach them somehow", `disallowLegacyEncryption` says "never write
+  /// legacy". The second wins.
+  ///
+  /// Shared by **every** write path, so `put` and `notify` cannot answer
+  /// differently for the same recipient and namespace.
+  static bool mayFallBackToLegacy(AtClientPreference? preference) =>
+      (preference?.allowLegacyCryptoFallback ?? false) &&
+      preference?.disallowLegacyEncryption != true;
+
   final AtClient _atClient;
 
   CryptoRuntime(this._atClient);
 
+  /// The resolve/stamp/prepare sequence every encrypting write path runs
+  /// before composing anything: resolves the provider this write will use
+  /// ([providerIdFor]), stamps it into the key's `appMetadata` when the key
+  /// carries none, and gives the provider its pre-write step
+  /// ([prepareForPut]). Returns the resolved provider id.
+  ///
+  /// [useRemoteAtServer] carries how this write is being routed, so a record
+  /// the provider writes travels the same route as the write that will cite
+  /// it. A notification passes `true` unconditionally: it is remote-only by
+  /// construction, so a conveyance left to reach the atServer by sync would
+  /// be announced before it exists.
+  ///
+  /// [stampProviderId] is false for a caller that may re-route the write to
+  /// legacy after the prepare step, because a key stamped with a provider that
+  /// then declined would claim a scheme its value was never sealed under.
+  Future<String> prepareWrite(AtKey atKey,
+      {String? requestedProviderId,
+      bool? useRemoteAtServer,
+      bool stampProviderId = true}) async {
+    final providerId =
+        providerIdFor(_atClient, requestedProviderId, atKey: atKey);
+    if (stampProviderId) {
+      atKey.metadata.appMetadata ??= AppMetadata(providerId: providerId);
+    }
+    await prepareForPut(atKey, providerId,
+        useRemoteAtServer: useRemoteAtServer);
+    return providerId;
+  }
+
+  /// Give the provider that will handle this write a chance to act *before* the
+  /// pipeline starts — see [PreparesWrites]. Providers that do not implement it
+  /// are skipped.
+  ///
+  /// [providerId] is resolved from the request options rather than from the
+  /// key's `appMetadata`, because at this point nothing has stamped it yet.
+  /// [useRemoteAtServer] carries how this write is being routed, so a provider
+  /// writing a record the write will depend on can route it the same way.
+  Future<void> prepareForPut(AtKey atKey, String providerId,
+      {bool? useRemoteAtServer}) async {
+    final config = CryptoConfig.forClient(_atClient);
+    final provider = config.lookup(providerId);
+    if (provider is PreparesWrites) {
+      await (provider as PreparesWrites).prepareForWrite(_context(), atKey,
+          useRemoteAtServer: useRemoteAtServer);
+    }
+  }
+
+  /// Whether a write to [atSign] in [namespace] can go out under this client's
+  /// default scheme, asked *before* anything is composed.
+  ///
+  /// A post-quantum share needs the recipient to have published a key for the
+  /// namespace, and there is no fallback that keeps it post-quantum. Schemes
+  /// with no such precondition — legacy among them — answer true.
+  ///
+  /// Throws if the answer cannot be established (an unreachable atServer is not
+  /// the same as an unready recipient), and — like every other read of a peer's
+  /// advertised key — if what came back cannot be verified as theirs.
+  Future<bool> isReadyFor(String atSign, String namespace) async {
+    final config = CryptoConfig.forClient(_atClient);
+    final provider = config.lookup(config.defaultProviderId);
+    if (provider is! ReportsReadiness) return true;
+    return await (provider as ReportsReadiness)
+        .isReadyFor(_context(), atSign, namespace);
+  }
+
+  /// The provider id a write will use, before anything has stamped the key.
+  ///
+  /// When [atKey] is supplied and the selected provider declines it
+  /// ([HandlesSelectively]), a *defaulted* id falls back to legacy, while an
+  /// *explicitly requested* id throws instead — quietly writing under another
+  /// scheme is how an app comes to believe data is post-quantum when it is not.
+  static String providerIdFor(AtClient atClient, String? requested,
+      {AtKey? atKey}) {
+    final config = CryptoConfig.forClient(atClient);
+    final id = requested ?? config.defaultProviderId;
+    if (atKey == null) return id;
+    if (id == legacyProviderId) {
+      refuseLegacyIfDisallowed(atClient, atKey, id,
+          because: requested != null
+              ? 'it was requested explicitly'
+              : 'this client is configured to write legacy');
+      return id;
+    }
+
+    final provider = config.lookup(id);
+    if (provider is HandlesSelectively &&
+        !(provider as HandlesSelectively).canHandle(atKey)) {
+      if (requested != null) {
+        throw AtEncryptionException(
+            'Crypto provider "$id" cannot handle ${atKey.key} — it was '
+            'requested explicitly, so no fallback was applied.');
+      }
+      refuseLegacyIfDisallowed(atClient, atKey, legacyProviderId,
+          because: 'the configured provider "$id" cannot handle this key, and '
+              'the fallback is legacy');
+      _logger.finer(
+          'default provider "$id" declined ${atKey.key}; using $legacyProviderId');
+      return legacyProviderId;
+    }
+    return id;
+  }
+
+  /// Throw if [providerId] is the legacy provider and [atClient] set
+  /// [AtClientPreference.disallowLegacyEncryption].
+  ///
+  /// Called both at selection time ([providerIdFor]), where the error is
+  /// actionable and nothing is in flight, and again at encryption time, which
+  /// is the point every encrypting write passes through however the id was
+  /// chosen.
+  static void refuseLegacyIfDisallowed(
+      AtClient atClient, AtKey atKey, String providerId,
+      {required String because}) {
+    if (providerId != legacyProviderId) return;
+    // NOTE: keyed on `isLocal`, not on "resolves to SelfKeyEncryption". A
+    // `local:` record is never transmitted, so there is no ciphertext to
+    // harvest and open later; a *synced* self key is held by the atServer and
+    // is harvestable.
+    if (atKey.isLocal) return;
+    if (atClient.getPreferences()?.disallowLegacyEncryption != true) return;
+    throw LegacyEncryptionRefusedException(atKey.key, because);
+  }
+
   Future<String> encryptForPut(AtKey atKey, dynamic value) async {
     try {
       final provider = _provider(atKey, 'put');
+      refuseLegacyIfDisallowed(_atClient, atKey, provider.id,
+          because: 'the write reached encryption still routed to legacy');
       final ciphertext =
           await provider.encrypt(_context(), atKey, _requireString(value));
       return _stampEncrypted(atKey, provider, ciphertext);
@@ -33,6 +174,9 @@ class CryptoRuntime {
   Future<String> encryptForNotification(AtKey atKey, dynamic value) async {
     try {
       final provider = _provider(atKey, 'notify');
+      refuseLegacyIfDisallowed(_atClient, atKey, provider.id,
+          because: 'the notification reached encryption still routed to '
+              'legacy');
       final ciphertext =
           await provider.encrypt(_context(), atKey, _requireString(value));
       return _stampEncrypted(atKey, provider, ciphertext);
@@ -84,8 +228,7 @@ class CryptoRuntime {
   CryptoProvider _provider(AtKey atKey, String operation) {
     final providerId =
         atKey.metadata.appMetadata?.providerId ?? legacyProviderId;
-    final config =
-        _atClient.getPreferences()?.crypto ?? const CryptoConfig.legacy();
+    final config = CryptoConfig.forClient(_atClient);
     final provider = config.lookup(providerId);
     if (provider != null) return provider;
     if (providerId == legacyProviderId) return _legacy;

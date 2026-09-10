@@ -1,16 +1,14 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/envelope_tamper.dart';
+import 'test_utils/mocks.dart';
+
 class MockAtClient extends Mock implements AtClient {}
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookupImpl extends Mock implements AtLookUp {}
 
 class TestEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   @override
@@ -39,7 +37,7 @@ void main() {
   /// [enrollmentId], which is where [ApkamSigning.enrollmentId] reads from.
   void stubEnrollment(MockAtClient atClient, String enrollmentId) {
     final remoteSecondary = MockRemoteSecondary();
-    final atLookUp = MockAtLookupImpl();
+    final atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
     when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
@@ -80,16 +78,17 @@ void main() {
   });
 
   group('wrapAndSign', () {
-    test('envelope contains payload, signature, algos and enrollmentId',
-        () async {
+    test('the envelope carries the payload and the signer claim', () async {
       final payload = {'hello': 'world', 'n': 42};
       final envelope = await signerA.wrapAndSign(payload);
 
-      expect(envelope['payload'], same(payload));
-      expect(envelope['signature'], isA<String>());
-      expect(envelope['hashingAlgo'], 'sha256');
-      expect(envelope['signingAlgo'], 'rsa2048');
-      expect(envelope['enrollmentId'], 'enroll-a');
+      expect(envelope.payload, payload,
+          reason: 'the payload round-trips through base64url JSON — a direct '
+              'read gets the undecoded string');
+      expect(envelope.signatures, hasLength(1));
+      expect(envelope.signerEnrollmentId, 'enroll-a',
+          reason: "the mixin stamps the signer's enrollment as `kid`, inside "
+              'the protected header where the signature covers it');
     });
   });
 
@@ -116,8 +115,8 @@ void main() {
     });
 
     test('tampered payload fails verification', () async {
-      final envelope = await signerA.wrapAndSign({'amount': 10});
-      (envelope['payload'] as Map)['amount'] = 1000000;
+      final envelope = (await signerA.wrapAndSign({'amount': 10}))
+          .withPayloadJson({'amount': 1000000});
       stubApskGet(atClientB, pkamPublicKey(atChopsA));
 
       await expectLater(

@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
@@ -37,9 +38,19 @@ void main() {
 
   Future<void> tearDownLocalSecondary() async {
     try {
+      // NOTE: the instance map is keyed (atSign, enrollmentId), so an enrolled
+      // client is filed separately and holds its storage location until it is
+      // stopped.
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
       // Close every Hive box (including the sync-queue box) so the next
       // setUp doesn't reattach to leftover in-memory state.
-      await (AtClientImpl.atClientInstanceMap[atSign] as AtClientImpl?)?.stop();
+      // `Hive.close()` reaches only the package-global instance; the keystore
+      // and sync-queue boxes live on the instance owning `storageDir`, so both
+      // registries have to close before the directory goes.
+      await HiveInstances.closeAll();
       await Hive.close();
       AtClientImpl.atClientInstanceMap.remove(atSign);
       final dir = Directory(storageDir);

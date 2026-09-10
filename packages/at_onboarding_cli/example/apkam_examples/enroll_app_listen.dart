@@ -17,8 +17,8 @@ void main(List<String> args) async {
 
   var atsign = argResults['atsign'];
   try {
-    var atAuthKeys =
-        await _decryptAtKeysFile(await _readAtKeysFile(argResults['atKeysPath']));
+    var atAuthKeys = await _decryptAtKeysFile(
+        await _readAtKeysFile(argResults['atKeysPath']));
     var atChops = _createAtChops(atAuthKeys);
     final atClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(

@@ -15,6 +15,6 @@ class ConsoleLoggingHandler implements LoggingHandler {
   @override
   void call(LogRecord record) {
     print(
-        '${record.level.name}|${record.time}|${record.loggerName}|${record.message} \n');
+        '${record.level.name}|${record.time}|${record.loggerName}|${record.message}');
   }
 }

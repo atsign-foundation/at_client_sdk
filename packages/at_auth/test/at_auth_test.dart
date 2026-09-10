@@ -11,9 +11,11 @@ import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_auth/at_auth_io.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup_io.dart';
@@ -105,7 +107,7 @@ void main() {
       final atAuthRequest = AtAuthRequest(
         '@alice🛠',
         atKeysIo: fileAtKeysIo,
-      )..enrollmentId = testEnrollmentId;
+      );
 
       atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
       atAuth.probeSocket = (host, port) async {};
@@ -116,61 +118,22 @@ void main() {
       expect(response.atAuthKeys!.enrollmentId, testEnrollmentId);
     });
 
-    test('with no enrollment id supplied, the FLAT stored one is used',
-        () async {
-      // UC-G1.1's second clause. `AtKeys.resolveAuthenticatingEnrollment()`
-      // derives the enrollment from the unique active privateAuthentication
-      // material and is deliberately NOT applied here: authentication
-      // defaults to the flat, stored, deprecated `AtKeys.enrollmentId`.
-      //
-      // The fixture is what makes this discriminate. It is a pure legacy
-      // keyfile - flat fields and a stored enrollmentId, no typed material -
-      // so the resolver's answer is null while the stored id is real. A build
-      // that had quietly switched to the derivation would authenticate as
-      // null here rather than as the id below.
-      final atKeys = await fileAtKeysIo.read('@alice🛠'.toAtsign());
-
-      expect(atKeys.resolveAuthenticatingEnrollment(), isNull,
-          reason: 'the fixture holds no typed authentication material, so the '
-              'derivation has nothing to resolve — which is what makes the '
-              'assertion below about the STORED field specifically');
-      // ignore: deprecated_member_use_from_same_package
-      expect(atKeys.enrollmentId, testEnrollmentId,
-          reason: 'and the stored field is what a no-id request falls back '
-              'to, per AtAuthImpl.authenticate');
-    });
-
-    // UC-G1.1's second clause names a **retrofitted** file specifically, and
-    // that word is the whole assertion. The sibling above uses a legacy-only
-    // fixture, where the resolver answers null — so "authentication used the
-    // flat field" and "the resolver had nothing to offer" are
-    // indistinguishable there. Neither of its two assertions calls
-    // `authenticate` at all; both are about the document.
-    //
-    // A retrofitted document is the one shape where both answers are real and
-    // they DIFFER: the flat field still names the legacy enrollment, because
-    // that enrollment goes on authenticating until the atServer's cap retires
-    // it, while the only active typed privateAuthentication belongs to the new
-    // one.
-    //
-    // The default and the explicit argument are SEPARATE tests on purpose. As
-    // two assertions in one body the second never runs once the first fails,
-    // so a mutation could not show the control staying green — which is the
-    // only thing that says the control is not entangled with the property
-    // under test.
+    /// A retrofitted keyfile: the flat fields keep the legacy enrollment's
+    /// credentials, the typed section carries the successor's. The one shape
+    /// where "the flat id" and "the derived id" are both real and differ.
     Future<InMemoryAtKeysIo> retrofittedKeyfile() async {
       final keysIo = InMemoryAtKeysIo();
       await keysIo.write(
           '@alice',
           AtKeys()
-            ..apkamPublicKey = AtBytes.fromString(base64Encode(
-                utf8.encode('legacy-rsa-public')))
-            ..apkamPrivateKey = AtBytes.fromString(base64Encode(
-                utf8.encode('legacy-rsa-private')))
-            ..defaultEncryptionPublicKey = AtBytes.fromString(
-                base64Encode(utf8.encode('enc-public')))
-            ..defaultEncryptionPrivateKey = AtBytes.fromString(
-                base64Encode(utf8.encode('enc-private')))
+            ..apkamPublicKey = AtBytes.fromString(
+                base64Encode(utf8.encode('legacy-rsa-public')))
+            ..apkamPrivateKey = AtBytes.fromString(
+                base64Encode(utf8.encode('legacy-rsa-private')))
+            ..defaultEncryptionPublicKey =
+                AtBytes.fromString(base64Encode(utf8.encode('enc-public')))
+            ..defaultEncryptionPrivateKey =
+                AtBytes.fromString(base64Encode(utf8.encode('enc-private')))
             ..defaultSelfEncryptionKey =
                 AtBytes.fromString(base64Encode(utf8.encode('self-key')))
             ..enrollmentId = 'legacy-1');
@@ -179,10 +142,10 @@ void main() {
       // hand-assembled document is a claim about what a retrofit produces,
       // and this test is about what `authenticate` does with the real thing.
       final approving = MockAtLookUp();
-      when(() => approving.executeCommand(any(that: startsWith('enroll:')),
-              auth: any(named: 'auth')))
-          .thenAnswer((_) async =>
-              'data:{"enrollmentId":"new-123","status":"approved"}');
+      when(() =>
+          approving.executeCommand(any(that: startsWith('enroll:')),
+              auth: any(named: 'auth'))).thenAnswer(
+          (_) async => 'data:{"enrollmentId":"new-123","status":"approved"}');
       await AtEnrollmentImpl().submit(
           AtSelfEnrollmentRequest(
               session: AtAuthSession(
@@ -195,9 +158,8 @@ void main() {
               namespaces: {'app_1': 'rw'}),
           approving);
 
-      // THE PREMISE, not an assertion of either test. If these ever agree,
-      // both tests below pass for a reason that has nothing to do with which
-      // source `authenticate` read.
+      // NOTE: the two sources must disagree, or the test below passes for a
+      // reason that has nothing to do with which one authenticate read.
       final retrofitted = await keysIo.read('@alice'.toAtsign());
       // ignore: deprecated_member_use_from_same_package
       expect(retrofitted.enrollmentId, 'legacy-1');
@@ -209,8 +171,8 @@ void main() {
 
     /// The enrollment id that reached `PkamAuthenticator.authenticate` — what
     /// actually signs the PKAM challenge, rather than what the document says.
-    Future<String?> idReachingPkam(InMemoryAtKeysIo keysIo,
-        {String? supplied}) async {
+    Future<String?> idReachingPkam(AtKeysIo keysIo,
+        {String atSign = '@alice'}) async {
       final authenticator = MockPkamAuthenticator();
       when(() => authenticator.authenticate(any(), any(),
               enrollmentId: any(named: 'enrollmentId')))
@@ -222,35 +184,52 @@ void main() {
           atServerStatus: mockAtServerStatus)
         ..secondaryAddressFinder = fakeSecondaryAddressFinder
         ..probeSocket = ((host, port) async {});
-      final request = AtAuthRequest('@alice', atKeysIo: keysIo);
-      if (supplied != null) request.enrollmentId = supplied;
-      await auth.authenticate(request);
+      await auth.authenticate(AtAuthRequest(atSign, atKeysIo: keysIo));
       return verify(() => authenticator.authenticate(any(), any(),
-              enrollmentId: captureAny(named: 'enrollmentId')))
-          .captured
-          .single as String?;
+              enrollmentId: captureAny(named: 'enrollmentId'))).captured.single
+          as String?;
     }
 
-    test(
-        'on a RETROFITTED keyfile a no-id request authenticates as the LEGACY '
-        'enrollment, not the resolver\'s answer', () async {
-      expect(await idReachingPkam(await retrofittedKeyfile()), 'legacy-1',
-          reason: 'a request carrying no enrollment id must authenticate as '
-              'the FLAT stored enrollment. The resolver names new-123 here '
-              'and is deliberately not consulted — signing the PKAM challenge '
-              'as the enrollment that merely holds the active typed material '
-              'would authenticate as somebody else');
+    test('a legacy keyfile authenticates as its flat stored enrollment',
+        () async {
+      // UC-G1.1: the keys decide.
+      final atKeys = await fileAtKeysIo.read('@alice🛠'.toAtsign());
+      expect(atKeys.resolveAuthenticatingEnrollment(), isNull,
+          reason: 'the fixture holds no typed authentication material, so '
+              'the id that reaches pkam can only have come from the flat '
+              'field');
+      expect(await idReachingPkam(fileAtKeysIo, atSign: '@alice🛠'),
+          testEnrollmentId);
     });
 
-    test('and an explicitly supplied enrollment id is used as given', () async {
-      // The control for the test above, and separate from it so a mutation can
-      // show this one staying green. It can: an explicit id never reaches the
-      // `??=` that the default is about, so this says the assertion above is
-      // about the DEFAULT specifically rather than about `authenticate`
-      // ignoring its argument.
-      expect(
-          await idReachingPkam(await retrofittedKeyfile(), supplied: 'new-123'),
-          'new-123');
+    test(
+        'a RETROFITTED keyfile authenticates as the successor, not the flat '
+        'legacy enrollment', () async {
+      expect(await idReachingPkam(await retrofittedKeyfile()), 'new-123',
+          reason: 'the retrofit exists to move the client to its successor; '
+              'the flat field still names legacy-1, and reading it would sign '
+              'the PKAM challenge as the enrollment the successor replaced');
+    });
+
+    test('an ancient keyfile with no enrollment id authenticates as primary',
+        () async {
+      // For a keyfile with no stored id, `primary` is the atServer's name for
+      // that credential; the verb builder keeps it off the wire.
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write(
+          '@alice',
+          AtKeys()
+            ..apkamPublicKey = AtBytes.fromString(
+                base64Encode(utf8.encode('legacy-rsa-public')))
+            ..apkamPrivateKey = AtBytes.fromString(
+                base64Encode(utf8.encode('legacy-rsa-private')))
+            ..defaultEncryptionPublicKey =
+                AtBytes.fromString(base64Encode(utf8.encode('enc-public')))
+            ..defaultEncryptionPrivateKey =
+                AtBytes.fromString(base64Encode(utf8.encode('enc-private')))
+            ..defaultSelfEncryptionKey =
+                AtBytes.fromString(base64Encode(utf8.encode('self-key'))));
+      expect(await idReachingPkam(keysIo), 'primary');
     });
 
     test(
@@ -264,7 +243,6 @@ void main() {
         throw Exception('simulated unreachable atServer');
       };
       final atAuthRequest = AtAuthRequest('@alice🛠', atKeysIo: fileAtKeysIo)
-        ..enrollmentId = testEnrollmentId
         ..retryOptions = const RetryOptions(
             maxRetries: 10,
             retryDelay: Duration(seconds: 2),
@@ -291,7 +269,6 @@ void main() {
         '@alice🛠',
         atKeysIo: fileAtKeysIo,
       );
-      atAuthRequest.enrollmentId = testEnrollmentId;
       atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
       atAuth.probeSocket = (host, port) async {};
 
@@ -313,7 +290,6 @@ void main() {
         atKeysIo: FileAtKeysIo(
             filePath: (_) => 'test/hello/data/@alice🛠_key.atKeys'),
       );
-      atAuthRequest.enrollmentId = testEnrollmentId;
       atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
       atAuth.probeSocket = (host, port) async {};
 
@@ -331,7 +307,6 @@ void main() {
         '@alice🛠',
         atKeysIo: fileAtKeysIo,
       );
-      atAuthRequest.enrollmentId = testEnrollmentId;
       atAuthRequest.atAuthKeys = AtKeys()
         ..apkamPublicKey =
             AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
@@ -366,7 +341,6 @@ void main() {
         '@alice🛠',
         atKeysIo: fileAtKeysIo,
       );
-      atAuthRequest.enrollmentId = testEnrollmentId;
       atAuthRequest.atAuthKeys = AtKeys()
         ..defaultEncryptionPublicKey = AtBytes.fromString(
             base64Encode(utf8.encode('defaultEncryptionPublicKey')))
@@ -392,7 +366,6 @@ void main() {
         '@alice🛠',
         atKeysIo: fileAtKeysIo,
       );
-      atAuthRequest.enrollmentId = testEnrollmentId;
 
       atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
       atAuth.probeSocket = (host, port) async {};
@@ -413,7 +386,6 @@ void main() {
         '@alice🛠',
         atKeysIo: fileAtKeysIo,
       );
-      atAuthRequest.enrollmentId = testEnrollmentId;
 
       atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
       atAuth.probeSocket = (host, port) async {};
@@ -455,7 +427,8 @@ void main() {
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
 
-      final atOnboardingRequest = AtOnboardingRequest('@aaron🛠');
+      final atOnboardingRequest = AtOnboardingRequest('@aaron🛠',
+          signingAlgoType: SigningAlgoType.rsa2048);
 
       atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
       atAuth.probeSocket = (host, port) async {};
@@ -475,7 +448,8 @@ void main() {
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenThrow(
           AtEnrollmentException('server refused: enrollment quota exceeded'));
 
-      final atOnboardingRequest = AtOnboardingRequest('@ferris🛠')
+      final atOnboardingRequest = AtOnboardingRequest('@ferris🛠',
+          signingAlgoType: SigningAlgoType.rsa2048)
         ..atKeysIo = fileAtKeysIo
         ..appName = 'wavi'
         ..deviceName = 'iphone';
@@ -512,7 +486,8 @@ void main() {
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
           .thenAnswer((_) => Future.value(mockEnrollmentResponse));
-      final atOnboardingRequest = AtOnboardingRequest('@bob🛠')
+      final atOnboardingRequest = AtOnboardingRequest('@bob🛠',
+          signingAlgoType: SigningAlgoType.rsa2048)
         ..atKeysIo = fileAtKeysIo
         ..appName = 'wavi'
         ..deviceName = 'iphone';
@@ -550,7 +525,8 @@ void main() {
           Future.value(
               AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
 
-      final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
+      final atOnboardingRequest = AtOnboardingRequest('@alice🛠',
+          signingAlgoType: SigningAlgoType.rsa2048)
         ..atKeysIo = InMemoryAtKeysIo()
         ..appName = 'wavi'
         ..deviceName = 'iphone';
@@ -606,7 +582,8 @@ void main() {
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
           .thenAnswer((_) => Future.value(mockEnrollmentResponse));
-      final atOnboardingRequest = AtOnboardingRequest('@colin🛠')
+      final atOnboardingRequest = AtOnboardingRequest('@colin🛠',
+          signingAlgoType: SigningAlgoType.rsa2048)
         ..atKeysIo = fileAtKeysIo;
 
       atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;

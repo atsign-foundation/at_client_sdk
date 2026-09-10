@@ -44,15 +44,14 @@ Future<bool> _pollUntilCachedExistsMatches(
 }
 
 /// Forces `autoNotify=true` on the publisher (sharedBy) atServer.
-/// Defensive: a prior CI run's bypasscache_test may have left
-/// `autoNotify=false` persisted on the server (its `finally`-based
-/// reset is unreliable on test timeouts). Without auto-notify, a
+/// Defensive: the cicd atSigns are long-lived, so a `false` written by an
+/// older build persists across runs. Without auto-notify, a
 /// publisher's put-with-TTR doesn't trigger the cross-server notify
 /// to the receiver atServer, the receiver's cached entry is never
 /// created, and these tests hang forever waiting for it.
 Future<void> _ensurePublisherAutoNotifyTrue() async {
   await TestSuiteInitializer.getInstance()
-      .switchToAtSign(sharedByAtSign, namespace);
+      .switchToAtSign(sharedByAtSign, namespace, posture: PqPosture.legacy);
   await AtClientManager.getInstance()
       .atClient
       .getRemoteSecondary()!
@@ -65,17 +64,21 @@ void main() {
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedByAtSign, namespace, authType);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        sharedByAtSign, namespace, authType,
+        posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        sharedWithAtSign, namespace, authType,
+        posture: PqPosture.legacy);
     // Initialize sharedWithAtSign
     sharedWithAtClient = (await TestSuiteInitializer.getInstance()
-            .switchToAtSign(sharedWithAtSign, namespace))
+            .switchToAtSign(sharedWithAtSign, namespace,
+                posture: PqPosture.legacy))
         .atClient;
     // Setting sharedByAtSign atClient instance to context.
-    sharedByAtClient = (await TestSuiteInitializer.getInstance()
-            .switchToAtSign(sharedByAtSign, namespace))
+    sharedByAtClient = (await TestSuiteInitializer.getInstance().switchToAtSign(
+            sharedByAtSign, namespace,
+            posture: PqPosture.legacy))
         .atClient;
     // Defensive: ensure auto-notify is on for the publisher atServer
     // before any TTR-using test runs.
@@ -97,8 +100,9 @@ void main() {
               ..cache(-1, true)
               ..timeToLive(5 * TestConstants.oneMinuteMillis))
             .build();
-    sharedByAtClient = (await TestSuiteInitializer.getInstance()
-            .switchToAtSign(sharedByAtSign, namespace))
+    sharedByAtClient = (await TestSuiteInitializer.getInstance().switchToAtSign(
+            sharedByAtSign, namespace,
+            posture: PqPosture.legacy))
         .atClient;
     final putResult = await sharedByAtClient.put(atKey, 'dummy_cached_value');
     assert(putResult == true);
@@ -106,7 +110,8 @@ void main() {
 
     // Switch to sharedWith AtSign and fetch the cached key
     sharedWithAtClient = (await TestSuiteInitializer.getInstance()
-            .switchToAtSign(sharedWithAtSign, namespace))
+            .switchToAtSign(sharedWithAtSign, namespace,
+                posture: PqPosture.legacy))
         .atClient;
     var cachedAtKey = AtKey()
       ..key = key
@@ -129,8 +134,9 @@ void main() {
     expect(getResponse.value, 'dummy_cached_value');
 
     // Switch back to sharedBy AtSign and delete the key
-    sharedByAtClient = (await TestSuiteInitializer.getInstance()
-            .switchToAtSign(sharedByAtSign, namespace))
+    sharedByAtClient = (await TestSuiteInitializer.getInstance().switchToAtSign(
+            sharedByAtSign, namespace,
+            posture: PqPosture.legacy))
         .atClient;
     await sharedByAtClient.delete(atKey);
     await E2ESyncService.getInstance().syncData(sharedByAtClient.syncService);
@@ -140,7 +146,8 @@ void main() {
     // publisher's delete propagates a delete-the-cache directive to
     // the receiver's atServer; same cross-server-notify tail applies.
     sharedWithAtClient = (await TestSuiteInitializer.getInstance()
-            .switchToAtSign(sharedWithAtSign, namespace))
+            .switchToAtSign(sharedWithAtSign, namespace,
+                posture: PqPosture.legacy))
         .atClient;
     final cachedRemoved = await _pollUntilCachedExistsMatches(
         sharedWithAtClient, cachedAtKeyStr, false);
@@ -164,14 +171,16 @@ void main() {
     var value = 'test_cached_value';
 
     var currentAtClient = (await TestSuiteInitializer.getInstance()
-            .switchToAtSign(sharedByAtSign, namespace))
+            .switchToAtSign(sharedByAtSign, namespace,
+                posture: PqPosture.legacy))
         .atClient;
     // notifying a key with ttr to shared with atSign
     await currentAtClient.put(atKey, value);
     await E2ESyncService.getInstance().syncData(currentAtClient.syncService);
 
     var sharedWithAtClient = (await TestSuiteInitializer.getInstance()
-            .switchToAtSign(sharedWithAtSign, namespace))
+            .switchToAtSign(sharedWithAtSign, namespace,
+                posture: PqPosture.legacy))
         .atClient;
     var cachedAtKey = AtKey()
       ..key = key

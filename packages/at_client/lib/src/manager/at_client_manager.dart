@@ -2,7 +2,14 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/secondary_address_finder_source.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/service/enrollment_service.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
@@ -47,14 +54,26 @@ class AtClientManager {
 
   static final AtClientManager _singleton = AtClientManager._internal();
 
-  AtClientManager._internal();
+  AtClientManager._internal() {
+    _registerAddressFinderSource();
+  }
 
   factory AtClientManager.getInstance() {
     return _singleton;
   }
 
   // ignore: no_leading_underscores_for_local_identifiers
-  AtClientManager(this._atSign);
+  AtClientManager(this._atSign) {
+    _registerAddressFinderSource();
+  }
+
+  /// Points `RemoteSecondary`'s process-wide finder source at the singleton
+  /// manager's field, so it need not import this class. Every constructor
+  /// registers the same closure, so registering again is harmless.
+  static void _registerAddressFinderSource() {
+    registerSecondaryAddressFinderSource(
+        () => AtClientManager.getInstance().secondaryAddressFinder);
+  }
 
   void setSecondaryAddressFinder(
       {SecondaryAddressFinder? secondaryAddressFinder}) {
@@ -65,12 +84,24 @@ class AtClientManager {
 
   /// Switches the active atSign and (re)creates its associated services.
   ///
-  /// The outgoing client is stopped via [AtClient.stop] and its instance
-  /// remains in cache for resumption. Calling this method again for the same
-  /// atSign resumes it with fresh services.
+  /// The outgoing client is stopped via [AtClient.stop], which unfiles it and
+  /// releases its storage. That client is not resumable — `start()` refuses a
+  /// client whose storage was released — so calling this method again for the
+  /// same atSign builds a new one.
   ///
   /// Use [AtClient.stop] only when permanently finished with an atSign (e.g.,
   /// logout or app shutdown).
+  ///
+  /// A call naming the atSign that is already current recreates nothing when
+  /// no [atChops], [atKeysIo], [atLookUp] or [enrollmentId] override is
+  /// supplied and the current client is not stopped: it returns that client as
+  /// it stands, and of [preference] only `crypto` is adopted. Every other
+  /// change — `hiveStoragePath` included — is dropped silently; a changed
+  /// rollout axis is the one exception, and is refused outright.
+  ///
+  /// With [atKeysIo] the enrollment is the keys' own answer,
+  /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
+  /// logged at shout level and ignored.
   ///
   /// * [serviceFactory] - Overrides service creation (primarily for testing).
   /// * [atChops] - Shared crypto context for the new services.
@@ -81,10 +112,15 @@ class AtClientManager {
       AtKeysIo? atKeysIo,
       AtLookUp? atLookUp,
       String? enrollmentId,
-      AtClientStorage? storage}) async {
+      AtClientStorage? storage,
+
+      /// The incoming client authenticates as a different enrollment of
+      /// [atSign] than the outgoing one, over the same store, which is handed
+      /// over open for the incoming client to close.
+      bool principalChange = false}) async {
     serviceFactory ??= DefaultAtServiceFactory();
 
-    _logger.info("setCurrentAtSign called with atSign $atSign");
+    _logger.finer("setCurrentAtSign called with atSign $atSign");
     AtUtils.fixAtSign(atSign);
     secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort);
@@ -113,6 +149,7 @@ class AtClientManager {
     final currentAtSign = _currentAtClient?.getCurrentAtSign();
     if (currentAtSign != null &&
         currentAtSign == atSign &&
+        !principalChange &&
         atChops == null &&
         atKeysIo == null &&
         atLookUp == null &&
@@ -126,6 +163,10 @@ class AtClientManager {
       // it, surfacing as CryptoProviderNotRegistered on the next put.
       final existing = _currentAtClient;
       if (existing is AtClientImpl) {
+        AtClientImpl.refuseChangedRolloutAxes(
+            running: existing.getPreferences(),
+            asked: preference,
+            cacheKey: AtClientImpl.instanceKey(atSign, existing.enrollmentId));
         existing.getPreferences()?.crypto = preference.crypto;
       }
       _logger
@@ -140,7 +181,21 @@ class AtClientManager {
     // Stop the outgoing atsign
     _atSign = atSign;
     final previousAtClient = _currentAtClient;
-    await previousAtClient?.stop();
+    // NOTE: on a principal change one enrollment of this atSign succeeds
+    // another over the same store, so that store crosses the switch OPEN —
+    // the outgoing client hands it over instead of closing it.
+    final AtClientStorage? carried;
+    if (principalChange &&
+        previousAtClient is AtClientImpl &&
+        (storage == null || storage.isHeldBy(previousAtClient))) {
+      carried = await previousAtClient.stopHandingOverStorage();
+    } else {
+      await previousAtClient?.stop();
+      carried = storage;
+    }
+    // NOTE: `forgetPrincipal` throws while a client is attached, so it can
+    // only run between holders — after the stop above.
+    if (principalChange) await carried?.forgetPrincipal();
 
     // Spin up the new atClient
     _currentAtClient = await serviceFactory.atClient(
@@ -149,7 +204,7 @@ class AtClientManager {
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         enrollmentId: enrollmentId,
-        storage: storage);
+        storage: carried);
 
     var notificationService = await serviceFactory.notificationService(
         _currentAtClient!, this,
@@ -182,7 +237,7 @@ class AtClientManager {
       _notifyListeners(switchAtSignEvent);
     }
 
-    _logger.info("setCurrentAtSign complete");
+    _logger.finer("setCurrentAtSign complete");
 
     return this;
   }
@@ -214,7 +269,8 @@ class AtClientManager {
       AtAuthSession session, AtClientPreference preference,
       {AtServiceFactory? serviceFactory,
       bool reuse = false,
-      AtClientStorage? storage}) async {
+      AtClientStorage? storage,
+      bool principalChange = false}) async {
     // Destructure rootDomain onto the preference for now. A follow-up will add
     // an AtRootDomain-typed accessor to AtClientPreference so this can stop.
     preference.rootDomain = session.rootDomain.rootDomain;
@@ -230,7 +286,8 @@ class AtClientManager {
         atKeysIo: session.atKeysIo,
         atLookUp: reuse ? session.atLookUp : null,
         enrollmentId: session.enrollmentId,
-        storage: storage);
+        storage: storage,
+        principalChange: principalChange);
   }
 
   void listenToAtSignChange(AtSignChangeListener listener) {

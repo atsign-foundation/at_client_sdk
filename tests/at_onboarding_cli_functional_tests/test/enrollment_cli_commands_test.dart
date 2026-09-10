@@ -5,9 +5,12 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
+
+import 'utils/at_client_cache.dart';
+import 'utils/test_keys_dir.dart';
+import 'utils/virtualenv_ports.dart';
 
 /// An [AtOnboardingService] binds to the enrollment it last authenticated as:
 /// it holds an [AtLookUp] whose connection the atServer has bound to that
@@ -19,9 +22,10 @@ import 'package:test/test.dart';
 /// authentication gets a fresh one — see [authenticateWithApkamKeys].
 void main() {
   String atSign = '@sitaram🛠';
-  String apkamKeysFilePath = 'storage/keys/@sitaram-apkam.atKeys';
+  String masterKeysFilePath = testKeysFile(atSign);
+  String apkamKeysFilePath = testKeysFile(atSign, suffix: 'apkam');
   String passwordProtectedKeysFilePath =
-      'storage/keys/@sitaram-apkam-password-protected.atKeys';
+      testKeysFile(atSign, suffix: 'apkam-password-protected');
   String passPhrase = 'abcd';
   final logger = AtSignLogger('E2E Test');
 
@@ -29,13 +33,16 @@ void main() {
   setUpAll(() async {
     AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atSign,
-        getOnboardingPreference(atSign,
-            '${Platform.environment['HOME']}/.atsign/keys/${atSign}_key.atKeys')
+        getOnboardingPreference(atSign, masterKeysFilePath)
           // Fetched cram key from the at_demos repo.
           ..cramSecret = cramKeyMap[atSign]);
 
     bool onboardingStatus = await onboardingService.onboard();
     expect(onboardingStatus, true);
+    // NOTE: the static client cache is keyed on `(atSign, enrollmentId)`
+    // alone, so without this eviction the CLI commands below run against the
+    // client the onboard left behind rather than the one they ask for.
+    await evictCachedAtClients();
     // Set SPP
     List<String> args = [
       'spp',
@@ -44,9 +51,11 @@ void main() {
       '-a',
       atSign,
       '-r',
-      'vip.ve.atsign.zone'
+      'vip.ve.atsign.zone',
+      '-k',
+      masterKeysFilePath
     ];
-    var res = await auth_cli.wrappedMain(args);
+    var res = await runCliCommand(args);
     // Zero indicates successful completion.
     expect(res, 0);
   });
@@ -86,9 +95,11 @@ void main() {
         '-r',
         'vip.ve.atsign.zone',
         '-i',
-        enrollmentId
+        enrollmentId,
+        '-k',
+        masterKeysFilePath
       ];
-      var res = await auth_cli.wrappedMain(args);
+      var res = await runCliCommand(args);
       expect(res, 0);
       logger.info('Approved enrollment with enrollmentId: $enrollmentId');
 
@@ -111,9 +122,11 @@ void main() {
         '-r',
         'vip.ve.atsign.zone',
         '-i',
-        enrollmentId
+        enrollmentId,
+        '-k',
+        masterKeysFilePath
       ];
-      res = await auth_cli.wrappedMain(args);
+      res = await runCliCommand(args);
       expect(res, 0);
       logger.info('Revoked enrollment with enrollmentId: $enrollmentId');
 
@@ -147,9 +160,11 @@ void main() {
         '-r',
         'vip.ve.atsign.zone',
         '-i',
-        enrollmentId
+        enrollmentId,
+        '-k',
+        masterKeysFilePath
       ];
-      res = await auth_cli.wrappedMain(args);
+      res = await runCliCommand(args);
       expect(res, 0);
       logger.info('Un-Revoked enrollment with enrollmentId: $enrollmentId');
 
@@ -187,9 +202,11 @@ void main() {
         '-r',
         'vip.ve.atsign.zone',
         '-i',
-        enrollmentId
+        enrollmentId,
+        '-k',
+        masterKeysFilePath
       ];
-      var res = await auth_cli.wrappedMain(args);
+      var res = await runCliCommand(args);
       expect(res, 0);
       logger.info('Approved enrollment with enrollmentId: $enrollmentId');
 
@@ -218,14 +235,18 @@ void main() {
         '-k',
         passwordProtectedKeysFilePath
       ];
-      res = await auth_cli.wrappedMain(args);
+      res = await runCliCommand(args);
       // Zero indicate successful completion.
       expect(res, 0);
     });
   });
 
   tearDownAll(() {
-    Directory('storage').deleteSync(recursive: true);
+    // Keyfiles live under the test keys dir, which is purged per run; this
+    // directory appears only when the CLI is given a relative local-secondary
+    // path, hence the guard.
+    final storage = Directory('storage');
+    if (storage.existsSync()) storage.deleteSync(recursive: true);
   });
 }
 
@@ -248,7 +269,7 @@ Future<bool> authenticateWithApkamKeys(
   }
   AtOnboardingService onboardingService =
       AtOnboardingServiceImpl(atSign, preference);
-  return await onboardingService.authenticate(enrollmentId: enrollmentId);
+  return await onboardingService.authenticate();
 }
 
 AtOnboardingPreference getOnboardingPreference(
@@ -259,7 +280,8 @@ AtOnboardingPreference getOnboardingPreference(
     ..atKeysFilePath = atKeysFilePath
     ..appName = 'buzz'
     ..deviceName = 'iphone'
-    ..rootDomain = 'vip.ve.atsign.zone';
+    ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = virtualenvRootPort;
 
   return atOnboardingPreference;
 }

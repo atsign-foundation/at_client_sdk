@@ -5,13 +5,17 @@ import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
+import 'utils/at_client_cache.dart';
 import 'utils/onboarding_service_impl_override.dart';
+import 'utils/test_keys_dir.dart';
+import 'utils/virtualenv_ports.dart';
 
-final String atKeysFilePath = '${Platform.environment['HOME']}/.atsign/keys';
+/// Where at_onboarding_cli falls back to when `atKeysFilePath` is null; only
+/// ever compared against, never written to.
+final String defaultAtKeysDir = '${Platform.environment['HOME']}/.atsign/keys';
 Map<String, bool> keysCreatedMap = {};
 
 void main() {
@@ -23,9 +27,9 @@ void main() {
     if (keysCreatedMap.containsKey(atSign)) {
       return;
     }
-    var atLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64,
-        secondaryAddressFinder:
-            CacheableSecondaryAddressFinder('vip.ve.atsign.zone', 64),
+    var atLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', virtualenvRootPort,
+        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+            'vip.ve.atsign.zone', virtualenvRootPort),
         transportFactory: SecureSocketTransportFactory(
             secureSocketConfig: SecureSocketConfig()));
     await atLookup.cramAuthenticate(at_demos.cramKeyMap[atSign]!);
@@ -40,12 +44,20 @@ void main() {
     await atLookup.close();
   }
 
+  // NOTE: every test in this group and the next drives a pre-enrollment atSign
+  // — `_createKeys` installs the flat `at_pkam_publickey` and nothing else —
+  // so each names `PqPosture.legacy`. At a post-quantum posture the client
+  // gives such an atSign its first enrollment on its first start, rewriting
+  // the keyfile and replacing the PKAM key these tests read back. Name it on
+  // every call: one atSign in one process holds one posture, so a client
+  // cached at another posture is refused rather than reused.
   group('A group of tests to assert on authenticate functionality', () {
     test('A test to verify authentication is successful with .atKeys file',
         () async {
       String atSign = '@alice🛠';
       await _createKeys(atSign);
-      AtOnboardingPreference preference = getPreferences(atSign);
+      AtOnboardingPreference preference =
+          getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
       AtOnboardingService atOnboardingService =
           AtOnboardingServiceImpl(atSign, preference);
@@ -58,7 +70,8 @@ void main() {
         () async {
       String atSign = '@alice🛠';
       await _createKeys(atSign);
-      AtOnboardingPreference preference = getPreferences(atSign);
+      AtOnboardingPreference preference =
+          getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
       AtOnboardingService atOnboardingService =
           AtOnboardingServiceImpl(atSign, preference);
@@ -76,7 +89,8 @@ void main() {
         () async {
       String atSign = '@eve🛠';
       await _createKeys(atSign);
-      AtOnboardingPreference preference = getPreferences(atSign);
+      AtOnboardingPreference preference =
+          getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
       AtOnboardingService onboardingService =
           AtOnboardingServiceImpl(atSign, preference);
@@ -93,10 +107,12 @@ void main() {
     test('A test to verify atKeysFilePath is set when null is provided',
         () async {
       String atSign = '@eve🛠';
-      AtOnboardingPreference preference = getPreferences(atSign);
+      AtOnboardingPreference preference =
+          getPreferences(atSign, posture: PqPosture.legacy);
       preference.atKeysFilePath = null;
       AtOnboardingServiceImpl(atSign, preference);
-      expect(preference.atKeysFilePath, '$atKeysFilePath/${atSign}_key.atKeys');
+      expect(
+          preference.atKeysFilePath, '$defaultAtKeysDir/${atSign}_key.atKeys');
     });
 
     tearDown(() async {
@@ -108,7 +124,8 @@ void main() {
       'A group of tests to assert encryption keys persist into local secondary',
       () {
     String atSign = '@eve🛠'.trim();
-    AtOnboardingPreference atOnboardingPreference = getPreferences(atSign);
+    AtOnboardingPreference atOnboardingPreference =
+        getPreferences(atSign, posture: PqPosture.legacy);
     AtOnboardingService atOnboardingService =
         AtOnboardingServiceImpl(atSign, atOnboardingPreference);
     AtClient? atClient;
@@ -163,6 +180,7 @@ void main() {
         // Assert .atKeys file is generated for the atSign
         expect(await atKeysFile.exists(), true);
         if (cleanup) {
+          await quiesceStartupTail(atOnboardingService);
           await atKeysFile.delete();
           expect(await atKeysFile.exists(), false);
         }
@@ -221,15 +239,21 @@ void main() {
         'A test to verify atSign is activated and .atKeys file is generated using activate_cli',
         () async {
       List<String> args = [
+        // The CLI infers no command from the options; it must be named.
+        'onboard',
         '-a',
         atSign,
         '-c',
         at_demos.cramKeyMap[atSign]!,
         '-r',
-        'vip.ve.atsign.zone'
+        'vip.ve.atsign.zone',
+        // Without -k the CLI writes the generated keyfile to the home
+        // directory's real keys dir.
+        '-k',
+        onboardingPreference.atKeysFilePath!,
       ];
       // perform activation of atSign
-      await auth_cli.wrappedMain(args);
+      await runCliCommand(args);
 
       /// ToDo: test should NOT exit with status 0 after activation is complete
       /// Exiting with status 0 is ideal behaviour, but for the sake of the test we need to be
@@ -237,6 +261,10 @@ void main() {
 
       // Authenticate atSign with the .atKeys file generated via the activate_cli tool
       expect(await File(onboardingPreference.atKeysFilePath!).exists(), true);
+      // NOTE: the activation left a client in the static cache, keyed without
+      // the storage path this preference asks for. Without the eviction the
+      // authenticate below reuses that client and the preference does nothing.
+      await evictCachedAtClients();
       expect(await onboardingService.authenticate(), true);
     });
 
@@ -246,17 +274,41 @@ void main() {
   });
 }
 
-AtOnboardingPreference getPreferences(String atSign) {
+/// Waits for the client an onboard brought up to finish its startup tail —
+/// successfully or not — before a test deletes the `.atKeys` file that tail
+/// is still writing to.
+///
+/// A post-quantum activation runs its startup as an unawaited task that files
+/// key material through `AtKeysIo.update`, which reads the keyfile and writes
+/// it back, so a delete landing mid-update is undone and the next onboard
+/// refuses at `AtFileUtil.ensureWritable` instead of reaching the activation
+/// check under test.
+Future<void> quiesceStartupTail(AtOnboardingService service) async {
+  final client = service.atClient;
+  if (client is AtClientImpl) {
+    // ignore: experimental_member_use
+    await client.pqBootstrap?.startupComplete;
+  }
+}
+
+/// Builds the onboarding preference these tests share.
+///
+/// [posture] is a constructor argument because the field is final; omitted,
+/// the preference takes the SDK default.
+AtOnboardingPreference getPreferences(String atSign, {PqPosture? posture}) {
   atSign = AtUtils.fixAtSign(atSign);
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
+  AtOnboardingPreference atOnboardingPreference = (posture == null
+      ? AtOnboardingPreference()
+      : AtOnboardingPreference(posture: posture))
     ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = virtualenvRootPort
     ..isLocalStoreRequired = true
     ..hiveStoragePath = 'storage/hive/client'
     ..commitLogPath = 'storage/hive/client/commit'
     ..privateKey = null
     ..cramSecret = at_demos.cramKeyMap[atSign]
-    ..atKeysFilePath = '$atKeysFilePath/${atSign}_key.atKeys'
-    ..downloadPath = atKeysFilePath
+    ..atKeysFilePath = testKeysFile(atSign)
+    ..downloadPath = testKeysDir
     ..appName = 'wavi'
     ..deviceName = 'pixel';
 

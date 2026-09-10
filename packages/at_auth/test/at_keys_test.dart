@@ -98,9 +98,7 @@ void main() {
       // Field-for-field, NOT byte-identical, and the name says so: this
       // compares two Maps, and Dart's Map equality ignores key order. The
       // emitter has one fixed field order, so a legacy file written elsewhere
-      // comes back with the same entries in a different sequence. The test
-      // said "byte-identically" until 2026-08-18, which is what made an
-      // acceptance row claiming byte identity read as already proven.
+      // comes back with the same entries in a different sequence.
       final reread =
           AtKeys.fromJson(Map<String, dynamic>.from(encryptedAtKeysMap))
             ..atsign = '@alice🛠'.toAtsign();
@@ -1241,14 +1239,12 @@ void main() {
 
       test('a status this build cannot read is advertised, with its token', () {
         // The keyfile's status vocabulary is open, so a newer build may say
-        // something about a signing key that this one has never heard of. This
-        // selector read exactly `retired` until 2026-08-22 and SKIPPED such a
-        // key — which sounds cautious and is not: the advertisement is
+        // something about a signing key that this one has never heard of.
+        // Skipping such a key sounds cautious and is not: the advertisement is
         // rewritten whole on every publish, so an omitted entry withdraws the
         // key, taking with it both what verifies its old envelopes and
-        // whatever its owner last said about it. Now that the advertisement's
-        // own status is an open token there is nothing left to guess: the
-        // keyfile's word travels out unchanged.
+        // whatever its owner last said about it. The keyfile's word travels
+        // out unchanged instead.
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
           ...signingPair('E1', CryptographicMaterialAlgorithm.rsa2048,
               value: 'rsa', status: CryptographicMaterialStatus.of('revoked')),
@@ -1363,6 +1359,32 @@ void main() {
           legacyAtKeys(atsign: '@alice'.toAtsign())
               .resolveAuthenticatingEnrollment(),
           isNull);
+    });
+
+    test('the enrollment to authenticate as is the one with typed material',
+        () {
+      expect(
+          AtKeys(
+                  atsign: '@alice'.toAtsign(),
+                  keysList: [authKey('auth:mldsa65:1', enrollmentId: 'E1')])
+              .enrollmentToAuthenticateAs(),
+          'E1');
+    });
+
+    test('a legacy keyfile authenticates as its flat stored enrollment', () {
+      final legacy = legacyAtKeys(atsign: '@alice'.toAtsign());
+      // ignore: deprecated_member_use_from_same_package
+      expect(legacy.enrollmentId, isNotNull,
+          reason: 'the fixture must store an id for this to say anything');
+      // ignore: deprecated_member_use_from_same_package
+      expect(legacy.enrollmentToAuthenticateAs(), legacy.enrollmentId);
+    });
+
+    test('a keyfile that predates enrollments authenticates as primary', () {
+      final ancient = legacyAtKeys(atsign: '@alice'.toAtsign());
+      // ignore: deprecated_member_use_from_same_package
+      ancient.enrollmentId = null;
+      expect(ancient.enrollmentToAuthenticateAs(), 'primary');
     });
   });
 }

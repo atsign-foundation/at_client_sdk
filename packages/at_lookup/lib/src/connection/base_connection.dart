@@ -33,7 +33,7 @@ abstract class BaseConnection extends AtConnection {
       return;
     }
     try {
-      logger.info('close(): calling destroy()'
+      logger.finer('close(): calling destroy()'
           ' on connection to ${_transport.description}');
       _transport.destroy();
     } catch (e) {

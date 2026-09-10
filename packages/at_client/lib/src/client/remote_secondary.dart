@@ -8,9 +8,10 @@ import 'package:at_auth/at_auth.dart'
         authenticatorForChops,
         authenticatorForCramSecret,
         authenticatorForPrivateKey;
+
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/client/secondary_address_finder_source.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -47,6 +48,10 @@ class RemoteSecondary implements Secondary {
   String? _privateKey;
   String? _cramSecret;
 
+  /// The algorithm the constructor resolved, so an authenticator built from a
+  /// bare signer names the same one the lookup was told to use.
+  late final SigningAlgoType _signingAlgoType;
+
   /// Hands the lookup an authenticator, so authentication is decided from the
   /// keystore rather than from credentials parked on at_lookup.
   ///
@@ -77,18 +82,18 @@ class RemoteSecondary implements Secondary {
     }
 
     // No keystore. The order from here is the ladder's own - atChops, then
-    // privateKey, then cramSecret - so a client holding more than one
-    // authenticates with the same credential it did before. That precedence is
-    // stated rather than fallen into.
+    // privateKey - so a client holding both authenticates with the same
+    // credential the ladder chose. That precedence is stated rather than
+    // fallen into.
     final chops = _atChops;
     if (chops != null) {
       lookUp.authenticator = authenticatorForChops(
         _atSign,
         chops,
         enrollmentId: lookUp.enrollmentId,
-        signingAlgo: _preference.signingAlgoType,
-        // The same preference fields the constructor stamps on the lookup, so
-        // the authenticator and the ladder it replaces read them alike.
+        signingAlgo: _signingAlgoType,
+        // The same preference field the constructor stamps on the lookup, so
+        // the authenticator and the ladder it replaces read it alike.
         hashingAlgo: _preference.hashingAlgoType,
       );
       return;
@@ -106,10 +111,10 @@ class RemoteSecondary implements Secondary {
       return;
     }
 
-    // Nothing in this tree sets `preference.cramSecret` - every in-tree CRAM
-    // goes through onboarding, which builds its own lookup - but the field is
-    // public API, so a consumer that set it kept working through the ladder
-    // and must keep working through the seam.
+    // Last in the ladder's own order. Nothing in this tree sets
+    // `preference.cramSecret` - every in-tree CRAM goes through onboarding,
+    // which builds its own lookup - but the field is public API, so a consumer
+    // that sets it must keep working through the seam.
     final cramSecret = _cramSecret;
     if (cramSecret != null) {
       lookUp.authenticator = authenticatorForCramSecret(_atSign, cramSecret);
@@ -117,15 +122,19 @@ class RemoteSecondary implements Secondary {
     }
 
     // None of the four: nothing to authenticate with, so nothing is
-    // installed. That is a real mode - at_server_status holds no key material
-    // at all, and an OTP enrollment submit routes through auth: false.
+    // installed. That is a real mode - at_status_impl holds no key material at
+    // all, and an OTP enrollment submit routes through auth: false.
   }
 
+  /// [signingAlgoType] overrides the preference's PKAM signing algorithm: the
+  /// algorithm is a property of the enrollment record, and one preference can
+  /// serve clients on two enrollments of one atSign with different algorithms.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
       AtChops? atChops,
       AtLookUp? atLookUp,
       String? enrollmentId,
+      SigningAlgoType? signingAlgoType,
       AtKeysIo? atKeysIo}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
@@ -149,16 +158,19 @@ class RemoteSecondary implements Secondary {
           rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
           transport: secureSocketTransport(secureSocketConfig),
           authenticator: null,
-          secondaryAddressFinder:
-              AtClientManager.getInstance().secondaryAddressFinder ??
-                  CacheableSecondaryAddressFinder(
-                      preference.rootDomain, preference.rootPort),
+          secondaryAddressFinder: processSecondaryAddressFinder() ??
+              CacheableSecondaryAddressFinder(
+                  preference.rootDomain, preference.rootPort),
           clientConfig: _getClientConfig(),
         );
     this.atLookUp.enrollmentId = enrollmentId;
+    final resolvedSigningAlgo =
+        // ignore: deprecated_member_use_from_same_package
+        signingAlgoType ?? preference.signingAlgoType;
     logger.finer(
-        'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
-    this.atLookUp.signingAlgoType = preference.signingAlgoType;
+        'signingAlgoType: $resolvedSigningAlgo hashingAlgoType: ${preference.hashingAlgoType}');
+    _signingAlgoType = resolvedSigningAlgo;
+    this.atLookUp.signingAlgoType = resolvedSigningAlgo;
     this.atLookUp.hashingAlgoType = preference.hashingAlgoType;
     this.atLookUp.atChops = atChops;
     _installAuthenticator();
@@ -187,13 +199,17 @@ class RemoteSecondary implements Secondary {
 
   /// Executes the command returned by [VerbBuilder] on a remote
   /// secondary server. Authentication is handled by the injected
-  /// `AtLookUp`. [sync] is accepted for [Secondary] interface
-  /// compatibility but is ignored. [cameFromServer] is also accepted
-  /// for interface compatibility and ignored — remote secondaries
-  /// don't have a client→server sync queue to skip enqueuing into.
+  /// `AtLookUp`. [cameFromServer] is accepted for [Secondary] interface
+  /// compatibility and ignored — remote secondaries don't have a
+  /// client→server sync queue to skip enqueuing into.
   @override
   Future<String> executeVerb(VerbBuilder builder,
-      {sync = false, bool cameFromServer = false}) async {
+      {@Deprecated('Inert: nothing reads it, so passing it suppresses '
+          'nothing. Whether a local write is enqueued for '
+          'client→server sync is decided by cameFromServer. '
+          'Removed in 4.0.')
+      sync = false,
+      bool cameFromServer = false}) async {
     try {
       String verbResult;
       logger.finer('Command sent to server: ${builder.buildCommand()}');
@@ -212,7 +228,12 @@ class RemoteSecondary implements Secondary {
     }
   }
 
-  Future<String> executeAndParse(VerbBuilder builder, {sync = false}) async {
+  Future<String> executeAndParse(VerbBuilder builder,
+      {@Deprecated('Inert: nothing reads it, so passing it suppresses '
+          'nothing. Whether a local write is enqueued for '
+          'client→server sync is decided by cameFromServer. '
+          'Removed in 4.0.')
+      sync = false}) async {
     // ignore: prefer_typing_uninitialized_variables
     var verbResult;
     try {
@@ -273,9 +294,8 @@ class RemoteSecondary implements Secondary {
   }
 
   Future<String?> findSecondaryUrl() async {
-    var secondaryAddress = await AtClientManager.getInstance()
-        .secondaryAddressFinder!
-        .findSecondary(_atSign);
+    var secondaryAddress =
+        await processSecondaryAddressFinder()!.findSecondary(_atSign);
     return secondaryAddress.toString();
   }
 

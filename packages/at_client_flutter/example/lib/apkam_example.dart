@@ -131,17 +131,14 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
     try {
       _logger.info('Initiating simulated request for $appName');
 
-      final atLookup = AtLookupImpl(
-        currentAtSign,
-        atClient.getPreferences()!.rootDomain,
-        atClient.getPreferences()!.rootPort,
-        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+      final atLookup = AtLookUp.withSecureSocket(
+        atSign: currentAtSign,
+        rootDomain: AtRootDomain(
           atClient.getPreferences()!.rootDomain,
           atClient.getPreferences()!.rootPort,
         ),
-        transportFactory: SecureSocketTransportFactory(
-          secureSocketConfig: SecureSocketConfig(),
-        ),
+        transport: secureSocketTransport(SecureSocketConfig()),
+        authenticator: null,
       );
 
       // STEP 1: Generate an OTP using the MANAGER client

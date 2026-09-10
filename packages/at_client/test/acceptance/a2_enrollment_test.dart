@@ -1,25 +1,99 @@
 /// A2 · Enrollments (a new enrollment joins).
 ///
-/// Start state: @alice pq-native; pqpublickey published; alice1 (E1) online.
+/// Start state: @alice pq-native; pq_signing_root published; alice1 (E1) online.
 /// Catalogue: `docs/projects/pq/acceptance.md` section 3.
 library;
 
 import 'package:test/test.dart';
 
-import 'blockers.dart';
+import 'proven_elsewhere.dart';
 
 void main() {
   group('A2 · enrollments', () {
     test('UC-A2.1 · new enrollment approved by an online enrollment', () {
-      // GIVEN @alice pq-native; pqpublickey published; alice1 (E1) online.
+      // GIVEN @alice pq-native; pq_signing_root published; alice1 (E1) online.
       // WHEN  alice2 requests enrollment E2 for [app_1.my_apps]; alice1 approves.
       // THEN  nothing in the conveyance path is RSA-wrapped (apkamSymmetricKey
-      //       rides X-Wing); alice2 holds pqpk private + the app_1 nskey private
+      //       rides X-Wing); alice2 holds the app_1 nskey private
       //       but NOT app_2's; alice2 authenticates PQ and decrypts @alice's
       //       app_1.my_apps self data; an app_2 key request is refused; E2's
       //       APKAM key is a distinct, individually-revocable record.
-      fail('not implemented');
-    }, skip: ss2);
+      provenIn(
+          'tests/at_functional_test/test/enrollment_pq_key_exchange_live_test.dart',
+          'a pq enrollment reaches the atServer with no RSA-wrapped key',
+          proves:
+              'the enrol request carries no RSA-wrapped apkamSymmetricKey, and the companion test has the approver mint it and the enrollee recover it',
+          clauses: [
+            'Nothing in the conveyance path is RSA-wrapped',
+          ]);
+      provenIn(
+        'tests/at_functional_test/test/enrollment_chain_link_live_test.dart',
+        'the root private reaches a privileged enrollment and no other',
+        proves: 'the entitlement, as a differential rather than an assertion '
+            'about one enrollment: a fully privileged and a scoped enrollment '
+            'are approved in the same run, and the privileged one receives '
+            'exactly one envelope more than the scoped one. A test that only '
+            'watched the privileged enrollment could not tell a root that is '
+            'withheld from a root that is sent to everybody',
+        clauses: ['the root is held only by fully privileged enrollments'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_signing_chain_test.dart',
+        'climbs a chain link to an anchored parent',
+        proves: 'the walk itself: verifyChain returns anchored and states the '
+            'path it took, so the chain is self-describing rather than '
+            'trusted. The siblings pin the other two verdicts — unsigned '
+            'during the changeover, and chained where the parent is not the '
+            'root — which is what stops anchored being the only reachable '
+            'answer. No atServer is in this loop: the input is a document and '
+            'the output is a verdict over it',
+        clauses: [
+          'carries a chain link that `verifyChain` walks to the '
+              'signing root'
+        ],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_rotation_live_test.dart',
+        'UC-A5.2/A5.3 · a revoked enrollment cannot authenticate',
+        proves: 'that the APKAM record is per-enrollment and revocable on its '
+            'own: three enrollments are established with three distinct APKAM '
+            'keypairs — asserted, because three sharing one keypair would '
+            'make the revocation meaningless — the atServer is confirmed to '
+            'be serving the doomed enrollment\'s own key, and authentication '
+            'is accepted before the revocation as the control',
+        clauses: ['distinct, individually-revocable record'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/pq_scoped_enrollment_self_read_test.dart',
+        'UC-A2.1: a scoped ML-DSA enrollment reads its own namespace and is '
+            'refused the key channel of another',
+        proves: 'both halves of that clause in one enrollment, which is what '
+            'nothing did before: the two were each covered separately and '
+            'never together. PQ AUTH: the enrollment is submitted with an '
+            'ML-DSA-65 APKAM keypair, has already PKAM-authenticated by the '
+            'time the client exists, and the keyfile holds ML-DSA-65 typed '
+            'material under the id it is still running as — submitting the '
+            'same enrollment as rsa2048 reddens it, because the client then '
+            'retrofits onto a replacement. DECRYPTS: it opens @alice\'s own '
+            'record in its granted namespace, read from the atServer since it '
+            'has a store of its own, and the record is asserted to be on the '
+            'nskey data path first — a legacy write is readable by every '
+            'enrollment of the atSign for an unrelated reason. REFUSED: the '
+            'atServer refuses it the envelope channel of the namespace it was '
+            'not granted, naming the verb, the enrollment id and the '
+            'namespace, with the approver reading BOTH channels as the '
+            'control and the same client reading the granted one on the same '
+            'verb — so only the namespace varies. ⚠️ The scoped enrollment '
+            'cannot heal a missing private by pulling: the per-enrollment '
+            'secret request gate serves only fully privileged requesters, so '
+            'what this proves is the approval-time PUSH. The read must be '
+            'made after `pqBootstrap.startupComplete`, because the sweep that '
+            'files an arriving private is a fire-and-forget startup step',
+        clauses: [
+          'authenticates PQ and decrypts',
+        ],
+      );
+    });
 
     test('UC-A2.2 · second host using the same (copied) keyfile', () {
       // GIVEN @alice pq-native; alice1 on E1; a second host runs against a copy
@@ -28,20 +102,353 @@ void main() {
       // THEN  the copy SHARES E1's one APKAM keypair and key package — the two
       //       hosts are the same enrollment, one recipient. Secrets already
       //       sealed to that key package open on both, and both hosts share the
-      //       pqpublickey private and E1's namespace authorisations. Revocation
+      //       signing-root private and E1's namespace authorisations. Revocation
       //       is per-enrollment, so revoking E1 cuts every host sharing the copy.
-      fail('not implemented');
-    }, skip: ss2);
+      provenIn(
+        'tests/at_functional_test/test/copied_keyfile_test.dart',
+        'a copied keyfile is the same enrollment and the same recipient',
+        proves: 'a keyfile round-tripped through its serialized form — which '
+            'is what copying it does — resolves to the same key package id, '
+            'that id is the one the enrollment advertised, and the copy '
+            'authenticates against the live atServer as the same enrollment '
+            'id. One enrollment and one recipient, so there is a single thing '
+            'to revoke and an operator cannot miss the second host. The '
+            'openable-on-both half is asserted at the KEM private half rather '
+            'than at the id: an id that survived the round trip while the '
+            'seed did not would leave the second host advertising a key '
+            'package it can open nothing with, and the failure would surface '
+            'at the first secret conveyed to it',
+        clauses: [
+          'Secrets already sealed to that key package are openable on both',
+        ],
+      );
+      provenIn(
+        'tests/at_functional_test/test/copied_keyfile_test.dart',
+        'a copied keyfile is the same enrollment and the same recipient',
+        proves: 'the revocation consequence, live and as a before/after pair '
+            'on one connection shape: the copy authenticates, the enrollment '
+            'is revoked, and the same copy is refused. The keypair in the '
+            'file is untouched throughout, so what changed is the enrollment '
+            'record — which is why one revoke reaches a host the operator '
+            'never knew about',
+        clauses: [
+          'Revocation is per-enrollment (`enroll:revoke`), so revoking E1 '
+              'cuts every host',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/pq_signing_root_test.dart',
+        'a copied keyfile signs with the root private on the second host',
+        proves: 'the signing-root half, which the live test above does not '
+            'reach: nothing anywhere copied a keyfile that HOLDS the root '
+            'private and then drove a second client from it, so the clause '
+            'rested on the case where the copy is conveyed nothing. The copy '
+            'resolves the SAME private under the SAME kid, and — the part '
+            'that makes it worth stating — produces a signature the atSign\'s '
+            'PUBLISHED root verifies, so a verifier cannot tell the two hosts '
+            'apart. An uncopied keyfile reading the same record resolves '
+            'nothing, which is the control. The enrollment-id assertion is '
+            'the mechanism for the authorisations half: the copy presents as '
+            'E1, and what E1 may reach is the atServer\'s decision, gated '
+            'live by UC-A2.3. Mutation-proven twice — dropping the atSign '
+            'material from a serialized keyfile reddens the resolve, and '
+            'dropping the flat enrollment id reddens the identity',
+        clauses: ['Both hosts share `pq_signing_root@alice⁻¹`'],
+      );
+    });
 
     test('UC-A2.3 · namespace-restricted enrollment', () {
       // GIVEN alice1 (E1, *) approves alice3 for app_1.my_apps only (E3).
       // WHEN  alice3 enrolls.
-      // THEN  alice3 gets the root pqpublickey private and, by approval-time
-      //       push, only the app_1.my_apps nskey private; app_2's is never
+      // THEN  alice3, being namespace-scoped rather than fully privileged, does
+      //       NOT get the signing-root private, and by approval-time push gets
+      //       only the app_1.my_apps nskey private; app_2's is never
       //       delivered. The boundary is enforced at the atServer __ssenv
       //       namespace-delivery gate, not by a client-side refusal alone, so
       //       alice3 can read/write app_1.my_apps but not app_2.my_apps.
-      fail('not implemented');
-    }, skip: ss4);
+      provenIn(
+        'tests/at_functional_test/test/enrollment_namespace_gate_test.dart',
+        'a scoped enrollment cannot read the envelope channel of a namespace',
+        proves: 'the atServer refuses the scoped enrollment\'s llookup of an '
+            '__ssenv record in an ungranted namespace, naming the enrollment '
+            'and the key, while the same enrollment reads the granted '
+            'namespace on the same connection and the approver reads both — '
+            'so the refusal is a gate rather than an absent record',
+        clauses: ['enforced at the atServer `__ssenv` namespace-delivery gate'],
+      );
+
+      provenIn(
+        'tests/at_functional_test/test/enrollment_namespace_gate_test.dart',
+        'a scoped enrollment can read and write the namespace it was granted',
+        proves: 'both verbs against a live atServer, because "read/write" is '
+            'two authorisations and the atServer answers them separately: an '
+            'llookup and an update of an ordinary record in the ungranted '
+            'namespace are each refused under their own verb, naming the '
+            'enrollment and the key, while both succeed in the granted one on '
+            'the same connection. The approver reads both records first, so '
+            'the refusals are a gate rather than an absent record. A gate '
+            'refusing reads while accepting writes would let a scoped '
+            'enrollment plant records in a namespace it cannot see',
+        clauses: ['can read/write `app_1.my_apps` but not `app_2.my_apps`'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/enrollment_chain_link_live_test.dart',
+        'the root private reaches a privileged enrollment and no other',
+        proves: 'the signing-root private is conveyed to a fully privileged '
+            'enrollment and withheld from a scoped one, with the grant '
+            'asserted to have actually differed between the two arms',
+        clauses: ['gets **no** `pq_signing_root'],
+      );
+      provenIn(
+        'packages/at_client/test/secret_sharing_approver_test.dart',
+        'shares namespace-authorized secrets with the approved enrollment',
+        proves: 'the sender-side half — shareAllSecretsWith forwards only the '
+            'secrets the approved namespaces authorize, so a private for an '
+            'ungranted namespace is never put on the wire in the first place. '
+            'The approver holds secrets in two namespaces and the enrollment '
+            'is authorised for one, so the count is the discriminator',
+        clauses: ['nskey is never delivered'],
+      );
+    });
+
+    test('UC-A2.4 · the key package advertises the configured KEM', () {
+      // GIVEN the deployment running alice4 sets
+      //       AtClientPreference.keyEstablishmentAlgorithms = [ml-kem-1024],
+      //       where the default is [x-wing], the hybrid.
+      // WHEN  alice4 requests an enrollment, minting the key package that rides
+      //       enroll:request.
+      // THEN  the advertised key is a 1568-byte ML-KEM-1024 encapsulation key
+      //       rather than a 1216-byte X-Wing one — the arms differ in SHAPE,
+      //       not only in a label — keys[].alg names ml-kem-1024 and suites
+      //       claims ml-kem-1024-rfc9180-v1 alone, so the package never claims
+      //       a construction its own key cannot decapsulate. The private is
+      //       filed as its 64-byte SEED with the algorithm alongside and
+      //       re-derives the same kpid after a restart; filing the 3168-byte
+      //       expanded decapsulation key would leave the enrollment unopenable
+      //       at the next start, with no error when the mistake is made. A key
+      //       that already exists keeps its own algorithm whatever the
+      //       preference later says, because the kpid is the address peers seal
+      //       to and metadata.keyPackage is never rewritten. An algorithm this
+      //       build does not implement fails the mint rather than quietly
+      //       minting the other one.
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'a client configured for ML-KEM-1024 mints and advertises it',
+        proves: 'the mint under the preference, asserted on the key LENGTH '
+            '(1568 against the hybrid\'s 1216) as well as the declared alg, so '
+            'the two arms cannot pass by agreeing on a label alone. Its '
+            'siblings in the same group carry the rest of the row: "the '
+            'persisted seed re-derives an ML-KEM package" (restart '
+            'recoverability), "a loaded key keeps its own algorithm whatever '
+            'the preference says" (the frozen kpid), and "an unimplemented '
+            'algorithm fails rather than minting something else".',
+        clauses: ['1568-byte ML-KEM-1024'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'the persisted seed re-derives an ML-KEM package',
+        proves: 'restart recoverability — the 64-byte seed is what is filed, '
+            'and re-deriving from it reproduces the same kpid, so an address '
+            'peers already hold survives a restart',
+        clauses: ['re-derives the same kpid'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'a loaded key keeps its own algorithm whatever the preference says',
+        proves: 'the frozen kpid: a preference change does not re-mint an '
+            'existing package, because the address is derived from the key '
+            'and re-minting would silently strand everything sealed to it',
+        clauses: ['an existing key keeps its own algorithm'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_minting_test.dart',
+        'a second algorithm is minted, filed and advertised beside the first',
+        proves: 'the other half of the same clause, which the load path '
+            'cannot show: a newly configured KEM is minted and advertised '
+            'BESIDE the existing key rather than replacing it. The key '
+            'already advertised keeps its kid — asserted, because an '
+            'enrollment that gained a key has not moved — and both entries '
+            'come back active, so a sender can negotiate to either',
+        clauses: ['an existing key keeps its own algorithm'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'an unimplemented algorithm fails rather than minting something else',
+        proves: 'the failing-closed arm — the mint throws rather than quietly '
+            'substituting the algorithm this build does have, which is the '
+            'one outcome an app could not detect',
+        clauses: ['an unimplemented algorithm fails the mint'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'what gets written declares what the advertised keys can open',
+        proves: 'the suites list is DERIVED from the package\'s own keys, not '
+            'stated from what this build supports — the distinction that '
+            'stops a package advertising one KEM from claiming it can open '
+            'constructions built on the other. "a package advertising no key '
+            'claims no suite" and "an unrecognised key algorithm contributes '
+            'no suite" hold the failing-closed direction.',
+        clauses: ['`keys[].alg = ml-kem-1024`'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        // NOTE: provenIn matches raw source, so a test name split across two
+        // adjacent string literals can only be cited up to that boundary.
+        'UC-A2.5 · a sender picks by its own order and stamps the matching',
+        proves: 'the version byte a real peer stamps when it seals to an '
+            'ML-KEM-1024 key, read off the envelope the atServer is holding '
+            'rather than computed. The byte is pinned as a RAW LITERAL — it '
+            'read sealVersionFor(mlKem1024Rfc9180) until 2026-08-27, which '
+            'compares the byte on the wire against the function that put it '
+            'there and pins nothing. Measured, not argued: under a mutation '
+            'that renumbers the wire consistently in both algo_ids.dart and '
+            "at_chops' version table, the old assertions stay green (exit 0) "
+            'and the literal reddens quoting its own reason. ⚠️ The recipient '
+            'here advertises BOTH KEMs and the sender\'s order selects the '
+            'ML-KEM key, where this row\'s Given advertises ML-KEM alone; the '
+            'seal target is an ML-KEM-1024 encapsulation key either way, '
+            'which is what fixes the byte, and no live test anywhere '
+            'advertises ML-KEM on its own',
+        clauses: ['seals under `ml-kem-1024-rfc9180-v1`'],
+      );
+    });
+
+    test('UC-A2.5 · an enrollment amends its own key package', () {
+      // GIVEN alice4 enrolled (E4) advertising a single X-Wing key, with
+      //       secrets already sealed to that kpid sitting unread, and a
+      //       preference naming BOTH x-wing and ml-kem-1024.
+      // WHEN  alice4 starts, and KeyPackageMinting mints the missing ML-KEM
+      //       keypair, files it, rebuilds and re-signs the key package with
+      //       both keys, and sends enroll:update on its own
+      //       APKAM-authenticated connection.
+      // THEN  enroll:listns returns the amended package (two keys, suites
+      //       covering both KEMs, still derived from the package's own keys);
+      //       it still verifies against E4's _apsk, because the update path
+      //       relaxes no signature check; a peer negotiates to whichever key
+      //       its own keyAlgos order prefers; the pre-existing envelope at the
+      //       OLD kpid still opens, because a key that is merely joined by a
+      //       second stays active and its private half is retained either way;
+      //       nothing already sealed is re-sealed and no conveyance fires, the
+      //       updater holding the plaintext already; and an unnamed sibling
+      //       metadata key survives the write.
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.5 · an enrollment amends its own key package',
+        proves: 'a client configured for both KEMs amends its own record at '
+            'startup: enroll:listns returns two keys where the creating '
+            'request carried one, the package still verifies against the '
+            '_apsk the atServer is serving, the original kpid keeps its '
+            'address and stays active, and the suites list widens to cover '
+            'both. A DIFFERENTIAL — the control arm is a client whose list '
+            'matches what it was created with, which must leave the record '
+            'alone, and it is what shows both arms started from one key.',
+        clauses: [
+          '`keys[]` has two entries',
+          'still verifies against E4',
+        ],
+      );
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.5 · setting keyPackage leaves a sibling metadata key alone',
+        proves: "the second Then — the atServer merges metadata per named "
+            'key, so a write naming only keyPackage does not withdraw a '
+            'sibling field a later build added. Driven by two enroll:updates '
+            'rather than through the client, because the client sends one '
+            'named key either way and could not tell a merge from a replace.',
+        clauses: ['an unnamed metadata key survives'],
+      );
+
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.5 · an envelope sealed before the amendment still opens after it',
+        proves: 'a secret sealed to the enrollment BEFORE it amends its key '
+            'package is opened by the client that exists after — the arm the '
+            'catalogue calls the silent, unattributable loss. Both the '
+            'pre-amendment and post-amendment clients sweep that address and '
+            'a sweep deletes what it opens, so the pre-amendment one is '
+            'silenced first; without that the row passes on whichever won the '
+            'race. Break-it: seal nothing beforehand and the precondition '
+            'assertion reddens rather than the outcome.',
+        clauses: ['the pre-existing envelope at'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.5 · a sender picks by its own order',
+        proves: 'two senders differing ONLY in sealsToKeyAlgorithms order, '
+            'against one recipient advertising both KEMs: the ML-KEM-first '
+            'sender seals to the ML-KEM key and stamps 0x03, the X-Wing-first '
+            'one stamps 0x02. The version byte is asserted as well as the '
+            'suite because a mismatch between them opens on the far side as '
+            'an AEAD failure naming neither party. Break-it: give both arms '
+            'the same order and the ML-KEM assertion reddens, so the arms '
+            'genuinely differ in the varied thing.',
+        clauses: ['negotiates to whichever key its own'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_minting_test.dart',
+        'an amendment conveys nothing over the wire',
+        proves: 'that amending sends nothing: the amendment is driven with a '
+            'control asserting it really happened, and no record is written. '
+            '`put` is stubbed to RECORD rather than left unstubbed, because '
+            'an unstubbed call on a mock throws and the test would then '
+            'redden for the mock rather than for a conveyance. '
+            'Mutation-proven — making the amendment write one reddens it, '
+            'quoting this assertion',
+        clauses: [
+          'nothing already sealed is re-sealed, and no conveyance '
+              'fires'
+        ],
+      );
+    });
+
+    test('UC-A2.6 · only the enrollment itself may amend its metadata', () {
+      // GIVEN alice1 (E1, fully privileged) and alice4 (E4, scoped) enrolled.
+      // WHEN  E1 sends enroll:update naming E4; and separately a legacy-PKAM /
+      //       owner connection (no enrollmentId) sends the same.
+      // THEN  both are refused — the second DESPITE carrying full permissions
+      //       everywhere else, which is the arm that goes green for the wrong
+      //       reason if the self-only check is written as an authorization
+      //       lookup rather than an identity test (isAuthorized short-circuits
+      //       a connection with no enrollment id to true). The same request
+      //       against a REVOKED E4 is refused, so a revoked enrollment cannot
+      //       re-advertise an encapsulation target. The accepted arm — E4
+      //       updating E4 — runs in the same session, or the two refusals
+      //       prove only that the verb refuses everything.
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.6 · only the enrollment itself may amend its metadata',
+        proves: 'both refusals against a live atServer, with the accepted arm '
+            'in the same session so they are about WHO asked rather than the '
+            'request being malformed. The owner arm is the one that matters: '
+            'it carries full permissions everywhere else, and isAuthorized '
+            'short-circuits a connection with no enrollment id to true, so it '
+            'goes green for the wrong reason if the self-only check is an '
+            'authorization lookup rather than an identity test. No mock can '
+            'stand in — a fake that accepts everything makes the interlock '
+            'and its absence identical.',
+        clauses: [
+          'both are refused',
+          'the arms must differ',
+        ],
+      );
+
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.6 · a revoked enrollment cannot re-advertise a key package',
+        proves: 'the outcome, by the two mechanisms that actually produce it — '
+            'measured 2026-08-24, there is NO revocation check inside '
+            'enroll:update. The revoked enrollment cannot authenticate at all '
+            '(AT0027 "is revoked"), and every other connection including the '
+            'fully-privileged owner is refused as not-self (AT0011 '
+            '"enroll:update is self-only"). Both arms are asserted on their '
+            'error text rather than on throwing, because a connection failing '
+            'for an unrelated reason satisfies a bare throwsA. The control '
+            'runs first and is accepted; skip the revoke and the same request '
+            'succeeds, which is what attributes the refusal to revocation. '
+            '⚠️ NOT proven: an enrollment revoked while it holds an already '
+            'open, already authenticated connection — this arm reconnects.',
+        clauses: ['the same request against a'],
+      );
+    });
   });
 }

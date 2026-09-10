@@ -12,11 +12,23 @@ import 'package:chalkdart/chalk.dart';
 
 import 'home_directory_util.dart';
 
+/// A client for the commands that only read or administer an atSign — `otp`,
+/// `list`, `spp`, `approve` and the rest.
+///
+/// [waitForPqStartup] holds the command until the client's post-quantum
+/// startup has finished, bounded by [startupTailBound]; a command that reads
+/// what that startup leaves behind needs it, one that sends a single verb and
+/// exits does not.
+///
+/// [posture] is how far into the post-quantum rollout this invocation runs;
+/// null means whatever the at_client this was built against defaults to.
 Future<AtClient> createAtClient(
     {required String atSign,
     String? atKeysFilePath,
     String? rootDomain,
-    String? passPhrase}) async {
+    String? passPhrase,
+    PqPosture? posture,
+    bool waitForPqStartup = true}) async {
   final int maxConnectAttempts = 5;
   String nameSpace = 'at_activate';
   atSign = AtUtils.fixAtSign(atSign);
@@ -41,14 +53,15 @@ Future<AtClient> createAtClient(
   // Parse rootServer using AtRootDomain
   AtRootDomain parsedRootDomain = AtRootDomain.parse(rootServer);
 
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..atKeysFilePath = atKeysFilePathToUse
-    ..namespace = nameSpace
-    ..rootDomain = parsedRootDomain.rootDomain
-    ..rootPort = parsedRootDomain.rootPort
-    ..passPhrase = passPhrase
-    ..storagePath = localStoragePathToUse
-    ..downloadPath = downloadPathToUse;
+  AtOnboardingPreference atOnboardingPreference =
+      AuthCliArgs.preferenceUnder(posture)
+        ..atKeysFilePath = atKeysFilePathToUse
+        ..namespace = nameSpace
+        ..rootDomain = parsedRootDomain.rootDomain
+        ..rootPort = parsedRootDomain.rootPort
+        ..passPhrase = passPhrase
+        ..storagePath = localStoragePathToUse
+        ..downloadPath = downloadPathToUse;
 
   AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(
       atSign, atOnboardingPreference,
@@ -80,6 +93,20 @@ Future<AtClient> createAtClient(
     throw UnAuthenticatedException(msg);
   }
   stderr.writeln(chalk.brightGreen('Connected'));
-  // Get the AtClient which the onboardingService just authenticated
-  return AtClientManager.getInstance().atClient;
+  final client = AtClientManager.getInstance().atClient;
+  // NOTE: the post-quantum startup — seeding and publishing this atSign's
+  // namespace keys among it — runs unawaited after the client is built, so a
+  // short-lived command would exit before it finishes.
+  if (waitForPqStartup && client is AtClientImpl) {
+    // ignore: experimental_member_use
+    await client.pqBootstrap?.startupComplete.timeout(startupTailBound,
+        onTimeout: () => stderr.writeln(chalk.brightYellow(
+            'The client\'s startup did not finish within '
+            '${startupTailBound.inSeconds}s; continuing. What it left undone '
+            'is retried at the next start.')));
+  }
+  return client;
 }
+
+/// How long a command waits for the client's post-quantum startup to finish.
+const Duration startupTailBound = Duration(seconds: 30);

@@ -1,109 +1,28 @@
 import 'dart:async';
+import 'package:at_client/src/client/at_reachability.dart';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtEnrollment, AtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/service/enrollment_service.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
-import 'package:at_client/src/service/enrollment_service_impl.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
-import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:meta/meta.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
-  /// Builds a client for [atSign] and wires its notification, sync and
-  /// enrollment services.
-  ///
-  /// The caller owns the client's lifetime and ends it with [stop]. Code that
-  /// wants the shared current-atSign client goes on calling
-  /// [AtClientManager.setCurrentAtSign], whose behaviour is unchanged.
-  ///
-  /// ⚠️ The client is NOT invisible to [AtClientManager]. It is filed in
-  /// `AtClientImpl.atClientInstanceMap` like any other, so a later
-  /// [AtClientManager.setCurrentAtSign] for the same atSign adopts THIS client
-  /// rather than building its own — and adopting it replaces its notification,
-  /// sync and enrollment services without stopping the ones it had, then stops
-  /// it on the next atSign switch. Until that is separated, do not mix this
-  /// factory and the manager for one atSign in one process.
-  ///
-  /// [storage] is borrowed by default, so [stop] detaches from it without
-  /// closing it and the caller closes it when done; a bundle built with
-  /// `closedByClient: true` is closed by the client instead, which is what an
-  /// app with no teardown of its own wants. Supplying none falls back to a Hive
-  /// store under the deprecated `preference.hiveStoragePath`.
-  ///
-  /// Each builder replaces one service with the caller's own; by default each
-  /// service is the real one.
-  ///
-  /// Throws a [StateError] when a client for [atSign] is already live, rather
-  /// than handing back one this caller does not own. [stop] releases it.
-  ///
-  /// A failure while building leaves nothing behind: the part-built client is
-  /// stopped, which unfiles it and releases its claim on [storage].
-  static Future<AtClient> create({
-    required String atSign,
-    required AtClientPreference preference,
-    String? namespace,
-    AtClientStorage? storage,
-    AtKeysIo? atKeysIo,
-    String? enrollmentId,
-    AtLookUp? atLookUp,
-    SecondaryAddressFinder? secondaryAddressFinder,
-    FutureOr<NotificationService> Function(AtClient)?
-        notificationServiceBuilder,
-    FutureOr<SyncService> Function(AtClient)? syncServiceBuilder,
-    FutureOr<EnrollmentService> Function(AtClient)? enrollmentServiceBuilder,
-  }) async {
-    if (AtClientImpl.holdsLiveClient(atSign)) {
-      throw StateError(
-          'A client for $atSign is already live. AtClient.create builds a '
-          'client the caller owns, so it will not hand back one owned '
-          'elsewhere; stop() the existing client first.');
-    }
-    if (storage != null && !preference.isLocalStoreRequired) {
-      throw ArgumentError.value(
-          storage,
-          'storage',
-          'preference.isLocalStoreRequired is false for $atSign, so this '
-              'storage would never be opened');
-    }
-    final client = await AtClientImpl.create(
-      atSign,
-      namespace,
-      preference,
-      atKeysIo: atKeysIo,
-      atLookUp: atLookUp,
-      enrollmentId: enrollmentId,
-      storage: storage,
-    );
-    // The client is already filed in `AtClientImpl.atClientInstanceMap` by the
-    // time the services are wired, so a throw here would leave an entry no
-    // caller holds a reference to, still claiming its storage. `stop()`
-    // unfiles it and releases that claim.
-    try {
-      client.notificationService = notificationServiceBuilder == null
-          ? await NotificationServiceImpl.create(client,
-              secondaryAddressFinder: secondaryAddressFinder)
-          : await notificationServiceBuilder(client);
-      client.syncService = syncServiceBuilder == null
-          ? await SyncServiceImpl.create(client)
-          : await syncServiceBuilder(client);
-      client.enrollmentService = enrollmentServiceBuilder == null
-          ? EnrollmentServiceImpl(client, AtEnrollment.create())
-          : await enrollmentServiceBuilder(client);
-    } catch (_) {
-      await client.stop();
-      rethrow;
-    }
-    return client;
-  }
-
   @experimental
   set telemetry(AtTelemetryService? telemetryService);
 
@@ -146,6 +65,40 @@ abstract class AtClient {
   /// emits.
   Future<void> get pendingEmissions;
 
+  /// Waits until other atSigns can seal data to [namespace] for this atSign,
+  /// doing whatever is missing, and reports what happened.
+  ///
+  /// Sending and receiving are not symmetric: sending needs the recipient's
+  /// published key, while receiving needs this atSign's own key published by a
+  /// startup step that is not awaited, so a process can finish its work and
+  /// exit while peers still see no published key for it. This is for the
+  /// caller that must not exit until it is reachable; nothing calls it for
+  /// you, and it is idempotent and cheap when there is nothing to do.
+  ///
+  /// ⚠️ **Must NOT run concurrently with this client's own PQ startup, or with
+  /// itself.** The mint lock's holder token is the enrolment id, so a second
+  /// concurrent mint by the same enrolment reads the lock back, sees its own
+  /// id and mints anyway; the two advertisements carry different key material,
+  /// and a peer that fetched in between holds a generation the owner may no
+  /// longer be able to open.
+  ///
+  /// Answers rather than throws for the two cases that are configuration and
+  /// not failure — a posture that does not seed, and a namespace this
+  /// enrollment cannot hold a key for. Read
+  /// [AtReachabilityResult.isReachable] rather than comparing the outcome.
+  ///
+  /// Nothing is left in flight when this returns [AtReachability.published]:
+  /// the advertisement is an awaited remote write rather than a local-first
+  /// put, so a peer's `plookup` finds it on return. Conveying the private half
+  /// to this atSign's other enrollments is awaited too, and a failure there is
+  /// logged rather than fatal — those enrollments pull at their next start.
+  ///
+  /// [timeout] bounds the whole operation, which may take several round
+  /// trips. On [AtReachability.timedOut] nothing is known about whether the
+  /// work eventually lands.
+  Future<AtReachabilityResult> ensureReachable(String namespace,
+      {Duration timeout = const Duration(seconds: 30)});
+
   /// Set an instance of [AtChops] for data encryption and signing operations
   set atChops(AtChops? atChops);
 
@@ -179,10 +132,17 @@ abstract class AtClient {
 
   AtClientPreference? getPreferences();
 
-  /// Whether this client has been stopped via [AtClientManager].
+  /// Whether this client has been stopped via `AtClientManager`.
   ///
-  /// Once true, the instance is unusable — all sub-services have been torn down
-  /// and the instance has been removed from the internal cache.
+  /// Once true, this instance's background services — the keystore-event
+  /// timers, the data-event stream, and the sync and notification services —
+  /// have been torn down, so it does no work of its own until it is resumed.
+  ///
+  /// ⚠️ **A stopped instance is NOT removed from the internal cache.** A later
+  /// `AtClientManager.setCurrentAtSign` for the same atSign hands back THIS
+  /// instance, clears the flag, and wires fresh services onto it against the
+  /// still-open local keystore, rather than building a new one with the
+  /// preference it was passed.
   bool get isStopped;
 
   /// Stops all background services for this atSign: cancels the
@@ -195,7 +155,7 @@ abstract class AtClient {
   ///
   /// Local storage is NOT closed. The instance remains in the internal cache
   /// and reuses its still-open local keystore when resumed by calling
-  /// [AtClientManager.setCurrentAtSign] for the same atSign, which wires up
+  /// `AtClientManager.setCurrentAtSign` for the same atSign, which wires up
   /// fresh services against the same store.
   Future<void> stop();
 

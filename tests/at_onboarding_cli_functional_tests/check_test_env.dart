@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'test/utils/virtualenv_ports.dart';
 
 Queue<String> _queue = Queue<String>();
 int maxRetryCount = 10;
@@ -10,7 +11,7 @@ int retryCount = 1;
 
 void main() {
   String atsign = '@sitaram🛠';
-  int atsignPort = 25017;
+  int atsignPort = virtualenvSecondaryPort(25017);
   String rootServer = 'vip.ve.atsign.zone';
 
   SecureSocket _secureSocket;
@@ -31,25 +32,28 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 5)));
 }
 
+/// Connects to [host]:[port], retrying while the virtualenv comes up.
+///
+/// Throws a `StateError` naming the last error once `maxRetryCount` attempts
+/// have all been refused, rather than looping until the caller's test timeout.
 Future<SecureSocket> secureSocketConnection(String host, int port) async {
-  dynamic socket;
-  while (true) {
+  Object? lastError;
+  for (retryCount = 1; retryCount <= maxRetryCount; retryCount++) {
     try {
-      socket = await SecureSocket.connect(host, port);
-      if (socket != null || retryCount > maxRetryCount) {
-        break;
-      }
+      return await SecureSocket.connect(host, port,
+          timeout: const Duration(seconds: 10));
     } catch (e, stackTrace) {
-      print('retrying for connection.. $retryCount');
+      lastError = e;
+      print('retrying for connection.. $retryCount of $maxRetryCount');
       print('Error: $e');
       if (retryCount == 1) {
         print('Stack trace: $stackTrace');
       }
       await Future<void>.delayed(const Duration(seconds: 5));
-      retryCount++;
     }
   }
-  return socket;
+  throw StateError('could not connect to $host:$port after $maxRetryCount '
+      'attempts; the virtualenv is not up. Last error: $lastError');
 }
 
 /// Socket Listener

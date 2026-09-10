@@ -1,0 +1,12 @@
+# Tag declarations for the functional pack. Declaring a tag does not filter
+# anything: it stops the runner warning about an unrecognised tag, and it makes
+# `--tags pq` / `-x pq` mean something.
+#
+# There is deliberately no `paths:` allowlist. This pack runs against a
+# virtualenv container created and thrown away per run, so an allowlist would
+# buy nothing and would let an unlisted test silently never run; a bare
+# `dart test` here runs every file under `test/`, which is what CI does.
+tags:
+  # Every file exercising a post-quantum mechanism. `pq_tag_test.dart`
+  # re-derives which files should carry the tag and fails when one does not.
+  pq:

@@ -23,8 +23,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
-class FakeAtKey extends Fake implements AtKey {}
-
 /// Simple domain object used for factory/rehydrate tests.
 class Widget {
   final String name;

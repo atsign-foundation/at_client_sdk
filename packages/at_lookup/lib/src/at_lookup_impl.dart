@@ -334,7 +334,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         logger.finer('Closing old connection');
         await _closeConnection();
       }
-      logger.info('Creating new connection');
+      logger.finer('Creating new connection');
       //1. find secondary url for atsign from lookup library
       SecondaryAddress secondaryAddress =
           await secondaryAddressFinder.findSecondary(_currentAtSign);
@@ -353,7 +353,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         messageListener.onDisconnect = _onNotificationConnectionLost;
       }
       messageListener.listen();
-      logger.info('New connection created OK');
+      logger.finer('New connection created OK');
     }
   }
 
@@ -1208,7 +1208,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // ⚠️ `multiplexed` is deliberately NOT set. It is accepted by the shared
       // verb syntax and read by no atServer, so setting it would advertise a
       // safety property that does not exist. See [AtLookupMuxable].
-      logger.info('SENDING: ${command.trim()}');
+      logger.finer('SENDING: ${command.trim()}');
       await _connection!.write(command);
     } finally {
       requestResponseMutex.release();
