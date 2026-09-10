@@ -492,16 +492,19 @@ D-12. Independent of the P series, which is `at_server`-side.
     the reconnect BACKOFF and is conditioned on "a connection that also carries verb
     traffic" — Monitor's is dedicated. This PR changes at_lookup by zero lines and at_lookup
     is ahead of at_client on the release train.
-    **It has a live test as well as three unit tests**, and it needed no test hook: the
-    atServer writes a stats notification to every monitor connection every 15s by default
-    (`at_secondary_config.dart:63` on at_server `origin/trunk`), and on every successful
-    change verb besides, so an idle atSign still ticks every 15s — a real clock to
-    bracket the budget around. `tests/at_functional_test/test/monitor_silence_test.dart`
-    runs two 45-second arms differing only in the budget — 3s must rebuild, 40s must not —
-    observed through the public `currentListenerStateStream`, with the stats-arrive premise
-    asserted first so a server that stopped sending them fails as itself. ⚠️ What no test
-    here does is wedge a real atServer into answering heartbeats while delivering nothing;
-    the arms reproduce the condition the watchdog keys on, not the fault that causes it.
+    **Its coverage is three unit tests**, and it needed no test hook: the budget is
+    injected through `AtClientPreference`, so the arms that matter — a budget under the
+    delivery gap must rebuild, one over it must not, and a zero budget disables the check —
+    run in milliseconds. They live in `packages/at_client/test/monitor_test.dart`, group
+    `a connection that is up but silent`, and each asserts through the public
+    `currentListenerStateStream` as well as the muxable's start count, with the
+    arrivals-happened premise asserted alongside so a silent fake fails as itself.
+    ⚠️ What no test here does is wedge a real atServer into answering heartbeats while
+    delivering nothing; the arms reproduce the condition the watchdog keys on, not the
+    fault that causes it.
+    ⚠️ **The live arms were removed** (gkc, 2026-09-10). They bracketed the budget around
+    the atServer's real 15s stats cadence, which cost two 45-second arms — 90s, 30% of the
+    whole functional pack — for properties the injected budget pins in milliseconds.
   - **The Flutter app-owned path works end to end.** `EnrollmentRequestList` takes an
     optional `enrollmentService` and every client read goes through it.
     ⚠️ **It was six reaches, not five, and the sixth fires first**: the service's constructor
