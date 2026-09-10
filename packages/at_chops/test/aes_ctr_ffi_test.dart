@@ -46,29 +46,47 @@ void main() {
     });
 
     group('FFI / pure-Dart interop (padding-parity guard)', () {
-      test('FFI encrypts, pure-Dart decrypts', () async {
-        final AESKey key = AESKey.generate(32);
-        final AesCtrFfiAlgo ffiAlgo = makeAlgo(key);
-        final AESEncryptionAlgo pureAlgo = AESEncryptionAlgo(key);
-        final InitialisationVector iv = InitialisationVector.random(16);
-        final Uint8List plain = Uint8List.fromList(utf8.encode('ffi→pure'));
+      // Every key length AesCtrFactory accepts, not just 256-bit: accepting
+      // 16 and 24 is what keeps a pure-Dart caller working after it resolves
+      // to FFI, so those are the lengths the parity claim is about.
+      for (final int len in <int>[16, 24, 32]) {
+        test('${len * 8}-bit: FFI encrypts, pure-Dart decrypts', () async {
+          final AESKey key = AESKey.generate(len);
+          final AesCtrFfiAlgo ffiAlgo = makeAlgo(key);
+          final AESEncryptionAlgo pureAlgo = AESEncryptionAlgo(key);
+          final InitialisationVector iv = InitialisationVector.random(16);
+          final Uint8List plain = Uint8List.fromList(utf8.encode('ffi→pure'));
 
-        final Uint8List encrypted = await ffiAlgo.encrypt(plain, iv: iv);
-        final Uint8List decrypted = await pureAlgo.decrypt(encrypted, iv: iv);
-        expect(utf8.decode(decrypted), 'ffi→pure');
-      });
+          final Uint8List encrypted = await ffiAlgo.encrypt(plain, iv: iv);
+          final Uint8List decrypted = await pureAlgo.decrypt(encrypted, iv: iv);
+          expect(utf8.decode(decrypted), 'ffi→pure');
+        });
 
-      test('pure-Dart encrypts, FFI decrypts', () async {
-        final AESKey key = AESKey.generate(32);
-        final AesCtrFfiAlgo ffiAlgo = makeAlgo(key);
-        final AESEncryptionAlgo pureAlgo = AESEncryptionAlgo(key);
-        final InitialisationVector iv = InitialisationVector.random(16);
-        final Uint8List plain = Uint8List.fromList(utf8.encode('pure→ffi'));
+        test('${len * 8}-bit: pure-Dart encrypts, FFI decrypts', () async {
+          final AESKey key = AESKey.generate(len);
+          final AesCtrFfiAlgo ffiAlgo = makeAlgo(key);
+          final AESEncryptionAlgo pureAlgo = AESEncryptionAlgo(key);
+          final InitialisationVector iv = InitialisationVector.random(16);
+          final Uint8List plain = Uint8List.fromList(utf8.encode('pure→ffi'));
 
-        final Uint8List encrypted = await pureAlgo.encrypt(plain, iv: iv);
-        final Uint8List decrypted = await ffiAlgo.decrypt(encrypted, iv: iv);
-        expect(utf8.decode(decrypted), 'pure→ffi');
-      });
+          final Uint8List encrypted = await pureAlgo.encrypt(plain, iv: iv);
+          final Uint8List decrypted = await ffiAlgo.decrypt(encrypted, iv: iv);
+          expect(utf8.decode(decrypted), 'pure→ffi');
+        });
+
+        test('${len * 8}-bit: both backends emit the same ciphertext',
+            () async {
+          final AESKey key = AESKey.generate(len);
+          final InitialisationVector iv = InitialisationVector.random(16);
+          final Uint8List plain =
+              Uint8List.fromList(utf8.encode('byte-for-byte'));
+
+          expect(await makeAlgo(key).encrypt(plain, iv: iv),
+              await AESEncryptionAlgo(key).encrypt(plain, iv: iv),
+              reason: 'a cross-decrypt still passes if both backends are '
+                  'wrong in the same way; this does not');
+        });
+      }
 
       // The IV's low 8 bytes are all 0xFF, so block 1 encrypts with the
       // counter at 2^64 - 1 and block 2 carries into the IV's high half. A
@@ -169,6 +187,38 @@ void main() {
       await expectLater(
           algo.encrypt(plain, iv: InitialisationVector.random(12)),
           throwsA(isA<AtEncryptionException>()));
+    });
+
+    /// The backends are interchangeable for a 16-byte IV and for no other
+    /// length, so a caller handed an IV it did not choose gets an outcome
+    /// that depends on whether the host has libcrypto. Pinned here so the
+    /// dartdoc on [AtPqc.aesCtr] cannot drift away from the behaviour.
+    group('a non-16-byte IV is where the two backends part company', () {
+      for (final int len in <int>[8, 12, 15]) {
+        test('$len-byte IV: pure-Dart accepts, FFI rejects', () async {
+          final AESKey key = AESKey.generate(32);
+          final InitialisationVector iv = InitialisationVector.random(len);
+          final Uint8List plain = Uint8List.fromList(utf8.encode('short iv'));
+
+          expect(
+              await AESEncryptionAlgo(key).encrypt(plain, iv: iv), isNotEmpty,
+              reason: 'the pure-Dart path right-pads a short IV into the '
+                  'counter block rather than rejecting it');
+          await expectLater(makeAlgo(key).encrypt(plain, iv: iv),
+              throwsA(isA<AtEncryptionException>()));
+        });
+      }
+
+      test('16 bytes is the length on which they agree', () async {
+        final AESKey key = AESKey.generate(32);
+        final InitialisationVector iv = InitialisationVector.random(16);
+        final Uint8List plain = Uint8List.fromList(utf8.encode('short iv'));
+
+        expect(await makeAlgo(key).encrypt(plain, iv: iv),
+            await AESEncryptionAlgo(key).encrypt(plain, iv: iv),
+            reason: 'the control for the divergence tests above: without it '
+                'they would pass against a backend that rejected every IV');
+      });
     });
 
     test('a key that is not 16/24/32 bytes throws AtEncryptionException',
