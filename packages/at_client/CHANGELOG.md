@@ -3053,6 +3053,11 @@ hunting for a constructor argument that never existed in a release. -->
   and a service that is not wired yet. The errors are still swallowed: these
   paths run on background triggers with nobody to hand an error to, and one
   escaping into the zone a timer fired in can take the isolate down.
+- fix: `setSPP` without an expiry logs at `warning` rather than `shout`.
+  Applying a documented default is not the loudest thing a client can say, and
+  the line contradicted itself by carrying the word "WARNING" while logging a
+  level above `severe`. The text loses that prefix and gains the space it was
+  missing between the sentence and the default.
 
 ## 3.14.0
 - feat (experimental): per-APKAM same-atSign secret-sharing substrate —

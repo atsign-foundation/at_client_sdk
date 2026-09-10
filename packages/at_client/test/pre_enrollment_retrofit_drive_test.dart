@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:mocktail/mocktail.dart';
@@ -80,8 +81,23 @@ void main() {
 
     final mockRemote = MockRemoteSecondary();
     when(() => mockRemote.atLookUp).thenReturn(mockLookUp);
-    when(() => mockRemote.executeVerb(any()))
-        .thenAnswer((_) async => 'data:ok');
+    // NOTE: answered by VERB, because the shapes differ and a caller cannot
+    // take the wrong one. A scan returns a JSON array and an empty one is an
+    // empty roster; a lookup of a record nothing stored returns `data:null`.
+    // A single blanket answer put the other shape in front of a caller each
+    // way round - `data:ok` was json-decoded as a payload and failed, and
+    // `data:null` reached `getKeys`, which builds a List from whatever the
+    // scan decoded to.
+    when(() => mockRemote.executeVerb(any())).thenAnswer((inv) async =>
+        inv.positionalArguments[0] is ScanVerbBuilder
+            ? 'data:[]'
+            : 'data:null');
+    // An empty roster: this atSign has no other enrollment to convey to, so
+    // the seeding step has nobody to reach. Matched on the command, because
+    // `listForNamespace` refuses an unreadable answer rather than reading it
+    // as empty.
+    when(() => mockRemote.executeCommand(any(that: startsWith('enroll:listns')),
+        auth: any(named: 'auth'))).thenAnswer((_) async => 'data:[]');
 
     final chops = AtChopsImpl(AtChopsKeys.create(encryptionKeyPair, pkamKeyPair)
       ..selfEncryptionKey = AESKey(selfKey));

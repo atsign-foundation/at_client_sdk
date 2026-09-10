@@ -2455,10 +2455,8 @@ class AtClientImpl implements AtClient {
   @override
   Future<AtResponse> setSPP(String spp, {Duration? expiry}) async {
     if (expiry == null) {
-      _logger.shout(
-        'WARNING: Setting SPP without an expiration'
-        '- defaulting to ${AtClient.defaultSppExpiry}',
-      );
+      _logger.warning('Setting SPP without an expiration, so it defaults to '
+          '${AtClient.defaultSppExpiry}');
       expiry = AtClient.defaultSppExpiry;
     }
     // SPP should be 6 characters PIN. Throw exception if its less
