@@ -110,11 +110,11 @@ required before any of those packages can publish against a real `at_utils` rele
   it "off the neutral path" here means changing which of *our* files import it, not
   patching chalkdart itself.
 - `at_client_flutter/examples/dockerstats/lib/main_smoke.dart` isn't in the pub
-  workspace (`at_utils: ^3.4.0` from pub.dev, no `resolution: workspace`) — its new
-  `at_utils_io.dart` import won't resolve locally until 4.0.0 actually publishes and
-  its pubspec bumps. Source is correct for that state; not fixable before I4. (The
-  file also has a pre-existing, unrelated `FileAtKeysIo` undefined-method error,
-  confirmed present before this change — not introduced here.)
+  workspace, so it resolves `at_utils` from pub.dev unless overridden. Added a
+  `dependency_overrides` entry pointing at the local `at_utils` (consistent with the
+  other five packages in that pubspec), so its `at_utils_io.dart` import resolves
+  locally. (The file also has a pre-existing, unrelated `FileAtKeysIo` undefined-method
+  error, confirmed present before this change — not introduced here.)
 
 ## Changelog
 

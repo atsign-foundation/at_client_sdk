@@ -35,6 +35,8 @@ dependency_overrides:
     path: ../../../at_commons/
   at_chops:
     path: ../../../at_chops/
+  at_utils:
+    path: ../../../at_utils/
 
 dev_dependencies:
   flutter_test:
