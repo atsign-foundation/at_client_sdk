@@ -218,14 +218,23 @@ typedef EvpDecryptInitExDart = int Function(Pointer<EVP_CIPHER_CTX>,
     Pointer<EVP_CIPHER>, Pointer<Void>, Pointer<Uint8>, Pointer<Uint8>);
 
 typedef EvpEncryptUpdateNative = Int32 Function(Pointer<EVP_CIPHER_CTX>,
-    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, IntPtr);
+    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, Int32);
 typedef EvpEncryptUpdateDart = int Function(Pointer<EVP_CIPHER_CTX>,
     Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, int);
 
 typedef EvpDecryptUpdateNative = Int32 Function(Pointer<EVP_CIPHER_CTX>,
-    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, IntPtr);
+    Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, Int32);
 typedef EvpDecryptUpdateDart = int Function(Pointer<EVP_CIPHER_CTX>,
     Pointer<Uint8>, Pointer<Int32>, Pointer<Uint8>, int);
+
+/// `EVP_EncryptUpdate`/`EVP_DecryptUpdate` take `inl` as a C `int`. Dart FFI
+/// silently truncates an out-of-range length to its low 32 bits, so reject it
+/// before the native call.
+void checkInlLength(int length, String name, String fn) {
+  if (length > 0x7fffffff) {
+    throw ArgumentError.value(length, name, 'exceeds the int32 limit of $fn');
+  }
+}
 
 typedef EvpEncryptFinalExNative = Int32 Function(
     Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>);

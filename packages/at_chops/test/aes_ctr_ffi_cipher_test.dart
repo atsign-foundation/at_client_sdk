@@ -6,6 +6,7 @@ import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
+import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
 import 'package:test/test.dart';
 
@@ -224,6 +225,18 @@ void main() {
               throwsA(isA<AtEncryptionException>()),
               reason: '$length-byte key was accepted');
         }
+      });
+    });
+
+    group('inl length guard', () {
+      test('a length beyond the C int limit throws', () {
+        expect(() => checkInlLength(0x80000000, 'input', 'EVP_EncryptUpdate'),
+            throwsArgumentError);
+      });
+
+      test('a length at the C int limit is accepted', () {
+        expect(() => checkInlLength(0x7fffffff, 'input', 'EVP_EncryptUpdate'),
+            returnsNormally);
       });
     });
   });

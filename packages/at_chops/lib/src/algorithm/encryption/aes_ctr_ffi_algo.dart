@@ -103,6 +103,7 @@ class AesCtrFfiAlgo
     // Padding is required for AESEncryptionAlgo parity.
     final Uint8List paddedData =
         Uint8List.fromList(paddingAlgo!.addPadding(plainData));
+    checkInlLength(paddedData.length, 'paddedData', 'EVP_EncryptUpdate');
 
     final Pointer<EVP_CIPHER_CTX> ctx = _ctxNew();
     if (ctx == nullptr) throw StateError('EVP_CIPHER_CTX_new failed');
@@ -166,6 +167,7 @@ class AesCtrFfiAlgo
       {InitialisationVector? iv}) async {
     final Uint8List keyBytes = _keyBytesForDecrypt();
     final List<int> nonce = _nonceBytesForDecrypt(iv);
+    checkInlLength(encryptedData.length, 'encryptedData', 'EVP_DecryptUpdate');
 
     final Pointer<EVP_CIPHER_CTX> ctx = _ctxNew();
     if (ctx == nullptr) throw StateError('EVP_CIPHER_CTX_new failed');

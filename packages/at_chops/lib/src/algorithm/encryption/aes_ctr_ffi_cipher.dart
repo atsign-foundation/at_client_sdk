@@ -120,6 +120,7 @@ final class AesCtrFfiCipher {
       throw StateError('AesCtrFfiCipher.update called after dispose');
     }
     if (input.isEmpty) return Uint8List(0);
+    checkInlLength(input.length, 'input', 'EVP_EncryptUpdate');
 
     _state.ensureCapacity(input.length);
     _state.inBuf.asTypedList(input.length).setAll(0, input);
