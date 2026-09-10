@@ -8,6 +8,8 @@ import 'package:test/test.dart';
 
 class _MockAtClient extends Mock implements AtClient {}
 
+class _MockSyncService extends Mock implements SyncService {}
+
 /// The expiry sweep reclaims a record whose namespace the client's enrollment
 /// does not cover: reclaiming an expired record is storage internals, not an
 /// operation the enrollment performs, so it is not subject to that
@@ -34,6 +36,7 @@ void main() {
     when(() => atClient.atSign).thenReturn(atSignStr.toAtsign());
     when(() => atClient.enrollmentId).thenReturn('enroll-1');
     when(() => atClient.persistenceBundle).thenReturn(bundle);
+    when(() => atClient.syncService).thenReturn(_MockSyncService());
 
     local = LocalSecondary(atClient,
         keyStore: bundle.keyValueStore, onEvent: (_) {});

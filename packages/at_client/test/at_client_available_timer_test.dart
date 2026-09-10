@@ -21,6 +21,8 @@ import 'package:test/test.dart';
 
 class _MockAtClient extends Mock implements AtClient {}
 
+class _MockSyncService extends Mock implements SyncService {}
+
 void main() {
   final storageDir = '${Directory.current.path}/test/hive_avail';
   const atSignStr = '@avail_test';
@@ -44,6 +46,10 @@ void main() {
     // from the client's persistence bundle — the 'keystore-cache reuse'
     // test relies on a fresh LocalSecondary sharing this keystore.
     when(() => atClient.persistenceBundle).thenReturn(bundle);
+    // NOTE: LocalSecondary asks the sync service to drain after every
+    // eligible write, so an unstubbed one answers null into a non-nullable
+    // SyncService and the write reports that instead of triggering.
+    when(() => atClient.syncService).thenReturn(_MockSyncService());
 
     events = <DataEvent>[];
     local = LocalSecondary(

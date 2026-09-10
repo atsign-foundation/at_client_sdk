@@ -59,12 +59,28 @@ class MockAtClient extends Mock implements AtClient {
       : _preference = AtClientPreference(
             posture: posture ?? PqPosture.pqReady,
             keyEstablishmentAlgorithms: keyEstablishmentAlgorithms)
-          ..namespace = 'wavi';
+          ..namespace = 'wavi' {
+    _answerReadsAsMissing();
+  }
 
   // A stable, mutable preference (matching the real getPreferences(), which
   // returns the live instance) so tests can set `.crypto` to inject a
   // CryptoConfig that CryptoRuntime resolves against.
   final AtClientPreference _preference;
+
+  /// A read of a key nothing stored, which is what a client with no fixture
+  /// data behind it should see. Registered in the constructor, so any `when`
+  /// a test writes afterwards supersedes it - mocktail takes the last
+  /// matching response. Left unstubbed it answered null into a non-nullable
+  /// `Future<AtValue>`, and the caller logged a defect instead of a miss.
+  void _answerReadsAsMissing() {
+    registerFallbackValue(AtKey());
+    when(() => get(any(), getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async =>
+            throw AtKeyNotFoundException('${inv.positionalArguments[0]}'));
+    when(() => get(any())).thenAnswer((inv) async =>
+        throw AtKeyNotFoundException('${inv.positionalArguments[0]}'));
+  }
 
   @override
   AtClientPreference getPreferences() => _preference;
