@@ -3,6 +3,7 @@ import 'package:at_client/at_client.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'mocks.dart';
+import 'test_keypairs.dart';
 
 /// A mock [AtClient] whose puts and gets go through [remoteData], so several
 /// clients of the same atSign share one view of the atServer.
@@ -41,7 +42,7 @@ MockAtClient buildRemoteBackedMockClient({
   final atClient = MockAtClient(
       keyEstablishmentAlgorithms: keyEstablishmentAlgorithms, posture: posture);
   when(() => atClient.atChops).thenReturn(AtChopsImpl(
-      AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+      AtChopsKeys.create(null, pkamKeyPairFor(atSign, enrollmentId))));
   when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
   when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
