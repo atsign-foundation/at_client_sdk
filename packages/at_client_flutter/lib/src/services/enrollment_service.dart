@@ -3,7 +3,8 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -24,11 +25,19 @@ class FlutterEnrollmentService {
 
   final AtSignLogger _logger = AtSignLogger('FlutterEnrollmentService');
   final AtEnrollment _atEnrollment = AtEnrollment.create();
-  final KeychainStorage _keychainStorage = KeychainStorage();
-  final KeychainAtKeysIo _keychainAtKeysIo = KeychainAtKeysIo();
+
+  @visibleForTesting
+  KeychainStorage keychainStorage = KeychainStorage();
+
+  @visibleForTesting
+  KeychainAtKeysIo keychainAtKeysIo = KeychainAtKeysIo();
+
+  @visibleForTesting
+  AtClient? atClientOverride;
 
   /// Instance of [AtClient] for the current atSign
-  AtClient get atClient => _atClient ?? AtClientManager.getInstance().atClient;
+  AtClient get atClient =>
+      atClientOverride ?? _atClient ?? AtClientManager.getInstance().atClient;
 
   static const _kDefaultExpiry = Duration(minutes: 5);
 
@@ -54,10 +63,13 @@ class FlutterEnrollmentService {
     bool waitForApproval = false,
   }) async {
     AtEnrollmentResponse? atEnrollmentResponse;
-    AtLookUp atLookup = AtLookupImpl(
-      request.atSign,
-      request.rootDomain.rootDomain,
-      request.rootDomain.rootPort,
+    // NOTE: an enrolment request is submitted unauthenticated — the requesting
+    // device holds no credential to authenticate with yet.
+    final AtLookUp atLookup = AtLookUp.withSecureSocket(
+      atSign: request.atSign,
+      rootDomain: request.rootDomain,
+      transport: secureSocketTransport(SecureSocketConfig()),
+      authenticator: null,
     );
     try {
       atEnrollmentResponse = await _atEnrollment.submit(request, atLookup);
@@ -65,7 +77,7 @@ class FlutterEnrollmentService {
       throw Exception('Enrollment failed: $e \n $s');
     } finally {
       // Always close the connection, including when submit() throws (a timeout
-      // or a network failure) — otherwise the AtLookupImpl connection leaks.
+      // or a network failure) — otherwise the lookup's connection leaks.
       await atLookup.close();
     }
 
@@ -76,7 +88,7 @@ class FlutterEnrollmentService {
         DateTime.now().toUtc().microsecondsSinceEpoch,
         namespace: (request is AtEnrollmentRequest) ? request.namespaces : null,
       );
-      await _keychainStorage.writeEnrollmentData(
+      await keychainStorage.writeEnrollmentData(
         atSign: request.atSign,
         enrollmentData: enrollmentData,
       );
@@ -103,17 +115,49 @@ class FlutterEnrollmentService {
   ) async {
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
-      if (!await _keychainStorage.validateEnrollment(request.atSign)) {
+      if (!await keychainStorage.validateEnrollment(request.atSign)) {
         throw Exception('Invalid enrollment');
       }
-      atEnrollmentResponse = await _atEnrollment.approve(request, atLookUp);
-      _keychainAtKeysIo.write(request.atSign, atEnrollmentResponse.atAuthKeys!);
-      _keychainStorage.deleteEnrollmentData(request.atSign);
+      // NOTE: approving also seals this atSign's secrets to the enrollee's key
+      // package, which only the client's enrollment service does — an approval
+      // made through at_auth alone can authenticate but decrypt nothing.
+      atEnrollmentResponse = await atClient.enrollmentService!.approve(request);
+      // NOTE: the approver holds no enrollee key material — approve() answers
+      // with the id and status, and the enrollee files its own keys.
+      final approvedKeys = atEnrollmentResponse.atAuthKeys;
+      if (approvedKeys != null) {
+        await keychainAtKeysIo.write(request.atSign, approvedKeys);
+      }
+      await _forgetPendingRequest(request.atSign);
+      // ignore: experimental_member_use
+    } on EnrollmentConveyanceException {
+      // NOTE: the approval itself succeeded and only the conveyance to the new
+      // device failed, so the enrollment is live but cannot decrypt — the
+      // pending record still has to go.
+      await _forgetPendingRequest(request.atSign);
+      rethrow;
     } catch (e) {
       throw Exception('Enrollment failed: $e');
+    } finally {
+      await atLookUp.close();
     }
-    await atLookUp.close();
     return atEnrollmentResponse;
+  }
+
+  /// Drop the local record of a request that has now been decided.
+  ///
+  /// Never throws: the atServer has already recorded the decision by the time
+  /// this runs, so a keychain failure costs only a pending row that lingers
+  /// until [KeychainStorage.validateEnrollment] expires it.
+  Future<void> _forgetPendingRequest(String atSign) async {
+    try {
+      await keychainStorage.deleteEnrollmentData(atSign);
+    } catch (e) {
+      _logger.warning(
+        'Decided the enrollment for $atSign but could not drop its pending '
+        'record; it will linger until it expires: $e',
+      );
+    }
   }
 
   /// Deny a pending enrollment request
@@ -135,8 +179,9 @@ class FlutterEnrollmentService {
       atEnrollmentResponse = await _atEnrollment.deny(request, atLookUp);
     } catch (e) {
       throw Exception('Denial failed: $e');
+    } finally {
+      await atLookUp.close();
     }
-    await atLookUp.close();
     return atEnrollmentResponse;
   }
 
@@ -159,8 +204,9 @@ class FlutterEnrollmentService {
       atEnrollmentResponse = await _atEnrollment.revoke(request, atLookUp);
     } catch (e) {
       throw Exception('Revocation failed: $e');
+    } finally {
+      await atLookUp.close();
     }
-    await atLookUp.close();
     return atEnrollmentResponse;
   }
 
@@ -245,7 +291,7 @@ class FlutterEnrollmentService {
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
     final otp = await _atEnrollment.setSpp(spp, atLookup, expiry: sppExpiry);
     _logger.info('SPP set on the server');
-    await _keychainStorage.saveSpp(atClient.getCurrentAtSign()!, otp);
+    await keychainStorage.saveSpp(atClient.getCurrentAtSign()!, otp);
     return otp;
   }
 
@@ -253,11 +299,11 @@ class FlutterEnrollmentService {
   ///
   /// Returns `null` if no SPP is set or the last SPP has expired.
   Future<SppData?> getActiveSpp() =>
-      _keychainStorage.getActiveSpp(atClient.getCurrentAtSign()!);
+      keychainStorage.getActiveSpp(atClient.getCurrentAtSign()!);
 
   /// Get all active (non-expired) SPPs from the keychain.
   Future<List<SppData>> getAllSpps() =>
-      _keychainStorage.getAllSpps(atClient.getCurrentAtSign()!);
+      keychainStorage.getAllSpps(atClient.getCurrentAtSign()!);
 
   /// Get the OTP from the server.
   ///

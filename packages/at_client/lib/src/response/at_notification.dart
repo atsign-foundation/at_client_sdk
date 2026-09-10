@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_commons.dart';
 
 class AtNotification {
   late String id;
@@ -38,6 +38,10 @@ class AtNotification {
       metadata.sharedKeyEnc = json['metadata'][AtConstants.sharedKeyEncrypted];
       metadata.appMetadata =
           Metadata.decodeAppMetadata(json['metadata'][AtConstants.appMetadata]);
+      // NOTE: a provider picks its wire format from isBinary; drop it here and
+      // a binary notification decodes as text.
+      metadata.isBinary = _asBool(json['metadata'][AtConstants.isBinary]);
+      metadata.encoding = json['metadata'][AtConstants.encoding];
       // AtConstants.sharedWithPublicKeyHash will be sent by the server starting v3.0.52
       // Notifications received from Secondary server before 3.0.52 does not contain
       // AtConstants.sharedWithPublicKeyHash. Therefore, check for null.
@@ -73,6 +77,11 @@ class AtNotification {
       'metadata': metadata
     };
   }
+
+  /// Reads a JSON boolean the atServer sends as a real bool on some paths and
+  /// as `'true'`/`'false'` on others.
+  static bool _asBool(dynamic value) =>
+      value is bool ? value : value.toString().toLowerCase() == 'true';
 
   static List<AtNotification> fromJsonList(
       List<Map<String, dynamic>> jsonList) {

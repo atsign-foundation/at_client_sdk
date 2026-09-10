@@ -1,0 +1,151 @@
+// The substrate and the nskey filing surface are both @experimental. Driving
+// them from another package is the point of this file.
+// ignore_for_file: experimental_member_use
+
+@Tags(['pq'])
+library;
+
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
+import 'package:at_functional_test/src/config_util.dart';
+import 'package:test/test.dart';
+
+import 'test_utils.dart';
+
+/// A conveyed nskey private reaching the keyfile, against a live atServer.
+///
+/// Three steps are asserted separately rather than only the end state — the
+/// client listening on the kpid its keyfile advertises, the sweep running, and
+/// the filer moving the material into `AtKeys` — because any one of them
+/// failing silently leaves the others looking correct.
+void main() {
+  TestUtils.isolateStorage('conveyed_key_collection_test');
+  late AtClient atClient;
+  late String atSign;
+  const namespace = 'wavi';
+
+  // NOTE: a real 32-byte X-Wing seed — what is filed is a seed, which
+  // NskeyPrivateFiling.read expands into a decapsulation key, so arbitrary
+  // bytes read back as null.
+  final privateBytes = Uint8List.fromList(List<int>.generate(32, (i) => i));
+
+  setUpAll(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
+    atClient = manager.atClient;
+  });
+
+  /// A keyfile shaped like one an enrollment made with
+  /// `enrollmentKeyPackageBuilder` leaves behind: both halves of one X-Wing
+  /// keypair, filed under the kpid they address.
+  Future<(InMemoryAtKeysIo, String)> keyfileWithPackage() async {
+    final pair = await XWingPureDartAlgo.instance.generateKeyPair();
+    final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
+    final now = DateTime.now().toUtc();
+    final keys = AtKeys();
+    keys.addKey(CryptographicMaterial(
+      keyId: kpid,
+      role: CryptographicMaterialRole.publicEncapsulation,
+      algorithm: CryptographicMaterialAlgorithm.xWing,
+      bytes: AtBytes(pair.publicKey),
+      createdAt: now,
+    ));
+    keys.addKey(CryptographicMaterial(
+      keyId: kpid,
+      role: CryptographicMaterialRole.privateDecapsulation,
+      algorithm: CryptographicMaterialAlgorithm.xWing,
+      bytes: AtBytes(pair.secretKey),
+      createdAt: now,
+    ));
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, keys);
+    return (io, kpid);
+  }
+
+  /// A second identity over the same client, standing in for another of this
+  /// atSign's enrollments. `forClient` caches one instance per `AtClient` — it
+  /// is the receiver here — so a sender has to use the plain constructor.
+  Future<AtClientSecretSharing> sender() async {
+    final party = AtClientSecretSharing(atClient)
+      ..sendWakeUpNotification = false;
+    await party.register();
+    return party;
+  }
+
+  Secret nskeySecret(String kid) => Secret(
+        namespace: namespace,
+        name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
+        value: base64Encode(privateBytes),
+      );
+
+  test(
+      'a conveyed private is swept off the atServer and filed into the keyfile',
+      () async {
+    final (io, advertised) = await keyfileWithPackage();
+    final from = await sender();
+
+    // NOTE: the first collection binds the receiver to the keyfile as well as
+    // sweeping an empty atServer; without it the receiver listens on a kpid of
+    // its own invention.
+    expect(await collectConveyedKeyMaterial(atClient, io), 0);
+
+    final receiver = AtClientSecretSharing.forClient(atClient);
+    expect(receiver.kpid, advertised,
+        reason: 'the receiver has to be listening on the address its keyfile '
+            'advertises, or the rest of this test would be sending to one '
+            'party and sweeping for another');
+    expect(
+        await NskeyPrivateFiling(keysIo: io, atSign: atSign)
+            .read(namespace, 'kid-live'),
+        isNull,
+        reason: 'nothing has been conveyed yet, so a pass here would mean the '
+            'assertion below is measuring leftover state');
+
+    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-live'),
+        inReplyTo: EnvelopeAddressing.unsolicited);
+
+    expect(await collectConveyedKeyMaterial(atClient, io), 1);
+
+    // A fresh filer over the same keyfile: what a restarted process sees.
+    expect(
+        await NskeyPrivateFiling(keysIo: io, atSign: atSign)
+            .read(namespace, 'kid-live'),
+        privateBytes,
+        reason: 'the private has to be in AtKeys, not in the transit buffer — '
+            'the buffer is in memory and does not survive the process');
+  });
+
+  test('a private addressed to another key package is not filed', () async {
+    final (io, _) = await keyfileWithPackage();
+    final from = await sender();
+    final elsewhere = await sender();
+    final receiver = AtClientSecretSharing.forClient(atClient);
+
+    // NOTE: both arms go through one collection, so a sweep that ran not at
+    // all fails the positive arm rather than passing the negative one.
+    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-mine'),
+        inReplyTo: EnvelopeAddressing.unsolicited);
+    await from.shareSecretWith(
+        elsewhere.myKeyPackage, nskeySecret('kid-elsewhere'),
+        inReplyTo: EnvelopeAddressing.unsolicited);
+
+    await collectConveyedKeyMaterial(atClient, io);
+
+    final filed = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+    expect(await filed.read(namespace, 'kid-mine'), privateBytes,
+        reason: 'the sweep has to have run for the absence below to mean '
+            'anything about addressing');
+    expect(await filed.read(namespace, 'kid-elsewhere'), isNull,
+        reason: 'an envelope is sealed to one key package; a client that filed '
+            'what it could merely see would be claiming key material it '
+            'cannot open');
+  });
+}

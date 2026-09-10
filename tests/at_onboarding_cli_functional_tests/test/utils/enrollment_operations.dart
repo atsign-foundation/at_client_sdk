@@ -6,9 +6,23 @@ import 'package:at_client/at_client.dart';
 
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 
+import 'at_client_cache.dart';
+import 'test_keys_dir.dart';
+import 'virtualenv_ports.dart';
+
 /// Contains methods that perform common enrollment operations like getOtp, approve, etc.
 ///
 /// Each method requires an atKeysFile that has authorization to perform operations
+///
+/// ⚠️ **Every method here builds its own client at `$storageDir/hive/<atSign>/1`,
+/// and must evict the cache first.** These run inside tests that have already
+/// built a client for the same atSign somewhere else, and
+/// `AtClientImpl.atClientInstanceMap` is static and keyed only by
+/// `(atSign, enrollmentId)` — so without [evictCachedAtClients] the service
+/// below silently reuses the caller's client and its storage path, and every
+/// operation runs against a store this class did not choose. The
+/// `AtClientManager.getInstance().reset()` each method ends with does not cover
+/// that: it runs afterwards, and it leaves the static map populated.
 class EnrollmentOperations {
   late String atsign;
   String storageDir = 'test/storage/temp';
@@ -16,6 +30,7 @@ class EnrollmentOperations {
   EnrollmentOperations(this.atsign);
 
   Future<String?> getOtp(String atKeysFilePath) async {
+    await evictCachedAtClients();
     AtOnboardingService? onboardingService = AtOnboardingServiceImpl(
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();
@@ -36,6 +51,7 @@ class EnrollmentOperations {
       String? encApkamSymmetricKey,
       String? appName,
       String? deviceName}) async {
+    await evictCachedAtClients();
     AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();
@@ -54,10 +70,13 @@ class EnrollmentOperations {
       enrollmentId = enrollment.enrollmentId;
       encApkamSymmetricKey = enrollment.encryptedAPKAMSymmetricKey;
     }
+    // NOTE: `?? ''`, not `!` — a pq-mode request carries no wrapped symmetric
+    // key, and that absence is what `EnrollmentServiceImpl.approve` reads to
+    // mint one of its own and swap in `approvedWithMintedKey`.
     EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
       enrollmentId: enrollmentId!,
       atSign: atsign,
-      apkamSymmetricKey: AtBytes.fromString(encApkamSymmetricKey!),
+      apkamSymmetricKey: AtBytes.fromString(encApkamSymmetricKey ?? ''),
     );
     AtEnrollmentResponse? enrollmentResponse =
         await enrollmentService.approve(decision);
@@ -72,6 +91,7 @@ class EnrollmentOperations {
       String? enrollmentId,
       String? appName,
       String? deviceName}) async {
+    await evictCachedAtClients();
     AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();
@@ -125,9 +145,10 @@ class EnrollmentOperations {
     return AtOnboardingPreference()
       ..commitLogPath = '$storageDir/commitLog/$atsign/1'
       ..hiveStoragePath = '$storageDir/hive/$atsign/1'
-      ..atKeysFilePath = '$storageDir/keys/${atsign}_key.atKeys'
       ..rootDomain = 'vip.ve.atsign.zone'
+      ..rootPort = virtualenvRootPort
       ..cramSecret = cramKey
-      ..atKeysFilePath = atKeysFilePath;
+      // NOTE: a null here falls through to the home directory's real keys dir.
+      ..atKeysFilePath = atKeysFilePath ?? testKeysFile(atsign);
   }
 }

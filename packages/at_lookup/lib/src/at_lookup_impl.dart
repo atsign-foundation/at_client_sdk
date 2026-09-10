@@ -352,7 +352,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         logger.finer('Closing old connection');
         await _closeConnection();
       }
-      logger.info('Creating new connection');
+      logger.finer('Creating new connection');
       //1. find secondary url for atsign from lookup library
       SecondaryAddress secondaryAddress =
           await secondaryAddressFinder.findSecondary(_currentAtSign);
@@ -372,7 +372,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         messageListener.onDisconnect = _onNotificationConnectionLost;
       }
       messageListener.listen();
-      logger.info('New connection created OK');
+      logger.finer('New connection created OK');
     }
   }
 
@@ -587,8 +587,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         return;
       }
       if (!await authenticate(this)) {
-        throw UnAuthenticatedException(
-            'Failed connecting to $_currentAtSign.'
+        throw UnAuthenticatedException('Failed connecting to $_currentAtSign.'
             ' The authenticator reported failure');
       }
       // The enrollment id still comes from the caller or this object, because
@@ -942,6 +941,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   Duration heartbeatResponseTimeout = const Duration(seconds: 10);
 
   String? _notifyRegex;
+
   /// The caller's watermark source, asked on every (re)connect.
   ///
   /// A function rather than a value because the caller's position moves as it
@@ -1228,7 +1228,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // ⚠️ `multiplexed` is deliberately NOT set. It is accepted by the shared
       // verb syntax and read by no atServer, so setting it would advertise a
       // safety property that does not exist. See [AtLookupMuxable].
-      logger.info('SENDING: ${command.trim()}');
+      logger.finer('SENDING: ${command.trim()}');
       await _connection!.write(command);
     } finally {
       requestResponseMutex.release();

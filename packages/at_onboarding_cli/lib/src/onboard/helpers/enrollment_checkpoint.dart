@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo;
+import 'package:at_commons/atsign.dart';
 import 'package:at_onboarding_cli/src/util/at_file_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart';
@@ -62,9 +63,14 @@ class EnrollmentCheckpoint {
     expiry ??= defaultCheckpointExpiry;
 
     final Map<String, dynamic> json = er.toJson();
-    json.remove(
-        'atSign'); // do not reveal which atSign this checkpoint belongs to
-    json['atAuthKeys'] = er.atAuthKeys?.toJson();
+
+    // NOTE: the checkpoint records which atSign it belongs to, because
+    // `AtKeys.toJson` refuses a document carrying enrollments or atSign keys
+    // with no `atsign`. The file is chmod 600 and already holds this
+    // enrollment's own APKAM private key material.
+    final keys = er.atAuthKeys;
+    keys?.atsign ??= _atSign.toAtsign();
+    json['atAuthKeys'] = keys?.toJson();
     json['validTill'] = DateTime.now().add(expiry).millisecondsSinceEpoch;
 
     final file = getFile(appName, deviceName, namespaces);

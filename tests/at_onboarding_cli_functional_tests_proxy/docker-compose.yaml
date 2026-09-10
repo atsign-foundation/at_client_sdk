@@ -2,7 +2,10 @@ version: '3.7'
 services:
   at_virtualenv:
     container_name: at_virtualenv
-    image: atsigncompany/virtualenv:vip
+    # Overridable, so a run can pick the atServer build it needs; CI sets
+    # VIRTUALENV_IMAGE. The default stays the published release so a bare
+    # `docker compose up` here behaves as it always has.
+    image: ${VIRTUALENV_IMAGE:-atsigncompany/virtualenv:vip}
     ports:
       - '127.0.0.1:6379:6379'
       - '127.0.0.1:9001:9001'

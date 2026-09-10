@@ -27,16 +27,17 @@ path) and **D2** (the `at/pqmls` group provider, referenced not detailed here).
 
 ## Document map
 
-This is one of **five** docs. Each keeps to its lane; cross-references point at
+This is one of **six** docs. Each keeps to its lane; cross-references point at
 the canonical home rather than duplicating it.
 
 | Doc | What lives there |
 |---|---|
 | **roadmap.md** (this doc) | Roadmap & high-level design — the WHY + WHAT: deliverables D1/D2, the conceptual `nskey` shape, migration philosophy, usability/crypto-agility constraints, the phase trajectory at a glance. |
-| [`implementation-plan.md`](implementation-plan.md) | The build sequence — the project list (Wave-0 baseline, P-1..P-3, S-1..S-6, SS-*, B-*, RF-*, R-1/R-2, ON-1, D2-1), the dependency graph, waves/parallelism, effort, publish gates, the critical path, and the coverage map. |
+| [`implementation-plan.md`](implementation-plan.md) | **What is still owed**, as one prioritised list (`## TODO`, P0–P3) plus `## PARKED`. ⚠️ This read "as **TODO / PARKED / DONE**" until 2026-08-26; there is no DONE section — what was done is in `git log`. The project list (Wave-0 baseline, P-1..P-3, S-1..S-6, SS-*, B-*, RF-*, R-1/R-2, ON-1, D2-1), the dependency graph, waves/parallelism, effort, publish gates, the critical path and the coverage map moved to [`detail/implementation-plan.md`](detail/implementation-plan.md) on 2026-08-16. |
 | [`design.md`](design.md) | Detailed designs by subsystem — the D1 `nskey` data-path key shapes / 3 providers / `appMetadata` / CK model / cold-start / FS + rotation levers; the secret-sharing substrate (`kpid`, `__ssenv`, `SecretStore`, push/pull, `enroll:listns`, the enrollment record + self-retrofit flow); at_chops primitives; the `CryptoProvider` seam / key stores / WASM split; and the worked walkthroughs (NoPorts, at_talk). Build-level notes with `file:line`. |
 | [`acceptance.md`](acceptance.md) | The given/when/then use-case catalogue (A1.x–A5.x, B0.x–B5.x) with concrete at-keys plus the impl/verify steps and the test harness. |
-| [`decisions.md`](decisions.md) | The decision log — the design rulings (the verb wire shape, the 1:1:1 ruling), the resolved and open decisions, and a dated timeline. The WHY behind every choice. |
+| [`decisions.md`](decisions.md) | The decision **index** — one row per ruling, with date and status, and nothing else. Since 2026-08-16 it is deliberately bodyless, so grepping it returns headlines; the reasoning behind every choice is in [`detail/decisions.md`](detail/decisions.md), under a `## <number>.` heading matching the row. |
+| [`seal-spec.md`](seal-spec.md) | The Atsign seal envelope around RFC 9180 — which suite each version byte names, the framing and the error model — paired with the IETF working group's vectors under `packages/at_chops/test/vectors/`. |
 
 ## The two major deliverables (D1 / D2)
 
@@ -54,10 +55,19 @@ deliverable: harvest-now-decrypt-later capture is a present-day threat, and PQ
 confidentiality is the defence.
 
 D1 does **not** require MLS. It is reached by routing every encryption path
-through pluggable PQ providers — **X-Wing hybrid KEM (ML-KEM-768 + X25519)** for
-key transport, **AES-256-GCM** for data — publishing a PQ enrollment-conveyance
-key, then making the **`nskey` data path** the default for both self and shared
-data and retiring the classical-only `selfEncryptionKey` and `shared_key.*`.
+through pluggable PQ providers — a post-quantum **KEM** for key transport,
+**AES-256-GCM** for data — publishing a PQ enrollment-conveyance key, then
+making the **`nskey` data path** the default for both self and shared data and
+retiring the classical-only `selfEncryptionKey` and `shared_key.*`.
+
+**Two KEMs, chosen per deployment.** The default is the **X-Wing hybrid
+(ML-KEM-768 + X25519)**, which keeps a hedge against ML-KEM falling to
+*classical* cryptanalysis. The alternative is **pure ML-KEM-1024**, selected by
+`AtClientPreference.keyEstablishmentAlgorithms` — it exists for its citation rather
+than its strength, being the only option here whose specification chain contains
+no draft, and the parameter set CNSA 2.0 mandates. Neither restricts who an
+atSign can talk to: a sender follows whatever the recipient advertised, and
+every build produces and opens both.
 
 D1's data path is the **`nskey` data path** — `at/nskey` conveys a symmetric
 content key (CK) and `at/symmetric/AES/GCM` encrypts the data under it — **not**
@@ -121,23 +131,26 @@ built-in legacy provider:
 - **`at/symmetric/AES/GCM`** encrypts the data (AES-256-GCM) under that CK,
   citing it by `ckKid`.
 
-An **`nskey` is an asymmetric X-Wing KEM keypair you encapsulate symmetric CKs
-to** — it never encrypts application data directly. Per `(atSign, namespace)`
-there is **one** `nskey` keypair, and it is the recipient key for *both*
-directions: Alice encapsulates her **own** CKs to it for self data, and external
-senders encapsulate CKs to it when sharing with her.
+An **`nskey` is an asymmetric KEM keypair you encapsulate symmetric CKs to** —
+it never encrypts application data directly. Per `(atSign, namespace)` there is
+**one** `nskey` keypair, under whichever KEM that atSign's deployment
+configured, and it is the recipient key for *both* directions: Alice
+encapsulates her **own** CKs to it for self data, and external senders
+encapsulate CKs to it when sharing with her. Its published advertisement names
+its algorithm, because a sender cannot tell one encapsulation key from another
+by looking and getting it wrong writes a record Alice can never open.
 
 - The **private half** lives in each of Alice's `<ns>`-authorised clients,
   conveyed per-APKAM as a secret over the shared substrate. It is a KEM private:
   it **decapsulates** CKs — both Alice's own and inbound ones — and never
   decrypts application data.
-- The **public half is published lazily**. On first use it is the **self at-key**
-  `nskey.<ns>@alice` — owner-only, synced to Alice's `<ns>`-authorised clients,
-  **not** a `public:` world-readable key; this alone suffices for self data. On
-  the namespace's **first cross-atSign share** the same public half is promoted
-  to the world-readable `public:nskey.<ns>@alice`, so external senders can fetch
-  it. A namespace used only for Alice's own data keeps the self at-key form and
-  never advertises a `public:` key.
+- The **public half is published eagerly** — written at mint, always, to
+  `public:__nskey.<ns>@alice`, so a sender never has to wonder whether a recipient
+  has published yet. The leading underscore keeps it out of every scan while an
+  exact `plookup` still resolves it, so publishing it does not advertise that the
+  namespace exists. The record is **mutable**: rotation overwrites it, serialised
+  by a short-lived lock key, and each conveyance names the generation it was
+  sealed to.
 
 So Alice's self data and a share to `@bob` both encapsulate the CK to the **same**
 `nskey`; the directions differ by *which atSign owns the CK record*, not by which
@@ -151,7 +164,7 @@ What D1 closes vs legacy, at **zero developer-visible change**:
 
 | Legacy weakness | D1 (the `nskey` data path) |
 |---|---|
-| Not PQ-safe (RSA-2048) | **Closed** — X-Wing hybrid KEM |
+| Not PQ-safe (RSA-2048) | **Closed** — X-Wing hybrid KEM by default, pure ML-KEM-1024 by configuration |
 | Crypto broader than transport (one key spans all namespaces) | **Closed** — per-namespace keypair mirrors enrollment authorization |
 | `selfEncryptionKey` sits still forever, conveyed to every enrollment | **Closed** — per-namespace, **rotatable**; per-namespace blast radius, not atSign-wide |
 | No per-device revocation granularity | **Closed** — per-APKAM future-data revocation: rotate the `nskey` keypair excluding the revoked keypair |
@@ -159,8 +172,8 @@ What D1 closes vs legacy, at **zero developer-visible change**:
 
 The concrete key shapes (the `nskey` strings and their lazy-publish lifecycle, the `<ckKid>.__ck`
 CK-conveyance record, the value shapes), the three layers and their
-`appMetadata`, the CK model, the `public:pqpublickey` root key and cold-start
-fallback, and the forward-secrecy / rotation levers all live in
+`appMetadata`, the CK model, the `public:pq_signing_root` signing root and the
+cold-start refusal, and the forward-secrecy / rotation levers all live in
 [`design.md`](design.md). The `at/pqmls` group provider — KeyPackages, ratcheted
 leaf keys, TreeKEM, membership decoupled from namespace authorisation — is
 **D2**, not a D1 tier; most apps never touch it. Crucially, the **per-APKAM
@@ -191,15 +204,16 @@ Existing apps are all on legacy. The migration must let **each client upgrade
 independently** (rebuild on its own schedule) while staying compatible with
 peers — and with other clients of its own atSign — that have not yet upgraded.
 The M0 provider seam is what makes this work; the whole plan is one invariant
-plus a gated rollout. (The rollout *machinery* — the readiness-marker lifecycle,
-the negotiation layer, the flag semantics — lives in
-[`design.md`](design.md) and is sequenced as `R-1`/`R-2` in
-[`implementation-plan.md`](implementation-plan.md).)
+plus **each app's own two releases** — capability, then active use. (There is no
+rollout *machinery*: the readiness-marker/negotiation layer was built and removed
+2026-08-05 —
+[`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05);
+the two-release model + the flag semantics live in [`design.md`](design.md) [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d).)
 
 **The seam lets schemes coexist per value, so the sender encrypts in the scheme
 the recipient can decrypt** — discovered from what the recipient publishes:
 
-- a published **`public:nskey`** for the namespace → the `nskey` data path;
+- a published **`public:__nskey`** for the namespace → the `nskey` data path;
 - only an **RSA pubkey** → `legacy`;
 - **KeyPackages + a group advertised** → `at/pqmls` (in D2).
 
@@ -216,10 +230,11 @@ read-capability; the risk is writing too *new*, never reading too *old*.
 **The versioning contract**, conceptually, is one construction-time flag —
 `disallowLegacyEncryption` on `AtClientPreference`:
 
-- **default `false` in 3.x** = "PQ when it can, legacy when it must" — a 3.x
-  client is PQ-*capable* but stays legacy-*compatible*, writing legacy only when
-  a reader isn't yet PQ-ready;
-- **default `true` in 4.0** = "PQ — refuse rather than write legacy";
+- **default `false` in 3.x** = "PQ when the app says so, legacy otherwise" — a
+  3.x client is PQ-*capable* but stays legacy-*compatible*; which scheme it
+  writes is its app's release decision, and the cold-start refusal (plus the
+  explicit fallback) is the only per-destination gate;
+- **default `true` in 4.0** = "PQ — refuse rather than write with the legacy provider";
 - **final at construction** (no mid-run flipping), and the SDK **SHOUTs at
   startup when it is `false`** so a client permitting legacy writes is never
   silent about it;
@@ -230,33 +245,47 @@ read-capability; the risk is writing too *new*, never reading too *old*.
 `shouldEncrypt=false` carve-out — are in [`design.md`](design.md); only the
 high-level 3.x-off / 4.x-on trajectory belongs here.)
 
-**The rollout trajectory at a glance** (one line per step; the operator-facing
-detail and the capabilities-by-code-change-level table live in
-[`design.md`](design.md), the sequencing in
+**The rollout trajectory at a glance** (one line per step; the two-release
+model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d), the sequencing in
 [`implementation-plan.md`](implementation-plan.md)):
 
 0. **Baseline** — all legacy.
-1. **Rebuild, behaviour-neutral (the soak)** — adds the PQ providers + provider
-   routing on *read*, keeps *writing* legacy; a zero-risk, client-by-client
-   deploy.
-2. **Publish the namespace `nskey` + capability marker** — the first upgraded
-   client mints the namespace `nskey` and publishes its public half (the
-   owner-only self at-key, promoted to `public:` on the first cross-atSign share),
-   its private conveyed per-APKAM over the substrate; the per-`(atSign, namespace)`
-   capability marker goes up **not-ready**; writes still legacy.
-3. **Flip readiness** — once an atSign's namespace fleet is fully upgraded, mark
-   it ready; new writes to/from that atSign's namespace switch to the `nskey`
-   data path automatically, per-destination.
-4. **Both ends ready ⇒ end-to-end D1** — once both atSigns are ready, the pair
-   runs the `nskey` data path both directions; a mixed pair stays legacy *in
-   that direction only*.
-5. **Retire legacy, then the v4 default flip** — lazy re-encrypt on touch, stop
-   conveying `selfEncryptionKey`, then `at_client 4.0` flips the
-   `disallowLegacyEncryption` default to `true` (legacy *reads* and the legacy
-   provider remain).
+1. **The app's capability release (final 3.x — the soak).** Rebuild only: adds
+   the PQ providers + provider routing on *read*, upgrades the app's enrollment,
+   mints the namespace `nskey` (publishing its public half immediately at
+   `public:__nskey.<ns>@alice`, the private conveyed per-APKAM over the
+   substrate) or self-heals the private from a holder — and keeps *writing*
+   legacy. A zero-risk, install-by-install deploy, and the one discipline of the
+   whole migration: **this build reaches every install before the next one
+   ships**.
+2. **The app's active release (4.x, or an explicit config).** The app now writes
+   the `nskey` data path. The SDK never makes this decision — the app's build
+   does. Cross-atSign, a write toward a peer whose install has not reached
+   capability fails **cold start by name** (or takes the explicit legacy
+   fallback); the peer's key appearing is what ends that, with no action on the
+   sender's side.
+3. **Both ends capable ⇒ end-to-end D1** — the pair runs the `nskey` data path
+   both directions; a mixed pair stays on the legacy provider *in that direction only*, by the
+   app's own choice of fallback.
+4. **Retire legacy, then the v4 default flip** — lazy re-encrypt on touch, then
+   `at_client 4.0` flips its default posture from `PqPosture.pqReady`
+   to `PqPosture.pqActive`: one edit moving the remaining rollout axes at
+   once (era config, `disallowLegacyEncryption`, the in-use signing set,
+   enrolment key exchange, retrofit signing algorithm), which is why the flag
+   and the era default can no longer be flipped apart
+   ([`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)).
+   ⚠️ This read "from `PqPosture.legacy`" until 2026-08-26, when the 3.x
+   release candidate moved the default to `pqReady`. The 4.0 flip is therefore
+   the second half of the move, not the whole of it: authentication, the
+   signing set, seeding and enrolment key exchange have already gone, and what
+   4.0 still turns on is writing post-quantum by default and refusing legacy
+   encryption.
+   Legacy *reads* and the legacy provider remain. Minting/conveying legacy key
+   material stops only in a later, **ecosystem-gated** release
+   ([`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
 
 In short: **3.x defaults to "PQ when it can, legacy when it must"; 4.x defaults
-to "PQ — refuse rather than write legacy" — overridable either way, but never
+to "PQ — refuse rather than write with the legacy provider" — overridable either way, but never
 silently.**
 
 ## Usability & crypto-agility constraints
@@ -279,8 +308,11 @@ The promises, at a high level:
   the client key load/save plumbing all ship default implementations.
 - **Old data stays readable forever; migration is lazy** — the seam routes per
   value by `appMetadata`, re-encryption is on-touch, there is never a flag-day.
-- **Backwards-compatible, per-destination rollout** — feature discovery gates new
-  behaviour per peer; an old peer silently keeps the legacy path.
+- **Backwards-compatible rollout** — reads are universal, and which scheme an
+  app writes is its own release decision; the only per-destination gate is the
+  cold-start refusal with its explicit legacy fallback
+  ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
+  An old peer keeps the legacy path by never having published a namespace key.
 - **Safety is automatic** — a duplicate same-identity launch forks or refuses
   deterministically rather than corrupting state.
 - **For NoPorts the target is zero user-visible delta** — same commands, args,
@@ -308,11 +340,17 @@ own; later ones build on earlier. **M0–M3 are Deliverable 1** (PQ-safe messagi
 via the `nskey` data path); **M4–M6 are Deliverable 2** (the `at/pqmls` group
 provider through to the pq-mls engine).
 
+⚠️ **This table is about capability, not progress.** What is still owed lives in
+[`implementation-plan.md`](implementation-plan.md)'s one prioritised
+[`## TODO`](implementation-plan.md#todo) list, and only there; what is done is in
+`git log`. Status written here goes stale silently, because
+nothing reads this file when work lands.
+
 | Milestone | Capability added | Why it matters |
 |---|---|---|
-| **M0 · Pluggable crypto seam** | Per-value `CryptoProvider` routing via `appMetadata`; legacy + new schemes coexist | The migration machinery — old data readable forever, new schemes drop in as providers, no flag-day. Everything rides this seam. **Landed** (Wave-0). |
-| **M1 · PQ primitives** | X-Wing hybrid KEM, AES-256-GCM, HKDF in at_chops; PQ enrollment-conveyance pubkey | The PQ/hybrid building blocks; closes the last harvest-now-decrypt-later hole (enrollment); the crypto-agile base. **Primitives landed and published** (`at_chops` 3.3.0 + 3.4.0, incl. ML-DSA-65 verify dispatch and the AES-GCM FFI backend); the enrollment-conveyance pubkey (P-3) is the remaining piece. |
-| **M2 · Per-APKAM identity / substrate** | Each APKAM keypair carries an X-Wing key package; the per-APKAM secret-sharing substrate beneath the `nskey` data path | The substrate that conveys `nskey` privates per-APKAM (D1) and underpins `at/pqmls` (D2); per-APKAM granularity + revocability. **In progress** — the substrate baseline (SS-0) and the atServer discovery verb (SS-1b) landed 2026-07-17 and 2026-07-07; wiring it to the live verbs and into AtClient is SS-1c/SS-2. |
+| **M0 · Pluggable crypto seam** | Per-value `CryptoProvider` routing via `appMetadata`; legacy + new schemes coexist | The migration machinery — old data readable forever, new schemes drop in as providers, no flag-day. Everything rides this seam. |
+| **M1 · PQ primitives** | X-Wing hybrid KEM and pure ML-KEM-1024, AES-256-GCM, HKDF in at_chops; PQ enrollment-conveyance pubkey | The PQ/hybrid building blocks; closes the last harvest-now-decrypt-later hole (enrollment); the crypto-agile base. |
+| **M2 · Per-APKAM identity / substrate** | Each APKAM keypair carries a key package naming its own KEM; the per-APKAM secret-sharing substrate beneath the `nskey` data path | The substrate that conveys `nskey` privates per-APKAM (D1) and underpins `at/pqmls` (D2); per-APKAM granularity + revocability. |
 | **M3 · the `nskey` data path** | `at/nskey` conveys the CK + `at/symmetric/AES/GCM` encrypts the data, as D1's default self **and** shared encryption; coarse FS via CK rotation; per-APKAM future-data revocation + PCS via `nskey`-keypair rotation; retires `selfEncryptionKey`/`shared_key.*` | **Completes Deliverable 1** — PQ-safe self + shared messaging, no group machinery in the app's face. |
 | **M4 · `at/pqmls` intra-atSign groups (D2)** | `SecureGroup` v1 epoch engine; per-APKAM leaves; two-lever rotation | First forward-secure (intra-atSign) group encryption; the stable interface MLS later swaps under. |
 | **M5 · `at/pqmls` cross-atSign groups + Group Delivery Service (D2)** | `(pair, namespace)`-scoped groups; the ciphertext-only Group Delivery Service (wake-then-pull, ordering/catch-up/retention) | First cross-atSign group encryption + the delivery service that makes *large* groups scale; precursor to NoPorts sessions. |
@@ -327,21 +365,34 @@ provider through to the pq-mls engine).
 primitives & the enrollment-conveyance key) → **Phase S** (structural enablers:
 the key stores and the WASM-readiness split) → **Phase SS** (the per-APKAM
 secret-sharing substrate) → **Phase B** (the `nskey` data path) → **Phase R**
-(rollout, the readiness lifecycle, and the versioning flag) — with, off the
-critical path, **Phase RF** (the existing-client retrofit), the
+(rollout: the `disallowLegacyEncryption` flag, the key-material self-heal, and
+the server self-enroll — the readiness lifecycle was removed,
+[`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)) —
+with, off the critical path, **Phase RF's client half** (the retrofit
+orchestration), the
 `selfEncryptionKey` retirement, PQ-native onboarding, and the **D2** carve. The
 critical-path shape to GA is **seam → primitives → substrate → data path →
 rollout → rotation** (D1 GA), with the v4 default flip as the final gated
-cutover. The GA version slot is re-derived at execution against pub.dev — both
-`at_client` 3.13.0 and 3.14.0 published on 2026-07-17, so it is no longer 3.14.x.
+cutover. The GA version slot is re-derived against pub.dev at the time of
+release rather than named here, because a version written into a design doc is
+wrong from the next publish onward.
 
-**Baseline on trunk** (so M0 and the M1 primitives are landed, not in flight):
-`#1930` (the M0 pluggable-crypto seam), `#1993` / `at_chops 3.3.0`
-(`pqSeal`/`pqOpen`), and `#2035` (design fixes). **As of the 2026-07-17 release
-train**, `at_chops 3.4.0`, `at_commons 5.13.0`, `at_client 3.14.0` (carrying the
-SS-0 substrate as an experimental surface) and `at_auth 3.3.0-rc1` are published,
-and SS-0 / SS-1b / S-1 / S-2 are satisfied — `SS-1c` is the next actionable
-project on the critical path. The full project sequence, the
-dependency graph (ASCII), waves/parallelism, effort sizing, publish gates, the
-critical path, and the coverage map are in
-[`implementation-plan.md`](implementation-plan.md).
+**The design goals the cutover rests on** are ruled in
+[`decisions.md` 56](detail/decisions.md#56-the-make-it-right-quality-pass-and-the-design-goals-it-settled-2026-08-09):
+the signing chain is **root-anchored** (chain links provisional, the sweep
+upgrades them; a root-holder conveys root links, not chain links); retrofit has
+**three modes** with a per-retrofit signing-algorithm selector; and — the frame
+for the whole cutover — **from the PQ project's view, 4.0 is final-3.x code with
+only flag *defaults* changed.** Every rollout stage (the crypto era default,
+`disallowLegacyEncryption`, the signed-envelope version, `EnrollmentKeyExchangeMode`,
+the retrofit signing algorithm) is an independent flag with a 3.x and a 4.0
+default, plus a convenience posture that sets them as a group; all the code ships
+in 3.x, and the acceptance suite drives the entire rollout by flag manipulation.
+
+**Where the build has got to is not recorded here.** What is owed and what is
+parked are in [`implementation-plan.md`](implementation-plan.md)'s
+[`## TODO`](implementation-plan.md#todo) and `## PARKED` sections, which are the
+only place owed work is written down; the project
+sequence, the dependency graph, publish gates and the coverage map are one
+level down in [`detail/implementation-plan.md`](detail/implementation-plan.md). This document describes the shape of the work, and
+that shape does not change when a project lands.

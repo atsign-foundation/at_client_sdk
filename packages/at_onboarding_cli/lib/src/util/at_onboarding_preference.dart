@@ -4,6 +4,17 @@ import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/src/util/registrar_api_constants.dart';
 
 class AtOnboardingPreference extends AtClientPreference {
+  /// Forwards every flag `AtClientPreference` fixes at construction.
+  ///
+  /// These are final in the superclass — what a client writes must not change
+  /// meaning mid-run — so construction is the only place to set them. Each is
+  /// optional and defaulted by the superclass.
+  AtOnboardingPreference({
+    super.posture,
+    super.authenticationKeyAlgorithm,
+    super.dataSigningKeyAlgorithms,
+  });
+
   /// specify path of .atKeysFile containing encryption keys
   String? atKeysFilePath;
 

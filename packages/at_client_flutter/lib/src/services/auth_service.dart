@@ -67,6 +67,10 @@ class AuthService {
   ///   window.
   ///
   /// Returns [AtAuthResponse] which contains keys and status of authentication
+  ///
+  /// Unlike [onboard], no keychain `atKeysIo` is defaulted in: the request has
+  /// to carry `atKeysIo` or `atAuthKeys` of its own, since a keychain default
+  /// could read another atSign's keys.
   Future<AtAuthResponse> authenticate(
     AtAuthRequest atAuthRequest, {
     List<WrittenAtKeysIo>? backupKeys,
@@ -131,7 +135,7 @@ class AuthService {
   }) async {
     preference.rootDomain = session.rootDomain.rootDomain;
     preference.rootPort = session.rootDomain.rootPort;
-    return AtClient.create(
+    return buildAtClient(
       atSign: session.atSign,
       namespace: session.namespace,
       preference: preference,

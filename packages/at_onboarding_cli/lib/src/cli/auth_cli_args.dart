@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart'
+    show EnrollmentKeyExchangeMode, PqPosture;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:meta/meta.dart';
@@ -68,12 +70,11 @@ enum AuthCliCommand {
           ' the program which first onboarded; however it can also be an enrolled'
           ' program which has "rw" access to the "__manage" namespace.'),
   decrypt(
-      usage:
-          'Decrypts a passphrase-protected atKeys file and writes it to the '
-              'targetKeys file'),
+      usage: 'Decrypts a passphrase-protected atKeys file and writes it to the '
+          'targetKeys file'),
   version(
     usage: 'Print version. The version printed is the at_onboarding_cli '
-          'package version. It prints a format similar to "Version: x.xx.x"',
+        'package version. It prints a format similar to "Version: x.xx.x"',
   );
 
   const AuthCliCommand({this.usage = ''});
@@ -121,6 +122,81 @@ class AuthCliArgs {
   static const argNameAutoApproveExisting = 'approve-existing';
   static const argNamePassPhrase = 'passPhrase';
   static const argNameHashingAlgoType = 'hashingAlgoType';
+  static const argNamePosture = 'posture';
+  static const argNameKeyExchange = 'key-exchange';
+
+  /// The postures a `--posture` argument may name.
+  static const Map<String, PqPosture> postureNames = {
+    'legacy': PqPosture.legacy,
+    'pqReady': PqPosture.pqReady,
+    'pqActive': PqPosture.pqActive,
+  };
+
+  /// The posture [results] names, or null when it named none.
+  static PqPosture? postureIn(ArgResults results) {
+    final named = results[argNamePosture];
+    return named == null ? null : postureNames[named];
+  }
+
+  /// The posture an **enroller** command — `onboard` or `enroll` — runs at:
+  /// whatever `--posture` named, else [PqPosture.legacy].
+  ///
+  /// `notice` is non-null exactly when the default was taken, and is for the
+  /// command to print.
+  static ({PqPosture posture, String? notice}) postureForEnroller(
+      ArgResults results) {
+    final named = postureIn(results);
+    if (named != null) return (posture: named, notice: null);
+    return (
+      posture: PqPosture.legacy,
+      notice: 'No --posture given, so this runs at "legacy": classical keys '
+          'throughout, no post-quantum key material, and a keyfile a '
+          'previously published build can read. Name --posture pqReady or '
+          '--posture pqActive to enrol further into the rollout.',
+    );
+  }
+
+  /// The posture an **approver** command runs at: whatever `--posture` named,
+  /// else [PqPosture.pqReady]. Naming `legacy` throws an [ArgumentError],
+  /// because a legacy posture configures none of the post-quantum providers an
+  /// approver needs to service a post-quantum enrolment.
+  static PqPosture postureForApprover(ArgResults results) {
+    final named = postureIn(results);
+    if (named == PqPosture.legacy) {
+      throw ArgumentError.value(
+          'legacy',
+          '--$argNamePosture',
+          'this command approves, lists or manages enrollments, and a legacy '
+              'posture configures no post-quantum providers — so it cannot '
+              'mint and seal the symmetric key a post-quantum enrolment asks '
+              'its approver for, and would leave such a request pending. Run '
+              'it at pqReady (the default) or pqActive');
+    }
+    return named ?? PqPosture.pqReady;
+  }
+
+  /// The key-exchange modes a `--key-exchange` argument may name.
+  static const Map<String, EnrollmentKeyExchangeMode> keyExchangeNames = {
+    'legacy': EnrollmentKeyExchangeMode.legacy,
+    'pq': EnrollmentKeyExchangeMode.pq,
+  };
+
+  /// The key-exchange mode [results] names, or null when it named none, which
+  /// leaves the choice to the posture.
+  static EnrollmentKeyExchangeMode? keyExchangeIn(ArgResults results) {
+    final named = results[argNameKeyExchange];
+    return named == null ? null : keyExchangeNames[named];
+  }
+
+  /// A preference under [posture], or under whatever the at_client this was
+  /// built against defaults to when [posture] is null.
+  ///
+  /// A posture is final in `AtClientPreference`, so it can only be set at
+  /// construction.
+  static AtOnboardingPreference preferenceUnder(PqPosture? posture) =>
+      posture == null
+          ? AtOnboardingPreference()
+          : AtOnboardingPreference(posture: posture);
   static const argNameMaxRetries = 'max-retries';
   static const argNameAllowBadRegistrarCerts = 'allow-bad-registrar-certs';
   static const argNameYes = 'yes';
@@ -307,6 +383,22 @@ class AuthCliArgs {
         mandatory: false,
         defaultsTo: HashingAlgoType.argon2id.name,
         hide: hide);
+    // NOTE: no defaultsTo, because the two roles resolve an unset value
+    // differently and a parser-level default could only state one of them.
+    // See postureForEnroller and postureForApprover.
+    p.addOption(argNamePosture,
+        help: 'How far into the post-quantum rollout to run. legacy drives no '
+            'upgrade and configures no post-quantum providers, so it cannot '
+            'read post-quantum data; pqReady moves the credentials and keeps '
+            'writes legacy; '
+            'pqActive makes post-quantum writes the default. onboard and '
+            'enroll default to legacy, so the keys they write stay usable by a '
+            'legacy app; every other command defaults to pqReady and refuses '
+            'legacy, because approving a post-quantum enrolment needs the '
+            'post-quantum providers',
+        mandatory: false,
+        allowed: postureNames.keys,
+        hide: hide);
     return p;
   }
 
@@ -435,11 +527,25 @@ class AuthCliArgs {
         mandatory: false);
     p.addOption(
       argNameMaxRetries,
-      help: 'Number of times to check for approval before giving up',
+      help: 'Consecutive failures to reach the atServer to ride out before '
+          'giving up. Waiting for the approval itself is not bounded',
       defaultsTo: '${AtOnboardingService.defaultMaxApkamRetries}',
       mandatory: false,
       hide: false,
     );
+    // NOTE: on `enroll` alone, not on the shared parser — a key-exchange mode
+    // means something only where an enrollment request is built. No
+    // defaultsTo: an unset value means the posture decides.
+    p.addOption(argNameKeyExchange,
+        help: 'How this enrollment\'s symmetric key travels. pq means the '
+            'approver seals it to the key package this request advertises, so '
+            'nothing RSA-wrapped rides the request; legacy means this app '
+            'wraps it to the atSign\'s encryption public key. Defaults to '
+            'whatever --posture implies. Name legacy explicitly when the '
+            'approving app predates conveyance: a pq request that nothing '
+            'conveys to leaves the enrollment approved and unable to decrypt',
+        mandatory: false,
+        allowed: keyExchangeNames.keys);
     return p;
   }
 

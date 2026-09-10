@@ -18,10 +18,12 @@ void main() async {
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace, authType);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        currentAtSign, namespace, authType,
+        posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        sharedWithAtSign, namespace, authType,
+        posture: PqPosture.legacy);
   });
 
   test(
@@ -41,7 +43,7 @@ void main() async {
     var value = '+1 100 200 30';
     // Setting currentAtSign atClient instance to context.
     currentAtClientManager = await TestSuiteInitializer.getInstance()
-        .switchToAtSign(currentAtSign, namespace);
+        .switchToAtSign(currentAtSign, namespace, posture: PqPosture.legacy);
     final notificationResult = await currentAtClientManager
         .atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
@@ -51,7 +53,7 @@ void main() async {
 
     // Setting sharedWithAtSign atClient instance to context.
     await TestSuiteInitializer.getInstance()
-        .switchToAtSign(sharedWithAtSign, namespace);
+        .switchToAtSign(sharedWithAtSign, namespace, posture: PqPosture.legacy);
     var notificationListResult = await AtClientManager.getInstance()
         .atClient
         .notifyList(regex: 'phone$randomValue');
@@ -79,7 +81,7 @@ void main() async {
     var value = '+1 100 200 30';
     // Setting currentAtSign atClient instance to context.
     currentAtClientManager = await TestSuiteInitializer.getInstance()
-        .switchToAtSign(currentAtSign, namespace);
+        .switchToAtSign(currentAtSign, namespace, posture: PqPosture.legacy);
     final notificationResult = await currentAtClientManager
         .atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value),
@@ -90,7 +92,7 @@ void main() async {
 
     // Setting sharedWithAtSign atClient instance to context.
     await TestSuiteInitializer.getInstance()
-        .switchToAtSign(sharedWithAtSign, namespace);
+        .switchToAtSign(sharedWithAtSign, namespace, posture: PqPosture.legacy);
     var notificationListResult = await AtClientManager.getInstance()
         .atClient
         .notifyList(regex: 'phone$randomValue');

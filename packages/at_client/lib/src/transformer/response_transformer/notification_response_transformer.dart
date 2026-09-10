@@ -1,7 +1,11 @@
 import 'dart:async';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/response/at_notification.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 
 /// Class is responsible for decrypting the notification value/text-message data
@@ -46,6 +50,18 @@ class NotificationResponseTransformer
       ..key = key
       ..sharedWith = atNotification.to
       ..sharedBy = atNotification.from;
+
+    // NOTE: the key string still carries its namespace suffix. Crypto routing
+    // is `(owner, namespace)` scoped and the nskey providers refuse a value
+    // without a namespace, so leaving it null makes such a notification
+    // unreadable. Splitting at the last dot matches AtKey.fromString, and
+    // toString() recomposes the key unchanged.
+    final namespaceIndex = atKey.key.lastIndexOf('.');
+    if (namespaceIndex > -1) {
+      atKey.namespace = atKey.key.substring(namespaceIndex + 1);
+      atKey.key = atKey.key.substring(0, namespaceIndex);
+    }
+
     if (atNotification.metadata != null) {
       atKey.metadata = atNotification.metadata!;
     }

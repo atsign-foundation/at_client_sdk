@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -12,13 +13,10 @@ class AtClientUtil {
   @Deprecated('use RemoteSecondary.findSecondaryUrl')
   static Future<String> findSecondary(
       String toAtSign, String rootDomain, int rootPort) async {
-    var secondaryUrl =
-        await AtLookupImpl.findSecondary(toAtSign, rootDomain, rootPort);
-    if (secondaryUrl == null) {
-      throw SecondaryNotFoundException(
-          'No secondary url found for atsign: $toAtSign');
-    }
-    return secondaryUrl;
+    final secondaryAddress =
+        await CacheableSecondaryAddressFinder(rootDomain, rootPort)
+            .findSecondary(toAtSign);
+    return secondaryAddress.toString();
   }
 
   static List<String> getSecondaryInfo(String? url) {
@@ -109,6 +107,7 @@ class AtClientUtil {
         metadataMap[AtConstants.sharedWithPublicKeyHash]);
     metadata.appMetadata =
         Metadata.decodeAppMetadata(metadataMap[AtConstants.appMetadata]);
+    metadata.immutable = metadataMap[AtConstants.immutable] ?? false;
 
     return metadata;
   }

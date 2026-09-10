@@ -9,6 +9,9 @@ import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_lock.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
+
+final _logger = AtSignLogger('FileAtKeysIo');
 
 /// File-backed `.atKeys` storage.
 class FileAtKeysIo extends WrittenAtKeysIo {
@@ -111,14 +114,41 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       return;
     }
 
+    final existing = await _readAtRestDocument(file);
     assurance.validateMapUpdate(
-      existing: await _readAtRestDocument(file),
+      existing: existing,
       candidate: document,
     );
+    await _preserveLegacyShape(file, existing, document);
     // Keep the previous state recoverable as .bak. A copy, not a rename, so
     // the live keyfile exists at every instant of the flush.
     await file.copy('${file.path}.bak');
     await _writeAtRestDocument(file, document);
+  }
+
+  /// The suffix [_preserveLegacyShape] writes the pre-upgrade document under.
+  static const legacyShapeBackupSuffix = '.pre-v1';
+
+  /// Copies the keyfile aside, once, at the moment its shape stops being the
+  /// flat one every published build can read.
+  ///
+  /// Keyed on that transition and never overwritten, unlike the rolling `.bak`
+  /// beside it, which the next write replaces.
+  Future<void> _preserveLegacyShape(
+    File file,
+    Map<String, dynamic> existing,
+    Map<String, dynamic> candidate,
+  ) async {
+    if (existing.containsKey('version')) return;
+    if (!candidate.containsKey('version')) return;
+    final backup = File('${file.path}$legacyShapeBackupSuffix');
+    if (backup.existsSync()) return;
+    await file.copy(backup.path);
+    _logger.shout(
+        'Upgrading ${file.path} to the typed keyfile format: it now carries '
+        'per-enrollment key material, which a build older than this one does '
+        'not read. The previous document has been copied to ${backup.path} '
+        'and will not be overwritten.');
   }
 
   Future<Map<String, dynamic>> _encodeAtRest(

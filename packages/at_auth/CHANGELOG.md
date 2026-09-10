@@ -1,3 +1,47 @@
+## 4.0.0-rc2
+
+- feat: `FileAtKeysIo` keeps a copy of the keyfile at the moment its shape
+  stops being the flat one every published build reads. The `.bak` beside it
+  is rolling — the next write replaces it, and a client's startup makes
+  several within seconds — so it preserves nothing an operator could come
+  back to. The new `<keyfile>.pre-v1` is keyed on the transition rather than
+  on the write and is never overwritten, and the upgrade is announced at
+  `shout`, the one level a CLI that has silenced its logging still shows.
+  Detected from the two documents rather than from a flag a caller passes.
+- **BREAKING:** `signingAlgoType` moves off `AuthRequest` and onto
+  `AtOnboardingRequest`, where it becomes a required constructor argument. It
+  defaulted to `rsa2048` on the shared base, which let an activation inherit an
+  algorithm its caller never chose — the state that produced the same defect
+  `AtEnrollmentRequest.signingAlgo` already guards against on the enrolment
+  door, where the argument is required for that reason. Authentication is
+  unaffected and loses a field it never read: the algorithm an existing keyfile
+  authenticates with is resolved from that keyfile, so a caller-settable value
+  there could only ever be wrong silently. Callers of `AtOnboardingRequest`
+  state the algorithm they want; `rsa2048` reproduces the previous behaviour.
+- **BREAKING:** a self-enrollment no longer approves its own request, and no
+  longer sends `encryptedAPKAMSymmetricKey`. The atServer migrates a legacy
+  credential into an enrollment named `primary` and approves a retrofit of it
+  outright, so the `pending` answer the self-approval existed for no longer
+  comes back; measured live on 2026-09-08, where the server answered
+  `approved`. A `pending` answer is now denied and thrown whatever the session
+  names, which is what an atServer that does not auto-approve gets, and those
+  are not supported. The symmetric key existed only so the client could
+  approve itself, and the atServer requires one only for a request carrying an
+  otp.
+- **BREAKING:** `AtAuthRequest.enrollmentId` is removed. The keys decide which
+  enrollment authenticates, through the new
+  `AtKeys.enrollmentToAuthenticateAs()`: the one enrollment holding active
+  typed authentication material, else the flat stored id, else `primary` for a
+  keyfile that predates enrollments. A retrofitted keyfile therefore
+  authenticates as its successor with nothing passed, where it used to
+  authenticate as the legacy enrollment unless the caller named the successor.
+  A keyfile holding several live enrollments throws naming them, as the
+  resolver always has. `primary` never reaches the wire: at_commons 5.18.0's
+  `PkamVerbBuilder` omits it, so the floor moves to that release.
+- feat: `AtKeys.holdsAuthenticationMaterial` — whether the document holds
+  typed authentication material or the flat APKAM keypair. A document holding
+  neither authenticates as nothing, whatever its flat id says.
+
 ## 4.0.0-rc1
 
 - fix: **`authenticatorForChops` requires `signingAlgo` and `hashingAlgo`.**
