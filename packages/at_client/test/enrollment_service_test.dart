@@ -5,6 +5,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -12,7 +13,21 @@ import 'package:test/test.dart';
 import 'test_utils/test_utils.dart';
 import 'test_utils/mocks.dart';
 
-class MockSyncService extends Mock implements SyncService {}
+/// Records the decision at_client hands down to at_auth, which is where the
+/// choice between minting a symmetric key and passing the enrollee's own one
+/// through becomes observable.
+class RecordingAtEnrollment extends Mock implements AtEnrollment {
+  final List<EnrollmentRequestDecision> approvals = [];
+
+  @override
+  Future<AtEnrollmentResponse> approve(
+      EnrollmentRequestDecision decision, AtLookUp atLookUp,
+      {AtChops? approverChops}) async {
+    approvals.add(decision);
+    return AtEnrollmentResponse(
+        decision.enrollmentId, EnrollmentStatus.approved);
+  }
+}
 
 void main() {
   String currentAtSign = '@alice';
@@ -34,22 +49,13 @@ void main() {
         remoteSecondary: mockRemoteSecondary);
     atClient.syncService = MockSyncService();
 
-    var localEnrollmentKey = AtKey()
-      ..isLocal = true
-      ..key = enrollmentId
-      ..sharedBy = '@alice';
-    AtData atData = AtData()
-      ..data = jsonEncode(Enrollment()
-        ..appName = 'wavi'
-        ..deviceName = 'iphone'
-        ..namespace = {'wavi': 'rw'}
-        ..enrollmentId = enrollmentId);
-
-    // Store enrollment data
-    await atClient
-        .getLocalSecondary()
-        ?.keyStore
-        ?.put(localEnrollmentKey.toString(), atData);
+    when(() => mockRemoteSecondary
+        .executeCommand('enroll:fetch:{"enrollmentId":"$enrollmentId"}\n',
+            auth: true)).thenAnswer((_) async => 'data:${jsonEncode({
+              'appName': 'wavi',
+              'deviceName': 'iphone',
+              'namespace': {'wavi': 'rw'},
+            })}');
 
     AtEncryptionResult? atEncryptionResult = await atClient.atChops
         ?.encryptString(atChops.atChopsKeys.selfEncryptionKey!.key,
@@ -148,6 +154,159 @@ void main() {
       expect(requests[2].appName, jsonDecode(enrollValue3)['appName']);
       expect(requests[2].deviceName, jsonDecode(enrollValue3)['deviceName']);
       expect(requests[2].namespace, jsonDecode(enrollValue3)['namespace']);
+    });
+
+    test('fetchEnrollmentRequests carries the enrollment\'s status', () async {
+      const currentAtsign = '@apkamstatus';
+      const enrollKey =
+          'abcdef02-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$currentAtsign';
+      const enrollValue = '{"appName":"buzz","deviceName":"pixel",'
+          '"namespace":{"buzz":"rw"},"status":"revoked"}';
+      final listCommand = (EnrollVerbBuilder()
+            ..operation = EnrollOperationEnum.list)
+          .buildCommand();
+      final secondary = MockRemoteSecondary();
+      when(() => secondary.executeCommand(listCommand, auth: true))
+          .thenAnswer((_) async => 'data:{"$enrollKey":$enrollValue}');
+
+      final client = await AtClientImpl.create(
+          currentAtsign,
+          'buzz',
+          AtClientPreference()
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/commit',
+          remoteSecondary: secondary);
+      client.enrollmentService =
+          EnrollmentServiceImpl(client, AtEnrollment.create());
+
+      final request =
+          (await client.enrollmentService!.fetchEnrollmentRequests()).single;
+
+      expect(request.status, 'revoked');
+      expect(request.appName, 'buzz',
+          reason: 'the control: the rest of the record parsed, so the status '
+              'above is the field arriving rather than the whole response');
+    });
+
+    test('fetchEnrollmentRequests carries the advertised key package',
+        () async {
+      // NOTE: a distinct atSign — AtClientImpl.create caches per atSign, so
+      // reusing one another test already built would hand back that test's
+      // client and its mock secondary, and this stub would never fire.
+      const currentAtsign = '@apkammeta';
+      const enrollKey =
+          'abcdef01-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$currentAtsign';
+      const enrollValue = '{"appName":"buzz","deviceName":"pixel",'
+          '"namespace":{"buzz":"rw"},'
+          '"metadata":{"keyPackage":{"opaqueToTheClient":true}}}';
+      // The unfiltered command: this test calls `fetchEnrollmentRequests()`
+      // directly with no params, not through `approve`, whose two reads each
+      // carry a status filter.
+      final listCommand = (EnrollVerbBuilder()
+            ..operation = EnrollOperationEnum.list)
+          .buildCommand();
+      final secondary = MockRemoteSecondary();
+      when(() => secondary.executeCommand(listCommand, auth: true))
+          .thenAnswer((_) async => 'data:{"$enrollKey":$enrollValue}');
+
+      final client = await AtClientImpl.create(
+          currentAtsign,
+          'buzz',
+          AtClientPreference()
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/commit',
+          remoteSecondary: secondary);
+      client.enrollmentService =
+          EnrollmentServiceImpl(client, AtEnrollment.create());
+
+      final request =
+          (await client.enrollmentService!.fetchEnrollmentRequests()).single;
+
+      expect(request.metadata?['keyPackage'], isNotNull,
+          reason: 'an approver reads the encapsulation target from here — the '
+              'metadata is only ever written by the request that creates the '
+              'record, so there is nowhere else to read it from');
+      // NOTE: the stub is deliberately not shaped like a real key package —
+      // this asserts pass-through of an opaque map, and a stub that mimicked
+      // the envelope would read as documentation of its shape.
+      expect((request.metadata!['keyPackage'] as Map)['opaqueToTheClient'],
+          isTrue);
+    });
+
+    /// What an approving app passes in on the RSA path: the wrapped key it
+    /// read off the enrollment notification. `AtBytes` holds base64.
+    final callerSuppliedKey = base64Encode(utf8.encode('from-the-enrollee'));
+
+    /// Drives `approve` against a pending record and returns the decision that
+    /// reached at_auth.
+    ///
+    /// The two reads are stubbed with different records: the pending one on
+    /// the pre-approval read, and a metadata-less one afterwards, so
+    /// conveyance short-circuits and the assertion is about the minting
+    /// decision alone.
+    Future<EnrollmentRequestDecision> decisionFor(
+        String atSign, String pendingValue) async {
+      final enrollKey =
+          'abcdef01-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$atSign';
+      final commands = approveListCommands();
+      final secondary = MockRemoteSecondary();
+      when(() => secondary.atLookUp).thenReturn(MockAtLookUp());
+      when(() => secondary.executeCommand(commands.first, auth: true))
+          .thenAnswer((_) async => 'data:{"$enrollKey":$pendingValue}');
+      when(() => secondary.executeCommand(commands.last, auth: true))
+          .thenAnswer((_) async =>
+              'data:{"$enrollKey":{"appName":"buzz","deviceName":"pixel",'
+              '"namespace":{"buzz":"rw"}}}');
+
+      // NOTE: the posture is named rather than defaulted — the arm where the
+      // approver mints and seals a key needs post-quantum providers, which a
+      // posture configuring none refuses outright.
+      final client = await AtClientImpl.create(
+          atSign,
+          'buzz',
+          AtClientPreference(posture: PqPosture.pqReady)
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/commit',
+          remoteSecondary: secondary);
+      final enrollment = RecordingAtEnrollment();
+      await EnrollmentServiceImpl(client, enrollment).approve(
+          EnrollmentRequestDecision.approved(
+              enrollmentId: 'abcdef01-1a2e-43e4-93bd-378f1d366ea7',
+              apkamSymmetricKey: AtBytes.fromString(callerSuppliedKey),
+              atSign: atSign));
+      return enrollment.approvals.single;
+    }
+
+    test('an enrollment that sent no wrapped key gets a minted one', () async {
+      final decision = await decisionFor(
+          '@apkamminted',
+          '{"appName":"buzz","deviceName":"pixel",'
+              '"namespace":{"buzz":"rw"},'
+              '"metadata":{"keyPackage":{"opaqueToTheClient":true}}}');
+
+      expect(decision.mintedApkamSymmetricKey, isNotNull,
+          reason: 'the absent wrapped key is the whole signal that this '
+              'enrollee expects the approver to mint one — it is only visible '
+              'on the record the enrollee wrote, which is why the read '
+              'happens before the approval');
+      expect(decision.encryptedAPKAMSymmetricKey, isEmpty,
+          reason: 'there is nothing to RSA-decrypt on this path');
+    });
+
+    test('an enrollment that sent a wrapped key keeps it', () async {
+      final decision = await decisionFor(
+          '@apkamwrapped',
+          '{"appName":"buzz","deviceName":"pixel",'
+              '"namespace":{"buzz":"rw"},'
+              '"encryptedAPKAMSymmetricKey":"rsa-wrapped",'
+              '"metadata":{"keyPackage":{"opaqueToTheClient":true}}}');
+
+      expect(decision.mintedApkamSymmetricKey, isNull,
+          reason: 'this enrollee advertised a key package for secret '
+              'conveyance but generated its own symmetric key, so minting a '
+              'second one would leave it unable to unwrap anything');
+      expect(decision.encryptedAPKAMSymmetricKey, callerSuppliedKey,
+          reason: "the caller's own decision must pass through untouched");
     });
 
     test(

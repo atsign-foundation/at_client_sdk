@@ -54,6 +54,25 @@ final atClient = (await CLIBase.fromCommandLineArgs(
 // pref.someCustomField is untouched.
 ```
 
+The post-quantum rollout flags are **final at construction** — what a client
+writes must not change meaning while it is running — so those are named in the
+constructor rather than assigned afterwards:
+
+```dart
+final pref = AtOnboardingPreference(
+  posture: PqPosture.pqActive,
+)..someCustomField = 'my value';
+```
+
+`posture`, `authenticationKeyAlgorithm`, `dataSigningKeyAlgorithms` and
+`sealsToKeyAlgorithms` are all available there, and each is optional. Every
+type they take — including `SigningAlgoType` — is nameable from
+`package:at_client/at_client.dart` alone.
+
+`disallowLegacyEncryption` is deliberately **not** among them: it is settable
+only through the posture, so an app that wants legacy writes refused adopts
+`PqPosture.pqActive` or builds a posture that says so.
+
 ## Where to go next
 
 - [`at_client`](../at_client) — the SDK whose `AtClient` this produces

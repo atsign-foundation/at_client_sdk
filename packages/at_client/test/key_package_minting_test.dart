@@ -1,0 +1,411 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:at_auth/at_auth.dart'
+    show
+        AtEnrollment,
+        AtEnrollmentResponse,
+        AtKeys,
+        CryptographicMaterial,
+        CryptographicMaterialRole,
+        EnrollmentUpdateRequest,
+        InMemoryAtKeysIo,
+        KeyEntryStatus,
+        CryptographicMaterialStatus;
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_client/src/secret_sharing/key_package.dart'
+    show KeyPackage, PackageKey;
+import 'package:at_client/src/secret_sharing/key_package_minting.dart'
+    show KeyPackageMinting;
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show EnvelopeType, SignedEnvelope, verifyEnvelope;
+import 'package:at_commons/at_commons.dart' show AtBytes;
+import 'package:at_commons/atsign.dart' show AtsignString;
+import 'package:mocktail/mocktail.dart';
+import 'package:test/test.dart';
+
+import 'test_utils/mocks.dart';
+
+class MockAtClient extends Mock implements AtClient {}
+
+class MockAtEnrollment extends Mock implements AtEnrollment {}
+
+/// An enrollment amending its own advertised key package.
+///
+/// Ordering is the property that matters most: an encapsulation key advertised
+/// before its private half is filed makes every sender reading the
+/// advertisement in that window seal data to a key nobody holds, and those
+/// writes are durable — [heldWhenPublished] is what lets a test tell the two
+/// orders apart rather than merely observe that both happened.
+void main() {
+  const atSign = '@alice';
+  const enrollmentId = 'enroll-a';
+
+  late MockAtClient atClient;
+  late MockAtEnrollment enrollment;
+  late MockAtLookUp atLookUp;
+  late AtChops atChops;
+  late InMemoryAtKeysIo keysIo;
+
+  late List<EnrollmentUpdateRequest> updates;
+
+  /// The kpids the keyfile held when each update was sent, so a test can tell
+  /// "advertised, then filed" from "filed, then advertised".
+  late List<Set<String>> heldWhenPublished;
+
+  Future<List<CryptographicMaterial>> encMaterials(
+      {String part = CryptographicMaterialRole.publicEncapsulation}) async {
+    final keys = await keysIo.read(atSign);
+    // NOTE: not scoped by enrollment id — an enrollment's first package is
+    // filed untagged and anything minted later is tagged.
+    return keys.keys.where((m) => m.role == part).toList();
+  }
+
+  Future<Set<String>> heldKpids() async =>
+      (await encMaterials()).map((m) => m.keyId).toSet();
+
+  /// The key package the last `enroll:update` advertised, verified against
+  /// `_apsk` the way a peer does before sealing anything to it.
+  ///
+  /// The enrollment holds no signing key of its own in these rows, so `_apsk`
+  /// is the bare APKAM public key.
+  Future<KeyPackage> advertised() async {
+    final envelope = SignedEnvelope.fromJson(
+        updates.last.metadata!['keyPackage'] as Map<String, dynamic>);
+    await verifyEnvelope(envelope,
+        signerPublicKey:
+            atChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey,
+        expecting: EnvelopeType.keyPackage);
+    return KeyPackage.fromPayload(envelope.payload, enrollmentId: enrollmentId);
+  }
+
+  /// Files an already-held encapsulation keypair, as an enrollment created
+  /// under [algorithm] would carry.
+  ///
+  /// [tagged] defaults to false because a first key package is filed before
+  /// the atServer has assigned an enrollment id, so an untagged pair is the
+  /// ordinary state of a freshly created enrollment; a tagged one appears
+  /// only once something re-files it under the id.
+  Future<String> fileHeldKey(String algorithm,
+      {bool tagged = false,
+      CryptographicMaterialStatus status =
+          CryptographicMaterialStatus.active}) async {
+    final kem = SecretSharingAlgos.kemFor(algorithm)!;
+    final seed = kem.newSeed();
+    final pair = await kem.keyPairFromSeed(seed);
+    final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
+    final materialAlgo = SecretSharingAlgos.materialAlgoFor(algorithm)!;
+    await keysIo.update(atSign.toAtsign(), (keys) {
+      keys.addKey(CryptographicMaterial(
+        enrollmentId: tagged ? enrollmentId : null,
+        keyId: kpid,
+        role: CryptographicMaterialRole.publicEncapsulation,
+        algorithm: materialAlgo,
+        bytes: AtBytes(pair.publicKey),
+        createdAt: DateTime.now().toUtc(),
+        status: status,
+      ));
+      keys.addKey(CryptographicMaterial(
+        enrollmentId: tagged ? enrollmentId : null,
+        keyId: kpid,
+        role: CryptographicMaterialRole.privateDecapsulation,
+        algorithm: materialAlgo,
+        bytes: AtBytes(seed),
+        createdAt: DateTime.now().toUtc(),
+        status: status,
+      ));
+      return true;
+    });
+    return kpid;
+  }
+
+  void configure(List<String> algorithms) {
+    when(() => atClient.getPreferences())
+        .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: algorithms));
+  }
+
+  setUpAll(() {
+    registerFallbackValue(AtKey());
+    registerFallbackValue(EnrollmentUpdateRequest(
+        enrollmentId: 'fallback', metadata: const {'a': 'b'}));
+    registerFallbackValue(MockAtLookUp());
+  });
+
+  setUp(() async {
+    atChops = AtChopsImpl(
+        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+    keysIo = InMemoryAtKeysIo();
+    await keysIo.write(atSign, AtKeys(atsign: atSign.toAtsign()));
+    updates = [];
+    heldWhenPublished = [];
+
+    atClient = MockAtClient();
+    when(() => atClient.atChops).thenReturn(atChops);
+    when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
+    when(() => atClient.atKeysIo).thenReturn(keysIo);
+    configure(const [SecretSharingAlgos.xWing]);
+
+    final remoteSecondary = MockRemoteSecondary();
+    atLookUp = MockAtLookUp();
+    when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
+    when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
+    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+
+    enrollment = MockAtEnrollment();
+    when(() => enrollment.update(any(), any())).thenAnswer((i) async {
+      updates.add(i.positionalArguments[0] as EnrollmentUpdateRequest);
+      heldWhenPublished.add(await heldKpids());
+      return AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved);
+    });
+  });
+
+  KeyPackageMinting minter() =>
+      KeyPackageMinting(atClient, enrollment: enrollment);
+
+  group('what it does not do', () {
+    test('an enrollment already holding what the list names does nothing',
+        () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+
+      final reconciled = await minter().reconcileKeyPackage();
+
+      expect(reconciled.minted, isEmpty);
+      expect(reconciled.retired, isEmpty);
+      expect(updates, isEmpty,
+          reason: 'this is every start after the first, and a package '
+              'republished on each one is a durable record rewritten to say '
+              'what it already says');
+    });
+
+    test('a client with no key source mints nothing', () async {
+      // NOTE: a minted key that cannot be filed is one peers seal to and this
+      // client can never open.
+      when(() => atClient.atKeysIo).thenReturn(null);
+      configure(const [SecretSharingAlgos.mlKem1024]);
+
+      final reconciled = await minter().reconcileKeyPackage();
+
+      expect(reconciled.minted, isEmpty);
+      expect(updates, isEmpty);
+    });
+
+    test('an unenrolled client mints nothing', () async {
+      // NOTE: enroll:update is self-only, so a client that can name no
+      // enrollment can name no record to amend.
+      when(() => atLookUp.enrollmentId).thenReturn(null);
+      configure(const [SecretSharingAlgos.mlKem1024]);
+
+      final reconciled = await minter().reconcileKeyPackage();
+
+      expect(reconciled.minted, isEmpty);
+      expect(updates, isEmpty);
+      expect(await heldKpids(), isEmpty,
+          reason: 'nothing may be filed either: a key this client cannot '
+              'advertise is one no sender can reach');
+    });
+  });
+
+  group('gaining a key', () {
+    test('a second algorithm is minted, filed and advertised beside the first',
+        () async {
+      final first = await fileHeldKey(SecretSharingAlgos.xWing);
+      configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
+
+      final reconciled = await minter().reconcileKeyPackage();
+
+      expect(reconciled.minted, [SecretSharingAlgos.mlKem1024]);
+      expect(reconciled.retired, isEmpty);
+
+      final package = await advertised();
+      expect(package.keys.map((k) => k.alg).toSet(),
+          {SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024});
+      expect(
+          package.keys.every((k) => k.status == KeyEntryStatus.active), isTrue);
+      expect(package.keys.map((k) => k.kid), contains(first),
+          reason: 'the key already advertised keeps its address — an '
+              'enrollment that gained a key has not moved');
+      expect(await heldKpids(), hasLength(2));
+    });
+
+    test('an amendment conveys nothing over the wire', () async {
+      // NOTE: `put` is stubbed to record rather than left unstubbed — an
+      // unstubbed call throws, and the failure would name the mock rather
+      // than a conveyance.
+      final written = <String>[];
+      when(() => atClient.put(any(), any())).thenAnswer((i) async {
+        written.add((i.positionalArguments[0] as AtKey).toString());
+        return true;
+      });
+
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
+
+      final reconciled = await minter().reconcileKeyPackage();
+
+      expect(reconciled.minted, [SecretSharingAlgos.mlKem1024],
+          reason: 'the control: the amendment must actually have happened, or '
+              'writing nothing is not evidence of anything');
+      expect(written, isEmpty,
+          reason: 'an amendment files locally and advertises through '
+              'enroll:update — it must not write a record. A conveyance here '
+              'would re-seal to a holder that already has the plaintext');
+    });
+
+    test('the private half is filed BEFORE the advertisement goes out',
+        () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
+
+      await minter().reconcileKeyPackage();
+
+      expect(heldWhenPublished, hasLength(1));
+      final advertisedKids =
+          (await advertised()).keys.map((k) => k.kid).toSet();
+      expect(heldWhenPublished.single, containsAll(advertisedKids),
+          reason: 'every kid the advertisement names was already in the '
+              'keyfile at the moment it was sent');
+    });
+
+    test('the minted private half re-derives the advertised public key',
+        () async {
+      // NOTE: a filed seed that does not reproduce the advertised key is an
+      // address this client answers at and cannot open, and it looks healthy
+      // until the first secret arrives.
+      configure(const [SecretSharingAlgos.mlKem1024]);
+
+      await minter().reconcileKeyPackage();
+
+      final privates = await encMaterials(
+          part: CryptographicMaterialRole.privateDecapsulation);
+      final seed = Uint8List.fromList(privates.single.bytes.bytes);
+      final pair =
+          await SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!
+              .keyPairFromSeed(seed);
+
+      expect(
+          base64Encode(pair.publicKey), (await advertised()).keys.single.pub);
+    });
+
+    test('the advertisement is signed by the key _apsk names', () async {
+      // NOTE: advertised() throws unless the signature verifies, so reaching
+      // a package at all is the assertion.
+      configure(const [SecretSharingAlgos.mlKem1024]);
+
+      await minter().reconcileKeyPackage();
+
+      expect((await advertised()).keys, hasLength(1));
+    });
+
+    test('only metadata is named, so the grant cannot widen', () async {
+      configure(const [SecretSharingAlgos.mlKem1024]);
+
+      await minter().reconcileKeyPackage();
+
+      final request = updates.single;
+      expect(request.enrollmentId, enrollmentId);
+      expect(request.metadata!.keys, ['keyPackage']);
+      expect(request.apkamPublicKey, isNull);
+      expect(request.signingKeys, isNull);
+      expect(request.apskLegacy, isNull);
+    });
+  });
+
+  group('losing a key', () {
+    test('an algorithm that left the list is retired, not dropped', () async {
+      final leaving = await fileHeldKey(SecretSharingAlgos.xWing);
+      final staying = await fileHeldKey(SecretSharingAlgos.mlKem1024);
+      configure(const [SecretSharingAlgos.mlKem1024]);
+
+      final reconciled = await minter().reconcileKeyPackage();
+
+      expect(reconciled.retired, [SecretSharingAlgos.xWing]);
+      expect(reconciled.minted, isEmpty);
+
+      final package = await advertised();
+      final byKid = {for (final k in package.keys) k.kid: k};
+      // NOTE: presence is asserted before status, so dropping the entry fails
+      // by name rather than crashing on a null.
+      expect(byKid.keys, contains(leaving),
+          reason: 'a retired key stays listed: the advertisement is rewritten '
+              'whole, so dropping the entry withdraws it and strands every '
+              'envelope still in flight to that address');
+      expect(byKid[leaving]!.status, KeyEntryStatus.retired,
+          reason: 'listed AS retired, so a peer holding an envelope in flight '
+              'can see whose key it was');
+      expect(byKid.keys, contains(staying));
+      expect(byKid[staying]!.status, KeyEntryStatus.active);
+      expect(package.bestKeyFor(SecretSharingAlgos.keyAlgos)!.kid, staying,
+          reason: 'nothing new is sealed to a retired key');
+    });
+
+    test('a keyfile status this build cannot read is republished verbatim',
+        () async {
+      // NOTE: the advertisement is rewritten whole on every reconcile, so a
+      // status token this build cannot read must cross unchanged rather than
+      // be narrowed to one of the two values it knows.
+      final unreadable = await fileHeldKey(SecretSharingAlgos.xWing,
+          status: CryptographicMaterialStatus.of('revoked'));
+      final live = await fileHeldKey(SecretSharingAlgos.mlKem1024);
+      configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
+
+      final reconciled = await minter().reconcileKeyPackage();
+      expect(reconciled.minted, [SecretSharingAlgos.xWing]);
+      expect(reconciled.retired, isEmpty,
+          reason: 'nothing was withdrawn by this run - the key was already '
+              'carrying a status of its own');
+
+      final package = await advertised();
+      final byKid = {for (final k in package.keys) k.kid: k};
+      expect(byKid.keys, contains(unreadable));
+      expect(byKid[unreadable]!.status, 'revoked',
+          reason: 'raw literal: the token the keyfile holds is the token the '
+              'record gets, so an older build cannot weaken it');
+      expect(byKid[unreadable]!.offeredForNewOperations, isFalse);
+      expect(byKid[live]!.status, KeyEntryStatus.active);
+      expect(package.bestKeyFor(const [SecretSharingAlgos.xWing])!.kid,
+          isNot(unreadable),
+          reason: 'and nothing new is sealed to it - the freshly minted '
+              'X-Wing key is the address for that algorithm now');
+    });
+
+    test('the retired private half is retained, so old envelopes still open',
+        () async {
+      final leaving = await fileHeldKey(SecretSharingAlgos.xWing);
+      await fileHeldKey(SecretSharingAlgos.mlKem1024);
+      configure(const [SecretSharingAlgos.mlKem1024]);
+
+      await minter().reconcileKeyPackage();
+
+      final privates = await encMaterials(
+          part: CryptographicMaterialRole.privateDecapsulation);
+      final retired = privates.firstWhere((m) => m.keyId == leaving);
+      expect(retired.status, CryptographicMaterialStatus.retired);
+      expect(retired.bytes.bytes, isNotEmpty,
+          reason: 'retirement withdraws a key from service; it never removes '
+              'the bytes, which are the only thing that opens what was '
+              'already sealed to it');
+    });
+
+    test('a swap mints the incoming key before retiring the outgoing one',
+        () async {
+      final outgoing = await fileHeldKey(SecretSharingAlgos.xWing);
+      configure(const [SecretSharingAlgos.mlKem1024]);
+
+      final reconciled = await minter().reconcileKeyPackage();
+
+      expect(reconciled.minted, [SecretSharingAlgos.mlKem1024]);
+      expect(reconciled.retired, [SecretSharingAlgos.xWing]);
+
+      final package = await advertised();
+      expect(package.keys.where((k) => k.status == KeyEntryStatus.active),
+          hasLength(1),
+          reason: 'exactly one active key at every observable moment');
+      expect(package.keys.map((k) => k.kid), contains(outgoing),
+          reason: 'the outgoing key is retired, not removed — a swap must not '
+              'strand what was already sealed to the key it replaces');
+      expect(package.keys.firstWhere((k) => k.kid == outgoing).status,
+          KeyEntryStatus.retired);
+    });
+  });
+}

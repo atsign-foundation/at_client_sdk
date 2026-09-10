@@ -1,4 +1,8 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_commons/at_builders.dart';
 

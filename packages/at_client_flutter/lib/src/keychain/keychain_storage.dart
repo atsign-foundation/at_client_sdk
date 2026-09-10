@@ -62,17 +62,8 @@ class KeychainStorage {
     if (atKeysData == null) {
       throw AtKeyException('No atsign found in keychain');
     }
-    for (int i = 0; i < atKeysData.keys.length; i++) {
-      // Check for both 'atsign' and legacy 'name' keys in metadata
-      if (atKeysData.keys[i].metadata.containsKey('atsign')) {
-        if (atKeysData.keys[i].metadata['atsign'] == atSign) {
-          return atKeysData.keys[i];
-        }
-      } else if (atKeysData.keys[i].metadata['name'] == atSign) {
-        return atKeysData.keys[i];
-      }
-    }
-    return null;
+    final index = _indexOf(atKeysData, atSign);
+    return index == -1 ? null : atKeysData.keys[index];
   }
 
   /// Get all Atsigns currently stored in the keychain
@@ -84,15 +75,78 @@ class KeychainStorage {
       return [];
     }
     final atSigns = <String>{};
-    for (int i = 0; i < atKeysData.keys.length; i++) {
-      // Check for both 'atsign' and legacy 'name' keys in metadata
-      if (atKeysData.keys[i].metadata.containsKey('atsign')) {
-        atSigns.add(atKeysData.keys[i].metadata['atsign']);
-      } else if (atKeysData.keys[i].metadata['name']) {
-        atSigns.add(atKeysData.keys[i].metadata['name']);
-      }
+    for (final keys in atKeysData.keys) {
+      final atSign = _atSignOf(keys);
+      if (atSign != null) atSigns.add(atSign);
     }
     return atSigns.toList();
+  }
+
+  /// Replace the stored [keys] for [atSign], or append them if this atSign has
+  /// no entry yet.
+  ///
+  ///   [assureUpdate] - called with the entry about to be replaced, before
+  ///   anything is written. Throwing from it abandons the write.
+  ///
+  /// Concurrent writers resolve last-writer-wins: this backend offers no
+  /// compare-and-swap, so the read and the write cannot be made atomic.
+  Future<void> updateAtKeysInKeychain({
+    required String atSign,
+    required AtKeys keys,
+    void Function(AtKeys existing)? assureUpdate,
+  }) async {
+    final atKeysData = await readAtKeysData();
+    if (atKeysData == null) {
+      await _write(
+        biometricStoreName: (await AtKeysStore.getName()),
+        keychainData: AtKeysData(keys: [keys]),
+      );
+      return;
+    }
+    final index = _indexOf(atKeysData, atSign);
+    if (index == -1) {
+      atKeysData.keys.add(keys);
+    } else {
+      assureUpdate?.call(atKeysData.keys[index]);
+      atKeysData.keys[index] = keys;
+    }
+    await _write(
+      biometricStoreName: (await AtKeysStore.getName()),
+      keychainData: atKeysData,
+    );
+  }
+
+  /// The atSign an entry belongs to, in whatever spelling it was stored: the
+  /// typed `atsign` field, else the `atsign` metadata entry, else the legacy
+  /// `name` one.
+  String? _atSignOf(AtKeys keys) {
+    if (keys.atsign != null) return keys.atsign.toString();
+    final value = keys.metadata.containsKey('atsign')
+        ? keys.metadata['atsign']
+        : keys.metadata['name'];
+    return value is String ? value : null;
+  }
+
+  /// [atSign] in its normalized spelling, so that two spellings of one atSign
+  /// match the same entry — callers supply either.
+  ///
+  /// A value `toAtsign()` rejects is returned as it stands rather than
+  /// dropped, so a malformed stored entry is still readable and removable.
+  String? _normalized(String? atSign) {
+    if (atSign == null) return null;
+    try {
+      return atSign.toAtsign().toString();
+    } on InvalidAtSignException {
+      return atSign;
+    }
+  }
+
+  int _indexOf(AtKeysData atKeysData, String atSign) {
+    final wanted = _normalized(atSign);
+    for (int i = 0; i < atKeysData.keys.length; i++) {
+      if (_normalized(_atSignOf(atKeysData.keys[i])) == wanted) return i;
+    }
+    return -1;
   }
 
   /// Append a new [AtKeys] entry to the keychain
@@ -137,8 +191,9 @@ class KeychainStorage {
       );
       if (data != null) {
         final atKeysData = AtKeysData.fromJson(jsonDecode(data));
+        final wanted = _normalized(atSign);
         atKeysData.keys.removeWhere(
-          (element) => element.metadata['atsign'] == atSign,
+          (element) => _normalized(_atSignOf(element)) == wanted,
         );
         await _write(
           biometricStoreName: (await AtKeysStore.getName()),
@@ -399,13 +454,11 @@ class KeychainStorage {
         return value;
       }
     } catch (e, s) {
+      // NOTE: never clear the store on a read failure. A transient platform
+      // error or a cancelled biometric prompt would destroy what may be the
+      // only copy of the atSign's keys; recovering a corrupt store is the
+      // caller's decision.
       _logger.severe('_read failed with $e', e, s);
-      print(s);
-      _logger.severe('Removing data');
-      await _write(
-        biometricStoreName: keychainStoreName,
-        keychainData: EmptyKeychainData(),
-      );
       rethrow;
     }
   }

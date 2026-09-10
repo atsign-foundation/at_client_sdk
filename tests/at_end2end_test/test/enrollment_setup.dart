@@ -1,3 +1,11 @@
+/// The default 30-second budget is far too small here: these long-lived CI
+/// atSigns carry commit logs of hundreds of thousands of entries, and a fresh
+/// runner replays from commit id -1 while the enrollment verbs share the same
+/// connection. Fifteen minutes is chosen to be uninteresting rather than
+/// tight; a run that genuinely hangs still fails, just later.
+@Timeout(Duration(minutes: 15))
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,6 +13,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
@@ -22,15 +31,30 @@ const String selfEncryptionKey = 'selfEncryptionKey';
 const String apkamSymmetricKey = 'apkamSymmetricKey';
 const String enrollmentId = 'enrollmentId';
 
+/// Stops the current client's sync, which this script never needs: enrollments
+/// are submitted and approved over the remote secondary, and replaying the
+/// commit logs these atSigns carry is pure cost.
+///
+/// ⚠️ Only the periodic timer and any later run stop — a sync already in flight
+/// runs to completion, and switching to another atSign builds a fresh sync
+/// service that starts immediately.
+Future<void> _stopSync() async {
+  final syncService = AtClientManager.getInstance().atClient.syncService;
+  if (syncService is SyncServiceImpl) {
+    await syncService.stop();
+  }
+}
+
 void main() {
   List atSignList = ConfigUtil.getYaml()['enrollment']['atsignList'];
   String namespace = TestConstants.namespace;
 
-  // Complete the initial sync for submitting the enrollment request to prevent time-out issues.
   setUpAll(() async {
     for (var atSign in atSignList) {
-      await TestSuiteInitializer.getInstance()
-          .testInitializer(atSign, namespace, 'pkam', enableInitialSync: false);
+      await TestSuiteInitializer.getInstance().testInitializer(
+          atSign, namespace, 'pkam',
+          enableInitialSync: false, posture: PqPosture.legacy);
+      await _stopSync();
     }
   });
 
@@ -40,7 +64,8 @@ void main() {
       // Set SPP at the start of enrollment tests to pass as OTP.
       await TestSuiteInitializer.getInstance().testInitializer(
           currentAtSign, namespace, 'pkam',
-          enableInitialSync: false);
+          enableInitialSync: false, posture: PqPosture.legacy);
+      await _stopSync();
       // Set SPP into the Remote Secondary
       var atClient = AtClientManager.getInstance().atClient;
       var otp = (await atClient.getOTP()).response;
@@ -60,7 +85,10 @@ void main() {
           deviceName: 'iphone',
           otp: otp,
           namespaces: {TestConstants.namespace: 'rw', '__config': 'rw'},
-          signingAlgo: SigningAlgoType.rsa2048);
+          signingAlgo: SigningAlgoType.rsa2048,
+          // Without an expiry, every run leaves another revoked enrollment on
+          // these never-recycled atSigns for good.
+          apkamKeysExpiryDuration: const Duration(hours: 3));
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
@@ -129,7 +157,6 @@ void main() {
             filePath: (_) =>
                 '${ConfigUtil.getYaml()['filePath']}/${currentAtSign}_key.atKeys',
           ));
-      atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
       atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
       atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
           AtBytes.fromString(

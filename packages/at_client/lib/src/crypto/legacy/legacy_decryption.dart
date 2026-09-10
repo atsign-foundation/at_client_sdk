@@ -1,6 +1,9 @@
 import 'package:at_commons/at_builders.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/util/encryption_util.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_utils/at_logger.dart';
 import 'legacy_encryption.dart';

@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart' show AtClient;
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart';
 import 'package:at_client/src/mixins/envelope_signing.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';
@@ -19,7 +19,7 @@ import 'package:meta/meta.dart' show experimental;
 ///
 /// Prefer [AtClientSecretSharing.forClient] over the plain constructor: a
 /// secret-sharing instance is this APKAM keypair's recipient identity (its
-/// X-Wing enc keypair, registered key package, and envelope listener) plus its
+/// KEM enc keypair, registered key package, and envelope listener) plus its
 /// [SecretStore]. Reusing one instance per [AtClient] lets every consumer (the
 /// app and SDK-internal ones, e.g. a future CryptoProvider that distributes
 /// its keys as secrets) share a single store and a single registration rather
@@ -27,13 +27,12 @@ import 'package:meta/meta.dart' show experimental;
 /// kpid-addressed envelopes converge idempotently via [SecretStore.putIfNewer]
 /// — but a single instance avoids redundant registration and double delivery.)
 ///
-/// > **⚠ Not yet suitable for production secrets.** The recipient key package
-/// > a sender seals to is discovered via the gated `enroll:listns` verb and is
-/// > not yet APKAM-signed or verified, so sealing currently trusts the
-/// > atServer to return the genuine key package — a tampering atServer could
-/// > substitute the encapsulation target and read the secret. This caveat
-/// > lifts once advertised key packages are signed by their generating
-/// > enrollment and verified against its `_apsk` before sealing.
+/// > **⚠ Experimental.** A recipient key package is APKAM-signed by the
+/// > enrollment that generated it and verified against that enrollment's
+/// > `_apsk` before anything is sealed to it, but the atServer serves the
+/// > `_apsk` too — so the **operator** of the atSign's own atServer is still
+/// > inside the confidentiality boundary. Durable storage of received secrets
+/// > is an app-supplied hook.
 @experimental
 class AtClientSecretSharing
     with
@@ -82,6 +81,8 @@ class AtClientSecretSharing
   /// Direct construction creates an independent instance with its own
   /// enc keypair. Use [forClient] unless that is what you want (tests,
   /// custom compositions).
+  /// [PairwiseSecretSharing.perEnrollmentSecretRequestGate] starts null — fail
+  /// closed — until a composition installs a resolver.
   AtClientSecretSharing(
     this.atClient, {
     this.publicKeyCacheSettings = const (

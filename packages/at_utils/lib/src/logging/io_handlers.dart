@@ -25,7 +25,7 @@ class FileLoggingHandler implements LoggingHandler {
   void call(LogRecord record) {
     var f = _file.openSync(mode: FileMode.append);
     f.writeStringSync(
-        '${record.level.name}|${record.time}|${record.loggerName}|${record.message} \n');
+        '${record.level.name}|${record.time}|${record.loggerName}|${record.message}\n');
     f.closeSync();
   }
 }
@@ -37,7 +37,7 @@ class StdErrLoggingHandler implements LoggingHandler {
   @override
   void call(LogRecord record) {
     stderr.write(
-        '${record.level.name}|${record.time}|${record.loggerName}|${record.message} \n');
+        '${record.level.name}|${record.time}|${record.loggerName}|${record.message}\n');
   }
 }
 

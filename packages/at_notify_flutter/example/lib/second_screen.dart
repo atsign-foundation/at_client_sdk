@@ -132,9 +132,11 @@ class _SecondScreenState extends State<SecondScreen> {
     } else if (!atSignController.text.contains('@')) {
       atSignController.text = '@${atSignController.text}';
     }
-    // ignore: deprecated_member_use
-    var checkPresence = await AtLookupImpl.findSecondary(atSignController.text, AtEnv.rootDomain, 64);
-    return checkPresence != null;
+    // NOTE: an atSign with no atDirectory entry arrives as a thrown exception
+    // rather than a null, so reaching the return means it was found.
+    await CacheableSecondaryAddressFinder(AtEnv.rootDomain, 64)
+        .findSecondary(atSignController.text);
+    return true;
   }
 
   void getAtSignAndInitializeNotify() async {

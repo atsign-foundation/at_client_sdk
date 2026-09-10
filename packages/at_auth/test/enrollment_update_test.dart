@@ -250,14 +250,16 @@ void main() {
       // appears, whatever it ends up called, and its being a closed set is
       // simultaneously the positive control: a request that emitted nothing
       // fails it too.
-      expect(paramsOf(l.commands.single).keys.toSet(), {
-        'enrollmentId',
-        'apkamPublicKey',
-        'signingAlgo',
-        'apkamPublicKeySignature',
-        'apsk',
-        'metadata',
-      },
+      expect(
+          paramsOf(l.commands.single).keys.toSet(),
+          {
+            'enrollmentId',
+            'apkamPublicKey',
+            'signingAlgo',
+            'apkamPublicKeySignature',
+            'apsk',
+            'metadata',
+          },
           reason: 'an enrollment cannot widen its own grant or approve '
               'itself, and the atServer refusing it is the second line rather '
               'than the first: there is no field here to carry either. The '

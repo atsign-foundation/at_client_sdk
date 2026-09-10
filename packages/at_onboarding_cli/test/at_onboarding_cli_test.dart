@@ -32,6 +32,25 @@ class MockEnrollmentRequest extends Mock implements EnrollmentRequest {}
 
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 
+/// Stubs at_auth's approval handshake (`waitForApproval`) on [mock].
+///
+/// [body] runs in place of the handshake, so a test expresses its
+/// "during approval" side effects, or a denial, there.
+void stubHandshake(MockEnrollmentBase mock, {Future<void> Function()? body}) {
+  registerFallbackValue(
+      AtEnrollmentResponse('fallback', EnrollmentStatus.pending));
+  registerFallbackValue(MockAtLookupImpl());
+  registerFallbackValue(Duration.zero);
+  when(() => mock.progressStream).thenAnswer((_) => Stream.empty());
+  when(() => mock.waitForApproval(any(),
+      atLookup: any(named: 'atLookup'),
+      retryInterval: any(named: 'retryInterval'),
+      logProgress: any(named: 'logProgress'),
+      maxRetries: any(named: 'maxRetries'))).thenAnswer((_) async {
+    if (body != null) await body();
+  });
+}
+
 void main() {
   AtSignLogger.root_level = 'INFO';
   AtLookupImpl mockAtLookup = MockAtLookupImpl();
@@ -55,9 +74,13 @@ void main() {
     test('A test to check atOnboardingService.authenticate() returns true',
         () async {
       final atSign = '@alice🛠';
-      AtOnboardingPreference onboardingPreference = AtOnboardingPreference()
-        ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
-        ..namespace = 'unit_test';
+      // NOTE: the posture is named, not inherited — under a posture wanting a
+      // stronger authentication key, client start reaches the retrofit, which
+      // mockAtLookup does not model.
+      AtOnboardingPreference onboardingPreference =
+          AtOnboardingPreference(posture: PqPosture.legacy)
+            ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
+            ..namespace = 'unit_test';
       AtOnboardingService onboardingService =
           AtOnboardingServiceImpl(atSign, onboardingPreference);
       onboardingService.atLookUp = mockAtLookup;
@@ -82,6 +105,41 @@ void main() {
           .thenAnswer((_) => AtChopsImpl(AtChopsKeys()));
       var authResult = await onboardingService.authenticate();
       expect(authResult, true);
+    });
+
+    test('authenticate hands the key source across to the client', () async {
+      final atSign = '@alice🛠';
+      // NOTE: the posture is named, not inherited — under a posture wanting a
+      // stronger authentication key, client start reaches the retrofit, which
+      // mockAtLookup does not model.
+      AtOnboardingPreference onboardingPreference =
+          AtOnboardingPreference(posture: PqPosture.legacy)
+            ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
+            ..namespace = 'unit_test';
+      AtOnboardingService onboardingService =
+          AtOnboardingServiceImpl(atSign, onboardingPreference);
+      onboardingService.atLookUp = mockAtLookup;
+      mockAtAuth.atChops = AtChopsImpl(AtChopsKeys());
+      onboardingService.atAuth = mockAtAuth;
+      when(() => mockAtLookup.pkamAuthenticate())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtAuth.authenticate(any()))
+          .thenAnswer((_) => Future.value(AtAuthResponse(atSign)
+            ..isSuccessful = true
+            ..atAuthKeys = (AtKeys()
+              ..apkamPublicKey = AtBytes.fromString('dumm')
+              ..apkamPrivateKey = AtBytes.fromString('dumm')
+              ..defaultSelfEncryptionKey = AtBytes.fromString('dumm')
+              ..defaultEncryptionPrivateKey = AtBytes.fromString('dumm')
+              ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
+              ..apkamSymmetricKey = AtBytes.fromString('dumm')
+              ..enrollmentId = 'source-handoff-enroll-id')));
+      when(() => mockAtAuth.atChops)
+          .thenAnswer((_) => AtChopsImpl(AtChopsKeys()));
+
+      await onboardingService.authenticate();
+
+      expect(AtClientManager.getInstance().atClient.atKeysIo, isNotNull);
     });
     // TODO: add more tests
     tearDown(() async => await tearDownFunc());
@@ -147,6 +205,7 @@ void main() {
       // setup mock behaviour
       when(() => mockEnrollmentBase.submit(any(), any()))
           .thenAnswer((_) => Future.value(enrollmentResponse));
+      stubHandshake(mockEnrollmentBase);
       when(() => mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId))
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookup.atChops).thenReturn(AtChopsImpl(atChopsKeys));
@@ -412,6 +471,7 @@ void main() {
       // setup mock behaviour
       when(() => mockEnrollmentBase.submit(any(), any()))
           .thenAnswer((_) => Future.value(enrollmentResponse));
+      stubHandshake(mockEnrollmentBase);
       when(() => mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId))
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookup.atChops).thenReturn(AtChopsImpl(atChopsKeys));
@@ -523,6 +583,16 @@ void main() {
         checkpointExistedDuringApproval = svc.enrollCheckpoint
             .getFile('myApp', 'myDevice', {'test': 'rw'}).existsSync();
         throw UnAuthenticatedException('error:AT0025');
+      });
+      // NOTE: the denial has to keep the real handshake's contract of
+      // throwing AtEnrollmentException.
+      stubHandshake(mockEnrollmentBase, body: () async {
+        try {
+          await mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId);
+        } on UnAuthenticatedException {
+          throw AtEnrollmentException(
+              'The enrollment: $dummyEnrollmentId is denied');
+        }
       });
 
       await expectLater(
@@ -767,7 +837,11 @@ Future<void> tearDownFunc() async {
 }
 
 AtClientPreference getAtClientPreferenceAlice() {
-  var preference = AtClientPreference();
+  // NOTE: the posture is named, not inherited — under a posture asking for a
+  // stronger authentication key, client start reaches the retrofit instead, a
+  // call MockAtLookupImpl does not model, and the failure arrives as a type
+  // error a long way from its cause.
+  var preference = AtClientPreference(posture: PqPosture.legacy);
   preference.hiveStoragePath = 'test/storage/hive/client';
   preference.commitLogPath = 'test/storage/hive/client/commit';
   preference.rootDomain = 'vip.ve.atsign.zone';

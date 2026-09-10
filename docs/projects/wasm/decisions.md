@@ -279,8 +279,12 @@ that capability exists only to announce that a global current atSign changed.
 
 **Surface (ruled 2026-09-05).** The owner of a claim is the client object, compared by
 identity — not the instance key, which for a legacy client is the bare atSign and so cannot
-tell two legacy clients of one atSign apart. Owned storage is closed on release; injected
-storage is only detached, the client knowing which it has. After detach, only the same
+tell two legacy clients of one atSign apart. Whether a release closes the storage is the
+bundle's own `closedByClient` — false by default, true for the store a client builds for
+itself (X6 put the flag on the bundle on 2026-09-06; the fix-forward of 2026-09-07 made the
+client-built store such a bundle too, and this read "owned storage is closed on release;
+injected storage is only detached, the client knowing which it has" until then). After
+detach, only the same
 principal may re-attach until `clear()` runs — the bundle remembers who held it last, so a
 different enrollment cannot inherit records it cannot decrypt and pushes it cannot make.
 A deliberate hand-over is `forgetPrincipal()`, which lifts the last-holder guard while keeping
@@ -298,6 +302,135 @@ manager's same-atSign short-circuit already refuses one, and nothing else in pro
 reaches a cached client; X1 pins that guard before X4 changes `stop()`, since the guard is
 what a released client's safety then rests on. (Amended 2026-09-05: first written as "two
 paths hand back a stopped client" — one was already guarded, the other has no caller.)
+
+### D-13 — Local storage is isolated per (atSign, enrollmentId), not per atSign (2026-09-05)
+
+A client's local keystore and sync queue are keyed by the **enrollment**, not by the
+atSign alone. Two enrollments of one atSign on one device get **separate** stores.
+
+**Why.** An enrollment holds key material only for its granted namespaces; a scoped
+enrollment and a differently-scoped one on the same atSign hold different secrets and see
+different records. Sharing a store between them would hand one enrollment records and
+pending writes belonging to another's scope — the very boundary
+[D-12](#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)'s
+claim exists to keep. Storage granularity must match the enrolled principal — the
+`(atSign, enrollmentId)` pair the instance cache keys on — not the atSign. (This is a
+different sense of "principal" from D-12's, which names the *claim holder* as the client
+OBJECT by identity; here it is the *storage-identity* granularity. Two senses, one word —
+qualify at each use.)
+
+**The defect this names.** Today storage is keyed by the atSign alone, a survival of the
+one-client-per-atSign era: the keystore box is `sha256(atSign)`, the sync-queue box is
+`syncqueue_<sha256(atSign)>`, and `AtClientImpl` takes `preference.hiveStoragePath`
+verbatim — nothing derives a per-enrollment storage path. Two enrollments handed the same
+path therefore share one box; on the global Hive instance they are literally one store.
+`HiveInstances.forPath(path)` isolates by *path*, but nothing makes two enrollments *use*
+different paths, and the per-atSign "refuse the second client" guard built during X4
+merely hid the collision rather than isolating the data.
+
+**Resolved — the isolation key.** See
+[D-14](#d-14--the-storage-isolation-design-2026-09-05). Neither route below was taken: both
+changed production's on-disk layout for a case that does not occur in production (one
+enrollment per atSign per process). Production keeps one storage path per atSign, and the
+per-enrollment discriminator is *test-supplied* where a single process stands in for several
+enrollments, with a per-location guard catching accidental sharing. The declined routes were a per-enrollment subdirectory
+(`<hiveStoragePath>/<enrollmentId>`) and the enrollment in the box name
+(`sha(atSign|enrollmentId)`, cross-repo).
+
+**Consequences for X4.** The release semantics (`stop()` releases storage) are sound and
+become *safe* once storage is per-enrollment: no sibling shares a client's box, so closing
+on release cannot pull the store out from under another enrollment or an in-flight sync
+round. The per-atSign guard comes out — it is the wrong shape, replaced by
+[D-14](#d-14--the-storage-isolation-design-2026-09-05)'s per-location guard. PR #2208 (the
+release half) is paused behind this ruling; its release code is kept, its guard reworked.
+
+### D-14 — The storage-isolation design (2026-09-05)
+
+Resolves [D-13](#d-13--local-storage-is-isolated-per-atsign-enrollmentid-not-per-atsign-2026-09-05)'s
+open isolation key. Two facts ground it: `HiveInstances.forPath` (pinned upstream, #2776)
+opens the keystore on a distinct instance per canonical path, and the spike's `AtSyncQueue`
+opens the queue on `forPath` too — so two clients of one atSign at **different storage
+paths** already get separate stores today. What D-13 named as the defect is only that
+nothing makes two enrollments *use* different paths, and nothing catches it when they don't.
+
+⚠️ **Two words, kept distinct throughout, because they are not the same thing.** A
+**storage path** is where an impl's files sit — the value it is constructed with. A
+**location** is the identity of the store those files hold: the path *plus* everything else
+that decides which records resolve there, defined by the per-location guard below. One
+path can hold two locations, which is why a directory-only key was wrong.
+
+**1 — Production unchanged; the discriminator is test-supplied.** `at_client` never derives
+a per-enrollment path. A production client hands one storage path per atSign, exactly as
+today — no migration, no cross-repo change, no reliance on `enrollmentId` (which is null when
+storage opens: `_init` builds the store before the id settles). Isolation per **enrolled
+principal** (D-13's sense) holds in production because two enrollments of one atSign are two
+OS processes with two storage directories, and
+[D-12](#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)'s
+claim already refuses a different **claim holder** (D-12's sense) inheriting a store.
+`enrollmentId` is a *test-fixture* discriminator only — one test process standing in for
+several. This is a third route, chosen over D-13's declined two (per-enrollment
+subdirectory; enrollment in the box name), both of which changed production layout for a
+case that does not occur in production.
+
+**2 — Each impl decides its own location.** What an `AtClientStorage` is constructed with is
+a storage path — `HiveAtClientStorage(storagePath)`, `SqliteAtClientStorage(dbPath)`,
+`InMemoryAtClientStorage` (`:memory:`) — and the impl derives its location from that path
+together with whatever else decides which records it resolves to (the per-location guard
+below). Not derived from
+`enrollmentId`, and not a neutral path *string* on `AtClient` — D-12 rejected that, since it
+leaves `at_client` constructing the backend. To isolate, construct impls with distinct paths.
+
+**3 — A per-location guard, enforced by the base.** Each impl reports a canonical `location`
+identity; `AtClientStorageBase` keeps a static registry and refuses to open a second storage
+at a location already open. The identity is the *store*, not merely where its files sit: the
+Hive canonical dir **plus the atSign**, the SQLite db-file plus the atSign, and a
+unique-per-instance token for in-memory (so two in-memory stores never falsely collide). Both
+halves are needed — a box name derives from the atSign, so two atSigns under one directory are
+two boxes that share nothing, and a directory-only key would refuse them. The e2e fixtures do
+exactly that, sharing `test/hive/client` across atSigns. (First written here as "the Hive
+canonical dir"; building it showed that key is too coarse, and the test *two atSigns sharing
+one directory both open* now pins it.) This
+is the correctly-shaped replacement for X4's per-**atSign** guard, which blocked legitimate
+distinct-location multi-enrollment and did not generalise to SQLite. N clients of one atSign
+at N distinct locations pass; two at one location throw, the error naming the location and
+the last **claim holder** — which `principalOf` renders as `atSign|enrollmentId`, so it
+carries the enrolled principal too.
+
+**4 — `storage:` is injected on both doors.** An optional `storage:` parameter on the direct
+`create` factory, threaded through `AtClientManager.setCurrentAtSign`; omitting it builds the
+default Hive impl from the preference's storage path (`preference.hiveStoragePath`,
+deprecated per D-12).
+Production omits it. The manager's `refuseChangedStoragePath` short-circuit check comes out —
+the per-location guard subsumes it.
+
+**5 — Multi-enrollment fixtures use direct `create`.** The manager is single-current —
+`setCurrentAtSign` stops the previous client on any real switch — correct for production (one
+enrollment per atSign) but unable to hold two live enrollments of one atSign. A fixture
+simulating several builds each via direct `create` with its own injected located storage,
+mirroring the reality that they are separate processes with separate managers.
+
+**6 — Lifecycle.** A location is registered when its backend opens and released only when it
+closes — never on detach, since a detached-but-open backend still occupies the location.
+Storage closes on `stop()` when its bundle says so — `closedByClient`, true for the store a
+client builds itself and false by default for one handed in (X4 ruled this by origin, owned
+against injected; X6 moved it onto the bundle; the fix-forward of 2026-09-07 finished the
+move). A borrowed bundle is only detached, so the *caller* owns the close (D-12) and can hand
+one store to successive clients; a principal change hands a bundle over open whichever it
+is, the incoming client closing it. A shared
+**test helper** owns the whole per-enrollment lifecycle — it builds the located storage and
+the client, tracks both, and in `tearDown` stops every client and closes every storage — so a
+forgotten cleanup cannot leave a location registered and trip the next test's guard.
+
+**Consequences.** X4a is **at_client-only, not cross-repo**: the isolating mechanism
+(`forPath`) is merged upstream and already wired on the spike for both keystore and queue.
+⚠️ It is **not** on trunk — trunk carries no `dependency_overrides` at all and resolves a
+published `at_persistence_secondary_server` that predates it, so X4a must port the pin and the
+queue's `forPath` there before a per-location guard means anything. Beyond that port X4a adds the
+per-location guard, the `storage:` injection, the impl `location` report, and the fixture
+rewrite behind the helper — and corrects the stale `hive_at_client_storage.dart` NOTE
+(distinct paths *do* isolate; only same-location collides). X4a lands on #2208's branch, so
+X4 and X4a ship as one PR: #2208 keeps its release code, e2e keystore initializer and fixture
+fixes, and its per-atSign guard is replaced in place by the per-location one.
 
 ---
 
@@ -588,6 +721,8 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-13 | **D-7..D-9 ruled.** dart2js is the JS/TS compile target; the facade lives in `at_client_web` with D-4 unamended; keys cross as strings and events as callbacks. `js-api.md` added as the sixth doc. |
 | 2026-08-18 | Added JS-6 (throw vs. return-tuple, supabase-js precedent) to `js-api.md` §11. |
 | 2026-09-05 | **D-12 ruled.** Client storage becomes one injected bundle owning the keystore and the sync queue; S3 and §2.3's separate queue interface are superseded. `hiveStoragePath` deprecated; `stop()` releases storage. OQ-3 resolved for storage. |
+| 2026-09-05 | **D-13 ruled.** Local storage is isolated per (atSign, enrollmentId), not per atSign — a scoped enrollment's data must not share a store with another scope. Names the atSign-only box-key defect; the isolation key (per-enrollment path vs box name) resolved in D-14. PR #2208 paused. |
+| 2026-09-05 | **D-14 ruled.** The storage-isolation design resolves D-13's key: production stays atSign-keyed, the location is test-supplied and lives on the storage impls, a base-enforced per-location guard replaces X4's per-atSign one, `storage:` injects on `create` and the manager, and multi-enrollment fixtures use direct `create` with a lifecycle-owning test helper. X4a is at_client-only, not cross-repo. |
 | 2026-08-18 | `plans/wasm/api-designing.md` written: the three-layer Dart facade split (Layer A/B/C) and the Axis A/B/C reference-SDK survey. `plans/wasm/key-storage.md` written, depending on the split. |
 | 2026-08-18 | Measured the collections API's write/read asymmetry (§2.6, F1–F12) against `packages/at_client/lib/src/collections/collections.dart`. |
 | 2026-08-18 | **D-9 amended, D-10 and D-11 ruled.** Collections (`AtCollection<T>`) become the sole JS/TS data plane; the flat key/value plane from the original §5.2 is removed, not deprecated in place. The Dart gear is typed via a declared `typeTag`; app types are never compiled into `at_client_web`. Write-compatibility with typed Dart peers is left open pending an upstream `writeTypeTag` or a bounded carrier-class shim (JS-7). `js-api.md` §5–§11 rewritten to match; `plans/wasm/api-designing.md` §2.3/§2.4/§2.6 rewritten for the collections-shaped Layer B. JS-2 resolved; JS-8 (the `AtClientManager` singleton blocking multi-instance clients) recorded. |

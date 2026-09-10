@@ -479,16 +479,11 @@ class AtKeys {
   /// itself is carried out rather than replaced. `dead` material was never
   /// adopted and has nothing to verify, so it stays out.
   ///
-  /// This read "selected on exactly [CryptographicMaterialStatus.retired]" until 2026-08-22,
-  /// skipping a status this build had never seen on the grounds that
-  /// advertising such a key would state something about it this build does not
-  /// know. That was right while the advertisement could only say `active` or
-  /// `retired`; now that its `status` is an open token the entry can carry the
-  /// keyfile's own word for it, so nothing is guessed — and skipping is not the
-  /// cautious option it looks like. The advertisement is rewritten whole on
-  /// every publish, so an omitted entry is a **withdrawal from the
-  /// advertisement**: it erases both the key that verifies what it signed
-  /// and whatever its owner last said about it.
+  /// A status this build cannot read is advertised too, carrying the keyfile's
+  /// own token. Skipping it is not the cautious option it looks like: the
+  /// advertisement is rewritten whole on every publish, so an omitted entry is
+  /// a **withdrawal from the advertisement** — it erases both the key that
+  /// verifies what it signed and whatever its owner last said about it.
   ///
   /// Same keyId shape and same unknown-algorithm skip as [signingKeysFor]; an
   /// enrollment's other `privateSigning` material is not a signing key of its
@@ -765,6 +760,30 @@ class AtKeys {
           'name the enrollment it means.');
     }
     return candidates.single;
+  }
+
+  /// Whether this document holds any authentication material: typed, or the
+  /// flat APKAM keypair. A document holding none authenticates as nothing,
+  /// whatever its flat [enrollmentId] says.
+  bool get holdsAuthenticationMaterial =>
+      authenticatableEnrollmentIds.isNotEmpty ||
+      // ignore: deprecated_member_use_from_same_package
+      apkamPrivateKey != null;
+
+  /// The enrollment this keyfile authenticates as: the one holding active
+  /// typed authentication material, else the flat stored [enrollmentId], else
+  /// [EnrollmentConstants.primaryEnrollmentId] for a keyfile that predates
+  /// enrollments.
+  ///
+  /// Throws, as [resolveAuthenticatingEnrollment] does, when several
+  /// enrollments qualify.
+  String enrollmentToAuthenticateAs() {
+    final resolved = resolveAuthenticatingEnrollment();
+    if (resolved != null) return resolved;
+    // ignore: deprecated_member_use_from_same_package
+    final flat = enrollmentId;
+    if (flat != null && flat.isNotEmpty) return flat;
+    return EnrollmentConstants.primaryEnrollmentId;
   }
 
   /// Decodes the typed-keys document shape (`version`, `atsign`,
@@ -1191,9 +1210,9 @@ class AtKeys {
   ///
   /// A null [algorithm] means the caller leaves `signingAlgoType` at
   /// at_lookup's default, which is what the flat fields' RSA keypair needs.
-  /// A null [enrollmentId] asks for the flat fields directly — callers reach
-  /// here having already defaulted it to this keyfile's own [enrollmentId],
-  /// which on a retrofitted file is deliberately the legacy one.
+  /// A null [enrollmentId] asks for the flat fields directly, as does any id
+  /// with no typed material of its own, [EnrollmentConstants.primaryEnrollmentId]
+  /// included; callers reach here with [enrollmentToAuthenticateAs]'s answer.
   /// Throws [AtKeyNotFoundException] when [enrollmentId] holds typed
   /// authentication material under an algorithm this build cannot sign with.
   /// Falling back to the flat fields there would authenticate as whoever owns

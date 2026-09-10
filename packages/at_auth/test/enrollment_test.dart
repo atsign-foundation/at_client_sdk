@@ -673,8 +673,8 @@ void main() {
               signingAlgo: signingAlgo,
               advertisedSigningKey: advertised,
               metadataBuilder: (_) async => {
-                    'keyPackage': {'v': 1, 'keys': []}
-                  },
+                'keyPackage': {'v': 1, 'keys': []}
+              },
               apkamSymmetricKeyResolver: _unusedResolver,
             ),
             mockAtLookUp);
@@ -682,8 +682,7 @@ void main() {
             as Map<String, dynamic>;
       }
 
-      test('an rsa2048 APKAM key with a key package is spelled BARE',
-          () async {
+      test('an rsa2048 APKAM key with a key package is spelled BARE', () async {
         // The case a key package used to force into the array. It is
         // reachable: a legacy posture names an empty signing set, so nothing
         // is advertised, while `--key-exchange pq` still carries a package.

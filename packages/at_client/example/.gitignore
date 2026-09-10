@@ -6,4 +6,4 @@
 build/
 
 # Local Claude Code guidance, kept out of git.
-CLAUDE.md
+CLAUDE*.md

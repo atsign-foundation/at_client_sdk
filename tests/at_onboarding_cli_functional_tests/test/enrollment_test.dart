@@ -11,6 +11,8 @@ import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'utils/enrollment_operations.dart';
+import 'utils/test_keys_dir.dart';
+import 'utils/virtualenv_ports.dart';
 
 var pkamPublicKey;
 var pkamPrivateKey;
@@ -117,8 +119,14 @@ void main() {
       // 4.2 send enroll request for second client with valid otp
       logger.info(
           'OnboardingEnrollmentTest: sending enroll request with new OTP');
+      // NOTE: `legacy` is named because this test is a test OF the legacy
+      // approve wire — `_notificationCallback` hand-builds `enroll:approve`,
+      // RSA-decrypting the wrapped symmetric key out of the notification and
+      // re-wrapping the encryption private and self keys under it. A pq
+      // request carries no wrapped key, so that code has nothing to decrypt.
       var enrollResponse = await onboardingService_2.sendEnrollRequest(
-          'buzz', 'iphone', totp, namespaces);
+          'buzz', 'iphone', totp, namespaces,
+          keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
       logger.info('enroll response $enrollResponse');
       // enrollment id from the response
       var enrollmentId = enrollResponse.enrollmentId;
@@ -155,8 +163,7 @@ void main() {
 
       // 4.7 Authenticate now with the approved enrollmentID
       logger.info('Authenticating with enrollment atKeys');
-      bool authResultWithEnrollment =
-          await onboardingService_2.authenticate(enrollmentId: enrollmentId);
+      bool authResultWithEnrollment = await onboardingService_2.authenticate();
       expect(authResultWithEnrollment, true);
       enrolledClientKeysFile.deleteSync();
 
@@ -195,13 +202,18 @@ void main() {
       // preference without appName and deviceName
       AtOnboardingPreference preference_1 = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort
         ..isLocalStoreRequired = true
         ..hiveStoragePath = 'storage/hive/client'
         ..commitLogPath = 'storage/hive/client/commit'
         ..cramSecret = at_demos.cramKeyMap[atSign4] ?? atSign4.substring(1)
         ..namespace =
             'wavi' // unique identifier that can be used to identify data from your app
-        ..rootDomain = 'vip.ve.atsign.zone';
+        // Omitting this would put the keyfile onboard() generates in the home
+        // directory's real keys dir.
+        ..atKeysFilePath = testKeysFile(atSign4)
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort;
 
       AtOnboardingService? onboardingService_1 =
           AtOnboardingServiceImpl(atSign4, preference_1);
@@ -279,6 +291,11 @@ void main() {
             totp,
             namespaces,
             retryInterval: Duration(seconds: 5),
+            // Legacy named for the same reason as the approve test above: this
+            // one asserts the RSA-wrapped key is present in the notification
+            // and then hand-builds the deny wire, so it is about the legacy
+            // shape by construction.
+            keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
           ),
           throwsA(predicate((dynamic e) =>
               e is AtEnrollmentException &&
@@ -294,10 +311,6 @@ void main() {
   });
 
   group('tests to validate enrollment access control', () {
-		setUp(() async {
-			await Directory('$storageDir/keys/').create(recursive: true);
-		});
-
     test('validate enrollment only has access to approved namespaces',
         () async {
       // creates an enrollment with rw access to wavi namespace. Then validate
@@ -305,18 +318,20 @@ void main() {
       String appName = 'test_app_name';
       String deviceName = 'functional_test_1';
       Map<String, String> namespaces = {'wavi': 'rw'};
-      String masterKeysFilePath = '$storageDir/keys/${atSign6}_key.atKeys';
+      String masterKeysFilePath = testKeysFile(atSign6);
       String enrollmentAtKeysFilePath =
-          '$storageDir/keys/${atSign6}_wavi_key.atKeys';
+          testKeysFile(atSign6, suffix: 'wavi_key');
 
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort
         ..isLocalStoreRequired = true
         ..hiveStoragePath = '$storageDir/hive/client'
         ..commitLogPath = '$storageDir/hive/client/commit'
         ..namespace =
             'wavi' // Unique identifier that can be used to identify data from your app
-        ..rootDomain = 'vip.ve.atsign.zone';
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort;
 
       // Init an OnboardingService instance and onboard. Creates a master
       // atKeys file at the location provided in variable 'masterKeysFilePath'
@@ -332,7 +347,8 @@ void main() {
       AtClientManager.getInstance().reset();
 
       // Fetch otp
-      EnrollmentOperations? enrollmentOperations = EnrollmentOperations(atSign6);
+      EnrollmentOperations? enrollmentOperations =
+          EnrollmentOperations(atSign6);
       String? otp = await enrollmentOperations.getOtp(masterKeysFilePath);
 
       // Create a new instance of OnboardingService that will be used to send an
@@ -346,12 +362,19 @@ void main() {
       // Await has NOT been added below to ensure that the onboardingService.enroll()
       // method call does not starve the rest of the test; but still will be
       // waiting for enrollment approval in the background
+      // NOTE: `legacy` is named because this test asserts what an approved
+      // enrolment may read, not the key exchange. A pq enrolment adds a
+      // post-approval round trip - the enrollee polls for the envelope holding
+      // the symmetric key the approver encapsulated to its key package - which
+      // on top of the 10s wait below overruns the 30s test timeout. The pq
+      // enrolment path is covered by `pq_native_enroll_test.dart`.
       Future<AtEnrollmentResponse> enrollRequestResponse =
           onboardingService.enroll(
         appName,
         deviceName,
         otp!,
         namespaces,
+        keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       );
       logger.info('Sleeping for 10s');
       await Future.delayed(Duration(seconds: 10));
@@ -413,18 +436,20 @@ void main() {
       String appName = 'access_test_appname';
       String deviceName = 'functional_test_2';
       Map<String, String> namespaces = {'delta': 'r'};
-      String masterKeysFilePath = '$storageDir/keys/${atSign2}_key.atKeys';
+      String masterKeysFilePath = testKeysFile(atSign2);
       String enrollmentAtKeysFilePath =
-          '$storageDir/keys/${atSign2}_wavi_key.atKeys';
+          testKeysFile(atSign2, suffix: 'wavi_key');
 
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort
         ..isLocalStoreRequired = true
         ..hiveStoragePath = '$storageDir/hive/client'
         ..commitLogPath = '$storageDir/hive/client/commit'
         ..namespace =
             'wavi' // Unique identifier that can be used to identify data from your app
-        ..rootDomain = 'vip.ve.atsign.zone';
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..rootPort = virtualenvRootPort;
 
       // Init an OnboardingService instance and onboard. Creates a master
       // atKeys file at the location provided in variable 'masterKeysFilePath'
@@ -454,12 +479,19 @@ void main() {
       // Await has NOT been added below to ensure that the onboardingService.enroll()
       // method call does not starve the rest of the test; but still will be
       // waiting for enrollment approval in the background
+      // NOTE: `legacy` is named because this test asserts what an approved
+      // enrolment may read, not the key exchange. A pq enrolment adds a
+      // post-approval round trip - the enrollee polls for the envelope holding
+      // the symmetric key the approver encapsulated to its key package - which
+      // on top of the 10s wait below overruns the 30s test timeout. The pq
+      // enrolment path is covered by `pq_native_enroll_test.dart`.
       Future<AtEnrollmentResponse> enrollRequestResponse =
           onboardingService.enroll(
         appName,
         deviceName,
         otp!,
         namespaces,
+        keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       );
       logger.info('Sleeping for 10s');
       await Future.delayed(Duration(seconds: 10));
@@ -589,17 +621,18 @@ AtOnboardingPreference getPreferenceForAuth(String atSign) {
   atSign = AtUtils.fixAtSign(atSign);
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = virtualenvRootPort
     ..isLocalStoreRequired = true
     ..hiveStoragePath = 'storage/hive/client'
     ..commitLogPath = 'storage/hive/client/commit'
     ..cramSecret = at_demos.cramKeyMap[atSign] ?? atSign.substring(1)
     ..namespace =
         'wavi' // unique identifier that can be used to identify data from your app
-    ..atKeysFilePath =
-        '${Platform.environment['HOME']}/.atsign/keys/${atSign}_key.atKeys'
+    ..atKeysFilePath = testKeysFile(atSign)
     ..appName = 'wavi'
     ..deviceName = 'pixel'
-    ..rootDomain = 'vip.ve.atsign.zone';
+    ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = virtualenvRootPort;
 
   return atOnboardingPreference;
 }
@@ -609,11 +642,11 @@ AtOnboardingPreference getPreferenceForEnroll(String atSign) {
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..namespace =
         'buzz' // unique identifier that can be used to identify data from your app
-    ..atKeysFilePath =
-        '${Platform.environment['HOME']}/.atsign/keys/${atSign}_buzzkey.atKeys'
+    ..atKeysFilePath = testKeysFile(atSign, suffix: 'buzzkey')
     ..appName = 'buzz'
     ..deviceName = 'iphone'
-    ..rootDomain = 'vip.ve.atsign.zone';
+    ..rootDomain = 'vip.ve.atsign.zone'
+    ..rootPort = virtualenvRootPort;
   return atOnboardingPreference;
 }
 
