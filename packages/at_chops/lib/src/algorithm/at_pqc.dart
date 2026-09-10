@@ -61,10 +61,16 @@ abstract final class AtPqc {
   ///
   /// Both backends PKCS7-pad the plaintext prior to encryption, so they are
   /// wire-interchangeable — an invariant a future edit must not break, since
-  /// the two ends of a connection may resolve to different backends. The one
-  /// exception: pass an explicit IV on every call. The pure-Dart path defaults
-  /// a missing IV to 16 zero bytes and the FFI path rejects it, so omitting it
-  /// is the one way to make the choice of backend observable.
+  /// the two ends of a connection may resolve to different backends.
+  ///
+  /// That interchangeability holds only for a 16-byte IV. Any other IV makes
+  /// the choice of backend observable, and in both directions: the pure-Dart
+  /// path substitutes 16 zero bytes for a missing IV and right-pads a shorter
+  /// one into the counter block, while the FFI path rejects both with an
+  /// [AtEncryptionException]. Callers that reach this method with an IV they
+  /// did not choose — one parsed from a record, or from an older writer — get
+  /// a failure that depends on whether the host has libcrypto. Pass exactly
+  /// 16 bytes.
   static SymmetricEncryptionAlgorithm<Uint8List, Uint8List> aesCtr(
           AESKey key) =>
       _aesCtrSupported
