@@ -13229,7 +13229,7 @@ grants a connection with no enrollment id full access — measured live against 
 running atServer: `pending`, then `approved`, with the new enrollment
 authenticating afterwards. The route, its controls and the answer to what
 becomes of the legacy credential are in
-[Why commit 7 needs no atServer change](../implementation-plan.md#why-commit-7-needs-no-atserver-change).
+[Why commit 7 needs no atServer change](implementation-plan.md#why-commit-7-needs-no-atserver-change).
 
 **The ruling stands, on the reason that never depended on this.** The null-id
 publish is a pinned working capability, and a client that has not retrofitted is
@@ -14260,3 +14260,20 @@ whether or not the label mentions them.
 **Free to do now.** Neither id has reached trunk, nothing is published, and no
 persistent test atSign holds a live `__ck` conveyance: the e2e packs default to
 the legacy posture, which is what that default is for.
+
+## 140. #2161's deferral note stays as written (2026-09-01)
+
+**Decision (gkc, 2026-09-01 — offered the correction twice, declined both
+times).** [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161)
+is closed, and its *Deliberately not doing now* section says the
+`AtLookupImpl.signingAlgoType` default *"rides the next at_lookup version whenever
+one is opened for another reason"*. That did not happen: at_lookup reached
+`3.7.0-rc1` without it, and the defect was fixed one layer up in at_auth, whose
+authenticator constructors require `signingAlgo` and `hashingAlgo`
+([#2198](https://github.com/atsign-foundation/at_client_sdk/pull/2198), merged
+2026-09-01). The note is a comment on a closed issue, not code, and stays as
+written; a reader of that issue is told the wrong thing about where the fix
+went, and this ruling is where the right thing is recorded. The deprecated field
+itself needs nothing — it dies with the credential ladder in the next at_lookup
+major, and requiring it or making it nullable is breaking, so neither could land
+in 3.x.

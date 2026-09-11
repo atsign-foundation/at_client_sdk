@@ -225,7 +225,7 @@ filed TODO row before the check was re-run properly.
 
 ## The citation audit — cluster A, 2026-08-26
 
-The [acceptance audit](../implementation-plan.md#the-acceptance-audit) is the
+The [acceptance audit](implementation-plan.md#the-acceptance-audit) is the
 judgement no rail can make: does the test a row cites actually establish what
 the citation's `proves:` prose claims. This section is the running record.
 **Cluster A is done (36 citations); B, C and G are not (109 remaining).**
@@ -586,7 +586,7 @@ the gap.
 
 ⛔ **The defect itself was reproduced and fixed on 2026-08-26** — see [the
 retrofit
-section](../implementation-plan.md#a-retrofitted-enrolment-cannot-run-an-authenticated-verb)
+section](implementation-plan.md#a-retrofitted-enrolment-cannot-run-an-authenticated-verb)
 for the mechanism. The reproduction landed in the **CLI functional pack**, where
 `at_activate` runs for real: a third arm in `pq_native_enroll_test.dart` runs
 `at_activate list` on a keyfile a real retrofit has moved.
@@ -914,7 +914,7 @@ fourth test doing that with `nskeyMintLockKey` is the same shape against a
 different key.
 
 ⚠️ **It touches the seeding failure mode.** [A client that exits during its
-startup tail abandons seeding](../implementation-plan.md#a-client-that-exits-during-its-startup-tail-abandons-seeding)
+startup tail abandons seeding](implementation-plan.md#a-client-that-exits-during-its-startup-tail-abandons-seeding)
 described the self-perpetuating interlock as *"reasoned from the code, not
 measured"* — a short-lived client that dies after the lock lands leaves an
 immutable key with a 120-second ttl that nothing deletes, and a successor that
@@ -1038,7 +1038,7 @@ the arming half proven as well, and the burn-down over-counted by one.
 gaps** — UC-A3.3 c1, UC-B4.1 c1 and UC-B4.4 c1 shared one cause, a negative
 cache that left a sender blind to a recipient for fifteen minutes after they
 became reachable. The defect, the ruling and the mutation proofs are in
-[the plan](../implementation-plan.md#how-the-negative-cache-falsified-three-clauses).
+[the plan](implementation-plan.md#how-the-negative-cache-falsified-three-clauses).
 ✅ **Two of the three are now closed** (2026-08-27), both by tests that make the
 transition happen rather than observing a steady state — the sender is refused
 *first*, so what follows is about a client that has already asked and been told

@@ -197,6 +197,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [137] | auth_cli has two roles, and they take opposite postures                                     | 2026-09-08 | LIVE               |
 | [138] | The posture ladder moves back a stage                                                       | 2026-09-08 | LIVE               |
 | [139] | A provider id names the role, and the algorithm only where the value cannot                 | 2026-09-09 | LIVE               |
+| [140] | #2161's deferral note stays as written: the fix went into at_auth                            | 2026-09-01 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -338,3 +339,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [137]: detail/decisions.md#137-auth_cli-has-two-roles-and-they-take-opposite-postures-2026-09-08
 [138]: detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08
 [139]: detail/decisions.md#139-a-provider-id-names-the-role-and-the-algorithm-only-where-the-value-cannot-2026-09-09
+[140]: detail/decisions.md#140-2161s-deferral-note-stays-as-written-2026-09-01
