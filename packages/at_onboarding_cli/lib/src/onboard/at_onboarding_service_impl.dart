@@ -140,19 +140,27 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           storagePath: atOnboardingPreference.storagePath!,
           closedByClient: true);
 
-  /// Builds the client for this atSign, authenticating with [atChops].
+  /// Builds the client for this atSign from [atKeysIo], the keyfile it
+  /// authenticates with. The client's own connection installs its
+  /// authenticator from that source, and stamps what a lookup from before the
+  /// authenticator seam reads; nothing is set on the lookup here.
   ///
-  /// [atKeysIo] is the key source the client keeps for everything [atChops]
-  /// cannot answer — resolving its PKAM algorithm from the key material,
-  /// filing conveyed privates, sourcing per-algorithm signing keys — and is
-  /// null where there is no source to hand across, as on the enrollment path
-  /// whose keyfile is written afterwards.
-  Future<void> _initAtClient(AtChops atChops,
-      {String? enrollmentId, AtKeysIo? atKeysIo}) async {
+  /// [atChops] is a signer that is not a keyfile — a secure element's — for a
+  /// keyfile holding no APKAM private half. at_auth signs with the keyfile's
+  /// keypair when it holds one and with this signer otherwise, so passing it
+  /// beside a complete keyfile changes nothing.
+  Future<void> _initAtClient(
+      {required AtKeysIo atKeysIo,
+      String? enrollmentId,
+      AtChops? atChops}) async {
     AtClientManager atClientManager = AtClientManager.getInstance();
     if (atOnboardingPreference.skipSync) {
       atServiceFactory = ServiceFactoryWithNoOpSyncService();
     }
+    // NOTE: atLookUp and enrollmentId are passed even when null, because a
+    // caller-supplied override is what stops setCurrentAtSign short-circuiting
+    // on an atSign that is already current; the client is rebuilt, and with it
+    // the connection and the authenticator on it.
     await atClientManager.setCurrentAtSign(
         _atSign, atOnboardingPreference.namespace, atOnboardingPreference,
         atChops: atChops,
@@ -162,65 +170,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         enrollmentId: enrollmentId,
         storage: _storageForClient());
 
-    // NOTE: read before the `??=` below erases the distinction between the
-    // two flows.
-    final serviceBuiltTheLookup = _atLookUp != null;
-
     // ??= to support mocking
     _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
-
-    /// The keypair the connection signs its PKAM challenge with, taken from
-    /// the same source as the enrollment id and the algorithm beside it.
-    final AtChops authenticationSigner;
-
-    if (serviceBuiltTheLookup) {
-      // Enrolment: the APKAM keypair was minted under the posture's axis and
-      // the keyfile that will hold it is written later, so there is no key
-      // material to resolve from and the preference is the only source.
-      _atLookUp!.enrollmentId = enrollmentId;
-      _atLookUp!.signingAlgoType =
-          atOnboardingPreference.authenticationKeyAlgorithm;
-      authenticationSigner = atChops;
-    } else {
-      // Authentication: the lookup just adopted is the client's own, and the
-      // client has already read the keyfile, which outranks any preference —
-      // you cannot sign ML-DSA with an RSA key.
-      //
-      // NOTE: the enrollment id, the algorithm and the signer must all come
-      // from the client. A client that retrofitted during its own init
-      // authenticates as a different enrollment from the one the keyfile
-      // named when this call started, and at_chops refuses an algorithm
-      // declared over a keypair of another. They are asserted rather than
-      // left alone because a cached client short-circuits
-      // `AtClientImpl.create` without rebuilding its RemoteSecondary, so its
-      // lookup carries whatever the previous caller left on it.
-      final client = atClientManager.atClient;
-      _atLookUp!.enrollmentId = client.enrollmentId ?? enrollmentId;
-      _atLookUp!.signingAlgoType = AtClientImpl.signingAlgoOf(client);
-      authenticationSigner = client.atChops ?? atChops;
-    }
-    // NOTE: neither key material nor a posture says how a challenge is
-    // hashed, so this axis is the preference's on both paths; asserting it is
-    // what resets a cached client's lookup after a caller that ran with
-    // another value.
-    _atLookUp!.hashingAlgoType = atOnboardingPreference.hashingAlgoType;
-
     _adoptBuiltClient(atClientManager.atClient);
-    // NOTE: the caller's on both flows, not [authenticationSigner]. at_auth's
-    // EnrollmentApprover reads this field for enrollment crypto, where the
-    // encryption keypair and the APKAM symmetric key matter rather than the
-    // APKAM signing keypair, and a retrofitted client's AtChops carries no
-    // APKAM symmetric key.
-    _atLookUp!.atChops = atChops;
-    final lookUp = _atLookUp;
-    if (lookUp is AtLookupMuxable) {
-      lookUp.authenticator = authenticatorFor(
-        _keysIo(),
-        _atSign,
-        enrollmentId: lookUp.enrollmentId,
-        chops: authenticationSigner,
-      );
-    }
   }
 
   /// Points [atClient] at [built] when this service holds none, or holds one
@@ -231,18 +183,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       atClient = built;
     }
   }
-
-  /// Where this CLI's keys live, for READING them during authentication.
-  ///
-  /// The passphrase is not optional here: this source is handed to an
-  /// authenticator that reads the keyfile on every authentication, and a
-  /// password-protected keyfile cannot be read without it.
-  AtKeysIo _keysIo() => FileAtKeysIo(
-        filePath: atOnboardingPreference.atKeysFilePath != null
-            ? (_) => atOnboardingPreference.atKeysFilePath!
-            : null,
-        passPhrase: atOnboardingPreference.passPhrase,
-      );
 
   @override
   @Deprecated('Use getter')
@@ -444,14 +384,19 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       enrollCheckpoint.delete(appName, deviceName, namespaces);
     }
 
-    // NOTE: the client is built from the keys the handshake completed - the
-    // APKAM keypair, the symmetric key, and the encryption private and self
-    // keys it fetched - and not from anything left on the lookup, which
-    // carries no AtChops once it holds an authenticator. The keyfile is
-    // written below, so there is no key source to hand across yet.
+    // The keyfile first, holding the keys the handshake completed, and the
+    // client from it: the same source it will authenticate with from now on.
+    final keyfile = await createAtKeysFile(
+      enrollmentResponse,
+      atKeysFile: atKeysFile,
+      allowOverwrite: allowOverwrite,
+    );
     await _initAtClient(
-      enrollmentResponse.atAuthKeys!.toAtChops(),
+      atKeysIo: FileAtKeysIo(
+          filePath: (_) => keyfile.path,
+          passPhrase: atOnboardingPreference.passPhrase),
       enrollmentId: enrollmentResponse.enrollmentId,
+      atChops: atChops,
     );
 
     // Store enrollment details in local secondary.
@@ -463,12 +408,6 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       ..namespace = namespaces;
     await atClient!.getLocalSecondary()!.putValue(
         localEnrollmentKey.toString(), jsonEncode(enrollmentDetails.toJson()));
-
-    await createAtKeysFile(
-      enrollmentResponse,
-      atKeysFile: atKeysFile,
-      allowOverwrite: allowOverwrite,
-    );
 
     return enrollmentResponse;
   }
@@ -751,8 +690,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
             '$authenticatedAs; using $authenticatedAs');
       }
       logger.finer('Calling persist keys to local secondary');
-      await _initAtClient(atAuth!.atChops!,
-          enrollmentId: authenticatedAs, atKeysIo: atKeysIo);
+      await _initAtClient(
+          atKeysIo: atKeysIo, enrollmentId: authenticatedAs, atChops: atChops);
       await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys!);
     }
 

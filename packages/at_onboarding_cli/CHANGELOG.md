@@ -1,12 +1,19 @@
 ## 1.17.0-rc1
 
-- fix: `enroll` builds its client from the keys the handshake completed —
-  the APKAM keypair, the symmetric key, and the encryption private and self
-  keys it fetched — rather than from an `AtChops` left on the lookup, which
-  at_auth's handshake stopped leaving there once it installed an
-  authenticator. The enroll flow had been failing on a null check after
-  approval, before writing the keyfile. The CLI's live packs found it; its
-  unit tests had not, because they stub the lookup's `atChops`.
+- refactor: both flows build their client from the keyfile. `enroll` writes
+  the keyfile for its new enrollment first and hands that source over;
+  `authenticate` hands over the source at_auth just read. Neither sets
+  `atChops`, `enrollmentId`, `signingAlgoType` or `hashingAlgoType` on the
+  lookup any more — the client's own connection installs an authenticator
+  from the key source and stamps what a lookup from before that seam reads,
+  so a connection's algorithm now comes from the key material on both flows
+  rather than from the preference on one of them.
+  ⚠️ `enroll` had been failing on a null check after approval and before the
+  keyfile was written, because it read an `AtChops` off the lookup that
+  at_auth's handshake stopped leaving there. The CLI's live packs found that;
+  its unit tests had not, because they stub the lookup's `atChops`.
+  `AtOnboardingService.atChops` is unchanged: it is the door for a signer
+  that is not a keyfile, such as a secure element's.
 - fix: `sendEnrollRequest` no longer sleeps 500ms after announcing itself on
   the progress stream. The pause existed so the CLI's narration did not scroll
   past unread, but it delayed the enrollment submission rather than pacing the

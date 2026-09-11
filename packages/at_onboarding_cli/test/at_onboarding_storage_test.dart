@@ -69,12 +69,9 @@ void main() {
     final service =
         AtOnboardingServiceImpl(atSign, preference, atServiceFactory: factory);
     service.atLookUp = mockAtLookup;
-    mockAtAuth.atChops = AtChopsImpl(AtChopsKeys());
     service.atAuth = mockAtAuth;
     when(() => mockAtLookup.pkamAuthenticate())
         .thenAnswer((_) => Future.value(true));
-    when(() => mockAtAuth.atChops)
-        .thenAnswer((_) => AtChopsImpl(AtChopsKeys()));
     when(() => mockAtAuth.authenticate(any()))
         .thenAnswer((_) => Future.value(AtAuthResponse(atSign)
           ..isSuccessful = true

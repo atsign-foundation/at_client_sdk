@@ -86,7 +86,6 @@ void main() {
       AtOnboardingService onboardingService =
           AtOnboardingServiceImpl(atSign, onboardingPreference);
       onboardingService.atLookUp = mockAtLookup;
-      mockAtAuth.atChops = AtChopsImpl(AtChopsKeys());
       onboardingService.atAuth = mockAtAuth;
       onboardingService.atClient = await AtClientImpl.create(
           atSign, 'unit_test', getAtClientPreferenceAlice());
@@ -103,8 +102,6 @@ void main() {
               ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
               ..apkamSymmetricKey = AtBytes.fromString('dumm')
               ..enrollmentId = 'dummy_enroll_id')));
-      when(() => mockAtAuth.atChops)
-          .thenAnswer((_) => AtChopsImpl(AtChopsKeys()));
       var authResult = await onboardingService.authenticate();
       expect(authResult, true);
     });
@@ -121,7 +118,6 @@ void main() {
       AtOnboardingService onboardingService =
           AtOnboardingServiceImpl(atSign, onboardingPreference);
       onboardingService.atLookUp = mockAtLookup;
-      mockAtAuth.atChops = AtChopsImpl(AtChopsKeys());
       onboardingService.atAuth = mockAtAuth;
       when(() => mockAtLookup.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
@@ -136,8 +132,6 @@ void main() {
               ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
               ..apkamSymmetricKey = AtBytes.fromString('dumm')
               ..enrollmentId = 'source-handoff-enroll-id')));
-      when(() => mockAtAuth.atChops)
-          .thenAnswer((_) => AtChopsImpl(AtChopsKeys()));
 
       await onboardingService.authenticate();
 
@@ -211,7 +205,6 @@ void main() {
       stubHandshake(mockEnrollmentBase);
       when(() => mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId))
           .thenAnswer((_) => Future.value(true));
-      when(() => mockAtLookup.atChops).thenReturn(AtChopsImpl(atChopsKeys));
       when(() => mockAtClient.getCurrentAtSign()).thenReturn(atsign);
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
 
@@ -478,7 +471,6 @@ void main() {
       stubHandshake(mockEnrollmentBase);
       when(() => mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId))
           .thenAnswer((_) => Future.value(true));
-      when(() => mockAtLookup.atChops).thenReturn(AtChopsImpl(atChopsKeys));
       when(() => mockAtClient.getCurrentAtSign()).thenReturn(atsign);
       when(() => mockAtClient.getLocalSecondary()).thenReturn(localSecondary);
       when(() => mockAtClient.put(any(), any())).thenAnswer((i) async {

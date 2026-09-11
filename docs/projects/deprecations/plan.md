@@ -287,8 +287,9 @@ apart from `LocalSecondary`'s `AtChops` tier, which waits for the live packs;
 `AtClient.atChops` is `@Deprecated`. Step 5 is done: the readers of the
 enrollment id ask the client. All four live packs have run green on everything landed;
 their first runs found two defects, recorded under step 4, one of them from
-the pass before this one. What is owed, in order: steps 6 and 7, then that
-tier, with the packs re-run before the PR if either touches a seam again. Step 7 is no longer
+the pass before this one. Step 6's at_onboarding_cli half is done and its four
+packs are green. What is owed, in order: step 6's live-pack fixtures and
+at_contact, then step 7, then that tier. Step 7 is no longer
 blocked by the legacy question, which step 3 answered, but it is blocked on the
 three at_client_flutter readings recorded under it.
 
@@ -719,11 +720,38 @@ path).
 
 ### Step 6: at_onboarding_cli, the live packs and at_contact (no API change)
 
-`_initAtClient(AtChops atChops, …)` drops the parameter and passes `atKeysIo`
-alone; the 7 `atLookUp.*` ladder uses between `:180` and `:220` go through
-`authenticatorFor`; and `AtOnboardingService.atChops` (2, on the interface) is
-marked `@Deprecated`. Then the CLI's tests: the `AtChopsImpl` constructions and
-the `atChops` stubs come out with the parameter.
+**Done for at_onboarding_cli, 2026-09-11.** `_initAtClient` takes `atKeysIo`
+as a required named parameter and `atChops` as an optional one, and does
+nothing to the lookup: the client's own connection installs the authenticator
+from that source and stamps what a lookup from before the seam reads, so the
+whole ladder block — `atChops`, `enrollmentId`, `signingAlgoType`,
+`hashingAlgoType`, and the `authenticatorFor` call the service made itself —
+is gone, along with the private `_keysIo` that fed it. `enroll` writes its
+keyfile first and builds the client from it, where it used to build the
+client and write the keyfile afterwards; `authenticate` hands over the source
+at_auth just read.
+
+`AtOnboardingService.atChops` is NOT deprecated, and that is a correction to
+this step as written: it is the door for a signer that is not a keyfile — a
+secure element's — which is the same shape at_auth's `_pkam` keeps for
+exactly that reason, and step 0's ruling says this tree does not deprecate
+what it has no replacement for. `_initAtClient` passes it through.
+
+One test changed contract rather than fixture:
+`authenticated_client_keeps_its_algorithm_test.dart`'s second arm asserted
+that a lookup the service built keeps the **preference's** `rsa2048`, because
+enrolment had no keyfile to resolve from at that moment. It now has one, so
+both arms assert the keyfile's `mldsa65` and the arm names the authenticator
+it expects beside it. Three mutations hold the rest: building the client with
+no key source reddens 3 tests, building it before the keyfile is written
+reddens 2 (the checkpoint and the local-secondary detail), and stamping the
+preference's algorithm again reddens 3.
+
+at_onboarding_cli's `lib` goes 34 to 22 deprecated uses and its test tree 211
+to 186 (`dart analyze` in `packages/at_onboarding_cli`, counted by path); 78
+unit tests pass. This moves a client-construction seam, so all four live packs
+ran against it on `at_virtual_env:local`, and all four are green: the
+onboarding-CLI pack +21, its proxy +4, functional +200, e2e +73.
 
 The two live packs follow the same moves on their own fixtures: at_functional
 carries 117 F1 uses (`AtChopsKeys` 24, `AtPkamKeyPair` 23,
