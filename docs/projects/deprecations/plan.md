@@ -903,13 +903,37 @@ declaration and the analyzer enumerates them.
 | D | `AtEnrollmentResponse.atSign`, `.rootDomain`, `.atAuthKeys` | 45 | remove, with C: the session carries all three |
 | F | the seven flat `AtKeys` fields | 332 | ⛔ **not removable** — see below |
 
-**Order, by risk.** E, G and H first: no consumer anywhere outside at_auth, so
+**Order, by risk.** E and H first: no consumer anywhere outside at_auth, so
 the only open question is at_auth's own use of them, which deletion answers.
 Then A, whose seven uses are functional-pack fixtures reading `atAuth.atChops`.
-Then B, C and D together, because they are one change rather than three —
+Then B, C, D **and G** together, because they are one change rather than four —
 **an authentication and an enrollment always carry a session** — which is where
 the behaviour moves, and where the four `AtAuthRequest` callers that pass keys
 alone get a source. F last, and as a ruling rather than a refactor.
+
+⚠️ **G is not free, and its zero is why.** `AtKeys.authenticationFor` is not
+deprecated, is at_client's route to a client's `AtChops`
+(`AtClientImpl._createAtChops`), and its two-line body calls exactly the two
+methods G would remove. The zero counted cross-package uses; this caller is
+at_auth's own, which no count in that table can see. So G waits for the
+decision about what `authenticationFor` returns once nothing wants an
+`AtChops` — which is at_client's `AtClient.atChops` chain, already
+`@Deprecated` and scheduled for at_client 4.0.
+
+**E and H are done, 2026-09-11.** The registrar's three aliases went with no
+caller anywhere. `KeyIOMixin` and its four helpers went too, and
+`WrittenAtKeysIo`/`GeneratedAtKeysIo` stopped mixing it in — a supertype
+change, so the suites that matter are the ones loading the *subclasses*:
+at_client's `StubAtKeysIo` and four more doubles, at_client_flutter's
+`KeychainAtKeysIo`, at_auth's own two stores. All analyze clean and all pass
+(at_auth 402, at_client 1858, at_onboarding_cli 78, at_client_flutter 40; every
+live pack analyzes at exit 0). Deletion named one user, as it was meant to:
+`at_keys_io_test.dart`'s `matchesEncryptedAtKeys` decrypted the at-rest
+document by hand through two of the helpers. It reads back through
+`FileAtKeysIo.read` now, which is a round-trip rather than an at-rest
+assertion — and the at-rest form is pinned harder elsewhere, in
+`legacy_field_self_encryption_test.dart`, against openssl's ciphertext and the
+committed legacy fixture. at_auth's `lib` annotations go 36 to 28.
 
 ⛔ **F is not a removal, and this step must not pretend otherwise.** A legacy
 `.atKeys` document decodes into the flat fields and files no

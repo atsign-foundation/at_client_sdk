@@ -1,5 +1,17 @@
 ## 4.0.0-rc2
 
+- **BREAKING:** the registrar's legacy aliases are removed —
+  `ActivateApiEndpoint`, and `RegistrarApiEndpoint.login`/`.validate`. Use
+  `RegistrarApiEndpoint`, `.requestOtp` and `.validateOtp`. Nothing in this
+  repository named any of the three.
+- **BREAKING:** `KeyIOMixin` and its four serialization helpers are removed,
+  and `WrittenAtKeysIo`/`GeneratedAtKeysIo` no longer mix it in:
+  `decryptAtKeysWithSelfEncKey`, `encryptAtKeysWithSelfEncKey`,
+  `generateKeyPairs` and `decodeAtKeys`. A `.atKeys` document is read and
+  written through the store itself — `FileAtKeysIo.read`/`.write` — which
+  does the passphrase and self-encryption decoding; `passphraseCodec` on
+  `AtKeysIo` remains for a caller that needs the envelope alone. No caller
+  outside at_auth named any of them.
 - `AtAuth.atChops` is deprecated. Build the client from the `AtKeysIo` you
   authenticated with, which `AtAuthResponse.session` carries, rather than
   from an `AtChops` at_auth hands out; the responses' own `atChops` were
