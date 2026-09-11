@@ -282,11 +282,10 @@ accessors, its signing path, its keyfile self-encryption, its lookup wiring,
 its approval key material, its handshake and its `atChops` field deprecated,
 with 14 `lib` uses left in at_auth, which is its floor for this pass: every
 one is decided and named in the table under step 3, and all but two are the
-injected-signer machinery that waits for the live packs. Step 4 has its
-key-material half, which is what unblocked at_client's test tree. What is
-owed, in order: the rest of step 4 (`apkam_signing`, `sync_service_impl`, and
-deprecating `AtClient.atChops` itself), then steps 5 to 7, then the live packs
-before the PR. Step 7 is no longer
+injected-signer machinery that waits for the live packs. Step 4 is done
+apart from `LocalSecondary`'s `AtChops` tier, which waits for the live packs;
+`AtClient.atChops` is `@Deprecated`. What is owed, in order: steps 5 to 7,
+then the live packs before the PR, then that tier. Step 7 is no longer
 blocked by the legacy question, which step 3 answered, but it is blocked on the
 three at_client_flutter readings recorded under it.
 
@@ -596,11 +595,25 @@ carries the `AtChops` only for a client built without one.
 RSA verifier: two different keypairs, and which public key the PKAM signature
 verifies under says which signed; its keyfile-plus-`AtChops` arm was red
 against the old wiring. The ladder fields on the lookup are still written, as
-step 5's ruling on `remote_secondary.dart` says. What remains of step 4 is the
+step 5's ruling on `remote_secondary.dart` says. `AtClient.atChops` is
+`@Deprecated`, getter and setter, with the replacement in the text. at_client's
+`lib` went 46 to 41 (`dart analyze` in `packages/at_client`, counting
+`deprecated_member_use` by path); its own test tree stayed at 276, because a
+package's tests are the same package and the analyzer reports none of the
+stubs there — a grep finds 42 `.atChops` references across 23 test files, some
+of them `AtLookUp`'s or `RemoteSecondary`'s, and those fixtures are found by
+grep, not by a count, like the `hiveStoragePath` ones above. The packages that
+read the field gained infos on purpose: at_onboarding_cli 32 to 33 in `lib`,
+at_functional_test 279 to 283 in `test`, at_end2end_test 45 to 48 in `lib`,
+the two CLI packs and at_client_flutter none. What remains of step 4 is the
 `AtChopsKeys` getter on `LocalSecondary` and its "from atChops" tier — which
 waits for the live packs, since a client built from an `AtChops` and no
-keystore keys is a shape only they can show — and deprecating
-`AtClient.atChops` itself.
+keystore keys is a shape only they can show. Of the 41, by member: 15 are
+`atLookUp.enrollmentId` reads, which are step 5's; 11 are `AtChops` as a type
+in the carrier's own plumbing (`remote_secondary.dart`, `at_client_impl.dart`,
+`at_client_manager.dart`); 4 are the lookup's ladder fields, which step 5's
+ruling keeps; and the rest are the key classes `_createAtChops`'s Hive branch
+and the nskey seeding build, the bridge for a client that has no keyfile.
 
 Two observations from flipping the fixtures that could move:
 

@@ -1,5 +1,9 @@
 ## 3.15.0-rc1
 
+- `AtClient.atChops` is deprecated, getter and setter. Build the client from a
+  keyfile — `AtClientImpl.create(atKeysIo:)` — and it derives what it needs
+  from that; nothing outside at_client needs the `AtChops` it holds. The
+  constructor's `atChops:` was already deprecated.
 - refactor: a client's remote connections — its own and sync's — authenticate
   from the keyfile when the client has one. The `AtChops` a keyfile client
   derives from that keyfile is no longer injected as the PKAM signer, and

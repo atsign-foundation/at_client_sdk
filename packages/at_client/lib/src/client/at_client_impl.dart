@@ -120,6 +120,10 @@ class AtClientImpl implements AtClient {
   AtTelemetryService? get telemetry => _telemetry;
 
   @override
+  @Deprecated('Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
+      'and it derives what it needs from that; nothing outside at_client needs '
+      'the AtChops it holds. Removed with the AtChops compatibility API in the '
+      'next major release.')
   set atChops(AtChops? atChops) {
     _atChops = atChops;
     if (_remoteSecondary != null) {
@@ -128,6 +132,10 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+  @Deprecated('Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
+      'and it derives what it needs from that; nothing outside at_client needs '
+      'the AtChops it holds. Removed with the AtChops compatibility API in the '
+      'next major release.')
   AtChops? get atChops => _atChops;
 
   @override
