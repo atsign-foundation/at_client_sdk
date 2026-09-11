@@ -369,7 +369,8 @@ class SyncServiceImpl implements SyncService {
         ..message = 'Exception: $e'
         ..atClientException = wrapped);
     } on _SyncAbandoned {
-      _logger.finer('sync ${syncRequest.id} abandoned: the service was stopped');
+      _logger
+          .finer('sync ${syncRequest.id} abandoned: the service was stopped');
       syncRequest.result!.atClientException = AtClientException(
           error_codes['AtClientException'], 'SyncService has been stopped');
       _syncError(syncRequest);
