@@ -444,8 +444,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       enrollCheckpoint.delete(appName, deviceName, namespaces);
     }
 
+    // NOTE: the client is built from the keys the handshake completed - the
+    // APKAM keypair, the symmetric key, and the encryption private and self
+    // keys it fetched - and not from anything left on the lookup, which
+    // carries no AtChops once it holds an authenticator. The keyfile is
+    // written below, so there is no key source to hand across yet.
     await _initAtClient(
-      _atLookUp!.atChops!,
+      enrollmentResponse.atAuthKeys!.toAtChops(),
       enrollmentId: enrollmentResponse.enrollmentId,
     );
 

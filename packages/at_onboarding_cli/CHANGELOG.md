@@ -1,5 +1,12 @@
 ## 1.17.0-rc1
 
+- fix: `enroll` builds its client from the keys the handshake completed —
+  the APKAM keypair, the symmetric key, and the encryption private and self
+  keys it fetched — rather than from an `AtChops` left on the lookup, which
+  at_auth's handshake stopped leaving there once it installed an
+  authenticator. The enroll flow had been failing on a null check after
+  approval, before writing the keyfile. The CLI's live packs found it; its
+  unit tests had not, because they stub the lookup's `atChops`.
 - fix: `sendEnrollRequest` no longer sleeps 500ms after announcing itself on
   the progress stream. The pause existed so the CLI's narration did not scroll
   past unread, but it delayed the enrollment submission rather than pacing the

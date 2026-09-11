@@ -285,10 +285,10 @@ one is decided and named in the table under step 3, and all but two are the
 injected-signer machinery that waits for the live packs. Step 4 is done
 apart from `LocalSecondary`'s `AtChops` tier, which waits for the live packs;
 `AtClient.atChops` is `@Deprecated`. Step 5 is done: the readers of the
-enrollment id ask the client. The functional pack has run green on everything landed; its
-first run found one defect, recorded under step 4. The e2e and
-onboarding-CLI packs are still owed. What is owed, in order: those two packs,
-then steps 6 and 7, then that tier. Step 7 is no longer
+enrollment id ask the client. All four live packs have run green on everything landed;
+their first runs found two defects, recorded under step 4, one of them from
+the pass before this one. What is owed, in order: steps 6 and 7, then that
+tier, with the packs re-run before the PR if either touches a seam again. Step 7 is no longer
 blocked by the legacy question, which step 3 answered, but it is blocked on the
 three at_client_flutter readings recorded under it.
 
@@ -611,7 +611,26 @@ not the substance, which this plan's own caution names and this pass did not
 enumerate.** The rule above is the fix, and `remote_secondary_wiring_test.dart`
 now holds that shape too: an empty keyfile beside an `AtChops` signs with the
 `AtChops`. The pack re-ran on the same `at_virtual_env:local` image,
-`./runLocal.sh 27000` in `tests/at_functional_test`: +200, all passed. The ladder fields on the lookup are still written, as
+`./runLocal.sh 27000` in `tests/at_functional_test`: +200, all passed. The
+e2e pack followed, `./runLocal.sh 26000` in `tests/at_end2end_test` (the bare
+run, `test -x legacy-server`, 21 files): +73, all passed, `retrofit_e2e_test`
+among them — so step 5's post-retrofit agreement assertion ran live and held.
+⚠️ **Then the two onboarding-CLI packs, and each had two red on the enrollee's
+side of an enrollment: the approval landed and no keyfile was written.** The
+CLI's `enroll` read `_atLookUp!.atChops!` after `awaitApproval`, and nothing
+had set it since the handshake started installing an authenticator instead of
+writing the ladder — the fix that landed on 2026-09-10 with the packs owed.
+Nothing went red until now because the CLI's unit tests stub the lookup's
+`atChops`, and the pack test hides the enroll future's error behind a
+`whenComplete` assertion on the keyfile. `enroll` now builds its client from
+the keys the handshake completed, through `toAtChops()`, which is counted
+rather than ignored: it is the bridge step 6 replaces with the keyfile.
+at_onboarding_cli's `lib` goes 33 to 34 for it (`dart analyze` in
+`packages/at_onboarding_cli`, counted by path): the ladder read gone, the
+bridge counted. Both CLI packs re-ran green with it — `./runLocal.sh 47000`
+in `tests/at_onboarding_cli_functional_tests`: +21; `./runLocal.sh 48000` in
+`tests/at_onboarding_cli_functional_tests_proxy`: +4 — so all four live packs
+have run green on this tree, on `at_virtual_env:local`. The ladder fields on the lookup are still written, as
 step 5's ruling on `remote_secondary.dart` says. `AtClient.atChops` is
 `@Deprecated`, getter and setter, with the replacement in the text. at_client's
 `lib` went 46 to 41 (`dart analyze` in `packages/at_client`, counting
