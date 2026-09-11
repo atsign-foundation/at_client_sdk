@@ -168,6 +168,10 @@ class AtAuthImpl implements AtAuth {
     // enrollment's RSA credentials. AtKeys owns that resolution — it is the
     // only reader of either source. ??= to support mocking.
     final algorithm = atAuthKeys.authenticationAlgorithmFor(enrollmentId);
+    // A signer the caller injected outranks the keyfile; without one the
+    // authenticator signs with the keypair the keys hold. The AtChops built
+    // otherwise serves only the atChops field, for the readers it still has.
+    final injectedChops = atChops;
     atChops ??= atAuthKeys.authenticationFor(enrollmentId).chops;
     _installAuthenticator(
         atLookUp!,
@@ -181,7 +185,7 @@ class AtAuthImpl implements AtAuth {
                   : null),
           atAuthRequest.atSign,
           enrollmentId: enrollmentId,
-          chops: atChops,
+          chops: injectedChops,
         ),
         signingAlgo: algorithm);
 

@@ -19,10 +19,13 @@ import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+
+import 'test_utils/pkam_pin.dart';
 
 /// `AtLookupImpl` implements `AtLookupMuxable`, so this double has the seam.
 class MockMuxableLookUp extends Mock implements AtLookupImpl {}
@@ -42,6 +45,21 @@ class FakeVerbBuilder extends Fake implements VerbBuilder {}
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 
 class FakeAtLookUp extends Fake implements AtLookupImpl {}
+
+/// Runs an installed [AtAuthenticator] for real and records what it sent.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+  final List<String> replies;
+
+  _RecordingExecutor(this.replies);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return replies.removeAt(0);
+  }
+}
 
 class FakeSecondaryAddressFinder extends Fake
     implements CacheableSecondaryAddressFinder {
@@ -71,9 +89,10 @@ void main() {
   /// [activated] is what the atServer reports about the atSign: `onboard`
   /// refuses an activated one, and `authenticate` needs one.
   AtAuthImpl rig(AtLookUp lookUp,
-      {required String enrollmentId, required bool activated}) {
+      {required String? enrollmentId, required bool activated}) {
     final pkam = MockPkamAuthenticator();
-    when(() => pkam.authenticate(any(), any(), enrollmentId: enrollmentId))
+    when(() => pkam.authenticate(any(), any(),
+            enrollmentId: enrollmentId ?? any(named: 'enrollmentId')))
         .thenAnswer((_) async => true);
     final status = MockAtServerStatus();
     when(() => status.get(any())).thenAnswer((_) async => activated
@@ -100,11 +119,43 @@ void main() {
   /// Authenticates from the committed legacy keyfile, whose flat fields name
   /// no algorithm — so at_lookup's default is the right one and nothing
   /// should set it.
-  Future<void> authenticate(AtAuthImpl auth) => auth.authenticate(AtAuthRequest(
+  Future<void> authenticate(AtAuthImpl auth, {AtKeysIo? keysIo}) =>
+      auth.authenticate(AtAuthRequest(
         atSign,
-        atKeysIo: FileAtKeysIo(
-            filePath: (atsign) => 'test/data/${atsign}_key.atKeys'),
+        atKeysIo: keysIo ??
+            FileAtKeysIo(
+                filePath: (atsign) => 'test/data/${atsign}_key.atKeys'),
       ));
+
+  /// A legacy-shaped keyfile holding [owner]'s demo material, in memory.
+  Future<InMemoryAtKeysIo> demoKeyfile(String owner) async {
+    final io = InMemoryAtKeysIo();
+    await io.write(
+        atSign,
+        AtKeys()
+          ..apkamPublicKey = AtBytes.fromString(demo.pkamPublicKeyMap[owner]!)
+          ..apkamPrivateKey =
+              AtBytes.fromString(demo.pkamPrivateKeyMap[owner]!)
+          ..defaultEncryptionPublicKey =
+              AtBytes.fromString(demo.encryptionPublicKeyMap[owner]!)
+          ..defaultEncryptionPrivateKey =
+              AtBytes.fromString(demo.encryptionPrivateKeyMap[owner]!)
+          ..defaultSelfEncryptionKey =
+              AtBytes.fromString(demo.aesKeyMap[owner]!));
+    return io;
+  }
+
+  /// Runs the authenticator [lookUp] was handed against the pinned challenge
+  /// and returns the `pkam:` command it sent.
+  Future<String> pkamSentBy(MockMuxableLookUp lookUp) async {
+    final installed = verify(() => lookUp.authenticator = captureAny())
+        .captured
+        .single as AtAuthenticator;
+    final executor =
+        _RecordingExecutor(['data:$pkamPinChallenge', 'data:success']);
+    expect(await installed(executor), isTrue);
+    return executor.sent.last;
+  }
 
   /// Onboards with a PQ activation key, the case where an algorithm HAS to be
   /// named because at_lookup's default would sign an ML-DSA key with RSA.
@@ -148,6 +199,39 @@ void main() {
       verifyNever(() => lookUp.atChops = any());
       verifyNever(() => lookUp.signingAlgoType = SigningAlgoType.mldsa65);
       verifyNever(() => lookUp.signingAlgoType = SigningAlgoType.rsa2048);
+    });
+  });
+
+  group('what the installed authenticator signs with', () {
+    test('the keyfile\'s own keypair, to the byte', () async {
+      final lookUp = MockMuxableLookUp();
+
+      await authenticate(rig(lookUp, enrollmentId: null, activated: true),
+          keysIo: await demoKeyfile(pkamPinAtSign));
+
+      expect(await pkamSentBy(lookUp), endsWith(':$expectedPkamSignature\n'),
+          reason: 'the bytes openssl produces for this challenge under the '
+              'keyfile\'s PKAM key: what signs may move, the signature may not');
+    });
+
+    test('a signer the caller injected, over the keyfile', () async {
+      // The keyfile holds another atSign's keypair, so if the keyfile signed
+      // the signature would not be the pin's. The door for a signer that is
+      // not a keyfile at all - a hardware-backed one - and this is its test.
+      final lookUp = MockMuxableLookUp();
+      // ignore: deprecated_member_use
+      final injected = AtChopsImpl(AtChopsKeys.create(
+          null,
+          // ignore: deprecated_member_use
+          AtPkamKeyPair.create(demo.pkamPublicKeyMap[pkamPinAtSign]!,
+              demo.pkamPrivateKeyMap[pkamPinAtSign]!)));
+      final auth = rig(lookUp, enrollmentId: null, activated: true)
+        ..atChops = injected;
+
+      await authenticate(auth, keysIo: await demoKeyfile('@bob🛠'));
+
+      expect(await pkamSentBy(lookUp), endsWith(':$expectedPkamSignature\n'),
+          reason: 'the injected signer\'s key, not the keyfile\'s');
     });
   });
 

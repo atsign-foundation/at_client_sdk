@@ -501,7 +501,14 @@ the live packs run.** One of them names the algorithm precisely because the
 keyfile cannot answer — a PQ-native activation signs with a keypair minted
 moments before, under an enrollment the atServer has not created — and that
 resolution is exercised by no unit test. The rest are reachable from unit
-tests.
+tests. `AtAuthImpl.authenticate` no longer feeds them: it hands
+`authenticatorFor` only a signer the caller injected through
+`AtAuth.create(atChops:)`, so at_auth's own mainstream authentication signs
+from the keypair, and `onboard` is the branches' last caller. The bytes are
+identical by design, so `auth_wiring_test.dart` holds the openssl PKAM pin on
+the authenticator `authenticate` installs and holds that an injected signer
+still wins; which branch of `_pkam` ran is not observable from outside and is
+not claimed.
 
 **The method that worked, for whoever picks this up.** Every change to a
 signing or key-resolution path went: capture the wire bytes with an

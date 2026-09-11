@@ -1,5 +1,12 @@
 ## 4.0.0-rc2
 
+- refactor: `AtAuth.authenticate` signs its PKAM challenge from the keyfile's
+  own keypair unless a signer was injected through `AtAuth.create(atChops:)`,
+  which still outranks the keyfile. It used to inject the `AtChops` it
+  builds for its `atChops` field, so at_auth's own authentication never took
+  the keypair path. Same bytes: the openssl-captured PKAM signature is
+  asserted on the authenticator `authenticate` installs, and a second arm
+  holds that an injected signer is the one that signs.
 - refactor: the enrolment handshake authenticates from the enrollee's keys
   alone. It used to build an `AtChops` around them and inject it as the
   signer, with a special shape for an enrollee still awaiting its symmetric
