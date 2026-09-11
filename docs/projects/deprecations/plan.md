@@ -288,8 +288,12 @@ apart from `LocalSecondary`'s `AtChops` tier, which waits for the live packs;
 enrollment id ask the client. All four live packs have run green on everything landed;
 their first runs found two defects, recorded under step 4, one of them from
 the pass before this one. Step 6's at_onboarding_cli half is done and its four
-packs are green. What is owed, in order: step 6's live-pack fixtures and
-at_contact, then step 7, then that tier. Step 7 is no longer
+packs are green, and step 7's three at_client_flutter readings are resolved.
+What is owed, in order:
+[step 8](#step-8-removal--at_auth-now-the-others-at-their-majors), which gkc
+ruled on and which removes at_auth's deprecated surface in this rc, then the
+remaining test-tree work in steps 6 and 7, then `LocalSecondary`'s `AtChops`
+tier. Step 7 is no longer
 blocked by the legacy question, which step 3 answered, but it is blocked on the
 three at_client_flutter readings recorded under it.
 
@@ -865,12 +869,63 @@ now, so this list is the only record that they exist. Its test tree still holds
 41, which is step 7's mechanical remainder. Its 40 unit tests pass, and
 `flutter analyze --no-pub --no-fatal-infos` is clean.
 
-### Step 8: removal, in the majors
+### Step 8: removal — at_auth now, the others at their majors
 
 at_client 4.0 removes `AtClient.atChops`, `create(atChops:)`, the manager
-parameters and `RemoteSecondary.atChops`. at_auth removes `toAtChops` and the
-`atChops` fields in its next major after 4.0. The at_lookup major removes the
+parameters and `RemoteSecondary.atChops`. The at_lookup major removes the
 ladder, gated as the consolidation plan records.
+
+⛔ **at_auth removes its own deprecated surface in this rc, and that corrects
+what this step said** — it read *"at_auth removes `toAtChops` and the `atChops`
+fields in its next major after 4.0"*. gkc ruled on 2026-09-11 that with only
+`4.0.0-rc1` published, further breaking changes inside the major are free:
+*"let's do it right; let's clean up all of the at_auth surface now."* So the
+removals below are this pass's work, not a later release's. Steps 1 to 7 move
+the callers; this deletes what they moved off.
+
+**The surface, measured.** 36 `@Deprecated` annotations in at_auth's `lib`, in
+eight families. The counts are cross-package uses from `dart analyze` per
+package, plus `flutter analyze` for at_client_flutter, taken after step 7's
+readings. ⚠️ **at_auth's own uses are absent from every count**, because a
+same-package deprecated use raises nothing in this tree — measured as zero
+`deprecated_member_use_from_same_package` diagnostics in every analyze this
+pass. For at_auth's own callers the instrument is deletion: remove the
+declaration and the analyzer enumerates them.
+
+| family | members | cross-package uses | decision |
+| ------ | ------- | -----------------: | -------- |
+| E | the registrar's `ActivateApiEndpoint`, `login`, `validate` aliases | 0 | remove |
+| G | `AtKeys.toAtChops`, `.toAtChopsForEnrollment`, `.copyWith` | 0 | remove |
+| H | `KeyIOMixin` and its four serialization helpers | 0 | remove |
+| A | `AtAuth.atChops` and `approve`'s `approverChops` | 7 | remove: both replacements landed this pass |
+| B | `AtAuthRequest.atAuthKeys`, `AuthResponse.atAuthKeys`/`.atLookUp`/`.atChops` | 37 | remove: every caller can supply an `AtKeysIo`, and 32 of 36 constructions already do |
+| C | `AtEnrollmentRequest`'s `atSign`, `rootDomain`, `apkamPublicKey`, `encryptedAPKAMSymmetricKey` | 22 | remove: callers supply a `session` |
+| D | `AtEnrollmentResponse.atSign`, `.rootDomain`, `.atAuthKeys` | 45 | remove, with C: the session carries all three |
+| F | the seven flat `AtKeys` fields | 332 | ⛔ **not removable** — see below |
+
+**Order, by risk.** E, G and H first: no consumer anywhere outside at_auth, so
+the only open question is at_auth's own use of them, which deletion answers.
+Then A, whose seven uses are functional-pack fixtures reading `atAuth.atChops`.
+Then B, C and D together, because they are one change rather than three —
+**an authentication and an enrollment always carry a session** — which is where
+the behaviour moves, and where the four `AtAuthRequest` callers that pass keys
+alone get a source. F last, and as a ruling rather than a refactor.
+
+⛔ **F is not a removal, and this step must not pretend otherwise.** A legacy
+`.atKeys` document decodes into the flat fields and files no
+`CryptographicMaterial` at all — `at_keys_test.dart`'s *"a legacy document
+files no typed material"* pins it, with a typed document as the control — so
+for every keyfile already on disk those seven fields are the only reader there
+is, and `toJson`, `fromJson` and `file_io`'s at-rest self-encryption are built
+on them. Deleting them drops support for every keyfile in the world. What is
+open for F is the **annotation**: step 0's ruling is that this tree does not
+deprecate what it has no replacement for, and a legacy keyfile has none.
+Whether the seven keep an annotation no caller can act on is gkc's call, and
+this step carries it as a question rather than answering it.
+
+⚠️ Each family lands with the gates the rest of this plan uses, and B, C and D
+run all four live packs before they commit: they change what an authentication
+and an enrollment hand back, which every pack fixture reads.
 
 ## 5. What each step clears
 
