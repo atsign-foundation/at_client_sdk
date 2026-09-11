@@ -9,16 +9,17 @@ members are reached through many differently-named receivers, and only the
 analyzer resolves a receiver's type. Re-derive before acting on any of them:
 
 ```bash
-# the workspace's members are the root pubspec.yaml's `workspace:` list
-for p in packages/at_auth packages/at_client packages/at_onboarding_cli \
-         packages/at_contact tests/at_functional_test tests/at_end2end_test; do
-  (cd $p && printf '%-40s lib:%4s test:%4s\n' $p \
-    "$(dart analyze lib  2>/dev/null | grep -c deprecated_member_use)" \
-    "$(dart analyze test 2>/dev/null | grep -c deprecated_member_use)")
+# EVERY member, enumerated from the root pubspec rather than hand-listed: a
+# hand-listed set is how the 2 CLI packs were recorded at zero while one held
+# 47. at_client_flutter needs the Flutter analyzer, which dart analyze is not.
+for p in $(sed -n '/^workspace:/,/^[a-z]/p' pubspec.yaml | sed -n 's/^ *- *//p'); do
+  [ "$p" = packages/at_client_flutter ] && continue
+  (cd $p && printf '%-46s %4s\n' $p \
+    "$(dart analyze 2>/dev/null | grep -c deprecated_member_use)")
 done
-# a Flutter package needs the Flutter analyzer; dart analyze never sees it
-(cd packages/at_client_flutter && flutter analyze --no-pub --no-fatal-infos \
-  | grep -c deprecated_member_use)
+(cd packages/at_client_flutter && printf '%-46s %4s\n' packages/at_client_flutter \
+  "$(flutter analyze --no-pub --no-fatal-infos | grep -c deprecated_member_use)")
+# a member's own split, from inside it: dart analyze lib | test | example | tool
 # per symbol, from any of the above analyses saved to a file:
 #   grep deprecated_member_use an.txt | sed -E "s/.*'([^']+)' is deprecated.*/\1/" | sort | uniq -c | sort -rn
 ```
@@ -40,7 +41,12 @@ at_client_flutter, and the 4 live packs (`tests/at_functional_test`,
 The workspace is the 17 members the root `pubspec.yaml` lists: 12 packages,
 the 4 live packs and `tools/wasm_shakedown`. Of those, at_commons, at_utils,
 at_chops, at_lookup, at_server_status, at_policy, at_cli_commons,
-`wasm_shakedown` and the 2 CLI packs are at zero in `lib` and `test` today.
+`wasm_shakedown` and the CLI *proxy* pack are at zero today.
+⚠️ `tests/at_onboarding_cli_functional_tests` is **not**: it holds 47, all in
+`test` — 22 `AtClientPreference` storage fields, 6 `isLocalStoreRequired`, 4
+`AtLookupImpl`, 8 flat keyfile fields and 7 keyfile accessors. This plan
+recorded both CLI packs at zero until 2026-09-11, because the re-derivation
+loop above hand-listed 6 members and reached neither.
 The other `packages/*_flutter` directories are not members; the 10 of them
 with a `lib` carry 17 between them (at_events_flutter 6, at_follows_flutter 3,
 at_contacts_group_flutter 2, at_login_flutter 2, one each in at_chat,
@@ -54,18 +60,25 @@ plan clears them.
 
 | member                              | in-tree version | lib | test |
 | ----------------------------------- | --------------- | --: | ---: |
-| at_auth                             | 4.0.0-rc2       |  74 |   92 |
-| at_client                           | 3.15.0-rc1      |  58 |  358 |
-| at_onboarding_cli                   | 1.17.0-rc1      |  31 |  204 |
+| at_auth                             | 4.0.0-rc2       |  74 |   93 |
+| at_client                           | 3.15.0-rc1      |  46 |  359 |
+| at_onboarding_cli                   | 1.17.0-rc1      |  31 |  239 |
 | at_client_flutter                   | 1.1.5-rc1       |   7 |   41 |
 | tests/at_functional_test            | (unpublished)   |   6 |  272 |
 | tests/at_end2end_test               | (unpublished)   |  45 |   80 |
+| tests/at_onboarding_cli_functional_tests | (unpublished) | 0 | 47 |
 | at_contact                          | (see pubspec)   |   0 |    4 |
 
-1272 uses, re-measured after [step 0](#step-0-done-at_auth-stops-deprecating-what-it-has-no-replacement-for) cleared 45. The table read 1317
-before that, and gave the two live packs 0 in `lib`: they have a `lib` each,
-holding 6 and 45. The test figures are downstream of the lib figures almost
-entirely:
+1339 uses. The right-hand column is everything outside `lib` that the member's
+own `dart analyze` sees, so it carries at_auth's and at_client_flutter's 1
+`example` use each, at_onboarding_cli's 35, and at_client's 1 in `tool` — the
+figure a CI analyze step would report, rather than a `lib`-plus-`test` subset.
+The table read 1317 on 2026-09-11 before [step 0](#step-0-done-at_auth-stops-deprecating-what-it-has-no-replacement-for), and it was wrong
+in three ways beyond that: it gave the two live packs 0 in `lib` where they
+hold 6 and 45, it omitted the CLI pack's 47 entirely, and it counted only
+`lib` and `test`.
+
+The test figures are downstream of the lib figures almost entirely:
 a test names `AtChops` because the client it builds takes one, and it stubs
 `atLookUp.enrollmentId` because production reads it. The tests clear when the
 libs clear, so this plan's steps are lib steps and each member's tests fall in
@@ -304,30 +317,55 @@ The suite covers the helpers: returning the decrypted bytes reversed instead
 of utf8-decoding them reddens 15 tests.
 
 The 3 `rsa2048` calls that pass none wait for step 4, since they need the
-encryption key pair. **What remains of this step is the signing half.**
-`RsaSigningAlgo`
-becomes `RsaSignatureAlgo` in `envelope_signature.dart` (3), which isn't a
-rename: the new class is built by the named constructors `.rsa2048()` and
-`.rsa4096()`, keys move from the constructor to the call, and its
-`verifyBytes` is async and takes the public key per call (there is no
-`verify` on it). Two cautions from the 2026-08-26 triage bite here and are
-confirmed in source. `RsaSignatureAlgo` refuses any key whose modulus is not
-its constructor's size (`rsa.dart` throws at the `_modulusBits` check when
-signing and yields no verification key on a mismatch), while `RsaSigningAlgo`
-checks nothing, so an enrollment holding an off-size RSA key stops signing and
-verifying where it used to; the constructor has to be chosen from the key's
-modulus, and whether to keep accepting off-size keys is a decision to take,
-not inherit. And nothing non-deprecated dispatches from a `SigningAlgoType` to
-an algorithm the way `AtChopsImpl.sign` does, so any path that today asks
-AtChops to choose between RSA and ML-DSA writes that two-way branch itself
-(`MlDsa65PureDartAlgo.signBytes` and `verifyBytes` are the PQ half). The
-envelope signature is a wire contract, so its bytes get pinned before and
-after.
-`_signPublicData` in `put_request_transformer.dart` (`AtSigningInput`,
-`AtSigningMode`, `atChops!.sign`) moves to the same `RsaSignatureAlgo`, signing
-with the key `ApkamSigning.authenticationSigningKey` already resolves; the
-`dataSignature` metadata is a wire contract too, and gets a raw-literal pin
-first.
+encryption key pair.
+
+**The signing half is done too**, and it is not the rename it looks like:
+`RsaSignatureAlgo` is built by `.rsa2048()` or `.rsa4096()`, takes its key
+per call as DER bytes rather than in the constructor, and has `verifyBytes`
+rather than `verify`. Both sites in `envelope_signature.dart` moved, and so
+did `_signPublicData` in `put_request_transformer.dart`, which carried
+`AtSigningInput`, `AtSigningMode` and `atChops!.sign` between them.
+`signBytes` is async where the old `sign` was not, and `signEnvelope` is
+synchronous by design, so at_chops gained `RsaSignatureAlgo.signBytesSync` —
+the pair `MlDsa65PureDartAlgo` already had, for the same reason. at_client's
+`lib` is 51 to 46, and `benchmark` 2 to 0.
+
+**Both signatures are byte-identical across the move, measured rather than
+argued.** The committed JWS vector re-signs to the same envelope, and a probe
+that signed one value with both classes and the same key printed equal
+base64. `dataSignature` had no pin at all — `put_request_test.dart` mocked
+`atChops.sign` and then compared two mocked values with each other — so this
+step adds one: a fixed private key, a fixed value, and the base64 signature
+as a raw literal. Signing it under sha512 instead reddens that pin with both
+strings in the failure.
+
+Two decisions the plan left open, both settled here.
+
+**Off-size RSA keys are refused, rather than carried over.** `RsaSignatureAlgo`
+throws when a key's modulus is not its constructor's size, where
+`RsaSigningAlgo` checked nothing. Envelope signing is rsa2048-only —
+`_joseAlgFor` returns nothing for any other RSA size, so `signEnvelope` throws
+before the algorithm is reached — which means the check can only fire on key
+material that disagrees with the algorithm its own envelope names. A signature
+made that way never verified against a reader that trusts the label, so the
+refusal turns a silent cross-implementation failure into a local error.
+
+**The public-data signature signs with the caller's encryption private key**,
+not with an APKAM signing key. The plan read `_signPublicData` as moving to
+`ApkamSigning.authenticationSigningKey`; that would have changed which key a
+reader must verify against, which is wire-breaking. `AtSigningMode.data`
+resolves to `DefaultSigningAlgo(atChopsKeys.atEncryptionKeyPair, sha256)`, so
+the key is and stays the encryption private key — and the method already
+received it as a parameter it did nothing with but null-check. It uses that
+parameter now, which drops one more reader of `AtChops`.
+
+Still owed by this family, and nowhere else in the plan: nothing
+non-deprecated dispatches from a `SigningAlgoType` to an algorithm the way
+`AtChopsImpl.sign` does, so any *other* path that asks AtChops to choose
+between RSA and ML-DSA has to write that two-way branch itself
+(`MlDsa65PureDartAlgo` is the PQ half). Neither site in this step needed it:
+the envelope already switches on the type, and public data is RSA by
+definition.
 
 Already done in this pass: the `AtChopsUtil` IV and symmetric-key helpers
 became the key classes' own statics (12 uses).
@@ -438,7 +476,7 @@ figure replaces its row here as it lands.
 | ---- | ----------------- | --------------------- | -------------------------------------- |
 | 0    | at_auth           | 0 here, 45 in its consumers | counted in those members         |
 | 1    | at_client         | 2 of 58               | none                                   |
-| 2    | at_client         | 7 of 58 so far; signing half owed | ~50, the engine-only fixtures |
+| 2    | at_client         | 12 of 58; and 2 in `benchmark` | ~50, the engine-only fixtures |
 | 3    | at_auth           | 74, onto its own getters | 92                                  |
 | 4    | at_client         | ~23                   | ~250, every `AtChopsImpl(` built only to hand over |
 | 5    | at_client         | 11 of 15; 4 stay as the bridge | the `enrollmentId` stubs      |

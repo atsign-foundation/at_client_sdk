@@ -1,5 +1,21 @@
 ## 3.15.0-rc1
 
+- refactor: envelope signing and the public-data signature use
+  `RsaSignatureAlgo` instead of the deprecated `RsaSigningAlgo` and
+  `AtChops.sign`. Both produce the same bytes: the committed JWS vector
+  re-signs identically, and a new pin in `put_request_test.dart` holds the
+  base64 `dataSignature` for a fixed key and value, which the old and new
+  classes were measured to agree on.
+- refactor: signing a public value now uses the encryption private key the
+  caller already passes in, which was previously only null-checked while the
+  key came from `AtChops`. Same key in a correctly wired client, and one
+  fewer reader of a surface that is going away.
+- refactor: RSA envelope signing refuses a key whose modulus is not 2048
+  bits, where `RsaSigningAlgo` checked nothing. Envelope signing is
+  rsa2048-only — `signEnvelope` throws for any other RSA size before reaching
+  the algorithm — so the check can only fire on key material that disagrees
+  with the algorithm its own document names, and such a signature never
+  verified against a reader that trusts the label.
 - refactor: the legacy encryption paths call their AES and RSA algorithms
   directly instead of going through `AtChops.encryptString` and
   `decryptString`. Two helpers beside them carry the base64 and utf8 steps the
