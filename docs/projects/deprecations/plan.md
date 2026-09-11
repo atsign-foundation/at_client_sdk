@@ -60,7 +60,7 @@ plan clears them.
 
 | member                              | in-tree version | lib | test |
 | ----------------------------------- | --------------- | --: | ---: |
-| at_auth                             | 4.0.0-rc2       |  74 |   93 |
+| at_auth                             | 4.0.0-rc2       |  56 |   86 |
 | at_client                           | 3.15.0-rc1      |  46 |  359 |
 | at_onboarding_cli                   | 1.17.0-rc1      |  31 |  239 |
 | at_client_flutter                   | 1.1.5-rc1       |   7 |   41 |
@@ -69,7 +69,8 @@ plan clears them.
 | tests/at_onboarding_cli_functional_tests | (unpublished) | 0 | 47 |
 | at_contact                          | (see pubspec)   |   0 |    4 |
 
-1339 uses. The right-hand column is everything outside `lib` that the member's
+1319 uses, down from 1403 when this plan was written. The right-hand column is
+everything outside `lib` that the member's
 own `dart analyze` sees, so it carries at_auth's and at_client_flutter's 1
 `example` use each, at_onboarding_cli's 35, and at_client's 1 in `tool` — the
 figure a CI analyze step would report, rather than a `lib`-plus-`test` subset.
@@ -274,6 +275,14 @@ changed package, the unit suite, and the format gate under CI's Dart in
 Docker), and each step's test tree clears in the same commit as its lib. A
 step that touches a lifecycle seam runs all 4 live packs before it commits.
 
+**Where this stands on 2026-09-11.** Steps 0, 1 and 2 are done, and step 3's
+accessors are built. 84 uses left the workspace, 6 of them hidden by an
+annotation rather than moved (step 3 says which). What is owed, in order:
+at_auth's own 56 `lib` uses onto the new accessors — the authentication path,
+so the one step here that cannot land on unit-green — then steps 4 through 7.
+Step 7 is no longer blocked by the legacy question, which step 3 answered, but
+it is blocked on the three at_client_flutter readings recorded under it.
+
 ### Step 0 (done): at_auth stops deprecating what it has no replacement for
 
 The deprecation on `AuthResponse`, `AtOnboardingResponse` and `AtAuthResponse`
@@ -474,11 +483,37 @@ The CLI's onboarding paths (`_generateAtKeysFile`,
 `_persistKeysLocalSecondary`, `authenticate` and
 `enrollment_checkpoint.dart`) and at_client_flutter's `auth_service.dart`,
 `enrollment_service.dart`, `keychain_storage.dart` and the two dialogs read
-`CryptographicMaterial` by role, and take the atSign and root domain from
-`session`, instead of the flat fields and the response models. Both packages'
-tests follow, and so do the live packs' F3 uses. How far this reaches depends
-on the second decision in [section 3](#3-decisions-this-plan-needs-and-the-ones-it-makes):
-a site that handles a legacy keyfile has no typed surface to move to.
+[step 3](#step-3-at_auth-builds-the-carrier-inside-400-rc2)'s accessors, and
+take the atSign and root domain from `session`, instead of the flat fields and
+the response models. Both packages' tests follow, and so do the live packs' F3
+uses.
+
+⚠️ **at_client_flutter's 7 `lib` uses are not the mechanical moves this step
+assumes.** Read on 2026-09-11, each carries a question of its own, and none of
+them is answered by the accessors:
+
+- `auth_service.dart` backs the authenticated keys up to the caller's
+  `backupKeys` from `atAuthResponse.atAuthKeys`. The annotation points at
+  `session`, but `session` is populated only when the request supplied an
+  `atKeysIo` — and `authenticate`'s own dartdoc says a request may carry
+  `atAuthKeys` instead — so a caller that passes keys directly would lose its
+  backup silently. `session.atKeysIo.read(atSign)` is also not the object the
+  response carried: for a generated io it is a different read entirely.
+- `enrollment_service.dart`'s approve path writes `atEnrollmentResponse`'s
+  keys to the keychain, and the NOTE directly above it says the approver holds
+  no enrollee key material — the enrollee files its own. If that is right the
+  branch is dead, and moving it preserves dead code.
+- `apkam_dialog.dart` passes `atSign` and `rootDomain` to
+  `AtEnrollmentRequest`, and the deprecation asks for a `session` instead. An
+  OTP enrolment is the pre-authentication door, so the enrollee has no session
+  to pass — it would have to construct one, and its `atKeysIo` decides where
+  the newly enrolled app's keys land. That is a design choice, not a rename.
+
+⚠️ The third of those is [step 0](#step-0-done-at_auth-stops-deprecating-what-it-has-no-replacement-for)'s
+shape again: `AtEnrollmentRequest`'s `atSign` and `rootDomain` are deprecated
+in favour of a `session` that one of its two constructors' callers cannot
+have. Before moving any caller, the annotation is worth the same test step 0
+applied — is there a replacement this caller can reach?
 
 ### Step 8: removal, in the majors
 
