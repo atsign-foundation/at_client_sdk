@@ -1,5 +1,10 @@
 ## 4.0.0-rc2
 
+- `AtAuth.atChops` is deprecated. Build the client from the `AtKeysIo` you
+  authenticated with, which `AtAuthResponse.session` carries, rather than
+  from an `AtChops` at_auth hands out; the responses' own `atChops` were
+  already deprecated. Injecting a signer through `AtAuth.create(atChops:)`
+  is unchanged, because a hardware-backed key has no other door yet.
 - refactor: `AtAuth.authenticate` signs its PKAM challenge from the keyfile's
   own keypair unless a signer was injected through `AtAuth.create(atChops:)`,
   which still outranks the keyfile. It used to inject the `AtChops` it

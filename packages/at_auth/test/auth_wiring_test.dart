@@ -88,8 +88,14 @@ void main() {
   ///
   /// [activated] is what the atServer reports about the atSign: `onboard`
   /// refuses an activated one, and `authenticate` needs one.
+  ///
+  /// [chops] is a signer injected through the constructor, the door a caller
+  /// with a hardware-backed key uses.
   AtAuthImpl rig(AtLookUp lookUp,
-      {required String? enrollmentId, required bool activated}) {
+      {required String? enrollmentId,
+      required bool activated,
+      // ignore: deprecated_member_use
+      AtChops? chops}) {
     final pkam = MockPkamAuthenticator();
     when(() => pkam.authenticate(any(), any(),
             enrollmentId: enrollmentId ?? any(named: 'enrollmentId')))
@@ -109,6 +115,7 @@ void main() {
         AtEnrollmentResponse(onboardedEnrollmentId, EnrollmentStatus.approved));
     return AtAuthImpl(
         atLookUp: lookUp,
+        atChops: chops,
         pkamAuthenticator: pkam,
         atEnrollment: enrollment,
         atServerStatus: status)
@@ -225,8 +232,8 @@ void main() {
           // ignore: deprecated_member_use
           AtPkamKeyPair.create(demo.pkamPublicKeyMap[pkamPinAtSign]!,
               demo.pkamPrivateKeyMap[pkamPinAtSign]!)));
-      final auth = rig(lookUp, enrollmentId: null, activated: true)
-        ..atChops = injected;
+      final auth =
+          rig(lookUp, enrollmentId: null, activated: true, chops: injected);
 
       await authenticate(auth, keysIo: await demoKeyfile('@bob🛠'));
 

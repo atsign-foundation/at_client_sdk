@@ -279,10 +279,10 @@ step that touches a lifecycle seam runs all 4 live packs before it commits.
 1403, before the keyfile and lookup-wiring changes below landed in at_auth; that
 figure is re-derived, never trusted. Steps 0, 1 and 2 are done; step 3 has its
 accessors, its signing path, its keyfile self-encryption, its lookup wiring,
-its approval key material and its handshake, with 16 `lib` uses left in
-at_auth; step 4 has its key-material half, which is what unblocked at_client's
-test tree. What is owed, in order: the rest of at_auth's 16, then the rest of
-step 4 (`apkam_signing`, `sync_service_impl`, and
+its approval key material, its handshake and its `atChops` field deprecated,
+with 14 `lib` uses left in at_auth; step 4 has its key-material half, which is
+what unblocked at_client's test tree. What is owed, in order: the rest of
+at_auth's 14, then the rest of step 4 (`apkam_signing`, `sync_service_impl`, and
 deprecating `AtClient.atChops` itself), then steps 5 to 7. Step 7 is no longer
 blocked by the legacy question, which step 3 answered, but it is blocked on the
 three at_client_flutter readings recorded under it.
@@ -455,7 +455,7 @@ deprecated declaration raises nothing, the same way `KeyIOMixin`'s 13
 annotating rather than fixing, so a step that reports a drop has to say which
 kind it was.
 
-**What remains of this step**, measured 2026-09-11, is 16 uses in `lib` and 73
+**What remains of this step**, measured 2026-09-11, is 14 uses in `lib` and 73
 in `test`, from 56 and 92 (`dart analyze` in `packages/at_auth`, counting the
 `deprecated_member_use` lines by path). Twelve of the test uses are in
 `auth_wiring_test.dart` on purpose: it asserts that `atChops` and
@@ -467,8 +467,8 @@ arm through the deprecated `approverChops` door, which stays until the major.
 | file | uses | what they are |
 | ---- | ---: | ------------- |
 | `at_authenticator.dart` | 8 | the two injected-signer branches, and `AtChops` in three signatures |
-| `at_auth_impl.dart` | 5 | the `AtAuth.atChops` field, and the `AtChops` onboarding builds to fill it; both go with that field's deprecation |
-| `at_auth.dart` | 2 | `AtAuth.atChops`, the interface field |
+| `at_auth_impl.dart` | 4 | the `AtChops` onboarding builds for the deprecated field and for the injected-signer branch |
+| `at_auth.dart` | 1 | `AtAuth.create`'s `atChops` parameter: the injection door, which keeps its type because a hardware-backed signer has no other door yet |
 | `at_keys.dart` | 1 | `authenticationFor`'s return type |
 
 Deprecated names are ignored with their reason rather than counted in three
@@ -534,9 +534,13 @@ believed. The PKAM signing path and the possession proof moved (above), and the
 reason rather than counted: their only caller is the deprecated `toAtChops`,
 so they are the carrier being built and leave with it. What is left is
 in the table under "What remains of this step" above, which is its one home.
-Then `AtAuthResponse.atChops` and `AtAuth.atChops`
-go `@Deprecated` beside `atAuthKeys`, which is where a consumer should have
-been reading all along.
+`AtAuth.atChops` is `@Deprecated` (the responses' `atChops` already was), and
+the packages that read it gained infos on purpose — at_onboarding_cli 31 to
+32 in `lib` and 204 to 211 in `test`, at_functional_test 272 to 279 in
+`test`, at_end2end_test none — which is the work of steps 5 and 6, now
+visible to the analyzer. The factory's `atChops` parameter is not deprecated:
+it is the door a caller with a hardware-backed signer comes through, and step
+0 stopped this package deprecating what it has no replacement for.
 
 **The PKAM signing path is done**, and it is the first production caller
 `authenticationKeyPairFor` has. Where the keyfile is the whole answer — the
