@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_commons/atsign.dart';
 import 'package:at_file_saver/at_file_saver.dart';
@@ -98,15 +99,20 @@ class BackupKeyWidget extends StatelessWidget {
 
   onBackup(BuildContext context) async {
     try {
-      var keychain = KeychainAtKeysIo();
-      var atKeys = await keychain.read(atsign);
-      Map<String, dynamic> aesEncryptedKeys = jsonDecode(
-        await keychain.encryptAtKeysWithSelfEncKey(atKeys),
-      );
-      if (aesEncryptedKeys.isEmpty) {
+      var atKeys = await KeychainAtKeysIo().read(atsign);
+      // A backup file is a `.atKeys` document, so the keyfile store writes
+      // one: `FileAtKeysIo.write` self-encrypts the legacy fields on the way
+      // out, which is what a restore decodes. Staged to a temporary path
+      // because the desktop branch below hands the bytes to a file saver
+      // rather than a path.
+      final staging = '${(await path_provider.getTemporaryDirectory()).path}'
+          '${Platform.pathSeparator}$atsign${Strings.keyFileName}';
+      await FileAtKeysIo(filePath: (_) => staging).write(atsign, atKeys);
+      final document = await File(staging).readAsString();
+      if (document.isEmpty) {
         return false;
       }
-      String tempFilePath = await _generateFile(aesEncryptedKeys);
+      String tempFilePath = await _generateFile(document);
       if (Platform.isAndroid && context.mounted) {
         if (Navigator.of(context).canPop()) {
           Navigator.of(context).pop();
@@ -147,8 +153,7 @@ class BackupKeyWidget extends StatelessWidget {
                               final encryptedKeysFile = await File(
                                 newPath,
                               ).create();
-                              var keyString = jsonEncode(aesEncryptedKeys);
-                              encryptedKeysFile.writeAsStringSync(keyString);
+                              encryptedKeysFile.writeAsStringSync(document);
                               if (context.mounted) {
                                 Navigator.of(context).pop(true);
                               }
@@ -222,7 +227,7 @@ class BackupKeyWidget extends StatelessWidget {
     }
   }
 
-  Future<String> _generateFile(Map<String, dynamic> aesEncryptedKeys) async {
+  Future<String> _generateFile(String document) async {
     if (Platform.isAndroid || Platform.isIOS) {
       var status = await Permission.storage.status;
       if (status.isDenied || status.isRestricted) {
@@ -234,13 +239,11 @@ class BackupKeyWidget extends StatelessWidget {
       final encryptedKeysFile = await File(
         '$path$atsign${Strings.keyFileName}',
       ).create();
-      var keyString = jsonEncode(aesEncryptedKeys);
-      encryptedKeysFile.writeAsStringSync(keyString);
+      encryptedKeysFile.writeAsStringSync(document);
       return encryptedKeysFile.path;
     } else {
       String encryptedKeysFile = '$atsign${Strings.keyFileSuffix}';
-      var keyString = jsonEncode(aesEncryptedKeys);
-      final List<int> codeUnits = keyString.codeUnits;
+      final List<int> codeUnits = document.codeUnits;
       final Uint8List data = Uint8List.fromList(codeUnits);
       String desktopPath = await FileSaver.instance.saveFile(
         encryptedKeysFile,
