@@ -100,8 +100,16 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   }
 
   Future<AtEnrollmentResponse> _sendEnrollment(String otp) async {
+    // NOTE: the atSign and the root domain travel loose, not on a `session`.
+    // This is the pre-authentication door — an app enrolling with an OTP holds
+    // no keys and so has no session — and the session the annotation asks for
+    // would be a key DESTINATION rather than an authenticated session, which
+    // decides where the newly enrolled app's keys land. That is a design
+    // choice for whoever owns this widget, not a rename.
     AtEnrollmentRequest request = AtEnrollmentRequest(
+      // ignore: deprecated_member_use
       atSign: atSign,
+      // ignore: deprecated_member_use
       rootDomain: rootDomain,
       deviceName: deviceName,
       appName: appName,

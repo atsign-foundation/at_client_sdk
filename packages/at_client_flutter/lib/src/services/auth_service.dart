@@ -71,6 +71,14 @@ class AuthService {
   /// Unlike [onboard], no keychain `atKeysIo` is defaulted in: the request has
   /// to carry `atKeysIo` or `atAuthKeys` of its own, since a keychain default
   /// could read another atSign's keys.
+  ///
+  /// ⚠️ [backupKeys] is written from the response's own keys rather than from
+  /// its `session`. A session is populated only when the request supplied an
+  /// `atKeysIo`, and a request may legitimately supply `atAuthKeys` instead —
+  /// so sourcing the backup from the session would silently back nothing up
+  /// for that caller. The two annotations retire together: when
+  /// `AtAuthRequest.atAuthKeys` goes, every request carries a source, and this
+  /// reads `session.atKeysIo` instead.
   Future<AtAuthResponse> authenticate(
     AtAuthRequest atAuthRequest, {
     List<WrittenAtKeysIo>? backupKeys,
@@ -86,11 +94,13 @@ class AuthService {
         );
       }
       atAuthResponse = await _atAuth.authenticate(atAuthRequest);
+      // ignore: deprecated_member_use
+      final authenticatedKeys = atAuthResponse.atAuthKeys;
       if (backupKeys != null &&
-          atAuthResponse.atAuthKeys != null &&
+          authenticatedKeys != null &&
           atAuthResponse.isSuccessful) {
         for (var atKeysIo in backupKeys) {
-          atKeysIo.write(atAuthRequest.atSign, atAuthResponse.atAuthKeys!);
+          atKeysIo.write(atAuthRequest.atSign, authenticatedKeys);
         }
       }
     } catch (e) {

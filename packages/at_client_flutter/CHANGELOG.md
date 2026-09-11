@@ -2,6 +2,20 @@
 
 ## 1.1.5-rc1
 
+- fix: approving an enrollment no longer tries to file the enrollee's keys in
+  the keychain. An approval answers with the enrollment id and its status
+  and carries no key material — the enrollee files its own keys on its own
+  device — so the branch never ran, and `keychainAtKeysIo` existed only for
+  it. The test that stated the approver files nothing now asserts the
+  contract it rests on: an approval response carries no keys.
+- refactor: the three remaining reads of a deprecated member each carry the
+  reason they cannot move yet, in the code beside them. The keys backed up
+  by `authenticate` and filed by `enroll` come from the response, because a
+  `session` is populated only when the request supplied an `AtKeysIo` and
+  both callers accept a request that supplies keys directly or enrols
+  through the OTP door; the activation dialog keeps its loose `atSign` and
+  `rootDomain`, because the session the annotation asks for would be a key
+  destination and would decide where an enrolled app's keys land.
 - refactor: the APKAM activation dialog names `signingAlgo: rsa2048` on the
   enrolment it submits, which `AtEnrollmentRequest` now requires. The dialog
   has no rollout position to read one from — it knows the atSign, the app and

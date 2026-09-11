@@ -30,7 +30,6 @@ class FlutterEnrollmentService {
   KeychainStorage keychainStorage = KeychainStorage();
 
   @visibleForTesting
-  KeychainAtKeysIo keychainAtKeysIo = KeychainAtKeysIo();
 
   @visibleForTesting
   AtClient? atClientOverride;
@@ -81,10 +80,16 @@ class FlutterEnrollmentService {
       await atLookup.close();
     }
 
-    if (atEnrollmentResponse.atAuthKeys != null) {
+    // NOTE: the keys this submission minted, which only the enrollee holds.
+    // `session` is the forward-looking source and carries none here: it is
+    // populated from the request's, and an app enrolling through the OTP door
+    // has no session to supply — see the dartdoc on [enroll].
+    // ignore: deprecated_member_use
+    final submittedKeys = atEnrollmentResponse.atAuthKeys;
+    if (submittedKeys != null) {
       EnrollmentData enrollmentData = EnrollmentData(
         atEnrollmentResponse.enrollmentId,
-        atEnrollmentResponse.atAuthKeys!,
+        submittedKeys,
         DateTime.now().toUtc().microsecondsSinceEpoch,
         namespace: (request is AtEnrollmentRequest) ? request.namespaces : null,
       );
@@ -122,12 +127,9 @@ class FlutterEnrollmentService {
       // package, which only the client's enrollment service does — an approval
       // made through at_auth alone can authenticate but decrypt nothing.
       atEnrollmentResponse = await atClient.enrollmentService!.approve(request);
-      // NOTE: the approver holds no enrollee key material — approve() answers
-      // with the id and status, and the enrollee files its own keys.
-      final approvedKeys = atEnrollmentResponse.atAuthKeys;
-      if (approvedKeys != null) {
-        await keychainAtKeysIo.write(request.atSign, approvedKeys);
-      }
+      // NOTE: nothing is filed here. The approver holds no enrollee key
+      // material — approve() answers with the id and status, and the enrollee
+      // files its own keys on its own device.
       await _forgetPendingRequest(request.atSign);
       // ignore: experimental_member_use
     } on EnrollmentConveyanceException {

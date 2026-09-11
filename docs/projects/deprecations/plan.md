@@ -801,6 +801,50 @@ in favour of a `session` that one of its two constructors' callers cannot
 have. Before moving any caller, the annotation is worth the same test step 0
 applied — is there a replacement this caller can reach?
 
+**The three readings, resolved on 2026-09-11.** All three came out as the
+readings suspected, and none was a rename.
+
+- **The approve path's branch is dead, and is deleted.** Confirmed from three
+  sides: at_auth's `EnrollmentApprover.approve` constructs its response with
+  the id and the status alone, at_client's `EnrollmentServiceImpl.approve`
+  returns that object unchanged, and the dartdoc on
+  `enrollment_service_approve_test.dart` already said so. `keychainAtKeysIo`
+  existed only for that branch and goes with it. ⚠️ Re-adding the branch
+  reddens nothing, which is what says it was unreachable rather than merely
+  unused — so what makes the deletion right is the contract, not a test. The
+  `verifyNever` that stated "the approver files nothing" only existed because
+  the field did; the claim moved onto the precondition that makes filing wrong
+  — `expect(response.atAuthKeys, isNull)` — which reddens when the mocked
+  approval is made to carry keys.
+- **`auth_service.dart`'s backup keeps reading the response's keys**, with the
+  reason in its dartdoc: a `session` is populated only when the request
+  supplied an `atKeysIo`, and `AtAuthRequest` explicitly accepts `atAuthKeys`
+  instead, so sourcing the backup from the session would back nothing up for
+  that caller. `AuthResponse.atAuthKeys` and `AtAuthRequest.atAuthKeys` have
+  to retire together: when the request field goes, every request carries a
+  source and the backup reads `session.atKeysIo`.
+- **`enrollment_service.dart`'s submit path is the same shape**, and the same
+  ruling: it files the keys the submission minted, which only the enrollee
+  holds, and an app enrolling through the OTP door supplies no session for the
+  response to carry one.
+- **`apkam_dialog.dart` keeps its loose `atSign` and `rootDomain`.** The
+  session the annotation asks for would be a key **destination** rather than
+  an authenticated session — `AtEnrollmentRequest`'s own dartdoc says its
+  `atKeysIo` is where the newly enrolled app's keys are persisted — so
+  adopting one decides where this widget's enrolled keys land. That is a
+  design choice for whoever owns the widget, and it is the question this step
+  now carries rather than a move it can make.
+
+**The count, decomposed.** at_client_flutter's `lib` reports 0 deprecated uses,
+from 7, and that figure is mostly annotation: one use was deleted with the dead
+branch, two pairs of reads became two single reads hoisted into locals (a real
+reduction, since each pair read the same field twice), and the resulting 4 uses
+carry `// ignore: deprecated_member_use` with the reasons above. ⛔ Read as
+"decided and stated", never as "cleared": the analyzer cannot see any of them
+now, so this list is the only record that they exist. Its test tree still holds
+41, which is step 7's mechanical remainder. Its 40 unit tests pass, and
+`flutter analyze --no-pub --no-fatal-infos` is clean.
+
 ### Step 8: removal, in the majors
 
 at_client 4.0 removes `AtClient.atChops`, `create(atChops:)`, the manager
