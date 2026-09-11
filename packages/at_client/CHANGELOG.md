@@ -1,5 +1,14 @@
 ## 3.15.0-rc1
 
+- refactor: the two legacy hashing calls build their algorithm directly
+  instead of going through `AtChops.hashWith`, whose class is deprecated. The
+  shared-key write hashes with `SHA512HashingAlgo`, and the read maps a
+  record's `pubKeyHash.hashingAlgo` through an exhaustive switch over
+  `HashingAlgoType`, so a new member of that enum stops this package
+  compiling rather than failing at runtime. `Md5HashingAlgo` stands in for the
+  `DefaultHash` the old factory returned, which subclasses it with no body of
+  its own.
+
 - **BREAKING (within this unpublished rc):** the CK-conveyance provider ids
   drop their AEAD segments — `at/nskey/XWING/AES/GCM` becomes `at/nskey/XWING`,
   and `at/nskey/MLKEM1024/AES/GCM` becomes `at/nskey/MLKEM1024`. X-Wing seals

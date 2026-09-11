@@ -76,7 +76,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
         EncryptionUtil.md5CheckSum(await _getSharedWithPublicKey(atKey));
     // Hashed the encryption public key with sha512. This is to ensure the encryption
     // public key of the receiver are same during encryption and decryption process.
-    String hash = await AtChops.hashWith(HashingAlgoType.sha512)
+    String hash = SHA512HashingAlgo()
         .hash((await _getSharedWithPublicKey(atKey)).codeUnits);
     atKey.metadata.pubKeyHash =
         PublicKeyHash(hash, HashingAlgoType.sha512.name);

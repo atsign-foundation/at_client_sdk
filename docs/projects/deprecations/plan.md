@@ -225,12 +225,13 @@ step 6 rather than counting as blast radius. The consumer that removal does
 break is whoever builds a client from a preference alone with an injected
 `AtChops`, which is the bridge the consolidation plan already holds open.
 
-For gkc: whether at_chops exports `AtHashingAlgorithmFactory` at all. It is
-the replacement its own deprecation names, but an export is frozen public API
-the moment `3.6.1`'s successor publishes, and the alternative is for
-at_client to use the exported `sha.dart` classes directly and drop the one
-call that maps a runtime `HashingAlgoType.fromString(...)` to an algorithm.
-The plan assumes the export; the decision is a one-line change either way.
+Settled by the code on 2026-09-11 rather than by gkc: at_chops does not
+export `AtHashingAlgorithmFactory`. The factory carries a deprecation of its
+own — *"Instantiate hashing algorithm classes directly instead"* — so it was
+never the replacement this plan read it as, and no deprecation in at_chops
+names it. Exporting it would have frozen a name already scheduled for
+removal and handed a consumer a warning on arrival. at_client maps the
+runtime type itself, in [step 1](#step-1-at_clients-two-hashing-calls-leave-atchopshashwith).
 
 Ruled by gkc on 2026-09-11: F3 clears in this pass, and the annotations with
 no replacement behind them come off first. 45 of the family's 477 uses could
@@ -270,11 +271,19 @@ packs, and every other deprecation in those members still reports — 1317
 before, 1272 after. The same commit adds the legacy-document pin that the
 second decision above rests on.
 
-### Step 1: at_chops exports what its own deprecations point at
+### Step 1: at_client's two hashing calls leave `AtChops.hashWith`
 
-`AtHashingAlgorithmFactory` is the named replacement for `AtChops.hashWith`,
-and the barrel doesn't export it. One line in the barrel and one CHANGELOG
-entry, once the decision recorded for gkc above is taken.
+`AtChops.hashWith` is a static on the deprecated `AtChops` class, so both of
+at_client's callers were naming it. `legacy_encryption.dart` now hashes with
+`SHA512HashingAlgo` directly, and `legacy_decryption.dart` maps a record's
+`pubKeyHash.hashingAlgo` through an exhaustive switch over `HashingAlgoType`:
+every arm's class is exported and none is deprecated. 2 uses cleared,
+at_client 419 to 417.
+
+The suite covers both sites as a pair. Hashing the write with sha256 instead
+reddens 3 tests in `legacy_shared_key_encryption_test.dart` and
+`legacy_encryption_decryption_test.dart` on *"Public key has changed"* —
+which is the reader recomputing what the writer stored, through the switch.
 
 ### Step 2: at_client's engine role (no API change)
 
@@ -416,7 +425,7 @@ figure replaces its row here as it lands.
 | step | package           | lib uses cleared      | test uses that fall in behind          |
 | ---- | ----------------- | --------------------- | -------------------------------------- |
 | 0    | at_auth           | 0 here, 45 in its consumers | counted in those members         |
-| 1    | at_chops          | 0, unblocks 2         | none                                   |
+| 1    | at_client         | 2 of 58               | none                                   |
 | 2    | at_client         | ~18 of 58             | ~50, the engine-only fixtures          |
 | 3    | at_auth           | 74, onto its own getters | 92                                  |
 | 4    | at_client         | ~23                   | ~250, every `AtChopsImpl(` built only to hand over |
@@ -450,6 +459,17 @@ The preference-only bridge, `_createAtChops`'s Hive branch and
 `_installAuthenticator`'s no-keystore leg, exists for a client with no
 `AtKeysIo`. Deleting it is the at_lookup major's decision, recorded in the
 consolidation plan rather than here.
+
+`AtHashingAlgorithmFactory` erased its own type parameters, and step 1's
+switch keeps that erasure: `Argon2idHashingAlgo` takes a `String` where the
+SHA and MD5 classes take `List<int>`, so a record whose
+`pubKeyHash.hashingAlgo` reads `argon2id` fails on a type at runtime rather
+than at compile time. Nothing here writes that value — the only writer emits
+`sha512` — but `at_notification.dart`, `sync_service_impl.dart` and
+at_commons' `update_verb_builder.dart` each build a `PublicKeyHash` from the
+wire, so it is reachable in principle. Typing the switch
+`AtHashingAlgorithm<List<int>, String>` would refuse it at compile time, and
+needs a decision on what a malformed record should do.
 
 The inert `sync:` flag's 4.0 deletion is [section 14.46](../pq/implementation-plan.md#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)'s, not
 this plan's. One detail found on 2026-09-11 that it does not record: the two

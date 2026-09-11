@@ -8,6 +8,18 @@ import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_utils/at_logger.dart';
 import 'legacy_encryption.dart';
 
+/// The hashing algorithm a record's `pubKeyHash.hashingAlgo` names.
+///
+/// The switch is exhaustive, so a new [HashingAlgoType] stops this compiling
+/// rather than failing at runtime.
+AtHashingAlgorithm _hashingAlgorithmFor(HashingAlgoType algoType) =>
+    switch (algoType) {
+      HashingAlgoType.sha256 => SHA256HashingAlgo(),
+      HashingAlgoType.sha512 => SHA512HashingAlgo(),
+      HashingAlgoType.md5 => Md5HashingAlgo(),
+      HashingAlgoType.argon2id => Argon2idHashingAlgo(),
+    };
+
 class LegacyDecryption {
   static AtKeyDecryption build(AtKey key, AtClient atClient) {
     AppMetadata? meta = key.metadata.appMetadata;
@@ -204,7 +216,7 @@ class SharedWithMeDecryption implements AtKeyDecryption {
 
     final isPubKeyHashMismatch = atKey.metadata.pubKeyHash != null &&
         atKey.metadata.pubKeyHash?.hash !=
-            AtChops.hashWith(HashingAlgoType.fromString(
+            _hashingAlgorithmFor(HashingAlgoType.fromString(
                     atKey.metadata.pubKeyHash!.hashingAlgo))
                 .hash(currentAtSignPublicKey!.codeUnits);
 
