@@ -56,13 +56,16 @@ plan clears them.
 | ----------------------------------- | --------------- | --: | ---: |
 | at_auth                             | 4.0.0-rc2       |  74 |   92 |
 | at_client                           | 3.15.0-rc1      |  58 |  358 |
-| at_onboarding_cli                   | 1.17.0-rc1      |  34 |  209 |
-| at_client_flutter                   | 1.1.5-rc1       |  22 |   55 |
-| tests/at_functional_test            | (unpublished)   |   0 |  280 |
-| tests/at_end2end_test               | (unpublished)   |   0 |  131 |
+| at_onboarding_cli                   | 1.17.0-rc1      |  31 |  204 |
+| at_client_flutter                   | 1.1.5-rc1       |   7 |   41 |
+| tests/at_functional_test            | (unpublished)   |   6 |  272 |
+| tests/at_end2end_test               | (unpublished)   |  45 |   80 |
 | at_contact                          | (see pubspec)   |   0 |    4 |
 
-1317 uses. The test figures are downstream of the lib figures almost entirely:
+1272 uses, re-measured after [step 0](#step-0-done-at_auth-stops-deprecating-what-it-has-no-replacement-for) cleared 45. The table read 1317
+before that, and gave the two live packs 0 in `lib`: they have a `lib` each,
+holding 6 and 45. The test figures are downstream of the lib figures almost
+entirely:
 a test names `AtChops` because the client it builds takes one, and it stubs
 `atLookUp.enrollmentId` because production reads it. The tests clear when the
 libs clear, so this plan's steps are lib steps and each member's tests fall in
@@ -147,16 +150,29 @@ observe, which is the exposure to expect rather than a regression.
 `.defaultEncryptionPublicKey`, `.defaultEncryptionPrivateKey`,
 `.defaultSelfEncryptionKey` and `.enrollmentId`, whose annotation says
 *"hard-coded keys are legacy, see new methods"* and names no version; and
-`atAuthKeys` on the request and response models, which says *"remove in v5"*.
-So at_auth has scheduled the model fields past its current major and left the
-flat fields' removal unstated.
+`atAuthKeys`, `atSign` and `rootDomain` on the request and response models,
+which point at `session`. So at_auth has scheduled the model fields past its
+current major and left the flat fields' removal unstated.
 
-This family is most of at_onboarding_cli (15 of its 34 lib uses and most of
-its 209 test uses) and all of at_client_flutter's 22 lib uses (`metadata`,
-`AtOnboardingResponse`, `AtAuthResponse` and `atAuthKeys`, 5 each, plus one
-`atSign` and one `rootDomain`) and 55 test uses. The typed replacement is
+432 uses after [step 0](#step-0-done-at_auth-stops-deprecating-what-it-has-no-replacement-for): at_onboarding_cli 15 in `lib`, 150 in `test`
+and 18 in `example`; at_client_flutter 7 and 40; at_end2end_test 21 and 53;
+at_functional_test 107 in `test`; at_client 3 and 18. The typed replacement is
 `AtKeys`'s `CryptographicMaterial` surface, which the CLI already uses on its
 PQ paths.
+
+⚠️ **That replacement reaches a typed keyfile only.** `AtKeys.fromJson` sends a
+document with no `version` field to the legacy decoder, which fills the flat
+fields and `metadata` and files no `CryptographicMaterial` at all — so for a
+legacy keyfile the flat fields are the only reader there is.
+`at_keys_test.dart`'s *"a legacy document files no typed material"* pins it,
+with a typed document as its control: the legacy fixture decodes to an empty
+`keys`, an empty `atSignKeys`, no enrollment ids and an empty
+`keysForEnrollment`, while the flat field holds the value.
+`holdsAuthenticationMaterial` answers true there only by falling back to the
+flat `apkamPrivateKey`. Every site that reads or writes a legacy keyfile is in
+this position: the CLI's `_generateAtKeysFile` and
+`_persistKeysLocalSecondary`, at_client_flutter's keychain atSign fallback,
+and every test that builds a legacy fixture.
 
 ### F4, the inert `sync:` flag (declared in at_lookup)
 
@@ -216,13 +232,26 @@ at_client to use the exported `sha.dart` classes directly and drop the one
 call that maps a runtime `HashingAlgoType.fromString(...)` to an algorithm.
 The plan assumes the export; the decision is a one-line change either way.
 
-For gkc: whether F3 clears in this pass or waits for at_auth 5. at_auth's own
-annotation says v5 for the model fields. Clearing it now means moving the CLI's onboarding
-paths off the flat fields, which is real work on a package at `1.17.0-rc1`;
-leaving it means at_onboarding_cli publishes with about 180 of its 209 test
-warnings, at_client_flutter with all 77 of its, and the two live packs keep
-about 240 between them. This plan schedules it last so the decision can be
-taken with everything else done.
+Ruled by gkc on 2026-09-11: F3 clears in this pass, and the annotations with
+no replacement behind them come off first. 45 of the family's 477 uses could
+not be cleared by a consumer at all. 31 name `AuthResponse`,
+`AtOnboardingResponse` or `AtAuthResponse`, which `AtAuth.authenticate` and
+`AtAuth.onboard` return while carrying no deprecation themselves, so a caller
+that names the return type in its own signature — as at_client_flutter's
+service class does — had nothing to move to. The other 14 name
+`AtKeys.metadata`, whose annotation promises new methods that do not exist.
+[Step 0](#step-0-done-at_auth-stops-deprecating-what-it-has-no-replacement-for) narrows both; the remaining 432 are consumer work, in steps 6
+and 7.
+
+For gkc, and new on 2026-09-11: whether at_auth files a legacy keyfile's flat
+material as `CryptographicMaterial` on read. The paragraph under F3 measures
+that it does not, which leaves every legacy-handling site with no replacement
+to move to — so steps 6 and 7 cannot reach zero by rewriting alone. Filing it
+would make the flat fields genuinely redundant and let all 432 clear, at the
+cost of changing what a legacy document becomes in memory, which the round-trip
+pins govern. The alternative is that those sites keep the flat fields under an
+ignore naming the reason, and only the typed-keyfile sites move. The split
+between the two is not yet counted.
 
 ## 4. Order of work
 
@@ -230,6 +259,16 @@ Each step lands with its own gates (`dart analyze --fatal-infos` on the
 changed package, the unit suite, and the format gate under CI's Dart in
 Docker), and each step's test tree clears in the same commit as its lib. A
 step that touches a lifecycle seam runs all 4 live packs before it commits.
+
+### Step 0 (done): at_auth stops deprecating what it has no replacement for
+
+The deprecation on `AuthResponse`, `AtOnboardingResponse` and `AtAuthResponse`
+moves onto the fields that have replacements, and `AtKeys.metadata` loses its
+annotation; at_auth `4.0.0-rc2` carries both, with its CHANGELOG entries. 45
+uses cleared across at_onboarding_cli, at_client_flutter and the two live
+packs, and every other deprecation in those members still reports — 1317
+before, 1272 after. The same commit adds the legacy-document pin that the
+second decision above rests on.
 
 ### Step 1: at_chops exports what its own deprecations point at
 
@@ -349,13 +388,17 @@ wait for step 7. Both packs and at_contact also clear F5 here by passing
 `storage:` instead of the three preference fields, and at_client's own 30
 test files do the same, since the analyzer will never list them.
 
-### Step 7: the F3 decision, then at_onboarding_cli's flat fields
+### Step 7: at_onboarding_cli's and at_client_flutter's flat fields
 
-If cleared now, the CLI's onboarding paths (`:478` to `:751`) and
-at_client_flutter's `auth_service.dart`, `enrollment_service.dart` and
-`keychain_storage.dart` read `CryptographicMaterial` by role instead of the
-flat fields and response models, and both packages' tests follow. If deferred, this row moves to "filed" with at_auth 5 as its gate, and
-the package publishes carrying that family's warnings alone.
+The CLI's onboarding paths (`_generateAtKeysFile`,
+`_persistKeysLocalSecondary`, `authenticate` and
+`enrollment_checkpoint.dart`) and at_client_flutter's `auth_service.dart`,
+`enrollment_service.dart`, `keychain_storage.dart` and the two dialogs read
+`CryptographicMaterial` by role, and take the atSign and root domain from
+`session`, instead of the flat fields and the response models. Both packages'
+tests follow, and so do the live packs' F3 uses. How far this reaches depends
+on the second decision in [section 3](#3-decisions-this-plan-needs-and-the-ones-it-makes):
+a site that handles a legacy keyfile has no typed surface to move to.
 
 ### Step 8: removal, in the majors
 
@@ -372,6 +415,7 @@ figure replaces its row here as it lands.
 
 | step | package           | lib uses cleared      | test uses that fall in behind          |
 | ---- | ----------------- | --------------------- | -------------------------------------- |
+| 0    | at_auth           | 0 here, 45 in its consumers | counted in those members         |
 | 1    | at_chops          | 0, unblocks 2         | none                                   |
 | 2    | at_client         | ~18 of 58             | ~50, the engine-only fixtures          |
 | 3    | at_auth           | 74, onto its own getters | 92                                  |
@@ -380,15 +424,20 @@ figure replaces its row here as it lands.
 | 6    | at_onboarding_cli | ~19 of 34             | ~30                                    |
 | 6    | the two live packs | 0 (no lib)           | ~190: their F1, F2 and F5              |
 | 6    | at_contact        | 0 (no lib)            | 4                                      |
-| 7    | at_onboarding_cli | ~15                   | ~180                                   |
-| 7    | at_client_flutter | 22                    | 55                                     |
-| 7    | the two live packs | 0                    | ~190: their F3                         |
+| 7    | at_onboarding_cli | 15 of 31              | 150, and 18 in `example`               |
+| 7    | at_client_flutter | 7                     | 40                                     |
+| 7    | the two live packs | 21, at_e2e's `lib`   | 107 functional, 53 at_e2e              |
+
+Step 7's two figures are a ceiling rather than a target until the legacy
+question in [section 3](#3-decisions-this-plan-needs-and-the-ones-it-makes) is
+settled.
 
 The 4 or so that survive in at_client until its major are the public surface
 and the ladder bridge, both `@Deprecated` by then with the replacement named.
-Two one-off deprecations outside every family stay listed so they are not
-lost: `stopCompactionJob` (2, at_e2e) and `AtOnboardingResponse`'s `atSign`
-(14 in at_functional, 5 in at_e2e).
+One one-off outside every family stays listed so it is not lost:
+`stopCompactionJob` (2, at_e2e). The 14 `atSign` uses in at_functional and 5
+in at_e2e that this section filed as `AtOnboardingResponse`'s are
+`AtEnrollmentRequest.pq(atSign:)`'s, and they belong to F3.
 
 ## 6. Filed, not scheduled
 

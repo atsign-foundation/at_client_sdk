@@ -1039,7 +1039,10 @@ class AtKeys {
   AtBytes? apkamSymmetricKey;
   @Deprecated('hard-coded keys are legacy, see new methods')
   String? enrollmentId;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  /// A legacy keyfile's entries outside the flat key schema: the atSign under
+  /// `atsign` or `name`, and the self-encryption key stored under the atSign
+  /// itself. The typed document has no equivalent, so a read and write cycle
+  /// preserves them only here.
   Map<String, dynamic> metadata = {};
 
   /// Encodes just the legacy flat shape — the hard-coded fields plus

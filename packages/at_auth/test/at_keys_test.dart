@@ -67,6 +67,26 @@ void main() {
       expect(AtKeys.fromJson(encryptedAtKeysMap), equals(createKeys()));
     });
 
+    test(
+        'fromJson -> a legacy document files no typed material, so the flat '
+        'fields are its only reader', () {
+      final legacy = AtKeys.fromJson(encryptedAtKeysMap);
+      final typed = AtKeys(keysList: [...rsaKeyPair('pair')]);
+
+      expect(typed.keys, hasLength(2),
+          reason: 'control: a typed document surfaces its material');
+      expect(legacy.keys, isEmpty,
+          reason: 'the legacy decoder fills the flat fields and metadata, and '
+              'files no CryptographicMaterial');
+      expect(legacy.atSignKeys, isEmpty);
+      expect(legacy.enrollmentIds, isEmpty);
+      expect(legacy.keysForEnrollment(legacy.enrollmentToAuthenticateAs()),
+          isEmpty);
+      // ignore: deprecated_member_use_from_same_package
+      expect(legacy.defaultEncryptionPrivateKey, isNotNull,
+          reason: 'while the flat field holds the value');
+    });
+
     test('an atsign alone does not stamp a legacy file with a version', () {
       // The behaviour: file_io sets atsign on every write, so before this a
       // legacy keyfile gained `version: 1` and an empty `keys` array the

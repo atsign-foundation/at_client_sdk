@@ -3,7 +3,10 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
-@Deprecated('remove in v5 in favour of AtAuthSession')
+/// The result of onboarding or authenticating an atSign.
+///
+/// [session] is the typed hand-off to the client, and supersedes the
+/// deprecated [atAuthKeys], [atLookUp] and [atChops] fields.
 sealed class AuthResponse {
   String atSign;
   bool isSuccessful = false;
@@ -26,8 +29,6 @@ sealed class AuthResponse {
   AuthResponse(this.atSign);
 }
 
-@Deprecated('remove in v5 in favour of AtAuthSession')
-
 /// Represents an onboarding response of an atSign.
 class AtOnboardingResponse extends AuthResponse {
   /// Constructor for [AtOnboardingResponse]
@@ -40,7 +41,7 @@ class AtOnboardingResponse extends AuthResponse {
   }
 }
 
-@Deprecated('remove in v5 in favour of AtAuthSession')
+/// Represents an authentication response of an atSign.
 class AtAuthResponse extends AuthResponse {
   /// Constructor that takes an @sign as a parameter
   AtAuthResponse(super.atSign);

@@ -51,6 +51,18 @@
 - feat: `AtKeys.holdsAuthenticationMaterial` — whether the document holds
   typed authentication material or the flat APKAM keypair. A document holding
   neither authenticates as nothing, whatever its flat id says.
+- fix: the deprecation on `AuthResponse`, `AtOnboardingResponse` and
+  `AtAuthResponse` moves onto the fields that have replacements. `authenticate`
+  and `onboard` return those types and are not themselves deprecated, so the
+  class-level annotation warned every caller with nothing to move to, and a
+  caller that names the return type in its own signature could not clear it at
+  all. `session` is still the typed hand-off, and `atAuthKeys`, `atLookUp` and
+  `atChops` keep their annotations.
+- fix: `AtKeys.metadata` is no longer deprecated. It carries a legacy keyfile's
+  entries outside the flat key schema — the atSign under `atsign` or `name`,
+  and the self-encryption key stored under the atSign itself — and the typed
+  document has no equivalent, so the replacement the annotation promised does
+  not exist.
 
 ## 4.0.0-rc1
 
