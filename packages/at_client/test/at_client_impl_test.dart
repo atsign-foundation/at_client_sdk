@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/sqlite.dart';
 import 'package:at_client/src/response/response.dart';
@@ -12,6 +11,7 @@ import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
 
@@ -485,29 +485,25 @@ void main() {
       () {
     MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
     MockLocalSecondary mockLocalSecondary = MockLocalSecondary();
-    MockAtChopsKeys mockAtChopsKeys = MockAtChopsKeys();
     setUp(() async {
       await _dropCachedClients('@alice');
-      var key = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
       registerFallbackValue(FakeLookupVerbBuilder());
       when(() => mockLocalSecondary.executeVerb(any()))
           .thenAnswer((_) => Future.value('yuh'));
       when(() => mockRemoteSecondary.executeVerb(any()))
           .thenAnswer((_) => Future.value('yuh'));
-      when(() => mockAtChopsKeys.selfEncryptionKey).thenReturn(AESKey(key));
     });
     test('defaults to the legacy crypto config when none is configured',
         () async {
       AtClientPreference preferences = AtClientPreference()
         ..hiveStoragePath = 'test/hive'
         ..commitLogPath = 'test/hive/path';
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
         preferences,
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
+        atKeysIo: await typedKeyfile('@alice'),
       );
       // No crypto config => the legacy default. The built-in legacy provider
       // is the runtime's fallback, so it is intentionally not in the config
@@ -532,13 +528,12 @@ void main() {
       AtClientPreference preferences = AtClientPreference()
         ..hiveStoragePath = 'test/hive'
         ..commitLogPath = 'test/hive/path';
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
         preferences,
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
+        atKeysIo: await typedKeyfile('@alice'),
       );
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
@@ -554,7 +549,7 @@ void main() {
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/path',
         remoteSecondary: mockRemoteSecondary,
-        atChops: AtChopsImpl(mockAtChopsKeys),
+        atKeysIo: await typedKeyfile('@ready'),
       );
       expect(
           CryptoConfig.eraDefaultFor(ready)!
@@ -573,9 +568,9 @@ void main() {
           AtClientPreference(posture: PqPosture.legacy)
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/path';
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
       AtClient ac = await AtClientImpl.create('@alice', 'buzz', preferences,
-          remoteSecondary: mockRemoteSecondary, atChops: chops);
+          remoteSecondary: mockRemoteSecondary,
+          atKeysIo: await typedKeyfile('@alice'));
 
       final gates = (ac as AtClientImpl).pqBootstrap!.gates;
       // Every gate, listed rather than sampled: this client does nothing at
@@ -636,9 +631,9 @@ void main() {
           AtClientPreference(posture: PqPosture.pqReady)
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/path';
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
       AtClient ac = await AtClientImpl.create('@bob', 'buzz', preferences,
-          remoteSecondary: mockRemoteSecondary, atChops: chops);
+          remoteSecondary: mockRemoteSecondary,
+          atKeysIo: await typedKeyfile('@bob'));
 
       final gates = (ac as AtClientImpl).pqBootstrap!.gates;
       expect([
@@ -665,13 +660,12 @@ void main() {
           AtClientPreference(posture: PqPosture.legacy)
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/path';
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
         preferences,
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
+        atKeysIo: await typedKeyfile('@alice'),
       );
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
@@ -691,13 +685,12 @@ void main() {
           AtClientPreference(posture: PqPosture.pqActive)
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/path';
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
         preferences,
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
+        atKeysIo: await typedKeyfile('@alice'),
       );
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
@@ -720,14 +713,13 @@ void main() {
           defaultProviderId: 'test-provider',
           providers: [provider],
         );
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
 
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
         preferences,
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
+        atKeysIo: await typedKeyfile('@alice'),
       );
 
       expect(CryptoConfig.forClient(ac).lookup('test-provider'),
@@ -742,15 +734,15 @@ void main() {
         ..crypto = const CryptoConfig(
           defaultProviderId: 'missing-provider',
         );
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
 
+      final keysIo = await typedKeyfile('@alice');
       await expectLater(
         () => AtClientImpl.create(
           '@alice',
           'buzz',
           preferences,
           remoteSecondary: mockRemoteSecondary,
-          atChops: chops,
+          atKeysIo: keysIo,
         ),
         throwsA(isA<CryptoProviderNotRegistered>()),
       );
@@ -759,8 +751,6 @@ void main() {
     test(
         'adopts the new crypto config when a cached AtClient is re-used with '
         'an updated preference', () async {
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
-
       // First creation registers only the legacy provider.
       AtClient ac1 = await AtClientImpl.create(
         '@alice',
@@ -770,7 +760,7 @@ void main() {
           ..commitLogPath = 'test/hive/path'
           ..crypto = const CryptoConfig(defaultProviderId: 'legacy'),
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
+        atKeysIo: await typedKeyfile('@alice'),
       );
       expect(CryptoConfig.forClient(ac1).lookup('late-provider'), isNull);
 
@@ -788,7 +778,7 @@ void main() {
             providers: [provider],
           ),
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
+        atKeysIo: await typedKeyfile('@alice'),
       );
 
       expect(identical(ac1, ac2), true);
@@ -797,8 +787,7 @@ void main() {
     });
 
     test('stores the injected atKeysIo', () async {
-      final keysIo = StubAtKeysIo();
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      final keysIo = await typedKeyfile('@alice');
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
@@ -806,7 +795,6 @@ void main() {
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/path',
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
         atKeysIo: keysIo,
       );
 
@@ -814,7 +802,9 @@ void main() {
     });
 
     test('has no default key source when none is injected', () async {
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      // Neither an atKeysIo nor an AtChops: the client falls back to reading
+      // key material out of the local secondary, which is the shape this test
+      // is about.
       AtClient ac = await AtClientImpl.create(
         '@alice',
         'buzz',
@@ -822,7 +812,6 @@ void main() {
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/path',
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
       );
 
       expect(ac.atKeysIo, isNull);
@@ -831,8 +820,7 @@ void main() {
     test(
         'cached re-use retains the original atKeysIo (no adoption, unlike '
         'crypto config)', () async {
-      final firstKeysIo = StubAtKeysIo();
-      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      final firstKeysIo = await typedKeyfile('@alice');
       AtClient ac1 = await AtClientImpl.create(
         '@alice',
         'buzz',
@@ -840,7 +828,6 @@ void main() {
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/path',
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
         atKeysIo: firstKeysIo,
       );
 
@@ -851,8 +838,7 @@ void main() {
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/path',
         remoteSecondary: mockRemoteSecondary,
-        atChops: chops,
-        atKeysIo: StubAtKeysIo(),
+        atKeysIo: await typedKeyfile('@alice'),
       );
 
       expect(identical(ac1, ac2), true);

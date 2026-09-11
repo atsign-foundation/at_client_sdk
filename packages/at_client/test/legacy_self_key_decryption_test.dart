@@ -53,8 +53,7 @@ void main() {
 
   test('test to check self encryption key decrypt method without IV', () async {
     SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
-    SymmetricKey selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    SymmetricKey selfEncryptionKey = AESKey.generate(32);
 
     AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
     atChopsKeys.selfEncryptionKey = selfEncryptionKey;
@@ -79,8 +78,7 @@ void main() {
 
   test('test to check self encryption key decrypt method with IV', () async {
     SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
-    SymmetricKey selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    SymmetricKey selfEncryptionKey = AESKey.generate(32);
 
     AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
     atChopsKeys.selfEncryptionKey = selfEncryptionKey;

@@ -423,7 +423,7 @@ void main() {
         () async {
       AtEncryptionResult? encryptedValue = await atClient.atChops
           ?.encryptString('1234', EncryptionKeyType.aes256,
-              iv: AtChopsUtil.generateIVLegacy());
+              iv: InitialisationVector.legacy());
       FakeLookupVerbBuilder fakeLookupVerbBuilder = FakeLookupVerbBuilder();
       registerFallbackValue(fakeLookupVerbBuilder);
       when(() => mockRemoteSecondary.executeVerb(any(that: LookupKeyMatcher())))

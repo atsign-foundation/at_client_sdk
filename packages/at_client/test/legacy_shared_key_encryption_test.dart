@@ -46,8 +46,7 @@ void main() {
     var bobEncryptionPublicKey = bobEncryptionKeyPair.atPublicKey.publicKey;
 
     // Generate the AES for encrypting the location value
-    var aesSharedKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    var aesSharedKey = AESKey.generate(32).key;
     // set atChops for bob
     AtChopsKeys bobAtChopsKeys = AtChopsKeys.create(bobEncryptionKeyPair, null);
     var bobAtChopsImpl = AtChopsImpl(bobAtChopsKeys);
@@ -126,10 +125,8 @@ void main() {
     var bobEncryptionPublicKey = bobEncryptionKeyPair.atPublicKey.publicKey;
 
     // Generate the AES for encrypting the location value
-    var actualSymmetricKeyBeingUsed =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
-    var aDifferentSymmetricKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    var actualSymmetricKeyBeingUsed = AESKey.generate(32).key;
+    var aDifferentSymmetricKey = AESKey.generate(32).key;
     // set atChops for bob
     AtChopsKeys bobAtChopsKeys = AtChopsKeys.create(bobEncryptionKeyPair, null);
     var bobAtChopsImpl = AtChopsImpl(bobAtChopsKeys);

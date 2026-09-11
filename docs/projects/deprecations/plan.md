@@ -309,6 +309,19 @@ which is the reader recomputing what the writer stored, through the switch.
 
 ### Step 2: at_client's engine role (no API change)
 
+**A shared fixture helper, built on the non-deprecated path** (gkc,
+2026-09-11): `typedKeyfile` in at_client's test utils returns an
+`InMemoryAtKeysIo` holding an `AtKeys` whose material is filed through
+`addKey` and `fileApkamMaterial` — no deprecated member is named building it —
+and a test passes it as `AtClientImpl.create(atKeysIo:)`, which derives the
+client's own `AtChops` the way production does. `mlDsaKeyfile`, which
+predated it, is now the narrow case of it. `at_client_impl_test.dart`'s 12
+client constructions moved onto it: 25 warnings to 0 in that file, and 12
+constructions that exercise the derivation instead of bypassing it with a
+mock. ⚠️ The helper is only ever right if it builds through the replacement:
+one that wrapped the deprecated construction would leave the new path
+exercised by nothing and the count would fall anyway.
+
 **The encryption half is done.** The 6 `encryptString` and `decryptString`
 calls that already passed an algorithm now call the `AESEncryptionAlgo` and
 `RsaEncryptionAlgo` objects they build, through two helpers in
@@ -421,6 +434,27 @@ now-deprecated `toAtChops` methods, so they leave with those in the major),
 cannot land on unit-green: all 4 live packs before it commits.
 
 ### Step 4: at_client's carrier role (no API change)
+
+⚠️ **This step is what unblocks at_client's test tree, and nothing else will.**
+Its five legacy-crypto test files carry 118 warnings between them, and every
+one of them stubs `mockAtClient.atChops` and builds an `AtChopsKeys` to put
+behind it — because `SharedKeyEncryption`, `SharedWithMeDecryption` and the
+self-key paths read `_atClient.atChops`. The fixture is mirroring production
+faithfully, so no fixture helper can move it: the material has to stop coming
+off an injected `AtChops` in the production code first. Measured 2026-09-11.
+
+Two observations from flipping the fixtures that could move:
+
+- A client whose only key source answers an **empty** `AtKeys` throws
+  *"PKAM mode requires defaultEncryptionPrivateKey"* out of `_createAtChops`.
+  `StubAtKeysIo` in at_client's test utils answers exactly that, so it only
+  ever worked beside an injected `AtChops`, and three tests using it went red
+  the moment the injection came out. A stub that cannot carry a client through
+  construction is not a stand-in for a key source.
+- `AtClientPreference.hiveStoragePath` and `commitLogPath` raise nothing
+  inside at_client, so flipping its own fixtures onto `storage:` is invisible
+  to the analyzer and still worth doing — the 30 files the plan names are
+  found by grep, not by a count.
 
 With step 3's getters available, `apkam_signing.dart`'s
 `authenticationSigningKey` reads the enrollment's authentication keypair from

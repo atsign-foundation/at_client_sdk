@@ -31,7 +31,7 @@ void main() {
     // this encryption public key, and a stub would not survive that.
     encryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
     pkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
-    selfKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    selfKey = AESKey.generate(32).key;
   });
 
   void dropCachedClients(String atSign) {
