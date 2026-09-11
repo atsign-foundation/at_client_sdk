@@ -206,7 +206,7 @@ Future<Map<String, dynamic>> _selfEncryptLegacyFields(
       document,
       (atChops, value) async => (await atChops.encryptString(
               value, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
+              keyName: 'selfEncryptionKey', iv: InitialisationVector.legacy()))
           .result);
 }
 
@@ -216,7 +216,7 @@ Future<Map<String, dynamic>> _selfDecryptLegacyFields(
       document,
       (atChops, value) async => (await atChops.decryptString(
               value, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
+              keyName: 'selfEncryptionKey', iv: InitialisationVector.legacy()))
           .result);
 }
 

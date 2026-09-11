@@ -142,7 +142,7 @@ void main() {
       final mock = MockAtLookUp();
       final commands = <String>[];
       final apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
-      final iv = AtChopsUtil.generateRandomIV(16);
+      final iv = InitialisationVector.random(16);
       final ivB64 = base64Encode(iv.ivBytes);
       final aes = StringAESEncryptor(AESKey(apkamSymmetricKey));
       when(() => mock.pkamAuthenticate(enrollmentId: '123'))

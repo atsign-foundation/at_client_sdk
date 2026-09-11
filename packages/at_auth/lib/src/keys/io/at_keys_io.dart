@@ -112,19 +112,19 @@ mixin KeyIOMixin on AtKeysIo {
                 jsonData[auth_constants.defaultEncryptionPublicKey],
                 EncryptionKeyType.aes256,
                 keyName: 'selfEncryptionKey',
-                iv: AtChopsUtil.generateIVLegacy()))
+                iv: InitialisationVector.legacy()))
             .result);
     securityKeys.defaultEncryptionPrivateKey = AtBytes.fromString(
         (await atChops.decryptString(
                 jsonData[auth_constants.defaultEncryptionPrivateKey],
                 EncryptionKeyType.aes256,
                 keyName: 'selfEncryptionKey',
-                iv: AtChopsUtil.generateIVLegacy()))
+                iv: InitialisationVector.legacy()))
             .result);
     securityKeys
         .apkamPublicKey = AtBytes.fromString((await atChops.decryptString(
             jsonData[auth_constants.apkamPublicKey], EncryptionKeyType.aes256,
-            keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
+            keyName: 'selfEncryptionKey', iv: InitialisationVector.legacy()))
         .result);
     // pkam private key will not be saved in keyfile if auth mode is sim/any other secure element.
     // decrypt the private key only when auth mode is keysFile
@@ -133,7 +133,7 @@ mixin KeyIOMixin on AtKeysIo {
           (await atChops.decryptString(jsonData[auth_constants.apkamPrivateKey],
                   EncryptionKeyType.aes256,
                   keyName: 'selfEncryptionKey',
-                  iv: AtChopsUtil.generateIVLegacy()))
+                  iv: InitialisationVector.legacy()))
               .result);
     }
     securityKeys.apkamSymmetricKey =
@@ -158,7 +158,7 @@ mixin KeyIOMixin on AtKeysIo {
                 atKeys.defaultEncryptionPublicKey.toString(),
                 EncryptionKeyType.aes256,
                 keyName: 'selfEncryptionKey',
-                iv: AtChopsUtil.generateIVLegacy()))
+                iv: InitialisationVector.legacy()))
             .result;
 
     atKeysMap[auth_constants.defaultEncryptionPrivateKey] =
@@ -166,18 +166,18 @@ mixin KeyIOMixin on AtKeysIo {
                 atKeys.defaultEncryptionPrivateKey.toString(),
                 EncryptionKeyType.aes256,
                 keyName: 'selfEncryptionKey',
-                iv: AtChopsUtil.generateIVLegacy()))
+                iv: InitialisationVector.legacy()))
             .result;
 
     atKeysMap[auth_constants.apkamPublicKey] = (await atChops.encryptString(
             atKeys.apkamPublicKey.toString(), EncryptionKeyType.aes256,
-            keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
+            keyName: 'selfEncryptionKey', iv: InitialisationVector.legacy()))
         .result;
 
     if (authMode == PkamAuthMode.keysFile) {
       atKeysMap[auth_constants.apkamPrivateKey] = (await atChops.encryptString(
               atKeys.apkamPrivateKey.toString(), EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
+              keyName: 'selfEncryptionKey', iv: InitialisationVector.legacy()))
           .result;
     }
 
@@ -198,20 +198,20 @@ mixin KeyIOMixin on AtKeysIo {
     var atKeysFile = AtKeys();
     // generate user encryption keypair
     _logger.info('Generating encryption keypair');
-    var atEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+    var atEncryptionKeyPair = RsaKeyPair.generate();
 
     //generate selfEncryptionKey
     var selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+        AESKey.generate(32);
     var apkamSymmetricKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+        AESKey.generate(32);
     _logger.info('Generating your encryption keys and .atKeys file\n');
 
     //generating pkamKeyPair only if authMode is keysFile
     String? pkamPublicKey;
     if (authMode == PkamAuthMode.keysFile) {
       _logger.info('Generating pkam keypair');
-      var apkamRsaKeypair = AtChopsUtil.generateAtPkamKeyPair();
+      var apkamRsaKeypair = RsaKeyPair.generate();
       pkamPublicKey = apkamRsaKeypair.atPublicKey.publicKey.toString();
       atKeysFile.apkamPrivateKey = AtBytes.fromString(
           apkamRsaKeypair.atPrivateKey.privateKey.toString());

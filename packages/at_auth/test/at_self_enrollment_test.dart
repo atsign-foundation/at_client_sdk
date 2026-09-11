@@ -483,16 +483,15 @@ void main() {
   /// such a connection is a retrofit of `primary` and is approved outright.
   /// The client therefore never approves its own request.
   group('a client holding no enrollment does not approve its own request', () {
-    late final AtEncryptionKeyPair encryptionKeyPair;
+    late final RsaKeyPair encryptionKeyPair;
     late final String selfEncryptionKey;
 
     setUpAll(() {
       // A real keypair: the submitter wraps the symmetric key to the public
       // half and the approver unwraps it with the private half, so a stub
       // would leave the round trip untested.
-      encryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
-      selfEncryptionKey =
-          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+      encryptionKeyPair = RsaKeyPair.generate();
+      selfEncryptionKey = AESKey.generate(32).key;
     });
 
     AtKeys keysFor({String? enrollmentId}) => AtKeys()
@@ -510,7 +509,11 @@ void main() {
     MockAtLookUp parkingLookUp() {
       final mock = MockAtLookUp();
       when(() => mock.atChops).thenReturn(AtChopsImpl(
-          AtChopsKeys.create(encryptionKeyPair, null)
+          AtChopsKeys.create(
+              AtEncryptionKeyPair.create(
+                  encryptionKeyPair.atPublicKey.publicKey,
+                  encryptionKeyPair.atPrivateKey.privateKey),
+              null)
             ..selfEncryptionKey = AESKey(selfEncryptionKey)));
       when(() =>
           mock.executeCommand(any(that: startsWith('enroll:request:')),

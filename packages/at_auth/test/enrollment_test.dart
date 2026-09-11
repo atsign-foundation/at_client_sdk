@@ -191,7 +191,7 @@ void main() {
         AtPkamKeyPair.create(apkamPublicKey, apkamPrivateKey));
     atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
     atChopsKeys.selfEncryptionKey = AESKey(selfEncryptionKey);
-    final iv = AtChopsUtil.generateIVLegacy();
+    final iv = InitialisationVector.legacy();
 
     AtChopsImpl atChopsImpl = AtChopsImpl(atChopsKeys);
 
@@ -733,8 +733,8 @@ void main() {
         final String? storedIvB64 =
             legacyIv ? null : base64Encode(List<int>.filled(16, 7));
         final iv = storedIvB64 == null
-            ? AtChopsUtil.generateIVLegacy()
-            : AtChopsUtil.generateIVFromBase64String(storedIvB64);
+            ? InitialisationVector.legacy()
+            : InitialisationVector.fromBase64(storedIvB64);
 
         AtChopsKeys atChopsKeys = AtChopsKeys.create(
             AtEncryptionKeyPair.create(

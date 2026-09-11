@@ -1,5 +1,11 @@
 ## 4.0.0-rc2
 
+- refactor: keys and initialisation vectors are generated from the key
+  classes' own statics rather than through `AtChopsUtil`, whose bodies were
+  one-line wrappers around them. 25 call sites; 13 of those sit inside the
+  deprecated `KeyIOMixin`, where nothing warned, and at_chops removes the
+  utility in its next major.
+
 - fix: `waitForApproval` no longer sleeps 500ms before every PKAM attempt when
   `logProgress` is set. The pause paced a text CLI's progress output so its
   lines did not scroll past unread, but it sat in the handshake rather than in

@@ -47,7 +47,7 @@ void main() {
             pkamPublicKeyMap[atSign]!, pkamPrivateKeyMap[atSign]!));
     atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
     final atChopsImpl = AtChopsImpl(atChopsKeys);
-    final iv = AtChopsUtil.generateIVLegacy();
+    final iv = InitialisationVector.legacy();
 
     Future<String> sealed(String value) async =>
         (await atChopsImpl.encryptString(value, EncryptionKeyType.aes256,

@@ -238,13 +238,11 @@ class EnrollmentSubmitter {
   /// Handles the subsequent enrollment requests.
   Future<AtEnrollmentResponse> _handleAtEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest, AtLookUp atLookUp) async {
-    // Generate required keys, under the algorithm the CALLER named. This used
-    // to be `AtChopsUtil.generateAtPkamKeyPair()` — RSA-2048 with no argument
-    // — so an app enrolling over OTP could not ask for anything else. On an
-    // atSign whose deployment had moved to post-quantum, every install then
-    // created an RSA-authenticating enrollment that the client retrofitted
-    // away on its first start, leaving a discarded enrollment behind and an
-    // RSA credential live for the atServer's grace window.
+    // NOTE: under the algorithm the CALLER named. Minting RSA-2048 regardless
+    // hands an atSign whose deployment has moved to post-quantum an
+    // RSA-authenticating enrollment, which the client retrofits away on its
+    // first start — leaving a discarded enrollment behind and an RSA
+    // credential live for the atServer's grace window.
     final apkam = await mintApkamKeyPair(atEnrollmentRequest.signingAlgo);
 
     //Fetch required keys from atServer
@@ -316,7 +314,7 @@ class EnrollmentSubmitter {
     String? encryptedAPKAMSymmetricKey;
     if (!isPq) {
       final SymmetricKey apkamSymmetricKey =
-          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+          AESKey.generate(32);
       atAuthKeys.apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey.key);
       // encrypting the following APKAM keys:
       // apkamSymmetricKey for the enroll verb
@@ -513,7 +511,7 @@ class EnrollmentSubmitter {
         apkamPublic = pair.atPublicKey.publicKey;
         apkamPrivate = pair.atPrivateKey.privateKey;
       } else {
-        final pair = AtChopsUtil.generateAtPkamKeyPair();
+        final pair = RsaKeyPair.generate();
         apkamPublic = pair.atPublicKey.publicKey;
         apkamPrivate = pair.atPrivateKey.privateKey;
       }

@@ -55,7 +55,7 @@ class EnrollmentApprover {
     chops.atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
 
     InitialisationVector encryptionPrivateKeyIV =
-        AtChopsUtil.generateRandomIV(16);
+        InitialisationVector.random(16);
     // Fetch the encryptionPrivateKey from the atChops and encrypt with APKAM Symmetric key.
     String encryptedDefaultEncryptionPrivateKey = (await chops.encryptString(
             chops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey,
@@ -64,7 +64,7 @@ class EnrollmentApprover {
             iv: encryptionPrivateKeyIV))
         .result;
 
-    InitialisationVector selfEncryptionKeyIV = AtChopsUtil.generateRandomIV(16);
+    InitialisationVector selfEncryptionKeyIV = InitialisationVector.random(16);
     // Fetch the selfEncryptionKey from the atChops and encrypt with APKAM Symmetric key.
     String encryptedDefaultSelfEncryptionKey = (await chops.encryptString(
             chops.atChopsKeys.selfEncryptionKey!.key, EncryptionKeyType.aes256,

@@ -158,8 +158,8 @@ class EnrollmentHandshake {
     // approver's, not this client's.
     InitialisationVector ivOf(Map<String, dynamic> keyResponse) =>
         keyResponse['iv'] == null
-            ? AtChopsUtil.generateIVLegacy()
-            : AtChopsUtil.generateIVFromBase64String(keyResponse['iv']);
+            ? InitialisationVector.legacy()
+            : InitialisationVector.fromBase64(keyResponse['iv']);
 
     String decryptedSelfEncryptionKey = aesEncryption.decrypt(
       selfEncKeyResponse['value'],
