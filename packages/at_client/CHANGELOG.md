@@ -1,5 +1,10 @@
 ## 3.15.0-rc1
 
+- refactor: the legacy shared key is wrapped and unwrapped with the atSign's
+  own RSA key taken from the client's key material rather than from its
+  `AtChops`, so those three calls no longer need one. Unwrapping asks only for
+  the private half, which is all RSA decryption reads and the only half a
+  keystore-backed client is guaranteed to hold.
 - feat: `LocalSecondary`'s encryption key getters resolve across three tiers
   rather than two: an injected `AtChops`, then the client's `atKeysIo`, then
   the keystore. A client handed a key source now serves its encryption

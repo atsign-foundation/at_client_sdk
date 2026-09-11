@@ -85,6 +85,23 @@ class MockRemoteSecondary extends Mock implements RemoteSecondary {
 
 class MockLocalSecondary extends Mock implements LocalSecondary {}
 
+/// Stubs [localSecondary] to answer [atSign]'s encryption keypair.
+///
+/// This is how a client resolves that keypair: `LocalSecondary` consults an
+/// injected `AtChops`, then the client's key source, then the keystore, and a
+/// mock standing in for it answers directly. Stubbing an `AtChops` on the
+/// client instead reaches the same material through the deprecated door, and
+/// leaves the paths that read it through the local secondary unexercised.
+/// [localSecondary] is typed as the interface because that is how the test
+/// trees declare their doubles; mocktail records against the instance.
+void stubEncryptionKeyPair(
+    LocalSecondary localSecondary, String atSign, RsaKeyPair keyPair) {
+  when(() => localSecondary.getEncryptionPublicKey(atSign))
+      .thenAnswer((_) async => keyPair.atPublicKey.publicKey);
+  when(() => localSecondary.getEncryptionPrivateKey())
+      .thenAnswer((_) async => keyPair.atPrivateKey.privateKey);
+}
+
 class MockCryptoProvider extends Mock implements CryptoProvider {}
 
 class FakeCryptoProvider extends Fake implements CryptoProvider {}

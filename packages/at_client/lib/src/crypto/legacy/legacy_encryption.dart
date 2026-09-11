@@ -132,9 +132,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     /// - If found existing in either local or atServer, decrypt it and return
     encryptedSharedKey =
         defaultResponseParser.parse(encryptedSharedKey!).response;
-    final decryptionResult = await _atClient.atChops!
-        .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
-    return decryptionResult.result;
+    return await decryptStringFromBase64(
+        encryptedSharedKey, await atSignDecryptionAlgo(_atClient));
   }
 
   /// Create a new symmetric shared key and share it.
@@ -150,11 +149,9 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     // Generate new symmetric key
     var newSymmetricKeyBase64 = AESKey.generate(32).key;
     // Encrypt the new symmetric key with our public key
-    var atChopsEncryptionResult = await _atClient.atChops!
-        .encryptString(newSymmetricKeyBase64, EncryptionKeyType.rsa2048);
-    var encryptedSharedKeyMyCopy = atChopsEncryptionResult.result;
-    _logger.info(
-        'encryptedSharedKeyMyCopy from atChops: $encryptedSharedKeyMyCopy');
+    var encryptedSharedKeyMyCopy = await encryptStringToBase64(
+        newSymmetricKeyBase64, await atSignEncryptionAlgo(_atClient));
+    _logger.info('encryptedSharedKeyMyCopy: $encryptedSharedKeyMyCopy');
 
     // Store my copy for future use
     // First, store to atServer

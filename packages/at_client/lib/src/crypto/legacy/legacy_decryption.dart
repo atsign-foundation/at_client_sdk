@@ -230,10 +230,10 @@ class SharedWithMeDecryption implements AtKeyDecryption {
       } else {
         iV = InitialisationVector.legacy();
       }
-      final decryptionResult = await _atClient.atChops!
-          .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
-      var encryptionAlgo = AESEncryptionAlgo(AESKey(
-          DefaultResponseParser().parse(decryptionResult.result).response));
+      final sharedKey = await decryptStringFromBase64(
+          encryptedSharedKey, await atSignDecryptionAlgo(_atClient));
+      var encryptionAlgo = AESEncryptionAlgo(
+          AESKey(DefaultResponseParser().parse(sharedKey).response));
       decryptedValue =
           await decryptStringFromBase64(encryptedValue, encryptionAlgo, iv: iV);
     } on AtDecryptionException catch (e) {

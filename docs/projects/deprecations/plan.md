@@ -435,13 +435,20 @@ cannot land on unit-green: all 4 live packs before it commits.
 
 ### Step 4: at_client's carrier role (no API change)
 
-⚠️ **This step is what unblocks at_client's test tree, and nothing else will.**
-Its five legacy-crypto test files carry 118 warnings between them, and every
-one of them stubs `mockAtClient.atChops` and builds an `AtChopsKeys` to put
-behind it — because `SharedKeyEncryption`, `SharedWithMeDecryption` and the
-self-key paths read `_atClient.atChops`. The fixture is mirroring production
-faithfully, so no fixture helper can move it: the material has to stop coming
-off an injected `AtChops` in the production code first. Measured 2026-09-11.
+**The key-material half of this step is done**, and it was indeed what
+unblocked at_client's test tree. `LocalSecondary`'s three encryption getters
+gained the client's key source as a middle tier, the legacy self-key paths
+stopped reaching into `atChops` before falling back to them, and the three
+`rsa2048` calls step 2 left behind now build their algorithm from that
+material — unwrapping with the private half alone, which is all RSA decryption
+reads. `stubEncryptionKeyPair` in the test utils is the fixture side: it
+answers a mock local secondary's key getters, which is where a client looks.
+at_client's test tree went 358 to 268 and its five legacy-crypto files to
+zero.
+
+What remains of step 4 is the rest of the plan's list below — `apkam_signing`,
+`sync_service_impl`, the `AtChopsKeys` getter on `LocalSecondary`, and
+deprecating `AtClient.atChops` itself.
 
 Two observations from flipping the fixtures that could move:
 

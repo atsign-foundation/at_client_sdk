@@ -124,15 +124,9 @@ void main() {
     var ivBase64String = base64Encode(InitialisationVector.random(16).ivBytes);
     var encryptedLocation = EncryptionUtil.encryptValue(location, aesSharedKey,
         ivBase64: ivBase64String);
-    var atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        aliceEncryptionPublicKey, aliceEncryptionPrivateKey);
-
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, null);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
     when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
-    when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
-        .thenAnswer((_) => Future.value(aliceEncryptionPublicKey));
+    stubEncryptionKeyPair(mockLocalSecondary, '@alice',
+        RsaKeyPair.create(aliceEncryptionPublicKey, aliceEncryptionPrivateKey));
     var sharedKey = AtKey()
       ..sharedBy = '@alice'
       ..sharedWith = '@bob'
@@ -160,15 +154,9 @@ void main() {
     var ivBase64String = base64Encode(InitialisationVector.random(16).ivBytes);
     var encryptedLocation = EncryptionUtil.encryptValue(location, aesSharedKey,
         ivBase64: ivBase64String);
-    var atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        aliceEncryptionPublicKey, aliceEncryptionPrivateKey);
-
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, null);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
     when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
-    when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
-        .thenAnswer((_) => Future.value(aliceEncryptionPublicKey));
+    stubEncryptionKeyPair(mockLocalSecondary, '@alice',
+        RsaKeyPair.create(aliceEncryptionPublicKey, aliceEncryptionPrivateKey));
     when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
         .thenAnswer((_) => Future.value('data:$encryptedSharedKey'));
     var sharedKey = AtKey()

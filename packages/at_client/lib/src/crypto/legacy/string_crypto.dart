@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_commons/at_commons.dart';
 
 /// Encrypts [value] with [algorithm] and returns the ciphertext in base64.
@@ -54,4 +55,46 @@ Future<String> decryptStringFromBase64(
           ExceptionScenario.decryptionFailed, 'Failed to decrypt $e'));
   }
   return utf8.decode(plainBytes);
+}
+
+/// Unwraps with the atSign's own RSA private key, which is the only half RSA
+/// decryption reads.
+///
+/// `LocalSecondary` resolves that key across every tier the client has — an
+/// injected `AtChops`, then its key source, then the keystore — so this works
+/// for a client built either way. The public half is deliberately not
+/// fetched: asking for material the operation does not use would refuse a
+/// client that holds a private key and no public one, which is a shape the
+/// keystore produces.
+Future<RsaEncryptionAlgo> atSignDecryptionAlgo(AtClient atClient) async {
+  final privateKey =
+      await atClient.getLocalSecondary()!.getEncryptionPrivateKey();
+  if (privateKey == null) {
+    throw AtPrivateKeyNotFoundException(
+        'no encryption private key for ${atClient.getCurrentAtSign()}, so a '
+        'legacy shared key cannot be unwrapped',
+        intent: Intent.fetchEncryptionPrivateKey,
+        exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
+  }
+  return RsaEncryptionAlgo()
+    ..atPrivateKey = AtPrivateKey.fromString(privateKey);
+}
+
+/// Wraps to the atSign's own RSA public key, so that only this atSign can
+/// unwrap it again.
+///
+/// Resolved the same way as [atSignDecryptionAlgo], and needs the public half
+/// because that is what encryption uses.
+Future<RsaEncryptionAlgo> atSignEncryptionAlgo(AtClient atClient) async {
+  final atSign = atClient.getCurrentAtSign()!;
+  final publicKey =
+      await atClient.getLocalSecondary()!.getEncryptionPublicKey(atSign);
+  if (publicKey == null) {
+    throw AtPublicKeyNotFoundException(
+        'no encryption public key for $atSign, so a legacy shared key cannot '
+        'be wrapped for it',
+        intent: Intent.fetchEncryptionPublicKey,
+        exceptionScenario: ExceptionScenario.fetchEncryptionKeys);
+  }
+  return RsaEncryptionAlgo()..atPublicKey = AtPublicKey.fromString(publicKey);
 }
