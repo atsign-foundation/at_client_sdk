@@ -1,5 +1,27 @@
 ## 3.15.0-rc1
 
+- `ApkamSigning.publicSigningKey` and `.privateSigningKey` are back, as the
+  synchronous accessors 3.14.0 published and reading the same place they did,
+  and both are **deprecated**. They answer the APKAM *authentication*
+  keypair. Two reasons to move off them, the first being the one that bites:
+  `_apsk` lists that key only while the enrollment holds no signing keys of
+  its own, so a signature made with it can verify against nothing; and a key
+  per algorithm is the model now, which one key cannot describe.
+  **Migration:** read `signingKeys` — every key this enrollment signs with,
+  strongest first — and `publicSigningKeyValue` for what gets advertised.
+  They are removed with `AtClient.atChops` in at_client 4.0.
+  - They **refuse** when the enrollment authenticates with anything but
+    `rsa2048`: the slot then holds base64 raw bytes of a post-quantum key,
+    and handing those to a caller expecting RSA is a corrupted value rather
+    than a policy mismatch. They also refuse, naming the client, where
+    3.14.0 met an absent keypair with a null-check failure.
+  - They log at `shout` under a posture that configures post-quantum
+    providers, which is where the advertisement may already have stopped
+    naming this key.
+- **BREAKING:** the asynchronous `ApkamSigning.publicSigningKey` — the
+  strongest held signing key — is removed, its name returned to the accessor
+  above. It had no caller outside this package's own tests, and choosing one
+  key out of several was the signer's decision to make: read `signingKeys`.
 - Approving an enrollment refuses, naming what is missing, when this
   client cannot read its own encryption private key and
   self-encryption key. at_auth used to refuse it at the end of a

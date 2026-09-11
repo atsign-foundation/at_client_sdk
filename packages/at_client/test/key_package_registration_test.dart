@@ -79,9 +79,9 @@ void main() {
       expect(keyPackage.enrollmentId, 'enroll-a');
       expect(registrant.isRegistered, isTrue);
 
-      // the _apsk signing key was published so peers can verify envelopes
+      // the _apsk advertisement was published so peers can verify envelopes
       expect(remoteData['public:_apsk.enroll-a.a.__e$atSign'],
-          await registrant.publicSigningKey);
+          await registrant.publicSigningKeyValue);
 
       // the returned key package carries the x-wing enc key; register() does
       // NOT write it anywhere (it rides enroll:request), and nothing is

@@ -117,7 +117,6 @@ void main() {
       expect(keys, hasLength(1));
       expect(keys.single.publicKey, pkamPublicKey());
       expect(keys.single.algorithm, SigningAlgoType.rsa2048);
-      expect(await signer.publicSigningKey, pkamPublicKey());
     });
 
     test('the keyfile\'s APKAM keypair answers a client holding no AtChops',
@@ -201,7 +200,6 @@ void main() {
       expect(keys.map((k) => k.publicKey), isNot(contains(pkamPublicKey())),
           reason: 'the authentication keypair authenticates and nothing else '
               'once the enrollment has signing keys of its own');
-      expect(await signer.publicSigningKey, b64('mldsa-pub'));
     });
 
     test('a held key this build cannot sign an envelope with is skipped',
