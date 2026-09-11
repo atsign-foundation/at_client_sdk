@@ -1,5 +1,11 @@
 ## 4.0.0-rc2
 
+- refactor: the `enroll:update` possession proof is signed by
+  `signPkamChallenge` too, which is what its own documentation said it needed:
+  the atServer verifies the proof and a PKAM challenge through one verifier,
+  so the two have to frame a signature identically, and now they do it by
+  calling the same function. Its tests verify the signature the way the
+  atServer does, for both rsa2048 and mldsa65.
 - refactor: a PKAM challenge is signed from the keypair rather than through
   `AtChops`, wherever the keyfile is the whole answer. `signPkamChallenge`
   takes the algorithm from the material it signs with, so a key cannot be put

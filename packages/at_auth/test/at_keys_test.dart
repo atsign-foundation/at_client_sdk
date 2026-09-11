@@ -215,10 +215,14 @@ void main() {
 
     test('Postapproval state for APKAM AtKeys to AtChopsImpl', () {
       apkam = createKeys();
+      // A test that asserts what the derived AtChops carries has to name it.
+      // ignore: deprecated_member_use
       expect(apkam.toAtChops(), isA<AtChopsImpl>());
     });
 
     test('MPKAM AtKeys to AtChopsImpl', () {
+      // A test that asserts what the derived AtChops carries has to name it.
+      // ignore: deprecated_member_use
       expect(mpkam.toAtChops(), isA<AtChopsImpl>());
     });
 
@@ -354,7 +358,11 @@ void main() {
     const typedApkamPublicKey = 'dHlwZWQtcHVibGlj';
     const typedEnrollmentId = 'the-retrofitted-enrollment';
 
+    // A test that asserts what the derived AtChops carries has to name it.
+    // ignore: deprecated_member_use
     String pkamPublicKeyOf(AtChops chops) =>
+        // A test that asserts what the derived AtChops carries has to name it.
+        // ignore: deprecated_member_use
         (chops as AtChopsImpl).atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
 
     /// A keyfile carrying the capped legacy enrollment in the flat fields and
@@ -460,6 +468,8 @@ void main() {
             'self:aes256:0', 'symmetricEncryption', 'aes256', typedSelf));
 
       final resolved = typedOnly.authenticationFor(typedEnrollmentId);
+      // A test that asserts what the derived AtChops carries has to name it.
+      // ignore: deprecated_member_use
       final keys = (resolved.chops as AtChopsImpl).atChopsKeys;
 
       expect(resolved.algorithm, SigningAlgoType.mldsa65);
@@ -485,6 +495,8 @@ void main() {
             privateKey: 'dHlwZWQtcHJpdmF0ZQ==');
 
       final keys = (noAtSignKeys.authenticationFor(typedEnrollmentId).chops
+              // A test that asserts what the derived AtChops carries has to name it.
+              // ignore: deprecated_member_use
               as AtChopsImpl)
           .atChopsKeys;
       expect(keys.atEncryptionKeyPair!.atPublicKey.publicKey, isEmpty);
