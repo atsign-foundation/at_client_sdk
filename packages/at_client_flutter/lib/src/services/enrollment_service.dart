@@ -30,7 +30,6 @@ class FlutterEnrollmentService {
   KeychainStorage keychainStorage = KeychainStorage();
 
   @visibleForTesting
-
   @visibleForTesting
   AtClient? atClientOverride;
 

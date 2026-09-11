@@ -89,9 +89,13 @@ void main() {
       // would redden this, which is when an approver filing them could even
       // be considered.
       // ignore: deprecated_member_use
-      expect(response.atAuthKeys, isNull,
-          reason: 'the enrollee files its own keys on its own device; nothing '
-              'reaches the approver for it to store');
+      expect(
+        response.atAuthKeys,
+        isNull,
+        reason:
+            'the enrollee files its own keys on its own device; nothing '
+            'reaches the approver for it to store',
+      );
       verify(() => mockKeychainStorage.deleteEnrollmentData(atSign)).called(1);
       verify(() => mockAtLookUp.close()).called(1);
     },

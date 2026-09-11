@@ -105,7 +105,8 @@ class BackupKeyWidget extends StatelessWidget {
       // out, which is what a restore decodes. Staged to a temporary path
       // because the desktop branch below hands the bytes to a file saver
       // rather than a path.
-      final staging = '${(await path_provider.getTemporaryDirectory()).path}'
+      final staging =
+          '${(await path_provider.getTemporaryDirectory()).path}'
           '${Platform.pathSeparator}$atsign${Strings.keyFileName}';
       await FileAtKeysIo(filePath: (_) => staging).write(atsign, atKeys);
       final document = await File(staging).readAsString();
