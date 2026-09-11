@@ -342,17 +342,10 @@ class SelfKeyEncryption implements AtKeyEncryption {
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
     }
 
-    // Get SelfEncryptionKey from atChops
-    // https://github.com/atsign-foundation/at_client_sdk/issues/1294 causes selfEncryptionKey to be null in atChops.
-    // Fetch from LocalSecondary until the above issue is fixed.
-    selfEncryptionKey = atClient.atChops?.atChopsKeys.selfEncryptionKey?.key;
-    if (selfEncryptionKey.isNullOrEmpty) {
-      // Fetch Self Encryption Key from Local Secondary
-      // Remove this call after the atChops has self encryption key populated from AtClientMobile.
-      selfEncryptionKey =
-          await _getSelfEncryptionKey(atClient.getLocalSecondary()!);
-    }
-    // If selfEncryptionKey is null in atChops and in Local Secondary throw exception.
+    // The local secondary resolves this across every tier the client has:
+    // an injected AtChops, then its key source, then the keystore.
+    selfEncryptionKey =
+        await _getSelfEncryptionKey(atClient.getLocalSecondary()!);
     if (selfEncryptionKey.isNullOrEmpty) {
       throw SelfKeyNotFoundException(
           'Failed to encrypt the data caused by Self encryption key not found',

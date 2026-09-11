@@ -1,5 +1,16 @@
 ## 3.15.0-rc1
 
+- feat: `LocalSecondary`'s encryption key getters resolve across three tiers
+  rather than two: an injected `AtChops`, then the client's `atKeysIo`, then
+  the keystore. A client handed a key source now serves its encryption
+  keypair and self-encryption key from it, which is what lets a caller pass
+  `atKeysIo:` instead of building an `AtChops`. The two PKAM getters
+  deliberately do not consult the source: `authenticationKeyPairFor` refuses
+  an enrollment whose material this build cannot sign with, and falling
+  through that refusal to the keystore is the thing it exists to prevent.
+- refactor: the legacy self-key paths read the local secondary rather than
+  reaching into `atClient.atChops` first and falling back to it. Same
+  resolution, one tier deeper, and they now see a key source.
 - refactor: envelope signing and the public-data signature use
   `RsaSignatureAlgo` instead of the deprecated `RsaSigningAlgo` and
   `AtChops.sign`. Both produce the same bytes: the committed JWS vector

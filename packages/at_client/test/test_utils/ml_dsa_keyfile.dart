@@ -7,6 +7,11 @@ import 'package:at_commons/at_commons.dart';
 const String testSelfEncryptionKey =
     'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
 
+/// The halves of the atSign encryption keypair [typedKeyfile] files, so a
+/// test can assert on what a client resolved without repeating the literal.
+const String testEncryptionPublicKey = 'dGVzdC1lbmMtcHVibGlj';
+const String testEncryptionPrivateKey = 'dGVzdC1lbmMtcHJpdmF0ZQ==';
+
 /// A keyfile for [atSign] carrying **typed material only**, so a test can
 /// build its keys without naming a deprecated member.
 ///
@@ -59,9 +64,9 @@ Future<InMemoryAtKeysIo> typedKeyfile(
   if (withAtSignKeys) {
     keys
       ..addKey(atSignKey('enc:rsa2048:1', 'publicEncryption', 'rsa2048',
-          'dGVzdC1lbmMtcHVibGlj'))
+          testEncryptionPublicKey))
       ..addKey(atSignKey('enc:rsa2048:1', 'privateDecryption', 'rsa2048',
-          'dGVzdC1lbmMtcHJpdmF0ZQ=='))
+          testEncryptionPrivateKey))
       ..addKey(atSignKey(
           'self:aes256:1', 'symmetricEncryption', 'aes256', selfEncryptionKey));
   }
