@@ -280,7 +280,7 @@ class SyncServiceImpl implements SyncService {
   Future<void> processSyncRequests() async {
     _logger.finest('in _processSyncRequests');
     if (isStopped) {
-      _logger.info('processSyncRequests: service is stopped; ignoring');
+      _logger.finer('processSyncRequests: service is stopped; ignoring');
       return;
     }
     if (_processInProgress || _syncInProgress) {
@@ -369,7 +369,7 @@ class SyncServiceImpl implements SyncService {
         ..message = 'Exception: $e'
         ..atClientException = wrapped);
     } on _SyncAbandoned {
-      _logger.info('sync ${syncRequest.id} abandoned: the service was stopped');
+      _logger.finer('sync ${syncRequest.id} abandoned: the service was stopped');
       syncRequest.result!.atClientException = AtClientException(
           error_codes['AtClientException'], 'SyncService has been stopped');
       _syncError(syncRequest);
@@ -489,7 +489,7 @@ class SyncServiceImpl implements SyncService {
         pulledUpdates++;
       }
     }
-    _logger.info('sync round ${syncRequest.id} '
+    _logger.finer('sync round ${syncRequest.id} '
         '(${syncRequest.requestSource.name}): pulled $pulledUpdates update(s) '
         'and $pulledDeletes delete(s), $conflicts conflict(s) skipped, '
         'pushed $pushed; server commit id $_latestKnownServerCommitId');
@@ -503,7 +503,7 @@ class SyncServiceImpl implements SyncService {
     // else call the global onDone callback.
     if (syncRequest.onDone != null &&
         syncRequest.requestSource == SyncRequestSource.app) {
-      _logger.info('Sending result to onDone callback');
+      _logger.finer('Sending result to onDone callback');
       syncRequest.onDone!(syncRequest.result);
     } else if (onDone != null) {
       onDone!(syncRequest.result);
@@ -808,7 +808,7 @@ class SyncServiceImpl implements SyncService {
             // while this batch was in flight. The server has the version this
             // batch carried and the newer op pushes next round, so removing
             // the entry unconditionally here would lose it.
-            _logger.info('${source.atKey} re-enqueued mid-push; '
+            _logger.finer('${source.atKey} re-enqueued mid-push; '
                 'keeping the newer entry queued for the next round');
           }
           _bailIfStopped();
@@ -1571,7 +1571,7 @@ class SyncServiceImpl implements SyncService {
   /// empty first await `waitUntilCaughtUp`.
   Future<void> stop() async {
     if (isStopped) {
-      _logger.info('stop() called, but service is already stopped. Ignoring.');
+      _logger.finer('stop() called, but service is already stopped. Ignoring.');
       return;
     }
     isStopped = true;
@@ -1606,7 +1606,7 @@ class SyncServiceImpl implements SyncService {
   /// not stopped is a no-op.
   Future<void> start() async {
     if (!isStopped) {
-      _logger.info('restart() called, but service is not stopped. Ignoring.');
+      _logger.finer('restart() called, but service is not stopped. Ignoring.');
       return;
     }
     _logger.info('Restarting sync service for $currentAtSign');
