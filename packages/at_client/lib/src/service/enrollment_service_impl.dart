@@ -94,6 +94,35 @@ class EnrollmentServiceImpl implements EnrollmentService {
   static bool isFullyPrivileged(Map<String, dynamic>? namespaces) =>
       privilege.isFullyPrivileged(namespaces);
 
+  /// This client's encryption private key and self-encryption key, resolved by
+  /// the local secondary across every tier it has, or null when there is no
+  /// local secondary or it holds neither, which leaves at_auth to refuse the
+  /// approval.
+  ///
+  /// The keystore reports an absent key by throwing; here that is one tier
+  /// missing, not a failure.
+  Future<ApproverKeyMaterial?> _approverKeys() async {
+    final local = _atClient.getLocalSecondary();
+    if (local == null) return null;
+    Future<String?> resolve(Future<String?> Function() read) async {
+      try {
+        return await read();
+      } on KeyNotFoundException {
+        return null;
+      }
+    }
+
+    final encryptionPrivateKey = await resolve(local.getEncryptionPrivateKey);
+    final selfEncryptionKey = await resolve(local.getEncryptionSelfKey);
+    if (encryptionPrivateKey == null || selfEncryptionKey == null) {
+      return null;
+    }
+    return (
+      encryptionPrivateKey: encryptionPrivateKey,
+      selfEncryptionKey: selfEncryptionKey,
+    );
+  }
+
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision) async {
@@ -133,7 +162,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
 
     final response = await _atEnrollmentImpl.approve(
         decision, _atClient.getRemoteSecondary()!.atLookUp,
-        approverChops: _atClient.atChops);
+        approverKeys: await _approverKeys());
 
     // NOTE: re-read after the approval, not before — the atServer publishes
     // the enrollment's _apsk at that point, and the advertised key package

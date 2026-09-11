@@ -8,6 +8,7 @@ import 'package:at_auth/src/enroll/enrollment_submitter.dart';
 import 'package:at_auth/src/enroll/enrollment_updater.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_auth/src/enroll/models/approver_key_material.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/models/enrollment_update_request.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
@@ -53,9 +54,12 @@ class AtEnrollmentImpl implements AtEnrollment {
   Future<AtEnrollmentResponse> approve(
           EnrollmentRequestDecision enrollmentRequestDecision,
           AtLookUp atLookUp,
-          {AtChops? approverChops}) =>
+          {ApproverKeyMaterial? approverKeys,
+          @Deprecated('Pass approverKeys instead. Removed with the AtChops '
+              'compatibility API in the next major release.')
+          AtChops? approverChops}) =>
       _approver.approve(enrollmentRequestDecision, atLookUp,
-          approverChops: approverChops);
+          approverKeys: approverKeys, approverChops: approverChops);
 
   @override
   Future<AtEnrollmentResponse> deny(

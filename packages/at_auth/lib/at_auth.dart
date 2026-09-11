@@ -45,6 +45,7 @@ export 'src/enroll/models/at_enrollment_request.dart';
 
 /// This class serves as the entity responsible for either approving or denying an enrollment request
 export 'src/enroll/models/enrollment_request_decision.dart';
+export 'src/enroll/models/approver_key_material.dart';
 
 /// The class stores enrollment request details. It notifies the approving app upon receiving a
 /// request from the requesting app, for approval or denial.

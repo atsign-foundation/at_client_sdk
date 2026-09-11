@@ -18,7 +18,7 @@ class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision decision, AtLookUp atLookUp,
-      {AtChops? approverChops}) async {
+      {ApproverKeyMaterial? approverKeys, AtChops? approverChops}) async {
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);
   }

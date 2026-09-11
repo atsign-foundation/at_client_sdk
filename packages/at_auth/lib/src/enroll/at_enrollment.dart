@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_auth/src/enroll/models/approver_key_material.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/models/enrollment_update_request.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
@@ -128,13 +129,20 @@ abstract class AtEnrollment {
   ///       enrollmentRequestDecision, atLookupImpl);
   /// ```
   ///
-  /// [approverChops] is the approving client's own crypto. What approval needs
-  /// is not authentication - the atSign's encryption private key, its
-  /// self-encryption key - so it does not belong on the network object. While
-  /// null, the implementation falls back to `atLookUp.atChops`.
+  /// [approverKeys] is what approval reads of the approving client's own
+  /// material: the atSign's encryption private key, which unwraps the
+  /// symmetric key a legacy enrollee RSA-wrapped to it, and its
+  /// self-encryption key, one of the two secrets sealed for the enrollee.
+  /// Neither is authentication, so neither belongs on the network object.
+  /// While it is null the implementation reads the same two off
+  /// [approverChops], and failing that off `atLookUp.atChops`.
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp,
-      {AtChops? approverChops});
+      {ApproverKeyMaterial? approverKeys,
+      @Deprecated('Pass approverKeys instead: the encryption private key and '
+          'the self-encryption key are all approval reads from this. Removed '
+          'with the AtChops compatibility API in the next major release.')
+      AtChops? approverChops});
 
   /// Denies an enrollment request.
   ///

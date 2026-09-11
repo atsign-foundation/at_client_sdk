@@ -1,5 +1,10 @@
 ## 3.15.0-rc1
 
+- refactor: approving an enrollment hands at_auth this client's encryption
+  private key and self-encryption key, resolved by the local secondary
+  across its three tiers, rather than the client's `AtChops`. A client with
+  no local secondary, or holding neither key, passes none and at_auth
+  refuses the approval as before.
 - feat: `AtClientPreference.pqStartupGates` names which post-quantum startup
   steps a client runs; null keeps today's behaviour and lets the posture
   decide. The set is read once, by a startup the constructor fires, so a

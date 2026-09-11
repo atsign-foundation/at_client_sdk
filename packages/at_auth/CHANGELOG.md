@@ -1,5 +1,15 @@
 ## 4.0.0-rc2
 
+- feat: `AtEnrollment.approve` takes `approverKeys`, an `ApproverKeyMaterial`
+  holding the atSign's encryption private key and its self-encryption key,
+  which is all approval reads. `approverChops` is deprecated and still
+  honoured, as is the older fallback to `atLookUp.atChops`. The two secrets
+  sealed for the enrollee are sealed through `AESEncryptionAlgo` directly,
+  and a new test opens them with the enrollee's own `StringAESEncryptor`, a
+  different AES implementation, so the pair is the contract.
+  ⚠️ `approve` no longer writes the unwrapped APKAM symmetric key into the
+  caller's `AtChops`. Nothing in this repository read it back; a caller that
+  did should keep the key from its own decision.
 - fix: `AtAuth.authenticate` and `onboard` install an authenticator on a
   lookup that can take one and set at_lookup's credential fields only on a
   lookup that cannot. They used to write both, and `AtLookUp` prefers the

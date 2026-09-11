@@ -251,8 +251,6 @@ void main() {
     test('A test to verify the approve enrollment', () async {
       String atSign = '@alice🛠';
 
-      String? apkamPrivateKey = pkamPrivateKeyMap[atSign]!;
-      String? apkamPublicKey = pkamPublicKeyMap[atSign]!;
       String? encryptionPublicKey = encryptionPublicKeyMap[atSign]!;
       String? encryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
       String? selfEncryptionKey = aesKeyMap[atSign]!;
@@ -262,19 +260,9 @@ void main() {
           RSAPublicKey.fromString(encryptionPublicKey)
               .encrypt(apkamSymmetricKey);
 
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(
-          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey),
-          AtPkamKeyPair.create(apkamPublicKey, apkamPrivateKey));
-      atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
-      atChopsKeys.selfEncryptionKey = AESKey(selfEncryptionKey);
-
-      AtChopsImpl atChopsImpl = AtChopsImpl(atChopsKeys);
-
       AtLookUp mockAtLookUp = MockAtLookUp();
 
       AtEnrollment atEnrollmentBase = AtEnrollmentImpl();
-
-      when(() => mockAtLookUp.atChops).thenReturn(atChopsImpl);
 
       when(() =>
           mockAtLookUp.executeCommand(any(that: startsWith('enroll:approve')),
@@ -290,8 +278,12 @@ void main() {
         atSign: atSign,
       );
 
-      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase
-          .approve(enrollmentRequestDecision, mockAtLookUp);
+      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.approve(
+          enrollmentRequestDecision, mockAtLookUp,
+          approverKeys: (
+            encryptionPrivateKey: encryptionPrivateKey,
+            selfEncryptionKey: selfEncryptionKey
+          ));
 
       expect(atEnrollmentResponse.enrollmentId,
           '4be2d358-074d-4e3b-99f3-64c4da01532f');

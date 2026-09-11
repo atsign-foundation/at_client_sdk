@@ -278,10 +278,10 @@ step that touches a lifecycle seam runs all 4 live packs before it commits.
 **Where this stands on 2026-09-11.** The workspace measured 1206 uses, from
 1403, before the keyfile and lookup-wiring changes below landed in at_auth; that
 figure is re-derived, never trusted. Steps 0, 1 and 2 are done; step 3 has its
-accessors, its signing path, its keyfile self-encryption and its lookup wiring,
-with 27 `lib` uses left in at_auth; step 4 has its key-material half, which is
-what unblocked at_client's test tree. What is owed, in order: the rest of
-at_auth's 27, then the rest of step 4 (`apkam_signing`, `sync_service_impl`, and
+accessors, its signing path, its keyfile self-encryption, its lookup wiring
+and its approval key material, with 23 `lib` uses left in at_auth; step 4 has
+its key-material half, which is what unblocked at_client's test tree. What is
+owed, in order: the rest of at_auth's 23, then the rest of step 4 (`apkam_signing`, `sync_service_impl`, and
 deprecating `AtClient.atChops` itself), then steps 5 to 7. Step 7 is no longer
 blocked by the legacy question, which step 3 answered, but it is blocked on the
 three at_client_flutter readings recorded under it.
@@ -303,6 +303,10 @@ depends on:
 - **`stubEncryptionKeyPair`** (at_client's `test/test_utils/mocks.dart`) — the
   same thing for a mocked client: it answers the local secondary's key
   getters, which is where a client looks.
+- **`ApproverKeyMaterial` and `approve(approverKeys:)`** (at_auth) — the
+  key-material form of what the approver read off an `AtChops`. at_client
+  fills it from `LocalSecondary`'s three-tier getters, so a client built from
+  a keyfile approves without ever holding an `AtChops`.
 
 ⛔ A fixture helper is only worth having if it goes through the replacement.
 One that wrapped the deprecated construction would drop the count while
@@ -446,12 +450,14 @@ deprecated declaration raises nothing, the same way `KeyIOMixin`'s 13
 annotating rather than fixing, so a step that reports a drop has to say which
 kind it was.
 
-**What remains of this step**, measured 2026-09-11, is 27 uses in `lib` and 96
+**What remains of this step**, measured 2026-09-11, is 23 uses in `lib` and 76
 in `test`, from 56 and 92 (`dart analyze` in `packages/at_auth`, counting the
-`deprecated_member_use` lines by path). The test figure rose by 12 on purpose:
-`auth_wiring_test.dart` asserts that `atChops` and `signingAlgoType` are never
-written on a lookup that takes an authenticator and are written on one that
-cannot, and a test cannot assert a member is untouched without naming it.
+`deprecated_member_use` lines by path). Twelve of the test uses are in
+`auth_wiring_test.dart` on purpose: it asserts that `atChops` and
+`signingAlgoType` are never written on a lookup that takes an authenticator
+and are written on one that cannot, and a test cannot assert a member is
+untouched without naming it. One more is `approver_key_material_test.dart`'s
+arm through the deprecated `approverChops` door, which stays until the major.
 
 | file | uses | what they are |
 | ---- | ---: | ------------- |
@@ -459,14 +465,20 @@ cannot, and a test cannot assert a member is untouched without naming it.
 | `enrollment_handshake.dart` | 7 | `_apkamChopsAwaitingSymmetricKey`, the shape for keys that are not a complete keyfile yet |
 | `at_auth_impl.dart` | 5 | the `AtAuth.atChops` field, and the `AtChops` onboarding builds to fill it; both go with that field's deprecation |
 | `at_auth.dart` | 2 | `AtAuth.atChops`, the interface field |
-| `enrollment_approver.dart` | 2 | reads the approver's own `atChops` |
-| `at_enrollment.dart`, `at_enrollment_impl.dart` | 1 each | `AtChops` in a signature |
 | `at_keys.dart` | 1 | `authenticationFor`'s return type |
 
-Two uses are ignored with their reason rather than counted: the credential
-ladder writes inside `AtAuthImpl._installAuthenticator`, which run only for a
-lookup without the authenticator seam, because those fields are the only route
-such a lookup has. `file_io.dart`'s three are gone: the keyfile's legacy fields
+Three uses are ignored with their reason rather than counted: the two
+credential ladder writes inside `AtAuthImpl._installAuthenticator`, which run
+only for a lookup without the authenticator seam, because those fields are the
+only route such a lookup has; and the approver's read of `atLookUp.atChops`,
+the door a caller that has not moved to `approverKeys` still comes through.
+The approver's own four are gone: `approve` takes `ApproverKeyMaterial`, the
+encryption private key and self-encryption key that are all it reads, and
+`approver_key_material_test.dart` opens what it seals with the enrollee's own
+`StringAESEncryptor`, a different AES implementation from the one that seals.
+The `@Deprecated` on `approverChops` is what cleared the three signatures: the
+analyzer treats a parameter's own type annotation as inside the deprecated
+declaration. `file_io.dart`'s three are gone: the keyfile's legacy fields
 are self-encrypted through `AESEncryptionAlgo` directly, and
 `legacy_field_self_encryption_test.dart` pins the at-rest bytes against
 openssl and re-encrypts the committed legacy fixture byte-for-byte.

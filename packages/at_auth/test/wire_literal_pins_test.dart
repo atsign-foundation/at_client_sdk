@@ -29,19 +29,11 @@ class MockAtLookUp extends Mock implements AtLookupImpl {}
 void main() {
   const atSign = '@alice🛠';
 
-  /// A lookup whose atChops holds the demo keys, recording every command.
+  /// A lookup holding no key material, recording every command.
   ({MockAtLookUp lookUp, List<String> commands}) lookUp(
       {String response = 'data:{"status":"approved","enrollmentId":"id-1"}'}) {
     final mock = MockAtLookUp();
     final commands = <String>[];
-    final atChopsKeys = AtChopsKeys.create(
-        AtEncryptionKeyPair.create(
-            encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!),
-        AtPkamKeyPair.create(
-            pkamPublicKeyMap[atSign]!, pkamPrivateKeyMap[atSign]!));
-    atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKeyMap[atSign]!);
-    atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
-    when(() => mock.atChops).thenReturn(AtChopsImpl(atChopsKeys));
     when(() => mock.executeCommand(any(), auth: true)).thenAnswer((inv) async {
       commands.add(inv.positionalArguments[0] as String);
       return response;
@@ -63,7 +55,11 @@ void main() {
         atSign: atSign,
       );
 
-      await AtEnrollmentImpl().approve(decision, l.lookUp);
+      await AtEnrollmentImpl().approve(decision, l.lookUp,
+          approverKeys: (
+            encryptionPrivateKey: encryptionPrivateKeyMap[atSign]!,
+            selfEncryptionKey: aesKeyMap[atSign]!
+          ));
 
       final command = l.commands.single;
       expect(command, startsWith('enroll:approve:'));

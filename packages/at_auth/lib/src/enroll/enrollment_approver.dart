@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:at_auth/src/enroll/models/approver_key_material.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
@@ -21,18 +23,34 @@ import 'package:at_lookup/at_lookup.dart';
 class EnrollmentApprover {
   static const _kSppRegex = r'[A-Za-z0-9]{6}';
 
-  /// [approverChops] is the approving client's own crypto.
-  ///
-  /// None of what this method needs is authentication: it wants the atSign's
-  /// **encryption** private key, its self-encryption key, and somewhere to put
-  /// the APKAM symmetric key it derives. Reaching through `atLookUp.atChops`
-  /// for those made a network object the carrier of an app's key material.
-  /// Passing it keeps at_lookup out of it, and lets that field go.
+  /// [approverKeys] is what approval reads of the approving client's own
+  /// material, and all of it: the atSign's encryption private key, which
+  /// unwraps the symmetric key a legacy enrollee RSA-wrapped to it, and the
+  /// self-encryption key, one of the two secrets sealed for the enrollee under
+  /// that symmetric key. Reaching through `atLookUp.atChops` for those made a
+  /// network object the carrier of an app's key material.
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp,
-      {AtChops? approverChops}) async {
-    final chops = approverChops ?? atLookUp.atChops;
-    if (chops == null) {
+      {ApproverKeyMaterial? approverKeys,
+      @Deprecated('Pass approverKeys instead. Removed with the AtChops '
+          'compatibility API in the next major release.')
+      AtChops? approverChops}) async {
+    var keys = approverKeys;
+    if (keys == null) {
+      // NOTE: the two doors this package is closing, kept open until the
+      // major: a caller's AtChops, then whatever an older at_auth left on the
+      // lookup.
+      // ignore: deprecated_member_use
+      final chops = approverChops ?? atLookUp.atChops;
+      if (chops != null) {
+        keys = (
+          encryptionPrivateKey:
+              chops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey,
+          selfEncryptionKey: chops.atChopsKeys.selfEncryptionKey!.key,
+        );
+      }
+    }
+    if (keys == null) {
       throw AtAuthenticationException(
           'The authentication keys are not initialized');
     }
@@ -40,36 +58,30 @@ class EnrollmentApprover {
     // this approver minted it — there is nothing to unwrap, and the RSA step is
     // skipped entirely rather than being fed an empty string. Every other
     // enrollment still arrives RSA-wrapped to the atSign's encryption public
-    // key, and is decrypted here with the private half from the atChops
-    // instance, via at_chops (wraps crypton's RSAPrivateKey.decrypt:
-    // utf8.decode(decryptData(base64(msg)))).
-    String apkamSymmetricKey = enrollmentRequestDecision
-            .mintedApkamSymmetricKey ??
-        utf8.decode((RsaEncryptionAlgo()
-              ..atPrivateKey = AtPrivateKey.fromString(chops
-                  .atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey))
-            .decrypt(base64Decode(
-                enrollmentRequestDecision.encryptedAPKAMSymmetricKey)));
+    // key, and is unwrapped here with the private half.
+    final String apkamSymmetricKey =
+        enrollmentRequestDecision.mintedApkamSymmetricKey ??
+            utf8.decode((RsaEncryptionAlgo()
+                  ..atPrivateKey =
+                      AtPrivateKey.fromString(keys.encryptionPrivateKey))
+                .decrypt(base64Decode(
+                    enrollmentRequestDecision.encryptedAPKAMSymmetricKey)));
 
-    // Set the APKAM Symmetric key to the AtChops Instance.
-    chops.atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
+    // NOTE: the enrollee opens these with at_chops' string AES under the same
+    // key and IV, so the pair is a wire contract; approver_key_material_test
+    // opens them that way.
+    final sealer = AESEncryptionAlgo(AESKey(apkamSymmetricKey));
+    Future<String> sealed(String value, InitialisationVector iv) async =>
+        base64.encode(await sealer
+            .encrypt(Uint8List.fromList(utf8.encode(value)), iv: iv));
 
-    InitialisationVector encryptionPrivateKeyIV =
-        InitialisationVector.random(16);
-    // Fetch the encryptionPrivateKey from the atChops and encrypt with APKAM Symmetric key.
-    String encryptedDefaultEncryptionPrivateKey = (await chops.encryptString(
-            chops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey,
-            EncryptionKeyType.aes256,
-            keyName: 'apkamSymmetricKey',
-            iv: encryptionPrivateKeyIV))
-        .result;
+    final encryptionPrivateKeyIV = InitialisationVector.random(16);
+    final encryptedDefaultEncryptionPrivateKey =
+        await sealed(keys.encryptionPrivateKey, encryptionPrivateKeyIV);
 
-    InitialisationVector selfEncryptionKeyIV = InitialisationVector.random(16);
-    // Fetch the selfEncryptionKey from the atChops and encrypt with APKAM Symmetric key.
-    String encryptedDefaultSelfEncryptionKey = (await chops.encryptString(
-            chops.atChopsKeys.selfEncryptionKey!.key, EncryptionKeyType.aes256,
-            keyName: 'apkamSymmetricKey', iv: selfEncryptionKeyIV))
-        .result;
+    final selfEncryptionKeyIV = InitialisationVector.random(16);
+    final encryptedDefaultSelfEncryptionKey =
+        await sealed(keys.selfEncryptionKey, selfEncryptionKeyIV);
 
     String command = 'enroll:approve:${jsonEncode({
           'enrollmentId': enrollmentRequestDecision.enrollmentId,
