@@ -333,6 +333,7 @@ Future<void> startClient(ChildIsolatePreferences clientParameters) async {
   // This isolate has no file-level fixture - TestUtils' static is null in a
   // fresh heap - so it builds its bundle from the path the main isolate sent.
   atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
+      posture: PqPosture.legacy,
       preference: atClientPreferences,
       storage: HiveAtClientStorage(
           atSign: currentAtSign,
@@ -369,12 +370,13 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
   atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
       currentAtSign,
       namespace,
-      AtClientPreference()
+      AtClientPreference(posture: PqPosture.legacy)
         ..privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign]
         ..isLocalStoreRequired = false
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort,
-      atChops: atChops);
+      atChops: atChops,
+      storage: TestUtils.storageFor(currentAtSign));
   var infoResponse = await atClientManager.atClient
       .getRemoteSecondary()
       ?.executeCommand('info:brief\n');
@@ -464,7 +466,9 @@ bool assertConvergence(
 
 AtClientPreference _getAtClientPreference(String currentAtSign, String clientId,
     {required String hiveStoragePath, required String commitLogPath}) {
-  var preference = AtClientPreference();
+  // NOTE: initAtClient refuses a preference whose posture differs from the one
+  // it is passed, so this posture and the caller's must agree.
+  var preference = AtClientPreference(posture: PqPosture.legacy);
   preference.hiveStoragePath = hiveStoragePath;
   preference.commitLogPath = commitLogPath;
   preference.isLocalStoreRequired = true;

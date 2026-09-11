@@ -129,6 +129,11 @@ class SyncResult {
 /// idempotent — "what to push" is owned by `LocalSecondary`'s
 /// `AtSyncQueue`, so requests are just "please drain" triggers that
 /// can be coalesced wholesale at end-of-round.
+///
+/// `app` is a `sync()` call — the app's, the warm start's, or the periodic
+/// safety net's — and the round it starts fetches the atServer's commit id.
+/// `system` is a stats notification from the atServer, whose commit id the
+/// round reads from the cache the notification promoted.
 enum SyncRequestSource { app, system }
 
 class SyncRequest {

@@ -26,10 +26,10 @@ void main() {
 
   setUp(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    var preference = TestUtils.getPreference(atSign);
+    var preference = TestUtils.getPreference(atSign, posture: PqPosture.legacy);
     preference.syncBatchSize = 15;
-    atClientManager =
-        await TestUtils.initAtClient(atSign, namespace, preference: preference);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        preference: preference, posture: PqPosture.legacy);
     await testSyncSvc.syncData();
   });
 

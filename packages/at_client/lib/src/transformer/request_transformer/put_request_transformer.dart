@@ -32,6 +32,7 @@ class PutRequestTransformer
 
     UpdateVerbBuilder updateVerbBuilder = UpdateVerbBuilder();
     updateVerbBuilder.atKey = tuple.one;
+    updateVerbBuilder.noCommit = options.noCommit;
     // Append '@' to the atSign if missed.
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedWith);
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedBy);
@@ -39,11 +40,13 @@ class PutRequestTransformer
     updateVerbBuilder.value = tuple.two;
     final atKey = updateVerbBuilder.atKey;
     final metadata = atKey.metadata;
-    // Check if the data needs to be encrypted for non-public keys
-    if (!_isPublicKey(metadata) && options.shouldEncrypt) {
+    // Check if the data needs to be encrypted for non-public keys.
+    // NOTE: a `local:` key is excluded — it never leaves the device, so there
+    // is nothing for a peer to decrypt, and the keystore encrypts it at rest.
+    if (!_isPublicKey(metadata) && !atKey.isLocal && options.shouldEncrypt) {
       // Add metadata for the crypto provider used to route future decrypts.
       updateVerbBuilder.atKey.metadata.appMetadata =
-          AppMetadata(providerId: _cryptoProviderIdFor(options));
+          AppMetadata(providerId: _cryptoProviderIdFor(options, atKey));
       await _encryptData(updateVerbBuilder);
     } else {
       // Sign the data for public keys
@@ -64,11 +67,9 @@ class PutRequestTransformer
         .encryptForPut(updateVerbBuilder.atKey, updateVerbBuilder.value);
   }
 
-  String _cryptoProviderIdFor(PutRequestOptions options) {
-    return options.cryptoProviderId ??
-        _atClient.getPreferences()?.crypto.defaultProviderId ??
-        CryptoRuntime.legacyProviderId;
-  }
+  String _cryptoProviderIdFor(PutRequestOptions options, AtKey atKey) =>
+      CryptoRuntime.providerIdFor(_atClient, options.cryptoProviderId,
+          atKey: atKey);
 
   void _signPublicData(
       UpdateVerbBuilder updateVerbBuilder, String? encryptionPrivateKey) {

@@ -54,12 +54,10 @@ void main() {
         .thenAnswer((_) async => SecondaryAddress(host, port));
     when(() => mockSocketFactory.createSocket(host, '$port', any()))
         .thenAnswer((_) => Future<SecureSocket>.value(mockSecureSocket));
-    when(() => mockOutboundConnectionFactory
-        .createOutboundConnection(mockSecureSocket))
-        .thenAnswer((_) => mockOutBoundConnection);
-    when(() => mockSecureSocketListenerFactory
-        .createListener(mockOutBoundConnection))
-        .thenAnswer((_) => mockOutboundListener);
+    when(() => mockOutboundConnectionFactory.createOutboundConnection(
+        mockSecureSocket)).thenAnswer((_) => mockOutBoundConnection);
+    when(() => mockSecureSocketListenerFactory.createListener(
+        mockOutBoundConnection)).thenAnswer((_) => mockOutboundListener);
     when(() => mockOutBoundConnection.getMetaData())
         .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
     when(() => mockOutBoundConnection.isInValid()).thenReturn(false);

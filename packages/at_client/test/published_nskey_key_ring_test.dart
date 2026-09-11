@@ -1,0 +1,683 @@
+import 'dart:convert';
+
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart';
+import 'package:at_commons/at_builders.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show ApkamSigningKeys, EnvelopeType, envelopeVersion, signEnvelope;
+import 'package:mocktail/mocktail.dart';
+import 'package:test/test.dart';
+
+import 'test_utils/mocks.dart';
+
+/// Discovery of another atSign's advertised nskey.
+///
+/// **Freshness**: a sender never sees a recipient's decapsulation fail, so
+/// re-fetching the advertisement is the only way it learns of a rotation.
+/// **Authenticity**: an advertisement is trusted only with an APKAM signature
+/// that verifies against the `_apsk` its enrollment published.
+void main() {
+  const alice = '@alice';
+  const bob = '@bob';
+  const namespace = 'app_1.my_apps';
+
+  late XWingKeyPair bobKey;
+  late AtChops bobChops;
+  late AtClientEnvelopeSigner bobSigner;
+
+  setUpAll(() async {
+    bobKey = await XWingKeyPair.generate();
+    registerFallbackValue(AtKey());
+    registerFallbackValue(UpdateVerbBuilder());
+  });
+
+  /// A mock client that signs as [enrollmentId] of [atSign].
+  MockAtClient signingClient(
+      String atSign, String enrollmentId, AtChops atChops) {
+    final atClient = MockAtClient();
+    final remoteSecondary = MockRemoteSecondary();
+    final atLookUp = MockAtLookUp();
+    when(() => atClient.atChops).thenReturn(atChops);
+    when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
+    when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
+    when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
+    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    return atClient;
+  }
+
+  setUp(() {
+    bobChops = AtChopsImpl(
+        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+    bobSigner =
+        AtClientEnvelopeSigner(signingClient(bob, 'enroll-bob', bobChops));
+  });
+
+  /// Every field `mintAndPublish` writes, unsigned, so a test can take one
+  /// away and watch the reader refuse what is left.
+  Map<String, Object?> advertisementPayload(XWingKeyPair pair,
+          {List<String>? suites}) =>
+      NskeyAdvertisement.single(
+        publicKey: pair.publicKeyBytes,
+        alg: SecretSharingAlgos.xWing,
+        suites: suites,
+      ).toPayload();
+
+  Future<String> signedPayloadFor(XWingKeyPair pair,
+          {List<String>? suites}) async =>
+      bobSigner.wrapAndSignAndJsonEncode(
+          advertisementPayload(pair, suites: suites),
+          type: EnvelopeType.nskeyRing);
+
+  String bobsApskPublicKey() =>
+      bobChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+
+  /// Alice's client: her advertisement fetch succeeds [succeedFor] times and
+  /// throws afterwards — the shape of an atServer that goes unreachable — and
+  /// her `_apsk` lookup returns [apskPublicKey].
+  ({MockAtClient atClient, List<int> fetches}) client({
+    int succeedFor = 999,
+    required String payload,
+    String? apskPublicKey,
+  }) {
+    final fetches = <int>[];
+    final atClient = MockAtClient();
+    when(() => atClient.getCurrentAtSign()).thenReturn(alice);
+    when(() => atClient.atChops).thenReturn(AtChopsImpl(
+        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+    // One answer for both gets the ring drives — the advertisement itself and
+    // the `_apsk` the verify checks it against — branching on the key, because
+    // a mocktail named-argument matcher also matches the argument's absence.
+    Future<AtValue> answer(Invocation invocation) async {
+      final key = invocation.positionalArguments.first as AtKey;
+      if (key.key != '__nskey') {
+        return AtValue()..value = apskPublicKey ?? bobsApskPublicKey();
+      }
+      fetches.add(1);
+      if (fetches.length > succeedFor) {
+        throw SecondaryConnectException('atServer unreachable');
+      }
+      return AtValue()..value = payload;
+    }
+
+    when(() => atClient.get(any())).thenAnswer(answer);
+    when(() => atClient.get(any(),
+        getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer(answer);
+    return (atClient: atClient, fetches: fetches);
+  }
+
+  group('freshness', () {
+    test('a fetched advertisement is reused inside the TTL', () async {
+      final c = client(payload: await signedPayloadFor(bobKey));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(minutes: 15));
+
+      await ring.currentPublic(bob, namespace);
+      await ring.currentPublic(bob, namespace);
+
+      expect(c.fetches, hasLength(1),
+          reason: 'a round trip to the recipient atServer on every put would '
+              'break offline writes — the TTL is the trade');
+    });
+
+    test('the advertisement is re-fetched once the TTL has passed', () async {
+      final c = client(payload: await signedPayloadFor(bobKey));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(milliseconds: 1));
+
+      await ring.currentPublic(bob, namespace);
+      await Future.delayed(const Duration(milliseconds: 20));
+      await ring.currentPublic(bob, namespace);
+
+      expect(c.fetches, hasLength(2),
+          reason: 're-fetching is the only way a sender learns of a rotation');
+    });
+
+    test('a failed re-fetch keeps serving the known key inside the grace',
+        () async {
+      final c = client(succeedFor: 1, payload: await signedPayloadFor(bobKey));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(milliseconds: 1),
+          advertisementStaleGrace: const Duration(minutes: 15));
+
+      final first = await ring.currentPublic(bob, namespace);
+      await Future.delayed(const Duration(milliseconds: 20));
+      final second = await ring.currentPublic(bob, namespace);
+
+      expect(second?.nskeyKid, first?.nskeyKid,
+          reason: 'an ordinary blip must not cost a working key');
+    });
+
+    test('a failed re-fetch stops serving the known key past the grace',
+        () async {
+      final c = client(succeedFor: 1, payload: await signedPayloadFor(bobKey));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(milliseconds: 1),
+          advertisementStaleGrace: const Duration(milliseconds: 1));
+
+      expect(await ring.currentPublic(bob, namespace), isNotNull);
+      await Future.delayed(const Duration(milliseconds: 30));
+
+      expect(await ring.currentPublic(bob, namespace), isNull,
+          reason: 'serving a stale generation indefinitely makes the stated '
+              '"TTL plus one content key" exposure unbounded — and a peer that '
+              'rotated because of a revocation is the one to stop sealing to');
+    });
+
+    test('an atSign that has never published resolves to nothing', () async {
+      final atClient = MockAtClient();
+      when(() => atClient.getCurrentAtSign()).thenReturn(alice);
+      // Both reads, because the ring asks local storage first and the atServer
+      // second: stubbing only the first would leave the fallback unstubbed,
+      // and this test would then pass on mocktail's complaint rather than on
+      // an absent advertisement.
+      when(() => atClient.get(any()))
+          .thenThrow(KeyNotFoundException('no such key'));
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenThrow(KeyNotFoundException('no such key'));
+
+      expect(
+          await PublishedNskeyKeyRing(atClient).currentPublic(bob, namespace),
+          isNull,
+          reason: 'that is the cold-start case, which belongs to the provider');
+    });
+
+    test('the ring fetches its own atSign\'s advertisement when it minted none',
+        () async {
+      // Another of alice's enrollments, or this one after a restart, holds
+      // nothing in memory while the advertisement sits on her own atServer.
+      // Reporting that as a cold start and minting would rotate the key out
+      // from under every peer that had already fetched it.
+      final c = client(payload: await signedPayloadFor(bobKey));
+
+      final own = await PublishedNskeyKeyRing(c.atClient)
+          .currentPublic(alice, namespace);
+
+      expect(own, isNotNull);
+      expect(c.fetches, hasLength(1),
+          reason: 'served by the same lookup a peer would use, signature '
+              'check included — which is what makes "one verify path, '
+              'same-atSign and cross-atSign" true rather than aspirational');
+    });
+
+    /// A client holding nothing locally for the advertisement, whose atServer
+    /// serves [payload]. Records how each advertisement read asked, and every
+    /// verb the local secondary was handed.
+    ({
+      MockAtClient atClient,
+      List<bool> askedRemote,
+      List<({String command, bool cameFromServer})> filedLocally,
+    }) clientMissingLocally(String payload) {
+      final atClient = MockAtClient();
+      final localSecondary = MockLocalSecondary();
+      when(() => atClient.getCurrentAtSign()).thenReturn(alice);
+      when(() => atClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => atClient.atChops).thenReturn(AtChopsImpl(
+          AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+
+      // How each advertisement read asked. A mocktail stub cannot tell a
+      // local-first get from a remote one on its own, so the options are what
+      // the order is pinned against.
+      final askedRemote = <bool>[];
+      final filedLocally = <({String command, bool cameFromServer})>[];
+
+      Future<AtValue> answer(Invocation invocation) async {
+        final key = invocation.positionalArguments.first as AtKey;
+        if (key.key != '__nskey') {
+          return AtValue()..value = bobsApskPublicKey();
+        }
+        final options =
+            invocation.namedArguments[#getRequestOptions] as GetRequestOptions?;
+        final remote = options?.useRemoteAtServer ?? false;
+        askedRemote.add(remote);
+        if (!remote) throw AtKeyNotFoundException('$key');
+        return AtValue()..value = payload;
+      }
+
+      when(() => atClient.get(any())).thenAnswer(answer);
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer(answer);
+
+      when(() => localSecondary.executeVerb(any(),
+          cameFromServer: any(named: 'cameFromServer'))).thenAnswer((i) async {
+        filedLocally.add((
+          command:
+              (i.positionalArguments.first as UpdateVerbBuilder).buildCommand(),
+          cameFromServer: i.namedArguments[#cameFromServer] as bool,
+        ));
+        return 'data:1';
+      });
+
+      return (
+        atClient: atClient,
+        askedRemote: askedRemote,
+        filedLocally: filedLocally,
+      );
+    }
+
+    test(
+        'an advertisement absent from local storage is fetched from the '
+        'atServer', () async {
+      // The advertisement is published to the atServer alone, so it reaches
+      // this device only when sync pulls it down; a read that stopped at local
+      // storage would report a published namespace as a cold start.
+      final c = clientMissingLocally(await signedPayloadFor(bobKey));
+
+      final own = await PublishedNskeyKeyRing(c.atClient)
+          .currentPublic(alice, namespace);
+
+      expect(own?.nskeyKid, nskeyKidOf(bobKey.publicKeyBytes));
+      expect(c.askedRemote, [false, true],
+          reason: 'local first, because this read sits on the write path — a '
+              'round trip by default would break offline writes — and the '
+              'atServer only once local storage has nothing');
+    });
+
+    test('what the atServer answered is filed locally, and not offered back',
+        () async {
+      final c = clientMissingLocally(await signedPayloadFor(bobKey));
+
+      await PublishedNskeyKeyRing(c.atClient).currentPublic(alice, namespace);
+
+      expect(c.filedLocally, hasLength(1),
+          reason: 'a device whose sync is off or paused would otherwise pay '
+              'the round trip on every read');
+      expect(c.filedLocally.single.command,
+          contains('public:__nskey.$namespace$alice'));
+      expect(c.filedLocally.single.cameFromServer, isTrue,
+          reason: 'an ordinary local write queues the key NAME for a '
+              'client→server push, and the push sends whatever local storage '
+              'holds when it drains — which is how a rotation lost its '
+              'successor to its own predecessor. cameFromServer is the flag '
+              'the enqueue refuses on');
+    });
+
+    test("a peer's advertisement is not filed under its own name", () async {
+      final c = clientMissingLocally(await signedPayloadFor(bobKey));
+
+      final peer =
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
+
+      expect(peer?.nskeyKid, nskeyKidOf(bobKey.publicKeyBytes),
+          reason: 'the fetch still works — only the filing is scoped');
+      expect(c.filedLocally, isEmpty,
+          reason: "a peer's advertisement is not ours to publish, and a record "
+              'written under its own name is exactly what a push would offer. '
+              'The shared-key path files a peer public key under '
+              '`cached:public:publickey@<peer>` for the same reason; here the '
+              'advertisementTtl cache is the mechanism');
+    });
+
+    test('what it minted itself costs no lookup', () async {
+      final c = client(payload: await signedPayloadFor(bobKey));
+      final ring = PublishedNskeyKeyRing(c.atClient);
+      // Stand in for mintAndPublish, which needs a remote secondary.
+      ring.rememberOwn(
+          alice,
+          namespace,
+          NskeyAdvertisement.single(
+            publicKey: bobKey.publicKeyBytes,
+            alg: SecretSharingAlgos.xWing,
+            suites:
+                SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
+          ));
+
+      expect((await ring.currentPublic(alice, namespace))?.nskeyKid,
+          nskeyKidOf(bobKey.publicKeyBytes));
+      expect(c.fetches, isEmpty, reason: 'the common case stays free');
+    });
+  });
+
+  group('authenticity', () {
+    test('a signed advertisement verifies against the published _apsk',
+        () async {
+      final c = client(payload: await signedPayloadFor(bobKey));
+
+      final advertised =
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
+
+      expect(advertised?.nskeyKid, nskeyKidOf(bobKey.publicKeyBytes));
+      expect(advertised?.publicKey, bobKey.publicKeyBytes);
+    });
+
+    test('a JWS-wrapped advertisement verifies and resolves the same key',
+        () async {
+      // A JWS-wrapped advertisement through the whole reader stack in one
+      // pass: the shape-aware field check, the signer claim from the protected
+      // header's kid, the verify over protected.payload, and the payload out
+      // of base64url.
+      final pair = bobChops.atChopsKeys.atPkamKeyPair!;
+      final envelope = signEnvelope(advertisementPayload(bobKey),
+          keys: [
+            ApkamSigningKeys(
+                algorithm: SigningAlgoType.rsa2048,
+                publicKey: pair.atPublicKey.publicKey,
+                privateKey: pair.atPrivateKey.privateKey)
+          ],
+          enrollmentId: 'enroll-bob',
+          type: EnvelopeType.nskeyRing);
+      final c = client(payload: jsonEncode(envelope));
+
+      final advertised =
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
+
+      expect(advertised?.nskeyKid, nskeyKidOf(bobKey.publicKeyBytes));
+      expect(advertised?.publicKey, bobKey.publicKeyBytes);
+    });
+
+    test('an advertisement signed by another atSign is rejected', () async {
+      // Bob's advertisement, but the `_apsk` served for him is somebody else's
+      // — which is what a substituted key looks like from the sender's side.
+      final mallory = AtChopsImpl(
+          AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+      final c = client(
+        payload: await signedPayloadFor(bobKey),
+        apskPublicKey: mallory.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey,
+      );
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('a tampered advertisement is rejected', () async {
+      // The signature stays valid for the original body; only the advertised
+      // key is swapped, which is the substitution that matters.
+      final envelope =
+          jsonDecode(await signedPayloadFor(bobKey)) as Map<String, dynamic>;
+      final mallorysKey = await XWingKeyPair.generate();
+      envelope['payload'] = advertisementPayload(mallorysKey);
+      final c = client(payload: jsonEncode(envelope));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('an advertisement missing any required field is refused', () async {
+      // A reader that defaulted a missing field would be answering, on the
+      // owner's behalf, questions the owner had not answered — which KEM the
+      // bytes belong to and which construction they can unwrap. A sender acts
+      // on both immediately.
+      for (final missing in ['v', 'createdAt', 'keys', 'suites']) {
+        final c = client(
+            payload: await bobSigner.wrapAndSignAndJsonEncode(
+                Map.of(advertisementPayload(bobKey))..remove(missing),
+                type: EnvelopeType.nskeyRing));
+
+        await expectLater(
+            PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+            throwsA(isA<AtSigningVerificationException>()),
+            reason: 'an advertisement with no $missing is not the old shape, '
+                'it is an advertisement that does not say');
+      }
+
+      // `alg` and the key itself sit INSIDE the entry, so removing them from
+      // the top level would remove nothing: these cases have to reach into the
+      // entry or they pass for the absence rather than for the guard.
+      for (final missing in ['use', 'alg', 'pub', 'kid']) {
+        final payload = advertisementPayload(bobKey);
+        ((payload['keys'] as List).first as Map).remove(missing);
+        final c = client(
+            payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+                type: EnvelopeType.nskeyRing));
+
+        await expectLater(
+            PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+            throwsA(isA<AtSigningVerificationException>()),
+            reason: 'an entry with no $missing is not a key this build can '
+                'seal to, and the advertisement carries no other');
+      }
+
+      // The control: the same payload with everything present resolves, so the
+      // loops above are failing on the removal rather than on the fixture.
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode(
+              advertisementPayload(bobKey),
+              type: EnvelopeType.nskeyRing));
+      expect(
+          (await PublishedNskeyKeyRing(c.atClient)
+                  .currentPublic(bob, namespace))
+              ?.publicKey,
+          bobKey.publicKeyBytes);
+    });
+
+    test('the envelope versions independently of the payload it wraps',
+        () async {
+      // The envelope and the payload it wraps version independently. The
+      // envelope's own version rides INSIDE the protected header, where the
+      // signature covers it — a version outside the signature is a claim an
+      // attacker can edit.
+      final envelope = await bobSigner
+          .wrapAndSign({'v': 99, 'anything': 1}, type: EnvelopeType.nskeyRing);
+
+      expect(envelope.toJson().containsKey('v'), isFalse);
+      expect(envelope.signature.version, envelopeVersion);
+      expect((envelope.payload as Map)['v'], 99);
+    });
+
+    test('a payload version this build has no code for is refused', () async {
+      // Refusing beats reading it as v1: a later version's fields might mean
+      // something else, and sealing to a key resolved from a misread payload
+      // is not recoverable.
+      // Otherwise well-formed, so the refusal is about the version and not
+      // about a field the newer shape happens to be missing.
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode(
+              advertisementPayload(bobKey)
+                ..['v'] = nskeyAdvertisementVersion + 1,
+              type: EnvelopeType.nskeyRing));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()
+              .having((e) => '$e', 'message', contains('no code for'))));
+    });
+
+    test('an unsigned advertisement is rejected, not accepted bare', () async {
+      final c = client(payload: jsonEncode(advertisementPayload(bobKey)));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()),
+          reason: 'accepting a bare key would leave the sealing target only as '
+              'trustworthy as the server that served it');
+    });
+
+    /// An entry for an algorithm this build has no KEM for.
+    Map<String, Object?> unusableEntry() => {
+          'kid': 'a-kid-for-an-algorithm-nobody-here-implements',
+          'use': 'enc',
+          'alg': 'kyber-1024-v9',
+          'pub': base64Encode(List<int>.filled(32, 7)),
+        };
+
+    test('an entry this build cannot use is skipped, not fatal', () async {
+      // The list exists so an owner can offer a new KEM beside an old one: a
+      // reader that refused the whole advertisement on the first unknown entry
+      // would mean nobody could publish a new one without cutting off every
+      // peer that predates it.
+      final payload = advertisementPayload(bobKey);
+      (payload['keys'] as List).insert(0, unusableEntry());
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
+
+      final advertised =
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
+
+      expect(advertised?.publicKey, bobKey.publicKeyBytes,
+          reason: 'the unusable entry is FIRST in the list, so a reader taking '
+              'the first entry rather than the best usable one would have '
+              'picked it');
+    });
+
+    test('an advertisement of only unusable entries is refused', () async {
+      final payload = advertisementPayload(bobKey);
+      (payload['keys'] as List)
+        ..clear()
+        ..add(unusableEntry());
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>().having(
+              (e) => '$e', 'message', contains('cannot encapsulate to'))),
+          reason: 'a reader understanding no entry refuses outright — no '
+              'downgrade, and no fallback to a key derived some other way');
+    });
+
+    test('a retired entry is not what a sender is pointed at', () async {
+      // This record's own writer never retires an entry — it overwrites on
+      // rotation — so this is the reader honouring a vocabulary a foreign
+      // implementation may use. Encapsulating to a generation the owner has
+      // moved off writes something the owner never looks for.
+      //
+      // The retired entry is bob's X-Wing key, FIRST in
+      // SecretSharingAlgos.keyAlgos, so preference order on its own would
+      // choose it and only status can make the reader pass it over.
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final pair = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      final payload = advertisementPayload(bobKey);
+      for (final entry in payload['keys'] as List) {
+        (entry as Map)['status'] = 'retired';
+      }
+      (payload['keys'] as List).add({
+        'kid': nskeyKidOf(pair.publicKey),
+        'use': 'enc',
+        'alg': SecretSharingAlgos.mlKem1024,
+        'pub': base64Encode(pair.publicKey),
+      });
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
+
+      final advertised =
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
+
+      expect(advertised?.publicKey, pair.publicKey);
+      expect(advertised?.alg, SecretSharingAlgos.mlKem1024);
+      expect(advertised?.publicKey, isNot(bobKey.publicKeyBytes),
+          reason: 'the retired X-Wing key is the one preference order would '
+              'have reached first');
+    });
+
+    test('a retired entry is still checked for being well formed', () async {
+      // It is not sealed to, but it is still part of the document being
+      // believed. Waving it through would mean an owner could publish anything
+      // at all beside a good key by calling it retired.
+      final payload = advertisementPayload(bobKey);
+      (payload['keys'] as List).add({
+        'kid': nskeyKidOf(bobKey.publicKeyBytes),
+        'use': 'enc',
+        'alg': SecretSharingAlgos.xWing,
+        'pub': base64Encode(bobKey.publicKeyBytes.sublist(0, 100)),
+        'status': 'retired',
+      });
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()
+              .having((e) => '$e', 'message', contains('bytes'))));
+    });
+
+    test('an advertisement that retires every key it names is refused',
+        () async {
+      final payload = advertisementPayload(bobKey);
+      for (final entry in payload['keys'] as List) {
+        (entry as Map)['status'] = 'retired';
+      }
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()
+              .having((e) => '$e', 'message', contains('retires every key'))),
+          reason: 'a distinct refusal from the unusable-algorithm one: the '
+              'algorithms are fine and the owner has withdrawn the keys, '
+              'which is a different thing to go and look at');
+    });
+
+    test('a malformed entry beside a usable one still refuses', () async {
+      // Sealing to the good entry and ignoring the bad one would be reading
+      // past evidence that the owner's publishing is broken.
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final pair = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      final payload = advertisementPayload(bobKey);
+      (payload['keys'] as List).add({
+        'kid': nskeyKidOf(pair.publicKey),
+        'use': 'enc',
+        'alg': SecretSharingAlgos.mlKem1024,
+        // Truncated: a length this build CAN state, and does not match.
+        'pub': base64Encode(pair.publicKey.sublist(0, 100)),
+      });
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('a key that is not its algorithm\'s length is rejected', () async {
+      // The kid is the digest of whatever bytes are carried, so a forger gets
+      // a matching one for free and the kid check cannot see this. The length
+      // is what says these bytes are an X-Wing public key at all.
+      final truncated = bobKey.publicKeyBytes.sublist(0, 1000);
+      final payload = advertisementPayload(bobKey);
+      final entry = (payload['keys'] as List).first as Map;
+      entry['pub'] = base64Encode(truncated);
+      entry['kid'] = nskeyKidOf(truncated);
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()
+              .having((e) => '$e', 'message', contains('1216'))),
+          reason: 'a kid computed over the wrong bytes still matches them, so '
+              'only the length stands between a forged advertisement and the '
+              'seal');
+    });
+
+    test('a kid that does not name its own key is rejected', () async {
+      // The kid has to be written over the entry the codec built, because
+      // NskeyAdvertisement derives a kid from the key it is given and so
+      // cannot produce this pairing by construction.
+      final otherKey = await XWingKeyPair.generate();
+      final payload = advertisementPayload(bobKey);
+      ((payload['keys'] as List).first as Map)['kid'] =
+          nskeyKidOf(otherKey.publicKeyBytes);
+      final c = client(
+          payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()),
+          reason: 'a conveyance sealed under a kid the recipient never minted '
+              'can never be opened');
+    });
+
+    test('a verification failure is not swallowed as a cold start', () async {
+      // The distinction matters: cold start falls back, a failed verify must
+      // not. The provider decides what to do with the throw.
+      final c = client(payload: 'not json at all');
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+  });
+}

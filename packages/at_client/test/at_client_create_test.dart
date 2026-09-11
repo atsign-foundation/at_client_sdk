@@ -28,7 +28,7 @@ void main() {
   test('the client holds the storage it was given', () async {
     final storage =
         HiveAtClientStorage(atSign: '@factoryheld', storagePath: dir.path);
-    final client = await AtClient.create(
+    final client = await buildAtClient(
         atSign: '@factoryheld',
         namespace: 'wavi',
         preference: pref(),
@@ -44,7 +44,7 @@ void main() {
 
   test('the client is filed in the instance map, though not as the current one',
       () async {
-    final client = await AtClient.create(
+    final client = await buildAtClient(
         atSign: '@factorysolo', namespace: 'wavi', preference: pref());
 
     expect(client.getCurrentAtSign(), '@factorysolo');
@@ -63,7 +63,7 @@ void main() {
   });
 
   test('the services are wired', () async {
-    final client = await AtClient.create(
+    final client = await buildAtClient(
         atSign: '@factorywired', namespace: 'wavi', preference: pref());
 
     expect(() => client.syncService, returnsNormally);
@@ -75,7 +75,7 @@ void main() {
 
   test('a builder replaces the service it names', () async {
     final noOp = NoOpSyncService();
-    final client = await AtClient.create(
+    final client = await buildAtClient(
         atSign: '@factorybuilder',
         namespace: 'wavi',
         preference: pref(),
@@ -90,11 +90,11 @@ void main() {
 
   test('an atSign whose client is live is refused; stop() releases it',
       () async {
-    final first = await AtClient.create(
+    final first = await buildAtClient(
         atSign: '@factorytwice', namespace: 'wavi', preference: pref());
 
     await expectLater(
-        () => AtClient.create(
+        () => buildAtClient(
             atSign: '@factorytwice', namespace: 'wavi', preference: pref()),
         throwsA(isA<StateError>()
             .having((e) => e.message, 'message', contains('already live'))),
@@ -102,7 +102,7 @@ void main() {
             'every argument it passed');
 
     await first.stop();
-    final second = await AtClient.create(
+    final second = await buildAtClient(
         atSign: '@factorytwice', namespace: 'wavi', preference: pref());
     expect(second, isNot(same(first)),
         reason: 'stop() frees the atSign, so the refusal is about a LIVE '
@@ -113,7 +113,7 @@ void main() {
 
   test('buildRemoteSecondary carries the client identity a preference cannot',
       () async {
-    final client = await AtClient.create(
+    final client = await buildAtClient(
         atSign: '@buildsecondary',
         namespace: 'wavi',
         preference: pref()..privateKey = 'dummy_private_key',
@@ -140,7 +140,7 @@ void main() {
         HiveAtClientStorage(atSign: '@factorynolocal', storagePath: dir.path);
 
     await expectLater(
-        () => AtClient.create(
+        () => buildAtClient(
             atSign: '@factorynolocal',
             namespace: 'wavi',
             preference: pref()..isLocalStoreRequired = false,
@@ -160,7 +160,7 @@ void main() {
         closedByClient: true);
 
     await expectLater(
-        () => AtClient.create(
+        () => buildAtClient(
             atSign: '@factoryhalfbuilt',
             namespace: 'wavi',
             preference: pref(),
@@ -184,7 +184,7 @@ void main() {
         atSign: '@factoryhalfbuilt',
         storagePath: dir.path,
         closedByClient: true);
-    final client = await AtClient.create(
+    final client = await buildAtClient(
         atSign: '@factoryhalfbuilt',
         namespace: 'wavi',
         preference: pref(),

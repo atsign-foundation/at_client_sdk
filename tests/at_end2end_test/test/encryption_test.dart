@@ -20,10 +20,12 @@ void main() {
     atSign_2 = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(atSign_1, namespace, authType);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(atSign_2, namespace, authType);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        atSign_1, namespace, authType,
+        posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        atSign_2, namespace, authType,
+        posture: PqPosture.legacy);
   });
 
   tearDownAll(() {});
@@ -32,7 +34,8 @@ void main() {
     String atSign, {
     String? testProviderId,
   }) async {
-    final preference = TestPreferences.getInstance().getPreference(atSign);
+    final preference = TestPreferences.getInstance()
+        .getPreference(atSign, posture: PqPosture.legacy);
     if (testProviderId != null) {
       preference.crypto = CryptoConfig(
         defaultProviderId: legacyCryptoProviderId,
@@ -59,7 +62,8 @@ void main() {
     List<CryptoProvider> providers, {
     String defaultProviderId = legacyCryptoProviderId,
   }) async {
-    final preference = TestPreferences.getInstance().getPreference(atSign)
+    final preference = TestPreferences.getInstance()
+        .getPreference(atSign, posture: PqPosture.legacy)
       ..crypto = CryptoConfig(
         defaultProviderId: defaultProviderId,
         providers: providers,

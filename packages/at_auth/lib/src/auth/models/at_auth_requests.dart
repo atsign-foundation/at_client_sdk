@@ -20,21 +20,6 @@ sealed class AuthRequest {
   /// Options for retrying operations that validate atServer status' for Onboarding.
   RetryOptions retryOptions;
 
-  /// Signing algorithm to use for pkam authentication.
-  ///
-  /// On an [AtOnboardingRequest] this also decides what the activation mints:
-  /// `mldsa65` makes the atSign **PQ-native from activation** — the first
-  /// enrollment's APKAM is an ML-DSA-65 keypair, filed as typed material under
-  /// the enrollment id rather than in the flat `apkamPublicKey` /
-  /// `apkamPrivateKey` fields, which stay empty.
-  ///
-  /// That shape is why this is opt-in rather than the default: a keyfile whose
-  /// flat APKAM fields are absent makes any reader that calls
-  /// `AtKeys.toAtChops()` fail loudly instead of signing an ML-DSA key with
-  /// the RSA routine. Failing loudly is the point, but it is a behaviour
-  /// change no minor release may impose on existing consumers.
-  SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
-
   /// Hashing algorithm to use for pkam authentication
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 }
@@ -51,10 +36,21 @@ class AtOnboardingRequest extends AuthRequest {
 
   AtOnboardingRequest(
     super.atSign, {
+    required this.signingAlgoType,
     super.rootDomain,
     super.retryOptions,
     this.atKeysIo,
   });
+
+  /// The algorithm this activation's first APKAM keypair is minted under, and
+  /// the algorithm the connection then authenticates with.
+  ///
+  /// `mldsa65` makes the atSign PQ-native from activation: the keypair is
+  /// filed as typed material under the enrollment id and the flat
+  /// `apkamPublicKey` / `apkamPrivateKey` fields stay empty, so any reader
+  /// calling [AtKeys.toAtChops] on that keyfile fails loudly instead of
+  /// signing an ML-DSA key with the RSA routine.
+  SigningAlgoType signingAlgoType;
 
   // Default root domain and port
   String appName = "firstApp";
@@ -136,9 +132,6 @@ class AtAuthRequest extends AuthRequest {
 
   // Controls how the authentication is performed
   AtKeysIo? atKeysIo;
-
-  /// The enrollmentId for APKAM authentication
-  String? enrollmentId;
 
   /// The keys for authentication of an atSign.
   @Deprecated('remove in v5')

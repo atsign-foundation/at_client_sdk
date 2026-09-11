@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -52,6 +54,10 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   /// atServer does.
   Object? startError;
 
+  /// Awaited between the start and the watermark read, where the real
+  /// muxable authenticates, so a test can land a stop() in that window.
+  Future<void>? startGate;
+
   @override
   Stream<String> get notifications => _notifications.stream;
 
@@ -70,6 +76,7 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
     startCalls++;
     if (startError != null) throw startError!;
     started = true;
+    if (startGate != null) await startGate;
     // Invoked, as the real muxable does on every (re)connect - so these
     // assertions also prove the callback the Monitor hands down is callable.
     heldWatermarkSource = getLastNotificationTime;
@@ -116,6 +123,7 @@ void main() {
   late List<NotificationListenerState> states;
   int? watermark;
   Object? watermarkError;
+  var watermarkReads = 0;
 
   setUp(() {
     muxable = FakeMuxable();
@@ -123,12 +131,14 @@ void main() {
     states = [];
     watermark = null;
     watermarkError = null;
+    watermarkReads = 0;
     monitor = Monitor(
       atSign: '@alice',
       atClientPreference: AtClientPreference(),
       lookUp: muxable,
       handleNotification: (String n) async => received.add(n),
       getLastNotificationTime: () async {
+        watermarkReads++;
         if (watermarkError != null) throw watermarkError!;
         return watermark;
       },
@@ -188,14 +198,13 @@ void main() {
     });
 
     /// Reading the watermark is a local keystore operation, not part of
-    /// connecting, so its failure must not abort the connect. When such an
-    /// exception reached the connect handler, the monitor retried with backoff
-    /// for as long as the cause persisted - and a cause that is a local
-    /// configuration rather than network weather persists forever. The client
-    /// was silently deaf and the only symptom was the absence of `listening`.
+    /// connecting, so its failure must not abort the connect. A configuration
+    /// cause never clears, so a monitor that retries on one is silently deaf
+    /// with the absence of `listening` as its only symptom.
     test('a watermark read that throws does not stop it connecting', () async {
-      watermarkError =
-          Exception('the keystore refused the lastreceivednotification read');
+      watermarkError = LegacyEncryptionRefusedException(
+          'lastreceivednotification',
+          'the configured provider cannot handle this key');
 
       monitor.start();
       await Future.delayed(const Duration(milliseconds: 20));
@@ -259,6 +268,29 @@ void main() {
               'has stopped');
     }, timeout: Timeout(Duration(seconds: 15)));
 
+    test(
+        'a stop() that lands while the start is authenticating keeps the '
+        'watermark unread', () async {
+      final gate = Completer<void>();
+      muxable.startGate = gate.future;
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(muxable.startCalls, 1,
+          reason: 'the start is in flight, parked where the real muxable '
+              'authenticates');
+
+      monitor.stop();
+      gate.complete();
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(watermarkReads, 0,
+          reason: 'the watermark lives in the client store, which stop() '
+              'has closed by the time the start resumes; reading it there is '
+              'the "Box not found" the live packs log');
+      expect(muxable.startedWithWatermark, isNull,
+          reason: 'the start still completes, without a watermark');
+    }, timeout: Timeout(Duration(seconds: 15)));
+
     test('a start that fails leaves it notConnected', () async {
       // Ported in spirit from "secondary not available" and "secondary
       // reachable but rejecting commands", both of which now fail inside the
@@ -316,10 +348,10 @@ void main() {
               'without the pause both run at once - the watermark is then '
               'written out of arrival order and the atServer replays a window '
               'on the next reconnect');
-      // Measured 1 and 1, not 2 and 2: the second notification is delivered
-      // out of the controller's buffer while it is still draining, and a
-      // pause during that does not re-fire onPause. What matters is that the
-      // seam is reached at all and left balanced.
+      // The count is 1 and 1, not 2 and 2: the second notification is
+      // delivered out of the controller's buffer while it is still draining,
+      // and a pause during that does not re-fire onPause. What matters is that
+      // the seam is reached at all and left balanced.
       expect(muxable.pauses, greaterThan(0),
           reason: 'the pause reached the connection rather than being an '
               'accident of handler timing: at_lookup carries it to the '

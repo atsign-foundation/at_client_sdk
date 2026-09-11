@@ -1,29 +1,32 @@
 import 'dart:async';
-import 'dart:convert'
-    show base64Decode, base64Encode, jsonDecode, jsonEncode, utf8;
+import 'dart:math' show Random;
+import 'dart:convert' show base64Decode, jsonDecode, jsonEncode, utf8;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_chops/at_chops.dart'
-    show PqOpenException, XWingPureDartAlgo, pqOpen, pqSeal;
-import 'package:at_client/at_client.dart'
-    show
-        AtKey,
-        AtNotification,
-        AtValue,
-        DeleteRequestOptions,
-        GetRequestOptions,
-        NotificationParams,
-        PutRequestOptions,
-        SyncDirection,
-        SyncProgress,
-        SyncProgressListener;
+import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, PqOpenException;
+import 'package:at_client/src/secret_sharing/pq_envelope.dart'
+    show pqOpenFromBase64, pqSealToBase64;
+import 'package:at_client/src/client/request_options.dart'
+    show DeleteRequestOptions, GetRequestOptions, PutRequestOptions;
+import 'package:at_client/src/response/at_notification.dart'
+    show AtNotification;
+import 'package:at_client/src/service/notification_service.dart'
+    show NotificationParams;
+import 'package:at_client/src/service/sync_service.dart'
+    show SyncDirection, SyncProgress, SyncProgressListener, SyncService;
+import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
+    show NamespaceMember;
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';
 import 'package:at_client/src/secret_sharing/secret_envelope.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:uuid/uuid.dart' show Uuid;
-import 'package:meta/meta.dart' show experimental;
+import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 /// A decrypted, signature-verified payload received from another APKAM
 /// keypair of the same atSign.
@@ -89,30 +92,40 @@ typedef SecretRequestPolicy = FutureOr<bool> Function(
 /// envelopes expire via [envelopeTtl].
 @experimental
 mixin PairwiseSecretSharing on KeyPackageRegistration {
-  /// Marker segment in envelope key names.
-  static const String envelopeKeyMarker = '__ssenv';
+  /// Marker segment in envelope key names — see [EnvelopeAddressing], which
+  /// owns the address format.
+  static const String envelopeKeyMarker = EnvelopeAddressing.marker;
 
   /// Domain-separation context bound into every sealed envelope's key
   /// schedule (the `info` argument to at_chops `pqSeal`/`pqOpen`). Ties a
   /// sealed payload to this substrate so it cannot be replayed into another
   /// `pqSeal`-based protocol, and vice versa.
-  static final Uint8List _sealInfo =
+  static final Uint8List sealInfo =
       Uint8List.fromList(utf8.encode('at_client/secret_sharing/v1'));
 
   /// How long an unconsumed envelope lives on the atServer.
   Duration envelopeTtl = Duration(days: 7);
 
-  /// How often [startListening] sweeps the local store for envelopes, in
-  /// addition to sweeping when sync delivers one.
+  /// How often [startListening] sweeps for envelopes, in addition to sweeping
+  /// when sync delivers one. Whether that sweep reads the local store or the
+  /// atServer is decided by [clientRunsSync].
   Duration sweepInterval = Duration(minutes: 1);
+
+  /// Whether this client runs sync (default true).
+  ///
+  /// Envelopes reach the local store only via sync, so when this is false
+  /// [startListening]'s initial and periodic sweeps read the atServer instead.
+  bool clientRunsSync = true;
 
   /// Whether [sendEnvelope] also fires a best-effort wake-up notification
   /// (default on) after the put. Clients that run sync receive envelopes via
   /// sync without it; sync-less clients rely on it (their [startListening]
   /// monitors for it and does a remote sweep). It is best-effort: the
-  /// envelope is already durably stored, so a failed wake-up never fails the
-  /// send. A future atServer enhancement will emit this notification itself
-  /// on a put to an `__ssenv` key, at which point senders can leave it off.
+  /// envelope is already on the atServer when this fires, so a failed wake-up
+  /// never fails the send and a wake-up that arrives never points at a value
+  /// that has not landed. A future atServer enhancement will emit this
+  /// notification itself on a put to an `__ssenv` key, at which point senders
+  /// can leave it off.
   bool sendWakeUpNotification = true;
 
   final StreamController<ReceivedEnvelope> _receivedController =
@@ -121,7 +134,16 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       StreamController<ReceivedSecret>.broadcast();
   Timer? _sweepTimer;
   _EnvelopeSyncListener? _syncListener;
+
+  /// The service [_syncListener] was added to, held so it can be removed from
+  /// the same one. `AtClient.syncService` throws once the client is stopped,
+  /// and this runs during that teardown.
+  SyncService? _listeningTo;
   StreamSubscription<AtNotification>? _wakeUpSubscription;
+
+  /// The addresses [startListening] took, so a service that arrives later is
+  /// attached for the same ones.
+  Set<String>? _listeningFor;
 
   /// Envelope keys already emitted on [receivedEnvelopes], so a sweep that
   /// races a slow delete cannot emit a payload twice.
@@ -132,6 +154,16 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// key package of the request's namespace).
   SecretRequestPolicy? answerSecretRequests;
 
+  /// Decides whether the enrollment behind a request may be handed a
+  /// per-enrollment (`__en.`-prefixed) secret.
+  ///
+  /// Null — the default — **fails closed**: per-enrollment secrets are never
+  /// served on request. Namespace authorization, which is all the answer path
+  /// otherwise checks, is the wrong bar for these — every enrollment approved
+  /// for the namespace clears it.
+  Future<bool> Function(String requesterEnrollmentId)?
+      perEnrollmentSecretRequestGate;
+
   /// Anti-storm floor: the same (requester, secret-name) is answered at most
   /// once per this interval. A burst of duplicate requests collapses to one
   /// share.
@@ -140,6 +172,18 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// `'<requesterKpid>:<secretName>' → last answered at`. In-memory; the
   /// cap is best-effort anti-storm, not a security control.
   final Map<String, DateTime> _lastAnsweredRequest = {};
+
+  /// How long a responder waits, uniformly at random within this window,
+  /// before answering a pull request.
+  ///
+  /// Every authorised holder sees the same request and would otherwise answer
+  /// at once; the wait spreads them out so that a holder can observe that
+  /// another has already answered. [Duration.zero] answers immediately.
+  Duration requestAnswerJitter = const Duration(seconds: 2);
+
+  /// Source of the jitter, injectable so a test can make it deterministic.
+  @visibleForTesting
+  Random requestAnswerRandom = Random();
 
   /// The secrets this client holds: what it created via
   /// [SecretStore.putSecret], plus what other APKAM keypairs shared with it
@@ -172,57 +216,85 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   ///
   /// Throws [StateError] if [to] advertises no key with a mutually-supported
   /// algorithm.
+  /// [inReplyTo] correlates this envelope with the request it answers, and is
+  /// [EnvelopeAddressing.unsolicited] for a request or an unsolicited push.
   Future<void> sendEnvelope(
     KeyPackage to,
     String appNamespace,
-    Map<String, dynamic> payload,
-  ) async {
-    final PackageKey? recipientKey = to.bestKeyFor(SecretSharingAlgos.keyAlgos);
+    Map<String, dynamic> payload, {
+    String inReplyTo = EnvelopeAddressing.unsolicited,
+  }) async {
+    final sealsTo = atClient.getPreferences()?.sealsToKeyAlgorithms ??
+        SecretSharingAlgos.keyAlgos;
+    final PackageKey? recipientKey = to.bestKeyFor(sealsTo);
     if (recipientKey == null) {
       throw StateError(
           'Key package ${to.enrollmentId}/${to.apkamId} advertises no key '
-          'with a supported algorithm (supported: '
-          '${SecretSharingAlgos.keyAlgos})');
+          'this client will seal to (it advertises '
+          '${to.keys.map((k) => k.alg).toSet().join(', ')}; this client seals '
+          'to ${sealsTo.join(', ')})');
     }
 
-    // X-Wing HPKE: pqSeal encapsulates to the recipient's published key and
-    // wraps the payload (AEAD over an HKDF key schedule) into one envelope —
-    // nothing secret travels except that sealed envelope.
-    final Uint8List sealed = await pqSeal(
-      XWingPureDartAlgo.instance,
+    // NOTE: candidates are narrowed to the chosen key's own KEM, so a suite
+    // the recipient's key cannot decapsulate can never be picked.
+    final AtKemAlgorithm? kem = SecretSharingAlgos.kemFor(recipientKey.alg);
+    final String? suite =
+        to.bestSuiteFor(SecretSharingAlgos.openableSuitesFor(recipientKey.alg));
+    final int? version =
+        suite == null ? null : SecretSharingAlgos.sealVersionFor(suite);
+    if (kem == null || suite == null || version == null) {
+      throw StateError('No mutually supported construction for key package '
+          '${to.enrollmentId}/${to.apkamId}: it advertises a '
+          '${recipientKey.alg} key opening ${to.suites}, and this client '
+          'produces ${SecretSharingAlgos.suites}');
+    }
+
+    final String sealed = await pqSealToBase64(
+      kem,
       base64Decode(recipientKey.pub),
       Uint8List.fromList(utf8.encode(jsonEncode(payload))),
-      info: _sealInfo,
+      info: sealInfo,
+      version: version,
     );
 
     final envelope = SecretEnvelope(
       fromKpid: kpid,
       fromEnrollmentId: enrollmentId,
       toKpid: recipientKey.kid,
-      suite: SecretSharingAlgos.xWingHpke,
+      suite: suite,
       kid: recipientKey.kid,
-      sealed: base64Encode(sealed),
+      sealed: sealed,
     );
     // pqSeal's AEAD authenticates the payload; the APKAM signature over the
     // whole envelope additionally authenticates the SENDER (receivers still
     // verify before decrypting).
-    final String signedJson = await wrapAndSignAndJsonEncode(envelope.toJson());
+    final String signedJson = await wrapAndSignAndJsonEncode(envelope.toJson(),
+        type: EnvelopeType.secretEnvelope);
 
-    final atKey = AtKey()
-      ..key = '${Uuid().v4()}.${recipientKey.kid}.$envelopeKeyMarker'
-      ..namespace = appNamespace
-      ..sharedBy = atClient.getCurrentAtSign()
-      ..metadata.ttl = envelopeTtl.inMilliseconds;
+    final atKey = EnvelopeAddressing.envelopeKey(
+      msgId: Uuid().v4(),
+      inReplyTo: inReplyTo,
+      recipientKpid: recipientKey.kid,
+      appNamespace: appNamespace,
+      sharedBy: atClient.getCurrentAtSign(),
+      ttl: envelopeTtl,
+    );
     // shouldEncrypt=false: the value is already end-to-end encrypted to the
     // recipient; self-key encryption would only obscure that the payload is
     // our own ciphertext. The value is raw JSON (never whole-value base64) so
     // that pre-fix readers' legacy decrypt fallback also returns it untouched.
+    //
+    // useRemoteAtServer=true: the wake-up below is a direct remote call, so a
+    // local-first put would let it outrun the envelope and spend a one-shot
+    // wake-up on an atServer that does not hold the value yet.
     await atClient.put(
       atKey,
       signedJson,
-      putRequestOptions: PutRequestOptions()..shouldEncrypt = false,
+      putRequestOptions: PutRequestOptions()
+        ..shouldEncrypt = false
+        ..useRemoteAtServer = true,
     );
-    logger.info('Stored secret envelope $atKey for kpid ${recipientKey.kid}');
+    logger.finer('Stored secret envelope $atKey for kpid ${recipientKey.kid}');
 
     if (sendWakeUpNotification) {
       await _sendWakeUp(atKey, appNamespace);
@@ -258,31 +330,41 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
   }
 
-  /// Starts watching for envelopes addressed to this client: sweeps the local
-  /// store now, after every sync that delivers an envelope key, and every
-  /// [sweepInterval]; and subscribes to wake-up notifications, doing a remote
-  /// sweep on each (which is how a sync-less client receives envelopes at
-  /// all). Requires [register] to have completed.
+  /// Starts watching for envelopes addressed to this client: sweeps now, after
+  /// every sync that delivers an envelope key, and every [sweepInterval]; and
+  /// subscribes to wake-up notifications, doing a remote sweep on each.
+  ///
+  /// The initial and periodic sweeps read wherever [clientRunsSync] says
+  /// envelopes arrive — the local store when sync is running, the atServer
+  /// when it is not. Requires [register] to have completed.
   Future<void> startListening() async {
     if (_sweepTimer != null) {
       return;
     }
-    // Throws StateError if not registered:
-    final String marker = '.$kpid.$envelopeKeyMarker.';
+    // Throws StateError if not registered. Every address this client holds,
+    // not just the active one: a sender that read the key package before a
+    // rotation addresses the superseded key.
+    final Set<String> addresses = heldKpids;
+    if (addresses.isEmpty) {
+      logger.finer('Not listening for envelopes: this client holds no key '
+          'package, so nothing can be addressed to it');
+      return;
+    }
+    final List<String> markers = [
+      for (final held in addresses) EnvelopeAddressing.fragmentFor(held)
+    ];
 
-    _syncListener = _EnvelopeSyncListener(marker, () {
-      unawaited(sweepOnce());
+    _syncListener = _EnvelopeSyncListener(markers, () {
+      _sweepInBackground();
     });
-    atClient.syncService.addProgressListener(_syncListener!);
-    // A wake-up notification only nudges us; the envelope itself is fetched
-    // from the atServer (a sync-less client has no local copy), so the sweep
-    // it triggers reads remote.
-    _wakeUpSubscription = atClient.notificationService
-        .subscribe(
-            regex: '\\.$kpid\\.$envelopeKeyMarker\\.', shouldDecrypt: false)
-        .listen((_) => unawaited(sweepOnce(fromRemote: true)));
-    _sweepTimer = Timer.periodic(sweepInterval, (_) => unawaited(sweepOnce()));
-    await sweepOnce();
+    _listeningFor = addresses;
+    attachToServices();
+    final bool sweepRemote = !clientRunsSync;
+    _sweepTimer = Timer.periodic(
+        sweepInterval, (_) => _sweepInBackground(fromRemote: sweepRemote));
+    // Awaited, not routed through _sweepInBackground: a start-up sweep that
+    // fails belongs to the caller, not to a log line.
+    await sweepOnce(fromRemote: sweepRemote);
   }
 
   /// Stops watching. The [receivedEnvelopes] stream stays open; a later
@@ -291,11 +373,88 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     _sweepTimer?.cancel();
     _sweepTimer = null;
     if (_syncListener != null) {
-      atClient.syncService.removeProgressListener(_syncListener!);
+      _listeningTo?.removeProgressListener(_syncListener!);
+      _listeningTo = null;
       _syncListener = null;
     }
     unawaited(_wakeUpSubscription?.cancel());
     _wakeUpSubscription = null;
+    _listeningFor = null;
+  }
+
+  /// Hooks the running listener onto whichever of the client's sync and
+  /// notification services are set, once each, so a service set after
+  /// [startListening] is attached too; a no-op before it and after
+  /// [stopListening].
+  void attachToServices() {
+    final listener = _syncListener;
+    final addresses = _listeningFor;
+    if (listener == null || addresses == null) return;
+    // Best effort, because this runs inside the client's service setters and a
+    // client must come up whether or not its envelope listener did.
+    if (_listeningTo == null) {
+      try {
+        final sync = _serviceIfSet(() => atClient.syncService);
+        if (sync != null) {
+          _listeningTo = sync;
+          sync.addProgressListener(listener);
+        }
+      } catch (e) {
+        logger.warning('Could not attach the envelope listener to sync for '
+            '${atClient.getCurrentAtSign()}; envelopes delivered by sync will '
+            'wait for the next periodic sweep: $e');
+      }
+    }
+    if (_wakeUpSubscription == null) {
+      try {
+        final notifications = _serviceIfSet(() => atClient.notificationService);
+        if (notifications != null) {
+          // A wake-up notification only nudges us; the envelope itself is
+          // fetched from the atServer (a sync-less client has no local copy),
+          // so the sweep it triggers reads remote.
+          _wakeUpSubscription = notifications
+              .subscribe(
+                  regex: EnvelopeAddressing.regexForAny(addresses),
+                  shouldDecrypt: false)
+              .listen((_) => _sweepInBackground(fromRemote: true));
+        }
+      } catch (e) {
+        logger.warning('Could not subscribe to envelope wake-ups for '
+            '${atClient.getCurrentAtSign()}; envelopes will wait for sync or '
+            'the next periodic sweep: $e');
+      }
+    }
+  }
+
+  /// A service getter throws [StateError] until the manager sets it and again
+  /// once the client is stopped; both read as absent here.
+  T? _serviceIfSet<T>(T Function() read) {
+    try {
+      return read();
+    } on StateError {
+      return null;
+    }
+  }
+
+  /// [sweepOnce] for the three callers that cannot await it — the sync-progress
+  /// listener, the wake-up subscription and the periodic timer.
+  ///
+  /// ⚠️ A sweep opens with a `getAtKeys` over the wire, so it throws on a
+  /// transient network failure and on every trigger of a **revoked**
+  /// enrollment for as long as the client runs. Bare `unawaited` would turn
+  /// that into an unhandled async error in whichever zone the trigger fired
+  /// in, which can take the isolate down, so failures are logged at `warning`
+  /// and swallowed — losing a sweep is not losing an envelope, because the
+  /// next trigger sweeps the same addresses again.
+  void _sweepInBackground({bool fromRemote = false}) {
+    unawaited(sweepOnce(fromRemote: fromRemote).catchError((Object e) {
+      logger.warning(
+          'Background envelope sweep failed for ${atClient.getCurrentAtSign()}'
+          '${atClient.enrollmentId == null ? '' : ' (enrollment '
+              '${atClient.enrollmentId})'}; the next trigger sweeps the same '
+          'addresses again: $e');
+      return 0;
+    }));
   }
 
   /// Scans for envelopes addressed to this client; verifies, decrypts, emits
@@ -309,7 +468,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// no synced local copy — can still receive envelopes.
   Future<int> sweepOnce({bool fromRemote = false}) async {
     final List<AtKey> envelopeKeys = await atClient.getAtKeys(
-        regex: '.*\\.$kpid\\.$envelopeKeyMarker\\..*',
+        regex: EnvelopeAddressing.sweepRegexForAny(heldKpids),
         useRemoteAtServer: fromRemote);
     int consumed = 0;
     for (final envelopeKey in envelopeKeys) {
@@ -321,27 +480,36 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       if (!_consumedEnvelopeKeys.add(keyString)) {
         continue;
       }
+      final ReceivedEnvelope? received;
       try {
-        final ReceivedEnvelope? received =
-            await _consume(envelopeKey, fromRemote: fromRemote);
-        if (received == null) {
-          // Not (or not yet) processable by this client; leave it for a
-          // sibling/upgraded client or for ttl expiry.
-          _consumedEnvelopeKeys.remove(keyString);
-          continue;
-        }
-        _receivedController.add(received);
-        await _handleSecretPayload(received); // no-op unless kind=='secret'
-        await _handleRequestPayload(received); // no-op unless kind=='request'
-        consumed++;
+        received = await _consume(envelopeKey, fromRemote: fromRemote);
       } catch (e) {
         // Includes transient failures (e.g. fetching the signer's _apsk key)
         // — never delete on failure; release the claim so the next sweep
-        // retries.
+        // retries. Nothing has been emitted yet, so a retry repeats nothing.
         _consumedEnvelopeKeys.remove(keyString);
         logger.warning('Failed to process envelope $envelopeKey: $e');
         continue;
       }
+      if (received == null) {
+        // Not (or not yet) processable by this client; leave it for a
+        // sibling/upgraded client or for ttl expiry.
+        _consumedEnvelopeKeys.remove(keyString);
+        continue;
+      }
+      _receivedController.add(received);
+      try {
+        await _handleSecretPayload(received); // no-op unless kind=='secret'
+        await _handleRequestPayload(received); // no-op unless kind=='request'
+      } catch (e) {
+        // NOTE: the envelope has been EMITTED — releasing the claim here would
+        // hand it to the next sweep for a second emission. The claim and the
+        // envelope are both kept; a fresh process retries the whole thing.
+        logger.warning('Envelope $envelopeKey was received but its payload '
+            'handler failed; it is kept for a retry at the next start: $e');
+        continue;
+      }
+      consumed++;
       try {
         await atClient.delete(envelopeKey,
             deleteRequestOptions: DeleteRequestOptions()
@@ -360,46 +528,56 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       {bool fromRemote = false}) async {
     final AtValue av = await atClient.get(envelopeKey,
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = fromRemote);
-    final signedEnvelope = jsonDecode(av.value as String) as Map;
+    final signedEnvelope =
+        SignedEnvelope.fromJson(jsonDecode(av.value as String) as Map);
     // Verify FIRST: the sealed envelope's AEAD authenticates the payload
     // bytes, but only the APKAM signature authenticates WHO sent it.
     await verifyEnvelopeSignature(signedEnvelope,
-        signerAtSign: atClient.getCurrentAtSign()!);
-    final envelope = SecretEnvelope.fromJson(signedEnvelope['payload']);
+        signerAtSign: atClient.getCurrentAtSign()!,
+        expecting: EnvelopeType.secretEnvelope);
+    final envelope = SecretEnvelope.fromJson(signedEnvelope.payload);
 
-    if (envelope.toKpid != kpid) {
+    if (!heldKpids.contains(envelope.toKpid)) {
       logger.warning('Envelope $envelopeKey is addressed to '
-          '${envelope.toKpid}, not to this client; skipping');
+          '${envelope.toKpid}, not to any key this client holds; skipping');
       return null;
     }
-    if (signedEnvelope['enrollmentId'] != envelope.fromEnrollmentId) {
+    final signerClaim = signedEnvelope.signerEnrollmentId;
+    if (signerClaim != envelope.fromEnrollmentId) {
       logger.warning('Envelope $envelopeKey: signer enrollment '
-          '${signedEnvelope['enrollmentId']} does not match claimed sender '
+          '$signerClaim does not match claimed sender '
           'enrollment ${envelope.fromEnrollmentId}; skipping');
       return null;
     }
-    if (!SecretSharingAlgos.suites.contains(envelope.suite)) {
+    // Resolving the KEM doubles as the support check: a suite with no KEM
+    // cannot be opened.
+    final AtKemAlgorithm? kem = SecretSharingAlgos.kemForSuite(envelope.suite);
+    if (kem == null) {
       logger.warning('Envelope $envelopeKey uses unsupported sealing suite '
           '${envelope.suite}; skipping');
       return null;
     }
-    if (envelope.kid != kpid) {
+    // Not necessarily the key this client currently advertises: a sender that
+    // read the key package before a rotation sealed to the superseded key,
+    // which is retained precisely so this still opens.
+    final held = encKeyFor(envelope.kid);
+    if (held == null) {
       logger.warning('Envelope $envelopeKey was encrypted to key '
           '${envelope.kid} which this client does not hold; skipping');
       return null;
     }
 
-    // pqOpen's AEAD authenticates: tampering, a wrong-recipient
-    // decapsulation, or mismatched `info` all surface as a PqOpenException.
-    // It is deterministic — retrying cannot help — so a failure leaves the
-    // envelope for ttl expiry rather than blocking sweeps forever.
+    // NOTE: the KEM instance must match the suite the envelope names — a
+    // hybrid envelope decapsulated with ML-KEM fails indistinguishably from a
+    // tampered one. Every PqOpenException here is deterministic, so a failed
+    // envelope is left to expire by ttl rather than blocking sweeps.
     final Uint8List plaintext;
     try {
-      plaintext = await pqOpen(
-        XWingPureDartAlgo.instance,
-        xWingSeed,
-        base64Decode(envelope.sealed),
-        info: _sealInfo,
+      plaintext = await pqOpenFromBase64(
+        kem,
+        held.secretKey,
+        envelope.sealed,
+        info: sealInfo,
       );
     } on PqOpenException catch (e) {
       logger.warning('Envelope $envelopeKey failed to open ($e); skipping');
@@ -409,24 +587,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     return ReceivedEnvelope(
       fromKpid: envelope.fromKpid,
       fromEnrollmentId: envelope.fromEnrollmentId,
-      appNamespace: _appNamespaceOf(envelopeKey),
+      appNamespace: EnvelopeAddressing.appNamespaceOf(envelopeKey),
       payload: jsonDecode(utf8.decode(plaintext)) as Map<String, dynamic>,
     );
-  }
-
-  /// The full application namespace of an envelope key: everything between
-  /// the `.__ssenv.` marker and the atSign. `AtKey.namespace` only carries
-  /// the last dot segment, which would truncate dotted app namespaces
-  /// (`examples.demos` would arrive as `demos`).
-  String _appNamespaceOf(AtKey envelopeKey) {
-    final String keyString = envelopeKey.toString();
-    final int markerIndex = keyString.indexOf('.$envelopeKeyMarker.');
-    final int atIndex = keyString.lastIndexOf('@');
-    if (markerIndex < 0 || atIndex <= markerIndex) {
-      return envelopeKey.namespace ?? '';
-    }
-    return keyString.substring(
-        markerIndex + envelopeKeyMarker.length + 2, atIndex);
   }
 
   /// Payload `kind` marker for envelopes that carry a [Secret].
@@ -444,6 +607,15 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// resolves any racing [waitForSecret]).
   static const String secretRequestKind = 'request';
 
+  /// Whether [member] is this client, so a broadcast skips itself.
+  ///
+  /// Identity is the **enrollment**, not the kpid: a kpid is the reader's
+  /// choice of addressing token, so two builds can disagree about the same
+  /// package's kpid and an instance whose enrollment changed under it holds a
+  /// stale one. A client with no enrollment matches nothing.
+  bool _isSelf(NamespaceMember member, String selfEnrollmentId) =>
+      member.enrollmentId == selfEnrollmentId;
+
   /// Broadcasts a pull request for held secrets to every key package
   /// registered for [namespace] (minus this client). Holders that pass the
   /// answer policy reply by sharing the matching secrets; the caller typically
@@ -459,16 +631,39 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   }) async {
     final members = await directory.listForNamespace(namespace,
         excludeEnrollmentIds: excludeEnrollmentIds);
+    final String selfId = enrollmentId;
+    // ONE id for the whole fan-out: it is what lets a second holder see that a
+    // first has already answered THIS request rather than other traffic at the
+    // same address.
+    final String requestId = Uuid().v4().replaceAll('-', '').substring(0, 16);
     int sent = 0;
     for (final member in members) {
       final to = member.keyPackage;
-      if (to != null && to.kpid != null && to.kpid != kpid) {
-        await sendEnvelope(to, namespace, {
-          'kind': secretRequestKind,
-          if (names != null) 'want': names,
-          if (namePrefix != null) 'namePrefix': namePrefix,
-        });
-        sent++;
+      if (to != null && to.kpid != null && !_isSelf(member, selfId)) {
+        // Per member: sendEnvelope throws StateError when a member advertises
+        // no mutually supported algorithm, and the design is N holders
+        // precisely so that some can be unreachable.
+        try {
+          await sendEnvelope(
+              to,
+              namespace,
+              {
+                'kind': secretRequestKind,
+                'requestId': requestId,
+                if (names != null) 'want': names,
+                if (namePrefix != null) 'namePrefix': namePrefix,
+              },
+              // The request answers nothing; its own id travels in the sealed
+              // payload, where a holder can trust it.
+              inReplyTo: EnvelopeAddressing.unsolicited);
+          sent++;
+        } catch (e) {
+          // Warning, not finer: a request that never went out is
+          // indistinguishable from one nobody answered.
+          logger.warning('Could not request secrets from enrollment '
+              '${member.enrollmentId} (kpid ${to.kpid}) in $namespace: $e. '
+              'The remaining members are still being asked.');
+        }
       }
     }
     return sent;
@@ -523,16 +718,71 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
     final policy = answerSecretRequests;
     if (policy != null && !(await policy(received, requester))) {
+      // Warning, and it names both sides: a holder that declines is the only
+      // party that knows it did, and the requester cannot tell that from
+      // nobody holding the secret or from the envelope never arriving.
+      logger.warning('Declining to answer the secret request from kpid '
+          '${received.fromKpid} (enrollment ${received.fromEnrollmentId}) in '
+          '${received.appNamespace}: the answer policy refused it. The '
+          'requester will see no reply.');
+      return;
+    }
+
+    if (requestAnswerJitter > Duration.zero) {
+      await Future.delayed(Duration(
+          microseconds:
+              requestAnswerRandom.nextInt(requestAnswerJitter.inMicroseconds)));
+    }
+
+    // Read from the SEALED payload, never from the key name: the name is
+    // written by the sender and nothing authenticates it.
+    final String? requestId = received.payload['requestId'] as String?;
+    if (requestId == null) {
+      // Fail open: answering costs a duplicate the requester merges away,
+      // while standing down costs it the secret with no error either side.
+      logger.info('Answering kpid ${received.fromKpid} in '
+          '${received.appNamespace} without checking whether another holder '
+          'already did: the request carries no requestId to correlate on');
+    }
+    final suppressedBy = requestId == null
+        ? const <String>{}
+        : await _envelopesSuggestingAnAnswer(
+            requestId, received.fromKpid, received.appNamespace);
+    if (suppressedBy.isNotEmpty) {
+      // Warning, and it names the record it matched: this drops an answer
+      // inside a dispatch loop, and a match is not by itself evidence that
+      // anybody answered.
+      logger.warning('Not answering request $requestId from kpid '
+          '${received.fromKpid} (enrollment ${received.fromEnrollmentId}) in '
+          '${received.appNamespace}: ${suppressedBy.length} envelope(s) '
+          'already answer it. Matched: ${suppressedBy.join(", ")}');
       return;
     }
 
     final want = (received.payload['want'] as List?)?.cast<String>().toSet();
     final namePrefix = received.payload['namePrefix'] as String?;
     final now = DateTime.now();
-    for (final secret in secretStore.listSecrets(
-        namespace: received.appNamespace, namePrefix: namePrefix)) {
+    // Resolved at most once per inbound request, not per matching secret —
+    // it costs a round trip to the enrollment record.
+    bool? requesterMayTakePerEnrollment;
+    for (final secret in _candidatesFor(received, want, namePrefix)) {
       if (want != null && !want.contains(secret.name)) {
         continue;
+      }
+      if (isPerEnrollmentSecretName(secret.name)) {
+        final gate = perEnrollmentSecretRequestGate;
+        requesterMayTakePerEnrollment ??=
+            gate != null && await gate(received.fromEnrollmentId);
+        if (!requesterMayTakePerEnrollment) {
+          // Warning, not finer: a refused serve must be attributable, or it
+          // presents as the holder never having answered.
+          logger.warning('Not serving ${secret.name} to enrollment '
+              '${received.fromEnrollmentId} (kpid ${received.fromKpid}): '
+              'per-enrollment secrets are served only to fully privileged '
+              'enrollments${gate == null ? ', and no privilege resolver is '
+                  'wired on this sharing instance' : ''}');
+          continue;
+        }
       }
       final rateKey = '${received.fromKpid}:${secret.name}';
       final last = _lastAnsweredRequest[rateKey];
@@ -540,9 +790,65 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         continue;
       }
       _lastAnsweredRequest[rateKey] = now;
-      await shareSecretWith(requester, secret);
+      await shareSecretWith(requester, secret,
+          inReplyTo: requestId ?? EnvelopeAddressing.unsolicited);
     }
   }
+
+  /// The store entries an inbound request may be answered from.
+  ///
+  /// Namespace-scoped, except for **explicitly named per-enrollment
+  /// secrets**: those are addressed to an enrollment and carry no namespace of
+  /// their own, so they match across namespaces. Named secrets only — a prefix
+  /// or bare request still cannot sweep another namespace's material, and
+  /// widening the search does not widen who is served.
+  Iterable<Secret> _candidatesFor(
+      ReceivedEnvelope received, Set<String>? want, String? namePrefix) {
+    final scoped = secretStore.listSecrets(
+        namespace: received.appNamespace, namePrefix: namePrefix);
+    final crossNamespaceNames =
+        want?.where(isPerEnrollmentSecretName).toSet() ?? const <String>{};
+    if (crossNamespaceNames.isEmpty) return scoped;
+
+    final seen = scoped.map((s) => (s.namespace, s.name)).toSet();
+    return [
+      ...scoped,
+      ...secretStore.listSecrets().where((s) =>
+          crossNamespaceNames.contains(s.name) &&
+          !seen.contains((s.namespace, s.name))),
+    ];
+  }
+
+  /// Envelope keys currently addressed to [kpid] in [appNamespace], read from
+  /// the atServer, where [sendEnvelope] writes them.
+  Future<Set<String>> _answerKeysFor(
+      String requestId, String kpid, String appNamespace) async {
+    try {
+      final keys = await atClient.getAtKeys(
+          regex: EnvelopeAddressing.answerSweepRegexFor(
+              requestId, kpid, appNamespace),
+          useRemoteAtServer: true);
+      return keys.map((k) => k.toString()).toSet();
+    } catch (e) {
+      // Fail open: a duplicate the requester merges away costs less than
+      // withholding the secret entirely.
+      logger.info('Could not check whether request $requestId to kpid $kpid '
+          'was already answered, so answering: $e');
+      return const {};
+    }
+  }
+
+  /// The envelope keys already answering [requestId] for [kpid] in
+  /// [appNamespace] — returned rather than a bool so a caller can name them.
+  ///
+  /// Coarse by design: it cannot see *what* was answered, which does not
+  /// matter because a responder answers every matching secret in one pass.
+  /// ⚠️ Over-suppressing is **not** a retry — nothing re-asks, so a holder
+  /// that stands down here on a record that is not an answer costs the
+  /// requester the secret outright, and silently.
+  Future<Set<String>> _envelopesSuggestingAnAnswer(
+          String requestId, String kpid, String appNamespace) async =>
+      _answerKeysFor(requestId, kpid, appNamespace);
 
   /// Returns the secret `(namespace, name)` as soon as this client holds
   /// it: immediately from [secretStore] when already present, otherwise the
@@ -610,14 +916,22 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   }
 
   /// Shares one secret with one key package.
-  Future<void> shareSecretWith(KeyPackage to, Secret secret) =>
-      sendEnvelope(to, secret.namespace, {
-        'kind': secretPayloadKind,
-        'name': secret.name,
-        'value': secret.value,
-        if (secret.version != null) 'version': secret.version,
-        'createdAt': secret.createdAt.toIso8601String(),
-      });
+  ///
+  /// [inReplyTo] decides whether other holders stand down for this share; pass
+  /// [EnvelopeAddressing.unsolicited] for a push nobody asked for.
+  Future<void> shareSecretWith(KeyPackage to, Secret secret,
+          {required String inReplyTo}) =>
+      sendEnvelope(
+          to,
+          secret.namespace,
+          {
+            'kind': secretPayloadKind,
+            'name': secret.name,
+            'value': secret.value,
+            if (secret.version != null) 'version': secret.version,
+            'createdAt': secret.createdAt.toIso8601String(),
+          },
+          inReplyTo: inReplyTo);
 
   /// Shares every secret in [secretStore] with [to], filtered — when
   /// [approvedNamespaces] is given — to secrets whose namespace that
@@ -641,16 +955,37 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
     int shared = 0;
     for (final secret in secretStore.listSecrets()) {
+      if (isPerEnrollmentSecretName(secret.name)) {
+        continue;
+      }
       if (approvedNamespaces != null &&
           !SecretStore.namespaceAuthorizes(
               approvedNamespaces, secret.namespace)) {
         continue;
       }
-      await shareSecretWith(to, secret);
+      await shareSecretWith(to, secret,
+          inReplyTo: EnvelopeAddressing.unsolicited);
       shared++;
     }
     return shared;
   }
+
+  /// Prefix marking a secret addressed to **one** enrollment.
+  ///
+  /// Distinct from the general `__` reserved space, which
+  /// [SecretStore.putIfNewer] accepts precisely so that system secrets flow
+  /// between a client's enrollments. Material addressed to a single enrollment
+  /// — its own `apkamSymmetricKey`, its own approval-chain link — must not.
+  static const String perEnrollmentSecretPrefix = '__en.';
+
+  /// Whether [name] is addressed to one enrollment, and so must never be
+  /// forwarded on.
+  ///
+  /// A received secret is stored like any other, so without this the next
+  /// enrollment [shareAllSecretsWith] reaches would be handed the previous
+  /// one's key material, whatever the namespace says.
+  static bool isPerEnrollmentSecretName(String name) =>
+      name.startsWith(perEnrollmentSecretPrefix);
 
   /// Pushes one [secret] to every key package registered for its namespace
   /// (minus this client). This is the mint/rotation push: it enumerates the
@@ -663,12 +998,23 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   }) async {
     final members = await directory.listForNamespace(secret.namespace,
         excludeEnrollmentIds: excludeEnrollmentIds);
+    final String selfId = enrollmentId;
     int pushed = 0;
     for (final member in members) {
       final to = member.keyPackage;
-      if (to != null && to.kpid != null && to.kpid != kpid) {
-        await shareSecretWith(to, secret);
-        pushed++;
+      if (to != null && to.kpid != null && !_isSelf(member, selfId)) {
+        // Per member: one peer this client cannot seal to must not stop the
+        // broadcast reaching the others.
+        try {
+          await shareSecretWith(to, secret,
+              inReplyTo: EnvelopeAddressing.unsolicited);
+          pushed++;
+        } catch (e) {
+          logger.warning('Could not push "${secret.name}" to enrollment '
+              '${member.enrollmentId} (kpid ${to.kpid}) in '
+              '${secret.namespace}: $e. The remaining members are still '
+              'being pushed to.');
+        }
       }
     }
     return pushed;
@@ -721,10 +1067,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
 }
 
 class _EnvelopeSyncListener extends SyncProgressListener {
-  final String marker;
+  /// One `.<kpid>.__ssenv.` fragment per address this client answers at.
+  final List<String> markers;
   final void Function() onEnvelopeSynced;
 
-  _EnvelopeSyncListener(this.marker, this.onEnvelopeSynced);
+  _EnvelopeSyncListener(this.markers, this.onEnvelopeSynced);
 
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
@@ -734,7 +1081,7 @@ class _EnvelopeSyncListener extends SyncProgressListener {
     }
     final delivered = keyInfoList.any((keyInfo) =>
         keyInfo.syncDirection == SyncDirection.remoteToLocal &&
-        keyInfo.key.contains(marker));
+        markers.any(keyInfo.key.contains));
     if (delivered) {
       onEnvelopeSynced();
     }

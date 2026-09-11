@@ -86,7 +86,7 @@ covered by [`acceptance.md`](acceptance.md) T3.1 and X1.
 `at_chops.dart` exports only pure-Dart algorithms, including the PQ ones
 (`ml_kem_768_pure_dart.dart`, `ml_dsa_65_pure_dart.dart`, `x_wing_pure_dart.dart`,
 `x25519_pure_dart_algo.dart`). `at_chops_ffi.dart`, documented "not web/wasm
-compatible", re-exports it plus the eight OpenSSL-backed FFI files. **No package's
+compatible", re-exports it plus the ten OpenSSL-backed FFI files. **No package's
 `lib/` imports the FFI barrel** — only at_chops's own tests and examples.
 
 The island is correctly quarantined; it is held by convention, which is what T0
@@ -273,10 +273,12 @@ abstract class AtClientStorage {
   present the same owner and an idempotent re-attach rule would wave the second through —
   the silent sharing this exists to refuse. Identity tells two instances apart; the refusal
   message still describes the holder by atSign and enrollment for a human.
-- **Owned storage is closed on release; injected storage is only detached.** The client
-  knows which it has — it either built the bundle or was handed it — so the flag lives on
-  the client and this interface stays neutral. An in-memory fixture therefore survives
-  `stop()` and can be inspected afterwards; an app can hand one bundle to a later client.
+- **A bundle says whether the client closes it: `closedByClient`.** False by default, so a
+  bundle handed to a client is only detached on `stop()` and the caller closes it; the
+  store a client builds for itself from a path is built with it true. An in-memory fixture
+  therefore survives `stop()` and can be inspected afterwards; an app can hand one bundle
+  to a later client. A principal change hands the outgoing client's bundle to the incoming
+  one open whatever the flag says, and the incoming client closes it.
 - **After detach, only the same principal may re-attach.** The bundle remembers the
   `(atSign, enrollmentId)` that last held it and refuses a different one until `clear()`
   has run. A new instance of the same principal — a restart within the process, a client
@@ -286,21 +288,37 @@ abstract class AtClientStorage {
   from the functional pack, and this makes it unrepresentable rather than a fixture's job
   to avoid.
 - **`forgetPrincipal()` is the deliberate hand-over.** It drops the guard and keeps the
-  data, so a caller that *means* to give one principal's storage to another — the same
-  atSign moving from a legacy client to an enrolled one — says so in one call, rather than
-  reaching for `clear()` and losing the records to get past the refusal. It throws while
+  data, so a caller that *means* to give one principal's storage to another says so in one
+  call, rather than reaching for `clear()` and losing the records to get past the refusal.
+  ⚠️ **The common case is enrolled to enrolled, not legacy to enrolled** — a self-retrofit
+  fires on `retrofitIsDue`, which compares the *authentication key algorithm* the posture
+  wants against the one the enrollment holds, so the usual shape is an rsa2048-auth
+  enrollment succeeded by an mldsa65-auth one. Both sides are enrollments; only the id and
+  the key algorithm differ. Legacy-to-enrolled is the same mechanism at the far end of the
+  same ladder, not a separate case.
+  **Succession is not coexistence, and only succession shares a store.**
+  [D-13](decisions.md#d-13--local-storage-is-isolated-per-atsign-enrollmentid-not-per-atsign-2026-09-05)
+  keeps two *live* enrollments of one atSign apart, because each holds key material the
+  other cannot read. A retrofit is not two live enrollments: the atServer caps the old one,
+  the new one inherits its data, and one store follows the succession. It throws while
   a client is attached: hand-over happens between holders, never under one.
 - **`clear()` empties keystore and queue together**, and forgets the last principal.
   `detach()` stamps the departing holder as the last principal, so a holder that clears
   and then keeps writing is still guarded; the fixture sequence is detach, clear, next.
-- **The Hive backend cannot yet refuse a second *instance* for one atSign.** Every box is
-  on the global Hive instance and named by atSign, so two `HiveAtClientStorage` objects for
-  one atSign share boxes whatever their paths — and nothing releases storage until X4, so a
-  per-atSign guard would refuse every test that rebuilds a client for the same atSign
-  (`local_secondary_test.dart` does it fifteen times). X2 ships the per-object claim; the
-  per-atSign guard lands with X4, once `stop()` releases. The upstream bundle already offers it
-  for the keystore; the queue is the half that matters, because a queue carrying another
-  test's entries is exactly what poisoned the functional pack. A half-cleared store —
+- **Isolation is per *location*, and two clients of one atSign at distinct storage paths
+  are already separated.** The keystore opens on `HiveInstances.forPath(storagePath)` and the queue does
+  the same (`at_sync_queue.dart`), so two `HiveAtClientStorage` objects for one
+  atSign at **different** paths get separate stores today; only the **same** path shares.
+  The guard is therefore per-location, not per-atSign: each impl reports a canonical
+  `location` and `AtClientStorageBase` refuses a second open at one already open — allowing
+  N distinct-location clients of one atSign (the multi-enrollment fixture) while catching an
+  accidental shared *location*. ⚠️ Not a shared *path*: two atSigns under one directory are
+  two boxes that share nothing, and the e2e fixtures rely on that, so a directory-only key
+  would refuse them. This sentence said "shared path" until 2026-09-06, which the ruling it
+  cites contradicts. X4's per-atSign guard was the wrong shape. The full design —
+  test-supplied locations, `storage:` injected on `create` and the manager, and the
+  injected-vs-owned close lifecycle — is
+  [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05). A half-cleared store —
   data without its pending writes, or writes without their data — is not representable.
 
 ### 2.3 The sync queue
@@ -347,6 +365,7 @@ plumbed `open({Box<String>? injectedBox})` (`at_sync_queue.dart`, documented as 
 seam) through to `AtClientImpl.create` as an intermediate step. The seam stays useful for
 tests; it stops being the route to backend selection. Drop the direct `hive` dependency
 once this and §2.2 land.
+
 
 ### 2.4 Key material — the exemplar
 
@@ -561,7 +580,7 @@ runtime.** A path is a string everywhere; it only stops meaning anything when so
 tries to open it. The type system never objects.
 
 **Design.** `AtClientPreference` should carry *capabilities* alongside its tuning
-knobs, and the filesystem paths should become an opaque storage location whose
+knobs, and the filesystem paths should become an opaque storage handle whose
 interpretation belongs to the backend — a directory on native, a database name on web.
 
 Two precedents in the same class and its neighbour show the shape:

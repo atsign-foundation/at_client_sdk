@@ -107,9 +107,12 @@ class EnrollParams {
   String? apkamPublicKeySignature;
 
   /// Opaque, additive metadata the server stores verbatim on the enrollment
-  /// record and returns from discovery (`enroll:listns`). Carries the
-  /// enrollment's key package (`metadata.keyPackage`) for the secret-sharing
-  /// substrate; the server has no opinion on its contents.
+  /// record, carrying the enrollment's key package (`metadata.keyPackage`)
+  /// for the secret-sharing substrate.
+  ///
+  /// Not every reader gets it back: `enroll:listns` and `enroll:fetch` return
+  /// it, and so does `enroll:list` except to a `__manage:r` holder, which is
+  /// given the roster projection over every record including its own.
   Map<String, dynamic>? metadata;
 
   List<EnrollmentStatus>? enrollmentStatusFilter;

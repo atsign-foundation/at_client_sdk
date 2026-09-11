@@ -30,5 +30,6 @@ export 'at_lookup.dart';
 /// transport, and a caller has to state it: `secureSocketTransport(
 /// SecureSocketConfig())` says "the TLS defaults", where a constant would let
 /// a site inherit settings its neighbour set deliberately.
-AtLookupTransport secureSocketTransport(SecureSocketConfig secureSocketConfig) =>
+AtLookupTransport secureSocketTransport(
+        SecureSocketConfig secureSocketConfig) =>
     AtLookupTransport(secureSocketConfig: secureSocketConfig);

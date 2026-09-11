@@ -4,12 +4,17 @@ import 'dart:async';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/nskey/nskey_provider.dart'
+    show NamespaceKeyUnavailableException;
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
+
+final AtSignLogger _logger = AtSignLogger('NotificationRequestTransformer');
 
 /// Class is responsible for taking the [NotificationParams] and converting into [NotifyVerbBuilder]
 class NotificationRequestTransformer
@@ -23,10 +28,35 @@ class NotificationRequestTransformer
   @override
   Future<NotifyVerbBuilder> transform(
       NotificationParams notificationParams) async {
+    // NOTE: provider selection is namespace-sensitive — the nskey path is
+    // (owner, namespace) scoped and declines a key without one — so the
+    // namespace has to be resolved before a provider is chosen.
+    _resolveNamespace(notificationParams);
+
     if (_shouldRouteThroughProvider(notificationParams)) {
-      notificationParams.atKey.metadata.appMetadata ??= AppMetadata(
-          providerId: notificationParams.cryptoProviderId ??
-              atClientPreference.crypto.defaultProviderId);
+      // NOTE: the provider id is stamped only once routing has settled — the
+      // catch below may re-route to legacy, and a key stamped with a provider
+      // that then declined would claim a scheme its value was never sealed
+      // under.
+      String providerId;
+      try {
+        providerId = await CryptoRuntime(_atClient).prepareWrite(
+            notificationParams.atKey,
+            requestedProviderId: notificationParams.cryptoProviderId,
+            useRemoteAtServer: true,
+            stampProviderId: false);
+      } on NamespaceKeyUnavailableException catch (e) {
+        if (!CryptoRuntime.mayFallBackToLegacy(atClientPreference)) rethrow;
+        _logger.warning('falling back to legacy encryption for the '
+            'notification of ${notificationParams.atKey.key}: ${e.message}');
+        providerId = await CryptoRuntime(_atClient).prepareWrite(
+            notificationParams.atKey,
+            requestedProviderId: CryptoRuntime.legacyProviderId,
+            useRemoteAtServer: true,
+            stampProviderId: false);
+      }
+      notificationParams.atKey.metadata.appMetadata ??=
+          AppMetadata(providerId: providerId);
     }
     // prepares notification builder
     NotifyVerbBuilder builder = await _prepareNotificationBuilder(
@@ -78,15 +108,7 @@ class NotificationRequestTransformer
     } else {
       AtKey ak = notificationParams.atKey;
 
-      if (notificationParams.messageType == MessageTypeEnum.key &&
-          ak.metadata.namespaceAware) {
-        ak.namespace ??= atClientPreference.namespace;
-        if (atClientPreference.namespace != null &&
-            !'${ak.key}.${ak.namespace}'
-                .endsWith('.${atClientPreference.namespace!}')) {
-          ak.key = '${ak.key}.${ak.namespace}';
-          ak.namespace = atClientPreference.namespace;
-        }
+      if (_isNamespaceAware(notificationParams)) {
         ak = AtKey.fromString(ak.toString());
       }
 
@@ -104,32 +126,46 @@ class NotificationRequestTransformer
     }
   }
 
+  bool _isNamespaceAware(NotificationParams notificationParams) =>
+      notificationParams.messageType == MessageTypeEnum.key &&
+      notificationParams.atKey.metadata.namespaceAware;
+
+  /// Fills in the preference's namespace, and folds a key that already carries
+  /// a different one into the app namespace — in place, on the caller's AtKey.
+  void _resolveNamespace(NotificationParams notificationParams) {
+    if (!_isNamespaceAware(notificationParams)) return;
+    final ak = notificationParams.atKey;
+    ak.namespace ??= atClientPreference.namespace;
+    if (atClientPreference.namespace != null &&
+        !'${ak.key}.${ak.namespace}'
+            .endsWith('.${atClientPreference.namespace!}')) {
+      ak.key = '${ak.key}.${ak.namespace}';
+      ak.namespace = atClientPreference.namespace;
+    }
+  }
+
+  /// Carries the caller's metadata onto the builder, minus the fields the
+  /// receiving atServer owns.
+  ///
+  /// Copying wholesale and then clearing is the deliberate polarity: a field
+  /// added to [Metadata] later travels by default, and only the exclusions have
+  /// to be maintained.
   void _addMetadataToBuilder(
       NotifyVerbBuilder builder, NotificationParams notificationParams) {
-    builder.atKey.metadata.ttl = notificationParams.atKey.metadata.ttl;
-    builder.atKey.metadata.ttb = notificationParams.atKey.metadata.ttb;
-    builder.atKey.metadata.ttr = notificationParams.atKey.metadata.ttr;
-    builder.atKey.metadata.ccd = notificationParams.atKey.metadata.ccd;
-    builder.atKey.metadata.isPublic =
-        notificationParams.atKey.metadata.isPublic;
-    builder.atKey.metadata.isEncrypted =
-        notificationParams.atKey.metadata.isEncrypted;
-    builder.atKey.metadata.sharedKeyEnc =
-        notificationParams.atKey.metadata.sharedKeyEnc;
-    builder.atKey.metadata.pubKeyCS =
-        notificationParams.atKey.metadata.pubKeyCS;
-    builder.atKey.metadata.encKeyName =
-        notificationParams.atKey.metadata.encKeyName;
-    builder.atKey.metadata.encAlgo = notificationParams.atKey.metadata.encAlgo;
-    builder.atKey.metadata.ivNonce = notificationParams.atKey.metadata.ivNonce;
-    builder.atKey.metadata.skeEncKeyName =
-        notificationParams.atKey.metadata.skeEncKeyName;
-    builder.atKey.metadata.skeEncAlgo =
-        notificationParams.atKey.metadata.skeEncAlgo;
-    builder.atKey.metadata.pubKeyHash =
-        notificationParams.atKey.metadata.pubKeyHash;
-    builder.atKey.metadata.appMetadata =
-        notificationParams.atKey.metadata.appMetadata;
+    builder.atKey.metadata = notificationParams.atKey.metadata.copy()
+      // Derived by the receiving atServer from ttb/ttl/ttr, and stamped there
+      // on write.
+      ..availableAt = null
+      ..expiresAt = null
+      ..refreshAt = null
+      ..createdAt = null
+      ..updatedAt = null
+      // Set by the atServer as it resolves the shared key, not by the sender.
+      ..sharedKeyStatus = null
+      // Local read-model flags; they mean nothing to the receiver.
+      ..isCached = false
+      ..isHidden = false
+      ..namespaceAware = true;
   }
 
   Future<String> _encryptNotificationValue(AtKey atKey, String value) async {

@@ -123,9 +123,8 @@ class AtAuthImpl implements AtAuth {
   ///
   /// If both are provided, atAuthRequest.atAuthKeys will be used.
   ///
-  /// The AtAuthRequest may optionally contain:
-  /// - atAuthRequest.enrollmentId - The enrollmentId to use for authentication.
-  ///   If not provided, the enrollmentId in the AtAuthKeys will be used.
+  /// The enrollment authenticated as is the keys' own answer,
+  /// [AtKeys.enrollmentToAuthenticateAs], never a caller-supplied id.
   ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
@@ -144,7 +143,7 @@ class AtAuthImpl implements AtAuth {
       );
     }
 
-    atAuthRequest.enrollmentId ??= atAuthKeys.enrollmentId;
+    final enrollmentId = atAuthKeys.enrollmentToAuthenticateAs();
     atLookUp ??= AtLookUp.withSecureSocket(
       atSign: atAuthRequest.atSign,
       rootDomain: atAuthRequest.rootDomain,
@@ -158,12 +157,11 @@ class AtAuthImpl implements AtAuth {
     // than caller-supplied; the flat fields keep carrying the original
     // enrollment's RSA credentials. AtKeys owns that resolution — it is the
     // only reader of either source. ??= to support mocking.
-    final algorithm =
-        atAuthKeys.authenticationAlgorithmFor(atAuthRequest.enrollmentId);
+    final algorithm = atAuthKeys.authenticationAlgorithmFor(enrollmentId);
     if (algorithm != null) {
       atLookUp!.signingAlgoType = algorithm;
     }
-    atChops ??= atAuthKeys.authenticationFor(atAuthRequest.enrollmentId).chops;
+    atChops ??= atAuthKeys.authenticationFor(enrollmentId).chops;
     atLookUp!.atChops = atChops;
     // Installed alongside atChops, not instead of it. at_lookup prefers the
     // authenticator, so this is the route that runs - but the field is still
@@ -180,7 +178,7 @@ class AtAuthImpl implements AtAuth {
                   ? atAuthRequest.atKeysIo
                   : null),
           atAuthRequest.atSign,
-          enrollmentId: atAuthRequest.enrollmentId,
+          enrollmentId: enrollmentId,
           chops: atChops,
         ));
 
@@ -191,7 +189,7 @@ class AtAuthImpl implements AtAuth {
       pkamResponse
         ..isSuccessful = (await pkamAuthenticator!.authenticate(
             atAuthRequest.atSign, atLookUp!,
-            enrollmentId: atAuthRequest.enrollmentId))
+            enrollmentId: enrollmentId))
         ..atAuthKeys = atAuthKeys
         ..atLookUp = atLookUp
         ..atChops = atChops;
@@ -206,7 +204,7 @@ class AtAuthImpl implements AtAuth {
           rootDomain: atAuthRequest.rootDomain,
           namespace: atAuthRequest.namespace,
           atKeysIo: atAuthRequest.atKeysIo!,
-          enrollmentId: atAuthRequest.enrollmentId,
+          enrollmentId: enrollmentId,
           atLookUp: atLookUp,
         );
       }

@@ -1,7 +1,77 @@
 # CHANGELOG
 
-## 1.1.6
+## 1.1.5-rc1
 
+- refactor: the APKAM activation dialog names `signingAlgo: rsa2048` on the
+  enrolment it submits, which `AtEnrollmentRequest` now requires. The dialog
+  has no rollout position to read one from — it knows the atSign, the app and
+  the namespaces — and rsa2048 is what this path minted before the parameter
+  existed, so behaviour is unchanged. An app that has a position builds the
+  request itself.
+
+- refactor: follows at_auth's barrel split — `file_picker.dart` and
+  `file_util.dart` take `FileAtKeysIo` from `package:at_auth/at_auth_io.dart`,
+  which is now their only at_auth import: it was all they used it for. No API
+  change here.
+
+- refactor: the enrollment service builds its lookup with
+  `AtLookUp.withSecureSocket`, passing `authenticator: null` - submitting an
+  enrolment request needs no authentication, and there is no credential here
+  to authenticate with.
+- fix: an atSign names one keychain entry however the caller spells it.
+  Nothing normalizes on the way in — `AuthRequest.atSign` is a plain String,
+  and at_auth passes that string verbatim to `read`/`write` while passing
+  `toAtsign()` to `flush` — so once entries started recording the canonical
+  spelling, `write('@Alice', …)` succeeded and the very next `read('@Alice')`
+  reported the atSign as absent. Worse for `flush`: an entry stored under a
+  spelling that normalizes differently (`@colin.constable` →
+  `@colinconstable`) was not found, so the flush appended beside it and left
+  the newer keys unreachable behind the older ones. `KeychainStorage` now
+  compares normalized in `_indexOf` and `removeAtsignFromKeychain`, and still
+  returns the stored spelling; a value `toAtsign()` rejects is compared as it
+  stands, so a malformed entry stays readable and removable.
+- fix: the enrollment request list can approve a pq-mode request. The
+  approve action null-banged `encryptedAPKAMSymmetricKey`, which a
+  request that expects the approver to mint its key does not carry, so
+  every such approval crashed before the service was called; and a
+  post-approval conveyance refusal now clears the row and shows the
+  refusal's own message instead of `Failed to approve`. The list widget
+  resolves its `AtClient` through the injected service's seam.
+- fix: an approval whose secret conveyance was refused is no longer
+  re-reported as `Enrollment failed`. at_client's `approve()` now throws
+  `EnrollmentConveyanceException` after a server-side approval whose
+  enrollee advertised an unverifiable key package; `approve()` here finishes
+  the approval bookkeeping and rethrows it, so the caller sees the true
+  state — approved, cannot decrypt, consider revoking — instead of a
+  failure claim about an enrollment that is live.
+- fix: a failed keychain read no longer wipes the store. The read's error
+  path wrote an empty entry over the stored data before rethrowing, so a
+  transient platform-channel error or a cancelled biometric prompt destroyed
+  the only copy of the atSign's keys. Recovery from a genuinely corrupt store
+  is now the caller's explicit decision, never a side effect of the read that
+  discovered it.
+- fix: approving an enrollment no longer reports `Enrollment failed: Null
+  check operator used on a null value` after the server-side approval has
+  succeeded. `approve()` returns no key material — the enrollee files its own
+  keys on its own device — and the approver-side keychain write now runs only
+  when keys are actually present.
+- fix: the keychain is a usable key store for the post-quantum paths.
+  `KeychainAtKeysIo` implemented only `read`/`write`, so `flush` fell through
+  to the interface's throwing default — and on Flutter that is the *default*
+  store, so filing an nskey private or a signing-root private threw
+  `UnimplementedError` on the platform where those paths matter most. It now
+  replaces the atSign's entry, with the same never-lose assurance the `.atKeys`
+  file gets, and implements `update` through it.
+- fix: `KeychainAtKeysIo.write` refuses an atSign that already has an entry,
+  like every other `WrittenAtKeysIo`. It used to append unconditionally to a
+  list `read` scans front-to-back, so a second write left the newer keys
+  permanently unreachable behind the older ones — a silent loss that looked
+  like a successful write. Use `flush` to persist a change to existing keys.
+- fix: an entry written by an older release, which carries its atSign under the
+  `name` metadata key rather than `atsign`, is now found, replaced and removed
+  by the same predicate the reads use. `getAllAtsigns` threw a `TypeError` on
+  one (a `String` used as a condition) and `removeAtsignFromKeychain` silently
+  kept it.
 - fix: changed keychain storage name delimiter from `_` to `:`
 - feat: upgrade path to move keys from `_` to `:` -- if `:` is absent and
   `_` is present, data is copied to `:` but `_` is left in place. In 2.0.0
@@ -24,14 +94,28 @@
   every client read now goes through it. Give it one built with an app-owned
   client and the enrollment UI works without `AtClientManager`; it previously
   reached the current-atSign client at five sites and threw for such an app.
-  A service the widget did not build is no longer disposed with the widget.
+  A service the widget did not build is no longer disposed with the widget:
+  `FlutterEnrollmentService.dispose()` closes the request stream and drops the
+  controller, so routing away from the widget left a caller's shared service
+  throwing on every later `getEnrollments()`.
 - build: require `at_client` ^3.15.0-rc1, the first version carrying
-  `AtClient.create`; the floor still said ^3.11.0.
+  `buildAtClient`; the floor still said ^3.11.0.
 - feat: `CramDialog` and `PkamDialog` take an optional `authService`, and
   `ApkamActivationDialog` an optional `enrollmentService`. Both default to the
   real service, so existing call sites are unaffected; passing one lets the
   dialogs' error and timeout paths be widget-tested without a live atServer
   (#1909).
+- fix: `FlutterEnrollmentService.approve` waits for the pending enrollment
+  record to be dropped. The delete was started and never awaited, so it
+  outlived the call that began it and a keychain failure had no caller left to
+  catch it — it surfaced as an unhandled async error. It is now awaited under
+  its own guard: by the time it runs the atServer has already recorded the
+  decision, so a keychain failure logs a warning and costs a pending row that
+  lingers until it expires, never a successful approval reported as a failure.
+- fix: `approve`, `deny` and `revoke` close the `AtLookUp` they were given even
+  when the operation throws. Each closed only after its `try`, so every failure
+  path leaked the caller's connection — the same defect fixed in `enroll` in
+  1.1.4, in the three methods that still had it.
 
 ## 1.1.4
 

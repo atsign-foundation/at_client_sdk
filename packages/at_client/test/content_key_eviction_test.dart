@@ -1,0 +1,206 @@
+import 'dart:typed_data';
+
+import 'package:at_client/at_client.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
+    show CommitOp;
+import 'package:test/test.dart';
+
+/// The eviction trigger for coarse forward secrecy: a client drops a cached
+/// content key when it observes that key's conveyance record being deleted.
+///
+/// Deleting the record stops anyone unwrapping the CK *again*, but says nothing
+/// about the clients that already did; sync carries the deletion to them, and
+/// this turns its arrival into eviction.
+void main() {
+  const atSign = '@alice';
+  const namespace = 'app_1.my_apps';
+
+  ContentKey ck(int seed) =>
+      ContentKey(Uint8List.fromList(List<int>.generate(32, (i) => seed + i)));
+
+  SyncProgress synced(List<KeyInfo> keys) => SyncProgress()
+    ..atSign = atSign
+    ..syncStatus = SyncStatus.success
+    ..keyInfoList = keys;
+
+  group('the key string a conveyance record arrives as', () {
+    test('splits a self conveyance into its CK, namespace and scope', () {
+      expect(ContentKeyEviction.parse('abc123.__ck.$namespace$atSign'),
+          (nskeyOwner: atSign, ckKid: 'abc123', ckNs: namespace),
+          reason: 'a multi-segment namespace is why this is parsed on the '
+              '.__ck. marker rather than by AtKey.fromString, which cuts at '
+              'the LAST dot and would report the namespace as "my_apps"');
+    });
+
+    test('an inbound conveyance scopes to its recipient — this atSign', () {
+      expect(ContentKeyEviction.parse('@alice:abc123.__ck.$namespace@bob'),
+          (nskeyOwner: '@alice', ckKid: 'abc123', ckNs: namespace));
+    });
+
+    test('an outbound conveyance scopes to its recipient — the other atSign',
+        () {
+      expect(ContentKeyEviction.parse('@bob:abc123.__ck.$namespace$atSign'),
+          (nskeyOwner: '@bob', ckKid: 'abc123', ckNs: namespace),
+          reason: 'the scope rule is sharedWith ?? sharedBy, matching every '
+              'writer of the CK cache');
+    });
+
+    test('declines anything that is not a conveyance record', () {
+      for (final key in [
+        '@alice:treaty.$namespace@bob',
+        'public:__nskey.$namespace$atSign',
+        '__ckcur.alice.$namespace$atSign',
+        'abc123.__ck.$namespace',
+        '.__ck.$namespace$atSign',
+        'abc123.__ck.$atSign',
+      ]) {
+        expect(ContentKeyEviction.parse(key), isNull, reason: key);
+      }
+    });
+  });
+
+  group('eviction', () {
+    late ContentKeyCache cache;
+    late ContentKeyEviction eviction;
+    late ContentKey key;
+
+    setUp(() {
+      cache = ContentKeyCache();
+      eviction = ContentKeyEviction(cache);
+      key = ck(1);
+      cache.putAsCurrent(atSign, namespace, key, 'gen1');
+    });
+
+    test('an observed deletion drops the key', () {
+      eviction.onSyncProgressEvent(synced([
+        KeyInfo('${key.ckKid}.__ck.$namespace$atSign',
+            SyncDirection.remoteToLocal, CommitOp.DELETE)
+      ]));
+
+      expect(cache.get(atSign, namespace, key.ckKid), isNull);
+      expect(cache.current(atSign, namespace), isNull,
+          reason: 'the key it was current under is gone, so there is no '
+              'current CK either — the next write cuts a fresh one');
+    });
+
+    test('an update of the same record does not', () {
+      eviction.onSyncProgressEvent(synced([
+        KeyInfo('${key.ckKid}.__ck.$namespace$atSign',
+            SyncDirection.remoteToLocal, CommitOp.UPDATE)
+      ]));
+
+      expect(cache.get(atSign, namespace, key.ckKid), isNotNull,
+          reason: 'a conveyance arriving is the ordinary case — evicting on '
+              'it would throw away a key the moment it was delivered');
+    });
+
+    test('a local write pushed to the server does not', () {
+      eviction.onSyncProgressEvent(synced([
+        KeyInfo('${key.ckKid}.__ck.$namespace$atSign',
+            SyncDirection.localToRemote, CommitOp.DELETE)
+      ]));
+
+      expect(cache.get(atSign, namespace, key.ckKid), isNotNull,
+          reason: 'this client already evicted through CkManager when it made '
+              'the delete; reacting to its own push back would mean being '
+              'right about a case this never sees');
+    });
+
+    test('an outbound share\'s deletion evicts under the recipient', () {
+      // NOTE: the conveyance was cached under bob — `sharedWith ?? sharedBy`,
+      // the scope every cache writer uses — so that is where the eviction must
+      // land.
+      final outbound = ck(7);
+      cache.putAsCurrent('@bob', namespace, outbound, 'gen1');
+
+      eviction.onSyncProgressEvent(synced([
+        KeyInfo('@bob:${outbound.ckKid}.__ck.$namespace$atSign',
+            SyncDirection.remoteToLocal, CommitOp.DELETE)
+      ]));
+
+      expect(cache.get('@bob', namespace, outbound.ckKid), isNull);
+      expect(cache.current('@bob', namespace), isNull);
+    });
+
+    test('a deletion in another namespace leaves this one alone', () {
+      eviction.onSyncProgressEvent(synced([
+        KeyInfo('${key.ckKid}.__ck.app_2.my_apps$atSign',
+            SyncDirection.remoteToLocal, CommitOp.DELETE)
+      ]));
+
+      expect(cache.get(atSign, namespace, key.ckKid), isNotNull,
+          reason: 'ckKids are unique within a namespace, not across them — '
+              'the same identity discipline the cache is keyed by');
+    });
+
+    test('a batch evicts every conveyance it carries and ignores the rest', () {
+      final second = ck(100);
+      cache.put(atSign, namespace, second);
+
+      eviction.onSyncProgressEvent(synced([
+        KeyInfo('treaty.$namespace$atSign', SyncDirection.remoteToLocal,
+            CommitOp.DELETE),
+        KeyInfo('${key.ckKid}.__ck.$namespace$atSign',
+            SyncDirection.remoteToLocal, CommitOp.DELETE),
+        KeyInfo('${second.ckKid}.__ck.$namespace$atSign',
+            SyncDirection.remoteToLocal, CommitOp.DELETE),
+      ]));
+
+      expect(cache.get(atSign, namespace, key.ckKid), isNull);
+      expect(cache.get(atSign, namespace, second.ckKid), isNull);
+    });
+
+    test('a progress event carrying no keys is harmless', () {
+      eviction.onSyncProgressEvent(SyncProgress()..atSign = atSign);
+
+      expect(cache.get(atSign, namespace, key.ckKid), isNotNull);
+    });
+  });
+
+  group('wiring', () {
+    tearDown(() async {
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await (client as AtClientImpl).stop();
+      }
+      AtClientImpl.atClientInstanceMap.clear();
+    });
+
+    test('a client registers the eviction listener on its sync service',
+        () async {
+      final client = await AtClientImpl.create(
+          '@evictionwiring',
+          'test',
+          // NOTE: the posture is named rather than defaulted — the default
+          // runs no post-quantum startup, which is the startup under test.
+          AtClientPreference(posture: PqPosture.pqReady)
+            ..hiveStoragePath = 'test/hive/evictionwiring'
+            ..commitLogPath = 'test/hive/evictionwiring') as AtClientImpl;
+      final registered = <SyncProgressListener>[];
+      final sync = _RecordingSyncService(registered);
+
+      client.syncService = sync;
+
+      expect(registered.whereType<ContentKeyEviction>(), hasLength(1));
+      expect(registered.whereType<ContentKeyEviction>().single.cache,
+          same(CryptoConfig.forClient(client).contentKeyCache),
+          reason: 'and on the SAME cache the providers read — a listener '
+              'evicting from a cache nobody reads is indistinguishable from '
+              'no listener at all');
+    });
+  });
+}
+
+/// A [SyncService] that only records the listeners added to it.
+class _RecordingSyncService implements SyncService {
+  final List<SyncProgressListener> registered;
+
+  _RecordingSyncService(this.registered);
+
+  @override
+  void addProgressListener(SyncProgressListener listener) =>
+      registered.add(listener);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}

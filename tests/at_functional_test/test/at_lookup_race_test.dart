@@ -23,7 +23,8 @@ void main() {
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
 
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
     atClientManager.atClient.syncService.sync();
     atClient = atClientManager.atClient;
 

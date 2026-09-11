@@ -29,8 +29,13 @@ class EnrollmentRequestList extends StatefulWidget {
 }
 
 class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
-  late final FlutterEnrollmentService _service =
-      widget.enrollmentService ?? FlutterEnrollmentService();
+  late final FlutterEnrollmentService _service;
+
+  /// Whether this widget built [_service], and may therefore dispose it.
+  ///
+  /// Disposing an injected service drops a controller its owner still holds,
+  /// and every later use of that service throws.
+  late final bool _ownsService;
   final List<ServerEnrollmentRequest> _requests = [];
   final List<Timer> _overlayTimers = [];
   StreamSubscription? _subscription;
@@ -40,6 +45,8 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   @override
   void initState() {
     super.initState();
+    _ownsService = widget.enrollmentService == null;
+    _service = widget.enrollmentService ?? FlutterEnrollmentService();
     _fetchAndSubscribe();
   }
 
@@ -108,8 +115,10 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
       await _service.approve(
         EnrollmentRequestDecision.approved(
           enrollmentId: request.enrollmentId,
+          // NOTE: a pq-mode enrollee wraps no key, and the approve path takes
+          // the resulting empty value as its signal to mint one.
           apkamSymmetricKey: AtBytes.fromString(
-            request.encryptedAPKAMSymmetricKey!,
+            request.encryptedAPKAMSymmetricKey ?? '',
           ),
           atSign: atSign,
         ),
@@ -120,6 +129,18 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
           _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);
         });
         _showFeedbackOverlay(request, EnrollmentStatus.approved);
+      }
+      // ignore: experimental_member_use
+    } on EnrollmentConveyanceException catch (e) {
+      // NOTE: the approval itself succeeded and only conveying the secret
+      // failed, so the request leaves the list and the message stands as-is.
+      if (mounted) {
+        setState(() {
+          _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } catch (e) {
       if (mounted) {
@@ -204,9 +225,9 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   @override
   void dispose() {
     _subscription?.cancel();
-    // Only a service this widget built. Disposing one the app supplied would
-    // close a controller the app still holds, and it cannot be reopened.
-    if (widget.enrollmentService == null) _service.dispose();
+    if (_ownsService) {
+      _service.dispose();
+    }
     for (var timer in _overlayTimers) {
       timer.cancel();
     }

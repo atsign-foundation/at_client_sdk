@@ -32,7 +32,7 @@ void main() {
     );
 
     final rootDomain = AtRootDomain(
-      TestUtils.getPreference(atSign).rootDomain,
+      TestUtils.getPreference(atSign, posture: PqPosture.legacy).rootDomain,
       TestUtils.rootServerPort,
     );
 
@@ -49,7 +49,8 @@ void main() {
     // 2. Hand the session to the client. Crucially: no atChops / atLookUp — the
     //    client must derive its own AtChops from session.atKeysIo and PKAM on a
     //    fresh socket.
-    final preference = TestUtils.getPreference(atSign);
+    final preference =
+        TestUtils.getPreference(atSign, posture: PqPosture.legacy);
     final atClientManager = await AtClientManager.getInstance().fromAuthSession(
         authResponse.session!, preference,
         storage: TestUtils.storageFor(atSign));

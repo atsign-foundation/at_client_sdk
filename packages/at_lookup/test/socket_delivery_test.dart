@@ -233,7 +233,8 @@ void main() {
       final seen = <String>[];
       rig.listener.onNotification = seen.add;
 
-      await rig.socket.serverSends('data:the_key_is\n@bob:phone@alice\n@alice@');
+      await rig.socket
+          .serverSends('data:the_key_is\n@bob:phone@alice\n@alice@');
 
       // Asserted before the read, so a listener that routes this away fails
       // here with the reason - not thirty seconds later on a starved read.
@@ -291,7 +292,8 @@ void main() {
           () => rig.listener
               .read(maxWaitMilliSeconds: 500, transientWaitTimeMillis: 500),
           throwsA(predicate((dynamic e) =>
-              e is AtLookUpException && e.errorMessage == 'Unexpected response found')),
+              e is AtLookUpException &&
+              e.errorMessage == 'Unexpected response found')),
           reason: 'the unrouted notification is still in the buffer and is '
               'returned joined to the response that followed it');
     });

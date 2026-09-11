@@ -1,4 +1,7 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/at_collection/collections.dart';
 
 @Deprecated("Use AtClient.collection for collection-style operations")
 class DefaultKeyMaker implements KeyMaker {

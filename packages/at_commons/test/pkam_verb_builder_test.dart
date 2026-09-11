@@ -19,6 +19,23 @@ void main() {
       expect(pkamVerbBuilder.checkParams(), true);
       expect(pkamVerbBuilder.buildCommand(), 'pkam:enrollmentId:123:abc123\n');
     });
+    test(
+        'the atSign\'s own credential authenticates with no enrollment id on '
+        'the wire', () {
+      // NOTE: raw literals — a released atServer knows the credential only by
+      // the absence of an id and refuses `enrollmentId:primary`.
+      final bare = PkamVerbBuilder()
+        ..signature = 'abc123'
+        ..enrollmentlId = 'primary';
+      expect(bare.buildCommand(), 'pkam:abc123\n');
+      final withAlgos = PkamVerbBuilder()
+        ..signature = 'abc123'
+        ..signingAlgo = 'rsa2048'
+        ..hashingAlgo = 'sha256'
+        ..enrollmentlId = 'primary';
+      expect(withAlgos.buildCommand(),
+          'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:abc123\n');
+    });
 
     test(
         'check pkam verb command when signed challenge and signing/hashing algo are set',

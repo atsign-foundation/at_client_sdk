@@ -8,7 +8,7 @@ import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
 import 'package:at_utils/at_progress.dart';
@@ -30,38 +30,52 @@ void _showPreOnboardingKeyWarning() {
   stdout.writeln();
   stdout.writeln(chalk.yellow('⚠️  IMPORTANT - READ CAREFULLY ⚠️'));
   stdout.writeln();
-  stdout.writeln(chalk.bold('You are about to onboard your atSign and generate a set of unique cryptographic keys.'));
-  stdout.writeln(chalk.bold('It is CRITICAL that you back up these keys to more than one place after onboarding.'));
+  stdout.writeln(chalk.bold(
+      'You are about to onboard your atSign and generate a set of unique cryptographic keys.'));
+  stdout.writeln(chalk.bold(
+      'It is CRITICAL that you back up these keys to more than one place after onboarding.'));
   stdout.writeln();
   stdout.writeln(chalk.red('LOSING ACCESS TO THESE KEYS WILL RESULT IN:'));
-  stdout.writeln('• Loss of ability to authenticate into your atSign\'s atServer');
-  stdout.writeln('• Loss of ability to decrypt any data on your atSign\'s atServer');
-  stdout.writeln('• Loss of data access to any applications/devices that use these keys');
+  stdout.writeln(
+      '• Loss of ability to authenticate into your atSign\'s atServer');
+  stdout.writeln(
+      '• Loss of ability to decrypt any data on your atSign\'s atServer');
+  stdout.writeln(
+      '• Loss of data access to any applications/devices that use these keys');
   stdout.writeln();
-  stdout.writeln(chalk.bold('If you lose these keys, you will NOT be able to recover your atSign or its data.'));
-  stdout.writeln(chalk.bold('NOT EVEN ATSIGN INC. CAN RECOVER THESE KEYS FOR YOU!'));
-  stdout.writeln(chalk.bold('You may reset your atSign\'s atServer by contacting support@atsign.com, if a new set of keys is required, but no data can be recovered.'));
+  stdout.writeln(chalk.bold(
+      'If you lose these keys, you will NOT be able to recover your atSign or its data.'));
+  stdout.writeln(
+      chalk.bold('NOT EVEN ATSIGN INC. CAN RECOVER THESE KEYS FOR YOU!'));
+  stdout.writeln(chalk.bold(
+      'You may reset your atSign\'s atServer by contacting support@atsign.com, if a new set of keys is required, but no data can be recovered.'));
   stdout.writeln();
   stdout.writeln(chalk.blue('IMPORTANT:'));
-  stdout.writeln('• After onboarding, you MUST back up your .atKeys file to a secure location');
-  stdout.writeln('• Store it in multiple secure locations (cloud storage, external drives, etc.)');
+  stdout.writeln(
+      '• After onboarding, you MUST back up your .atKeys file to a secure location');
+  stdout.writeln(
+      '• Store it in multiple secure locations (cloud storage, external drives, etc.)');
   stdout.writeln('• Keep it safe from unauthorized access');
   stdout.writeln();
-  
+
   while (true) {
-    stdout.write(chalk.blue('[Action Required] ') + chalk.bold('Do you understand that losing these keys means losing access to your atSign and all its data? (Y/N): '));
+    stdout.write(chalk.blue('[Action Required] ') +
+        chalk.bold(
+            'Do you understand that losing these keys means losing access to your atSign and all its data? (Y/N): '));
     String? response = stdin.readLineSync();
-    
+
     if (response != null) {
       String normalized = response.trim().toLowerCase();
       if (normalized == 'y' || normalized == 'yes') {
         stdout.writeln();
-        stdout.writeln(chalk.green('✓ Acknowledged. Please remember to back up your keys securely!'));
+        stdout.writeln(chalk.green(
+            '✓ Acknowledged. Please remember to back up your keys securely!'));
         stdout.writeln();
         break;
       } else if (normalized == 'n' || normalized == 'no') {
         stdout.writeln();
-        stdout.writeln(chalk.red('Onboarding cancelled. Please ensure you understand the importance of key backup before proceeding.'));
+        stdout.writeln(chalk.red(
+            'Onboarding cancelled. Please ensure you understand the importance of key backup before proceeding.'));
         exit(0);
       } else {
         stdout.writeln(chalk.yellow('Please enter Y (yes) or N (no).'));
@@ -86,6 +100,10 @@ void deleteStorage() {
 
 Future<int> main(List<String> arguments) async {
   AtSignLogger.defaultLoggingHandler = AtSignLogger.stdErrLoggingHandler;
+  // NOTE: a retrofit reads a keyfile and writes back what it decided from what
+  // it read, so two CLIs on one keyfile can each write a different enrollment
+  // into it. This serialises the whole sequence on a lock beside the keyfile.
+  retrofitSerializer = fileRetrofitSerializer;
   try {
     return await wrappedMain(arguments);
   } on ArgumentError catch (e) {
@@ -115,9 +133,18 @@ Future<int> wrappedMain(List<String> arguments) async {
   }
 
   final first = arguments.first;
-  if (first.startsWith('-') && first != '-h' && first != '--help' && first != '--version') {
-    // no command found ... legacy ... insert 'onboard' as the command
-    arguments = ['onboard', ...arguments];
+  if (first.startsWith('-') &&
+      first != '-h' &&
+      first != '--help' &&
+      first != '--version') {
+    stderr.writeln('Version: $packageVersion');
+    stderr.writeln('No command was given. "$first" is an option, not a '
+        'command — an invocation with no command used to be treated as '
+        '"onboard", and no longer is. Name the command you want:');
+    aca.parser.printAllCommandsUsage(showSubCommandParams: false);
+    stderr.writeln('\nFor an activation that is "onboard": '
+        'auth onboard -a <atSign> -c <cram secret>\n');
+    return 1;
   }
 
   final ArgResults topLevelResults;
@@ -215,9 +242,10 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.otp:
         // generate a one-time-passcode for this atSign. This is a passcode
@@ -232,9 +260,10 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.interactive:
         // Interactive session for various enrollment management activities:
@@ -245,9 +274,9 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.list:
         await list(
@@ -255,9 +284,9 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.fetch:
         await fetch(
@@ -265,9 +294,10 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.approve:
         await approve(
@@ -275,9 +305,9 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.auto:
         await autoApprove(
@@ -285,9 +315,9 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.deny:
         await deny(
@@ -295,9 +325,10 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.revoke:
         await revoke(
@@ -305,9 +336,10 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.enroll:
         // App which doesn't have auth keys and is not the first app.
@@ -323,9 +355,10 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
 
       case AuthCliCommand.delete:
         await deleteEnrollment(
@@ -333,9 +366,10 @@ Future<int> wrappedMain(List<String> arguments) async {
             await createAtClient(
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
-                rootDomain:
-                    commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                waitForPqStartup: false,
+                posture: AuthCliArgs.postureForApprover(commandArgResults)));
       case AuthCliCommand.decrypt:
         await passPhraseDecryptAtKeys(commandArgResults);
 
@@ -400,10 +434,13 @@ Future<int> status(ArgResults ar) async {
 
   String? pk;
   try {
-    AtLookUp al = AtLookupImpl(
-      atSign,
-      rootDomain.rootDomain,
-      rootDomain.rootPort,
+    // NOTE: a public key lookup needs no authentication, and no credential is
+    // held here.
+    final AtLookUp al = AtLookUp.withSecureSocket(
+      atSign: atSign,
+      rootDomain: rootDomain,
+      transport: secureSocketTransport(SecureSocketConfig()),
+      authenticator: null,
     );
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
@@ -436,7 +473,7 @@ Future<int> status(ArgResults ar) async {
 /// secret from the registrar.
 @visibleForTesting
 Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
-  if(argResults[AuthCliArgs.argNameVersion]) {
+  if (argResults[AuthCliArgs.argNameVersion]) {
     stdout.writeln('Version: $packageVersion');
     return false;
   }
@@ -457,7 +494,8 @@ Future<bool> onboard(ArgResults argResults, {AtOnboardingService? svc}) async {
     }
     // if  -y flag is not used and --cramkey is not provided, show back up key warning message
     // --cramkey implies --yes for backwards compatibility with automation scripts
-    if (!argResults[AuthCliArgs.argNameYes] && !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
+    if (!argResults[AuthCliArgs.argNameYes] &&
+        !argResults.wasParsed(AuthCliArgs.argNameCramSecret)) {
       _showPreOnboardingKeyWarning();
     }
     await svc.onboard(
@@ -517,11 +555,21 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     apkamKeysExpiryDuration: parseDuration(apkamKeysExpiry),
     maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
     retryInterval: AtOnboardingService.defaultApkamRetryInterval,
+    // NOTE: the minted key's algorithm has to agree with the posture the
+    // enrolment is submitted under, or at_chops is handed a key of one
+    // algorithm and a declaration of another.
+    signingAlgo: AuthCliArgs.postureForEnroller(argResults)
+        .posture
+        .authenticationKeyAlgorithm,
+    // NOTE: null means the posture decides. This is asked separately from the
+    // posture because a pq request carries no wrapped key, so an approver that
+    // cannot convey approves an enrollment that can decrypt nothing, and only
+    // the caller knows which approver will pick the request up.
+    keyExchangeMode: AuthCliArgs.keyExchangeIn(argResults),
   );
 
   return true;
 }
-
 
 @visibleForTesting
 Future<void> setSpp(ArgResults argResults, AtClient atClient) async {
@@ -821,11 +869,17 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
       atSign: atClient.getCurrentAtSign()!,
       enrollmentId: eId,
-      apkamSymmetricKey: AtBytes.fromString(er['encryptedAPKAMSymmetricKey']),
+      // NOTE: `?? ''` is not defensive padding. An absent wrapped key is what
+      // identifies a pq request, so it has to reach approve(), which mints a
+      // symmetric key for itself and ignores this value.
+      apkamSymmetricKey:
+          AtBytes.fromString(er['encryptedAPKAMSymmetricKey'] ?? ''),
     );
 
-    // Finally call approve method via an AtEnrollment object
-    final response = await AtEnrollment.create().approve(decision, atLookup);
+    // NOTE: approving is also when this atSign's secrets are sealed to the new
+    // device's key package, so approving through at_auth alone leaves an
+    // enrollment that can authenticate and decrypt nothing.
+    final response = await atClient.enrollmentService!.approve(decision);
 
     stdout.writeln('Server response: $response');
 
@@ -874,8 +928,6 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
     deviceRegex = RegExp(drx);
   }
 
-  AtLookUp atLookup = atClient.getRemoteSecondary()!.atLookUp;
-
   // listen for enrollment requests
   stdout.writeln('Listening for new enrollment requests');
 
@@ -907,11 +959,16 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
       EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
         atSign: atClient.getCurrentAtSign()!,
         enrollmentId: eId,
-        apkamSymmetricKey: AtBytes.fromString(er['encryptedAPKAMSymmetricKey']),
+        // NOTE: an absent wrapped key is what identifies a pq request, so it
+        // has to reach approve(), which mints a symmetric key for itself.
+        apkamSymmetricKey:
+            AtBytes.fromString(er['encryptedAPKAMSymmetricKey'] ?? ''),
       );
 
-      // Finally call approve method via an AtEnrollment object
-      final response = await AtEnrollment.create().approve(decision, atLookup);
+      // NOTE: approving is also when this atSign's secrets are sealed to the
+      // new device's key package, so approving through at_auth alone leaves an
+      // enrollment that can authenticate and decrypt nothing.
+      final response = await atClient.enrollmentService!.approve(decision);
       stdout.writeln('Approval successful.\n'
           '\tResponse: $response');
 
@@ -1045,7 +1102,7 @@ Future<void> passPhraseDecryptAtKeys(ArgResults ar) async {
     throw ArgumentError(
         'The --${AuthCliArgs.argNameAtKeys} option must not be empty');
   }
-  if (!File(atKeysFilePath).existsSync()){
+  if (!File(atKeysFilePath).existsSync()) {
     throw ArgumentError('Keys file does not exist at $atKeysFilePath');
   }
 
@@ -1061,7 +1118,8 @@ Future<void> passPhraseDecryptAtKeys(ArgResults ar) async {
 
   final writer = FileAtKeysIo(filePath: (_) => targetKeyFilePath);
   await writer.write(atSign, decryptedAtKeys);
-  stdout.writeln('${chalk.green('[Success]')} Decrypted atKeys file stored at $targetKeyFilePath');
+  stdout.writeln(
+      '${chalk.green('[Success]')} Decrypted atKeys file stored at $targetKeyFilePath');
 }
 
 @visibleForTesting
@@ -1080,15 +1138,22 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     throw ArgumentError('Invalid root server domain: $e');
   }
 
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..rootDomain = rootDomain.rootDomain
-    ..rootPort = rootDomain.rootPort
-    ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
-    ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
-    ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
-    ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
-    ..hashingAlgoType =
-        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
+  // NOTE: the posture is final in AtClientPreference, so it is fixed at
+  // construction rather than set in the cascade below.
+  final enroller = AuthCliArgs.postureForEnroller(ar);
+  if (enroller.notice != null) {
+    stderr.writeln('${chalk.blue('[Information]')} ${enroller.notice}');
+  }
+  AtOnboardingPreference atOnboardingPreference =
+      AuthCliArgs.preferenceUnder(enroller.posture)
+        ..rootDomain = rootDomain.rootDomain
+        ..rootPort = rootDomain.rootPort
+        ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
+        ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
+        ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
+        ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
+        ..hashingAlgoType =
+            HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
 
   final impl = AtOnboardingServiceImpl(atSign, atOnboardingPreference);
   String lastProgressEventType = '';

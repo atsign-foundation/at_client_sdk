@@ -84,6 +84,28 @@ void main() {
       expect(result.runtimeType, AtKeysData);
     });
 
+    test('a failing read leaves the stored key material intact', () async {
+      when(
+        () => mockBiometricStorage.getStorage(
+          any(),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((_) async => mockBiometricStorageFile);
+      // NOTE: this store may hold the only copies of the atSign's keys, so a
+      // read path that writes on failure turns a transient error into
+      // permanent key loss.
+      when(
+        () => mockBiometricStorageFile.read(),
+      ).thenThrow(Exception('platform channel unavailable'));
+      when(
+        () => mockBiometricStorageFile.write(any()),
+      ).thenAnswer((_) async {});
+
+      await expectLater(keyChainStorage.readAtKeysData(), throwsException);
+
+      verifyNever(() => mockBiometricStorageFile.write(any()));
+    });
+
     test('readAtKeys returns null if no data exists', () async {
       when(
         () => mockBiometricStorage.getStorage(
