@@ -100,17 +100,27 @@ class AtAuthImpl implements AtAuth {
     return memory;
   }
 
-  /// Hands [lookUp] the authenticator, when it is the implementation that has
-  /// somewhere to put it.
+  /// Hands [lookUp] the authenticator when it is the implementation that has
+  /// somewhere to put it, and sets at_lookup's credential fields otherwise,
+  /// because those are the only route such a lookup has.
   ///
-  /// `AtLookUp` does not declare it - that interface is frozen because mocks
-  /// implement it - so any other implementation keeps the existing behaviour.
-  void _installAuthenticator(AtLookUp? lookUp, AtAuthenticator authenticator) {
+  /// `AtLookUp` does not declare the seam - that interface is frozen because
+  /// mocks implement it - so any other implementation authenticates from the
+  /// fields as it always did. [signingAlgo] reaches only that route; the
+  /// authenticator carries its own.
+  void _installAuthenticator(AtLookUp lookUp, AtAuthenticator authenticator,
+      {SigningAlgoType? signingAlgo}) {
     if (lookUp is AtLookupMuxable) {
       lookUp.authenticator = authenticator;
-    } else {
-      _logger.finer('${lookUp.runtimeType} has no authenticator seam; '
-          'leaving authentication on the credential fields');
+      return;
+    }
+    _logger.finer('${lookUp.runtimeType} has no authenticator seam; '
+        'authenticating from the credential fields');
+    // ignore: deprecated_member_use
+    lookUp.atChops = atChops;
+    if (signingAlgo != null) {
+      // ignore: deprecated_member_use
+      lookUp.signingAlgoType = signingAlgo;
     }
   }
 
@@ -158,17 +168,9 @@ class AtAuthImpl implements AtAuth {
     // enrollment's RSA credentials. AtKeys owns that resolution — it is the
     // only reader of either source. ??= to support mocking.
     final algorithm = atAuthKeys.authenticationAlgorithmFor(enrollmentId);
-    if (algorithm != null) {
-      atLookUp!.signingAlgoType = algorithm;
-    }
     atChops ??= atAuthKeys.authenticationFor(enrollmentId).chops;
-    atLookUp!.atChops = atChops;
-    // Installed alongside atChops, not instead of it. at_lookup prefers the
-    // authenticator, so this is the route that runs - but the field is still
-    // read for work that is not authentication at all (enrollment_approver
-    // takes the encryption private key out of it), so it cannot go yet.
     _installAuthenticator(
-        atLookUp,
+        atLookUp!,
         authenticatorFor(
           await _keysSourceFor(atAuthRequest.atSign, atAuthKeys,
               // Only when the request supplied a source and no keys of its
@@ -180,7 +182,8 @@ class AtAuthImpl implements AtAuth {
           atAuthRequest.atSign,
           enrollmentId: enrollmentId,
           chops: atChops,
-        ));
+        ),
+        signingAlgo: algorithm);
 
     _logger.finer('Authenticating using PKAM');
     pkamAuthenticator ??= PkamAuthenticator();
@@ -333,24 +336,23 @@ class AtAuthImpl implements AtAuth {
         ..selfEncryptionKey = _atAuthKeys.defaultSelfEncryptionKey == null
             ? null
             : AESKey(_atAuthKeys.defaultSelfEncryptionKey!.toString()));
-      atLookUp!.signingAlgoType = atOnboardingRequest.signingAlgoType;
     } else {
       atChops ??= _atAuthKeys.toAtChops();
     }
-    atLookUp!.atChops = atChops;
     // The algorithm is named rather than derived here. A PQ-native activation
     // signs with the keypair minted a few lines above, which is in no keyfile,
     // under an enrollment the atServer has not created yet - so there is
     // nothing for the keystore to resolve, and the rsa2048 default would sign
     // an ML-DSA key with the RSA routine.
     _installAuthenticator(
-        atLookUp,
+        atLookUp!,
         authenticatorFor(
           await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
           atOnboardingRequest.atSign,
           chops: atChops,
           signingAlgo: atOnboardingRequest.signingAlgoType,
-        ));
+        ),
+        signingAlgo: atOnboardingRequest.signingAlgoType);
 
     //3. send onboarding enrollment
     String? enrollmentIdFromServer;
@@ -375,14 +377,15 @@ class AtAuthImpl implements AtAuth {
     // about who is on the connection, and the enrollment-record-authoritative
     // signing-algorithm check never runs.
     _installAuthenticator(
-        atLookUp,
+        atLookUp!,
         authenticatorFor(
           await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
           atOnboardingRequest.atSign,
           enrollmentId: enrollmentIdFromServer,
           chops: atChops,
           signingAlgo: atOnboardingRequest.signingAlgoType,
-        ));
+        ),
+        signingAlgo: atOnboardingRequest.signingAlgoType);
 
     //4. Close connection to server
     try {

@@ -1,5 +1,21 @@
 ## 4.0.0-rc2
 
+- fix: `AtAuth.authenticate` and `onboard` install an authenticator on a
+  lookup that can take one and set at_lookup's credential fields only on a
+  lookup that cannot. They used to write both, and `AtLookUp` prefers the
+  authenticator, so on the lookup at_auth builds for itself the fields were
+  written and never read. A lookup handed in through
+  `AtAuth.create(atLookUp:)` without the seam authenticates from the fields
+  as before. A test covers which wiring each kind of lookup gets.
+  ⚠️ A caller that took `AtAuthResponse.atLookUp` and passed it to
+  `approve` without `approverChops` was reading key material at_auth had
+  left on the lookup; pass `approverChops`, which is what `approve`
+  documents and what at_client does.
+- refactor: the legacy flat fields of a `.atKeys` document are
+  self-encrypted through `AESEncryptionAlgo` directly rather than through
+  an `AtChops` built for the purpose. Same bytes: a new test pins the
+  at-rest ciphertext against openssl and re-encrypts the committed legacy
+  fixture byte-for-byte.
 - fix: the enrolment handshake installs an authenticator on a muxable lookup
   and reaches for at_lookup's credential ladder only when it cannot. It used
   to set both, and `AtLookUp` prefers the authenticator, so the ladder fields
