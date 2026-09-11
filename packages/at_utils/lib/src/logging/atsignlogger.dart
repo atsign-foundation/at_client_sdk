@@ -13,8 +13,6 @@ class AtSignLogger {
 
   static final ConsoleLoggingHandler consoleLoggingHandler =
       ConsoleLoggingHandler();
-  static final StdErrLoggingHandler stdErrLoggingHandler =
-      StdErrLoggingHandler();
 
   /// The default logging handler to log events.
   ///
