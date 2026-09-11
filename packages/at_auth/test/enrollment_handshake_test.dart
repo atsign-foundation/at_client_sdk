@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
@@ -9,7 +10,29 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/pkam_pin.dart';
+
+/// `AtLookupImpl` implements `AtLookupMuxable`, so this double has the seam.
 class MockAtLookUp extends Mock implements AtLookupImpl {}
+
+/// The frozen interface alone: no authenticator seam, only the credential
+/// fields.
+class MockPlainLookUp extends Mock implements AtLookUp {}
+
+/// Runs an installed [AtAuthenticator] for real and records what it sent.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+  final List<String> replies;
+
+  _RecordingExecutor(this.replies);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return replies.removeAt(0);
+  }
+}
 
 /// What one poll of the approval handshake runs into.
 enum Poll {
@@ -31,34 +54,40 @@ enum Poll {
 void main() {
   const atSign = '@alice🛠';
 
-  /// A handshake rig whose PKAM polls run into [script], one entry per poll,
-  /// and whose post-approval key fetches succeed — so the only thing under
-  /// observation is how the retry budget responds to the script.
-  Future<(AtEnrollmentResponse, MockAtLookUp, List<Poll>)> rig(
-      List<Poll> script) async {
-    final apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
-    final encryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
-    final selfEncryptionKey = aesKeyMap[atSign]!;
+  final apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
 
-    final atChopsKeys = AtChopsKeys.create(
-        AtEncryptionKeyPair.create(
-            encryptionPublicKeyMap[atSign]!, encryptionPrivateKey),
-        AtPkamKeyPair.create(
-            pkamPublicKeyMap[atSign]!, pkamPrivateKeyMap[atSign]!));
-    atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
-    final atChopsImpl = AtChopsImpl(atChopsKeys);
-    final iv = InitialisationVector.legacy();
+  /// An enrollee's keys as `submit` leaves them for the handshake: the APKAM
+  /// keypair, the atSign's encryption public key, the symmetric key, and
+  /// neither of the two secrets the handshake is about to fetch. This one
+  /// holds the demo RSA keypair, which is the PKAM pin's key.
+  AtKeys rsaKeys() => AtKeys()
+    ..apkamPublicKey = AtBytes.fromString(pkamPublicKeyMap[atSign]!)
+    ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKeyMap[atSign]!)
+    ..defaultEncryptionPublicKey =
+        AtBytes.fromString(encryptionPublicKeyMap[atSign]!)
+    ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey);
 
-    Future<String> sealed(String value) async =>
-        (await atChopsImpl.encryptString(value, EncryptionKeyType.aes256,
-                keyName: 'apkamSymmetricKey', iv: iv))
-            .result;
+  AtEnrollmentResponse responseFor(AtKeys keys) =>
+      AtEnrollmentResponse('123', EnrollmentStatus.pending,
+          atSign: atSign,
+          rootDomain: AtRootDomain.atsignDomain,
+          atAuthKeys: keys);
 
-    final sealedPrivateKey = await sealed(encryptionPrivateKey);
-    final sealedSelfKey = await sealed(selfEncryptionKey);
+  /// Stubs [lookup]'s PKAM polls to run into [script], one entry per poll,
+  /// and its post-approval key fetches to succeed. Returns the polls as they
+  /// happen.
+  Future<List<Poll>> stubLookUp(AtLookUp lookup, List<Poll> script) async {
+    // Sealed the way an approver seals them, under the legacy IV the record
+    // then carries none of.
+    final sealer = AESEncryptionAlgo(AESKey(apkamSymmetricKey));
+    Future<String> sealed(String value) async => base64.encode(await sealer
+        .encrypt(Uint8List.fromList(utf8.encode(value)),
+            iv: InitialisationVector.legacy()));
+
+    final sealedPrivateKey = await sealed(encryptionPrivateKeyMap[atSign]!);
+    final sealedSelfKey = await sealed(aesKeyMap[atSign]!);
 
     final polled = <Poll>[];
-    final lookup = MockAtLookUp();
     when(() => lookup.pkamAuthenticate(enrollmentId: '123'))
         .thenAnswer((_) async {
       final outcome =
@@ -86,19 +115,30 @@ void main() {
             auth: any(named: 'auth')))
         .thenAnswer(
             (_) async => 'data:${jsonEncode({'value': sealedSelfKey})}');
+    return polled;
+  }
 
-    final keys = AtKeys()
-      ..apkamPublicKey = AtBytes.fromString(pkamPublicKeyMap[atSign]!)
-      ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKeyMap[atSign]!)
-      ..defaultEncryptionPublicKey =
-          AtBytes.fromString(encryptionPublicKeyMap[atSign]!)
-      ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey);
+  /// A handshake rig around a lookup that has the authenticator seam, whose
+  /// PKAM polls run into [script] and whose key fetches succeed — so the only
+  /// thing under observation is how the handshake responds to the script.
+  Future<(AtEnrollmentResponse, MockAtLookUp, List<Poll>)> rig(
+      List<Poll> script,
+      {AtKeys? keys}) async {
+    final lookup = MockAtLookUp();
+    final polled = await stubLookUp(lookup, script);
+    return (responseFor(keys ?? rsaKeys()), lookup, polled);
+  }
 
-    final response = AtEnrollmentResponse('123', EnrollmentStatus.pending,
-        atSign: atSign,
-        rootDomain: AtRootDomain.atsignDomain,
-        atAuthKeys: keys);
-    return (response, lookup, polled);
+  /// Runs the authenticator [lookup] was handed against a recorded challenge
+  /// and returns the `pkam:` command it sent.
+  Future<String> pkamSentBy(MockAtLookUp lookup) async {
+    final installed = verify(() => lookup.authenticator = captureAny())
+        .captured
+        .single as AtAuthenticator;
+    final executor =
+        _RecordingExecutor(['data:$pkamPinChallenge', 'data:success']);
+    expect(await installed(executor), isTrue);
+    return executor.sent.last;
   }
 
   Future<void> waitFor(
@@ -218,6 +258,69 @@ void main() {
       verify(() => lookup.authenticator = any(that: isNotNull)).called(1);
       verifyNever(() => lookup.atChops = any());
       verifyNever(() => lookup.signingAlgoType = SigningAlgoType.rsa2048);
+      verifyNever(() => lookup.signingAlgoType = SigningAlgoType.mldsa65);
+    });
+
+    test('and that authenticator signs the PKAM with the enrollment keypair',
+        () async {
+      final (response, lookup, _) = await rig([Poll.approved]);
+      await AtEnrollmentImpl().waitForApproval(response, atLookup: lookup);
+
+      final pkam = await pkamSentBy(lookup);
+
+      expect(pkam, contains(':enrollmentId:123:'),
+          reason: 'the handshake authenticates as the enrollment being '
+              'approved, or the atServer answers for the wrong principal');
+      expect(pkam, endsWith(':$expectedPkamSignature\n'),
+          reason: 'the bytes openssl produces for this challenge under this '
+              'key: what signs may move, the signature may not');
+    });
+
+    test('an ML-DSA enrollment signs with its typed keypair, and it verifies',
+        () async {
+      // The shape submit leaves for a PQ enrollee: the keypair's bytes in the
+      // flat fields, which carry no algorithm, and typed material under the
+      // enrollment id, which does. ML-DSA signatures are randomised, so the
+      // check is the verifier's rather than a byte pin.
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      final keys = rsaKeys()
+        ..apkamPublicKey = AtBytes(pair.publicKey)
+        ..apkamPrivateKey = AtBytes(pair.secretKey)
+        ..fileApkamMaterial(
+            enrollmentId: '123',
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            publicKey: base64Encode(pair.publicKey),
+            privateKey: base64Encode(pair.secretKey));
+      final (response, lookup, _) = await rig([Poll.approved], keys: keys);
+      await AtEnrollmentImpl().waitForApproval(response, atLookup: lookup);
+
+      final pkam = await pkamSentBy(lookup);
+
+      expect(pkam, contains(':signingAlgo:mldsa65:'),
+          reason: 'the algorithm comes from the typed material; the default '
+              'would sign an ML-DSA key with the RSA routine');
+      final signature =
+          base64Decode(pkam.substring(pkam.lastIndexOf(':') + 1).trim());
+      expect(
+          MlDsa65PureDartAlgo.verifyBytesSync(
+              Uint8List.fromList(utf8.encode(pkamPinChallenge)),
+              signature: signature,
+              publicKey: pair.publicKey),
+          isTrue,
+          reason: 'signed over the challenge bytes directly, as the atServer '
+              'verifies mldsa65');
+    });
+
+    test('a lookup without the seam gets the credential fields instead',
+        () async {
+      final lookup = MockPlainLookUp();
+      await stubLookUp(lookup, [Poll.approved]);
+
+      await AtEnrollmentImpl()
+          .waitForApproval(responseFor(rsaKeys()), atLookup: lookup);
+
+      verify(() => lookup.atChops = any(that: isNotNull)).called(1);
+      // The demo keypair is RSA and names no other algorithm.
       verifyNever(() => lookup.signingAlgoType = SigningAlgoType.mldsa65);
     });
   });

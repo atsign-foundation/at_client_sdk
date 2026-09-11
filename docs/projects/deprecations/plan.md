@@ -278,10 +278,11 @@ step that touches a lifecycle seam runs all 4 live packs before it commits.
 **Where this stands on 2026-09-11.** The workspace measured 1206 uses, from
 1403, before the keyfile and lookup-wiring changes below landed in at_auth; that
 figure is re-derived, never trusted. Steps 0, 1 and 2 are done; step 3 has its
-accessors, its signing path, its keyfile self-encryption, its lookup wiring
-and its approval key material, with 23 `lib` uses left in at_auth; step 4 has
-its key-material half, which is what unblocked at_client's test tree. What is
-owed, in order: the rest of at_auth's 23, then the rest of step 4 (`apkam_signing`, `sync_service_impl`, and
+accessors, its signing path, its keyfile self-encryption, its lookup wiring,
+its approval key material and its handshake, with 16 `lib` uses left in
+at_auth; step 4 has its key-material half, which is what unblocked at_client's
+test tree. What is owed, in order: the rest of at_auth's 16, then the rest of
+step 4 (`apkam_signing`, `sync_service_impl`, and
 deprecating `AtClient.atChops` itself), then steps 5 to 7. Step 7 is no longer
 blocked by the legacy question, which step 3 answered, but it is blocked on the
 three at_client_flutter readings recorded under it.
@@ -307,6 +308,10 @@ depends on:
   key-material form of what the approver read off an `AtChops`. at_client
   fills it from `LocalSecondary`'s three-tier getters, so a client built from
   a keyfile approves without ever holding an `AtChops`.
+- **`test_utils/pkam_pin.dart`** (at_auth) — the one home of the
+  openssl-captured PKAM signature and its challenge, so every path that signs
+  a PKAM challenge is held to the same bytes; `at_authenticator_test.dart` and
+  `enrollment_handshake_test.dart` both assert it.
 
 ⛔ A fixture helper is only worth having if it goes through the replacement.
 One that wrapped the deprecated construction would drop the count while
@@ -450,7 +455,7 @@ deprecated declaration raises nothing, the same way `KeyIOMixin`'s 13
 annotating rather than fixing, so a step that reports a drop has to say which
 kind it was.
 
-**What remains of this step**, measured 2026-09-11, is 23 uses in `lib` and 76
+**What remains of this step**, measured 2026-09-11, is 16 uses in `lib` and 73
 in `test`, from 56 and 92 (`dart analyze` in `packages/at_auth`, counting the
 `deprecated_member_use` lines by path). Twelve of the test uses are in
 `auth_wiring_test.dart` on purpose: it asserts that `atChops` and
@@ -462,16 +467,24 @@ arm through the deprecated `approverChops` door, which stays until the major.
 | file | uses | what they are |
 | ---- | ---: | ------------- |
 | `at_authenticator.dart` | 8 | the two injected-signer branches, and `AtChops` in three signatures |
-| `enrollment_handshake.dart` | 7 | `_apkamChopsAwaitingSymmetricKey`, the shape for keys that are not a complete keyfile yet |
 | `at_auth_impl.dart` | 5 | the `AtAuth.atChops` field, and the `AtChops` onboarding builds to fill it; both go with that field's deprecation |
 | `at_auth.dart` | 2 | `AtAuth.atChops`, the interface field |
 | `at_keys.dart` | 1 | `authenticationFor`'s return type |
 
-Three uses are ignored with their reason rather than counted: the two
-credential ladder writes inside `AtAuthImpl._installAuthenticator`, which run
-only for a lookup without the authenticator seam, because those fields are the
-only route such a lookup has; and the approver's read of `atLookUp.atChops`,
-the door a caller that has not moved to `approverKeys` still comes through.
+Deprecated names are ignored with their reason rather than counted in three
+places, each of which exists only for a lookup without the authenticator seam
+or a caller that has not moved: the two credential ladder writes inside
+`AtAuthImpl._installAuthenticator`; `EnrollmentHandshake._installLadder`,
+which builds the ladder's `AtChops` around the APKAM keypair alone; and the
+approver's read of `atLookUp.atChops`, the door a caller that has not moved to
+`approverKeys` still comes through. The handshake's seven are gone: it hands
+`authenticatorFor` the enrollee's keys alone, since `authenticationKeyPairFor`
+reads only the APKAM keypair and those keys always hold it, and
+`enrollment_handshake_test.dart` asserts the openssl PKAM pin on the
+handshake's own authenticator and verifies an ML-DSA enrollment's signature
+with at_chops' verifier. Its write of the unwrapped symmetric key onto its own
+`AtChops` was removed first, alone, and every test stayed green: nothing read
+it.
 The approver's own four are gone: `approve` takes `ApproverKeyMaterial`, the
 encryption private key and self-encryption key that are all it reads, and
 `approver_key_material_test.dart` opens what it seals with the enrollee's own

@@ -5,6 +5,7 @@ import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
+import 'test_utils/pkam_pin.dart';
 
 /// Records what the authenticator sent, and with which budgets, and hands back
 /// scripted atServer replies.
@@ -27,11 +28,10 @@ class RecordingExecutor implements AtCommandExecutor {
 }
 
 void main() {
-  // The demo key maps are keyed on the emoji atSigns, so PKAM can sign for
-  // real here rather than with placeholder material.
-  const atSign = '@alice🛠';
-  const challenge = '_9e8169dc-5618-44ec-ab43-1a5b2144c581@alice🛠'
-      ':c3d345fc-5691-4f90-bc34-17cba31f060f';
+  // The PKAM pin's atSign and challenge, so the signature asserted below is
+  // the one frozen in test_utils/pkam_pin.dart.
+  const atSign = pkamPinAtSign;
+  const challenge = pkamPinChallenge;
   const cramSecret = 'cramsecret123';
 
   /// Captured with `shasum -a 512` over `cramsecret123` + the challenge, so
@@ -39,23 +39,6 @@ void main() {
   const expectedCramDigest =
       'a6c61879f2bd17254e233a74578c9be0304e556d0517e5c0fdb1d6444047a041'
       '99fdba06b01c3765cfc2ca6a1d57124f5da58f05fea1f777a705814e2d54e766';
-
-  /// FROZEN: the base64 PKCS#1 v1.5 SHA-256 signature the `pkam:` verb
-  /// carries for [challenge] under [atSign]'s demo PKAM private key. The
-  /// atServer verifies it against the key it holds, so these bytes are a
-  /// cross-implementation contract rather than an implementation detail: an
-  /// intended change edits this literal, and that edit is the review.
-  ///
-  /// Captured with `openssl dgst -sha256 -sign <key> -keyform DER` over the
-  /// raw challenge bytes, so the expectation does not come from the code it
-  /// is checking — the same standard as [expectedCramDigest] above.
-  const expectedPkamSignature =
-      'Y9uoEs+F2k/cZ285RGbPx9yShG5Ea/e0FcYiXZ7MDeO/BFxop7s4c7EHCpvH5x0TEquq'
-      '1XY/524q+CLq7JyeA8noCaQZB04T3F7EWZp3GFnad4rX3OwUICb/TM4YDWt+H21eXsKX'
-      'LktwSHYqhRcZcil0M2XrT+sqekN1nj0/mRWL09JyTMNxDbfgvndXzBKdHt8t1ihlRdoQ'
-      'AnZn16qWrwj9EI0X4WsuNxDEB+J6oPMYUmiVsPGNhZvFjyYqtKuxtQRsWcVc962trwZa'
-      'b9jovcMeERuTqOCiUxsER60e1x94AjiAK7V8Rx5+01q3Lp5IVwnn3Ungd5hgMLngHXXg'
-      'Uw==';
 
   /// Demo material, so the PKAM leg performs a real RSA signature rather than
   /// stopping short of the thing it exists to do.

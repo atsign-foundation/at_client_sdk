@@ -1,5 +1,16 @@
 ## 4.0.0-rc2
 
+- refactor: the enrolment handshake authenticates from the enrollee's keys
+  alone. It used to build an `AtChops` around them and inject it as the
+  signer, with a special shape for an enrollee still awaiting its symmetric
+  key; `authenticatorFor` reads only the APKAM keypair, which those keys
+  always hold, so neither is needed. Same bytes: the openssl-captured PKAM
+  signature is now asserted on the handshake's own authenticator, and an
+  ML-DSA enrollment's signature is checked with at_chops' verifier. A lookup
+  without the authenticator seam still gets at_lookup's credential fields,
+  built from the keypair alone.
+  ⚠️ The handshake no longer copies the unwrapped symmetric key into an
+  `AtChops`; it never left the handshake, and nothing read it.
 - feat: `AtEnrollment.approve` takes `approverKeys`, an `ApproverKeyMaterial`
   holding the atSign's encryption private key and its self-encryption key,
   which is all approval reads. `approverChops` is deprecated and still
