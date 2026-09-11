@@ -81,9 +81,12 @@ class FlutterEnrollmentService {
     }
 
     // NOTE: the keys this submission minted, which only the enrollee holds.
-    // `session` is the forward-looking source and carries none here: it is
-    // populated from the request's, and an app enrolling through the OTP door
-    // has no session to supply — see the dartdoc on [enroll].
+    // A response carries a session only when the request did, and the request
+    // this service builds carries none. An enrollee CAN supply one — its
+    // `atKeysIo` would be the destination the new keys are persisted to, and
+    // at_auth's handshake flushes them there — which would replace this write
+    // rather than move it. That is a decision about where an enrolled app's
+    // keys land; see the dialog that builds the request.
     // ignore: deprecated_member_use
     final submittedKeys = atEnrollmentResponse.atAuthKeys;
     if (submittedKeys != null) {

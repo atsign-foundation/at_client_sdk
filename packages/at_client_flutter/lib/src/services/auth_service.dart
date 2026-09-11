@@ -73,12 +73,12 @@ class AuthService {
   /// could read another atSign's keys.
   ///
   /// ⚠️ [backupKeys] is written from the response's own keys rather than from
-  /// its `session`. A session is populated only when the request supplied an
-  /// `atKeysIo`, and a request may legitimately supply `atAuthKeys` instead —
-  /// so sourcing the backup from the session would silently back nothing up
-  /// for that caller. The two annotations retire together: when
-  /// `AtAuthRequest.atAuthKeys` goes, every request carries a source, and this
-  /// reads `session.atKeysIo` instead.
+  /// its `session`, because at_auth populates a session only for a request
+  /// that supplied an `atKeysIo` — so for a caller that passed `atAuthKeys`
+  /// instead this would back nothing up. That is a gap in at_auth rather than
+  /// a limit on the caller: it wraps a fixed key set in an `InMemoryAtKeysIo`
+  /// internally already, and could hand that back as the session. When it
+  /// does, this reads `session.atKeysIo` and the annotation is satisfied.
   Future<AtAuthResponse> authenticate(
     AtAuthRequest atAuthRequest, {
     List<WrittenAtKeysIo>? backupKeys,

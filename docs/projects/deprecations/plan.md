@@ -816,24 +816,44 @@ readings suspected, and none was a rename.
   the field did; the claim moved onto the precondition that makes filing wrong
   — `expect(response.atAuthKeys, isNull)` — which reddens when the mocked
   approval is made to carry keys.
-- **`auth_service.dart`'s backup keeps reading the response's keys**, with the
-  reason in its dartdoc: a `session` is populated only when the request
-  supplied an `atKeysIo`, and `AtAuthRequest` explicitly accepts `atAuthKeys`
-  instead, so sourcing the backup from the session would back nothing up for
-  that caller. `AuthResponse.atAuthKeys` and `AtAuthRequest.atAuthKeys` have
-  to retire together: when the request field goes, every request carries a
-  source and the backup reads `session.atKeysIo`.
-- **`enrollment_service.dart`'s submit path is the same shape**, and the same
-  ruling: it files the keys the submission minted, which only the enrollee
-  holds, and an app enrolling through the OTP door supplies no session for the
-  response to carry one.
-- **`apkam_dialog.dart` keeps its loose `atSign` and `rootDomain`.** The
-  session the annotation asks for would be a key **destination** rather than
-  an authenticated session — `AtEnrollmentRequest`'s own dartdoc says its
-  `atKeysIo` is where the newly enrolled app's keys are persisted — so
-  adopting one decides where this widget's enrolled keys land. That is a
-  design choice for whoever owns the widget, and it is the question this step
-  now carries rather than a move it can make.
+- **`auth_service.dart`'s backup keeps reading the response's keys** for now,
+  because at_auth populates a session only for a request that supplied an
+  `atKeysIo`, and a caller that passed `atAuthKeys` would have nothing backed
+  up. ⚠️ **That is a gap in at_auth, not a limit on the caller** — see the
+  correction below.
+- **`enrollment_service.dart`'s submit path is the same shape**: it files the
+  keys the submission minted, and the request this service builds carries no
+  session for the response to carry one.
+- **`apkam_dialog.dart` keeps its loose `atSign` and `rootDomain`**, because
+  supplying a session moves the persisting of the enrolled app's keys into
+  at_auth's handshake — `AtEnrollmentRequest`'s dartdoc says its `atKeysIo` is
+  where they land — from the service that writes them today. A decision about
+  where those keys land, which is the question this step now carries.
+
+⛔ **Correction, same day: "a legitimate caller cannot reach the replacement"
+was wrong, and it was mine.** gkc asked why every `AtEnrollmentRequest` caller
+cannot supply a session and every `AtAuthRequest` caller an `AtKeysIo`. They
+can, both:
+
+- `InMemoryAtKeysIo` is exported from at_auth's barrel, so a caller holding an
+  `AtKeys` wraps it in three lines. Measured across the tree: **32 of 36
+  `AtAuthRequest` constructions already pass a source**, and the 4 that pass
+  keys alone are at_client_flutter's examples and one widget test, all taking
+  keys straight from an approved enrollment.
+- at_auth **already builds that wrapper itself**, in `AtAuthImpl._keysSourceFor`,
+  for exactly the `atAuthKeys`-only case. So the comment beside the session
+  block — *"The legacy atAuthKeys-only path has no source to hand across, so it
+  gets no session"* — is false: it has one, built a few lines earlier. Handing
+  it over is what makes every successful authentication carry a session, and
+  then `auth_service.dart`'s backup reads `session.atKeysIo`.
+- An enrollee can construct an `AtAuthSession` too: its atSign, its root
+  domain, and an `AtKeysIo` destination. What stops the dialog is not
+  reachability but consequence — at_auth's handshake then persists the
+  enrolled keys into that source, replacing the write the flutter service does
+  after submit.
+
+So the four ignores rest on a gap and a design choice, not on an unreachable
+replacement, and both are fixable. The annotations stand.
 
 **The count, decomposed.** at_client_flutter's `lib` reports 0 deprecated uses,
 from 7, and that figure is mostly annotation: one use was deleted with the dead
