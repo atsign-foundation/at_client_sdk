@@ -2,6 +2,18 @@
 
 ## 1.1.5-rc1
 
+- **BREAKING:** `ApkamActivationDialog` takes a required `atKeysIo`, the
+  destination for the keys its enrollment mints. The enrolled app holds the
+  only copy, and the approval completes the keyset with the atSign's
+  encryption private key and self-encryption key, so where it lands is the
+  app's choice rather than this widget's: pass `KeychainAtKeysIo()` for the
+  platform keychain, or a `FileAtKeysIo` or secure-element store. The dialog
+  puts it on the request as a session, which is what makes at_auth write the
+  completed keyset there and answer with a session of its own.
+- The three examples build their client from that session, like their other
+  flows, and the branch that adopted auth's live `AtChops`/`AtLookUp` is
+  gone — it was reachable only while an enrollment could hand back keys with
+  nowhere to put them.
 - fix: approving an enrollment no longer tries to file the enrollee's keys in
   the keychain. An approval answers with the enrollment id and its status
   and carries no key material — the enrollee files its own keys on its own

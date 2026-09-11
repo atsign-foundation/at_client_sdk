@@ -152,13 +152,14 @@ Future<void> authenticateWithKeychain(BuildContext context) async {
       request: authRequest,
       backupKeys: [KeychainAtKeysIo()],
     );
-    if (response == null || !response.isSuccessful) {
+    final session = response?.session;
+    if (session == null) {
       _logger.warning('PkamDialog failed or user cancelled');
       return;
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, response);
+    await _setupAtClient(context, session);
   }, context: context);
 }
 
@@ -190,13 +191,14 @@ Future<void> authenticateWithFile(BuildContext context) async {
       request: authRequest,
       backupKeys: [KeychainAtKeysIo()],
     );
-    if (response == null || !response.isSuccessful) {
+    final session = response?.session;
+    if (session == null) {
       _logger.warning('PkamDialog failed or user cancelled');
       return;
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, response);
+    await _setupAtClient(context, session);
   }, context: context);
 }
 
@@ -217,6 +219,10 @@ Future<void> authenticateWithApkam(BuildContext context) async {
       appName: namespace,
       deviceName: 'default',
       namespaces: {namespace: 'rw'},
+      // Where this enrollment's keys land. The enrolled app holds the only
+      // copy, so the destination is the app's choice; at_auth writes the
+      // completed keyset there once the approval releases it.
+      atKeysIo: KeychainAtKeysIo(),
     );
 
     if (enrollmentResponse == null) {
@@ -226,15 +232,18 @@ Future<void> authenticateWithApkam(BuildContext context) async {
       );
     }
 
-    if (enrollmentResponse.atAuthKeys == null) {
-      _logger.severe('Enrollment failed: atAuthKeys missing');
-      throw AtAuthenticationException('Enrollment failed: atAuthKeys missing');
+    final enrolled = enrollmentResponse.session;
+    if (enrolled == null) {
+      _logger.severe('Enrollment failed: no session to authenticate with');
+      throw AtAuthenticationException(
+        'Enrollment failed: no session to authenticate with',
+      );
     }
 
-    _logger.info('Step 3: Creating AuthRequest with atAuthKeys');
+    _logger.info('Step 3: Creating AuthRequest from the enrolled keys');
     AtAuthRequest authRequest = AtAuthRequest(
       request.atSign,
-      atAuthKeys: enrollmentResponse.atAuthKeys!,
+      atKeysIo: enrolled.atKeysIo,
       rootDomain: request.rootDomain,
     );
     _logger.info('Step 4: Showing PkamDialog');
@@ -243,13 +252,14 @@ Future<void> authenticateWithApkam(BuildContext context) async {
       request: authRequest,
       backupKeys: [KeychainAtKeysIo()],
     );
-    if (response == null || !response.isSuccessful) {
+    final session = response?.session;
+    if (session == null) {
       _logger.warning('PkamDialog failed or user cancelled');
       return;
     }
 
     _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, response);
+    await _setupAtClient(context, session);
   }, context: context);
 }
 
@@ -331,8 +341,11 @@ Future<String?> _openFileSaveDialog({
 }
 
 /// Helper method to set up the atClient instance and navigate to home page
-Future<void> _setupAtClient(BuildContext context, AuthResponse response) async {
-  _logger.info('Setting up atClient for ${response.atSign}');
+/// Every flow here hands authentication a key source, so it always answers
+/// with a session — and the client rebuilds its own connection from the
+/// session's source rather than adopting auth's live objects.
+Future<void> _setupAtClient(BuildContext context, AtAuthSession session) async {
+  _logger.info('Setting up atClient for ${session.atSign}');
 
   var dir = await getApplicationSupportDirectory();
   _logger.info('Using directory: ${dir.path}');
@@ -341,37 +354,19 @@ Future<void> _setupAtClient(BuildContext context, AuthResponse response) async {
   // closedByClient: this app picks the location and the client still closes the
   // store when it stops, so there is nothing to tear down.
   var storage = HiveAtClientStorage(
-    atSign: response.atSign,
+    atSign: session.atSign,
     storagePath: dir.path,
     closedByClient: true,
   );
 
-  if (response.enrollmentId == null) {
+  if (session.enrollmentId == null) {
     _logger.warning("EnrollmentId is null");
   }
-  final session = response.session;
-  if (session != null) {
-    // Preferred path: hand over the session; the client rebuilds its own
-    // authenticated connection from the session's key source.
-    await AtClientManager.getInstance().fromAuthSession(
-      session,
-      acp,
-      storage: storage,
-    );
-  } else {
-    // Transitional fallback for flows that hand back only atAuthKeys with no
-    // AtKeysIo source (e.g. APKAM enrollment): adopt auth's already-
-    // authenticated AtChops/AtLookUp directly.
-    await AtClientManager.getInstance().setCurrentAtSign(
-      response.atSign,
-      namespace,
-      acp,
-      enrollmentId: response.enrollmentId,
-      atChops: response.atChops,
-      atLookUp: response.atLookUp,
-      storage: storage,
-    );
-  }
+  await AtClientManager.getInstance().fromAuthSession(
+    session,
+    acp,
+    storage: storage,
+  );
 
   if (context.mounted) {
     _logger.info('Navigating to HomePage');
