@@ -1322,20 +1322,40 @@ class AtKeys {
     );
   }
 
+  /// The atSign's active material in [role], whatever algorithm it names.
+  CryptographicMaterial? _activeAtSignMaterial(String role) => atSignKeys
+      .where((m) =>
+          m.role == role && m.status == CryptographicMaterialStatus.active)
+      .firstOrNull;
+
   /// The atSign's RSA encryption keypair: the key a legacy shared key is
   /// wrapped to, and whose private half signs public data.
   ///
-  /// Read from the flat
-  /// [defaultEncryptionPublicKey]/[defaultEncryptionPrivateKey], because that
-  /// is where it lives in every keyfile this build can write — nothing files
-  /// an atSign encryption keypair as typed `publicEncryption` /
-  /// `privateDecryption` material. A writer that starts to would need this
-  /// getter to prefer it, as [authenticationKeyPairFor] already does for the
-  /// APKAM pair.
+  /// Typed `publicEncryption`/`privateDecryption` material under the atSign
+  /// wins where this keyfile holds an `rsa2048` pair of it, and the flat
+  /// [defaultEncryptionPublicKey]/[defaultEncryptionPrivateKey] answer
+  /// otherwise. Both are writable without a deprecated member — the typed
+  /// pair through [addKey] or the `keysList` constructor — so a caller has a
+  /// route that does not touch the flat fields at all.
+  ///
+  /// The algorithm is checked rather than assumed from the role: the role
+  /// tokens are open strings, and an X25519 or ML-KEM key filed under
+  /// `publicEncryption` is not an [RsaKeyPair] however it is labelled.
   ///
   /// Null unless the keyfile holds both halves. An atSign activated with
   /// `mintLegacyMaterial: false` holds neither.
   RsaKeyPair? get encryptionKeyPair {
+    final typedPublic =
+        _activeAtSignMaterial(CryptographicMaterialRole.publicEncryption);
+    final typedPrivate =
+        _activeAtSignMaterial(CryptographicMaterialRole.privateDecryption);
+    if (typedPublic != null &&
+        typedPrivate != null &&
+        typedPublic.algorithm == CryptographicMaterialAlgorithm.rsa2048 &&
+        typedPrivate.algorithm == CryptographicMaterialAlgorithm.rsa2048) {
+      return RsaKeyPair.create(
+          typedPublic.bytes.toString(), typedPrivate.bytes.toString());
+    }
     // ignore: deprecated_member_use_from_same_package
     final public = defaultEncryptionPublicKey;
     // ignore: deprecated_member_use_from_same_package
@@ -1347,10 +1367,18 @@ class AtKeys {
   /// The atSign's self-encryption key, which opens the records it wrote for
   /// itself.
   ///
-  /// Read from the flat [defaultSelfEncryptionKey], for the reason
-  /// [encryptionKeyPair] gives. Null where the keyfile holds none, which an
+  /// Typed `symmetricEncryption` material under the atSign wins where this
+  /// keyfile holds an `aes256` one, and the flat [defaultSelfEncryptionKey]
+  /// answers otherwise — the same two sources, and the same algorithm check,
+  /// as [encryptionKeyPair]. Null where the keyfile holds neither, which an
   /// atSign activated with `mintLegacyMaterial: false` does not.
   AESKey? get selfEncryptionKey {
+    final typed =
+        _activeAtSignMaterial(CryptographicMaterialRole.symmetricEncryption);
+    if (typed != null &&
+        typed.algorithm == CryptographicMaterialAlgorithm.aes256) {
+      return AESKey(typed.bytes.toString());
+    }
     // ignore: deprecated_member_use_from_same_package
     final key = defaultSelfEncryptionKey;
     if (key == null) return null;

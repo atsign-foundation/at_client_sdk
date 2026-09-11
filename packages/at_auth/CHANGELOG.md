@@ -1,5 +1,13 @@
 ## 4.0.0-rc2
 
+- feat: `AtKeys.encryptionKeyPair` and `.selfEncryptionKey` prefer typed
+  `publicEncryption`/`privateDecryption`/`symmetricEncryption` material under
+  the atSign, falling back to the flat fields. `addKey` with no enrollment id
+  already files that material, so the atSign's encryption keypair and
+  self-encryption key can now be both written and read without naming a
+  deprecated member. The algorithm is checked rather than assumed from the
+  role, because the role tokens are open strings and an X-Wing key filed
+  under `publicEncryption` is not an RSA keypair however it is labelled.
 - feat: `AtKeys.authenticationKeyPairFor`, `.encryptionKeyPair` and
   `.selfEncryptionKey` — the typed form of what an `AtChops` carried, so a
   caller can take the key material without building one.

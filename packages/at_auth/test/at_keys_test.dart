@@ -275,6 +275,69 @@ void main() {
       expect(AtKeys().selfEncryptionKey, isNull);
     });
 
+    test('typed material wins, and is writable without a deprecated member',
+        () {
+      // The whole point of these accessors: a caller can put this material in
+      // and take it out again without naming a flat field. `addKey` with no
+      // enrollment id files under the atSign, which is what makes the typed
+      // route available to a fixture as well as to production.
+      const typedPublic = 'dHlwZWQtZW5jLXB1Yg==';
+      const typedPrivate = 'dHlwZWQtZW5jLXByaXY=';
+      const typedSelf = 'dHlwZWQtc2VsZg==';
+      final flatPublic =
+          encryptedAtKeysMap[auth_constants.defaultEncryptionPublicKey];
+      expect(flatPublic, isNot(typedPublic),
+          reason: 'control: the two sources differ, so preferring the wrong '
+              'one is observable');
+
+      final keys = createKeys()
+        ..addKey(CryptographicMaterial(
+            keyId: 'enc:rsa2048:0',
+            role: CryptographicMaterialRole.publicEncryption,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
+            bytes: AtBytes.fromString(typedPublic),
+            operations: const [],
+            createdAt: DateTime.utc(2026, 1, 1)))
+        ..addKey(CryptographicMaterial(
+            keyId: 'enc:rsa2048:0',
+            role: CryptographicMaterialRole.privateDecryption,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
+            bytes: AtBytes.fromString(typedPrivate),
+            operations: const [],
+            createdAt: DateTime.utc(2026, 1, 1)))
+        ..addKey(CryptographicMaterial(
+            keyId: 'self:aes256:0',
+            role: CryptographicMaterialRole.symmetricEncryption,
+            algorithm: CryptographicMaterialAlgorithm.aes256,
+            bytes: AtBytes.fromString(typedSelf),
+            operations: const [],
+            createdAt: DateTime.utc(2026, 1, 1)));
+
+      expect(keys.encryptionKeyPair!.atPublicKey.publicKey, typedPublic);
+      expect(keys.encryptionKeyPair!.atPrivateKey.privateKey, typedPrivate);
+      expect(keys.selfEncryptionKey!.key, typedSelf);
+    });
+
+    test('a typed key of the wrong algorithm is not taken for an RSA pair',
+        () {
+      // The role tokens are open strings, so a KEM key can be filed under
+      // publicEncryption. Reading it as an RSA keypair would fail inside the
+      // cipher, naming neither the keyfile nor the algorithm.
+      final keys = createKeys()
+        ..addKey(CryptographicMaterial(
+            keyId: 'enc:xwing:0',
+            role: CryptographicMaterialRole.publicEncryption,
+            algorithm: CryptographicMaterialAlgorithm.xWing,
+            bytes: AtBytes.fromString('eHdpbmc='),
+            operations: const [],
+            createdAt: DateTime.utc(2026, 1, 1)));
+
+      expect(keys.encryptionKeyPair!.atPublicKey.publicKey,
+          encryptedAtKeysMap[auth_constants.defaultEncryptionPublicKey],
+          reason: 'falls through to the flat pair rather than reading the '
+              'X-Wing bytes as RSA');
+    });
+
     test('encryptionKeyPair needs both halves', () {
       final halfPair = createKeys()..defaultEncryptionPrivateKey = null;
       expect(halfPair.encryptionKeyPair, isNull,
