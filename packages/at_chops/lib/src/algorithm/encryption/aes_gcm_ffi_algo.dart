@@ -75,6 +75,8 @@ final class AesGcm256FfiAlgo
       {InitialisationVector? iv, List<int> aad = const []}) async {
     final Uint8List keyBytes = _keyBytesForEncrypt();
     final List<int> nonce = _nonceBytesForEncrypt(iv);
+    checkInlLength(aad.length, 'aad', 'EVP_EncryptUpdate');
+    checkInlLength(plainData.length, 'plainData', 'EVP_EncryptUpdate');
 
     final Pointer<EVP_CIPHER_CTX> ctx = _ctxNew();
     if (ctx == nullptr) throw StateError('EVP_CIPHER_CTX_new failed');
@@ -195,6 +197,8 @@ final class AesGcm256FfiAlgo
         encryptedData.sublist(0, encryptedData.length - tagLength);
     final Uint8List tag =
         encryptedData.sublist(encryptedData.length - tagLength);
+    checkInlLength(aad.length, 'aad', 'EVP_DecryptUpdate');
+    checkInlLength(cipherText.length, 'encryptedData', 'EVP_DecryptUpdate');
 
     final Pointer<EVP_CIPHER_CTX> ctx = _ctxNew();
     if (ctx == nullptr) throw StateError('EVP_CIPHER_CTX_new failed');

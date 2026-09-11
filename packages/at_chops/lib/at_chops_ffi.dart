@@ -3,6 +3,8 @@ library;
 
 export 'at_chops.dart';
 export 'src/algorithm/at_pqc.dart';
+export 'src/algorithm/encryption/aes_ctr_ffi_algo.dart';
+export 'src/algorithm/encryption/aes_ctr_ffi_cipher.dart';
 export 'src/algorithm/encryption/aes_gcm_ffi_algo.dart';
 export 'src/algorithm/encryption/ml_kem_768_ffi.dart';
 export 'src/algorithm/encryption/x25519_ffi_algo.dart';
