@@ -580,9 +580,16 @@ answers a mock local secondary's key getters, which is where a client looks.
 at_client's test tree went 358 to 268 and its five legacy-crypto files to
 zero.
 
-What remains of step 4 is the rest of the plan's list below — `apkam_signing`,
-`sync_service_impl`, the `AtChopsKeys` getter on `LocalSecondary`, and
-deprecating `AtClient.atChops` itself.
+`apkam_signing.dart`'s `authenticationSigningKey` now reads the enrollment's
+APKAM keypair from the keyfile — typed material first, the flat pair as
+`rsa2048` otherwise — and takes the client's `AtChops` only for a client built
+without a key source; it became asynchronous, since a keyfile is read rather
+than held, and its four callers followed. Three arms in
+`apkam_signing_keys_test.dart` were red against the old getter (a keyfile-only
+client hit its null check; the keyfile's key lost to an injected `AtChops`)
+and are green now. What remains of step 4 is `sync_service_impl`, the
+`AtChopsKeys` getter on `LocalSecondary`, and deprecating `AtClient.atChops`
+itself.
 
 Two observations from flipping the fixtures that could move:
 

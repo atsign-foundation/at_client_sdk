@@ -135,7 +135,7 @@ mixin ApkamSigning {
   Future<String> get publicSigningKeyValue async => apskValueOf(apskEntries(
         signing: await heldSigningKeys,
         withdrawn: await withdrawnSigningKeys,
-        authentication: authenticationSigningKey,
+        authentication: await authenticationSigningKey,
       ));
 
   /// This client's signing keys, strongest algorithm first — one entry per
@@ -161,11 +161,13 @@ mixin ApkamSigning {
     final held = await heldSigningKeys;
     if (held.isNotEmpty) return held;
 
-    return [authenticationSigningKey!];
+    return [(await authenticationSigningKey)!];
   }
 
-  /// The APKAM **authentication** keypair as a signing key, or null when this
-  /// client holds no `AtChops` keypair.
+  /// The APKAM **authentication** keypair as a signing key: the keyfile's for
+  /// [enrollmentId] — typed material first, the flat pair as `rsa2048`
+  /// otherwise — else the client's `AtChops` keypair, for a client built
+  /// without a key source; null when it holds neither.
   ///
   /// Two jobs, one key, for as long as an enrollment holds no signing material
   /// of its own: it authenticates the connection and it signs what the
@@ -174,7 +176,17 @@ mixin ApkamSigning {
   /// because a credential whose posture wants a stronger authentication
   /// algorithm retrofits into a new enrollment rather than reclassifying this
   /// key, so the old enrollment's record keeps verifying what this key signed.
-  ApkamSigningKeys? get authenticationSigningKey {
+  Future<ApkamSigningKeys?> get authenticationSigningKey async {
+    final fromKeyfile = (await _readKeyfile('authentication key'))
+        ?.authenticationKeyPairFor(enrollmentId);
+    if (fromKeyfile != null) {
+      return ApkamSigningKeys(
+        algorithm: fromKeyfile.algorithm,
+        publicKey: fromKeyfile.publicKey,
+        privateKey: fromKeyfile.privateKey,
+      );
+    }
+    // NOTE: the door for a client built from an AtChops and no keyfile.
     final keyPair = atClient.atChops?.atChopsKeys.atPkamKeyPair;
     if (keyPair == null) return null;
     return ApkamSigningKeys(
@@ -184,22 +196,27 @@ mixin ApkamSigning {
     );
   }
 
+  /// [atClient]'s keyfile, or null when it has no key source or the read
+  /// fails; a failure is logged naming [purpose], and the caller falls back.
+  Future<AtKeys?> _readKeyfile(String purpose) async {
+    final io = atClient.atKeysIo;
+    final atSign = atClient.getCurrentAtSign();
+    if (io == null || atSign == null) return null;
+    try {
+      return await io.read(atSign);
+    } on Object catch (e) {
+      logger.warning('Cannot read $atSign\'s keyfile for its $purpose ($e) — '
+          'falling back to the APKAM authentication key');
+      return null;
+    }
+  }
+
   /// What the keyfile holds for [enrollmentId], filtered to what this build
   /// can sign an envelope with. Empty when the client has no key source, when
   /// the read fails, or when the enrollment holds none.
   Future<List<ApkamSigningKeys>> get heldSigningKeys async {
-    final io = atClient.atKeysIo;
-    final atSign = atClient.getCurrentAtSign();
-    if (io == null || atSign == null) return const [];
-
-    AtKeys keys;
-    try {
-      keys = await io.read(atSign);
-    } on Object catch (e) {
-      logger.warning('Cannot read $atSign\'s signing keys ($e) — signing with '
-          'the APKAM authentication key instead');
-      return const [];
-    }
+    final keys = await _readKeyfile('signing keys');
+    if (keys == null) return const [];
 
     return [
       for (final key in keys.signingKeysFor(enrollmentId))

@@ -1,5 +1,11 @@
 ## 3.15.0-rc1
 
+- refactor: `ApkamSigning.authenticationSigningKey` reads the enrollment's
+  APKAM authentication keypair from the keyfile, typed material first and
+  the flat pair as `rsa2048` otherwise, the way `heldSigningKeys` already
+  reads the signing keys; the client's `AtChops` answers only for a client
+  built without a key source. It is now asynchronous, since a keyfile is
+  read rather than held.
 - refactor: approving an enrollment hands at_auth this client's encryption
   private key and self-encryption key, resolved by the local secondary
   across its three tiers, rather than the client's `AtChops`. A client with

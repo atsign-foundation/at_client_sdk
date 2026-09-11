@@ -10,7 +10,7 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show recordResolvedSigningAlgo;
 import 'package:at_commons/at_commons.dart'
-    show AtKey, AtKeyNotFoundException, AtValue;
+    show AtBytes, AtKey, AtKeyNotFoundException, AtValue;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
@@ -118,6 +118,54 @@ void main() {
       expect(keys.single.publicKey, pkamPublicKey());
       expect(keys.single.algorithm, SigningAlgoType.rsa2048);
       expect(await signer.publicSigningKey, pkamPublicKey());
+    });
+
+    test('the keyfile\'s APKAM keypair answers a client holding no AtChops',
+        () async {
+      // The mainstream client: built from a keyfile, never handed an AtChops.
+      when(() => atClient.atChops).thenReturn(null);
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
+        ..apkamPublicKey = AtBytes.fromString(rsaPair.atPublicKey.publicKey)
+        ..apkamPrivateKey =
+            AtBytes.fromString(rsaPair.atPrivateKey.privateKey)));
+
+      final keys = await signer.signingKeys;
+
+      expect(keys.single.publicKey, rsaPair.atPublicKey.publicKey);
+      expect(keys.single.algorithm, SigningAlgoType.rsa2048,
+          reason: 'the flat fields carry no algorithm, and are rsa2048');
+    });
+
+    test('typed ML-DSA authentication material names its own algorithm',
+        () async {
+      when(() => atClient.atChops).thenReturn(null);
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
+          keys.fileApkamMaterial(
+              enrollmentId: enrollmentId,
+              algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+              publicKey: base64Encode(mlDsaPair.publicKey),
+              privateKey: base64Encode(mlDsaPair.secretKey))));
+
+      final keys = await signer.signingKeys;
+
+      expect(keys.single.publicKey, base64Encode(mlDsaPair.publicKey));
+      expect(keys.single.algorithm, SigningAlgoType.mldsa65,
+          reason: 'from the material, not from a preference or a default');
+    });
+
+    test('the keyfile\'s APKAM keypair wins over an injected AtChops',
+        () async {
+      // The rig's AtChops holds one RSA keypair; the keyfile holds another.
+      // Which public key comes back says which source answered.
+      final other = AtChopsUtil.generateAtPkamKeyPair();
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
+        ..apkamPublicKey = AtBytes.fromString(other.atPublicKey.publicKey)
+        ..apkamPrivateKey = AtBytes.fromString(other.atPrivateKey.privateKey)));
+
+      expect((await signer.signingKeys).single.publicKey,
+          other.atPublicKey.publicKey,
+          reason: 'the keyfile is the source; the AtChops is the door for a '
+              'client that has no keyfile');
     });
 
     test('the fallback signs under the algorithm the client resolved',

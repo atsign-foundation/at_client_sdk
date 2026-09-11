@@ -71,7 +71,7 @@ class SigningKeyMinting with ApkamSigning {
     // authentication keypair reports would instead stop an mldsa65 signing key
     // from ever being minted.
     final authenticationIsAlsoTheSigningKey = held.isEmpty &&
-        authenticationSigningKey?.algorithm == SigningAlgoType.rsa2048;
+        (await authenticationSigningKey)?.algorithm == SigningAlgoType.rsa2048;
     final missing = [
       for (final algorithm in SigningAlgoType.strongestFirst)
         if (wanted.contains(algorithm) &&
@@ -172,7 +172,7 @@ class SigningKeyMinting with ApkamSigning {
             ),
           ...await withdrawnSigningKeys,
         ], (key) => key.algorithm),
-        authentication: authenticationSigningKey);
+        authentication: await authenticationSigningKey);
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
 
     if (isAtSignCredential(atLookUp?.enrollmentId)) {
