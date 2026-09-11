@@ -1111,7 +1111,7 @@ class AtClientImpl implements AtClient {
 
   Future<void> _stop({required bool keepStorageOpen}) async {
     if (_isStopped) {
-      _logger.info('stop() called: but client is already stopped. Ignoring.');
+      _logger.finer('stop() called: but client is already stopped. Ignoring.');
       return;
     }
 
@@ -2252,7 +2252,6 @@ class AtClientImpl implements AtClient {
       ..currentAtSign = _atSign
       ..senderAtSign = senderAtSign
       ..fileLength = fileLength;
-    _logger.info('Sending ack for stream notification:$notification');
     await handler.streamAck(
       notification,
       streamCompletionCallBack,
