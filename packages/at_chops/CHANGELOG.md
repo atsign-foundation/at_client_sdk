@@ -1,3 +1,12 @@
+## 3.7.0
+
+- feat: AES-CTR via OpenSSL when libcrypto is present, in one-shot (`AtPqc.aesCtr`)
+  and incremental (`AesCtrFfiCipher`, for streams) form. Ciphertext is unchanged;
+  hosts without libcrypto keep the pure-Dart path.
+- fix: `AesGcm256FfiAlgo` rejects a plaintext, ciphertext or AAD longer than the
+  C `int` its OpenSSL binding passes, rather than letting the length wrap. The
+  AES-CTR backends already carried this guard.
+
 ## 3.6.1
 
 - chore: dart format, and a stale symbol name in one test comment
