@@ -120,7 +120,8 @@ class AtClientImpl implements AtClient {
   AtTelemetryService? get telemetry => _telemetry;
 
   @override
-  @Deprecated('Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
+  @Deprecated(
+      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
       'and it derives what it needs from that; nothing outside at_client needs '
       'the AtChops it holds. Removed with the AtChops compatibility API in the '
       'next major release.')
@@ -132,7 +133,8 @@ class AtClientImpl implements AtClient {
   }
 
   @override
-  @Deprecated('Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
+  @Deprecated(
+      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
       'and it derives what it needs from that; nothing outside at_client needs '
       'the AtChops it holds. Removed with the AtChops compatibility API in the '
       'next major release.')

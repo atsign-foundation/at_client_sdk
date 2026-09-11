@@ -86,7 +86,7 @@ void main() {
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
-    when(() => lookUp.enrollmentId).thenReturn('enroll-a');
+    when(() => atClient.enrollmentId).thenReturn('enroll-a');
     // NOTE: an EMPTY roster, and said rather than left unstubbed. A read miss
     // broadcasts a pull to the namespace's other enrollments, and here there
     // are none - which is the situation these tests are in. Matched on the
@@ -519,7 +519,7 @@ void main() {
     when(() => other.getCurrentAtSign()).thenReturn(atSign);
     when(() => other.getRemoteSecondary()).thenReturn(otherSecondary);
     when(() => otherSecondary.atLookUp).thenReturn(otherLookUp);
-    when(() => otherLookUp.enrollmentId).thenReturn('enroll-minter');
+    when(() => other.enrollmentId).thenReturn('enroll-minter');
 
     final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
     final minted = await xWing.keyPairFromSeed(xWing.newSeed());

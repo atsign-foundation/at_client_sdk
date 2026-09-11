@@ -41,7 +41,7 @@ void main() {
     final atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
   }
 
   /// Stubs [atClient]'s get of A's `_apsk` key to return [publicKey].

@@ -183,6 +183,14 @@ void main() {
     privilegedKeysIo = session.atKeysIo;
 
     expect(client.enrollmentId, isNot(session.enrollmentId));
+    // The connection's id is written from the client's at every rebuild, and
+    // every reader of "which enrollment am I" now asks the client. This is the
+    // moment the two could have parted, so it is the moment they are compared.
+    // ignore: deprecated_member_use
+    expect(client.getRemoteSecondary()!.atLookUp.enrollmentId,
+        client.enrollmentId,
+        reason: 'the retrofitted connection must authenticate as the '
+            'enrollment the client says it is');
     expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65);
 
     final granted = (await client.enrollmentService!.fetchEnrollmentRequests())

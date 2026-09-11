@@ -41,7 +41,7 @@ void main() {
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
-    when(() => lookUp.enrollmentId).thenReturn(null);
+    when(() => atClient.enrollmentId).thenReturn(null);
     // NOTE: an EMPTY roster, and said rather than left unstubbed. A read miss
     // broadcasts a pull to the namespace's other enrollments, and here there
     // are none - which is the situation these tests are in. Matched on the
@@ -237,7 +237,7 @@ void main() {
       when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
       when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
       when(() => secondary.atLookUp).thenReturn(lookUp);
-      when(() => lookUp.enrollmentId).thenReturn('enrollment-1');
+      when(() => atClient.enrollmentId).thenReturn('enrollment-1');
       when(() => atClient.getPreferences())
           .thenReturn(AtClientPreference()..namespace = namespace);
       when(() => atClient.enrollmentService)

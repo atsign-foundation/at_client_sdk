@@ -1,5 +1,10 @@
 ## 3.15.0-rc1
 
+- refactor: every reader of "which enrollment am I" reads
+  `AtClient.enrollmentId` rather than the connection's `atLookUp.enrollmentId`.
+  `RemoteSecondary` writes the connection's id from the client's at every
+  build and rebuild, so the two agree by construction; the e2e retrofit test
+  now asserts it at the one moment they could have parted.
 - `AtClient.atChops` is deprecated, getter and setter. Build the client from a
   keyfile — `AtClientImpl.create(atKeysIo:)` — and it derives what it needs
   from that; nothing outside at_client needs the `AtChops` it holds. The

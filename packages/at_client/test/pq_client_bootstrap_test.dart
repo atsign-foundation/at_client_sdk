@@ -371,7 +371,7 @@ void main() {
       final lookUp = MockAtLookupImpl();
       when(() => client.getRemoteSecondary()).thenReturn(remote);
       when(() => remote.atLookUp).thenReturn(lookUp);
-      when(() => lookUp.enrollmentId).thenReturn(null);
+      when(() => client.enrollmentId).thenReturn(null);
       expect(
           await EnrollmentRecordPrivilegeResolver(client,
                   listEnrollments: ({enrollmentListParams}) async => [])

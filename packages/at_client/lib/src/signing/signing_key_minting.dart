@@ -175,7 +175,7 @@ class SigningKeyMinting with ApkamSigning {
         authentication: await authenticationSigningKey);
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
 
-    if (isAtSignCredential(atLookUp?.enrollmentId)) {
+    if (isAtSignCredential(atClient.enrollmentId)) {
       // NOTE: the unlocked variant — the caller holds the lock for the whole
       // publish-then-file section, and re-acquiring it here deadlocks.
       await publishPublicSigningKeyLocked(value: apskValueOf(entries));
@@ -184,10 +184,10 @@ class SigningKeyMinting with ApkamSigning {
     final bare = bareApskValueOf(entries);
     await _enrollment.update(
         EnrollmentUpdateRequest(
-            enrollmentId: atLookUp!.enrollmentId!,
+            enrollmentId: atClient.enrollmentId!,
             signingKeys: bare == null ? entries : null,
             apskLegacy: bare),
-        atLookUp);
+        atLookUp!);
   }
 
   Future<void> _file(

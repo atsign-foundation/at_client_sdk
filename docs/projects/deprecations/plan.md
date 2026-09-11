@@ -648,22 +648,38 @@ pass `atKeysIo`, and the client derives what it needs from the keyfile.
 
 ### Step 5: at_client's enrollment-id readers (no API change)
 
-First a probe, not a reading: build a client, retrofit it, and assert at both
-moments that `atClient.enrollmentId` and `atLookUp.enrollmentId` agree. If
-they ever don't, that difference is the finding and the readers stay.
+**Done, 2026-09-11.** The probe first, as a question about writers rather
+than a reading: the lookup's id has one writer in at_client, `RemoteSecondary`'s
+constructor, which takes it from the client's field at every build and
+rebuild, the retrofit's included. Outside at_client the analyzer finds three
+writers in at_onboarding_cli — one from the client's field, two on the CLI's
+own lookup before a client exists, which a client is then built around and
+re-stamps — and two test fixtures, the e2e pack's own handshake lookup and a
+functional fixture that sets the client's and the lookup's together. So the
+two agree by construction wherever the tree writes them, and the moment they
+could part is a completed retrofit, which no unit test drives: the e2e
+retrofit test now asserts the agreement right after one, for the live-pack
+run this work owes. A completed retrofit only happens live.
 
-Then the 8 readers the consolidation plan enumerates, plus
-`key_package_minting.dart`'s `enrolment` alias, read `atClient.enrollmentId`.
-The 3 authenticator-feeding reads and the one writer in
-`remote_secondary.dart` stay: they build the ladder's replacement and go with
-the ladder in the at_lookup major. `apkam_signing.dart`'s manufactured
-sentinel, `EnrollmentConstants.primaryEnrollmentId` (which is the string
-`primary`, defined in at_commons's `enrollment_constants.dart`), is preserved
-exactly, as the consolidation plan's caution asks.
-
-In the tests, the `when(() => lookUp.enrollmentId)` stubs come out, and each
-fixture that sets `atClient.enrollmentId` after construction is read for what
-it now observes.
+Then ten readers moved to `atClient.enrollmentId`: `nskey_rotation.dart`,
+`nskey_seeding.dart` twice, `pq_signing_root.dart`, `apkam_signing.dart`'s
+getter with its `primary` sentinel preserved exactly,
+`enrollment_privilege_resolver.dart`, `envelope_enrollment_conveyance.dart`,
+`key_package_minting.dart`'s `enrolment` alias, and `signing_key_minting.dart`
+twice. The four in `remote_secondary.dart` stay as ruled above, and the
+fifteenth `enrollmentId` the analyzer listed is `AtKeys.enrollmentId` in
+`enrollment_symmetric_key.dart`, the keyfile's flat field and F3's, not a
+lookup read. In the tests, twenty-four `when(() => lookUp.enrollmentId)`
+stubs in thirteen files became stubs on the client's id, each lookup mapped to
+its client by following the `getRemoteSecondary()` and `atLookUp` stub chain.
+⚠️ The first search for them was case-sensitive and missed the file whose
+receiver is spelled `lookup`; the full suite found it, and the sweep that
+found the rest is `grep -rliE 'when\(\(\) => \w*look\w*\.enrollmentId\)'`
+over `test/`, which now returns nothing. Putting one reader back on the lookup
+reddens 22 tests, which is what says the fixtures now exercise the client's
+field. at_client's `lib` went 41 to 31 and its `enrollmentId` uses 15 to 5;
+its test tree 276 to 252 (`dart analyze` in `packages/at_client`, counted by
+path).
 
 ### Step 6: at_onboarding_cli, the live packs and at_contact (no API change)
 

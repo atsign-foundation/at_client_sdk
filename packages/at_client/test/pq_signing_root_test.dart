@@ -89,7 +89,7 @@ void main() {
     final secondary = MockRemoteSecondary();
     final lookup = MockAtLookUp();
     when(() => secondary.atLookUp).thenReturn(lookup);
-    when(() => lookup.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
     final published = <UpdateVerbBuilder>[];
     final verbs = <VerbBuilder>[];
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
@@ -426,7 +426,7 @@ void main() {
     final secondary = MockRemoteSecondary();
     final lookup = MockAtLookUp();
     when(() => secondary.atLookUp).thenReturn(lookup);
-    when(() => lookup.enrollmentId).thenReturn('enrollment-1');
+    when(() => atClient.enrollmentId).thenReturn('enrollment-1');
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     final verbs = <VerbBuilder>[];
@@ -479,7 +479,7 @@ void main() {
       final secondary = MockRemoteSecondary();
       final lookup = MockAtLookUp();
       when(() => secondary.atLookUp).thenReturn(lookup);
-      when(() => lookup.enrollmentId).thenReturn('enrollment-1');
+      when(() => atClient.enrollmentId).thenReturn('enrollment-1');
       when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
       when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
       String? publishedValue;
@@ -523,7 +523,7 @@ void main() {
       final secondary = MockRemoteSecondary();
       final lookup = MockAtLookUp();
       when(() => secondary.atLookUp).thenReturn(lookup);
-      when(() => lookup.enrollmentId).thenReturn('enrollment-1');
+      when(() => atClient.enrollmentId).thenReturn('enrollment-1');
       when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
       when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
       var reads = 0;

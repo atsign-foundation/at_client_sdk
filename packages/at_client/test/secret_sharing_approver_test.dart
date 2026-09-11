@@ -61,7 +61,7 @@ void main() {
     final atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
     final notificationService = MockNotificationService();
     when(() => atClient.notificationService).thenReturn(notificationService);

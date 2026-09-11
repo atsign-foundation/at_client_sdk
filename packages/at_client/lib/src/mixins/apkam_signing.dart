@@ -57,7 +57,7 @@ mixin ApkamSigning {
   AtSignLogger get logger;
 
   String get enrollmentId {
-    final id = atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
+    final id = atClient.enrollmentId;
     if (id == null) {
       logger.finer('No enrollment id; using '
           '"${EnrollmentConstants.primaryEnrollmentId}"');

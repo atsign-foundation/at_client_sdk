@@ -38,7 +38,7 @@ void main() {
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
-    when(() => lookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
     when(() => atClient.getPreferences())
         .thenReturn(AtClientPreference()..namespace = preferenceNamespace);
 
