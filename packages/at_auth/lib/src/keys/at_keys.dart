@@ -1148,16 +1148,22 @@ class AtKeys {
           '$enrollmentId');
     }
 
+    // Through the accessors rather than the flat fields, so a keyfile whose
+    // atSign material is typed produces a working AtChops: this is the only
+    // route from an `AtKeysIo` to a client's crypto, and reading the flat
+    // fields here would hand back empty encryption keys for a document that
+    // holds the pair under `publicEncryption`/`privateDecryption`.
+    final pair = encryptionKeyPair;
     final atChopsKeys = AtChopsKeys.create(
         AtEncryptionKeyPair.create(
-          defaultEncryptionPublicKey?.toString() ?? '',
-          defaultEncryptionPrivateKey?.toString() ?? '',
+          pair?.atPublicKey.publicKey ?? '',
+          pair?.atPrivateKey.privateKey ?? '',
         ),
         AtPkamKeyPair.create(publicAuthentication.bytes.toString(),
             privateAuthentication.bytes.toString()));
-    if (defaultSelfEncryptionKey != null) {
-      atChopsKeys.selfEncryptionKey =
-          AESKey(defaultSelfEncryptionKey!.toString());
+    final selfKey = selfEncryptionKey;
+    if (selfKey != null) {
+      atChopsKeys.selfEncryptionKey = selfKey;
     }
     return AtChopsImpl(atChopsKeys);
   }

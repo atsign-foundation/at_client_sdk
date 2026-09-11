@@ -1,5 +1,11 @@
 ## 4.0.0-rc2
 
+- fix: `toAtChopsForEnrollment` takes the encryption keypair and
+  self-encryption key through those accessors rather than off the flat
+  fields, so a keyfile whose atSign material is typed derives a working
+  `AtChops`. This is the only route from an `AtKeysIo` to a client's crypto —
+  `AtClientImpl.create(atKeysIo:)` goes through `authenticationFor` — so
+  before this a typed-only document produced empty encryption keys.
 - feat: `AtKeys.encryptionKeyPair` and `.selfEncryptionKey` prefer typed
   `publicEncryption`/`privateDecryption`/`symmetricEncryption` material under
   the atSign, falling back to the flat fields. `addKey` with no enrollment id

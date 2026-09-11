@@ -426,6 +426,71 @@ void main() {
       expect(futureAlgo.authenticationFor('never-held-here').chops, isNotNull);
     });
 
+    test(
+        'a keyfile with no flat fields at all still yields a working AtChops',
+        () {
+      // What a fixture needs in order to build its keys without naming a
+      // deprecated member: typed material only, through `addKey` and
+      // `fileApkamMaterial`, reaching a client via `AtClientImpl.create`'s
+      // `atKeysIo:` — which derives its crypto through exactly this call.
+      const typedEncPublic = 'dHlwZWQtZW5jLXB1Yg==';
+      const typedEncPrivate = 'dHlwZWQtZW5jLXByaXY=';
+      const typedSelf = 'dHlwZWQtc2VsZg==';
+      CryptographicMaterial atSignKey(
+              String keyId, String role, String algo, String bytes) =>
+          CryptographicMaterial(
+              keyId: keyId,
+              role: CryptographicMaterialRole.of(role),
+              algorithm: CryptographicMaterialAlgorithm.of(algo),
+              bytes: AtBytes.fromString(bytes),
+              operations: const [],
+              createdAt: DateTime.utc(2026, 1, 1));
+
+      final typedOnly = AtKeys()
+        ..fileApkamMaterial(
+            enrollmentId: typedEnrollmentId,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            publicKey: typedApkamPublicKey,
+            privateKey: 'dHlwZWQtcHJpdmF0ZQ==')
+        ..addKey(atSignKey(
+            'enc:rsa2048:0', 'publicEncryption', 'rsa2048', typedEncPublic))
+        ..addKey(atSignKey(
+            'enc:rsa2048:0', 'privateDecryption', 'rsa2048', typedEncPrivate))
+        ..addKey(atSignKey(
+            'self:aes256:0', 'symmetricEncryption', 'aes256', typedSelf));
+
+      final resolved = typedOnly.authenticationFor(typedEnrollmentId);
+      final keys = (resolved.chops as AtChopsImpl).atChopsKeys;
+
+      expect(resolved.algorithm, SigningAlgoType.mldsa65);
+      expect(keys.atPkamKeyPair!.atPublicKey.publicKey, typedApkamPublicKey);
+      expect(keys.atEncryptionKeyPair!.atPublicKey.publicKey, typedEncPublic,
+          reason: 'the encryption half comes from the typed atSign material; '
+              'reading the flat fields here would hand back an empty string');
+      expect(keys.atEncryptionKeyPair!.atPrivateKey.privateKey,
+          typedEncPrivate);
+      expect(keys.selfEncryptionKey!.key, typedSelf);
+    });
+
+    test('control: without the typed atSign material the encryption half is '
+        'empty', () {
+      // The same document minus the atSign keys. This is what the assertion
+      // above would see if the accessors were not consulted, so it keeps that
+      // test honest about what it is measuring.
+      final noAtSignKeys = AtKeys()
+        ..fileApkamMaterial(
+            enrollmentId: typedEnrollmentId,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            publicKey: typedApkamPublicKey,
+            privateKey: 'dHlwZWQtcHJpdmF0ZQ==');
+
+      final keys = (noAtSignKeys.authenticationFor(typedEnrollmentId).chops
+              as AtChopsImpl)
+          .atChopsKeys;
+      expect(keys.atEncryptionKeyPair!.atPublicKey.publicKey, isEmpty);
+      expect(keys.selfEncryptionKey, isNull);
+    });
+
     test('authenticationKeyPairFor resolves the same way, without an AtChops',
         () {
       final legacy = createKeys().authenticationKeyPairFor(flatEnrollmentId)!;
