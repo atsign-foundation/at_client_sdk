@@ -1023,6 +1023,24 @@ curl -sL https://pub.dev/api/archives/at_client_flutter-1.1.4.tar.gz | tar xz -C
 flutter pub get && flutter analyze --no-fatal-infos
 ```
 
+**Measured on 2026-09-11, against this tree**: at_client_flutter 1.1.4's
+`examples/todos` gives **0 errors** and 7 deprecation infos (`atAuthKeys` ×2,
+`atChops` ×2, `atLookUp`, `commitLogPath`, `hiveStoragePath`); at_client
+3.14.0's `example`, 22 files of application code, gives **0 errors** and 3.
+The zero means something because the same rig reports errors when a member
+really has gone — a consumer file written against published `ApkamSigning`
+failed on exactly two of its six members in the same run.
+
+⚠️ **A failed `pub get` makes this instrument lie loudly.** `dart analyze` on
+an unresolved package reports hundreds of `uri_does_not_exist` and
+`undefined_class` errors that read exactly like API breaks — 900 of them here,
+from one missing override. **Check the `pub get` exit code before reading the
+analysis at all.** Two of these examples need care: at_client's pins
+`at_onboarding_cli: ^2.0.0`, which nothing published satisfies, so its
+own override has to be kept; and `at_chat_flutter/example` pins
+`at_auth: ^3.0.0` against a tree on 4.0.0-rc2 and cannot resolve at all, so
+nothing can analyse it — it has been that way since at_auth 4.
+
 ⚠️ **Do not hand-roll a regex API differ instead.** One was tried here and
 reported 65 "removed members" for at_onboarding_cli, nearly all of them local
 variables and cascade assignments sitting at two-space indent inside method
