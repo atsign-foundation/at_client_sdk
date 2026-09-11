@@ -158,10 +158,8 @@ AtAuthenticator authenticatorForCramSecret(
 /// be deleted: without this, authentication would require an `AtKeysIo` and
 /// every such caller would break.
 ///
-/// Signs with an empty public half, exactly as the ladder did:
-/// `AtPkamKeyPair.create('', privateKey)`. RSA signing needs the private key
-/// only, and at_auth already builds a signer of that shape in
-/// `enrollment_handshake` for an enrollment whose keys are incomplete.
+/// Signs with the private key alone, which is all RSA signing reads. The
+/// ladder passed an empty public half to the same effect.
 ///
 /// Always rsa2048: a keyless caller names no enrollment, so there is no
 /// record to read an algorithm from, and rsa2048 is at_lookup's default.
@@ -183,9 +181,9 @@ AtAuthenticator authenticatorForPrivateKey(
       fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
       fromResponse = validatedFromChallenge(fromResponse, atSign);
 
-      final signature = base64Encode(PkamSigningAlgo(
-              AtPkamKeyPair.create('', privateKey), HashingAlgoType.sha256)
-          .sign(Uint8List.fromList(utf8.encode(fromResponse))));
+      final signature = base64Encode(RsaSignatureAlgo.rsa2048().signBytesSync(
+          Uint8List.fromList(utf8.encode(fromResponse)),
+          secretKey: base64Decode(privateKey)));
 
       final pkamResponse = await executor.sendSync((PkamVerbBuilder()
             ..signingAlgo = SigningAlgoType.rsa2048.name
@@ -215,7 +213,10 @@ Future<bool> _pkam(
 ) async {
   // A null algorithm means the flat fields' RSA keypair, which is what
   // at_lookup signs with by default - so a legacy enrollment is rsa2048.
-  final AtChops signer;
+  // Exactly one of these answers: a signer the caller brought, or the
+  // keypair this keyfile holds.
+  final AtChops? signer;
+  ({SigningAlgoType algorithm, String publicKey, String privateKey})? keyPair;
   final SigningAlgoType signingAlgo;
   if (injectedAlgo != null) {
     // The caller named the algorithm because the keystore cannot answer. A
@@ -224,6 +225,7 @@ Future<bool> _pkam(
     // resolve from - and the default would sign an ML-DSA key with the RSA
     // routine.
     signer = injectedChops ?? keys.authenticationFor(enrollmentId).chops;
+    keyPair = null;
     signingAlgo = injectedAlgo;
   } else if (injectedChops != null) {
     // The caller brought its own signer - a hardware-backed one, say. Take
@@ -239,12 +241,17 @@ Future<bool> _pkam(
     // were one null once, and rsa2048 was then a guess about somebody else's
     // credentials.
     signer = injectedChops;
+    keyPair = null;
     signingAlgo = keys.authenticationAlgorithmFor(enrollmentId) ??
         SigningAlgoType.rsa2048;
   } else {
-    final resolved = keys.authenticationFor(enrollmentId);
-    signer = resolved.chops;
-    signingAlgo = resolved.algorithm ?? SigningAlgoType.rsa2048;
+    // No injection at all: the keyfile is the whole answer, so take the
+    // keypair rather than an AtChops built around it. This is the mainstream
+    // path, and the algorithm comes from the material it signs with, so a key
+    // cannot be put through the wrong routine.
+    keyPair = keys.authenticationKeyPairFor(enrollmentId);
+    signer = null;
+    signingAlgo = keyPair?.algorithm ?? SigningAlgoType.rsa2048;
   }
   const hashingAlgo = HashingAlgoType.sha256;
 
@@ -258,16 +265,28 @@ Future<bool> _pkam(
   fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
   fromResponse = validatedFromChallenge(fromResponse, atSign);
 
-  final signingResult = signer.sign(AtSigningInput(fromResponse)
-    ..signingAlgoType = signingAlgo
-    ..hashingAlgoType = hashingAlgo
-    ..signingMode = AtSigningMode.pkam);
+  final String signature;
+  if (signer != null) {
+    signature = signer
+        .sign(AtSigningInput(fromResponse)
+          ..signingAlgoType = signingAlgo
+          ..hashingAlgoType = hashingAlgo
+          ..signingMode = AtSigningMode.pkam)
+        .result;
+  } else if (keyPair != null) {
+    signature = signPkamChallenge(keyPair, fromResponse);
+  } else {
+    throw AtKeyNotFoundException(
+        'AtKeys holds no authentication keypair for '
+        '${enrollmentId ?? "this atSign's own credential"}, so there is '
+        'nothing to sign the PKAM challenge with');
+  }
 
   final pkamResponse = await executor.sendSync((PkamVerbBuilder()
         ..signingAlgo = signingAlgo.name
         ..hashingAlgo = hashingAlgo.name
         ..enrollmentlId = enrollmentId
-        ..signature = signingResult.result)
+        ..signature = signature)
       .buildCommand());
   if (pkamResponse == 'data:success') {
     _logger.info('pkam auth success for $atSign');
@@ -313,4 +332,57 @@ Future<bool> _cram(
     return true;
   }
   throw UnAuthenticatedException('Auth failed');
+}
+
+/// Signs [challenge] as a PKAM proof with [keyPair], returning the base64 the
+/// `pkam:` verb carries.
+///
+/// The algorithm comes from the key material rather than from a caller, so a
+/// key cannot be put through the wrong routine.
+String signPkamChallenge(
+  ({SigningAlgoType algorithm, String publicKey, String privateKey}) keyPair,
+  String challenge,
+) {
+  final data = Uint8List.fromList(utf8.encode(challenge));
+  switch (keyPair.algorithm) {
+    case SigningAlgoType.rsa2048:
+      return base64Encode(RsaSignatureAlgo.rsa2048()
+          .signBytesSync(data, secretKey: base64Decode(keyPair.privateKey)));
+    case SigningAlgoType.mldsa65:
+      return base64Encode(MlDsa65PureDartAlgo.signBytesSync(data,
+          secretKey: _mlDsaSecretKey(keyPair.privateKey)));
+    default:
+      throw AtSigningException(
+          'a PKAM challenge cannot be signed with ${keyPair.algorithm.name}: '
+          'this build signs one with rsa2048 or mldsa65');
+  }
+}
+
+/// [base64Key] as an ML-DSA-65 secret key, refused with what went wrong.
+///
+/// The length is checked here rather than left to the algorithm because this
+/// is the last frame that knows the key was offered as a PKAM credential. A
+/// PKAM key of about 1.2 kB is an RSA-2048 private key, and the way a caller
+/// holds one while naming mldsa65 is a retrofitted keyfile: its flat fields
+/// carry the original enrollment's RSA pair beside the new enrollment's
+/// ML-DSA material, and the two are selected separately.
+Uint8List _mlDsaSecretKey(String base64Key) {
+  final Uint8List secretKey;
+  try {
+    secretKey = base64Decode(base64Key);
+  } on FormatException {
+    throw AtSigningException('an mldsa65 PKAM private key must be base64 of '
+        'the raw ML-DSA-65 secret key');
+  }
+  if (secretKey.length != MlDsa65Sizes.secretKeyBytes) {
+    throw AtSigningException(
+        'this PKAM key is ${secretKey.length} bytes, and an ML-DSA-65 secret '
+        'key is ${MlDsa65Sizes.secretKeyBytes}. '
+        '${secretKey.length > 1000 && secretKey.length < 1400 ? 'A key this size is an RSA-2048 private key, so the declared '
+            'algorithm and the credentials most likely come from different '
+            'enrollments — check that the enrollment id being authenticated '
+            'as is the one whose key material was loaded. ' : ''}'
+        'Signing was not attempted');
+  }
+  return secretKey;
 }

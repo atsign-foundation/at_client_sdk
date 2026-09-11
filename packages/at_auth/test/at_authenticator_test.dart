@@ -40,6 +40,23 @@ void main() {
       'a6c61879f2bd17254e233a74578c9be0304e556d0517e5c0fdb1d6444047a041'
       '99fdba06b01c3765cfc2ca6a1d57124f5da58f05fea1f777a705814e2d54e766';
 
+  /// FROZEN: the base64 PKCS#1 v1.5 SHA-256 signature the `pkam:` verb
+  /// carries for [challenge] under [atSign]'s demo PKAM private key. The
+  /// atServer verifies it against the key it holds, so these bytes are a
+  /// cross-implementation contract rather than an implementation detail: an
+  /// intended change edits this literal, and that edit is the review.
+  ///
+  /// Captured with `openssl dgst -sha256 -sign <key> -keyform DER` over the
+  /// raw challenge bytes, so the expectation does not come from the code it
+  /// is checking — the same standard as [expectedCramDigest] above.
+  const expectedPkamSignature =
+      'Y9uoEs+F2k/cZ285RGbPx9yShG5Ea/e0FcYiXZ7MDeO/BFxop7s4c7EHCpvH5x0TEquq'
+      '1XY/524q+CLq7JyeA8noCaQZB04T3F7EWZp3GFnad4rX3OwUICb/TM4YDWt+H21eXsKX'
+      'LktwSHYqhRcZcil0M2XrT+sqekN1nj0/mRWL09JyTMNxDbfgvndXzBKdHt8t1ihlRdoQ'
+      'AnZn16qWrwj9EI0X4WsuNxDEB+J6oPMYUmiVsPGNhZvFjyYqtKuxtQRsWcVc962trwZa'
+      'b9jovcMeERuTqOCiUxsER60e1x94AjiAK7V8Rx5+01q3Lp5IVwnn3Ungd5hgMLngHXXg'
+      'Uw==';
+
   /// Demo material, so the PKAM leg performs a real RSA signature rather than
   /// stopping short of the thing it exists to do.
   AtKeys signingKeys() => AtKeys()
@@ -90,6 +107,9 @@ void main() {
       expect(executor.sent.last, contains('signingAlgo:rsa2048'),
           reason: 'a null algorithm resolves to the flat fields\' RSA keypair, '
               'which is what at_lookup signed with by default');
+      expect(executor.sent.last, contains(':sha256:$expectedPkamSignature'),
+          reason: 'the signature the atServer verifies, not merely that one '
+              'was sent');
       expect(executor.maxWaits, [null, null],
           reason: 'PKAM takes the process-wide defaults, unlike CRAM');
     });
@@ -221,6 +241,9 @@ void main() {
           reason: 'a keyless caller names no enrollment, so it has no record '
               'to read an algorithm from, and rsa2048 is what at_lookup '
               'signed with');
+      expect(executor.sent.last, contains(':sha256:$expectedPkamSignature'),
+          reason: 'the same key signs the same challenge to the same bytes '
+              'whether it arrived in a keyfile or on its own');
     });
 
     test('still refuses a challenge naming another atSign', () async {

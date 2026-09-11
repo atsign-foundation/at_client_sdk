@@ -430,8 +430,27 @@ now-deprecated `toAtChops` methods, so they leave with those in the major),
 `AtAuthResponse.atChops` and `AtAuth.atChops` go `@Deprecated` beside
 `atAuthKeys`, which is where a consumer should have been reading all along.
 
-⚠️ This is the authentication path, so it is the one step in this plan that
-cannot land on unit-green: all 4 live packs before it commits.
+**The PKAM signing path is done**, and it is the first production caller
+`authenticationKeyPairFor` has. Where the keyfile is the whole answer — the
+mainstream case, and `authenticatorFor`'s — `_pkam` now takes the keypair and
+signs it with `RsaSignatureAlgo` or `MlDsa65PureDartAlgo` directly, taking the
+algorithm from the material rather than from a caller. The bare-private-key
+authenticator does the same. The two injected-signer branches deliberately do
+not: an injected `AtChops` is the shape that injection exists for, and one of
+them names the algorithm precisely because the keyfile cannot answer, which is
+a resolution only the live packs exercise.
+
+⚠️ The PKAM signature is a wire contract and had no pin. It has one now, and
+it is worth copying: the expected base64 was captured with
+`openssl dgst -sha256 -sign <key> -keyform DER`, so it does not come from the
+code it checks. It was green against the old signing before the change and
+green after, which is how byte-identity was established rather than argued;
+signing the challenge under sha512 instead reddens it with both strings in the
+failure. at_chops' barrel now exports `MlDsa65Sizes`, because the diagnostic
+that names a mismatched enrollment needs the FIPS 204 length.
+
+⚠️ This is the authentication path, so the rest of this step still cannot land
+on unit-green: all 4 live packs before the PR. Nothing here has run them.
 
 ### Step 4: at_client's carrier role (no API change)
 

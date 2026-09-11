@@ -1,5 +1,21 @@
 ## 4.0.0-rc2
 
+- refactor: a PKAM challenge is signed from the keypair rather than through
+  `AtChops`, wherever the keyfile is the whole answer. `signPkamChallenge`
+  takes the algorithm from the material it signs with, so a key cannot be put
+  through the wrong routine, and `authenticationKeyPairFor` is what resolves
+  it. The bare-private-key authenticator signs with `RsaSignatureAlgo`
+  likewise. A caller that injects its own `AtChops` still signs with it: that
+  is the shape the injection exists for.
+  ⚠️ The bytes are unchanged, and pinned: `at_authenticator_test.dart` now
+  carries the base64 PKAM signature for a fixed challenge and demo key,
+  captured with `openssl dgst -sha256 -sign` so the expectation does not come
+  from the code it checks.
+- refactor: the ML-DSA PKAM key-length diagnostic moves here with the
+  signing. A key of about 1.2 kB is an RSA-2048 private key, and the way a
+  caller holds one while naming mldsa65 is a retrofitted keyfile whose flat
+  fields carry another enrollment's pair; saying so beats reporting a byte
+  count.
 - fix: `toAtChopsForEnrollment` takes the encryption keypair and
   self-encryption key through those accessors rather than off the flat
   fields, so a keyfile whose atSign material is typed derives a working
