@@ -10,11 +10,13 @@
   from that; nothing outside at_client needs the `AtChops` it holds. The
   constructor's `atChops:` was already deprecated.
 - refactor: a client's remote connections — its own and sync's — authenticate
-  from the keyfile when the client has one. The `AtChops` a keyfile client
-  derives from that keyfile is no longer injected as the PKAM signer, and
-  travels to sync's connection only for a client built without a keyfile.
-  Same bytes: a new test verifies the PKAM signature under the keyfile's
-  public key and not under the `AtChops`'. The credential fields at_lookup
+  from the keyfile's keypair when the keyfile holds one; the client's
+  `AtChops` is the door when it holds none, which a client built from an
+  `AtChops` with an empty key source beside it needs — the shape the
+  functional pack builds, where a first form of this change that dropped the
+  `AtChops` failed 36 of its tests. Same bytes: a test verifies the PKAM
+  signature under the keyfile's public key when the keyfile holds one, and
+  under the `AtChops`' when it holds none. The credential fields at_lookup
   reads are still written on the lookup, for a lookup from before the
   authenticator seam; they go with that ladder in the at_lookup major.
 - refactor: `ApkamSigning.authenticationSigningKey` reads the enrollment's

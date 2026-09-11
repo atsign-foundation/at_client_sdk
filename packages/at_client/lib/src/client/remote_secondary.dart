@@ -70,15 +70,17 @@ class RemoteSecondary implements Secondary {
       return;
     }
 
-    // A keyfile is the whole answer: the authenticator signs with the keypair
-    // it holds for this enrollment. An AtChops beside it is what a keyfile
-    // client derives from that same keyfile, not a second credential.
+    // The keyfile's keypair signs when it holds one for this enrollment; the
+    // AtChops beside it is the door for a keyfile that holds none - a client
+    // built from an AtChops with a stand-in key source, which the live packs
+    // build. The rule is at_auth's, in the authenticator.
     final io = _atKeysIo;
     if (io != null) {
       lookUp.authenticator = authenticatorFor(
         io,
         _atSign,
         enrollmentId: lookUp.enrollmentId,
+        chops: _atChops,
       );
       return;
     }

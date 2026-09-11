@@ -12,6 +12,9 @@
 /// equivalent test found was covered by nothing.
 library;
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
@@ -152,6 +155,31 @@ void main() {
     return io;
   }
 
+  /// An `AtChops` holding [pkamPinAtSign]'s demo PKAM keypair: the injected
+  /// signer, which is the door for a keyfile holding no keypair.
+  // ignore: deprecated_member_use
+  AtChops pinChops() => AtChopsImpl(AtChopsKeys.create(
+      null,
+      // ignore: deprecated_member_use
+      AtPkamKeyPair.create(demo.pkamPublicKeyMap[pkamPinAtSign]!,
+          demo.pkamPrivateKeyMap[pkamPinAtSign]!)));
+
+  /// A keyfile holding [pkamPinAtSign]'s encryption material and no APKAM
+  /// keypair at all, in memory.
+  Future<InMemoryAtKeysIo> encryptionOnlyKeyfile() async {
+    final io = InMemoryAtKeysIo();
+    await io.write(
+        atSign,
+        AtKeys()
+          ..defaultEncryptionPublicKey = AtBytes.fromString(
+              demo.encryptionPublicKeyMap[pkamPinAtSign]!)
+          ..defaultEncryptionPrivateKey = AtBytes.fromString(
+              demo.encryptionPrivateKeyMap[pkamPinAtSign]!)
+          ..defaultSelfEncryptionKey =
+              AtBytes.fromString(demo.aesKeyMap[pkamPinAtSign]!));
+    return io;
+  }
+
   /// Runs the authenticator [lookUp] was handed against the pinned challenge
   /// and returns the `pkam:` command it sent.
   Future<String> pkamSentBy(MockMuxableLookUp lookUp) async {
@@ -221,24 +249,45 @@ void main() {
               'keyfile\'s PKAM key: what signs may move, the signature may not');
     });
 
-    test('a signer the caller injected, over the keyfile', () async {
-      // The keyfile holds another atSign's keypair, so if the keyfile signed
-      // the signature would not be the pin's. The door for a signer that is
-      // not a keyfile at all - a hardware-backed one - and this is its test.
+    test('a signer the caller injected, when the keyfile holds no keypair',
+        () async {
+      // The door for a signer that is not a keyfile at all - a hardware-backed
+      // one, or a client built from an AtChops with a stand-in key source
+      // beside it. The keyfile here holds encryption material and no APKAM
+      // keypair, so only the injected signer can answer.
       final lookUp = MockMuxableLookUp();
-      // ignore: deprecated_member_use
-      final injected = AtChopsImpl(AtChopsKeys.create(
-          null,
-          // ignore: deprecated_member_use
-          AtPkamKeyPair.create(demo.pkamPublicKeyMap[pkamPinAtSign]!,
-              demo.pkamPrivateKeyMap[pkamPinAtSign]!)));
-      final auth =
-          rig(lookUp, enrollmentId: null, activated: true, chops: injected);
+      final auth = rig(lookUp,
+          enrollmentId: null, activated: true, chops: pinChops());
+
+      await authenticate(auth, keysIo: await encryptionOnlyKeyfile());
+
+      expect(await pkamSentBy(lookUp), endsWith(':$expectedPkamSignature\n'),
+          reason: 'the injected signer\'s key: the keyfile has none');
+    });
+
+    test('the keyfile, over a signer the caller injected, when it holds one',
+        () async {
+      // One rule for a signer beside a keyfile: the keyfile's keypair signs.
+      // The keyfile holds another atSign's demo keypair, so the signature is
+      // that key's and not the pin's.
+      final lookUp = MockMuxableLookUp();
+      final auth = rig(lookUp,
+          enrollmentId: null, activated: true, chops: pinChops());
 
       await authenticate(auth, keysIo: await demoKeyfile('@bob🛠'));
 
-      expect(await pkamSentBy(lookUp), endsWith(':$expectedPkamSignature\n'),
-          reason: 'the injected signer\'s key, not the keyfile\'s');
+      final pkam = await pkamSentBy(lookUp);
+      final signature =
+          base64Decode(pkam.substring(pkam.lastIndexOf(':') + 1).trim());
+      expect(
+          await RsaSignatureAlgo.rsa2048().verifyBytes(
+              Uint8List.fromList(utf8.encode(pkamPinChallenge)),
+              signature: signature,
+              publicKey: base64Decode(demo.pkamPublicKeyMap['@bob🛠']!)),
+          isTrue,
+          reason: 'the keyfile\'s keypair signed');
+      expect(pkam, isNot(endsWith(':$expectedPkamSignature\n')),
+          reason: 'and not the injected signer\'s');
     });
   });
 

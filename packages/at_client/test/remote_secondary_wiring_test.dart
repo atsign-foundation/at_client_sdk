@@ -130,6 +130,21 @@ void main() {
           isTrue);
     });
 
+    test('the AtChops, for a client whose keyfile holds no keypair', () async {
+      // The shape the live packs build: an empty AtKeys as the key source and
+      // an AtChops carrying the keys. The door, and this is its test.
+      final lookUp = MockMuxableLookUp();
+      final empty = InMemoryAtKeysIo();
+      await empty.write(atSign, AtKeys());
+      RemoteSecondary(atSign, preference,
+          atLookUp: lookUp, atChops: chopsOf(chopsPair), atKeysIo: empty);
+
+      expect(
+          await verifiesUnder(chopsPair, await pkamSignatureBy(lookUp)), isTrue,
+          reason:
+              'the keyfile holds nothing to sign with, so the AtChops does');
+    });
+
     test('the AtChops, for a client holding no keyfile', () async {
       // The door, kept open while clients built from an AtChops exist.
       final lookUp = MockMuxableLookUp();
@@ -171,22 +186,16 @@ void main() {
       when(() => client.atChops).thenReturn(chopsOf(chopsPair));
     });
 
-    test('carries no AtChops when the client has a keyfile', () async {
+    test('carries the client\'s AtChops beside its keyfile', () async {
+      // The same two sources the client's own connection has, so sync signs
+      // with the same key: the keyfile's when it holds one, the AtChops when
+      // it holds none.
       when(() => client.atKeysIo).thenReturn(await keyfile());
 
       final remote = SyncServiceImpl.remoteSecondaryFor(client);
 
-      expect(remote.atChops, isNull,
-          reason: 'the keyfile is the credential sync authenticates with');
-    });
-
-    test('carries the AtChops for a client built without one', () {
-      when(() => client.atKeysIo).thenReturn(null);
-
-      final remote = SyncServiceImpl.remoteSecondaryFor(client);
-
-      expect(remote.atChops, same(client.atChops),
-          reason: 'the door for a client built from an AtChops');
+      expect(remote.atChops, same(client.atChops));
+      expect(remote.atLookUp, isA<AtLookupMuxable>());
     });
   });
 }

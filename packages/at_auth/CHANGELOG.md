@@ -5,13 +5,15 @@
   from an `AtChops` at_auth hands out; the responses' own `atChops` were
   already deprecated. Injecting a signer through `AtAuth.create(atChops:)`
   is unchanged, because a hardware-backed key has no other door yet.
-- refactor: `AtAuth.authenticate` signs its PKAM challenge from the keyfile's
-  own keypair unless a signer was injected through `AtAuth.create(atChops:)`,
-  which still outranks the keyfile. It used to inject the `AtChops` it
-  builds for its `atChops` field, so at_auth's own authentication never took
-  the keypair path. Same bytes: the openssl-captured PKAM signature is
-  asserted on the authenticator `authenticate` installs, and a second arm
-  holds that an injected signer is the one that signs.
+- refactor: one rule for a signer beside a keyfile, in every authenticator
+  at_auth builds: the keyfile's keypair signs when it holds one for the
+  enrollment, and an injected `AtChops` signs when it holds none — the door
+  for a hardware-backed key, or for a client built from an `AtChops` with a
+  stand-in key source beside it. `AtAuth.authenticate` used to inject the
+  `AtChops` it builds for its `atChops` field, so at_auth's own authentication
+  never took the keypair path. Same bytes: the openssl-captured PKAM
+  signature is asserted on the authenticator `authenticate` installs, and two
+  arms hold the rule from each side.
 - refactor: the enrolment handshake authenticates from the enrollee's keys
   alone. It used to build an `AtChops` around them and inject it as the
   signer, with a special shape for an enrollee still awaiting its symmetric

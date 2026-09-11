@@ -285,9 +285,10 @@ one is decided and named in the table under step 3, and all but two are the
 injected-signer machinery that waits for the live packs. Step 4 is done
 apart from `LocalSecondary`'s `AtChops` tier, which waits for the live packs;
 `AtClient.atChops` is `@Deprecated`. Step 5 is done: the readers of the
-enrollment id ask the client. What is owed, in order: the live packs on
-everything landed since the handshake moved, then steps 6 and 7, then that
-tier. Step 7 is no longer
+enrollment id ask the client. The functional pack has run green on everything landed; its
+first run found one defect, recorded under step 4. The e2e and
+onboarding-CLI packs are still owed. What is owed, in order: those two packs,
+then steps 6 and 7, then that tier. Step 7 is no longer
 blocked by the legacy question, which step 3 answered, but it is blocked on the
 three at_client_flutter readings recorded under it.
 
@@ -505,14 +506,18 @@ the live packs run.** One of them names the algorithm precisely because the
 keyfile cannot answer — a PQ-native activation signs with a keypair minted
 moments before, under an enrollment the atServer has not created — and that
 resolution is exercised by no unit test. The rest are reachable from unit
-tests. `AtAuthImpl.authenticate` no longer feeds them: it hands
+tests. `AtAuthImpl.authenticate` hands
 `authenticatorFor` only a signer the caller injected through
-`AtAuth.create(atChops:)`, so at_auth's own mainstream authentication signs
-from the keypair, and `onboard` is the branches' last caller. The bytes are
+`AtAuth.create(atChops:)`, and `_pkam`'s injected-signer branch now applies
+one rule wherever a signer arrives beside a keyfile: the keyfile's keypair
+signs when it holds one for the enrollment, the injected signer when it holds
+none. So at_auth's own mainstream authentication signs from the keypair, and
+`onboard` is the algorithm-naming branch's last caller. The bytes are
 identical by design, so `auth_wiring_test.dart` holds the openssl PKAM pin on
-the authenticator `authenticate` installs and holds that an injected signer
-still wins; which branch of `_pkam` ran is not observable from outside and is
-not claimed.
+the authenticator `authenticate` installs and holds the rule from both sides:
+an injected signer signs for a keyfile holding no keypair, and a keyfile
+holding another atSign's keypair outranks the injected signer, checked with
+at_chops' verifier. Flipping the rule back reddens exactly that second arm.
 
 **The method that worked, for whoever picks this up.** Every change to a
 signing or key-resolution path went: capture the wire bytes with an
@@ -588,15 +593,25 @@ without a key source; it became asynchronous, since a keyfile is read rather
 than held, and its four callers followed. Three arms in
 `apkam_signing_keys_test.dart` were red against the old getter (a keyfile-only
 client hit its null check; the keyfile's key lost to an injected `AtChops`)
-and are green now. `RemoteSecondary` no longer injects the client's `AtChops`
-into the authenticator when the client has a keyfile — the keyfile is the
-whole answer, and the `AtChops` a keyfile client holds was derived from it —
-and sync's own remote, built through `SyncServiceImpl.remoteSecondaryFor`,
-carries the `AtChops` only for a client built without one.
-`remote_secondary_wiring_test.dart` tells the two sources apart with at_chops'
-RSA verifier: two different keypairs, and which public key the PKAM signature
-verifies under says which signed; its keyfile-plus-`AtChops` arm was red
-against the old wiring. The ladder fields on the lookup are still written, as
+and are green now. `RemoteSecondary` hands the authenticator the
+client's `AtChops` beside its keyfile, and at_auth's rule decides: the
+keyfile's keypair signs when it holds one, the `AtChops` when it holds none.
+Sync's own remote, built through `SyncServiceImpl.remoteSecondaryFor`, gets
+the same two sources. `remote_secondary_wiring_test.dart` tells the two apart
+with at_chops' RSA verifier — two different keypairs, and which public key
+the PKAM signature verifies under says which signed — and its
+keyfile-plus-`AtChops` arm was red against the old wiring. ⚠️ **The first
+form of this change dropped the `AtChops` whenever a keyfile was present, on
+the premise that a keyfile client's `AtChops` was derived from that keyfile.
+The functional pack falsified it: 36 of its tests went red, every one with
+"AtKeys holds no authentication keypair for this atSign's own credential",
+because its fixtures hand the client an empty `AtKeys()` as the key source
+beside an `AtChops` holding the keys — the stand-in that carries the shape but
+not the substance, which this plan's own caution names and this pass did not
+enumerate.** The rule above is the fix, and `remote_secondary_wiring_test.dart`
+now holds that shape too: an empty keyfile beside an `AtChops` signs with the
+`AtChops`. The pack re-ran on the same `at_virtual_env:local` image,
+`./runLocal.sh 27000` in `tests/at_functional_test`: +200, all passed. The ladder fields on the lookup are still written, as
 step 5's ruling on `remote_secondary.dart` says. `AtClient.atChops` is
 `@Deprecated`, getter and setter, with the replacement in the text. at_client's
 `lib` went 46 to 41 (`dart analyze` in `packages/at_client`, counting

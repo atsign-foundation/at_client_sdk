@@ -228,22 +228,22 @@ Future<bool> _pkam(
     keyPair = null;
     signingAlgo = injectedAlgo;
   } else if (injectedChops != null) {
-    // The caller brought its own signer - a hardware-backed one, say. Take
-    // only the ALGORITHM from the keyfile: `authenticationFor` would build an
-    // AtChops this call is about to discard, and it throws on a keyfile
-    // missing material a caller with its own signer never needed.
-    //
-    // Null below means the enrollment files no typed material, so the flat
-    // fields' RSA pair is what it authenticates with. It cannot also mean
-    // "typed material this build cannot read": authenticationAlgorithmFor
-    // refuses that rather than reporting null, so the fallback is a statement
-    // about the keyfile and not a guess about the injected signer. Those two
-    // were one null once, and rsa2048 was then a guess about somebody else's
-    // credentials.
-    signer = injectedChops;
-    keyPair = null;
-    signingAlgo = keys.authenticationAlgorithmFor(enrollmentId) ??
-        SigningAlgoType.rsa2048;
+    // A signer beside a keyfile. The keyfile's keypair signs when it holds
+    // one for this enrollment; the injected signer is the door for a keyfile
+    // that holds none - a client built from an AtChops with a stand-in key
+    // source beside it, or a hardware-backed key with no software pair. A
+    // keyfile that holds typed material this build cannot sign with is
+    // refused here rather than fallen through: `authenticationKeyPairFor`
+    // throws for it, and signing as whoever the injected signer is would be
+    // a guess about somebody else's credentials.
+    keyPair = keys.authenticationKeyPairFor(enrollmentId);
+    if (keyPair != null) {
+      signer = null;
+      signingAlgo = keyPair.algorithm;
+    } else {
+      signer = injectedChops;
+      signingAlgo = SigningAlgoType.rsa2048;
+    }
   } else {
     // No injection at all: the keyfile is the whole answer, so take the
     // keypair rather than an AtChops built around it. This is the mainstream

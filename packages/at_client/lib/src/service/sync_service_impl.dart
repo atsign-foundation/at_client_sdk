@@ -191,12 +191,12 @@ class SyncServiceImpl implements SyncService {
 
   /// Sync's own connection, built from the same key material the client
   /// holds, so its authenticator matches the client's rather than falling to
-  /// a different credential. The client's `AtChops` travels only for a client
-  /// built without a keyfile; with one, the keyfile is the credential.
+  /// a different credential: the keyfile's keypair when it holds one, the
+  /// client's `AtChops` when it holds none.
   @visibleForTesting
   static RemoteSecondary remoteSecondaryFor(AtClient atClient) =>
       RemoteSecondary(atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-          atChops: atClient.atKeysIo == null ? atClient.atChops : null,
+          atChops: atClient.atChops,
           enrollmentId: atClient.enrollmentId,
           signingAlgoType: signingAlgoOf(atClient),
           atKeysIo: atClient.atKeysIo);
