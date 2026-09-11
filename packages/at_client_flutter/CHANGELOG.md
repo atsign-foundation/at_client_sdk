@@ -72,6 +72,12 @@
   by the same predicate the reads use. `getAllAtsigns` threw a `TypeError` on
   one (a `String` used as a condition) and `removeAtsignFromKeychain` silently
   kept it.
+- fix: changed keychain storage name delimiter from `_` to `:`
+- feat: upgrade path to move keys from `_` to `:` -- if `:` is absent and
+  `_` is present, data is copied to `:` but `_` is left in place. In 2.0.0
+  the `_` store will be removed after copying.
+
+## 1.1.5
 - feat: `AuthService.createClient` turns a completed authentication into a
   client the app owns, taking `storage` to decide the backend and the location.
   The app owns its lifetime, so it no longer has to go through

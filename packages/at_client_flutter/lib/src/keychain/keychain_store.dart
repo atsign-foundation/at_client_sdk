@@ -1,4 +1,4 @@
-import 'package:package_info_plus/package_info_plus.dart';
+part of 'keychain_storage.dart';
 
 const _atKeysStoreName = '@atsigns';
 const _enrollmentStoreName = '@enrollment';
@@ -18,8 +18,15 @@ class AtKeysStore extends KeychainStore {
   const AtKeysStore();
   static Future<String> getName() async {
     String packageName = await getPackageName();
-    return '${_atKeysStoreName}_$packageName';
+    return '$_atKeysStoreName:$packageName';
   }
+}
+
+// Legacy pre-1.1.6 store name (used `_` instead of `:`).
+// TODO(2.0.0): remove once migration deletes `_` stores in-place.
+Future<String> _getImproperAtKeysStoreName() async {
+  String packageName = await getPackageName();
+  return '${_atKeysStoreName}_$packageName';
 }
 
 class EnrollmentStore extends KeychainStore {

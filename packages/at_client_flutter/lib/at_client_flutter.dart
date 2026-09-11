@@ -3,7 +3,6 @@ library;
 export 'package:at_client/at_client.dart';
 
 export 'src/keychain/keychain_data.dart';
-export 'src/keychain/keychain_store.dart';
 export 'src/keychain/keychain_storage.dart';
 export 'src/keychain/keychain_io_impl.dart';
 
