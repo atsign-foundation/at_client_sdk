@@ -39,13 +39,9 @@ class AtAuthImpl implements AtAuth {
     _progressController.add(progressEvent);
   }
 
-  @override
-  @Deprecated('Build the client from the AtKeysIo you authenticated with, '
-      'which AtAuthResponse.session carries; at_auth no longer needs to hand '
-      'out an AtChops. Injecting a signer through AtAuth.create(atChops:) is '
-      'unchanged. Removed with the AtChops compatibility API in the next '
-      'major release.')
-  AtChops? atChops;
+  /// The signer a caller injected through [AtAuth.create], else the one
+  /// [authenticate] and [onboard] build from the keys they resolved.
+  AtChops? _chops;
 
   CramAuthenticator? cramAuthenticator;
 
@@ -77,12 +73,13 @@ class AtAuthImpl implements AtAuth {
 
   AtAuthImpl(
       {this.atLookUp,
-      this.atChops,
+      AtChops? atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
       this.atServerStatus,
       AtEnrollment? atEnrollment})
-      : atEnrollment = atEnrollment ?? AtEnrollment.create();
+      : _chops = atChops,
+        atEnrollment = atEnrollment ?? AtEnrollment.create();
 
   /// The keystore the authenticator should read, matching the precedence
   /// [authenticate] itself uses.
@@ -122,7 +119,7 @@ class AtAuthImpl implements AtAuth {
     _logger.finer('${lookUp.runtimeType} has no authenticator seam; '
         'authenticating from the credential fields');
     // ignore: deprecated_member_use
-    lookUp.atChops = atChops;
+    lookUp.atChops = _chops;
     if (signingAlgo != null) {
       // ignore: deprecated_member_use
       lookUp.signingAlgoType = signingAlgo;
@@ -173,11 +170,13 @@ class AtAuthImpl implements AtAuth {
     // enrollment's RSA credentials. AtKeys owns that resolution — it is the
     // only reader of either source. ??= to support mocking.
     final algorithm = atAuthKeys.authenticationAlgorithmFor(enrollmentId);
-    // A signer the caller injected outranks the keyfile; without one the
-    // authenticator signs with the keypair the keys hold. The AtChops built
-    // otherwise serves only the atChops field, for the readers it still has.
-    final injectedChops = atChops;
-    atChops ??= atAuthKeys.authenticationFor(enrollmentId).chops;
+    // NOTE: the keyfile's keypair signs when it holds one for this
+    // enrollment, and an injected signer is the door when it does not -
+    // `authenticatorFor` holds that rule. The AtChops resolved here serves
+    // only AtAuthResponse.atChops and at_lookup's credential ladder, which is
+    // all that still reads one.
+    final injectedChops = _chops;
+    _chops ??= atAuthKeys.authenticationFor(enrollmentId).chops;
     _installAuthenticator(
         atLookUp!,
         authenticatorFor(
@@ -204,7 +203,7 @@ class AtAuthImpl implements AtAuth {
             enrollmentId: enrollmentId))
         ..atAuthKeys = atAuthKeys
         ..atLookUp = atLookUp
-        ..atChops = atChops;
+        ..atChops = _chops;
 
       // Build the explicit hand-off session from the request's confirmed
       // subset — only when the request supplied an AtKeysIo source. The legacy
@@ -340,13 +339,13 @@ class AtAuthImpl implements AtAuth {
     // directly, and name the algorithm: at_lookup defaults to rsa2048 and
     // would otherwise sign an ML-DSA key with the RSA routine.
     if (atOnboardingRequest.signingAlgoType != SigningAlgoType.rsa2048) {
-      atChops ??= AtChopsImpl(AtChopsKeys.create(
+      _chops ??= AtChopsImpl(AtChopsKeys.create(
           null, AtPkamKeyPair.create(mint.apkamPublicKey, mint.apkamPrivateKey))
         ..selfEncryptionKey = _atAuthKeys.defaultSelfEncryptionKey == null
             ? null
             : AESKey(_atAuthKeys.defaultSelfEncryptionKey!.toString()));
     } else {
-      atChops ??= _atAuthKeys.toAtChops();
+      _chops ??= _atAuthKeys.toAtChops();
     }
     // The algorithm is named rather than derived here. A PQ-native activation
     // signs with the keypair minted a few lines above, which is in no keyfile,
@@ -358,7 +357,7 @@ class AtAuthImpl implements AtAuth {
         authenticatorFor(
           await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
           atOnboardingRequest.atSign,
-          chops: atChops,
+          chops: _chops,
           signingAlgo: atOnboardingRequest.signingAlgoType,
         ),
         signingAlgo: atOnboardingRequest.signingAlgoType);
@@ -391,7 +390,7 @@ class AtAuthImpl implements AtAuth {
           await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
           atOnboardingRequest.atSign,
           enrollmentId: enrollmentIdFromServer,
-          chops: atChops,
+          chops: _chops,
           signingAlgo: atOnboardingRequest.signingAlgoType,
         ),
         signingAlgo: atOnboardingRequest.signingAlgoType);
@@ -467,7 +466,7 @@ class AtAuthImpl implements AtAuth {
       ..isSuccessful = true
       ..atAuthKeys = _atAuthKeys
       ..atLookUp = atLookUp
-      ..atChops = atChops;
+      ..atChops = _chops;
 
     // Hand back the same explicit session as authenticate(), so a
     // freshly-onboarded atSign flows straight into the client. atKeysIo is

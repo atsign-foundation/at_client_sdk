@@ -12,11 +12,15 @@
   does the passphrase and self-encryption decoding; `passphraseCodec` on
   `AtKeysIo` remains for a caller that needs the envelope alone. No caller
   outside at_auth named any of them.
-- `AtAuth.atChops` is deprecated. Build the client from the `AtKeysIo` you
-  authenticated with, which `AtAuthResponse.session` carries, rather than
-  from an `AtChops` at_auth hands out; the responses' own `atChops` were
-  already deprecated. Injecting a signer through `AtAuth.create(atChops:)`
-  is unchanged, because a hardware-backed key has no other door yet.
+- **BREAKING:** `AtAuth.atChops` is removed. Build the client from the
+  `AtKeysIo` you authenticated with, which `AtAuthResponse.session` carries,
+  rather than from an `AtChops` at_auth hands out; the responses' own
+  `atChops` stay deprecated for now. Injecting a signer through
+  `AtAuth.create(atChops:)` is unchanged, because a hardware-backed key has
+  no other door yet — the implementation holds it privately, for the
+  authentication it was always for. Nothing outside at_auth wrote the field;
+  the seven places that read it were fixtures passing it back to a client
+  built from the same keyfile.
 - refactor: one rule for a signer beside a keyfile, in every authenticator
   at_auth builds: the keyfile's keypair signs when it holds one for the
   enrollment, and an injected `AtChops` signs when it holds none — the door
@@ -37,11 +41,16 @@
   built from the keypair alone.
   ⚠️ The handshake no longer copies the unwrapped symmetric key into an
   `AtChops`; it never left the handshake, and nothing read it.
-- feat: `AtEnrollment.approve` takes `approverKeys`, an `ApproverKeyMaterial`
-  holding the atSign's encryption private key and its self-encryption key,
-  which is all approval reads. `approverChops` is deprecated and still
-  honoured, as is the older fallback to `atLookUp.atChops`. The two secrets
-  sealed for the enrollee are sealed through `AESEncryptionAlgo` directly,
+- **BREAKING:** `AtEnrollment.approve` takes `approverKeys`, an
+  `ApproverKeyMaterial` holding the atSign's encryption private key and its
+  self-encryption key, which is all approval reads — and it is now
+  **required**. `approverChops` is removed, and with it the older fallback to
+  `atLookUp.atChops`: a connection is not where an app's key material lives,
+  and requiring the material means the compiler names every caller rather
+  than a refusal arriving at run time. A caller that cannot resolve its own
+  two keys refuses instead of approving and failing afterwards. The two
+  secrets sealed for the enrollee are sealed through `AESEncryptionAlgo`
+  directly,
   and a new test opens them with the enrollee's own `StringAESEncryptor`, a
   different AES implementation, so the pair is the contract.
   ⚠️ `approve` no longer writes the unwrapped APKAM symmetric key into the
@@ -55,9 +64,9 @@
   `AtAuth.create(atLookUp:)` without the seam authenticates from the fields
   as before. A test covers which wiring each kind of lookup gets.
   ⚠️ A caller that took `AtAuthResponse.atLookUp` and passed it to
-  `approve` without `approverChops` was reading key material at_auth had
-  left on the lookup; pass `approverChops`, which is what `approve`
-  documents and what at_client does.
+  `approve` was reading key material at_auth had left on the lookup.
+  `approve` requires `approverKeys` now and reads the lookup for nothing,
+  so there is no longer a way to depend on that.
 - refactor: the legacy flat fields of a `.atKeys` document are
   self-encrypted through `AESEncryptionAlgo` directly rather than through
   an `AtChops` built for the purpose. Same bytes: a new test pins the

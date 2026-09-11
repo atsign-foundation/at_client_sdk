@@ -10,14 +10,6 @@ import 'package:at_utils/at_progress.dart';
 
 /// Interface for onboarding and authentication to a secondary server of an atsign
 abstract interface class AtAuth {
-  /// The `AtChops` [authenticate] and [onboard] build for the enrollment they
-  /// authenticated as, or the signer a caller injected.
-  @Deprecated('Build the client from the AtKeysIo you authenticated with, '
-      'which AtAuthResponse.session carries; at_auth no longer needs to hand '
-      'out an AtChops. Injecting a signer through AtAuth.create(atChops:) is '
-      'unchanged. Removed with the AtChops compatibility API in the next '
-      'major release.')
-  AtChops? atChops;
   AtLookUp? atLookUp;
   Stream<ProgressEvent> get progressStream;
 

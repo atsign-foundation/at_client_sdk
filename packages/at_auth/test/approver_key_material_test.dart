@@ -32,11 +32,10 @@ void main() {
   final selfEncryptionKey = demo.aesKeyMap[atSign]!;
   final apkamSymmetricKey = demo.apkamSymmetricKeyMap[atSign]!;
 
-  /// A lookup holding no key material that records the one command sent.
+  /// A lookup that records the one command sent and answers nothing else.
   ({MockAtLookUp lookUp, List<String> commands}) emptyLookUp() {
     final lookUp = MockAtLookUp();
     final commands = <String>[];
-    when(() => lookUp.atChops).thenReturn(null);
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((inv) async {
       commands.add(inv.positionalArguments[0] as String);
@@ -102,8 +101,6 @@ void main() {
       final opened = unsealed(l.commands.single);
       expect(opened.encryptionPrivateKey, encryptionPrivateKey);
       expect(opened.selfEncryptionKey, selfEncryptionKey);
-      // Never even asked: the material came with the call.
-      verifyNever(() => l.lookUp.atChops);
     });
 
     test('opens, under a key the approver had to unwrap, to the same two',
@@ -124,35 +121,27 @@ void main() {
     });
   });
 
-  group('where the material may still come from', () {
-    test('an AtChops, for a caller that has not moved yet', () async {
-      // The door this package is closing, kept working while it is open.
+  group('where the material comes from', () {
+    test('the call, and the connection is asked for nothing else', () async {
       final l = emptyLookUp();
-      // ignore: deprecated_member_use
-      final chops = AtChopsImpl(AtChopsKeys.create(
-          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey),
-          null)
-        ..selfEncryptionKey = AESKey(selfEncryptionKey));
 
-      await EnrollmentApprover().approve(wrappedDecision(), l.lookUp,
-          // ignore: deprecated_member_use
-          approverChops: chops);
+      await EnrollmentApprover().approve(mintedDecision(), l.lookUp,
+          approverKeys: (
+            encryptionPrivateKey: encryptionPrivateKey,
+            selfEncryptionKey: selfEncryptionKey
+          ));
 
       final opened = unsealed(l.commands.single);
       expect(opened.encryptionPrivateKey, encryptionPrivateKey);
       expect(opened.selfEncryptionKey, selfEncryptionKey);
-    });
-
-    test('and with neither, it refuses', () async {
-      // The control: without it the arms above would say nothing about where
-      // the material came from.
-      final l = emptyLookUp();
-
-      await expectLater(
-          () => EnrollmentApprover().approve(mintedDecision(), l.lookUp),
-          throwsA(predicate((dynamic e) =>
-              e is AtAuthenticationException &&
-              e.message.contains('authentication keys are not initialized'))));
+      // The control for the arms above: they would read the same if approval
+      // had taken the material off the connection instead of the argument.
+      // Approval touches the lookup to send the command, and for nothing
+      // else - which is why `approverKeys` is required rather than a
+      // preference over a fallback.
+      verify(() => l.lookUp.executeCommand(any(), auth: any(named: 'auth')))
+          .called(1);
+      verifyNoMoreInteractions(l.lookUp);
     });
   });
 }

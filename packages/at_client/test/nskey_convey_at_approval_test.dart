@@ -18,7 +18,7 @@ class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision decision, AtLookUp atLookUp,
-      {ApproverKeyMaterial? approverKeys, AtChops? approverChops}) async {
+      {required ApproverKeyMaterial approverKeys}) async {
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);
   }
@@ -41,6 +41,7 @@ void main() {
   MockAtClient buildMockClient(String enrollmentId) {
     final atClient = buildRemoteBackedMockClient(
         atSign: atSign, enrollmentId: enrollmentId, remoteData: remoteData);
+    stubApproverKeys(atClient);
     // The sweep enumerates envelope keys by scan, which the shared fixture
     // does not stub.
     when(() => atClient.getAtKeys(

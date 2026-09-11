@@ -5,7 +5,6 @@ import 'package:at_auth/src/enroll/models/approver_key_material.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
-import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -27,33 +26,12 @@ class EnrollmentApprover {
   /// material, and all of it: the atSign's encryption private key, which
   /// unwraps the symmetric key a legacy enrollee RSA-wrapped to it, and the
   /// self-encryption key, one of the two secrets sealed for the enrollee under
-  /// that symmetric key. Reaching through `atLookUp.atChops` for those made a
-  /// network object the carrier of an app's key material.
+  /// that symmetric key. Required: approval never reaches through [atLookUp]
+  /// for key material, which made a network object the carrier of an app's
+  /// keys.
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp,
-      {ApproverKeyMaterial? approverKeys,
-      @Deprecated('Pass approverKeys instead. Removed with the AtChops '
-          'compatibility API in the next major release.')
-      AtChops? approverChops}) async {
-    var keys = approverKeys;
-    if (keys == null) {
-      // NOTE: the two doors this package is closing, kept open until the
-      // major: a caller's AtChops, then whatever an older at_auth left on the
-      // lookup.
-      // ignore: deprecated_member_use
-      final chops = approverChops ?? atLookUp.atChops;
-      if (chops != null) {
-        keys = (
-          encryptionPrivateKey:
-              chops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey,
-          selfEncryptionKey: chops.atChopsKeys.selfEncryptionKey!.key,
-        );
-      }
-    }
-    if (keys == null) {
-      throw AtAuthenticationException(
-          'The authentication keys are not initialized');
-    }
+      {required ApproverKeyMaterial approverKeys}) async {
     // An enrollment that advertised a key package sent no wrapped key, because
     // this approver minted it — there is nothing to unwrap, and the RSA step is
     // skipped entirely rather than being fed an empty string. Every other
@@ -63,7 +41,7 @@ class EnrollmentApprover {
         enrollmentRequestDecision.mintedApkamSymmetricKey ??
             utf8.decode((RsaEncryptionAlgo()
                   ..atPrivateKey =
-                      AtPrivateKey.fromString(keys.encryptionPrivateKey))
+                      AtPrivateKey.fromString(approverKeys.encryptionPrivateKey))
                 .decrypt(base64Decode(
                     enrollmentRequestDecision.encryptedAPKAMSymmetricKey)));
 
@@ -77,11 +55,11 @@ class EnrollmentApprover {
 
     final encryptionPrivateKeyIV = InitialisationVector.random(16);
     final encryptedDefaultEncryptionPrivateKey =
-        await sealed(keys.encryptionPrivateKey, encryptionPrivateKeyIV);
+        await sealed(approverKeys.encryptionPrivateKey, encryptionPrivateKeyIV);
 
     final selfEncryptionKeyIV = InitialisationVector.random(16);
     final encryptedDefaultSelfEncryptionKey =
-        await sealed(keys.selfEncryptionKey, selfEncryptionKeyIV);
+        await sealed(approverKeys.selfEncryptionKey, selfEncryptionKeyIV);
 
     String command = 'enroll:approve:${jsonEncode({
           'enrollmentId': enrollmentRequestDecision.enrollmentId,

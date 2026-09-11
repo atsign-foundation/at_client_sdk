@@ -54,7 +54,6 @@ void main() {
   const retrofittedId = 'retrofitted-enrollment';
 
   late String keysFilePath;
-  late AtChops flatRsaChops;
   late AtClient retrofittedClient;
 
   setUp(() async {
@@ -103,10 +102,6 @@ void main() {
     final io = FileAtKeysIo(filePath: (_) => keysFilePath);
     await io.write(atSign, keys);
 
-    // What at_auth hands `_initAtClient`: the signer for the FLAT enrolment,
-    // resolved the way at_auth resolves it.
-    flatRsaChops = (await io.read(atSign)).authenticationFor(null).chops;
-
     // The client as a retrofit leaves it: running as the retrofitted
     // enrolment, with the signer that enrolment owns.
     final retrofittedChops =
@@ -128,12 +123,11 @@ void main() {
     AtClientImpl.atClientInstanceMap.clear();
   });
 
-  /// A service whose `authenticate()` succeeds without a server, handing over
-  /// [flatRsaChops] as at_auth would.
+  /// A service whose `authenticate()` succeeds without a server, reporting the
+  /// flat enrolment in the response as at_auth would.
   AtOnboardingServiceImpl serviceAuthenticatingAsFlatEnrollment() {
     final atAuth = _MockAtAuth();
     when(() => atAuth.progressStream).thenAnswer((_) => const Stream.empty());
-    when(() => atAuth.atChops).thenReturn(flatRsaChops);
     when(() => atAuth.authenticate(any()))
         .thenAnswer((_) async => AtAuthResponse(atSign)
           ..isSuccessful = true

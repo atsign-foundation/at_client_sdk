@@ -5,6 +5,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
@@ -22,7 +23,7 @@ class RecordingAtEnrollment extends Mock implements AtEnrollment {
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision decision, AtLookUp atLookUp,
-      {ApproverKeyMaterial? approverKeys, AtChops? approverChops}) async {
+      {required ApproverKeyMaterial approverKeys}) async {
     approvals.add(decision);
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);
@@ -269,6 +270,18 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit',
           remoteSecondary: secondary);
+
+      // Approval seals the approver's own encryption private key and
+      // self-encryption key for the enrollee, so a client that holds neither
+      // refuses before it decides anything. This one is built with no key
+      // source, which leaves the keystore - the last of the local secondary's
+      // three tiers - as where it reads them.
+      final store = client.getLocalSecondary()!.keyStore!;
+      await store.put(AtConstants.atEncryptionPrivateKey,
+          AtData()..data = demo.encryptionPrivateKeyMap['@alice🛠']);
+      await store.put(AtConstants.atEncryptionSelfKey,
+          AtData()..data = demo.aesKeyMap['@alice🛠']);
+
       final enrollment = RecordingAtEnrollment();
       await EnrollmentServiceImpl(client, enrollment).approve(
           EnrollmentRequestDecision.approved(

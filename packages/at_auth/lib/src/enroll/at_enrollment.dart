@@ -10,7 +10,6 @@ import 'package:at_auth/src/enroll/models/otp.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
-import 'package:at_chops/at_chops.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollment {
@@ -126,23 +125,18 @@ abstract class AtEnrollment {
   ///               encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
   ///
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.approve(
-  ///       enrollmentRequestDecision, atLookupImpl);
+  ///       enrollmentRequestDecision, atLookupImpl, approverKeys: myKeys);
   /// ```
   ///
   /// [approverKeys] is what approval reads of the approving client's own
-  /// material: the atSign's encryption private key, which unwraps the
-  /// symmetric key a legacy enrollee RSA-wrapped to it, and its
+  /// material, and all of it: the atSign's encryption private key, which
+  /// unwraps the symmetric key a legacy enrollee RSA-wrapped to it, and its
   /// self-encryption key, one of the two secrets sealed for the enrollee.
-  /// Neither is authentication, so neither belongs on the network object.
-  /// While it is null the implementation reads the same two off
-  /// [approverChops], and failing that off `atLookUp.atChops`.
+  /// Neither is authentication, so the caller hands them over rather than the
+  /// implementation reaching through [atLookUp] for them.
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp,
-      {ApproverKeyMaterial? approverKeys,
-      @Deprecated('Pass approverKeys instead: the encryption private key and '
-          'the self-encryption key are all approval reads from this. Removed '
-          'with the AtChops compatibility API in the next major release.')
-      AtChops? approverChops});
+      {required ApproverKeyMaterial approverKeys});
 
   /// Denies an enrollment request.
   ///

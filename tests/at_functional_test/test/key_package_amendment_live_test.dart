@@ -300,7 +300,6 @@ void main() {
       ..commitLogPath = storage;
     final manager = await AtClientManager(atSign).setCurrentAtSign(
         atSign, namespace, preference,
-        atChops: auth.atChops,
         atKeysIo: keysIo,
         enrollmentId: enrollmentId,
         storage: TestUtils.storageForPrincipal(atSign, enrollmentId));
@@ -447,7 +446,6 @@ void main() {
       expect(response.session!.enrollmentId, client.enrollmentId);
       final manager = await AtClientManager(atSign).setCurrentAtSign(
           atSign, namespace, preference,
-          atChops: auth.atChops,
           atKeysIo: keyfiles[device]!,
           enrollmentId: client.enrollmentId,
           storage: TestUtils.storageForPrincipal(atSign, client.enrollmentId));

@@ -15,7 +15,6 @@ import 'package:at_auth/src/enroll/models/otp.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
-import 'package:at_chops/at_chops.dart';
 
 /// A concrete implementation of [AtEnrollment] for managing enrollments.
 ///
@@ -54,12 +53,9 @@ class AtEnrollmentImpl implements AtEnrollment {
   Future<AtEnrollmentResponse> approve(
           EnrollmentRequestDecision enrollmentRequestDecision,
           AtLookUp atLookUp,
-          {ApproverKeyMaterial? approverKeys,
-          @Deprecated('Pass approverKeys instead. Removed with the AtChops '
-              'compatibility API in the next major release.')
-          AtChops? approverChops}) =>
+          {required ApproverKeyMaterial approverKeys}) =>
       _approver.approve(enrollmentRequestDecision, atLookUp,
-          approverKeys: approverKeys, approverChops: approverChops);
+          approverKeys: approverKeys);
 
   @override
   Future<AtEnrollmentResponse> deny(

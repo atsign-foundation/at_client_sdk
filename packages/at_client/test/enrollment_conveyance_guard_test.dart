@@ -19,7 +19,6 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
-import 'package:at_chops/at_chops.dart';
 
 class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   final List<EnrollmentRequestDecision> approvals = [];
@@ -27,7 +26,7 @@ class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision decision, AtLookUp atLookUp,
-      {ApproverKeyMaterial? approverKeys, AtChops? approverChops}) async {
+      {required ApproverKeyMaterial approverKeys}) async {
     approvals.add(decision);
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);
@@ -48,12 +47,15 @@ void main() {
   setUpAll(() => registerFallbackValue(AtKey()));
   setUp(() => remoteData = {});
 
-  MockAtClient buildMockClient(String enrollmentId, {PqPosture? posture}) =>
-      buildRemoteBackedMockClient(
-          atSign: atSign,
-          enrollmentId: enrollmentId,
-          remoteData: remoteData,
-          posture: posture);
+  MockAtClient buildMockClient(String enrollmentId, {PqPosture? posture}) {
+    final atClient = buildRemoteBackedMockClient(
+        atSign: atSign,
+        enrollmentId: enrollmentId,
+        remoteData: remoteData,
+        posture: posture);
+    stubApproverKeys(atClient);
+    return atClient;
+  }
 
   /// Stubs `enroll:list` to return one pending enrollment carrying [keyPackage]
   /// and **no** `encryptedAPKAMSymmetricKey` — the shape that asks this
@@ -90,6 +92,29 @@ void main() {
               enrollmentId: enrolleeId,
               apkamSymmetricKey: AtBytes.fromString(''),
               atSign: atSign));
+
+  /// Approval seals the approver's own encryption private key and
+  /// self-encryption key for the enrollee, so a client that cannot read both
+  /// has nothing to seal.
+  group('a client that cannot read its own key material', () {
+    test('refuses, and leaves the request pending', () async {
+      // No `stubApproverKeys` here: this client has no local secondary at all,
+      // which is what a client built without a key source looks like.
+      final approver = buildRemoteBackedMockClient(
+          atSign: atSign, enrollmentId: 'approver-1', remoteData: remoteData);
+      stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson());
+
+      await expectLater(
+          approveWith(approver),
+          throwsA(isA<AtClientException>().having((e) => e.message, 'message',
+              contains('cannot read both of them'))));
+
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty,
+          reason: 'and nothing was conveyed - at_auth used to refuse this, '
+              'and the refusal has to stay on this side of the call now that '
+              'approverKeys is required');
+    });
+  });
 
   /// A client whose posture configures no post-quantum providers has neither
   /// the providers to mint, seal and convey nor a reason to.

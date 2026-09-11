@@ -1,5 +1,11 @@
 ## 3.15.0-rc1
 
+- Approving an enrollment refuses, naming what is missing, when this
+  client cannot read its own encryption private key and
+  self-encryption key. at_auth used to refuse it at the end of a
+  nullable hand-off; its `approverKeys` is required now, so the refusal
+  belongs on this side, where the local secondary's tiers are what was
+  asked and the message can say so.
 - refactor: `AtClientPreference.pqStartupGates` is for tests. Nothing in
   any package's `lib` builds its own set, so a client runs every
   post-quantum startup step or none, and which of the two is the

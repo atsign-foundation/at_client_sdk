@@ -95,15 +95,15 @@ class EnrollmentServiceImpl implements EnrollmentService {
       privilege.isFullyPrivileged(namespaces);
 
   /// This client's encryption private key and self-encryption key, resolved by
-  /// the local secondary across every tier it has, or null when there is no
-  /// local secondary or it holds neither, which leaves at_auth to refuse the
-  /// approval.
+  /// the local secondary across every tier it has.
   ///
   /// The keystore reports an absent key by throwing; here that is one tier
-  /// missing, not a failure.
-  Future<ApproverKeyMaterial?> _approverKeys() async {
+  /// missing, not a failure. Reaching the end with either one unresolved is a
+  /// refusal rather than a null handed onward: approval seals both for the
+  /// enrollee, so a client that cannot read its own material must not flip
+  /// the record to approved and fail afterwards.
+  Future<ApproverKeyMaterial> _approverKeys() async {
     final local = _atClient.getLocalSecondary();
-    if (local == null) return null;
     Future<String?> resolve(Future<String?> Function() read) async {
       try {
         return await read();
@@ -112,10 +112,15 @@ class EnrollmentServiceImpl implements EnrollmentService {
       }
     }
 
-    final encryptionPrivateKey = await resolve(local.getEncryptionPrivateKey);
-    final selfEncryptionKey = await resolve(local.getEncryptionSelfKey);
+    final encryptionPrivateKey =
+        local == null ? null : await resolve(local.getEncryptionPrivateKey);
+    final selfEncryptionKey =
+        local == null ? null : await resolve(local.getEncryptionSelfKey);
     if (encryptionPrivateKey == null || selfEncryptionKey == null) {
-      return null;
+      throw AtClientException.message(
+          'approving an enrollment seals this atSign\'s encryption private '
+          'key and its self-encryption key for the enrollee, and this client '
+          'cannot read both of them');
     }
     return (
       encryptionPrivateKey: encryptionPrivateKey,

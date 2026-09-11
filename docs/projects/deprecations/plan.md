@@ -291,10 +291,9 @@ the pass before this one. Step 6's at_onboarding_cli half is done and its four
 packs are green, and step 7's three at_client_flutter readings are resolved.
 [Step 8](#step-8-removal--at_auth-now-the-others-at-their-majors) is under
 way: gkc ruled that at_auth's surface is cleaned in this rc, and its families
-E and H are removed.
+E, H and A are removed.
 
-**What is owed, in order.** Step 8's family A (7 uses, all functional-pack
-fixtures reading `atAuth.atChops`); then B, C, D and G as one change — *an
+**What is owed, in order.** Step 8's B, C, D and G as one change — *an
 authentication and an enrollment always carry a session* — which runs all four
 live packs before it commits; then the remaining test-tree work in steps 6 and
 7; then `LocalSecondary`'s `AtChops` tier. Two of those wait on gkc rather
@@ -303,16 +302,23 @@ fields keep an annotation no caller can act on (step 8), and where an enrolled
 app's keys should land if `apkam_dialog.dart` supplies a session (step 7).
 
 ⚠️ **Re-derive every figure here before quoting it.** The counts on
-2026-09-11, after step 8's E and H: at_auth `lib` 14 and `test` 73 with 28
-annotations left in `lib`; at_client 28 and 252; at_onboarding_cli 23 and 186;
-at_client_flutter 0 and 41, its `lib` zero being four ignores with reasons
-rather than a clearance. Two of those moved for reasons that are not work:
-at_onboarding_cli gained one when gkc deprecated
-`AtClientManager.setCurrentAtSign`'s `atChops` parameter, which the CLI passes
-through; and at_client **lost three** to the same commit, because a parameter's
-own type annotation stops reporting once the parameter is deprecated — the
-invisibility this plan's step 3 records, arriving this time as a fall in the
-count with nothing moved. Neither is progress.
+2026-09-11, after step 8's E, H and A: at_auth `lib` 16 and `test` 70 with
+**23** annotations left in `lib`; at_client 28 and 248; at_onboarding_cli 23
+and 186; at_client_flutter 0 and 41, its `lib` zero being four ignores with
+reasons rather than a clearance. The annotation count is the one that measures
+the removals — 28 to 23 is the five declarations family A deleted.
+
+⚠️ **Three of those movements are not work, and one of them is a RISE.** Two
+are gkc's `setCurrentAtSign(atChops:)` deprecation: at_onboarding_cli gained
+one, because the CLI passes the parameter through, and at_client **lost three**,
+because a parameter's own type annotation stops reporting once the parameter is
+deprecated. The third is at_auth's `lib` going **14 to 16** across family A,
+which removed code and reported more: taking `@Deprecated` off the `atChops`
+field makes that declaration's own `AtChops` type annotation visible, and
+turning the constructor's `this.atChops` into an explicit `AtChops? atChops`
+gives it a type annotation it never had. Both are the invisibility step 3
+records, running backwards. So the count can fall without work and rise
+without regression, and neither direction is progress on its own.
 
 **What has been built, so it is not built again.** Four things this plan now
 depends on:
@@ -482,29 +488,44 @@ deprecated declaration raises nothing, the same way `KeyIOMixin`'s 13
 annotating rather than fixing, so a step that reports a drop has to say which
 kind it was.
 
-**What remains of this step**, measured 2026-09-11, is 14 uses in `lib` and 73
+⚠️ **An override may keep a parameter its interface has dropped.** Removing
+`approverChops` from `AtEnrollment.approve` left four at_client test doubles
+declaring it in their own `approve` overrides, and `dart analyze` named none
+of them: an override carrying an **extra** optional named parameter is still a
+valid override. Measured — the only error the removal raised anywhere in
+at_client was in at_client's own `enrollment_service_impl`. The reverse does
+hold, and the at_lookup consolidation plan probed it: an override **missing** a
+named parameter the interface declares is `invalid_override`. So a removal is
+compiler-enumerable in one direction only, and doubles that kept the parameter
+have to be found by grepping its name.
+
+**What remains of this step**, measured 2026-09-11, is 16 uses in `lib` and 70
 in `test`, from 56 and 92 (`dart analyze` in `packages/at_auth`, counting the
-`deprecated_member_use` lines by path). Twelve of the test uses are in
+`deprecated_member_use` lines by path). The `lib` figure rose by two across
+step 8's family A for the annotation reason the status section above explains,
+not because anything moved the wrong way. Twelve of the test uses are in
 `auth_wiring_test.dart` on purpose: it asserts that `atChops` and
 `signingAlgoType` are never written on a lookup that takes an authenticator
 and are written on one that cannot, and a test cannot assert a member is
-untouched without naming it. One more is `approver_key_material_test.dart`'s
-arm through the deprecated `approverChops` door, which stays until the major.
+untouched without naming it. One more was `approver_key_material_test.dart`'s
+arm through the deprecated `approverChops` door. Step 8's family A removed
+that door and the arm with it; what the arm asserted — that the material comes
+with the call — is now an interaction control that names no deprecated member.
 
 | file | uses | what they are |
 | ---- | ---: | ------------- |
 | `at_authenticator.dart` | 8 | the two injected-signer branches, and `AtChops` in three signatures |
-| `at_auth_impl.dart` | 4 | the `AtChops` onboarding builds for the deprecated field and for the injected-signer branch |
+| `at_auth_impl.dart` | 6 | the `AtChops` onboarding builds for the injected-signer branch and for `AtAuthResponse.atChops`, plus the private field's own type and `AtAuth.create`'s parameter |
 | `at_auth.dart` | 1 | `AtAuth.create`'s `atChops` parameter: the injection door, which keeps its type because a hardware-backed signer has no other door yet |
 | `at_keys.dart` | 1 | `authenticationFor`'s return type |
 
-Deprecated names are ignored with their reason rather than counted in three
-places, each of which exists only for a lookup without the authenticator seam
-or a caller that has not moved: the two credential ladder writes inside
-`AtAuthImpl._installAuthenticator`; `EnrollmentHandshake._installLadder`,
-which builds the ladder's `AtChops` around the APKAM keypair alone; and the
-approver's read of `atLookUp.atChops`, the door a caller that has not moved to
-`approverKeys` still comes through. The handshake's seven are gone: it hands
+Deprecated names are ignored with their reason rather than counted in two
+places, both of which exist only for a lookup without the authenticator seam:
+the two credential ladder writes inside `AtAuthImpl._installAuthenticator`,
+and `EnrollmentHandshake._installLadder`, which builds the ladder's `AtChops`
+around the APKAM keypair alone. There were three until family A: the approver's
+read of `atLookUp.atChops` was the third, and requiring `approverKeys` closed
+it. The handshake's seven are gone: it hands
 `authenticatorFor` the enrollee's keys alone, since `authenticationKeyPairFor`
 reads only the APKAM keypair and those keys always hold it, and
 `enrollment_handshake_test.dart` asserts the openssl PKAM pin on the
@@ -516,9 +537,10 @@ The approver's own four are gone: `approve` takes `ApproverKeyMaterial`, the
 encryption private key and self-encryption key that are all it reads, and
 `approver_key_material_test.dart` opens what it seals with the enrollee's own
 `StringAESEncryptor`, a different AES implementation from the one that seals.
-The `@Deprecated` on `approverChops` is what cleared the three signatures: the
-analyzer treats a parameter's own type annotation as inside the deprecated
-declaration. `file_io.dart`'s three are gone: the keyfile's legacy fields
+The three signatures are clear because `approverChops` is gone (step 8, family
+A). While it existed its `@Deprecated` did the same job, for the reason this
+step records above: the analyzer treats a parameter's own type annotation as
+inside the deprecated declaration. `file_io.dart`'s three are gone: the keyfile's legacy fields
 are self-encrypted through `AESEncryptionAlgo` directly, and
 `legacy_field_self_encryption_test.dart` pins the at-rest bytes against
 openssl and re-encrypts the committed legacy fixture byte-for-byte.
@@ -914,7 +936,7 @@ declaration and the analyzer enumerates them.
 | E | the registrar's `ActivateApiEndpoint`, `login`, `validate` aliases | 0 | remove |
 | G | `AtKeys.toAtChops`, `.toAtChopsForEnrollment`, `.copyWith` | 0 | remove |
 | H | `KeyIOMixin` and its four serialization helpers | 0 | remove |
-| A | `AtAuth.atChops` and `approve`'s `approverChops` | 7 | remove: both replacements landed this pass |
+| A | `AtAuth.atChops` and `approve`'s `approverChops` | 7 | ✅ removed |
 | B | `AtAuthRequest.atAuthKeys`, `AuthResponse.atAuthKeys`/`.atLookUp`/`.atChops` | 37 | remove: every caller can supply an `AtKeysIo`, and 32 of 36 constructions already do |
 | C | `AtEnrollmentRequest`'s `atSign`, `rootDomain`, `apkamPublicKey`, `encryptedAPKAMSymmetricKey` | 22 | remove: callers supply a `session` |
 | D | `AtEnrollmentResponse.atSign`, `.rootDomain`, `.atAuthKeys` | 45 | remove, with C: the session carries all three |
@@ -922,11 +944,44 @@ declaration and the analyzer enumerates them.
 
 **Order, by risk.** E and H first: no consumer anywhere outside at_auth, so
 the only open question is at_auth's own use of them, which deletion answers.
-Then A, whose seven uses are functional-pack fixtures reading `atAuth.atChops`.
-Then B, C, D **and G** together, because they are one change rather than four —
+Then A, which is done — what it cost is below. Then B, C, D **and G**
+together, because they are one change rather than four —
 **an authentication and an enrollment always carry a session** — which is where
 the behaviour moves, and where the four `AtAuthRequest` callers that pass keys
 alone get a source. F last, and as a ruling rather than a refactor.
+
+**What A cost, and the correction to the sentence that scoped it.** This step
+said A's seven uses were *"all functional-pack fixtures reading
+`atAuth.atChops`"*. Wrong in two ways, both of which mattered. One of the
+eight sites is at_onboarding_cli's own mock stub of the getter — inert since
+step 6 moved the CLI off it. And `approverChops`'s population is not in the
+analyzer's count at all: four at_client test doubles *declare* the parameter
+in an `approve` override, at_auth's own test exercised it, and at_lookup's
+dartdoc named it. None of those is a deprecated *use*, so the count could not
+see them — and an override declaring a parameter its interface no longer has
+is not an error either, so the compiler could not see the four doubles.
+
+Two decisions inside A, both wider than the family:
+
+- **`approverKeys` is required, not merely preferred.** That closes at_auth's
+  own read of `atLookUp.atChops` in the same move — a connection is not where
+  an app's key material lives — and hands the enumeration of call sites to the
+  compiler rather than to a refusal at run time. Every real caller already
+  passed it: at_client's `EnrollmentServiceImpl`, and at_auth's own test. What
+  was `approve`'s runtime refusal is now its signature.
+- **That refusal moved to at_client**, because `_approverKeys()` could return
+  null and at_auth's throw was what caught it — its dartdoc said so in as many
+  words. at_client is the better place: it knows whether the local secondary
+  is absent or holds neither key, and it refuses before the approval command
+  goes out rather than after it. Removing the throw reddens the guard test
+  with the mutant proceeding to fail at conveyance, which is the hazard the
+  refusal exists for.
+
+Five of A's seven pack sites passed `atChops: auth.atChops` to
+`setCurrentAtSign` beside the very keyfile they had just authenticated from,
+so the argument was redundant — the keyfile is what the client resolves from.
+The two in `enrollment_test.dart` passed no key source at all and now take the
+session's `atKeysIo`, which moved them off two family-B reads as well.
 
 ⚠️ **G is not free, and its zero is why.** `AtKeys.authenticationFor` is not
 deprecated, is at_client's route to a client's `AtChops`

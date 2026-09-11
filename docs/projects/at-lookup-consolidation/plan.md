@@ -726,15 +726,22 @@ tolerant reader ships first, the deletion follows:
 Future<AtEnrollmentResponse> approve(
     EnrollmentRequestDecision decision,
     AtLookUp atLookUp, {
-    AtChops? approverChops,   // step 5 makes this the only source
+    required ApproverKeyMaterial approverKeys,
 });
 ```
 
-The approver resolves `approverChops ?? atLookUp.atChops`, refuses when both
-are null, and uses that one object throughout. at_client's
-`enrollment_service_impl` passes `approverChops: atClient.atChops`. Step 5 then
-deletes the fallback and the field together, and no behaviour moves on the day
-it does.
+⛔ **What shipped is not what this section designed, and the difference is the
+point.** It planned an `AtChops? approverChops` resolving
+`approverChops ?? atLookUp.atChops`, refusing when both were null, with a
+later step deleting the fallback and the parameter together. What landed is
+`ApproverKeyMaterial`: a record of the two values approval actually reads —
+the atSign's encryption private key and its self-encryption key — because
+handing over an `AtChops` would have moved the same object under another name.
+It arrived optional and deprecated beside the old door, and the deprecations
+pass then made it **required** and deleted both fallbacks together, so the
+approver reads the lookup for nothing at all. at_client resolves the two
+values through its local secondary's tiers, and refuses when it cannot read
+them rather than approving and failing afterwards.
 
 ⚠️ **It does not leave the mocks alone, even though the parameter is
 optional.** This paragraph first claimed it would. Dart requires an override to

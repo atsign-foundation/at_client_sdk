@@ -22,6 +22,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -84,6 +85,25 @@ class MockRemoteSecondary extends Mock implements RemoteSecondary {
 }
 
 class MockLocalSecondary extends Mock implements LocalSecondary {}
+
+/// Gives [atClient] a local secondary holding the two keys an approval reads
+/// of its own atSign: the encryption private key, which unwraps the symmetric
+/// key a legacy enrollee RSA-wrapped to it, and the self-encryption key, one
+/// of the two secrets approval seals for the enrollee.
+///
+/// Real demo material rather than placeholders, so a test that goes on to
+/// unwrap or open with it gets keys that work. Returns the local secondary for
+/// a test that wants to stub more on it.
+MockLocalSecondary stubApproverKeys(AtClient atClient,
+    {String demoAtSign = '@alice🛠'}) {
+  final local = MockLocalSecondary();
+  when(() => atClient.getLocalSecondary()).thenReturn(local);
+  when(() => local.getEncryptionPrivateKey())
+      .thenAnswer((_) async => demo.encryptionPrivateKeyMap[demoAtSign]!);
+  when(() => local.getEncryptionSelfKey())
+      .thenAnswer((_) async => demo.aesKeyMap[demoAtSign]!);
+  return local;
+}
 
 /// Stubs [localSecondary] to answer [atSign]'s encryption keypair.
 ///

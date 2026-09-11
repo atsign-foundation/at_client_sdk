@@ -36,7 +36,7 @@ const _cramTransientWaitMillis = 4000;
 ///   [enrollmentId].
 ///
 /// [chops] lets a caller supply its own signer, which `AtAuth` has always
-/// allowed through `AtAuth.create(atChops:)` and its mutable `atChops` field.
+/// allowed through `AtAuth.create(atChops:)`.
 /// When supplied, only the *algorithm* is taken from the keyfile - the keypair
 /// is the caller's. Resolving the keyfile's own signer eagerly would be worse
 /// than wasteful: it throws on a keyfile missing material that a caller with
