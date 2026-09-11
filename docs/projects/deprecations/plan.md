@@ -284,8 +284,10 @@ with 14 `lib` uses left in at_auth, which is its floor for this pass: every
 one is decided and named in the table under step 3, and all but two are the
 injected-signer machinery that waits for the live packs. Step 4 is done
 apart from `LocalSecondary`'s `AtChops` tier, which waits for the live packs;
-`AtClient.atChops` is `@Deprecated`. What is owed, in order: steps 5 to 7,
-then the live packs before the PR, then that tier. Step 7 is no longer
+`AtClient.atChops` is `@Deprecated`. Step 5 is done: the readers of the
+enrollment id ask the client. What is owed, in order: the live packs on
+everything landed since the handshake moved, then steps 6 and 7, then that
+tier. Step 7 is no longer
 blocked by the legacy question, which step 3 answered, but it is blocked on the
 three at_client_flutter readings recorded under it.
 
