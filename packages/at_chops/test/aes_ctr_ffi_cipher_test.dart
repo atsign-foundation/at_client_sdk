@@ -348,13 +348,21 @@ void main() {
     });
 
     group('inl length guard', () {
-      test('a length beyond the C int limit throws', () {
-        expect(() => checkInlLength(0x80000000, 'input', 'EVP_EncryptUpdate'),
-            throwsArgumentError);
+      test('a length beyond the C int limit throws the supplied type', () {
+        expect(
+            () => checkInlLength(0x80000000, 'input', 'EVP_EncryptUpdate',
+                AtEncryptionException.new),
+            throwsA(isA<AtEncryptionException>()));
+        expect(
+            () => checkInlLength(0x80000000, 'input', 'EVP_DecryptUpdate',
+                AtDecryptionException.new),
+            throwsA(isA<AtDecryptionException>()));
       });
 
       test('a length at the C int limit is accepted', () {
-        expect(() => checkInlLength(0x7fffffff, 'input', 'EVP_EncryptUpdate'),
+        expect(
+            () => checkInlLength(0x7fffffff, 'input', 'EVP_EncryptUpdate',
+                AtEncryptionException.new),
             returnsNormally);
       });
     });
