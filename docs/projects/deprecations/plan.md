@@ -275,13 +275,37 @@ changed package, the unit suite, and the format gate under CI's Dart in
 Docker), and each step's test tree clears in the same commit as its lib. A
 step that touches a lifecycle seam runs all 4 live packs before it commits.
 
-**Where this stands on 2026-09-11.** Steps 0, 1 and 2 are done, and step 3's
-accessors are built. 84 uses left the workspace, 6 of them hidden by an
-annotation rather than moved (step 3 says which). What is owed, in order:
-at_auth's own 56 `lib` uses onto the new accessors — the authentication path,
-so the one step here that cannot land on unit-green — then steps 4 through 7.
-Step 7 is no longer blocked by the legacy question, which step 3 answered, but
-it is blocked on the three at_client_flutter readings recorded under it.
+**Where this stands on 2026-09-11.** The workspace is at 1206 uses, from 1403.
+Steps 0, 1 and 2 are done; step 3 has its accessors and its signing path, with
+34 `lib` uses left in at_auth; step 4 has its key-material half, which is what
+unblocked at_client's test tree. What is owed, in order: the rest of at_auth's
+34, then the rest of step 4 (`apkam_signing`, `sync_service_impl`, and
+deprecating `AtClient.atChops` itself), then steps 5 to 7. Step 7 is no longer
+blocked by the legacy question, which step 3 answered, but it is blocked on the
+three at_client_flutter readings recorded under it.
+
+**What has been built, so it is not built again.** Four things this plan now
+depends on:
+
+- **`AtKeys.authenticationKeyPairFor`, `.encryptionKeyPair`, `.selfEncryptionKey`**
+  (at_auth) — the typed form of what an `AtChops` carried. The last two prefer
+  typed atSign material and fall back to the flat fields, so key material can
+  be both written and read without naming a deprecated member.
+- **`signPkamChallenge`** (at_auth's `at_authenticator.dart`) — signs a PKAM
+  challenge, or an `enroll:update` possession proof, from a keypair. Both call
+  it, which is how their framing is kept identical.
+- **`typedKeyfile`** (at_client's `test/test_utils/ml_dsa_keyfile.dart`) — an
+  `InMemoryAtKeysIo` holding an `AtKeys` filed entirely through `addKey` and
+  `fileApkamMaterial`, for `AtClientImpl.create(atKeysIo:)`. `mlDsaKeyfile` is
+  its narrow case.
+- **`stubEncryptionKeyPair`** (at_client's `test/test_utils/mocks.dart`) — the
+  same thing for a mocked client: it answers the local secondary's key
+  getters, which is where a client looks.
+
+⛔ A fixture helper is only worth having if it goes through the replacement.
+One that wrapped the deprecated construction would drop the count while
+leaving the new path exercised by nothing, which is the opposite of the point.
+(gkc, 2026-09-11.)
 
 ### Step 0 (done): at_auth stops deprecating what it has no replacement for
 
@@ -420,8 +444,35 @@ deprecated declaration raises nothing, the same way `KeyIOMixin`'s 13
 annotating rather than fixing, so a step that reports a drop has to say which
 kind it was.
 
-**What remains of this step** is 34 uses in `lib` and 84 in `test`, from 56
-and 92. The enrolment handshake now installs an authenticator and falls back
+**What remains of this step**, measured 2026-09-11, is 34 uses in `lib` and 84
+in `test`, from 56 and 92:
+
+| file | uses | what they are |
+| ---- | ---: | ------------- |
+| `at_auth_impl.dart` | 9 | builds an `AtChops` for onboarding, and sets `atChops`/`signingAlgoType` on its lookup |
+| `at_authenticator.dart` | 8 | the two injected-signer branches, and `AtChops` in three signatures |
+| `enrollment_handshake.dart` | 7 | `_apkamChopsAwaitingSymmetricKey`, the shape for keys that are not a complete keyfile yet |
+| `file_io.dart` | 3 | an `AtChops` built to decrypt a keyfile |
+| `at_auth.dart` | 2 | `AtAuth.atChops`, the interface field |
+| `enrollment_approver.dart` | 2 | reads the approver's own `atChops` |
+| `at_enrollment.dart`, `at_enrollment_impl.dart` | 1 each | `AtChops` in a signature |
+| `at_keys.dart` | 1 | `authenticationFor`'s return type |
+
+⚠️ **The two injected-signer branches in `_pkam` are the ones to leave until
+the live packs run.** One of them names the algorithm precisely because the
+keyfile cannot answer — a PQ-native activation signs with a keypair minted
+moments before, under an enrollment the atServer has not created — and that
+resolution is exercised by no unit test. The rest are reachable from unit
+tests.
+
+**The method that worked, for whoever picks this up.** Every change to a
+signing or key-resolution path went: capture the wire bytes with an
+independent instrument first (`openssl dgst` for RSA, or a verifier that
+mimics the atServer), see the pin green against the OLD code, change, see it
+green again, then mutate the change and read the failure message. Three
+findings came out of the mutation step and none would have come out of the
+diff. ⛔ Never annotate a use to make the count fall: an ignore is for a use
+that is decided and stated, and the plan says which those are. The enrolment handshake now installs an authenticator and falls back
 to at_lookup's ladder only for a lookup that cannot take one; it used to set
 both, and the lookup prefers the authenticator, so the ladder fields were
 written and never read.
