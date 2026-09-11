@@ -1,5 +1,14 @@
 ## 4.0.0-rc2
 
+- **BREAKING:** `AtKeys.toAtChops` and `.toAtChopsForEnrollment` are no
+  longer public. Nothing outside at_auth called either, and the assembly they
+  wrap was already library-private, so they became private too and
+  `AtKeys.authenticationFor` — the public route — returns exactly what it
+  returned before. A caller that wants the keypair without an `AtChops`
+  around it takes `authenticationKeyPairFor`, with `encryptionKeyPair` and
+  `selfEncryptionKey` for the rest of what one carried.
+- **BREAKING:** `AtKeys.copyWith` is removed. Its declaration was its only
+  occurrence in this repository; use `addKey`.
 - **BREAKING:** the registrar's legacy aliases are removed —
   `ActivateApiEndpoint`, and `RegistrarApiEndpoint.login`/`.validate`. Use
   `RegistrarApiEndpoint`, `.requestOtp` and `.validateOtp`. Nothing in this

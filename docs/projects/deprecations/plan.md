@@ -19,6 +19,18 @@ for p in $(sed -n '/^workspace:/,/^[a-z]/p' pubspec.yaml | sed -n 's/^ *- *//p')
 done
 (cd packages/at_client_flutter && printf '%-46s %4s\n' packages/at_client_flutter \
   "$(flutter analyze --no-pub --no-fatal-infos | grep -c deprecated_member_use)")
+#
+# ⛔ THE WORKSPACE IS NOT THE REPO: 17 of 49 packages. The absentees are the
+# example trees and the legacy Flutter packages, and three at_client_flutter
+# examples hold 18 uses no figure in this plan counted until 2026-09-11 - one
+# of them a caller of a member family H had already removed. So enumerate
+# every pubspec, not the workspace:
+for d in $(find . -name pubspec.yaml -not -path '*/.dart_tool/*' -not -path './pubspec.yaml' \
+             -not -path '*/build/*' | xargs -n1 dirname | sort); do
+  a=dart; grep -q '^  flutter:' $d/pubspec.yaml && a=flutter
+  (cd $d && printf '%-52s %4s\n' $d \
+    "$($a analyze --no-fatal-infos 2>/dev/null | grep -c deprecated_member_use)")
+done
 # a member's own split, from inside it: dart analyze lib | test | example | tool
 # per symbol, from any of the above analyses saved to a file:
 #   grep deprecated_member_use an.txt | sed -E "s/.*'([^']+)' is deprecated.*/\1/" | sort | uniq -c | sort -rn
@@ -55,6 +67,19 @@ at_contacts, at_location and at_theme; count with
 none in this plan's families, and 4 of them fail `flutter analyze` for
 unrelated reasons. They are listed so the figure is true, not because this
 plan clears them.
+
+⛔ **Nor are the `example/` and `examples/` trees, and those are not merely
+uncounted — they are ungated.** No workflow analyses or builds any of them, and
+`at_client_sdk.yaml` fetches at_client_flutter's dependencies with
+`--no-example`, so nothing in CI can go red on one. Three of them use this
+plan's families: `at_client_flutter/example` 8, `examples/todos` 5,
+`examples/dockerstats` 5. That is where family H's removal broke a caller while
+this plan recorded it as having none. Treat an example as a member for counting
+and for compiling, and remember two of them are red for reasons that predate
+this work: `example/` imports three packages its pubspec never declares, and
+its `apkam_example.dart` has omitted a required `signingAlgo` since
+`4.0.0-rc1`. `examples/todos` is a canonical example the tree tells authors to
+copy, so it is the one that has to end up showing the right thing.
 
 ## 1. Where the debt is
 
@@ -291,10 +316,11 @@ the pass before this one. Step 6's at_onboarding_cli half is done and its four
 packs are green, and step 7's three at_client_flutter readings are resolved.
 [Step 8](#step-8-removal--at_auth-now-the-others-at-their-majors) is under
 way: gkc ruled that at_auth's surface is cleaned in this rc, and its families
-E, H and A are removed.
+E, H, A and G are removed, and B, C and D are blocked on a decision.
 
-**What is owed, in order.** Step 8's B, C, D and G as one change — *an
-authentication and an enrollment always carry a session* — which runs all four
+**What is owed, in order.** Step 8's B, C and D as one change — *an
+authentication and an enrollment always carry a session* — which is **blocked**
+until gkc rules on where an enrolled app's keys land, and which runs all four
 live packs before it commits; then the remaining test-tree work in steps 6 and
 7; then `LocalSecondary`'s `AtChops` tier. Two of those wait on gkc rather
 than on code, and both are stated where they arise: whether F's seven flat
@@ -934,21 +960,66 @@ declaration and the analyzer enumerates them.
 | family | members | cross-package uses | decision |
 | ------ | ------- | -----------------: | -------- |
 | E | the registrar's `ActivateApiEndpoint`, `login`, `validate` aliases | 0 | remove |
-| G | `AtKeys.toAtChops`, `.toAtChopsForEnrollment`, `.copyWith` | 0 | remove |
+| G | `AtKeys.copyWith` | 0 | ✅ removed — dead code: its declaration was its only occurrence in the repo |
+| G | `AtKeys.toAtChops`, `.toAtChopsForEnrollment` | 0 | ✅ removed from the public API, by becoming library-private |
 | H | `KeyIOMixin` and its four serialization helpers | 0 | remove |
 | A | `AtAuth.atChops` and `approve`'s `approverChops` | 7 | ✅ removed |
-| B | `AtAuthRequest.atAuthKeys`, `AuthResponse.atAuthKeys`/`.atLookUp`/`.atChops` | 37 | remove: every caller can supply an `AtKeysIo`, and 32 of 36 constructions already do |
-| C | `AtEnrollmentRequest`'s `atSign`, `rootDomain`, `apkamPublicKey`, `encryptedAPKAMSymmetricKey` | 22 | remove: callers supply a `session` |
-| D | `AtEnrollmentResponse.atSign`, `.rootDomain`, `.atAuthKeys` | 45 | remove, with C: the session carries all three |
+| B | `AtAuthRequest.atAuthKeys` + `AuthResponse.atAuthKeys` | 35 | blocked — see below |
+| B | `AuthResponse.atLookUp`, `AuthResponse.atChops` | 10 | ″, and every use is in an example app |
+| C | `AtEnrollmentRequest.atSign` | 24 | ″ |
+| C | `AtEnrollmentRequest`'s `rootDomain`, `apkamPublicKey`, `encryptedAPKAMSymmetricKey` | 1 | free once C's `atSign` moves |
+| D | `AtEnrollmentResponse.atAuthKeys` | 55 | blocked — see below |
+| D | `AtEnrollmentResponse.atSign`, `.rootDomain` | 0 | free |
 | F | the seven flat `AtKeys` fields | 332 | ⛔ **not removable** — see below |
+
+⛔ **Every figure in this plan excluded 32 packages, and one of them held a
+caller of something already removed.** The re-derivation loop enumerates the
+root `pubspec.yaml`'s `workspace:` block — 17 members — and the repo has 49
+packages with a pubspec. The 32 absentees are the `example/` and `examples/`
+trees and the legacy Flutter packages, holding 316 Dart files. Three
+at_client_flutter examples carry **18** deprecated uses between them, none of
+which any count in this plan has ever included. Worse, `example/`'s
+`at_backup_key.dart` called `encryptAtKeysWithSelfEncKey`, so **step 8's
+family H broke it** — this step recorded *"No caller outside at_auth named any
+of them"*, and that was false the moment it was written. Fixed in the same
+pass, back to the error count it had before the mixin went.
+
+⚠️ **CI cannot see them either**, which is why nothing went red: no workflow
+analyses or builds any example package, and `at_client_sdk.yaml` fetches
+at_client_flutter's dependencies with `--no-example`. So an example is not a
+gate — it has to be analysed deliberately. Two of them cannot be made green
+here at all: `example/` imports three packages its own pubspec never declares
+and `apkam_example.dart` has omitted a required `signingAlgo` since
+`4.0.0-rc1`, both predating this pass.
+
+⛔ **B, C and D are blocked, and on the decision this plan already carries for
+gkc.** `AuthResponse.atLookUp` and `.atChops` have no user anywhere except the
+three example apps, where they sit in a branch whose own comment says what it
+is: *"Transitional fallback for flows that hand back only atAuthKeys with no
+AtKeysIo source (e.g. APKAM enrollment)"*. That is the same question as *where
+an enrolled app's keys land if `apkam_dialog.dart` supplies a session* — and
+until it is answered, an enrollment cannot always carry a session, which is the
+whole thesis of this group. `todos` is a canonical example this repo tells
+authors to copy, so it has to show the right thing rather than compile.
+
+⛔ **G is not blocked, and the caveat below saying it waits is wrong.** It reads
+as though removing the two builders forces a decision about what
+`authenticationFor` returns. It does not: the assembly is already in two
+library-private functions, `toAtChops` and `toAtChopsForEnrollment` are thin
+public wrappers over them, and `authenticationFor` is in the same library. Make
+the two private and `authenticationFor` keeps returning exactly what it returns
+today. What G actually costs is relocating eleven at_auth tests onto
+`authenticationFor`, which is the public route through the same code — and for
+the flat-field fixtures those tests use, `authenticationFor(null)` resolves a
+null algorithm and calls the same builder, so every assertion survives.
+`copyWith` is simply dead.
 
 **Order, by risk.** E and H first: no consumer anywhere outside at_auth, so
 the only open question is at_auth's own use of them, which deletion answers.
-Then A, which is done — what it cost is below. Then B, C, D **and G**
-together, because they are one change rather than four —
-**an authentication and an enrollment always carry a session** — which is where
-the behaviour moves, and where the four `AtAuthRequest` callers that pass keys
-alone get a source. F last, and as a ruling rather than a refactor.
+Then A and G, both done — what each cost is below. **B, C and D are one
+change rather than three — *an authentication and an enrollment always carry a
+session* — and they are blocked**, on the decision recorded above. F last, and
+as a ruling rather than a refactor.
 
 **What A cost, and the correction to the sentence that scoped it.** This step
 said A's seven uses were *"all functional-pack fixtures reading
@@ -983,14 +1054,40 @@ so the argument was redundant — the keyfile is what the client resolves from.
 The two in `enrollment_test.dart` passed no key source at all and now take the
 session's `atKeysIo`, which moved them off two family-B reads as well.
 
-⚠️ **G is not free, and its zero is why.** `AtKeys.authenticationFor` is not
-deprecated, is at_client's route to a client's `AtChops`
-(`AtClientImpl._createAtChops`), and its two-line body calls exactly the two
-methods G would remove. The zero counted cross-package uses; this caller is
-at_auth's own, which no count in that table can see. So G waits for the
-decision about what `authenticationFor` returns once nothing wants an
-`AtChops` — which is at_client's `AtClient.atChops` chain, already
-`@Deprecated` and scheduled for at_client 4.0.
+**G is done, 2026-09-11, and the reason it looked blocked is worth keeping.**
+This section used to say: *"G is not free, and its zero is why.
+`AtKeys.authenticationFor` is not deprecated, is at_client's route to a
+client's `AtChops`, and its two-line body calls exactly the two methods G
+would remove. So G waits for the decision about what `authenticationFor`
+returns once nothing wants an `AtChops`."* Every fact in that was true and the
+conclusion did not follow. Removing a member from the public API is not the
+same act as changing what a method returns: the assembly is in two
+library-private functions, `toAtChops` and `toAtChopsForEnrollment` were thin
+public wrappers over them, and `authenticationFor` sits in the same library —
+so making the two private removes them from the surface while
+`authenticationFor` returns exactly what it always did, and at_client is
+untouched. `copyWith` was dead: its declaration was its only occurrence in the
+repository.
+
+What it actually cost was the eleven at_auth tests that named the two
+builders — ten in `at_keys_test.dart` and one in `at_self_enrollment_test.dart`
+— which now go through `authenticationFor`, the public route into the same
+code. Their assertions are unchanged and they exercise the replacement instead
+of the thing removed. Coverage was checked by mutation rather than assumed:
+deleting `_createPkamChops`'s `defaultEncryptionPrivateKey` guard reddens
+*"MPKAM AtKeys to AtChopsImpl -> throws"*, and it fails in the shape that
+matters — a `_TypeError` null check rather than the `AtException` asserted,
+which is what that guard was holding back.
+
+⚠️ **And it raised at_auth's count by 7 before settling back.** Undeprecating
+the two builders made their own return types and four at_chops calls in
+`_toAtChopsForEnrollment` visible for the first time; they were always there,
+inside declarations the analyzer would not look into. They carry
+`// ignore: deprecated_member_use` with the reason the two private assembly
+functions beside them already give, so at_auth's total is 92 either side. That
+is the third time in this step that the count moved for annotation reasons
+rather than work — see the status section. **Read a movement's cause before
+reading it as progress.**
 
 **E and H are done, 2026-09-11.** The registrar's three aliases went with no
 caller anywhere. `KeyIOMixin` and its four helpers went too, and

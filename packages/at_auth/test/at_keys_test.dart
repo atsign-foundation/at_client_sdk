@@ -197,6 +197,9 @@ void main() {
     });
   });
 
+  /// `authenticationFor` is the public route to the flat fields' AtChops; the
+  /// assembly behind it is library-private. These keyfiles hold no typed
+  /// material, so a null enrollment resolves a null algorithm and reaches it.
   group('AtKeys AtChops transformers', () {
     late AtKeys apkam;
     late AtKeys mpkam;
@@ -209,7 +212,7 @@ void main() {
     test('Preapproval state for APKAM AtKeys to AtChopsImpl', () {
       apkam.defaultEncryptionPrivateKey = null;
       apkam.defaultSelfEncryptionKey = null;
-      var chops = apkam.toAtChops();
+      var chops = apkam.authenticationFor(null).chops;
       expect(chops, isNotNull);
     });
 
@@ -217,47 +220,47 @@ void main() {
       apkam = createKeys();
       // A test that asserts what the derived AtChops carries has to name it.
       // ignore: deprecated_member_use
-      expect(apkam.toAtChops(), isA<AtChopsImpl>());
+      expect(apkam.authenticationFor(null).chops, isA<AtChopsImpl>());
     });
 
     test('MPKAM AtKeys to AtChopsImpl', () {
       // A test that asserts what the derived AtChops carries has to name it.
       // ignore: deprecated_member_use
-      expect(mpkam.toAtChops(), isA<AtChopsImpl>());
+      expect(mpkam.authenticationFor(null).chops, isA<AtChopsImpl>());
     });
 
     test('MPKAM AtKeys to AtChopsImpl -> throws', () {
       mpkam.defaultEncryptionPrivateKey = null;
-      expect(() => mpkam.toAtChops(), throwsA(isA<AtException>()));
+      expect(() => mpkam.authenticationFor(null), throwsA(isA<AtException>()));
     });
 
     test('APKAM AtKeys to AtChopsImpl -> throws', () {
       apkam.apkamPublicKey = null;
       apkam.defaultEncryptionPrivateKey = null;
       apkam.apkamSymmetricKey = null;
-      expect(() => apkam.toAtChops(), throwsA(isA<AtException>()));
+      expect(() => apkam.authenticationFor(null), throwsA(isA<AtException>()));
     });
 
     test('APKAM AtKeys with a null apkamPublicKey -> throws', () {
       // apkamSymmetricKey is set, so this routes through the APKAM path, which
       // must throw (not fall through to a null-deref) when apkamPublicKey is null.
       apkam.apkamPublicKey = null;
-      expect(() => apkam.toAtChops(), throwsA(isA<AtException>()));
+      expect(() => apkam.authenticationFor(null), throwsA(isA<AtException>()));
     });
 
     test('MPKAM AtKeys with a null apkamPublicKey -> throws', () {
       mpkam.apkamPublicKey = null;
-      expect(() => mpkam.toAtChops(), throwsA(isA<AtException>()));
+      expect(() => mpkam.authenticationFor(null), throwsA(isA<AtException>()));
     });
 
     test('MPKAM AtKeys with a null defaultEncryptionPublicKey -> throws', () {
       mpkam.defaultEncryptionPublicKey = null;
-      expect(() => mpkam.toAtChops(), throwsA(isA<AtException>()));
+      expect(() => mpkam.authenticationFor(null), throwsA(isA<AtException>()));
     });
 
     test('MPKAM AtKeys with a null defaultSelfEncryptionKey -> throws', () {
       mpkam.defaultSelfEncryptionKey = null;
-      expect(() => mpkam.toAtChops(), throwsA(isA<AtException>()));
+      expect(() => mpkam.authenticationFor(null), throwsA(isA<AtException>()));
     });
   });
 
@@ -546,10 +549,11 @@ void main() {
     });
 
     test('authenticationAlgorithmFor answers without building an AtChops', () {
-      // Only typed material, so toAtChops() has no flat keypair to build from
-      // and throws. The algorithm still resolves — which is what lets a caller
-      // holding an injected AtChops name the algorithm without paying for one
-      // it will discard.
+      // Only typed material, so a null enrollment resolves a null algorithm,
+      // reaches the flat fields, finds no keypair and throws. The algorithm
+      // still resolves for the enrollment that owns it — which is what lets a
+      // caller holding an injected AtChops name the algorithm without paying
+      // for one it will discard.
       final typedOnly = AtKeys()
         ..fileApkamMaterial(
             enrollmentId: typedEnrollmentId,
@@ -557,7 +561,8 @@ void main() {
             publicKey: typedApkamPublicKey,
             privateKey: 'dHlwZWQtcHJpdmF0ZQ==');
 
-      expect(() => typedOnly.toAtChops(), throwsA(isA<AtException>()));
+      expect(
+          () => typedOnly.authenticationFor(null), throwsA(isA<AtException>()));
       expect(typedOnly.authenticationAlgorithmFor(typedEnrollmentId),
           SigningAlgoType.mldsa65);
     });

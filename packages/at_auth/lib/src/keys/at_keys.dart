@@ -1101,8 +1101,17 @@ class AtKeys {
     return keys;
   }
 
-  @Deprecated('AtChops is being deprecated, by extension this method as well')
-  AtChops toAtChops() {
+  /// The `AtChops` this keyfile's FLAT fields assemble, APKAM or MPKAM by
+  /// whether they hold an `apkamSymmetricKey`.
+  ///
+  /// Library-private: it was public and deprecated, and nothing outside
+  /// at_auth called it. [authenticationFor] is the public route, and reaches
+  /// here for a keyfile whose enrollment names no algorithm of its own.
+  ///
+  // NOTE: the AtChops names below are the carrier this returns, not work
+  // owed. They were invisible while this method was itself deprecated.
+  // ignore: deprecated_member_use
+  AtChops _toAtChops() {
     //if the keys contain an apkamSymmetricKey, they're a apkam key
     return switch (apkamSymmetricKey) {
       AtBytes() => _createApkamChops(this),
@@ -1116,17 +1125,20 @@ class AtKeys {
   /// This is how a second enrollment held in the same keyfile — a
   /// self-retrofit's, whose APKAM keypair lives in its own `enrollments[]`
   /// entry while the flat fields keep carrying the original enrollment's —
-  /// becomes able to authenticate at all; [toAtChops] reads only the flat
+  /// becomes able to authenticate at all; [_toAtChops] reads only the flat
   /// fields and cannot see it.
   ///
   /// The signing keypair rides the String-typed pkam slot as base64 of the
   /// raw key bytes. A caller authenticating over at_lookup must also set
   /// `signingAlgoType` to what [signingAlgorithmForEnrollment] reports, or
   /// the signature is produced by the wrong routine.
-  @Deprecated('Use authenticationKeyPairFor, with encryptionKeyPair and '
-      'selfEncryptionKey for the rest of what an AtChops carried. AtChops is '
-      'being deprecated, and by extension this method as well.')
-  AtChops toAtChopsForEnrollment(String enrollmentId) {
+  ///
+  /// Library-private for the reason [_toAtChops] gives; a caller wanting the
+  /// keypair without an `AtChops` around it takes
+  /// [authenticationKeyPairFor], with [encryptionKeyPair] and
+  /// [selfEncryptionKey] for the rest of what one carried.
+  // ignore: deprecated_member_use
+  AtChops _toAtChopsForEnrollment(String enrollmentId) {
     final materials = keysForEnrollment(enrollmentId);
     // Named for the authentication role they hold, not for the pkam slot they
     // ride in: this method reaches the APKAM keypair only. An enrollment's
@@ -1154,17 +1166,21 @@ class AtKeys {
     // fields here would hand back empty encryption keys for a document that
     // holds the pair under `publicEncryption`/`privateDecryption`.
     final pair = encryptionKeyPair;
+    // ignore: deprecated_member_use
     final atChopsKeys = AtChopsKeys.create(
+        // ignore: deprecated_member_use
         AtEncryptionKeyPair.create(
           pair?.atPublicKey.publicKey ?? '',
           pair?.atPrivateKey.privateKey ?? '',
         ),
+        // ignore: deprecated_member_use
         AtPkamKeyPair.create(publicAuthentication.bytes.toString(),
             privateAuthentication.bytes.toString()));
     final selfKey = selfEncryptionKey;
     if (selfKey != null) {
       atChopsKeys.selfEncryptionKey = selfKey;
     }
+    // ignore: deprecated_member_use
     return AtChopsImpl(atChopsKeys);
   }
 
@@ -1237,15 +1253,16 @@ class AtKeys {
       String? enrollmentId) {
     final algorithm = authenticationAlgorithmFor(enrollmentId);
     if (algorithm == null) {
-      return (chops: toAtChops(), algorithm: null);
+      return (chops: _toAtChops(), algorithm: null);
     }
-    return (chops: toAtChopsForEnrollment(enrollmentId!), algorithm: algorithm);
+    return (chops: _toAtChopsForEnrollment(enrollmentId!),
+        algorithm: algorithm);
   }
 
   /// The algorithm half of [authenticationFor], without building an AtChops.
   ///
   /// A caller holding an injected AtChops still has to name the algorithm, and
-  /// building one it will discard is not free — [toAtChops] throws on a
+  /// building one it will discard is not free — [_toAtChops] throws on a
   /// keyfile that is missing any of the material it needs, so resolving
   /// eagerly would fail a caller that never needed the keypair at all.
   ///
@@ -1391,24 +1408,6 @@ class AtKeys {
     return AESKey(key.toString());
   }
 
-  @Deprecated('legacy, please use addKey to add additional keys.')
-  AtKeys copyWith(AtKeys other) {
-    var keys = AtKeys()
-      ..apkamPublicKey = other.apkamPublicKey ?? apkamPublicKey
-      ..apkamPrivateKey = other.apkamPrivateKey ?? apkamPrivateKey
-      ..defaultEncryptionPublicKey =
-          other.defaultEncryptionPublicKey ?? defaultEncryptionPublicKey
-      ..defaultEncryptionPrivateKey =
-          other.defaultEncryptionPrivateKey ?? defaultEncryptionPrivateKey
-      ..defaultSelfEncryptionKey =
-          other.defaultSelfEncryptionKey ?? defaultSelfEncryptionKey
-      ..apkamSymmetricKey = other.apkamSymmetricKey ?? apkamSymmetricKey
-      ..enrollmentId = other.enrollmentId ?? enrollmentId;
-    if (other.metadata.isNotEmpty) {
-      keys.metadata.addAll(other.metadata);
-    }
-    return keys;
-  }
 }
 
 // metadata holds JSON-derived values, so nested maps/lists compare by
@@ -1470,8 +1469,8 @@ int _deepHash(Object? value) {
 /// During approval: the enroll will wait to confirm via PKAM
 /// post approval: we fetch the defaultEncryptionPrivateKey & defaultSelfEncryptionKey
 // NOTE: every deprecated member below is the carrier this function
-// exists to assemble. Its only caller is the deprecated `toAtChops`, so
-// they leave with it rather than being work owed.
+// exists to assemble. Its only caller is `_toAtChops`, so they leave with
+// it rather than being work owed.
 // ignore: deprecated_member_use
 AtChops _createApkamChops(AtKeys atKeys) {
   if (atKeys.apkamPublicKey == null) {
@@ -1510,8 +1509,8 @@ AtChops _createApkamChops(AtKeys atKeys) {
 }
 
 // NOTE: every deprecated member below is the carrier this function
-// exists to assemble. Its only caller is the deprecated `toAtChops`, so
-// they leave with it rather than being work owed.
+// exists to assemble. Its only caller is `_toAtChops`, so they leave with
+// it rather than being work owed.
 // ignore: deprecated_member_use
 AtChops _createPkamChops(AtKeys atKeys) {
   if (atKeys.defaultEncryptionPrivateKey == null) {

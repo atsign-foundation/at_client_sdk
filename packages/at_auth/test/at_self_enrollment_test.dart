@@ -364,7 +364,7 @@ void main() {
         reason: 'the legacy enrollment has no typed signing material; its '
             'RSA keypair lives in the flat fields');
 
-    final atChops = after.toAtChopsForEnrollment('new-123');
+    final atChops = after.authenticationFor('new-123').chops;
     const challenge = '_deadbeef@alice:cafe';
     final result = atChops.sign(AtSigningInput(challenge)
       ..signingAlgoType = SigningAlgoType.mldsa65

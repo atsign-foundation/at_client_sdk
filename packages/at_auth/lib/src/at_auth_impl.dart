@@ -333,9 +333,10 @@ class AtAuthImpl implements AtAuth {
     _atAuthKeys = mint.keys;
 
     // A PQ-native activation authenticates with the keypair just minted, which
-    // is not in the flat fields toAtChops() reads — and the enrollment it will
-    // be filed under does not exist yet, so toAtChopsForEnrollment() has
-    // nothing to resolve either. Build the chops from the minted halves
+    // is not in the flat fields `authenticationFor` reads for an enrollment
+    // naming no algorithm — and the enrollment it will be filed under does
+    // not exist yet, so there is nothing to resolve. Build the chops from the
+    // minted halves
     // directly, and name the algorithm: at_lookup defaults to rsa2048 and
     // would otherwise sign an ML-DSA key with the RSA routine.
     if (atOnboardingRequest.signingAlgoType != SigningAlgoType.rsa2048) {
@@ -345,7 +346,7 @@ class AtAuthImpl implements AtAuth {
             ? null
             : AESKey(_atAuthKeys.defaultSelfEncryptionKey!.toString()));
     } else {
-      _chops ??= _atAuthKeys.toAtChops();
+      _chops ??= _atAuthKeys.authenticationFor(null).chops;
     }
     // The algorithm is named rather than derived here. A PQ-native activation
     // signs with the keypair minted a few lines above, which is in no keyfile,
@@ -600,7 +601,7 @@ class AtAuthImpl implements AtAuth {
   ///
   /// A PQ-native activation's APKAM goes in as typed material — the flat
   /// fields stay empty, so `AtAuthImpl.authenticate` resolves this enrollment
-  /// through `signingAlgorithmForEnrollment` / `toAtChopsForEnrollment` and
+  /// through `signingAlgorithmForEnrollment` / `authenticationFor` and
   /// signs ML-DSA with no caller-supplied algorithm anywhere. An `rsa2048`
   /// activation already wrote its APKAM to the flat fields and adds nothing
   /// here, which is what keeps a legacy keyfile byte-identical.
