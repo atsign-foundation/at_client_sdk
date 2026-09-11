@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart' show AtChopsUtil, EncryptionKeyType;
+import 'package:at_chops/at_chops.dart' show AESKey;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart' as privilege;
@@ -123,8 +123,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
     String? mintedApkamSymmetricKey;
     var decision = enrollmentRequestDecision;
     if (mintsSymmetricKey) {
-      mintedApkamSymmetricKey =
-          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+      mintedApkamSymmetricKey = AESKey.generate(32).key;
       decision = EnrollmentRequestDecision.approvedWithMintedKey(
         enrollmentId: enrollmentRequestDecision.enrollmentId,
         apkamSymmetricKey: mintedApkamSymmetricKey,

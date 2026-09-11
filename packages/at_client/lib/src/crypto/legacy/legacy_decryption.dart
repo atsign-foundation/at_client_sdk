@@ -87,9 +87,9 @@ class SelfKeyDecryption implements AtKeyDecryption {
 
     InitialisationVector iV;
     if (atKey.metadata.ivNonce != null) {
-      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+      iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
     } else {
-      iV = AtChopsUtil.generateIVLegacy();
+      iV = InitialisationVector.legacy();
     }
     AtEncryptionResult decryptionResultFromAtChops;
     try {
@@ -137,9 +137,9 @@ class SharedByMeDecryption extends AbstractAtKeyEncryption
     }
     InitialisationVector iV;
     if (atKey.metadata.ivNonce != null) {
-      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+      iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
     } else {
-      iV = AtChopsUtil.generateIVLegacy();
+      iV = InitialisationVector.legacy();
     }
     AtEncryptionResult decryptionResultFromAtChops;
     try {
@@ -224,9 +224,9 @@ class SharedWithMeDecryption implements AtKeyDecryption {
     try {
       InitialisationVector iV;
       if (atKey.metadata.ivNonce != null) {
-        iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+        iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
       } else {
-        iV = AtChopsUtil.generateIVLegacy();
+        iV = InitialisationVector.legacy();
       }
       final decryptionResult = await _atClient.atChops!
           .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);

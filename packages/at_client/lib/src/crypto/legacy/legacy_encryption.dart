@@ -146,8 +146,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     _logger.info(
         "Creating new shared symmetric key as ${atKey.sharedBy} for ${atKey.sharedWith}");
     // Generate new symmetric key
-    var newSymmetricKeyBase64 =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    var newSymmetricKeyBase64 = AESKey.generate(32).key;
     // Encrypt the new symmetric key with our public key
     var atChopsEncryptionResult = await _atClient.atChops!
         .encryptString(newSymmetricKeyBase64, EncryptionKeyType.rsa2048);
@@ -367,9 +366,9 @@ class SelfKeyEncryption implements AtKeyEncryption {
     try {
       InitialisationVector iV;
       if (atKey.metadata.ivNonce != null) {
-        iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+        iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
       } else {
-        iV = AtChopsUtil.generateIVLegacy();
+        iV = InitialisationVector.legacy();
       }
       var encryptionAlgo = AESEncryptionAlgo(AESKey(selfEncryptionKey!));
       encryptionResultFromAtChops = await atClient.atChops!.encryptString(
@@ -414,7 +413,7 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
     try {
       InitialisationVector iV;
       atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
-      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+      iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
       var encryptionAlgo = AESEncryptionAlgo(AESKey(sharedKey));
       encryptionResultFromAtChops = await _atClient.atChops!.encryptString(
           value, EncryptionKeyType.aes256,
