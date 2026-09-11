@@ -48,6 +48,7 @@ void main() {
   setUp(() {
     dir = Directory.systemTemp.createTempSync('onboarding_storage_');
     reset(mockAtLookup);
+    when(() => mockAtLookup.close()).thenAnswer(Future.value);
     reset(mockAtAuth);
     registerFallbackValue(FakeAtAuthRequest());
     when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());

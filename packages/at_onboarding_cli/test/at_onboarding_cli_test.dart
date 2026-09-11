@@ -58,6 +58,7 @@ void main() {
 
   setUp(() {
     reset(mockAtLookup);
+    when(() => mockAtLookup.close()).thenAnswer(Future.value);
     reset(mockAtAuth);
     registerFallbackValue(FakeAtAuthRequest());
     when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
@@ -66,6 +67,7 @@ void main() {
   group('A group of tests to verify at_chops creation in onboarding_cli', () {
     setUp(() {
       reset(mockAtLookup);
+      when(() => mockAtLookup.close()).thenAnswer(Future.value);
       reset(mockAtAuth);
       registerFallbackValue(FakeAtAuthRequest());
       when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
@@ -152,6 +154,7 @@ void main() {
     setUp(() async {
       persistenceBundle = await setupLocalStorage(atsign);
       reset(mockAtLookup);
+      when(() => mockAtLookup.close()).thenAnswer(Future.value);
       reset(mockAtAuth);
       when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
       registerFallbackValue(FakeAtAuthRequest());
@@ -419,6 +422,7 @@ void main() {
 
     setUp(() {
       reset(mockAtLookup);
+      when(() => mockAtLookup.close()).thenAnswer(Future.value);
       reset(mockAtAuth);
       when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
       reset(mockEnrollmentBase);
