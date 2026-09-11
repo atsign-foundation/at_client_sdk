@@ -1123,6 +1123,9 @@ class AtKeys {
   /// raw key bytes. A caller authenticating over at_lookup must also set
   /// `signingAlgoType` to what [signingAlgorithmForEnrollment] reports, or
   /// the signature is produced by the wrong routine.
+  @Deprecated('Use authenticationKeyPairFor, with encryptionKeyPair and '
+      'selfEncryptionKey for the rest of what an AtChops carried. AtChops is '
+      'being deprecated, and by extension this method as well.')
   AtChops toAtChopsForEnrollment(String enrollmentId) {
     final materials = keysForEnrollment(enrollmentId);
     // Named for the authentication role they hold, not for the pkam slot they
@@ -1264,6 +1267,94 @@ class AtKeys {
           'different enrollment\'s and are not a substitute for it.');
     }
     return null;
+  }
+
+  /// The authentication keypair [enrollmentId] proves possession of, and the
+  /// algorithm that signs with it.
+  ///
+  /// The typed form of [authenticationFor], resolving the same way and on the
+  /// same terms: typed material wherever this keyfile holds it for
+  /// [enrollmentId], the flat [apkamPublicKey]/[apkamPrivateKey] under
+  /// `rsa2048` only where it holds none. [authenticationFor] documents why
+  /// that order matters on a retrofitted keyfile. Both halves are base64 of
+  /// the raw key bytes.
+  ///
+  /// Null when the keyfile holds no authentication keypair for
+  /// [enrollmentId] at all. Throws [AtKeyNotFoundException] when its typed
+  /// material names an algorithm this build cannot sign with, rather than
+  /// answering from the flat fields, which on such a keyfile are a different
+  /// enrollment's.
+  ({SigningAlgoType algorithm, String publicKey, String privateKey})?
+      authenticationKeyPairFor(String? enrollmentId) {
+    final algorithm = authenticationAlgorithmFor(enrollmentId);
+    if (algorithm != null) {
+      final materials = keysForEnrollment(enrollmentId!);
+      final private = materials
+          .where((m) =>
+              m.role == CryptographicMaterialRole.privateAuthentication &&
+              m.status == CryptographicMaterialStatus.active)
+          .firstOrNull;
+      final public = materials
+          .where((m) =>
+              m.role == CryptographicMaterialRole.publicAuthentication &&
+              m.status == CryptographicMaterialStatus.active)
+          .firstOrNull;
+      if (private == null || public == null) {
+        throw AtKeyNotFoundException(
+            'AtKeys holds no active authentication keypair for enrollment '
+            '$enrollmentId');
+      }
+      return (
+        algorithm: algorithm,
+        publicKey: public.bytes.toString(),
+        privateKey: private.bytes.toString(),
+      );
+    }
+    // ignore: deprecated_member_use_from_same_package
+    final flatPublic = apkamPublicKey;
+    // ignore: deprecated_member_use_from_same_package
+    final flatPrivate = apkamPrivateKey;
+    if (flatPublic == null || flatPrivate == null) return null;
+    return (
+      algorithm: SigningAlgoType.rsa2048,
+      publicKey: flatPublic.toString(),
+      privateKey: flatPrivate.toString(),
+    );
+  }
+
+  /// The atSign's RSA encryption keypair: the key a legacy shared key is
+  /// wrapped to, and whose private half signs public data.
+  ///
+  /// Read from the flat
+  /// [defaultEncryptionPublicKey]/[defaultEncryptionPrivateKey], because that
+  /// is where it lives in every keyfile this build can write — nothing files
+  /// an atSign encryption keypair as typed `publicEncryption` /
+  /// `privateDecryption` material. A writer that starts to would need this
+  /// getter to prefer it, as [authenticationKeyPairFor] already does for the
+  /// APKAM pair.
+  ///
+  /// Null unless the keyfile holds both halves. An atSign activated with
+  /// `mintLegacyMaterial: false` holds neither.
+  RsaKeyPair? get encryptionKeyPair {
+    // ignore: deprecated_member_use_from_same_package
+    final public = defaultEncryptionPublicKey;
+    // ignore: deprecated_member_use_from_same_package
+    final private = defaultEncryptionPrivateKey;
+    if (public == null || private == null) return null;
+    return RsaKeyPair.create(public.toString(), private.toString());
+  }
+
+  /// The atSign's self-encryption key, which opens the records it wrote for
+  /// itself.
+  ///
+  /// Read from the flat [defaultSelfEncryptionKey], for the reason
+  /// [encryptionKeyPair] gives. Null where the keyfile holds none, which an
+  /// atSign activated with `mintLegacyMaterial: false` does not.
+  AESKey? get selfEncryptionKey {
+    // ignore: deprecated_member_use_from_same_package
+    final key = defaultSelfEncryptionKey;
+    if (key == null) return null;
+    return AESKey(key.toString());
   }
 
   @Deprecated('legacy, please use addKey to add additional keys.')

@@ -257,6 +257,32 @@ void main() {
     });
   });
 
+  group('AtKeys typed key accessors', () {
+    test('encryptionKeyPair and selfEncryptionKey read the flat material', () {
+      final keys = createKeys();
+      expect(keys.encryptionKeyPair!.atPublicKey.publicKey,
+          encryptedAtKeysMap[auth_constants.defaultEncryptionPublicKey]);
+      expect(keys.encryptionKeyPair!.atPrivateKey.privateKey,
+          encryptedAtKeysMap[auth_constants.defaultEncryptionPrivateKey]);
+      expect(keys.selfEncryptionKey!.key,
+          encryptedAtKeysMap[auth_constants.defaultSelfEncryptionKey]);
+    });
+
+    test('both answer null when the keyfile holds no legacy material', () {
+      // What `mintLegacyMaterial: false` produces: an atSign with no RSA
+      // encryption keypair and no self-encryption key at all.
+      expect(AtKeys().encryptionKeyPair, isNull);
+      expect(AtKeys().selfEncryptionKey, isNull);
+    });
+
+    test('encryptionKeyPair needs both halves', () {
+      final halfPair = createKeys()..defaultEncryptionPrivateKey = null;
+      expect(halfPair.encryptionKeyPair, isNull,
+          reason: 'a public half alone is not a keypair, and returning one '
+              'built over an empty private key would fail inside the cipher');
+    });
+  });
+
   group('AtKeys authenticationFor', () {
     // The fixture's flat fields are this enrollment's own credentials.
     final flatEnrollmentId = encryptedAtKeysMap['enrollmentId'] as String;
@@ -335,6 +361,48 @@ void main() {
       // An enrollment the keyfile holds nothing for still gets the flat
       // fields: absent material and unusable material are different answers.
       expect(futureAlgo.authenticationFor('never-held-here').chops, isNotNull);
+    });
+
+    test('authenticationKeyPairFor resolves the same way, without an AtChops',
+        () {
+      final legacy = createKeys().authenticationKeyPairFor(flatEnrollmentId)!;
+      expect(legacy.publicKey, flatApkamPublicKey);
+      expect(legacy.algorithm, SigningAlgoType.rsa2048,
+          reason: 'the flat fields hold an RSA keypair, and rsa2048 is what '
+              'signs it — where authenticationFor reports null to leave '
+              "at_lookup at that same default");
+
+      final typed =
+          retrofitted().authenticationKeyPairFor(typedEnrollmentId)!;
+      expect(typed.publicKey, typedApkamPublicKey);
+      expect(typed.privateKey, 'dHlwZWQtcHJpdmF0ZQ==');
+      expect(typed.algorithm, SigningAlgoType.mldsa65);
+
+      expect(retrofitted().authenticationKeyPairFor(flatEnrollmentId)!.publicKey,
+          flatApkamPublicKey,
+          reason: 'the enrollment that owns the flat fields still gets them');
+      expect(retrofitted().authenticationKeyPairFor(null)!.publicKey,
+          flatApkamPublicKey);
+    });
+
+    test('authenticationKeyPairFor refuses what it cannot sign with', () {
+      final futureAlgo = createKeys()
+        ..fileApkamMaterial(
+            enrollmentId: 'future-algorithm',
+            algorithm: CryptographicMaterialAlgorithm.of('sphincs-plus-256s'),
+            publicKey: typedApkamPublicKey,
+            privateKey: 'dHlwZWQtcHJpdmF0ZQ==');
+
+      expect(() => futureAlgo.authenticationKeyPairFor('future-algorithm'),
+          throwsA(isA<AtKeyNotFoundException>()));
+      expect(futureAlgo.authenticationKeyPairFor('never-held-here'), isNotNull,
+          reason: 'absent material and unusable material stay different');
+    });
+
+    test('authenticationKeyPairFor answers null for a keyfile holding none',
+        () {
+      expect(AtKeys().authenticationKeyPairFor(null), isNull);
+      expect(AtKeys().authenticationKeyPairFor('anything'), isNull);
     });
 
     test('authenticationAlgorithmFor answers without building an AtChops', () {

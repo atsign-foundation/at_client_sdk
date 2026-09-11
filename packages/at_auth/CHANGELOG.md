@@ -1,5 +1,17 @@
 ## 4.0.0-rc2
 
+- feat: `AtKeys.authenticationKeyPairFor`, `.encryptionKeyPair` and
+  `.selfEncryptionKey` — the typed form of what an `AtChops` carried, so a
+  caller can take the key material without building one.
+  `authenticationKeyPairFor` resolves exactly as `authenticationFor` does,
+  typed material first and the flat APKAM pair under `rsa2048` only where
+  there is none, and refuses an algorithm this build cannot sign with rather
+  than falling back to another enrollment's credentials. The two flat-backed
+  getters read the legacy fields, because nothing files an atSign encryption
+  keypair or self-encryption key as typed material; a writer that starts to
+  would make them prefer it.
+- `toAtChopsForEnrollment` is deprecated, joining `toAtChops`, and names
+  those three as the replacement.
 - refactor: keys and initialisation vectors are generated from the key
   classes' own statics rather than through `AtChopsUtil`, whose bodies were
   one-line wrappers around them. 25 call sites; 13 of those sit inside the

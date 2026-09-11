@@ -372,23 +372,44 @@ became the key classes' own statics (12 uses).
 
 ### Step 3: at_auth builds the carrier (inside 4.0.0-rc2)
 
-Typed getters on `AtKeys` for what at_client actually reads: the authentication
-keypair for an enrollment, the encryption keypair and the self encryption key,
-as `RsaKeyPair`, `AESKey` and the PQ key classes, resolved from
-`CryptographicMaterial` by role and algorithm. `signingKeysFor` is the model,
-since it already does this for signing keys. `authenticationFor` returns the
-algorithm and the key rather than an `AtChops`. `toAtChops()` and
-`toAtChopsForEnrollment()` are marked `@Deprecated` pointing at the getters and
-stay for 4.x's consumers.
+**The getters are built.** `AtKeys.authenticationKeyPairFor` is the typed form
+of `authenticationFor` — same resolution, same refusal, returning the
+algorithm and both halves instead of an `AtChops` — and `.encryptionKeyPair`
+and `.selfEncryptionKey` give the rest of what one carried, as `RsaKeyPair`
+and `AESKey`. `toAtChopsForEnrollment` is now `@Deprecated` beside
+`toAtChops`, both naming the three.
 
-Then at_auth's own F1 uses move onto its own getters: `at_keys.dart` (19),
-`enrollment_handshake.dart` (11), `at_authenticator.dart` (10),
-`at_auth_impl.dart` (9), `apkam_possession_proof.dart` (6), `file_io.dart` (5),
-`enrollment_approver.dart` (4), `onboarding_mint.dart` (4),
-`enrollment_submitter.dart` (2), `at_auth.dart` (2), `at_enrollment_impl.dart`
-(1) and `at_enrollment.dart` (1), which is all 74. `AtAuthResponse.atChops` and
-`AtAuth.atChops` go `@Deprecated` beside `atAuthKeys`, which is where a
-consumer should have been reading all along.
+⚠️ **Only the APKAM pair has a typed source.** Nothing in at_auth or at_client
+files an atSign encryption keypair (`publicEncryption`/`privateDecryption`) or
+a self-encryption key (`symmetricEncryption`) as typed material — measured by
+grepping the role tokens for writers, which found only the vocabulary that
+defines them. So those two getters read the flat fields, and a typed branch
+would have been code nothing produces. The dartdoc says so and names what a
+writer would have to change. This is also the answer to the legacy question in
+[section 3](#3-decisions-this-plan-needs-and-the-ones-it-makes): the getters
+are where the legacy shape is known, so a consumer moves onto them and the
+flat fields stay a detail of at_auth rather than becoming typed material.
+
+⚠️ **Deprecating a method hides its own uses.** `toAtChopsForEnrollment`
+carried 6 deprecated uses, and annotating it dropped at_auth's `lib` count from
+62 to 56 without one of them moving — a deprecated member used inside a
+deprecated declaration raises nothing, the same way `KeyIOMixin`'s 13
+`AtChopsUtil` calls never appeared. The acceptance gate below is satisfiable by
+annotating rather than fixing, so a step that reports a drop has to say which
+kind it was.
+
+**What remains of this step** is at_auth's own uses moving onto those
+getters: 56 in `lib` — `at_keys.dart` 19 (13 of them inside the two
+now-deprecated `toAtChops` methods, so they leave with those in the major),
+`at_authenticator.dart` 10, `at_auth_impl.dart` 9,
+`enrollment_handshake.dart` 9, `apkam_possession_proof.dart` 6,
+`file_io.dart` 3, `at_auth.dart` 2, `enrollment_approver.dart` 2,
+`at_enrollment.dart` 1, `at_enrollment_impl.dart` 1 — and 85 in `test`. Then
+`AtAuthResponse.atChops` and `AtAuth.atChops` go `@Deprecated` beside
+`atAuthKeys`, which is where a consumer should have been reading all along.
+
+⚠️ This is the authentication path, so it is the one step in this plan that
+cannot land on unit-green: all 4 live packs before it commits.
 
 ### Step 4: at_client's carrier role (no API change)
 
@@ -477,7 +498,7 @@ figure replaces its row here as it lands.
 | 0    | at_auth           | 0 here, 45 in its consumers | counted in those members         |
 | 1    | at_client         | 2 of 58               | none                                   |
 | 2    | at_client         | 12 of 58; and 2 in `benchmark` | ~50, the engine-only fixtures |
-| 3    | at_auth           | 74, onto its own getters | 92                                  |
+| 3    | at_auth           | 18 so far; 56 owed    | 7 so far; 85 owed                      |
 | 4    | at_client         | ~23                   | ~250, every `AtChopsImpl(` built only to hand over |
 | 5    | at_client         | 11 of 15; 4 stay as the bridge | the `enrollmentId` stubs      |
 | 6    | at_onboarding_cli | ~19 of 34             | ~30                                    |
