@@ -5,8 +5,6 @@
 // TODO(4.0): remove the ladder side with the credential ladder.
 // ignore_for_file: deprecated_member_use
 
-import 'dart:io';
-
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -15,6 +13,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'at_lookup_test_utils.dart';
+import 'fake_at_server_transport.dart';
 
 class FakeAtSigningInput extends Fake implements AtSigningInput {}
 
@@ -24,11 +23,11 @@ void main() {
   late OutboundConnection mockOutBoundConnection;
   late SecondaryAddressFinder mockSecondaryAddressFinder;
   late OutboundMessageListener mockOutboundListener;
-  late AtLookupSecureSocketFactory mockSocketFactory;
-  late AtLookupSecureSocketListenerFactory mockSecureSocketListenerFactory;
+  late AtTransportFactory mockTransportFactory;
+  late AtLookupMessageListenerFactory mockSecureSocketListenerFactory;
   late AtLookupOutboundConnectionFactory mockOutboundConnectionFactory;
   late AtChops mockAtChops;
-  late SecureSocket mockSecureSocket;
+  late FakeAtServerTransport transport;
 
   const host = '127.0.0.1';
   const port = 12345;
@@ -42,20 +41,20 @@ void main() {
     mockOutBoundConnection = MockOutboundConnectionImpl();
     mockSecondaryAddressFinder = MockSecondaryAddressFinder();
     mockOutboundListener = MockOutboundMessageListener();
-    mockSocketFactory = MockSecureSocketFactory();
-    mockSecureSocketListenerFactory = MockSecureSocketListenerFactory();
+    mockTransportFactory = MockAtTransportFactory();
+    mockSecureSocketListenerFactory = MockMessageListenerFactory();
     mockOutboundConnectionFactory = MockOutboundConnectionFactory();
     mockAtChops = MockAtChops();
-    registerFallbackValue(SecureSocketConfig());
     registerFallbackValue(FakeAtSigningInput());
-    mockSecureSocket = createMockAtServerSocket(host, port);
+    transport = FakeAtServerTransport(description: '$host:$port');
 
     when(() => mockSecondaryAddressFinder.findSecondary('@alice'))
         .thenAnswer((_) async => SecondaryAddress(host, port));
-    when(() => mockSocketFactory.createSocket(host, '$port', any()))
-        .thenAnswer((_) => Future<SecureSocket>.value(mockSecureSocket));
-    when(() => mockOutboundConnectionFactory.createOutboundConnection(
-        mockSecureSocket)).thenAnswer((_) => mockOutBoundConnection);
+    when(() => mockTransportFactory.connect(host, '$port'))
+        .thenAnswer((_) => Future<AtTransport>.value(transport));
+    when(() =>
+            mockOutboundConnectionFactory.createOutboundConnection(transport))
+        .thenAnswer((_) => mockOutBoundConnection);
     when(() => mockSecureSocketListenerFactory.createListener(
         mockOutBoundConnection)).thenAnswer((_) => mockOutboundListener);
     when(() => mockOutBoundConnection.getMetaData())
@@ -71,7 +70,7 @@ void main() {
 
   AtLookupImpl build() => AtLookupImpl('@alice', host, 64,
       secondaryAddressFinder: mockSecondaryAddressFinder,
-      secureSocketFactory: mockSocketFactory,
+      transportFactory: mockTransportFactory,
       socketListenerFactory: mockSecureSocketListenerFactory,
       outboundConnectionFactory: mockOutboundConnectionFactory);
 

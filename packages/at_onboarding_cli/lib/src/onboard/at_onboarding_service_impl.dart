@@ -55,6 +55,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           atOnboardingPreference.rootDomain,
           atOnboardingPreference.rootPort,
         ),
+        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          atOnboardingPreference.rootDomain,
+          atOnboardingPreference.rootPort,
+        ),
         transport: secureSocketTransport(SecureSocketConfig()),
         authenticator: null,
       );

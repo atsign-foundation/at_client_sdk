@@ -19,6 +19,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils_io.dart' show StdErrLoggingHandler;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
@@ -32,7 +33,7 @@ const _atSignDefine = String.fromEnvironment('DOCKERSTATS_SMOKE_ATSIGN');
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  AtSignLogger.defaultLoggingHandler = AtSignLogger.stdErrLoggingHandler;
+  AtSignLogger.defaultLoggingHandler = StdErrLoggingHandler();
   AtSignLogger.root_level = 'INFO';
   _smokeLog('main entered');
   runApp(const _SmokeApp());

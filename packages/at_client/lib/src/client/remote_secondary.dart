@@ -158,7 +158,9 @@ class RemoteSecondary implements Secondary {
           rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
           transport: secureSocketTransport(secureSocketConfig),
           authenticator: null,
-          secondaryAddressFinder: processSecondaryAddressFinder(),
+          secondaryAddressFinder: processSecondaryAddressFinder() ??
+              CacheableSecondaryAddressFinder(
+                  preference.rootDomain, preference.rootPort),
           clientConfig: _getClientConfig(),
         );
     this.atLookUp.enrollmentId = enrollmentId;
@@ -267,7 +269,7 @@ class RemoteSecondary implements Secondary {
   }
 
   void addStreamData(List<int> data) {
-    atLookUp.connection!.getSocket().add(data);
+    atLookUp.connection!.add(data);
   }
 
   /// Generates digest using from verb response and [secret] and performs a CRAM authentication to

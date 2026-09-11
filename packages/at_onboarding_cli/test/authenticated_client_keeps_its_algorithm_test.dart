@@ -6,7 +6,7 @@ import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -120,7 +120,11 @@ void main() {
     // NOTE: a real lookup rather than a mock — it is stamped twice on this
     // path, once by the RemoteSecondary that wraps it and once here, and only
     // the last one decides.
-    final own = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
+    final own = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64,
+        secondaryAddressFinder:
+            CacheableSecondaryAddressFinder('vip.ve.atsign.zone', 64),
+        transportFactory: SecureSocketTransportFactory(
+            secureSocketConfig: SecureSocketConfig()));
     final service = legacyPostureService(atSign,
         await pqKeyfile(atSign, enrollmentId), enrollmentId, _MockAtAuth())
       ..atLookUp = own;

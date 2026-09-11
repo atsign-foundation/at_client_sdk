@@ -5,7 +5,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 
 /// Requests for an enrollment
 /// Enrollment request will be submitted to server and marked as pending
@@ -26,8 +26,12 @@ void main(List<String> args) async {
           mandatory: false,
           defaultsTo: 'root.atsign.org');
     final argResults = parser.parse(args);
-    AtLookUp atLookUp =
-        AtLookupImpl(argResults['atsign'], argResults['rootDomain'], 64);
+    AtLookUp atLookUp = AtLookupImpl(
+        argResults['atsign'], argResults['rootDomain'], 64,
+        secondaryAddressFinder:
+            CacheableSecondaryAddressFinder(argResults['rootDomain'], 64),
+        transportFactory: SecureSocketTransportFactory(
+            secureSocketConfig: SecureSocketConfig()));
 
     AtEnrollment atEnrollmentBase = AtEnrollment.create();
 

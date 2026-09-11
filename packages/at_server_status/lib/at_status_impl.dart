@@ -114,6 +114,8 @@ class AtStatusImpl implements AtServerStatus {
         rootDomain: AtRootDomain(_rootUrl!, _rootPort!),
         transport: secureSocketTransport(SecureSocketConfig()),
         authenticator: null,
+        secondaryAddressFinder:
+            CacheableSecondaryAddressFinder(_rootUrl!, _rootPort!),
       );
       await atLookupImpl.executeCommand('from:$atSign\n');
       await atLookupImpl.scan(auth: false).then((keysList) async {

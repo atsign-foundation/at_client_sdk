@@ -18,6 +18,37 @@ permissions: # added using https://github.com/step-security/secure-workflows
   contents: read
 
 jobs:
+  # The four packages under tests/ are workspace members that nothing analyzes:
+  # every `dart analyze` and `dart format` step in this repo is scoped to a
+  # packages/ directory. A compile error in a harness therefore surfaces only
+  # when a functional or e2e job loads its suites — slow, credential-bound, and
+  # easy to misread as flake. This job is the fast, hermetic check: no
+  # virtualenv, no atServer, no secrets.
+  analyze_tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - at_end2end_test
+          - at_functional_test
+          - at_onboarding_cli_functional_tests
+          - at_onboarding_cli_functional_tests_proxy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Install dependencies in ${{ matrix.package }}
+        working-directory: tests/${{ matrix.package }}
+        run: dart pub get
+
+      # Errors and warnings fail the build; info-level issues do not. The
+      # harnesses carry ~260 deprecation infos the migration has not reached yet.
+      - name: Analyze project source in ${{ matrix.package }}
+        working-directory: tests/${{ matrix.package }}
+        run: dart analyze
+
   unit_at_client:
     runs-on: ubuntu-latest
     strategy:

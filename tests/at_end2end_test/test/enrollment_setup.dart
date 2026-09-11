@@ -17,7 +17,7 @@ import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -74,9 +74,15 @@ void main() {
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = AtLookupImpl(
-          currentAtSign,
-          atClient.getPreferences()!.rootDomain,
-          atClient.getPreferences()!.rootPort);
+        currentAtSign,
+        atClient.getPreferences()!.rootDomain,
+        atClient.getPreferences()!.rootPort,
+        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+            atClient.getPreferences()!.rootDomain,
+            atClient.getPreferences()!.rootPort),
+        transportFactory: SecureSocketTransportFactory(
+            secureSocketConfig: SecureSocketConfig()),
+      );
 
       // Do an enrollment with access to the __config namespace
       AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(

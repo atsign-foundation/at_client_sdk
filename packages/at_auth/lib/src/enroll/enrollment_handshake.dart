@@ -61,6 +61,9 @@ class EnrollmentHandshake {
       transport: secureSocketTransport(SecureSocketConfig()),
       // Installed below, from the in-memory keys this handshake just wrote.
       authenticator: null,
+      secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          enrollmentResponse.rootDomain!.rootDomain,
+          enrollmentResponse.rootDomain!.rootPort),
     );
 
     // An enrollment that advertised a key package holds no symmetric key yet,

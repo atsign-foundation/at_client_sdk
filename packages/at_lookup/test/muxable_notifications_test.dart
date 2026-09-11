@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -7,11 +6,11 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'at_lookup_test_utils.dart';
-import 'fake_at_server_socket.dart';
+import 'fake_at_server_transport.dart';
 
 /// [AtLookupMuxable] - the notification stream, over a REAL listener.
 ///
-/// The factories are mocked only to get a [FakeAtServerSocket] underneath; the
+/// The factories are mocked only to get a [FakeAtServerTransport] underneath; the
 /// connection, the listener and the framing are all production code, so a
 /// notification here travels the same path it does against a live atServer.
 /// A test that stubbed the listener would pass whether or not the framing
@@ -20,39 +19,29 @@ void main() {
   const host = '127.0.0.1';
   const port = 12345;
 
-  /// Every socket the factory has handed out, in order.
+  late MockSecondaryAddressFinder addressFinder;
+
+  /// The ONE injection point. Everything above it - the connection, the
+  /// listener, both framings, reconnect - is production code, so a
+  /// notification here travels the path it travels live.
+  late FakeAtServerTransportFactory transportFactory;
+
+  /// Every transport the factory has handed out, in order.
   ///
   /// A fresh one per connection, because reconnection is under test: a rig
-  /// that returned the same destroyed socket would make a successful
+  /// that returned the same destroyed transport would make a successful
   /// reconnect indistinguishable from a failed one.
-  late List<FakeAtServerSocket> sockets;
+  List<FakeAtServerTransport> transports() => transportFactory.created;
 
-  /// The socket currently in use - the most recent one the factory handed out.
-  late FakeAtServerSocket socket;
-  late MockSecondaryAddressFinder addressFinder;
-  late MockSecureSocketFactory socketFactory;
+  /// The transport currently in use - the most recent one handed out.
+  FakeAtServerTransport transport() => transportFactory.last;
 
   setUp(() {
-    sockets = [];
     addressFinder = MockSecondaryAddressFinder();
-    socketFactory = MockSecureSocketFactory();
-    registerFallbackValue(SecureSocketConfig());
+    transportFactory = FakeAtServerTransportFactory();
 
     when(() => addressFinder.findSecondary('@alice'))
         .thenAnswer((_) async => SecondaryAddress(host, port));
-    // The ONE injection point: a fresh fake socket per connection, reaching
-    // the muxable through the factory's `transport` parameter. Everything
-    // above it - the connection, the listener, both framings, reconnect - is
-    // production code, so a notification here travels the path it travels
-    // live. A fresh socket per call because reconnection is under test: reuse
-    // a destroyed one and a successful reconnect looks like a failed one.
-    when(() => socketFactory.createSocket(host, '$port', any()))
-        .thenAnswer((_) async {
-      final s = FakeAtServerSocket();
-      sockets.add(s);
-      socket = s;
-      return s;
-    });
   });
 
   /// Built through the FACTORY, and held as the INTERFACE.
@@ -60,17 +49,15 @@ void main() {
   /// Not a stylistic choice: this is the shape every caller has at the end of
   /// this project, so testing through it is what proves the factory produces
   /// something fully usable without naming the concrete class. Reaching for
-  /// `AtLookupImpl(...)` here would test a constructor the plan is retiring
-  /// and would leave the factory's own seam unexercised.
+  /// `AtLookupImpl(...)` here would leave the factory's own seam unexercised.
   AtLookupMuxable build({AtAuthenticator? authenticator}) =>
       AtLookUp.withSecureSocket(
         atSign: '@alice',
         rootDomain: const AtRootDomain(host, 64),
         authenticator: authenticator,
         secondaryAddressFinder: addressFinder,
-        transport: AtLookupTransport(
-          secureSocketConfig: SecureSocketConfig(),
-          socketFactory: socketFactory,
+        transport: AtLookupTransportFactories(
+          transportFactory: transportFactory,
         ),
       );
 
@@ -86,8 +73,8 @@ void main() {
       final seen = <String>[];
       atLookup.notifications.listen(seen.add);
 
-      await socket.serverSends('notification: {"id":"n1"}\n');
-      await socket.settle();
+      await transport().serverSends('notification: {"id":"n1"}\n');
+      await transport().settle();
 
       expect(seen, ['notification: {"id":"n1"}']);
     });
@@ -100,12 +87,12 @@ void main() {
       final atLookup = authenticated();
       await atLookup.startNotifications();
 
-      await socket.serverSends('notification: {"id":"early"}\n');
-      await socket.settle();
+      await transport().serverSends('notification: {"id":"early"}\n');
+      await transport().settle();
 
       final seen = <String>[];
       atLookup.notifications.listen(seen.add);
-      await socket.settle();
+      await transport().settle();
 
       expect(seen, ['notification: {"id":"early"}'],
           reason: 'a buffered notification must be delivered on subscribe - '
@@ -128,8 +115,9 @@ void main() {
       final seen = <String>[];
       atLookup.notifications.listen(seen.add);
 
-      await socket.serverSends('data:the_key_is\n@bob:phone@alice\n@alice@');
-      await socket.settle();
+      await transport()
+          .serverSends('data:the_key_is\n@bob:phone@alice\n@alice@');
+      await transport().settle();
 
       expect(seen, isEmpty,
           reason: 'a multi-line data value still reads as data: on its prefix, '
@@ -137,25 +125,25 @@ void main() {
     });
   });
 
-  group('back-pressure reaches the socket through the stream', () {
-    test('pausing the notification stream pauses the socket', () async {
+  group('back-pressure reaches the transport() through the stream', () {
+    test('pausing the notification stream pauses the transport()', () async {
       final atLookup = authenticated();
       await atLookup.startNotifications();
       final seen = <String>[];
       final sub = atLookup.notifications.listen(seen.add);
-      await socket.settle();
+      await transport().settle();
 
       sub.pause();
-      await socket.settle();
-      expect(socket.pauseCount, greaterThanOrEqualTo(1),
+      await transport().settle();
+      expect(transport().pauseCount, greaterThanOrEqualTo(1),
           reason: 'pausing the notification stream must reach the SOCKET, not '
               'merely buffer in this process - onPause is wired through to '
               'the listener, which pauses its subscription');
 
       sub.resume();
-      await socket.settle();
-      await socket.serverSends('notification: {"id":"after"}\n');
-      await socket.settle();
+      await transport().settle();
+      await transport().serverSends('notification: {"id":"after"}\n');
+      await transport().settle();
       expect(seen, ['notification: {"id":"after"}'],
           reason: 'and resuming must restore delivery');
 
@@ -175,8 +163,9 @@ void main() {
       await atLookup.startNotifications(
           getLastNotificationTime: () async => 1755600000000);
 
-      expect(socket.written, ['monitor:selfNotifications:1755600000000\n']);
-      expect(socket.written.single, isNot(contains('multiplexed')),
+      expect(
+          transport().written, ['monitor:selfNotifications:1755600000000\n']);
+      expect(transport().written.single, isNot(contains('multiplexed')),
           reason: 'no atServer implements this flag; sending it would claim a '
               'safety property that is not there');
       expect(atLookup.isNotifying, isTrue);
@@ -187,7 +176,7 @@ void main() {
 
       await atLookup.startNotifications(regex: '.wavi');
 
-      expect(socket.written, ['monitor:selfNotifications .wavi\n']);
+      expect(transport().written, ['monitor:selfNotifications .wavi\n']);
     });
 
     test('called twice, it sends once', () async {
@@ -196,7 +185,7 @@ void main() {
       await atLookup.startNotifications();
       await atLookup.startNotifications();
 
-      expect(socket.written, hasLength(1),
+      expect(transport().written, hasLength(1),
           reason: 'a second monitor: on the same connection would duplicate '
               'every notification');
     });
@@ -226,9 +215,9 @@ void main() {
 
       await atLookup.startNotifications(
           regex: '.wavi', getLastNotificationTime: () async => 1755600000000);
-      expect(sockets, hasLength(1));
+      expect(transports(), hasLength(1));
       expect(authCount, 1);
-      final first = socket;
+      final first = transport();
       expect(
           first.written, ['monitor:selfNotifications:1755600000000 .wavi\n']);
 
@@ -236,20 +225,20 @@ void main() {
       await first.serverCloses();
       await Future.delayed(const Duration(milliseconds: 50));
       expect(atLookup.isReconnectingNotifications, isTrue,
-          reason: 'the listener must tell the muxable the socket died - '
+          reason: 'the listener must tell the muxable the transport() died - '
               'without the onDisconnect seam nothing here ever learns it');
 
       // First delay in the backoff is 1s.
       await Future.delayed(const Duration(milliseconds: 1400));
 
-      expect(sockets, hasLength(2),
+      expect(transports(), hasLength(2),
           reason: 'a new connection must have been opened');
       expect(authCount, 2,
           reason: 'the new connection is unauthenticated, so the authenticator '
               'must run again - reconnecting without reauthenticating gives a '
-              'socket the atServer will not send notifications on');
-      expect(
-          socket.written, ['monitor:selfNotifications:1755600000000 .wavi\n'],
+              'transport() the atServer will not send notifications on');
+      expect(transport().written,
+          ['monitor:selfNotifications:1755600000000 .wavi\n'],
           reason: 'the regex is REMEMBERED across a reconnect - dropping it '
               'would start delivering everything. The watermark beside it is '
               'not remembered but re-asked, and this callback returns a '
@@ -261,17 +250,17 @@ void main() {
       await atLookup.stopNotifications();
     });
 
-    test('notifications flow again on the reconnected socket', () async {
+    test('notifications flow again on the reconnected transport()', () async {
       final atLookup = authenticated()
         ..heartbeatInterval = const Duration(hours: 1);
       await atLookup.startNotifications();
       final seen = <String>[];
       atLookup.notifications.listen(seen.add);
 
-      await socket.serverCloses();
+      await transport().serverCloses();
       await Future.delayed(const Duration(milliseconds: 1400));
-      await socket.serverSends('notification: {"id":"after-reconnect"}\n');
-      await socket.settle();
+      await transport().serverSends('notification: {"id":"after-reconnect"}\n');
+      await transport().settle();
 
       expect(seen, ['notification: {"id":"after-reconnect"}'],
           reason: 'the framing seam must be re-installed on the NEW listener - '
@@ -286,14 +275,14 @@ void main() {
         ..heartbeatInterval = const Duration(hours: 1);
       await atLookup.startNotifications();
 
-      await socket.serverCloses();
+      await transport().serverCloses();
       await Future.delayed(const Duration(milliseconds: 50));
       expect(atLookup.isReconnectingNotifications, isTrue);
 
       await atLookup.stopNotifications();
       await Future.delayed(const Duration(milliseconds: 1400));
 
-      expect(sockets, hasLength(1),
+      expect(transports(), hasLength(1),
           reason: 'a reconnect landing after stopNotifications would resurrect '
               'the connection the caller just asked to be rid of');
     });
@@ -302,14 +291,14 @@ void main() {
       final atLookup = authenticated()
         ..heartbeatInterval = const Duration(milliseconds: 40);
       await atLookup.startNotifications();
-      final s = socket;
+      final s = transport();
       expect(s.written, hasLength(1), reason: 'just the monitor: so far');
 
       await Future.delayed(const Duration(milliseconds: 90));
 
       expect(s.written.last, 'noop:0\n',
           reason: 'a connection that only ever reads cannot tell a quiet '
-              'atServer from a dead socket');
+              'atServer from a dead transport()');
       await s.serverSends('data:ok\n@alice@');
       await atLookup.stopNotifications();
     });
@@ -319,7 +308,7 @@ void main() {
         ..heartbeatInterval = const Duration(milliseconds: 30)
         ..heartbeatResponseTimeout = const Duration(milliseconds: 60);
       await atLookup.startNotifications();
-      final s = socket;
+      final s = transport();
 
       // Probe goes out at ~30ms, times out at ~90ms, closes the connection,
       // whose onDone drives the disconnect seam.
@@ -337,14 +326,14 @@ void main() {
     test('a paused subscriber does not lose its connection to the heartbeat',
         () async {
       // Pausing is the back-pressure contract this stream advertises, not
-      // misuse - and a paused subscription stops the socket being read, so
+      // misuse - and a paused subscription stops the transport() being read, so
       // nothing can fill the read queue and a probe could never be answered.
       // Probing anyway times the read out and destroys a healthy connection.
       final atLookup = authenticated()
         ..heartbeatInterval = const Duration(milliseconds: 30)
         ..heartbeatResponseTimeout = const Duration(milliseconds: 60);
       await atLookup.startNotifications();
-      final s = socket;
+      final s = transport();
       final states = <bool>[];
       atLookup.notificationConnectionUp.listen(states.add);
 
@@ -355,7 +344,7 @@ void main() {
 
       expect(s.written.where((w) => w.startsWith('noop:')), isEmpty,
           reason: 'the probe must be SKIPPED while delivery is paused. This '
-              'is the mechanism: asserting only that the socket survived '
+              'is the mechanism: asserting only that the transport() survived '
               'would pass even if a probe went out and happened to be '
               'answered');
       expect(s.destroyed, isFalse,
@@ -377,7 +366,7 @@ void main() {
       // pins it rather than leaving it to the dartdoc alone.
       final atLookup = authenticated();
       // Registered up front: a failing expect below would otherwise skip the
-      // teardown and leave a live reconnect loop, which then builds sockets
+      // teardown and leave a live reconnect loop, which then builds transports()
       // into the NEXT test's list through the shared factory.
       addTearDown(atLookup.stopNotifications);
 
@@ -386,10 +375,10 @@ void main() {
       var beforeClosed = false;
       atLookup.notificationConnectionUp
           .listen(before.add, onDone: () => beforeClosed = true);
-      await socket.settle();
+      await transport().settle();
 
       await atLookup.stopNotifications();
-      await socket.settle();
+      await transport().settle();
       expect(beforeClosed, isTrue,
           reason: 'the stop must close the stream, which is what makes the '
               'old subscription useless rather than merely silent');
@@ -401,8 +390,8 @@ void main() {
       await atLookup.startNotifications();
       final after = <bool>[];
       atLookup.notificationConnectionUp.listen(after.add);
-      await socket.serverCloses();
-      await socket.settle();
+      await transport().serverCloses();
+      await transport().settle();
 
       expect(after, contains(false),
           reason: 'a subscription taken after the restart tracks the new '
@@ -430,16 +419,17 @@ void main() {
         if (boom) throw StateError('watermark store unreadable');
         return 1755600000000;
       });
-      expect(socket.written, ['monitor:selfNotifications:1755600000000\n']);
+      expect(
+          transport().written, ['monitor:selfNotifications:1755600000000\n']);
 
       boom = true;
-      await socket.serverCloses();
+      await transport().serverCloses();
       await Future.delayed(const Duration(milliseconds: 1400));
 
-      expect(sockets, hasLength(2),
+      expect(transports(), hasLength(2),
           reason: 'the attempt must have reached the point of opening a '
-              'socket, or this proves nothing about what follows the connect');
-      expect(sockets.last.written, ['monitor:selfNotifications\n'],
+              'transport(), or this proves nothing about what follows the connect');
+      expect(transports().last.written, ['monitor:selfNotifications\n'],
           reason: 'a failed watermark read must still send monitor: - without '
               'one the atServer replays a window, which is recoverable, where '
               'sending nothing is a connection that can never deliver');
@@ -450,10 +440,10 @@ void main() {
       // The control arm: the same callback recovering must behave normally,
       // so this cannot pass by the watermark being ignored altogether.
       boom = false;
-      await sockets.last.serverCloses();
+      await transports().last.serverCloses();
       await Future.delayed(const Duration(milliseconds: 1400));
-      expect(
-          sockets.last.written, ['monitor:selfNotifications:1755600000000\n'],
+      expect(transports().last.written,
+          ['monitor:selfNotifications:1755600000000\n'],
           reason: 'a transient watermark failure is not terminal');
     });
 
@@ -468,7 +458,7 @@ void main() {
         ..heartbeatInterval = const Duration(hours: 1);
       await atLookup.startNotifications(
           getLastNotificationTime: () async => watermark);
-      final first = socket;
+      final first = transport();
       expect(first.written, ['monitor:selfNotifications:1755600000000\n']);
 
       // The caller consumes notifications and advances; then the far end goes.
@@ -477,10 +467,10 @@ void main() {
       await first.settle();
       await Future.delayed(const Duration(milliseconds: 1400));
 
-      expect(sockets, hasLength(2),
+      expect(transports(), hasLength(2),
           reason: 'the test needs an actual reconnect to have happened');
-      expect(
-          sockets.last.written, ['monitor:selfNotifications:1755600009999\n'],
+      expect(transports().last.written,
+          ['monitor:selfNotifications:1755600009999\n'],
           reason: 'the reconnect must carry where the caller has got to, not '
               'where it was when notifications started');
 
@@ -493,15 +483,15 @@ void main() {
       // startNotifications puts it back to true - so a reconnect loop still
       // sleeping from before the stop wakes to a flag that says "carry on",
       // and would act on the connection the RESTART established: a second
-      // `monitor:` on a live socket, its heartbeat reset, and an `up` with no
+      // `monitor:` on a live transport(), its heartbeat reset, and an `up` with no
       // preceding down.
       final atLookup = authenticated();
       await atLookup.startNotifications();
 
       // Drop the connection so a reconnect loop starts and parks on its
       // first backoff (1s), then stop and restart well inside that window.
-      await socket.serverCloses();
-      await socket.settle();
+      await transport().serverCloses();
+      await transport().settle();
       expect(atLookup.isReconnectingNotifications, isTrue,
           reason: 'the test needs a loop actually sleeping, or it proves '
               'nothing about what happens when one wakes');
@@ -512,7 +502,7 @@ void main() {
               'disarms the disconnect handler on the next connection');
 
       await atLookup.startNotifications();
-      final restarted = socket;
+      final restarted = transport();
       final states = <bool>[];
       atLookup.notificationConnectionUp.listen(states.add);
 
@@ -522,7 +512,7 @@ void main() {
       expect(restarted.written.where((w) => w.startsWith('monitor:')),
           hasLength(1),
           reason: 'the restart sent its own monitor:; a loop from the '
-              'previous session must not send a second one on this socket');
+              'previous session must not send a second one on this transport()');
       expect(states, isNot(contains(true)),
           reason: 'and must not announce an `up` the restart already made');
 
@@ -532,7 +522,7 @@ void main() {
     test('close() fails a pending read even while delivery is paused',
         () async {
       // The case `_closeConnection`'s own dartdoc names: with delivery paused
-      // the socket's done event is buffered, so the onDone route that fails a
+      // the transport()'s done event is buffered, so the onDone route that fails a
       // pending read never runs, and the abort inside `_closeConnection` is
       // the only thing left. A test that closes while delivery is live cannot
       // see that - onDone gets there first and the abort could be deleted
@@ -570,7 +560,7 @@ void main() {
       // or any verb - builds the connection while no controller exists, so
       // createConnection installs no seams at all. Reading the stream
       // afterwards has to install BOTH of them. With only the routing seam,
-      // the socket going away reaches nothing and the muxable never learns it
+      // the transport() going away reaches nothing and the muxable never learns it
       // is down.
       final atLookup = authenticated();
       await atLookup.pkamAuthenticate();
@@ -578,8 +568,8 @@ void main() {
       final states = <bool>[];
       atLookup.notificationConnectionUp.listen(states.add);
 
-      await socket.serverCloses();
-      await socket.settle();
+      await transport().serverCloses();
+      await transport().settle();
 
       expect(states, contains(false),
           reason: 'the disconnect seam must be installed by the stream getter '
@@ -601,8 +591,7 @@ void main() {
       final atLookup = authenticated();
       final seen = <bool>[];
       atLookup.notificationConnectionUp.listen(seen.add);
-      when(() => socketFactory.createSocket(host, '$port', any()))
-          .thenAnswer((_) async => throw const SocketException('refused'));
+      transportFactory.connectFailure = SecondaryConnectException('refused');
 
       await expectLater(
           atLookup.startNotifications(), throwsA(isA<Exception>()));
@@ -612,7 +601,7 @@ void main() {
       expect(seen, isEmpty,
           reason: 'nothing may report the connection up - a subscriber that '
               'saw `true` here would wait forever for notifications on a '
-              'socket that does not exist');
+              'transport() that does not exist');
     });
 
     test('a failure to send monitor: surfaces the same way', () async {
@@ -621,13 +610,7 @@ void main() {
       atLookup.notificationConnectionUp.listen(seen.add);
       // Connect succeeds; the write does not. at_client's monitor_test had
       // this as "secondary reachable but rejecting commands".
-      when(() => socketFactory.createSocket(host, '$port', any()))
-          .thenAnswer((_) async {
-        final s = FakeAtServerSocket()..failWrites = true;
-        sockets.add(s);
-        socket = s;
-        return s;
-      });
+      transportFactory.onCreate = (t) => t.failWrites = true;
 
       await expectLater(
           atLookup.startNotifications(), throwsA(isA<Exception>()));
@@ -647,10 +630,10 @@ void main() {
       atLookup.notificationConnectionUp.listen(seen.add);
 
       await atLookup.startNotifications();
-      await socket.settle();
+      await transport().settle();
       expect(seen, [true], reason: 'monitor: accepted on a live connection');
 
-      await socket.serverCloses();
+      await transport().serverCloses();
       await Future.delayed(const Duration(milliseconds: 50));
       expect(seen, [true, false],
           reason: 'the muxable owns reconnection, so it is the only thing that '
@@ -671,9 +654,9 @@ void main() {
       atLookup.notificationConnectionUp.listen(seen.add);
 
       await atLookup.startNotifications();
-      await socket.settle();
+      await transport().settle();
       await atLookup.stopNotifications();
-      await socket.settle();
+      await transport().settle();
 
       expect(seen, [true, false],
           reason: 'a deliberate stop is still a transition a subscriber must '
@@ -687,16 +670,16 @@ void main() {
       await atLookup.startNotifications();
       var done = false;
       atLookup.notifications.listen((_) {}, onDone: () => done = true);
-      await socket.settle();
+      await transport().settle();
 
       await atLookup.stopNotifications();
-      await socket.settle();
+      await transport().settle();
 
       expect(atLookup.isNotifying, isFalse);
       expect(done, isTrue,
           reason: 'a stream that can never produce another event must close, '
               'not hang');
-      expect(socket.destroyed, isTrue);
+      expect(transport().destroyed, isTrue);
     });
   });
 }

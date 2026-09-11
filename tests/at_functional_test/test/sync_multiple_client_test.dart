@@ -13,6 +13,7 @@ import 'package:at_functional_test/src/at_demo_credentials.dart'
     as demo_credentials;
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils_io.dart' show StdErrLoggingHandler;
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 import 'package:version/version.dart';
@@ -242,7 +243,7 @@ void mainIsolateMessageListener(dynamic data) {
 }
 
 Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
-  AtSignLogger.defaultLoggingHandler = AtSignLogger.stdErrLoggingHandler;
+  AtSignLogger.defaultLoggingHandler = StdErrLoggingHandler();
   AtSignLogger.root_level = 'warning';
   int numberOfRepetitions = N;
   int counter = 0;

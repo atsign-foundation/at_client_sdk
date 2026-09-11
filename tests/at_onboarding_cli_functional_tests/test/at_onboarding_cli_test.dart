@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
@@ -27,8 +27,11 @@ void main() {
     if (keysCreatedMap.containsKey(atSign)) {
       return;
     }
-    var atLookup =
-        AtLookupImpl(atSign, 'vip.ve.atsign.zone', virtualenvRootPort);
+    var atLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', virtualenvRootPort,
+        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+            'vip.ve.atsign.zone', virtualenvRootPort),
+        transportFactory: SecureSocketTransportFactory(
+            secureSocketConfig: SecureSocketConfig()));
     await atLookup.cramAuthenticate(at_demos.cramKeyMap[atSign]!);
     var command =
         'update:privatekey:at_pkam_publickey ${at_demos.pkamPublicKeyMap[atSign]}\n';

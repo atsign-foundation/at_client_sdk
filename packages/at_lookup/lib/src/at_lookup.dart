@@ -74,22 +74,24 @@ abstract interface class AtLookUp {
   /// here: a caller wanting the TLS defaults writes
   /// `secureSocketTransport(SecureSocketConfig())` and thereby states it,
   /// while a caller on another transport says nothing about TLS at all.
+  ///
+  /// [secondaryAddressFinder] is required for the same reason: the neutral
+  /// barrel cannot name a native implementation, so the caller supplies one.
   static AtLookupMuxable withSecureSocket({
     required String atSign,
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
-    required AtLookupTransport transport,
+    required AtLookupTransportFactories transport,
+    required SecondaryAddressFinder secondaryAddressFinder,
     Map<String, dynamic> clientConfig = const {},
-    SecondaryAddressFinder? secondaryAddressFinder,
   }) {
     return AtLookupImpl(
       atSign,
       rootDomain.rootDomain,
       rootDomain.rootPort,
-      secureSocketConfig: transport.secureSocketConfig,
       clientConfig: clientConfig,
       secondaryAddressFinder: secondaryAddressFinder,
-      secureSocketFactory: transport.socketFactory,
+      transportFactory: transport.transportFactory,
       socketListenerFactory: transport.listenerFactory,
       outboundConnectionFactory: transport.connectionFactory,
     )..authenticator = authenticator;
@@ -415,29 +417,23 @@ abstract interface class AtLookupMuxable implements AtLookUp {
 /// where bundling leaves exactly one — and the change lands inside it without
 /// touching this signature.
 ///
-/// ⚠️ **This is not yet enough for a non-socket transport, and it does not
-/// claim to be.** `AtConnection` exposes `Socket getSocket()`, which the
-/// listener calls, so a WebSocket implementation needs that member gone —
-/// a breaking change for every `implements AtConnection`, and out of scope
-/// while this ships as an additive minor.
-class AtLookupTransport {
-  final AtLookupSecureSocketFactory socketFactory;
+/// Nothing here names a socket any more. [AtTransportFactory] returns an
+/// [AtTransport], `AtConnection` speaks `inbound`/`add`, and the settings a
+/// TLS socket needs live inside the factory that opens one — so a WebSocket
+/// implementation is a value passed to [transportFactory] rather than a
+/// change to any type on this path.
+class AtLookupTransportFactories {
+  /// Opens the byte channel. Required and undefaulted for the same reason
+  /// [AtLookUp.withSecureSocket]'s `transport` is: a default naming an
+  /// implementation imports that implementation into every caller.
+  final AtTransportFactory transportFactory;
+
   final AtLookupOutboundConnectionFactory connectionFactory;
-  final AtLookupSecureSocketListenerFactory listenerFactory;
+  final AtLookupMessageListenerFactory listenerFactory;
 
-  /// How this transport is configured to reach an atServer.
-  ///
-  /// Here rather than on [AtLookUp.withSecureSocket] because it is a property
-  /// of the transport, not of the lookup: TLS certificates, a keylog path and
-  /// a cert-check toggle mean nothing to a transport that is not TLS over TCP.
-  /// A WebSocket transport would carry its own settings in its own type and
-  /// leave the factory's signature alone.
-  final SecureSocketConfig secureSocketConfig;
-
-  const AtLookupTransport({
-    required this.secureSocketConfig,
-    this.socketFactory = const AtLookupSecureSocketFactory(),
+  const AtLookupTransportFactories({
+    required this.transportFactory,
     this.connectionFactory = const AtLookupOutboundConnectionFactory(),
-    this.listenerFactory = const AtLookupSecureSocketListenerFactory(),
+    this.listenerFactory = const AtLookupMessageListenerFactory(),
   });
 }

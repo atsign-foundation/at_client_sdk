@@ -2,8 +2,8 @@
 #
 # Adding a package is one stanza — nothing in the package, nothing in CI. Gate a
 # package only once it is web-safe, so a gate holds a line rather than recording
-# a backlog: at_utils, at_lookup and at_client own 3, 6 and 7 offenders today,
-# which is why they are not here.
+# a backlog: at_client owns 7 offenders today, which is why it is not here yet.
+# at_utils and at_lookup joined below as each was ported.
 #
 # `ratchets` walk the import graph, `probe` compiles, `controls` keep the walk
 # honest. Baselines are one-way. See tools/wasm_shakedown/README.md for why.
@@ -19,7 +19,7 @@ at_chops:
   ratchets:
     - barrel: package:at_chops/at_chops.dart
       allowed_offenders: []
-      max_blocked_packages: 2 # at_utils + chalkdart, via the logger
+      max_blocked_packages: 0 # was 2 (at_utils + chalkdart, via the logger) — both cleared by the at_utils 4.0.0 barrel split
       min_files_walked: 500
   probe:
     # at_chops_ffi.dart is absent on purpose: it is the FFI island and does not
@@ -37,12 +37,18 @@ at_auth:
   # the stores' interfaces and the auth flows; anything needing a filesystem, a
   # raw socket or the dart:io HTTP stack moved to at_auth_io.dart.
   #
-  # All four blocked packages are inherited: at_lookup (sockets), at_utils and
-  # chalkdart (the logger), at_server_status. They come off as each is ported.
+  # Three inherited blocked packages, none of them at_auth's own code:
+  # at_lookup (sockets), at_server_status, and chalkdart. at_utils came off with
+  # the 4.0.0 barrel split, which cleaned at_utils.dart and at_logger.dart --
+  # but not at_progress.dart, which still exports src/logging/progress.dart and
+  # its chalkdart import. That barrel is how chalkdart is still reachable here:
+  # at_auth/src/at_auth.dart and seven of its enrollment files import it.
+  # Porting at_progress.dart takes chalkdart off; at_lookup and at_server_status
+  # come off as each is ported.
   ratchets:
     - barrel: package:at_auth/at_auth.dart
       allowed_offenders: []
-      max_blocked_packages: 4
+      max_blocked_packages: 3 # was 4 -- at_utils cleared by the 4.0.0 split
       min_files_walked: 850
   probe:
     - package:at_auth/at_auth.dart
@@ -63,3 +69,58 @@ at_auth:
     - barrel: package:at_auth/at_auth.dart
       reaches_file: lib/src/auth/socket_probe_io.dart
       because: the conditional export in probe_default.dart
+
+at_utils:
+  # Gated by the 4.0.0 barrel split. at_utils.dart holds AtSignLogger, AtUtils and
+  # atmetadata; PseudoServerSocket, ApplicationConfiguration and the file/stderr/CLI
+  # logging handlers (all dart:io, plus chalkdart for CLI coloring) moved to
+  # at_utils_io.dart. This also drops chalkdart out of the neutral barrel, so
+  # at_chops's inherited count above should fall from 2 to 0 once this lands.
+  ratchets:
+    - barrel: package:at_utils/at_utils.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      min_files_walked: 90
+  probe:
+    - package:at_utils/at_utils.dart
+  controls:
+    - barrel: package:at_utils/at_utils_io.dart
+      reaches_file: lib/src/networking/pseudo_server_socket.dart
+      reaches_library: dart:io
+      because: the native code it exists to quarantine
+
+at_lookup:
+  # Gated by the 4.0.0 transport split. at_lookup.dart holds AtLookUp, the
+  # AtConnection/AtTransport byte-channel seam and the address-finder interface;
+  # the TLS socket, the atDirectory lookup and the SecureSocketTransport that
+  # implements the seam moved to at_lookup_io.dart.
+  #
+  # Zero blocked packages on the first run. The neutral barrel reaches at_chops,
+  # at_commons, at_utils, meta and mutex, and the first two splits had already
+  # done the work: at_chops.dart and at_utils.dart are the neutral barrels of
+  # their own 4.0.0 majors, which is what keeps chalkdart off this graph.
+  # at_lookup stays in at_auth's blocked set above regardless -- at_auth imports
+  # at_lookup_io.dart at two sites.
+  ratchets:
+    - barrel: package:at_lookup/at_lookup.dart
+      allowed_offenders: []
+      max_blocked_packages: 0
+      min_files_walked: 570
+  probe:
+    # at_lookup_io.dart is absent on purpose. dart compile wasm accepts dart:io
+    # and stubs it, so probing the io barrel would pass and prove nothing; the
+    # ratchet is what holds that line. The controls below assert the io barrel
+    # still holds what it isolates.
+    - package:at_lookup/at_lookup.dart
+  controls:
+    - barrel: package:at_lookup/at_lookup_io.dart
+      reaches_file: lib/src/io/secure_socket_util.dart
+      reaches_library: dart:io
+      because: the TLS socket construction it exists to quarantine
+
+    # A second island, not a duplicate of the first: the address path and the
+    # transport path are quarantined for different reasons, and one control on
+    # the socket util stays green with the finder gutted.
+    - barrel: package:at_lookup/at_lookup_io.dart
+      reaches_file: lib/src/io/cacheable_secondary_address_finder.dart
+      because: the raw-TLS atDirectory lookup, which has no browser equivalent

@@ -7,21 +7,26 @@
 /// asked for — which is the way a transport swap otherwise fails silently
 /// instead of failing to compile.
 ///
-/// ⚠️ **Importing this library is not yet the only thing standing between
-/// at_lookup and a non-socket transport, and it does not claim to be.**
-/// `AtConnection` still exposes `Socket getSocket()`, which the message
-/// listener calls and which every `implements AtConnection` would have to
-/// drop. Until that member goes, a transport built on anything other than a
-/// socket cannot satisfy the connection type this one produces. What this
-/// split buys is that the shape is already right when that change lands,
-/// rather than the change also having to remove a default.
+/// Both halves are here: the transport that carries the atServer session, and
+/// [CacheableSecondaryAddressFinder], which resolves an atSign to a host by
+/// asking the atDirectory over raw TLS. A caller that imports `at_lookup.dart`
+/// alone supplies both — its own [AtTransportFactory], and a
+/// [SecondaryAddressFinder] such as `ProxySecondaryAddressFinder`.
 library;
 
 import 'package:at_commons/at_commons.dart' show SecureSocketConfig;
 
-import 'src/at_lookup.dart' show AtLookupTransport;
+import 'at_lookup.dart';
+import 'src/io/cacheable_secondary_address_finder.dart'
+    show CacheableSecondaryAddressFinder;
+import 'src/io/secure_socket_transport.dart' show SecureSocketTransportFactory;
+
+export 'package:at_commons/at_commons.dart' show SecureSocketConfig;
 
 export 'at_lookup.dart';
+export 'src/io/cacheable_secondary_address_finder.dart';
+export 'src/io/secure_socket_transport.dart';
+export 'src/io/secure_socket_util.dart';
 
 /// TLS over TCP — the transport to pass to `AtLookUp.withSecureSocket` unless
 /// you are supplying your own.
@@ -30,6 +35,35 @@ export 'at_lookup.dart';
 /// transport, and a caller has to state it: `secureSocketTransport(
 /// SecureSocketConfig())` says "the TLS defaults", where a constant would let
 /// a site inherit settings its neighbour set deliberately.
-AtLookupTransport secureSocketTransport(
+AtLookupTransportFactories secureSocketTransport(
         SecureSocketConfig secureSocketConfig) =>
-    AtLookupTransport(secureSocketConfig: secureSocketConfig);
+    AtLookupTransportFactories(
+        transportFactory: SecureSocketTransportFactory(
+            secureSocketConfig: secureSocketConfig));
+
+/// The pre-4.0.0 `AtLookupImpl(atSign, rootDomain, rootPort)` constructor.
+///
+/// Supplies the two dependencies 4.0.0 made required — a
+/// [CacheableSecondaryAddressFinder] and a [SecureSocketTransportFactory] — so
+/// that a call which relied on the deleted defaults becomes a one-line change.
+/// New code should use [AtLookUp.withSecureSocket], which names its transport
+/// explicitly and hands back an interface.
+@Deprecated('Use AtLookUp.withSecureSocket. Removed in the next major release.')
+AtLookupImpl atLookupOverSecureSocket(
+  String atSign,
+  String rootDomain,
+  int rootPort, {
+  String? privateKey,
+  String? cramSecret,
+  SecureSocketConfig? secureSocketConfig,
+  Map<String, dynamic>? clientConfig,
+}) =>
+    // ignore: deprecated_member_use_from_same_package
+    AtLookupImpl(atSign, rootDomain, rootPort,
+        privateKey: privateKey,
+        cramSecret: cramSecret,
+        clientConfig: clientConfig,
+        secondaryAddressFinder:
+            CacheableSecondaryAddressFinder(rootDomain, rootPort),
+        transportFactory: SecureSocketTransportFactory(
+            secureSocketConfig: secureSocketConfig ?? SecureSocketConfig()));

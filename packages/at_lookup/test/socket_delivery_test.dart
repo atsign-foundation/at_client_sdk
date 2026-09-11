@@ -9,7 +9,7 @@ import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 
 import 'package:test/test.dart';
 
-import 'fake_at_server_socket.dart';
+import 'fake_at_server_transport.dart';
 
 /// Delivery THROUGH a socket, which nothing in this package covered before.
 ///
@@ -23,19 +23,19 @@ void main() {
     test('a complete response in one packet', () async {
       final rig = FakeAtServerRig();
 
-      await rig.socket.serverSends('data:phone@alice\n@alice@');
+      await rig.transport.serverSends('data:phone@alice\n@alice@');
 
       expect(await rig.listener.read(), 'data:phone@alice');
-      expect(rig.socket.listenCount, 1,
+      expect(rig.transport.listenCount, 1,
           reason: 'the listener must have subscribed exactly once');
     });
 
     test('a response split across packets, as the atServer sends it', () async {
       final rig = FakeAtServerRig();
 
-      await rig.socket.serverSends('data:public:phone@');
-      await rig.socket.serverSends('alice\n@ali');
-      await rig.socket.serverSends('ce@');
+      await rig.transport.serverSends('data:public:phone@');
+      await rig.transport.serverSends('alice\n@ali');
+      await rig.transport.serverSends('ce@');
 
       expect(await rig.listener.read(), 'data:public:phone@alice');
     });
@@ -43,8 +43,8 @@ void main() {
     test('two responses in order on one connection', () async {
       final rig = FakeAtServerRig();
 
-      await rig.socket.serverSends('data:one@alice\n@alice@');
-      await rig.socket.serverSends('data:two@alice\n@alice@');
+      await rig.transport.serverSends('data:one@alice\n@alice@');
+      await rig.transport.serverSends('data:two@alice\n@alice@');
 
       expect(await rig.listener.read(), 'data:one@alice');
       expect(await rig.listener.read(), 'data:two@alice');
@@ -55,8 +55,8 @@ void main() {
 
       await rig.connection.write('from:@alice\n');
 
-      expect(rig.socket.written, ['from:@alice\n']);
-      expect(rig.socket.flushCount, 1,
+      expect(rig.transport.written, ['from:@alice\n']);
+      expect(rig.transport.flushCount, 1,
           reason: 'BaseConnection.write must flush, or bytes can sit in the '
               'buffer while the test waits for a reply that was never sent');
     });
@@ -74,24 +74,24 @@ void main() {
       unawaited(rig.listener
           .read(transientWaitTimeMillis: 5000, maxWaitMilliSeconds: 5000)
           .then((v) => got = v));
-      await rig.socket.settle();
+      await rig.transport.settle();
 
-      rig.socket.subscription!.pause();
-      expect(rig.socket.pauseCount, 1,
+      rig.listener.pauseDelivery();
+      expect(rig.transport.pauseCount, 1,
           reason: 'pausing the subscription must reach the controller');
 
-      await rig.socket.serverSends('data:paused@alice\n@alice@');
+      await rig.transport.serverSends('data:paused@alice\n@alice@');
       await Future.delayed(const Duration(milliseconds: 50));
       expect(got, isNull,
           reason: 'a paused subscription must not deliver, and the read must '
               'still be waiting');
 
-      rig.socket.subscription!.resume();
+      rig.listener.resumeDelivery();
       await Future.delayed(const Duration(milliseconds: 50));
       // Asserted after the wait, not at the call: a controller schedules
       // onResume rather than running it synchronously, so checking it on the
       // next line reads 0 and looks like a broken resume.
-      expect(rig.socket.resumeCount, 1,
+      expect(rig.transport.resumeCount, 1,
           reason: 'resuming must reach the controller');
       expect(got, 'data:paused@alice',
           reason: 'resuming must deliver the bytes buffered while paused');
@@ -109,17 +109,17 @@ void main() {
       unawaited(rig.listener
           .read(transientWaitTimeMillis: 5000, maxWaitMilliSeconds: 5000)
           .then((v) => got = v));
-      await rig.socket.settle();
+      await rig.transport.settle();
 
       expect(rig.listener.isDeliveryPaused, isFalse,
           reason: 'a fresh listener is delivering');
       rig.listener.pauseDelivery();
-      expect(rig.socket.pauseCount, 1,
+      expect(rig.transport.pauseCount, 1,
           reason: 'pauseDelivery must reach the socket, not just set a flag - '
               'if listen() discarded its subscription this is 0');
       expect(rig.listener.isDeliveryPaused, isTrue);
 
-      await rig.socket.serverSends('data:held@alice\n@alice@');
+      await rig.transport.serverSends('data:held@alice\n@alice@');
       await Future.delayed(const Duration(milliseconds: 50));
       expect(got, isNull,
           reason: 'bytes must not be delivered while the listener has paused '
@@ -155,7 +155,7 @@ void main() {
       rig.listener.resumeDelivery();
 
       expect(rig.listener.isDeliveryPaused, isFalse);
-      await rig.socket.serverSends('data:fine@alice\n@alice@');
+      await rig.transport.serverSends('data:fine@alice\n@alice@');
       expect(
           await rig.listener
               .read(maxWaitMilliSeconds: 500, transientWaitTimeMillis: 500),
@@ -166,7 +166,7 @@ void main() {
     test('pausing before listen() is a no-op, not a crash', () async {
       // The muxable wires pause/resume to a stream controller, and a listener
       // can be handed one before its socket exists. Null-safe by design.
-      final socket = FakeAtServerSocket();
+      final socket = FakeAtServerTransport();
       final connection = OutboundConnectionImpl(socket);
       final listener = OutboundMessageListener(connection);
 
@@ -187,10 +187,10 @@ void main() {
     test('comes back, and leaves the connection alive', () async {
       final rig = FakeAtServerRig();
 
-      await rig.socket.serverSends('@alice@\n@alice@');
+      await rig.transport.serverSends('@alice@\n@alice@');
       await Future.delayed(const Duration(milliseconds: 20));
 
-      expect(rig.socket.destroyed, isFalse,
+      expect(rig.transport.destroyed, isFalse,
           reason: 'a colonless response must not destroy the connection - a '
               'RangeError raised in the data handler surfaces as a socket '
               'error and closes it');
@@ -215,11 +215,11 @@ void main() {
       final seen = <String>[];
       rig.listener.onNotification = seen.add;
 
-      await rig.socket.serverSends('notification: {"id":"abc"}\n');
+      await rig.transport.serverSends('notification: {"id":"abc"}\n');
       expect(seen, ['notification: {"id":"abc"}']);
 
       // and the verb channel is undisturbed by it
-      await rig.socket.serverSends('data:phone@alice\n@alice@');
+      await rig.transport.serverSends('data:phone@alice\n@alice@');
       expect(
           await rig.listener
               .read(maxWaitMilliSeconds: 500, transientWaitTimeMillis: 500),
@@ -233,7 +233,7 @@ void main() {
       final seen = <String>[];
       rig.listener.onNotification = seen.add;
 
-      await rig.socket
+      await rig.transport
           .serverSends('data:the_key_is\n@bob:phone@alice\n@alice@');
 
       // Asserted before the read, so a listener that routes this away fails
@@ -256,7 +256,7 @@ void main() {
       final seen = <String>[];
       rig.listener.onNotification = seen.add;
 
-      await rig.socket
+      await rig.transport
           .serverSends('notification: {"id":"a"}\nnotification: {"id":"b"}\n');
 
       expect(seen, [
@@ -270,9 +270,9 @@ void main() {
       final seen = <String>[];
       rig.listener.onNotification = seen.add;
 
-      await rig.socket.serverSends('notification: {"id":');
+      await rig.transport.serverSends('notification: {"id":');
       expect(seen, isEmpty, reason: 'incomplete - no newline yet');
-      await rig.socket.serverSends('"split"}\n');
+      await rig.transport.serverSends('"split"}\n');
 
       expect(seen, ['notification: {"id":"split"}']);
     });
@@ -285,8 +285,8 @@ void main() {
       // _isValidResponse. This is why Monitor was given a listener of its own.
       final rig = FakeAtServerRig();
 
-      await rig.socket.serverSends('notification: {"id":"abc"}\n');
-      await rig.socket.serverSends('data:after@alice\n@alice@');
+      await rig.transport.serverSends('notification: {"id":"abc"}\n');
+      await rig.transport.serverSends('data:after@alice\n@alice@');
 
       expect(
           () => rig.listener
@@ -304,10 +304,10 @@ void main() {
         () async {
       final rig = FakeAtServerRig();
 
-      await rig.socket.serverCloses();
+      await rig.transport.serverCloses();
       await Future.delayed(const Duration(milliseconds: 20));
 
-      expect(rig.socket.destroyed, isTrue);
+      expect(rig.transport.destroyed, isTrue);
       expect(rig.connection.getMetaData()!.isClosed, isTrue);
     });
 
@@ -315,10 +315,10 @@ void main() {
         () async {
       final rig = FakeAtServerRig();
 
-      await rig.socket.serverErrors(const SocketException('reset by peer'));
+      await rig.transport.serverErrors(const SocketException('reset by peer'));
       await Future.delayed(const Duration(milliseconds: 20));
 
-      expect(rig.socket.destroyed, isTrue);
+      expect(rig.transport.destroyed, isTrue);
       expect(rig.connection.getMetaData()!.isClosed, isTrue);
     });
   });
@@ -344,7 +344,7 @@ void main() {
           thrown = e;
         },
       );
-      await rig.socket.settle();
+      await rig.transport.settle();
 
       await killIt();
       await done;
@@ -377,7 +377,8 @@ void main() {
     test('a far end that hangs up fails the pending read at once', () async {
       final rig = FakeAtServerRig();
 
-      final waited = await millisUntilReadFails(rig, rig.socket.serverCloses);
+      final waited =
+          await millisUntilReadFails(rig, rig.transport.serverCloses);
 
       expect(waited, lessThan(1000),
           reason: 'onDone already closes the connection; the read waiting on '
@@ -387,8 +388,8 @@ void main() {
     test('a far end that faults fails the pending read at once', () async {
       final rig = FakeAtServerRig();
 
-      final waited = await millisUntilReadFails(
-          rig, () => rig.socket.serverErrors(const SocketException('reset')));
+      final waited = await millisUntilReadFails(rig,
+          () => rig.transport.serverErrors(const SocketException('reset')));
 
       expect(waited, lessThan(1000),
           reason: 'onError already closes the connection; the read waiting on '
@@ -399,7 +400,7 @@ void main() {
         () async {
       final rig = FakeAtServerRig();
 
-      await rig.socket.serverSends('data:phone@alice\n@alice@');
+      await rig.transport.serverSends('data:phone@alice\n@alice@');
       await rig.connection.close();
 
       expect(await rig.listener.read(transientWaitTimeMillis: 3000),
