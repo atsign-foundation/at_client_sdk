@@ -2,14 +2,24 @@
 
 ## 1.1.5-rc1
 
-- **BREAKING:** `ApkamActivationDialog` takes a required `atKeysIo`, the
-  destination for the keys its enrollment mints. The enrolled app holds the
+- `AuthService.authenticate` writes `backupKeys` from the keys the session's
+  own source holds, rather than from the response's own — which is what its
+  dartdoc said it would do once at_auth handed a source across. It also
+  *awaits* those writes, which it did not.
+- fix: the test that claimed authentication saves keys to the keychain passed
+  no `backupKeys` at all and asserted on a mock `read` stubbed to answer
+  whatever happened, so it was green with the backup path deleted. It asks
+  for the backup and asserts what the keychain double was handed.
+- `ApkamActivationDialog` takes an optional `atKeysIo`, the destination for
+  the keys its enrollment mints, defaulting to the platform keychain as
+  `AuthService.onboard` already does. The enrolled app holds the
   only copy, and the approval completes the keyset with the atSign's
-  encryption private key and self-encryption key, so where it lands is the
-  app's choice rather than this widget's: pass `KeychainAtKeysIo()` for the
-  platform keychain, or a `FileAtKeysIo` or secure-element store. The dialog
-  puts it on the request as a session, which is what makes at_auth write the
-  completed keyset there and answer with a session of its own.
+  encryption private key and self-encryption key, so an app that wants them
+  elsewhere names a `FileAtKeysIo` or a secure-element store. The dialog puts
+  the destination on the request as a session, which is what makes at_auth
+  write the completed keyset there and answer with a session of its own —
+  before this, the completed keys lived only in memory on the response, and
+  the keychain held the pre-approval set that nothing reads back.
 - The three examples build their client from that session, like their other
   flows, and the branch that adopted auth's live `AtChops`/`AtLookUp` is
   gone — it was reachable only while an enrollment could hand back keys with

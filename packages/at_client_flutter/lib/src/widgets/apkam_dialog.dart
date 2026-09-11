@@ -28,12 +28,13 @@ class ApkamActivationDialog extends StatefulWidget {
   /// Where this enrollment's keys are persisted, and the source the client
   /// built from the returned session reads them back through.
   ///
-  /// Required, and a [WrittenAtKeysIo] in practice: the enrolled app holds the
-  /// only copy of the keys this activation mints, and the approval completes
-  /// them with the atSign's encryption private key and self-encryption key.
-  /// Supply `KeychainAtKeysIo()` for the platform keychain, or a
-  /// `FileAtKeysIo` / secure-element store where the app keeps its own.
-  final AtKeysIo atKeysIo;
+  /// Defaults to the platform keychain, as [AuthService.onboard] does for an
+  /// onboarding request: an app that does not name a destination still gets
+  /// one, and the keys this activation mints are the only copy in existence —
+  /// the approval completes them with the atSign's encryption private key and
+  /// self-encryption key. Name a `FileAtKeysIo` or a secure-element store to
+  /// keep them elsewhere.
+  final AtKeysIo? atKeysIo;
 
   final ThemeData themeData;
 
@@ -47,7 +48,7 @@ class ApkamActivationDialog extends StatefulWidget {
     required this.appName,
     required this.deviceName,
     required this.namespaces,
-    required this.atKeysIo,
+    this.atKeysIo,
     required this.themeData,
     this.enrollmentService,
   });
@@ -70,7 +71,7 @@ class ApkamActivationDialog extends StatefulWidget {
     required String appName,
     required String deviceName,
     required Map<String, String> namespaces,
-    required AtKeysIo atKeysIo,
+    AtKeysIo? atKeysIo,
   }) async {
     return showDialog<AtEnrollmentResponse>(
       context: context,
@@ -98,7 +99,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   final String appName;
   final String deviceName;
   final Map<String, String> namespaces;
-  final AtKeysIo atKeysIo;
+  final AtKeysIo? atKeysIo;
 
   _ApkamActivationDialogState(
     this.atSign,
@@ -126,7 +127,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       session: AtAuthSession(
         atSign: atSign,
         rootDomain: rootDomain,
-        atKeysIo: atKeysIo,
+        atKeysIo: atKeysIo ?? KeychainAtKeysIo(),
       ),
       deviceName: deviceName,
       appName: appName,

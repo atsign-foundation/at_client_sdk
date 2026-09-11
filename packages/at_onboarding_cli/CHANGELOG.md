@@ -1,5 +1,11 @@
 ## 1.17.0-rc1
 
+- refactor: `authenticate` takes the enrollment it authenticated as, and the
+  keys it persists to the local secondary, from the session at_auth hands
+  back rather than from the response's own key fields. The source on that
+  session is the one this service passed in, so it is the same key set — and
+  honouring the hand-off means a caller can supply a source this service
+  never has to open itself.
 - refactor: both flows build their client from the keyfile. `enroll` writes
   the keyfile for its new enrollment first and hands that source over;
   `authenticate` hands over the source at_auth just read. Neither sets

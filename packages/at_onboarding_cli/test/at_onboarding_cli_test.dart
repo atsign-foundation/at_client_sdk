@@ -94,14 +94,21 @@ void main() {
       when(() => mockAtAuth.authenticate(any()))
           .thenAnswer((_) => Future.value(AtAuthResponse(atSign)
             ..isSuccessful = true
-            ..atAuthKeys = (AtKeys()
-              ..apkamPublicKey = AtBytes.fromString('dumm')
-              ..apkamPrivateKey = AtBytes.fromString('dumm')
-              ..defaultSelfEncryptionKey = AtBytes.fromString('dumm')
-              ..defaultEncryptionPrivateKey = AtBytes.fromString('dumm')
-              ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
-              ..apkamSymmetricKey = AtBytes.fromString('dumm')
-              ..enrollmentId = 'dummy_enroll_id')));
+            ..session = AtAuthSession(
+              atSign: atSign,
+              rootDomain: AtRootDomain.atsignDomain,
+              enrollmentId: 'dummy_enroll_id',
+              atKeysIo: InMemoryAtKeysIo.holding(
+                  atSign,
+                  AtKeys()
+                    ..apkamPublicKey = AtBytes.fromString('dumm')
+                    ..apkamPrivateKey = AtBytes.fromString('dumm')
+                    ..defaultSelfEncryptionKey = AtBytes.fromString('dumm')
+                    ..defaultEncryptionPrivateKey = AtBytes.fromString('dumm')
+                    ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
+                    ..apkamSymmetricKey = AtBytes.fromString('dumm')
+                    ..enrollmentId = 'dummy_enroll_id'),
+            )));
       var authResult = await onboardingService.authenticate();
       expect(authResult, true);
     });
@@ -124,14 +131,21 @@ void main() {
       when(() => mockAtAuth.authenticate(any()))
           .thenAnswer((_) => Future.value(AtAuthResponse(atSign)
             ..isSuccessful = true
-            ..atAuthKeys = (AtKeys()
-              ..apkamPublicKey = AtBytes.fromString('dumm')
-              ..apkamPrivateKey = AtBytes.fromString('dumm')
-              ..defaultSelfEncryptionKey = AtBytes.fromString('dumm')
-              ..defaultEncryptionPrivateKey = AtBytes.fromString('dumm')
-              ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
-              ..apkamSymmetricKey = AtBytes.fromString('dumm')
-              ..enrollmentId = 'source-handoff-enroll-id')));
+            ..session = AtAuthSession(
+              atSign: atSign,
+              rootDomain: AtRootDomain.atsignDomain,
+              enrollmentId: 'source-handoff-enroll-id',
+              atKeysIo: InMemoryAtKeysIo.holding(
+                  atSign,
+                  AtKeys()
+                    ..apkamPublicKey = AtBytes.fromString('dumm')
+                    ..apkamPrivateKey = AtBytes.fromString('dumm')
+                    ..defaultSelfEncryptionKey = AtBytes.fromString('dumm')
+                    ..defaultEncryptionPrivateKey = AtBytes.fromString('dumm')
+                    ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
+                    ..apkamSymmetricKey = AtBytes.fromString('dumm')
+                    ..enrollmentId = 'source-handoff-enroll-id'),
+            )));
 
       await onboardingService.authenticate();
 

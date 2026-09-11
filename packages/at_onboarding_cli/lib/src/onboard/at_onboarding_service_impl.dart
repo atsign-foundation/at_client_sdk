@@ -682,8 +682,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     logger.finer('Auth response: $atAuthResponse');
     if (atAuthResponse.isSuccessful &&
         atOnboardingPreference.atKeysFilePath != null) {
-      final authenticatedAs =
-          atAuthResponse.atAuthKeys!.enrollmentToAuthenticateAs();
+      // The session reports the enrollment the keyfile authenticated as,
+      // which is the keys' own answer rather than anything a caller asked
+      // for.
+      final authenticatedAs = atAuthResponse.session!.enrollmentId;
       if (enrollmentId != null && enrollmentId != authenticatedAs) {
         logger.shout('$_atSign was asked to authenticate as enrollment '
             '$enrollmentId, but its keyfile authenticates as '
@@ -692,7 +694,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       logger.finer('Calling persist keys to local secondary');
       await _initAtClient(
           atKeysIo: atKeysIo, enrollmentId: authenticatedAs, atChops: atChops);
-      await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys!);
+      // Through the session's own source rather than re-deriving one: what
+      // authentication handed back is what it authenticated with.
+      await _persistKeysLocalSecondary(
+          await atAuthResponse.session!.atKeysIo.read(_atSign));
     }
 
     return atAuthResponse.isSuccessful;

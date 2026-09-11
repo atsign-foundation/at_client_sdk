@@ -79,7 +79,13 @@ void main() {
     when(() => atAuth.authenticate(any()))
         .thenAnswer((_) async => AtAuthResponse(atSign)
           ..isSuccessful = true
-          ..atAuthKeys = (AtKeys()..enrollmentId = enrollmentId));
+          ..session = AtAuthSession(
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            enrollmentId: enrollmentId,
+            atKeysIo: InMemoryAtKeysIo.holding(
+                atSign, AtKeys()..enrollmentId = enrollmentId),
+          ));
 
     return AtOnboardingServiceImpl(atSign, preference)..atAuth = atAuth;
   }

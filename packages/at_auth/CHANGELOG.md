@@ -1,5 +1,21 @@
 ## 4.0.0-rc2
 
+- feat: `InMemoryAtKeysIo.holding(atSign, keys)` — an in-memory store already
+  holding a key set, for a caller that has keys in hand and needs a *source*
+  to authenticate from. at_auth wraps a fixed key set this way internally, so
+  this is the same object the authentication would have built.
+- `AuthResponse.enrollmentId` answers from `session` where there is one, and
+  from the deprecated keys otherwise. Same signature, and it now works for a
+  request that supplied only an `AtKeysIo` — previously it read the keys
+  alone, so a keyfile-sourced authentication reported no enrollment at all.
+- refactor: every caller of `AtAuthRequest.atAuthKeys` and of
+  `AuthResponse.atAuthKeys`/`.atLookUp`/`.atChops` in this repository reads
+  the session instead — `session.atKeysIo` for the keys, `enrollmentId` for
+  the enrollment. **The fields themselves stay**, deprecated as before: an
+  application reaches them through at_client_flutter's `AuthService`, and
+  those packages do not break. Measured, not assumed: at_client_flutter
+  1.1.4's published example app compiles against this tree with zero errors
+  and seven deprecation infos.
 - **BREAKING:** `AtKeys.toAtChops` and `.toAtChopsForEnrollment` are no
   longer public. Nothing outside at_auth called either, and the assembly they
   wrap was already library-private, so they became private too and

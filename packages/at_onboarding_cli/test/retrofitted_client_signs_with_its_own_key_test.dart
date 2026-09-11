@@ -131,12 +131,18 @@ void main() {
     when(() => atAuth.authenticate(any()))
         .thenAnswer((_) async => AtAuthResponse(atSign)
           ..isSuccessful = true
-          // NOTE: at_auth reports the FLAT id here in the field; the rig names
+          // NOTE: at_auth reports the FLAT id on the session; the rig names
           // the retrofitted id because that is the client-cache key, which is
           // what lets it reach the post-retrofit state without an atServer.
           // `_initAtClient` sees only the client and the caller's chops either
-          // way.
-          ..atAuthKeys = (AtKeys()..enrollmentId = retrofittedId));
+          // way. The session's source is the keyfile on disk, which is what
+          // the service reads the keys back through.
+          ..session = AtAuthSession(
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            enrollmentId: retrofittedId,
+            atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
+          ));
 
     return AtOnboardingServiceImpl(
         atSign,

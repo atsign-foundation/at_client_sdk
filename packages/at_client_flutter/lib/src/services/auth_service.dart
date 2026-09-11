@@ -72,13 +72,10 @@ class AuthService {
   /// to carry `atKeysIo` or `atAuthKeys` of its own, since a keychain default
   /// could read another atSign's keys.
   ///
-  /// ⚠️ [backupKeys] is written from the response's own keys rather than from
-  /// its `session`, because at_auth populates a session only for a request
-  /// that supplied an `atKeysIo` — so for a caller that passed `atAuthKeys`
-  /// instead this would back nothing up. That is a gap in at_auth rather than
-  /// a limit on the caller: it wraps a fixed key set in an `InMemoryAtKeysIo`
-  /// internally already, and could hand that back as the session. When it
-  /// does, this reads `session.atKeysIo` and the annotation is satisfied.
+  /// [backupKeys] is written from the keys the session's own source holds, so
+  /// a backup is a copy of what was authenticated with. A request that handed
+  /// over a fixed key set instead carries no session, and its backup comes
+  /// from the response's own keys as it always did.
   Future<AtAuthResponse> authenticate(
     AtAuthRequest atAuthRequest, {
     List<WrittenAtKeysIo>? backupKeys,
@@ -94,13 +91,16 @@ class AuthService {
         );
       }
       atAuthResponse = await _atAuth.authenticate(atAuthRequest);
-      // ignore: deprecated_member_use
-      final authenticatedKeys = atAuthResponse.atAuthKeys;
+      final session = atAuthResponse.session;
+      final authenticatedKeys = session != null
+          ? await session.atKeysIo.read(atAuthRequest.atSign)
+          // ignore: deprecated_member_use
+          : atAuthResponse.atAuthKeys;
       if (backupKeys != null &&
           authenticatedKeys != null &&
           atAuthResponse.isSuccessful) {
-        for (var atKeysIo in backupKeys) {
-          atKeysIo.write(atAuthRequest.atSign, authenticatedKeys);
+        for (final backup in backupKeys) {
+          await backup.write(atAuthRequest.atSign, authenticatedKeys);
         }
       }
     } catch (e) {

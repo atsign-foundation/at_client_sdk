@@ -59,7 +59,10 @@ void main() {
                   result = await showDialog<AtAuthResponse>(
                     context: context,
                     builder: (context) => PkamDialog(
-                      request: AtAuthRequest('@alice', atAuthKeys: AtKeys()),
+                      request: AtAuthRequest(
+                        '@alice',
+                        atKeysIo: InMemoryAtKeysIo.holding('@alice', AtKeys()),
+                      ),
                       authService: mockAuthService,
                     ),
                   );

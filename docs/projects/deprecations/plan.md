@@ -316,13 +316,13 @@ the pass before this one. Step 6's at_onboarding_cli half is done and its four
 packs are green, and step 7's three at_client_flutter readings are resolved.
 [Step 8](#step-8-removal--at_auth-now-the-others-at-their-majors) is under
 way: gkc ruled that at_auth's surface is cleaned in this rc, and its families
-E, H, A and G are removed, and B, C and D are blocked on a decision.
+E, H, A and G are removed; B's callers have moved with its surface held; C
+and D are open on one design question.
 
-**What is owed, in order.** Step 8's B, C and D as one change — *an
-authentication and an enrollment always carry a session* — which is **blocked**
-until gkc rules on where an enrolled app's keys land, and which runs all four
-live packs before it commits; then the remaining test-tree work in steps 6 and
-7; then `LocalSecondary`'s `AtChops` tier. Two of those wait on gkc rather
+**What is owed, in order.** Step 8's C and D — the *enrollment* request and
+response — which carry an open design question stated at that step; then the
+remaining test-tree work in steps 6 and 7; then `LocalSecondary`'s `AtChops`
+tier. Two of those wait on gkc rather
 than on code, and both are stated where they arise: whether F's seven flat
 fields keep an annotation no caller can act on (step 8), and where an enrolled
 app's keys should land if `apkam_dialog.dart` supplies a session (step 7).
@@ -964,8 +964,8 @@ declaration and the analyzer enumerates them.
 | G | `AtKeys.toAtChops`, `.toAtChopsForEnrollment` | 0 | ✅ removed from the public API, by becoming library-private |
 | H | `KeyIOMixin` and its four serialization helpers | 0 | remove |
 | A | `AtAuth.atChops` and `approve`'s `approverChops` | 7 | ✅ removed |
-| B | `AtAuthRequest.atAuthKeys` + `AuthResponse.atAuthKeys` | 35 | blocked — see below |
-| B | `AuthResponse.atLookUp`, `AuthResponse.atChops` | 10 | ″, and every use is in an example app |
+| B | `AtAuthRequest.atAuthKeys` + `AuthResponse.atAuthKeys` | 35 | ⛔ **kept** — callers moved, surface held |
+| B | `AuthResponse.atLookUp`, `AuthResponse.atChops` | 10 | ″ |
 | C | `AtEnrollmentRequest.atSign` | 24 | ″ |
 | C | `AtEnrollmentRequest`'s `rootDomain`, `apkamPublicKey`, `encryptedAPKAMSymmetricKey` | 1 | free once C's `atSign` moves |
 | D | `AtEnrollmentResponse.atAuthKeys` | 55 | blocked — see below |
@@ -992,15 +992,103 @@ here at all: `example/` imports three packages its own pubspec never declares
 and `apkam_example.dart` has omitted a required `signingAlgo` since
 `4.0.0-rc1`, both predating this pass.
 
-⛔ **B, C and D are blocked, and on the decision this plan already carries for
-gkc.** `AuthResponse.atLookUp` and `.atChops` have no user anywhere except the
-three example apps, where they sit in a branch whose own comment says what it
-is: *"Transitional fallback for flows that hand back only atAuthKeys with no
-AtKeysIo source (e.g. APKAM enrollment)"*. That is the same question as *where
-an enrolled app's keys land if `apkam_dialog.dart` supplies a session* — and
-until it is answered, an enrollment cannot always carry a session, which is the
-whole thesis of this group. `todos` is a canonical example this repo tells
-authors to copy, so it has to show the right thing rather than compile.
+⛔ **THE RULE THIS STEP MISSED, and gkc had to state twice.** A package an
+application depends on directly **does not break** — at_client_flutter,
+at_onboarding_cli, at_cli_commons and at_client — because *"our ideal
+objective is that most applications will be able to migrate to PQ without
+needing to modify any line of code"* (gkc, 2026-09-11, on the two-rollout
+sequence `pqReady` then `pqActive`). at_auth is the exception only in that
+almost nothing uses it directly; the moment one of its members is reachable
+through at_client_flutter's own API, removing it breaks an app just the same.
+
+⛔ **And the baseline for "does this break" is the PUBLISHED version on
+pub.dev, not this branch's starting commit** (gkc, 2026-09-11). This step
+audited against `957010e9f` and found almost nothing, because the branch point
+already carried a year of unreleased change. Published is what an application
+compiles against: at_client_flutter **1.1.4** (on at_auth `^3.2.0`),
+at_onboarding_cli **1.16.0**, at_cli_commons **3.1.1**, at_client **3.14.0**.
+Everything in tree is an rc ahead of those.
+
+**The instrument, which beats reading diffs.** A published package ships its
+own example apps, and those are application code written against the published
+API. Extract the archive, point one at the in-tree packages with absolute
+`dependency_overrides`, and analyse it:
+
+```bash
+curl -s https://pub.dev/api/packages/at_client_flutter \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['latest']['version'])"
+curl -sL https://pub.dev/api/archives/at_client_flutter-1.1.4.tar.gz | tar xz -C <scratch>
+# replace the example's own dependency_overrides with absolute paths into the
+# repo, add at_client_flutter itself, then:
+flutter pub get && flutter analyze --no-fatal-infos
+```
+
+⚠️ **Do not hand-roll a regex API differ instead.** One was tried here and
+reported 65 "removed members" for at_onboarding_cli, nearly all of them local
+variables and cascade assignments sitting at two-space indent inside method
+bodies (`rethrow`, `while`, `commitLogPath`). Compiling real application code
+is both sounder and less work.
+
+**B's callers moved and B's surface stayed, 2026-09-11 — the second ruling.** It was blocked on
+where an enrolled app's keys land, because `AuthResponse.atLookUp` and
+`.atChops` had no user anywhere except three example apps, in a branch whose
+own comment said what it was: *"Transitional fallback for flows that hand back
+only atAuthKeys with no AtKeysIo source (e.g. APKAM enrollment)"*.
+
+⛔ **gkc ruled on 2026-09-11: the caller supplies the key destination, and it
+is required.** `ApkamActivationDialog` takes an `AtKeysIo` and puts it on the
+request as a session, so at_auth's handshake writes the completed keyset there
+— the keys plus the encryption private key and self-encryption key the
+approval releases — and hands a session back. Before that the completed keys
+lived only in memory on the response, while the keychain held the
+*pre-approval* set that nothing ever reads back: `EnrollmentData`'s only reader
+is `validateEnrollment`, a presence-and-expiry check.
+
+The removal was built, gated and run past all four live packs — and then held,
+because it breaks an application. `AtAuthRequest.atAuthKeys` and
+`AuthResponse.atAuthKeys`/`.atLookUp`/`.atChops` **stay**, deprecated exactly
+as they were; `atKeysIo` stays optional with its runtime refusal. What the
+work kept is everything non-breaking:
+
+- **every caller in this repository reads the session** — `session.atKeysIo`
+  for the keys, `enrollmentId` for the enrollment — which is what a
+  deprecation pass is for, and leaves the fields exercised by nothing but an
+  external app;
+- **`InMemoryAtKeysIo.holding(atSign, keys)`**, for a caller that has keys and
+  needs a source. at_auth wraps a fixed key set this way internally, so it is
+  the same object the authentication would have built;
+- **`AuthResponse.enrollmentId` answers from the session as well as the keys**
+  — same signature, and it now works for a keyfile-sourced authentication,
+  which previously reported no enrollment at all because it read the keys
+  alone. ⚠️ That getter is **derived from a deprecated field and is not itself
+  deprecated**, so a later removal of the field leaves it live and broken
+  unless it is re-pointed first — the shape the rules call *deleting the mover
+  leaves Y live but unexercised*.
+
+⚠️ **What the removal measured before it was held**, so a later pass need not
+re-derive it: 35 uses of `atAuthKeys` across at_auth, at_onboarding_cli's lib,
+at_client_flutter and three packs, plus 10 of `.atLookUp`/`.atChops` confined
+to example apps; all four live packs green on the removed shape (functional
+200, e2e 73, onboarding-CLI 21, proxy 4).
+
+Two things found while moving the callers, neither of them family B:
+
+- **at_client_flutter's `AuthService.authenticate` never awaited its backup
+  writes**, and the test that claimed authentication saves keys to the
+  keychain passed **no `backupKeys` at all** and asserted on a mock `read`
+  stubbed to answer the same keys whatever happened — green with the backup
+  path deleted. It asks for the backup and asserts what the double was handed;
+  emptying the loop reddens it.
+- **`at_chat_flutter/example` cannot be analysed by anything.** It pins
+  `at_auth: ^3.0.0` against a tree on `4.0.0-rc2`, so `flutter pub get` fails
+  version solving — since at_auth 4, long before this pass. It held two of the
+  removed reads; they are moved onto the session, and that edit is **unverified
+  by any analyzer**, which is stated in the commit. The pin is a separate
+  question: whether at_chat_flutter supports at_auth 4 at all.
+
+⚠️ **A scripted edit on a CRLF file rewrites every line.** That example is
+CRLF; read and written in text mode the diff became all 165 lines. Read and
+write such a file in binary, and assert the line count has not moved.
 
 ⛔ **G is not blocked, and the caveat below saying it waits is wrong.** It reads
 as though removing the two builders forces a decision about what
@@ -1016,10 +1104,10 @@ null algorithm and calls the same builder, so every assertion survives.
 
 **Order, by risk.** E and H first: no consumer anywhere outside at_auth, so
 the only open question is at_auth's own use of them, which deletion answers.
-Then A and G, both done — what each cost is below. **B, C and D are one
-change rather than three — *an authentication and an enrollment always carry a
-session* — and they are blocked**, on the decision recorded above. F last, and
-as a ruling rather than a refactor.
+Then A and G, both removed, and B, whose callers moved while its surface
+stayed — what each cost is below. **C and D are one change rather than two**,
+and they turn on a question this step now states. F last, and as a ruling
+rather than a refactor.
 
 **What A cost, and the correction to the sentence that scoped it.** This step
 said A's seven uses were *"all functional-pack fixtures reading
