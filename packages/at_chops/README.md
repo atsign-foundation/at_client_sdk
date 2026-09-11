@@ -4,7 +4,7 @@ data signing, key agreement, and hashing that can be leveraged by client applica
 ## Features
 
 - Asymmetric encryption/decryption using RSA-2048 and RSA-4096
-- Symmetric encryption/decryption using AES-128, AES-192, and AES-256 (CTR and GCM modes)
+- Symmetric encryption/decryption using AES-128, AES-192, and AES-256 (CTR and GCM modes) — pure-Dart and OpenSSL FFI backends
 - Digest signing and verification for PKAM authentication (RSA, ECC secp256r1, Ed25519)
 - Data signing and verification for public data in the Atsign Protocol
 - Post-quantum digital signatures: ML-DSA-65 (FIPS 204) — pure-Dart and OpenSSL FFI backends
@@ -227,6 +227,10 @@ ML-DSA-65, ML-KEM-768, and X25519 each have an OpenSSL FFI backend (`MlDsa65FfiA
 X-Wing (`XWingFfiAlgo`) composes the FFI backends for maximum performance when `libcrypto` is available.
 
 AES-256-GCM also has an OpenSSL FFI backend (`AesGcm256FfiAlgo`) alongside its pure-Dart counterpart (`AesGcm256EncryptionAlgo`); the two are fully interoperable. `AtPqc.aesGcm256(key)` auto-selects FFI or pure-Dart when AAD is not needed. If you need AAD (e.g. for PQ-HPKE), construct `AesGcm256FfiAlgo.fromLib(lib, key)` or `AesGcm256EncryptionAlgo(key)` directly — both expose `encrypt`/`decrypt` with `{List<int> aad}`.
+
+AES-CTR has an OpenSSL FFI backend (`AesCtrFfiAlgo`) alongside its pure-Dart counterpart (`AESEncryptionAlgo`). Both PKCS7-pad before encrypting, so their output is byte-identical at all three key lengths and either can read the other's records. `AtPqc.aesCtr(key)` auto-selects between them; pass an IV of exactly 16 bytes, which is the only length on which the two agree — the pure-Dart path also accepts a missing or shorter IV, and the FFI path rejects both.
+
+For a byte stream whose chunk boundaries the caller does not control, `AtPqc.aesCtrStreamCipher(key, iv)` returns an `AesCtrFfiCipher` holding one OpenSSL cipher context across many `update()` calls, or `null` where libcrypto is unavailable. It is raw CTR — no padding, so it is *not* wire-compatible with `AtPqc.aesCtr` — and the caller owns the context and must `dispose()` it. CTR is unauthenticated in both shapes; add a MAC, or use GCM, where integrity matters.
 
 FFI backends are exported from `package:at_chops/at_chops_ffi.dart`, not the
 main `at_chops.dart` barrel, so pure-Dart-only consumers aren't forced to

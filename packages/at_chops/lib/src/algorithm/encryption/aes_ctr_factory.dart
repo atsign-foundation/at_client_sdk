@@ -13,6 +13,12 @@ class AesCtrFactory {
   /// The `aesKey` must have a length of 16, 24, or 32 bytes to correspond to AES-128, AES-192,
   /// or AES-256 respectively. A `MacAlgorithm.empty` is used for each variant.
   ///
+  /// The counter width differs per backend: the VM and FFI paths increment the
+  /// full 128-bit counter block, carrying into the IV's high half when the low
+  /// 64 bits overflow; the browser (WebCrypto) path counts only the low 64
+  /// bits (`counterBits`, better_cryptography's browser default), wrapping
+  /// within the low half instead. The backends agree until the carry.
+  ///
   /// Throws an [AtEncryptionException] if the provided key length is invalid.
   ///
   /// Example usage:
