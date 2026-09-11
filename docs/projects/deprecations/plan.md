@@ -420,15 +420,17 @@ deprecated declaration raises nothing, the same way `KeyIOMixin`'s 13
 annotating rather than fixing, so a step that reports a drop has to say which
 kind it was.
 
-**What remains of this step** is at_auth's own uses moving onto those
-getters: 56 in `lib` — `at_keys.dart` 19 (13 of them inside the two
-now-deprecated `toAtChops` methods, so they leave with those in the major),
-`at_authenticator.dart` 10, `at_auth_impl.dart` 9,
-`enrollment_handshake.dart` 9, `apkam_possession_proof.dart` 6,
-`file_io.dart` 3, `at_auth.dart` 2, `enrollment_approver.dart` 2,
-`at_enrollment.dart` 1, `at_enrollment_impl.dart` 1 — and 85 in `test`. Then
-`AtAuthResponse.atChops` and `AtAuth.atChops` go `@Deprecated` beside
-`atAuthKeys`, which is where a consumer should have been reading all along.
+**What remains of this step** is 36 uses in `lib` and 81 in `test`, from 56
+and 92. The PKAM signing path and the possession proof moved (above), and the
+12 inside the two private `AtChops` assemblers are now ignored with their
+reason rather than counted: their only caller is the deprecated `toAtChops`,
+so they are the carrier being built and leave with it. What is left is
+`at_auth_impl.dart` 9, `enrollment_handshake.dart` 9, the two injected-signer
+branches in `at_authenticator.dart`, `file_io.dart` 3, `at_auth.dart` 2,
+`enrollment_approver.dart` 2 and one each in `at_enrollment.dart` and
+`at_enrollment_impl.dart`. Then `AtAuthResponse.atChops` and `AtAuth.atChops`
+go `@Deprecated` beside `atAuthKeys`, which is where a consumer should have
+been reading all along.
 
 **The PKAM signing path is done**, and it is the first production caller
 `authenticationKeyPairFor` has. Where the keyfile is the whole answer — the

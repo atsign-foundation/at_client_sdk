@@ -1,5 +1,9 @@
 ## 4.0.0-rc2
 
+- chore: the two private functions that assemble the `AtChops` for
+  `toAtChops` say so, and their deprecated uses are ignored rather than
+  counted. Their only caller is that deprecated method, so they are the
+  carrier being built and leave with it in the major.
 - refactor: the `enroll:update` possession proof is signed by
   `signPkamChallenge` too, which is what its own documentation said it needed:
   the atServer verifies the proof and a PKAM challenge through one verifier,

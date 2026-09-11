@@ -1469,6 +1469,10 @@ int _deepHash(Object? value) {
 ///   - post approval
 /// During approval: the enroll will wait to confirm via PKAM
 /// post approval: we fetch the defaultEncryptionPrivateKey & defaultSelfEncryptionKey
+// NOTE: every deprecated member below is the carrier this function
+// exists to assemble. Its only caller is the deprecated `toAtChops`, so
+// they leave with it rather than being work owed.
+// ignore: deprecated_member_use
 AtChops _createApkamChops(AtKeys atKeys) {
   if (atKeys.apkamPublicKey == null) {
     throw AtKeyNotFoundException(
@@ -1478,6 +1482,7 @@ AtChops _createApkamChops(AtKeys atKeys) {
     throw AtKeyNotFoundException(
         "apkamSymmetricKey not found in AtKeys, unable to make atChops instance");
   }
+  // ignore: deprecated_member_use
   final atEncryptionKeyPair = AtEncryptionKeyPair.create(
     atKeys.defaultEncryptionPublicKey!.toString(),
     atKeys.defaultEncryptionPrivateKey == null
@@ -1485,11 +1490,13 @@ AtChops _createApkamChops(AtKeys atKeys) {
         : atKeys.defaultEncryptionPrivateKey!.toString(),
   );
 
+  // ignore: deprecated_member_use
   final atPkamKeyPair = AtPkamKeyPair.create(
     atKeys.apkamPublicKey!.toString(),
     atKeys.apkamPrivateKey!.toString(),
   );
 
+  // ignore: deprecated_member_use
   final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
     ..apkamSymmetricKey = AESKey(atKeys.apkamSymmetricKey!.toString());
 
@@ -1498,9 +1505,14 @@ AtChops _createApkamChops(AtKeys atKeys) {
         AESKey(atKeys.defaultSelfEncryptionKey!.toString());
   }
 
+  // ignore: deprecated_member_use
   return AtChopsImpl(atChopsKeys);
 }
 
+// NOTE: every deprecated member below is the carrier this function
+// exists to assemble. Its only caller is the deprecated `toAtChops`, so
+// they leave with it rather than being work owed.
+// ignore: deprecated_member_use
 AtChops _createPkamChops(AtKeys atKeys) {
   if (atKeys.defaultEncryptionPrivateKey == null) {
     throw AtPrivateKeyNotFoundException(
@@ -1520,19 +1532,23 @@ AtChops _createPkamChops(AtKeys atKeys) {
     throw AtKeyNotFoundException('PKAM mode requires defaultSelfEncryptionKey');
   }
 
+  // ignore: deprecated_member_use
   final atEncryptionKeyPair = AtEncryptionKeyPair.create(
     atKeys.defaultEncryptionPublicKey!.toString(),
     atKeys.defaultEncryptionPrivateKey!.toString(),
   );
 
+  // ignore: deprecated_member_use
   final atPkamKeyPair = AtPkamKeyPair.create(
     atKeys.apkamPublicKey!.toString(),
     atKeys.apkamPrivateKey!.toString(),
   );
 
+  // ignore: deprecated_member_use
   final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
     ..selfEncryptionKey = AESKey(atKeys.defaultSelfEncryptionKey!.toString());
 
+  // ignore: deprecated_member_use
   return AtChopsImpl(atChopsKeys);
 }
 
