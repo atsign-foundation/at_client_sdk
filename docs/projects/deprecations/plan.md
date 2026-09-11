@@ -420,8 +420,18 @@ deprecated declaration raises nothing, the same way `KeyIOMixin`'s 13
 annotating rather than fixing, so a step that reports a drop has to say which
 kind it was.
 
-**What remains of this step** is 36 uses in `lib` and 81 in `test`, from 56
-and 92. The PKAM signing path and the possession proof moved (above), and the
+**What remains of this step** is 34 uses in `lib` and 84 in `test`, from 56
+and 92. The enrolment handshake now installs an authenticator and falls back
+to at_lookup's ladder only for a lookup that cannot take one; it used to set
+both, and the lookup prefers the authenticator, so the ladder fields were
+written and never read.
+
+⚠️ **That wiring was covered by nothing**, and the check that found it is
+worth repeating elsewhere: removing the authenticator outright left every
+handshake test green, because the lookup is mocked past the point where it
+would be used. A test asserting which wiring is installed catches it now. Any
+other place this plan moves an authentication seam deserves the same mutation
+before it is believed. The PKAM signing path and the possession proof moved (above), and the
 12 inside the two private `AtChops` assemblers are now ignored with their
 reason rather than counted: their only caller is the deprecated `toAtChops`,
 so they are the carrier being built and leave with it. What is left is

@@ -81,19 +81,13 @@ class EnrollmentHandshake {
     AtChops atChops = handshakeKeys.apkamSymmetricKey != null
         ? handshakeKeys.toAtChops()
         : _apkamChopsAwaitingSymmetricKey(handshakeKeys);
-    atLookup.atChops = atChops;
 
-    // And the algorithm, or PKAM signs this enrollment's challenge with
-    // at_lookup's default — rsa2048 — whatever the keypair actually is. That
-    // fails inside at_chops on a key length, naming neither the enrollment nor
-    // the mismatch.
-    if (handshakeAlgorithm != null) {
-      atLookup.signingAlgoType = handshakeAlgorithm;
-    }
-    // The chops is injected rather than resolved: this enrollment's keys are
+    // The signer is injected rather than resolved: this enrollment's keys are
     // deliberately not a complete keyfile yet - the symmetric key is the thing
     // the handshake is here to fetch - so asking the keystore to build a
-    // signer would demand material that has not arrived.
+    // signer would demand material that has not arrived. The same instance is
+    // handed over here and mutated below when the symmetric key lands, so
+    // whichever path authenticates sees it.
     if (atLookup is AtLookupMuxable) {
       final memory = InMemoryAtKeysIo();
       await memory.write(
@@ -104,6 +98,20 @@ class EnrollmentHandshake {
         enrollmentId: enrollmentResponse.enrollmentId,
         chops: atChops,
       );
+    } else {
+      // A caller-supplied lookup from before the authenticator seam: its
+      // credential ladder is the only way to authenticate it, and both fields
+      // go with that ladder in the at_lookup major. The algorithm has to be
+      // stated or PKAM signs this enrollment's challenge under at_lookup's
+      // default of rsa2048 whatever the keypair actually is, which fails
+      // inside at_chops on a key length and names neither the enrollment nor
+      // the mismatch.
+      // ignore: deprecated_member_use
+      atLookup.atChops = atChops;
+      if (handshakeAlgorithm != null) {
+        // ignore: deprecated_member_use
+        atLookup.signingAlgoType = handshakeAlgorithm;
+      }
     }
 
     await _waitForPkamAuthSuccess(

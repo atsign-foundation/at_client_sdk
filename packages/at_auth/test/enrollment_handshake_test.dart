@@ -203,6 +203,25 @@ void main() {
     });
   });
 
+  group('what the handshake installs on the lookup', () {
+    test('an authenticator, and not the credential ladder', () async {
+      // Which wiring authenticates was covered by nothing: removing the
+      // authenticator outright left every test in this file green, because
+      // the lookup is mocked past the point where it would be used. This
+      // asserts the wiring itself.
+      final (response, lookup, _) = await rig([Poll.approved]);
+
+      await AtEnrollmentImpl().waitForApproval(response, atLookup: lookup);
+
+      // The setter call, not the stored value: a mock does not keep what is
+      // assigned to it.
+      verify(() => lookup.authenticator = any(that: isNotNull)).called(1);
+      verifyNever(() => lookup.atChops = any());
+      verifyNever(() => lookup.signingAlgoType = SigningAlgoType.rsa2048);
+      verifyNever(() => lookup.signingAlgoType = SigningAlgoType.mldsa65);
+    });
+  });
+
   group('the published polling regime', () {
     test('is these numbers', () {
       // Raw literals on purpose. These ARE the published defaults, so a

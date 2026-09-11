@@ -1,5 +1,15 @@
 ## 4.0.0-rc2
 
+- fix: the enrolment handshake installs an authenticator on a muxable lookup
+  and reaches for at_lookup's credential ladder only when it cannot. It used
+  to set both, and `AtLookUp` prefers the authenticator, so the ladder fields
+  were being written and never read. The chops instance is shared with the
+  authenticator, so the symmetric key filled in once it arrives still reaches
+  whichever path authenticates.
+  ⚠️ Which wiring authenticates was covered by nothing: removing the
+  authenticator outright left every handshake test green, because the lookup
+  is mocked past the point where it would be used. There is a test for the
+  wiring itself now.
 - chore: the two private functions that assemble the `AtChops` for
   `toAtChops` say so, and their deprecated uses are ignored rather than
   counted. Their only caller is that deprecated method, so they are the
