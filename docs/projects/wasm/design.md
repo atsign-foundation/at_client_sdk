@@ -86,7 +86,7 @@ covered by [`acceptance.md`](acceptance.md) T3.1 and X1.
 `at_chops.dart` exports only pure-Dart algorithms, including the PQ ones
 (`ml_kem_768_pure_dart.dart`, `ml_dsa_65_pure_dart.dart`, `x_wing_pure_dart.dart`,
 `x25519_pure_dart_algo.dart`). `at_chops_ffi.dart`, documented "not web/wasm
-compatible", re-exports it plus the eight OpenSSL-backed FFI files. **No package's
+compatible", re-exports it plus the ten OpenSSL-backed FFI files. **No package's
 `lib/` imports the FFI barrel** — only at_chops's own tests and examples.
 
 The island is correctly quarantined; it is held by convention, which is what T0
