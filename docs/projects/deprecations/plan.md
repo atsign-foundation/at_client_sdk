@@ -280,10 +280,13 @@ step that touches a lifecycle seam runs all 4 live packs before it commits.
 figure is re-derived, never trusted. Steps 0, 1 and 2 are done; step 3 has its
 accessors, its signing path, its keyfile self-encryption, its lookup wiring,
 its approval key material, its handshake and its `atChops` field deprecated,
-with 14 `lib` uses left in at_auth; step 4 has its key-material half, which is
-what unblocked at_client's test tree. What is owed, in order: the rest of
-at_auth's 14, then the rest of step 4 (`apkam_signing`, `sync_service_impl`, and
-deprecating `AtClient.atChops` itself), then steps 5 to 7. Step 7 is no longer
+with 14 `lib` uses left in at_auth, which is its floor for this pass: every
+one is decided and named in the table under step 3, and all but two are the
+injected-signer machinery that waits for the live packs. Step 4 has its
+key-material half, which is what unblocked at_client's test tree. What is
+owed, in order: the rest of step 4 (`apkam_signing`, `sync_service_impl`, and
+deprecating `AtClient.atChops` itself), then steps 5 to 7, then the live packs
+before the PR. Step 7 is no longer
 blocked by the legacy question, which step 3 answered, but it is blocked on the
 three at_client_flutter readings recorded under it.
 
