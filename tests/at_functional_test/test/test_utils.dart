@@ -1,3 +1,7 @@
+// PqStartupGates is @experimental; this pack's PQ files drive that
+// substrate deliberately.
+// ignore_for_file: experimental_member_use
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -9,6 +13,8 @@ import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
 import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/pq_client_bootstrap.dart'
+    show PqStartupGates;
 import 'package:at_client/src/service/notification_service_impl.dart';
 
 import 'package:at_demo_data/at_demo_data.dart';
@@ -161,9 +167,11 @@ class TestUtils {
       SigningAlgoType? authenticationKeyAlgorithm,
       Set<SigningAlgoType>? dataSigningKeyAlgorithms,
       List<String>? keyEstablishmentAlgorithms,
-      List<String>? sealsToKeyAlgorithms}) {
+      List<String>? sealsToKeyAlgorithms,
+      PqStartupGates? pqStartupGates}) {
     var preference = AtClientPreference(
         posture: posture,
+        pqStartupGates: pqStartupGates,
         authenticationKeyAlgorithm: authenticationKeyAlgorithm,
         dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
         keyEstablishmentAlgorithms: keyEstablishmentAlgorithms,

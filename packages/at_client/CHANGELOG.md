@@ -1,5 +1,12 @@
 ## 3.15.0-rc1
 
+- feat: `AtClientPreference.pqStartupGates` names which post-quantum startup
+  steps a client runs; null keeps today's behaviour and lets the posture
+  decide. The set is read once, by a startup the constructor fires, so a
+  set handed to a running client cannot be applied, and
+  `rolloutDifferencesFrom` reports it as a rollout difference rather than
+  leaving a client describing a configuration it never ran.
+  `PqStartupGates` compares by value.
 - refactor: the legacy shared key is wrapped and unwrapped with the atSign's
   own RSA key taken from the client's key material rather than from its
   `AtChops`, so those three calls no longer need one. Unwrapping asks only for

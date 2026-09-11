@@ -126,6 +126,50 @@ class PqStartupGates {
   /// broadcasts a pull. Off means the key ring is built without the
   /// conveyance-request hook.
   final bool askOnReadMiss;
+
+  /// The gates that are off, in declaration order, or `every step` when none
+  /// are — so a difference between two sets reads as the steps it changes.
+  @override
+  String toString() {
+    final off = [
+      for (final gate in _named.entries)
+        if (!gate.value) gate.key
+    ];
+    return off.isEmpty ? 'every step' : 'every step but ${off.join(', ')}';
+  }
+
+  /// NOTE: by value, because only `const` instances are canonicalized — a
+  /// caller writing `PqStartupGates()` without `const` would otherwise differ
+  /// from the default over a difference that does not exist.
+  @override
+  bool operator ==(Object other) {
+    if (other is! PqStartupGates) return false;
+    final mine = _named.values.toList();
+    final theirs = other._named.values.toList();
+    for (var i = 0; i < mine.length; i++) {
+      if (mine[i] != theirs[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hashAll(_named.values);
+
+  Map<String, bool> get _named => {
+        'hydrateHeldSecrets': hydrateHeldSecrets,
+        'collectConveyedKeys': collectConveyedKeys,
+        'startEnvelopeListener': startEnvelopeListener,
+        'mintInUseSigningKeys': mintInUseSigningKeys,
+        'reconcileKeyPackage': reconcileKeyPackage,
+        'seedNamespaceKeys': seedNamespaceKeys,
+        'requestRootPrivate': requestRootPrivate,
+        'requestMissingPrivates': requestMissingPrivates,
+        'publishRootLink': publishRootLink,
+        'publishChainLink': publishChainLink,
+        'sweepUnanchoredEnrollments': sweepUnanchoredEnrollments,
+        'reconcileEnrollmentSnapshot': reconcileEnrollmentSnapshot,
+        'askOnReadMiss': askOnReadMiss,
+      };
 }
 
 /// One PQ startup per client — the single owner of the nskey key ring,

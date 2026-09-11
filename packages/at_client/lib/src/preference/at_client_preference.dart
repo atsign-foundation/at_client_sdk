@@ -3,6 +3,8 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show pqCryptoProviderIds;
+import 'package:at_client/src/client/pq_client_bootstrap.dart'
+    show PqStartupGates;
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -32,6 +34,16 @@ class AtClientPreference {
   /// must not move names [PqPosture.legacy].
   final PqPosture posture;
 
+  /// Which of the post-quantum startup's steps this client runs, or null to
+  /// let [posture] decide — every step when it configures post-quantum
+  /// providers, none when it does not.
+  ///
+  /// ⚠️ Read once, by a startup the client's constructor fires unawaited, so
+  /// naming a set here is the only way to change it: a set handed to a client
+  /// that is already running cannot be applied, which is why
+  /// [rolloutDifferencesFrom] reports it.
+  final PqStartupGates? pqStartupGates;
+
   /// Which algorithms this client keeps an **active signing key** for — the
   /// keys that sign what its enrollment attests to, which is a different job
   /// from the APKAM authentication key that proves possession on a connection.
@@ -58,6 +70,7 @@ class AtClientPreference {
 
   AtClientPreference(
       {this.posture = PqPosture.legacy,
+      this.pqStartupGates,
       SigningAlgoType? authenticationKeyAlgorithm,
       Set<SigningAlgoType>? dataSigningKeyAlgorithms,
       List<String>? sealsToKeyAlgorithms,
@@ -122,6 +135,7 @@ class AtClientPreference {
         other.posture.configuresPqProviders, posture.configuresPqProviders);
     compare('posture.keyExchangeMode', other.posture.keyExchangeMode.name,
         posture.keyExchangeMode.name);
+    compare('pqStartupGates', other.pqStartupGates, pqStartupGates);
     compare('authenticationKeyAlgorithm', other.authenticationKeyAlgorithm.name,
         authenticationKeyAlgorithm.name);
     compare('disallowLegacyEncryption', other.disallowLegacyEncryption,
