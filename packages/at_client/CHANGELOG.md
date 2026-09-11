@@ -1,5 +1,16 @@
 ## 3.15.0-rc1
 
+- refactor: the legacy encryption paths call their AES and RSA algorithms
+  directly instead of going through `AtChops.encryptString` and
+  `decryptString`. Two helpers beside them carry the base64 and utf8 steps the
+  wrapper did and keep its exception mapping, so a failure inside a cipher
+  still arrives as `AtEncryptionException` or `AtDecryptionException` and a
+  malformed input still surfaces as whatever the conversion throws. The
+  encrypt path's chained diagnostic now names `Intent.shareData` and
+  `ExceptionScenario.encryptionFailed`; the wrapper named the decrypt pair on
+  both sides. `AtEncryptionResult` leaves these paths with them. The three RSA
+  calls that pass no algorithm stay, because they read the client's key pair
+  out of `AtChops`.
 - refactor: the two legacy hashing calls build their algorithm directly
   instead of going through `AtChops.hashWith`, whose class is deprecated. The
   shared-key write hashes with `SHA512HashingAlgo`, and the read maps a

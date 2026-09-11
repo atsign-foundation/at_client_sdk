@@ -287,13 +287,25 @@ which is the reader recomputing what the writer stored, through the switch.
 
 ### Step 2: at_client's engine role (no API change)
 
-The 6 `encryptString` and `decryptString` calls that already pass an
-algorithm become direct calls on the `AESEncryptionAlgo` and
-`RsaEncryptionAlgo` objects they construct, with the `utf8` and `base64` steps
-the wrapper did made explicit; `AtEncryptionResult` goes with them (5 uses).
+**The encryption half is done.** The 6 `encryptString` and `decryptString`
+calls that already passed an algorithm now call the `AESEncryptionAlgo` and
+`RsaEncryptionAlgo` objects they build, through two helpers in
+`crypto/legacy/string_crypto.dart` that carry the `utf8` and `base64` steps
+the wrapper did. The helpers keep the wrapper's exception mapping rather than
+inlining the conversions 6 times: every call site handles
+`AtEncryptionException` or `AtDecryptionException`, and a direct call would
+have thrown the cipher's own type past those handlers and lost the `severe`
+log with it. `AtEncryptionResult` left with them, which is where the 5 cleared
+warnings came from — the calls themselves named no deprecated member, because
+they reach `AtChops` through `AtClient.atChops`, which step 4 deprecates.
+Both legacy files now report zero. at_client's `lib` is 58 to 51.
+
+The suite covers the helpers: returning the decrypted bytes reversed instead
+of utf8-decoding them reddens 15 tests.
+
 The 3 `rsa2048` calls that pass none wait for step 4, since they need the
-encryption key pair. `AtChops.hashWith(…)` becomes
-`AtHashingAlgorithmFactory.withHashingAlgorithm(…)` (2). `RsaSigningAlgo`
+encryption key pair. **What remains of this step is the signing half.**
+`RsaSigningAlgo`
 becomes `RsaSignatureAlgo` in `envelope_signature.dart` (3), which isn't a
 rename: the new class is built by the named constructors `.rsa2048()` and
 `.rsa4096()`, keys move from the constructor to the call, and its
@@ -426,7 +438,7 @@ figure replaces its row here as it lands.
 | ---- | ----------------- | --------------------- | -------------------------------------- |
 | 0    | at_auth           | 0 here, 45 in its consumers | counted in those members         |
 | 1    | at_client         | 2 of 58               | none                                   |
-| 2    | at_client         | ~18 of 58             | ~50, the engine-only fixtures          |
+| 2    | at_client         | 7 of 58 so far; signing half owed | ~50, the engine-only fixtures |
 | 3    | at_auth           | 74, onto its own getters | 92                                  |
 | 4    | at_client         | ~23                   | ~250, every `AtChopsImpl(` built only to hand over |
 | 5    | at_client         | 11 of 15; 4 stay as the bridge | the `enrollmentId` stubs      |
