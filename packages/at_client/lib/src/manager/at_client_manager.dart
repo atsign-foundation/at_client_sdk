@@ -108,7 +108,8 @@ class AtClientManager {
   Future<AtClientManager> setCurrentAtSign(
       String atSign, String? namespace, AtClientPreference preference,
       {AtServiceFactory? serviceFactory,
-      AtChops? atChops,
+      // ignore: deprecated_member_use
+      @Deprecated("use atKeysIo") AtChops? atChops,
       AtKeysIo? atKeysIo,
       AtLookUp? atLookUp,
       String? enrollmentId,
@@ -348,7 +349,8 @@ abstract class AtServiceFactory {
     String? namespace,
     AtClientPreference preference,
     AtClientManager atClientManager, {
-    AtChops? atChops,
+    // ignore: deprecated_member_use
+    @Deprecated("Use atKeysIo") AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
@@ -376,7 +378,8 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     String? namespace,
     AtClientPreference preference,
     AtClientManager atClientManager, {
-    AtChops? atChops,
+    // ignore: deprecated_member_use
+    @Deprecated("Use atKeysIo") AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
