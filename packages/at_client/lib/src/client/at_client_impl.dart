@@ -880,13 +880,7 @@ class AtClientImpl implements AtClient {
     _pqBootstrap = PqClientBootstrap(
       this,
       keysIo: _atKeysIo,
-      // NOTE: a preference that names its own set wins; null falls back to the
-      // axis, so a deployment that builds its own posture with the providers
-      // off gets the same client it did before this could be named.
-      gates: _preference?.pqStartupGates ??
-          ((_preference?.posture.configuresPqProviders ?? true)
-              ? const PqStartupGates()
-              : const PqStartupGates.inert()),
+      gates: _preference?.resolvedPqStartupGates ?? const PqStartupGates(),
       privilege: EnrollmentRecordPrivilegeResolver(this,
           listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
               .fetchEnrollmentRequests),

@@ -1,4 +1,5 @@
 import 'package:at_chops/at_chops.dart';
+import 'package:meta/meta.dart' show internal, visibleForTesting;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
@@ -42,7 +43,21 @@ class AtClientPreference {
   /// naming a set here is the only way to change it: a set handed to a client
   /// that is already running cannot be applied, which is why
   /// [rolloutDifferencesFrom] reports it.
+  @visibleForTesting
   final PqStartupGates? pqStartupGates;
+
+  /// Which post-quantum startup steps this client's bootstrap runs: the set
+  /// [pqStartupGates] names, else every step when [posture] configures the
+  /// post-quantum providers and none when it does not.
+  ///
+  /// The one home for that rule — a client reads this rather than deriving it,
+  /// and it resolves [pqStartupGates] here because only this library may.
+  @internal
+  PqStartupGates get resolvedPqStartupGates =>
+      pqStartupGates ??
+      (posture.configuresPqProviders
+          ? const PqStartupGates()
+          : const PqStartupGates.inert());
 
   /// Which algorithms this client keeps an **active signing key** for — the
   /// keys that sign what its enrollment attests to, which is a different job

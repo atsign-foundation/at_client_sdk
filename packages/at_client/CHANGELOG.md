@@ -1,5 +1,10 @@
 ## 3.15.0-rc1
 
+- refactor: `AtClientPreference.pqStartupGates` is for tests. Nothing in
+  any package's `lib` builds its own set, so a client runs every
+  post-quantum startup step or none, and which of the two is the
+  posture's business — one `@internal` getter derives it now, where the
+  client used to restate the rule beside it.
 - refactor: every reader of "which enrollment am I" reads
   `AtClient.enrollmentId` rather than the connection's `atLookUp.enrollmentId`.
   `RemoteSecondary` writes the connection's id from the client's at every
