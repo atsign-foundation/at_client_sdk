@@ -162,15 +162,7 @@ class SyncServiceImpl implements SyncService {
       AtClientManager? atClientManager,
       RemoteSecondary? remoteSecondary,
       bool warmStartSync = true}) async {
-    remoteSecondary ??= RemoteSecondary(
-        atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-        atChops: atClient.atChops,
-        enrollmentId: atClient.enrollmentId,
-        // Sync's own connection, built with the same key material the client
-        // holds, so its authenticator matches the client's rather than
-        // falling to a different credential.
-        signingAlgoType: signingAlgoOf(atClient),
-        atKeysIo: atClient.atKeysIo);
+    remoteSecondary ??= remoteSecondaryFor(atClient);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
     await syncService.statsServiceListener();
     syncService._startPeriodicSyncTimer();
@@ -196,6 +188,18 @@ class SyncServiceImpl implements SyncService {
       }
     });
   }
+
+  /// Sync's own connection, built from the same key material the client
+  /// holds, so its authenticator matches the client's rather than falling to
+  /// a different credential. The client's `AtChops` travels only for a client
+  /// built without a keyfile; with one, the keyfile is the credential.
+  @visibleForTesting
+  static RemoteSecondary remoteSecondaryFor(AtClient atClient) =>
+      RemoteSecondary(atClient.getCurrentAtSign()!, atClient.getPreferences()!,
+          atChops: atClient.atKeysIo == null ? atClient.atChops : null,
+          enrollmentId: atClient.enrollmentId,
+          signingAlgoType: signingAlgoOf(atClient),
+          atKeysIo: atClient.atKeysIo);
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
     _logger = AtSignLogger('SyncService'

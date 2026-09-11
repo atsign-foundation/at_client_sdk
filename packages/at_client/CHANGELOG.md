@@ -1,5 +1,13 @@
 ## 3.15.0-rc1
 
+- refactor: a client's remote connections — its own and sync's — authenticate
+  from the keyfile when the client has one. The `AtChops` a keyfile client
+  derives from that keyfile is no longer injected as the PKAM signer, and
+  travels to sync's connection only for a client built without a keyfile.
+  Same bytes: a new test verifies the PKAM signature under the keyfile's
+  public key and not under the `AtChops`'. The credential fields at_lookup
+  reads are still written on the lookup, for a lookup from before the
+  authenticator seam; they go with that ladder in the at_lookup major.
 - refactor: `ApkamSigning.authenticationSigningKey` reads the enrollment's
   APKAM authentication keypair from the keyfile, typed material first and
   the flat pair as `rsa2048` otherwise, the way `heldSigningKeys` already

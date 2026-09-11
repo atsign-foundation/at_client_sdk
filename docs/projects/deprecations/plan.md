@@ -587,9 +587,20 @@ without a key source; it became asynchronous, since a keyfile is read rather
 than held, and its four callers followed. Three arms in
 `apkam_signing_keys_test.dart` were red against the old getter (a keyfile-only
 client hit its null check; the keyfile's key lost to an injected `AtChops`)
-and are green now. What remains of step 4 is `sync_service_impl`, the
-`AtChopsKeys` getter on `LocalSecondary`, and deprecating `AtClient.atChops`
-itself.
+and are green now. `RemoteSecondary` no longer injects the client's `AtChops`
+into the authenticator when the client has a keyfile — the keyfile is the
+whole answer, and the `AtChops` a keyfile client holds was derived from it —
+and sync's own remote, built through `SyncServiceImpl.remoteSecondaryFor`,
+carries the `AtChops` only for a client built without one.
+`remote_secondary_wiring_test.dart` tells the two sources apart with at_chops'
+RSA verifier: two different keypairs, and which public key the PKAM signature
+verifies under says which signed; its keyfile-plus-`AtChops` arm was red
+against the old wiring. The ladder fields on the lookup are still written, as
+step 5's ruling on `remote_secondary.dart` says. What remains of step 4 is the
+`AtChopsKeys` getter on `LocalSecondary` and its "from atChops" tier — which
+waits for the live packs, since a client built from an `AtChops` and no
+keystore keys is a shape only they can show — and deprecating
+`AtClient.atChops` itself.
 
 Two observations from flipping the fixtures that could move:
 
