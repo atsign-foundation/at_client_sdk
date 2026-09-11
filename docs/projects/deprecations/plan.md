@@ -289,13 +289,30 @@ enrollment id ask the client. All four live packs have run green on everything l
 their first runs found two defects, recorded under step 4, one of them from
 the pass before this one. Step 6's at_onboarding_cli half is done and its four
 packs are green, and step 7's three at_client_flutter readings are resolved.
-What is owed, in order:
-[step 8](#step-8-removal--at_auth-now-the-others-at-their-majors), which gkc
-ruled on and which removes at_auth's deprecated surface in this rc, then the
-remaining test-tree work in steps 6 and 7, then `LocalSecondary`'s `AtChops`
-tier. Step 7 is no longer
-blocked by the legacy question, which step 3 answered, but it is blocked on the
-three at_client_flutter readings recorded under it.
+[Step 8](#step-8-removal--at_auth-now-the-others-at-their-majors) is under
+way: gkc ruled that at_auth's surface is cleaned in this rc, and its families
+E and H are removed.
+
+**What is owed, in order.** Step 8's family A (7 uses, all functional-pack
+fixtures reading `atAuth.atChops`); then B, C, D and G as one change — *an
+authentication and an enrollment always carry a session* — which runs all four
+live packs before it commits; then the remaining test-tree work in steps 6 and
+7; then `LocalSecondary`'s `AtChops` tier. Two of those wait on gkc rather
+than on code, and both are stated where they arise: whether F's seven flat
+fields keep an annotation no caller can act on (step 8), and where an enrolled
+app's keys should land if `apkam_dialog.dart` supplies a session (step 7).
+
+⚠️ **Re-derive every figure here before quoting it.** The counts on
+2026-09-11, after step 8's E and H: at_auth `lib` 14 and `test` 73 with 28
+annotations left in `lib`; at_client 28 and 252; at_onboarding_cli 23 and 186;
+at_client_flutter 0 and 41, its `lib` zero being four ignores with reasons
+rather than a clearance. Two of those moved for reasons that are not work:
+at_onboarding_cli gained one when gkc deprecated
+`AtClientManager.setCurrentAtSign`'s `atChops` parameter, which the CLI passes
+through; and at_client **lost three** to the same commit, because a parameter's
+own type annotation stops reporting once the parameter is deprecated — the
+invisibility this plan's step 3 records, arriving this time as a fall in the
+count with nothing moved. Neither is progress.
 
 **What has been built, so it is not built again.** Four things this plan now
 depends on:
