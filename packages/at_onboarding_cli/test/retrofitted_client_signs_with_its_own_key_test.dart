@@ -11,12 +11,9 @@ import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class _MockAtAuth extends Mock implements AtAuth {}
-
-class _FakeAtAuthRequest extends Fake implements AtAuthRequest {}
+import 'lifecycle_rig.dart';
 
 /// Answers a challenge-response without an atServer.
 ///
@@ -41,12 +38,11 @@ class _OfflineExchange implements AtCommandExecutor {
   }
 }
 
-/// The signer stamped on the adopted lookup has to belong to the enrolment
-/// that lookup declares, whatever enrolment the caller authenticated as.
+/// The signer installed on the client's connection has to belong to the
+/// enrolment that connection declares: the retrofitted one, not the legacy
+/// one the flat fields still carry.
 void main() {
   AtSignLogger.root_level = 'SHOUT';
-
-  setUpAll(() => registerFallbackValue(_FakeAtAuthRequest()));
 
   const atSign = '@retrofitted_cli';
   const namespace = 'unit_test';
@@ -54,15 +50,14 @@ void main() {
   const retrofittedId = 'retrofitted-enrollment';
 
   late String keysFilePath;
-  late AtClient retrofittedClient;
+  late Directory storage;
 
   setUp(() async {
     AtClientImpl.atClientInstanceMap.clear();
-
+    storage = Directory.systemTemp.createTempSync('retrofit_storage');
     keysFilePath =
         '${Directory.systemTemp.createTempSync('retrofit_keys').path}'
         '/${atSign}_key.atKeys';
-    addTearDown(() => File(keysFilePath).parent.deleteSync(recursive: true));
 
     // The keyfile a retrofit leaves behind: the legacy enrolment's RSA keypair
     // in the flat fields, the live enrolment's ML-DSA-65 material in the typed
@@ -99,78 +94,45 @@ void main() {
         bytes: AtBytes.fromString(mlDsaPair.atPublicKey.publicKey),
         createdAt: now,
       ));
-    final io = FileAtKeysIo(filePath: (_) => keysFilePath);
-    await io.write(atSign, keys);
-
-    // The client as a retrofit leaves it: running as the retrofitted
-    // enrolment, with the signer that enrolment owns.
-    final retrofittedChops =
-        (await io.read(atSign)).authenticationFor(retrofittedId).chops;
-    retrofittedClient = await AtClientImpl.create(
-      atSign,
-      namespace,
-      AtClientPreference(posture: PqPosture.legacy)
-        ..hiveStoragePath = 'test/storage/hive/retrofitted'
-        ..commitLogPath = 'test/storage/hive/retrofitted/commit',
-      atChops: retrofittedChops,
-      atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
-      enrollmentId: retrofittedId,
-    );
+    await FileAtKeysIo(filePath: (_) => keysFilePath).write(atSign, keys);
   });
 
   tearDown(() async {
-    await retrofittedClient.getRemoteSecondary()?.atLookUp.close();
+    for (final client
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await client.stop();
+    }
     AtClientImpl.atClientInstanceMap.clear();
+    AtClientManager.getInstance().reset();
+    File(keysFilePath).parent.deleteSync(recursive: true);
+    storage.deleteSync(recursive: true);
   });
 
-  /// A service whose `authenticate()` succeeds without a server, reporting the
-  /// flat enrolment in the response as at_auth would.
-  AtOnboardingServiceImpl serviceAuthenticatingAsFlatEnrollment() {
-    final atAuth = _MockAtAuth();
-    when(() => atAuth.progressStream).thenAnswer((_) => const Stream.empty());
-    when(() => atAuth.authenticate(any()))
-        .thenAnswer((_) async => AtAuthResponse(atSign)
-          ..isSuccessful = true
-          // NOTE: at_auth reports the FLAT id on the session; the rig names
-          // the retrofitted id because that is the client-cache key, which is
-          // what lets it reach the post-retrofit state without an atServer.
-          // `_initAtClient` sees only the client and the caller's chops either
-          // way. The session's source is the keyfile on disk, which is what
-          // the service reads the keys back through.
-          ..session = AtAuthSession(
-            atSign: atSign,
-            rootDomain: AtRootDomain.atsignDomain,
-            enrollmentId: retrofittedId,
-            atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
-          ));
-
-    return AtOnboardingServiceImpl(
+  test('the client\'s connection authenticates as the enrolment it declares',
+      () async {
+    final port = await refusedPort();
+    // NOTE: a real lookup, pointed at a port nothing listens on: the client's
+    // connection wraps and stamps it, and the open comes back offline without
+    // a network.
+    final own =
+        AtLookupImpl(atSign, InternetAddress.loopbackIPv4.address, port);
+    final service = AtOnboardingServiceImpl(
         atSign,
         AtOnboardingPreference(posture: PqPosture.legacy)
           ..atKeysFilePath = keysFilePath
           ..namespace = namespace
-          ..hiveStoragePath = 'test/storage/hive/retrofitted'
-          ..commitLogPath = 'test/storage/hive/retrofitted/commit')
-      ..atAuth = atAuth;
-  }
+          ..rootDomain = InternetAddress.loopbackIPv4.address
+          ..rootPort = port
+          ..storagePath = storage.path,
+        atLookUp: own);
+    expect(await service.authenticate(), isFalse,
+        reason: 'offline by construction; what is under test was installed '
+            'when the client was built');
 
-  test('the adopted lookup authenticates as the enrolment it declares',
-      () async {
-    final service = serviceAuthenticatingAsFlatEnrollment();
-    expect(await service.authenticate(), isTrue);
-
-    final adopted = service.atLookUp!;
-    expect(
-        identical(
-            adopted,
-            AtClientManager.getInstance()
-                .atClient
-                .getRemoteSecondary()!
-                .atLookUp),
-        isTrue,
-        reason: 'the flow under test is the one that adopts the client\'s own '
-            'lookup; if this service built its own, everything below is about '
-            'the wrong object');
+    final adopted = service.atClient!.getRemoteSecondary()!.atLookUp;
+    expect(identical(adopted, own), isTrue,
+        reason: 'the client wraps the lookup it was handed; if it built its '
+            'own, everything below is about the wrong object');
 
     // NOTE: these two go red if a fix weakens the DECLARATION to rsa2048
     // instead of correcting the signer, which would otherwise turn the
@@ -180,16 +142,15 @@ void main() {
 
     final exchange = _OfflineExchange(atSign);
     // NOTE: `AtLookUp` does not declare the authenticator — that interface is
-    // frozen for the mocks implementing it — so the seam `_initAtClient`
-    // installs on is reached through `AtLookupMuxable`.
+    // frozen for the mocks implementing it — so the seam is reached through
+    // `AtLookupMuxable`.
     final authenticator = (adopted as AtLookupMuxable).authenticator!;
     await expectLater(authenticator(exchange), completion(isTrue),
         reason: 'the lookup declares mldsa65 for the retrofitted enrolment, so '
             'the signer installed beside it has to be that enrolment\'s '
-            'ML-DSA keypair. Handing it the flat enrolment\'s RSA keypair — '
-            'which is what at_auth resolved before the client moved — reaches '
-            'at_chops as "this PKAM key is ~1218 bytes, and an ML-DSA-65 '
-            'secret key is 4032", and no verb this client runs can '
+            'ML-DSA keypair. Handing it the flat enrolment\'s RSA keypair '
+            'reaches at_chops as "this PKAM key is ~1218 bytes, and an '
+            'ML-DSA-65 secret key is 4032", and no verb this client runs can '
             'authenticate');
 
     expect(exchange.sent.where((c) => c.startsWith('pkam:')), isNotEmpty,

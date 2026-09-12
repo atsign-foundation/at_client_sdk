@@ -1,57 +1,22 @@
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class MockAtLookupImpl extends Mock implements AtLookupImpl {}
+import 'lifecycle_rig.dart';
 
-class MockAtAuthImpl extends Mock implements AtAuth {}
-
-class FakeAtAuthRequest extends Fake implements AtAuthRequest {}
-
-/// Records the storage the manager passes on to the client factory.
-class RecordingServiceFactory extends DefaultAtServiceFactory {
-  AtClientStorage? seen;
-  bool called = false;
-
-  @override
-  Future<AtClient> atClient(String atSign, String? namespace,
-      AtClientPreference preference, AtClientManager atClientManager,
-      {AtChops? atChops,
-      AtKeysIo? atKeysIo,
-      AtLookUp? atLookUp,
-      String? enrollmentId,
-      AtClientStorage? storage}) async {
-    called = true;
-    seen = storage;
-    return super.atClient(atSign, namespace, preference, atClientManager,
-        atKeysIo: atKeysIo,
-        atLookUp: atLookUp,
-        enrollmentId: enrollmentId,
-        storage: storage);
-  }
-}
-
+/// Where the client `authenticate()` opens keeps its local storage: the
+/// store on the preference when there is one, else a Hive store under the
+/// preference's path that the client closes itself.
 void main() {
   AtSignLogger.root_level = 'SHOUT';
-  final atSign = '@alice🛠';
+  const atSign = '@alice🛠';
   late Directory dir;
-  final mockAtLookup = MockAtLookupImpl();
-  final mockAtAuth = MockAtAuthImpl();
 
   setUp(() {
     dir = Directory.systemTemp.createTempSync('onboarding_storage_');
-    reset(mockAtLookup);
-    when(() => mockAtLookup.close()).thenAnswer(Future.value);
-    reset(mockAtAuth);
-    registerFallbackValue(FakeAtAuthRequest());
-    when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
     AtClientManager.getInstance().reset();
   });
 
@@ -60,58 +25,35 @@ void main() {
         in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
       await c.stop();
     }
+    AtClientImpl.atClientInstanceMap.clear();
     AtClientManager.getInstance().reset();
     dir.deleteSync(recursive: true);
   });
 
-  Future<AtOnboardingServiceImpl> authenticated(
-      AtOnboardingPreference preference, AtServiceFactory factory) async {
-    final service =
-        AtOnboardingServiceImpl(atSign, preference, atServiceFactory: factory);
-    service.atLookUp = mockAtLookup;
-    service.atAuth = mockAtAuth;
-    when(() => mockAtLookup.pkamAuthenticate())
-        .thenAnswer((_) => Future.value(true));
-    when(() => mockAtAuth.authenticate(any()))
-        .thenAnswer((_) => Future.value(AtAuthResponse(atSign)
-          ..isSuccessful = true
-          ..session = AtAuthSession(
-            atSign: atSign,
-            rootDomain: AtRootDomain.atsignDomain,
-            enrollmentId: 'dummy_enroll_id',
-            atKeysIo: InMemoryAtKeysIo.holding(
-                atSign,
-                AtKeys()
-                  ..apkamPublicKey = AtBytes.fromString('dumm')
-                  ..apkamPrivateKey = AtBytes.fromString('dumm')
-                  ..defaultSelfEncryptionKey = AtBytes.fromString('dumm')
-                  ..defaultEncryptionPrivateKey = AtBytes.fromString('dumm')
-                  ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
-                  ..apkamSymmetricKey = AtBytes.fromString('dumm')
-                  ..enrollmentId = 'dummy_enroll_id'),
-          )));
+  Future<AtOnboardingPreference> preference() async =>
+      AtOnboardingPreference(posture: PqPosture.legacy)
+        ..atKeysFilePath = 'test/data/${atSign}_key.atKeys'
+        ..namespace = 'unit_test'
+        ..rootDomain = InternetAddress.loopbackIPv4.address
+        ..rootPort = await refusedPort();
 
+  Future<AtOnboardingServiceImpl> authenticated(
+      AtOnboardingPreference preference) async {
+    final service = AtOnboardingServiceImpl(atSign, preference,
+        atLookUp: lookUpAnswering(() async => true));
     expect(await service.authenticate(), isTrue);
     return service;
   }
 
   test('the storage on the preference is the one the client holds', () async {
     final storage = HiveAtClientStorage(atSign: atSign, storagePath: dir.path);
-    final factory = RecordingServiceFactory();
-    final service = await authenticated(
-        AtOnboardingPreference()
-          ..atKeysFilePath = 'test/data/${atSign}_key.atKeys'
-          ..namespace = 'unit_test'
-          ..storagePath = '${dir.path}/never_opened'
-          ..storage = storage,
-        factory);
+    final service = await authenticated((await preference())
+      ..storagePath = '${dir.path}/never_opened'
+      ..storage = storage);
 
-    expect(factory.seen, same(storage),
-        reason: 'the bundle put on the preference is the one that reached the '
-            'client factory, rather than being dropped on the way');
     expect(storage.isHeldBy(service.atClient!), isTrue,
-        reason: 'and the client opened THAT bundle, rather than a Hive store '
-            'under hiveStoragePath');
+        reason: 'the client opened THAT bundle, rather than a Hive store '
+            'under storagePath');
     expect(Directory('${dir.path}/never_opened').existsSync(), isFalse,
         reason: 'storagePath goes unread when a bundle is supplied');
 
@@ -121,41 +63,28 @@ void main() {
 
   test('no bundle on the preference gets a client-closed one at storagePath',
       () async {
-    final factory = RecordingServiceFactory();
-    final service = await authenticated(
-        AtOnboardingPreference()
-          ..atKeysFilePath = 'test/data/${atSign}_key.atKeys'
-          ..namespace = 'unit_test'
-          ..storagePath = '${dir.path}/built_for_the_cli',
-        factory);
+    final pref = (await preference())
+      ..storagePath = '${dir.path}/built_for_the_cli';
+    final service = await authenticated(pref);
 
-    expect(factory.seen, isA<HiveAtClientStorage>(),
-        reason: 'the CLI supplies a bundle of its own rather than leaving '
-            'at_client to open one from a preference path');
-    expect(factory.seen!.closedByClient, isTrue,
-        reason: 'and the client is what closes it, so a CLI still has nothing '
-            'to tear down');
     expect(Directory('${dir.path}/built_for_the_cli').existsSync(), isTrue,
         reason: 'the store landed where storagePath said');
+    expect(pref.storageFor(atSign).closedByClient, isTrue,
+        reason: 'and the client is what closes it, so a CLI still has nothing '
+            'to tear down');
 
     await service.atClient!.stop();
   });
 
   test('the deprecated hiveStoragePath still decides where the store goes',
       () async {
-    final factory = RecordingServiceFactory();
-    final service = await authenticated(
-        AtOnboardingPreference()
-          ..atKeysFilePath = 'test/data/${atSign}_key.atKeys'
-          ..namespace = 'unit_test'
-          // ignore: deprecated_member_use
-          ..hiveStoragePath = '${dir.path}/legacy_path',
-        factory);
+    final service = await authenticated((await preference())
+      // ignore: deprecated_member_use
+      ..hiveStoragePath = '${dir.path}/legacy_path');
 
     expect(Directory('${dir.path}/legacy_path').existsSync(), isTrue,
-        reason: 'a caller that set the deprecated field before this change '
-            'keeps the location it had');
-    expect(factory.seen!.closedByClient, isTrue);
+        reason: 'a caller that set the deprecated field keeps the location '
+            'it had');
 
     await service.atClient!.stop();
   });

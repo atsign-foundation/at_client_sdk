@@ -139,8 +139,10 @@ class AtAuthRequest extends AuthRequest {
 }
 
 class RetryOptions {
-  static const defaultRetryOptions =
-      RetryOptions(maxRetries: 10, retryDelay: Duration(seconds: 2));
+  static const int defaultMaxRetries = 10;
+  static const Duration defaultRetryDelay = Duration(seconds: 2);
+  static const defaultRetryOptions = RetryOptions(
+      maxRetries: defaultMaxRetries, retryDelay: defaultRetryDelay);
 
   final int maxRetries;
   final Duration retryDelay;

@@ -12,7 +12,7 @@ import 'package:at_onboarding_cli/src/cli/auth_cli_args.dart';
 import 'package:at_onboarding_cli/src/util/at_file_util.dart';
 import 'package:at_onboarding_cli/src/util/at_onboarding_preference.dart';
 import 'package:test/test.dart';
-import 'at_onboarding_cli_test.dart';
+import 'keyfile_helpers.dart';
 
 void main() {
   final baseDirPath = 'test/keys';

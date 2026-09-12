@@ -18,9 +18,9 @@ Future<void> main(List<String> args) async {
 
 `CLIBase.fromCommandLineArgs(...)` parses the standard at-SDK flags
 (`-a <atsign>`, `-k <keys-file>`, `-n <namespace>`, `-r <root-domain>`,
-etc.), loads the user's `.atKeys` file, runs PKAM authentication via
-[`at_onboarding_cli`](../at_onboarding_cli), and hands back a ready
-`AtClient`.
+etc.), loads the user's `.atKeys` file, opens the client through at_client's
+`Atsign.open`, waits for its connection to come online, and hands back a
+ready `AtClient`.
 
 Two worked examples live under [`example/bin/`](example/bin):
 

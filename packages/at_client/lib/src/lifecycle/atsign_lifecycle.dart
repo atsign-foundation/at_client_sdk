@@ -121,9 +121,13 @@ extension AtsignLifecycle on Atsign {
   /// encryption keypair and the self-encryption key, and defaults to the
   /// posture's answer. [onProgress] hears each step of the activation.
   ///
+  /// A newly registered atSign can take minutes to be provisioned: the
+  /// activation asks up to [provisioningRetries] times,
+  /// [provisioningPollInterval] apart, before giving up.
+  ///
   /// See [open] for [namespace], [storage], [atLookUp] and [connectBudget];
   /// a supplied [atLookUp] serves the activation too, and is taken as having
-  /// already reached the atServer.
+  /// already reached the atServer, so the provisioning wait is skipped.
   Future<AtClient> activate({
     required String cramSecret,
     required WrittenAtKeysIo keys,
@@ -134,6 +138,8 @@ extension AtsignLifecycle on Atsign {
     String device = firstEnrollmentDeviceName,
     bool? mintLegacyMaterial,
     SigningAlgoType? signingAlgo,
+    int provisioningRetries = RetryOptions.defaultMaxRetries,
+    Duration provisioningPollInterval = RetryOptions.defaultRetryDelay,
     void Function(ProgressEvent event)? onProgress,
     AtLookUp? atLookUp,
     Duration connectBudget = AtConnection.defaultBudget,
@@ -166,6 +172,9 @@ extension AtsignLifecycle on Atsign {
             mintLegacyMaterial ?? preference.posture.mintLegacyMaterial,
         metadataBuilder: metadataBuilder,
         advertisedSigningKey: advertisedSigningKey,
+        retryOptions: RetryOptions(
+            maxRetries: provisioningRetries,
+            retryDelay: provisioningPollInterval),
         onProgress: onProgress,
         atLookUp: atLookUp);
 
@@ -396,13 +405,28 @@ extension AtsignLifecycle on Atsign {
   }) async {
     final pending = AtKeys(atsign: this)
       // ignore: deprecated_member_use
-      ..defaultEncryptionPublicKey = minted.defaultEncryptionPublicKey
-      // ignore: deprecated_member_use
       ..apkamSymmetricKey = minted.apkamSymmetricKey
       // ignore: deprecated_member_use
       ..enrollmentId = enrollmentId;
     for (final material in minted.keysForEnrollment(enrollmentId)) {
       pending.addKey(material.withStatus(CryptographicMaterialStatus.pending));
+    }
+    // NOTE: the atSign's encryption public key rides here typed, not in its
+    // flat field: a file store self-encrypts that field under a key this
+    // device is only given at approval, so a flat copy cannot be written yet.
+    // The completion copies it into the flat field for legacy readers.
+    // ignore: deprecated_member_use
+    final encryptionPublicKey = minted.defaultEncryptionPublicKey;
+    if (encryptionPublicKey != null) {
+      pending.addKey(CryptographicMaterial(
+          keyId:
+              '${AtKeys.keyIdPrefix('enc', CryptographicMaterialAlgorithm.rsa2048)}1',
+          enrollmentId: enrollmentId,
+          role: CryptographicMaterialRole.publicEncryption,
+          algorithm: CryptographicMaterialAlgorithm.rsa2048,
+          bytes: encryptionPublicKey,
+          createdAt: DateTime.now().toUtc(),
+          status: CryptographicMaterialStatus.pending));
     }
     final apkamFiled = pending
         .keysForEnrollment(enrollmentId)

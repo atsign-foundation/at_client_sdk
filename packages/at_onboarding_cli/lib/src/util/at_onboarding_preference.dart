@@ -60,4 +60,14 @@ class AtOnboardingPreference extends AtClientPreference {
   /// Leave it null and a Hive bundle is built under [storagePath], which the
   /// client closes itself.
   AtClientStorage? storage;
+
+  /// The store a client for [atSign] opens: [storage] when set, else a fresh
+  /// Hive store under [storagePath] that the client closes when it stops.
+  ///
+  /// Fresh each call, because a closed store cannot reopen and every client
+  /// this package opens closes the store it was given.
+  AtClientStorage storageFor(String atSign) =>
+      storage ??
+      HiveAtClientStorage(
+          atSign: atSign, storagePath: storagePath!, closedByClient: true);
 }

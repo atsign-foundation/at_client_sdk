@@ -150,6 +150,14 @@ class PendingEnrollment {
     // ignore: deprecated_member_use
     stored.enrollmentId = enrollmentId;
     // ignore: deprecated_member_use
+    stored.defaultEncryptionPublicKey ??= stored
+        .keysForEnrollment(enrollmentId)
+        .where((m) =>
+            m.role == CryptographicMaterialRole.publicEncryption &&
+            m.algorithm == CryptographicMaterialAlgorithm.rsa2048)
+        .firstOrNull
+        ?.bytes;
+    // ignore: deprecated_member_use
     stored.defaultEncryptionPrivateKey ??=
         completed.defaultEncryptionPrivateKey;
     // ignore: deprecated_member_use
@@ -178,11 +186,8 @@ class PendingEnrollment {
         if (stored.enrollmentId == enrollmentId) stored.enrollmentId = null;
         if (stored.enrollmentIds.isEmpty &&
             !stored.holdsAuthenticationMaterial) {
-          stored
-            // ignore: deprecated_member_use
-            ..apkamSymmetricKey = null
-            // ignore: deprecated_member_use
-            ..defaultEncryptionPublicKey = null;
+          // ignore: deprecated_member_use
+          stored.apkamSymmetricKey = null;
         }
         return true;
       });

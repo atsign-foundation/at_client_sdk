@@ -32,6 +32,12 @@
   supplies the no-op sync service the CLIs use; `client.enrollments` gains
   `fetch`, `unrevoke` and `delete`, and an `otp` or `spp` asked for with no
   expiry leaves the atServer's default in force.
+- `activate` takes `provisioningRetries` and `provisioningPollInterval`, the
+  wait for a newly registered atSign to be provisioned. The pending document
+  `enroll` files carries the atSign's encryption public key as typed
+  material rather than in its flat field, which a file store self-encrypts
+  under a key the device is only given at approval; the completion copies it
+  into the flat field for legacy readers.
 - feat: `Atsign('@alice').enroll(otp: ..., app: ..., device: ...,
   namespaces: ..., keys: ..., preference: ...)` submits an enrollment and
   files the keys it minted in the store the caller named, as `pending` under

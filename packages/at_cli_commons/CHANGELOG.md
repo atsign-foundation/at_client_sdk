@@ -1,5 +1,12 @@
 ## 3.1.2
 
+- feat: `CLIBase` opens its client through at_client's `Atsign.open` and
+  waits for the connection to come online with a budget of
+  `maxConnectAttempts` tries, three seconds apart, instead of
+  re-authenticating in a loop. A refusal by the atServer is thrown as
+  `AtOpenRefusedException` at once; a connection still offline when the
+  budget is spent is `SecondaryServerConnectivityException`, as before.
+- build: require `at_onboarding_cli` ^2.0.0-rc1 and `at_auth` ^4.0.0-rc2.
 - chore: set `AtOnboardingPreference.storagePath` rather than the now-deprecated
   `AtClientPreference.hiveStoragePath`. The store lands in the same place; the
   bundle is built by at_onboarding_cli and closed by the client, so `CLIBase`

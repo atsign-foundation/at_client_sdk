@@ -66,45 +66,63 @@ Full step-by-step walkthrough:
 
 ## Library usage
 
-If you're building your own onboarding tooling, `AtOnboardingService`
-is the main entry point:
+The lifecycle is at_client's: one import, and the verbs are on the atSign.
 
 ```dart
+import 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
+import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 
+final keys = FileAtKeysIo(filePath: (_) => 'storage/@alice_key.atKeys');
 final pref = AtOnboardingPreference()
   ..rootDomain = 'root.atsign.org'
   ..namespace = 'my_app'
-  ..hiveStoragePath = 'storage/hive'
-  ..commitLogPath = 'storage/commitLog'
-  ..isLocalStoreRequired = true
-  ..atKeysFilePath = 'storage/@alice_key.atKeys';
+  ..storagePath = 'storage/hive';
 
-final svc = AtOnboardingServiceImpl('@alice', pref);
+// Activate a new atSign with its CRAM secret; `OnboardingUtil` fetches one
+// from the registrar against an emailed verification code.
+final client = await Atsign('@alice').activate(
+    cramSecret: secret, keys: keys, preference: pref,
+    storage: pref.storageFor('@alice'));
 
-// Onboard (Phase 2): CRAM-authenticate and generate master atKeys.
-// Provide cramSecret via pref.cramSecret; omit to trigger email OTP.
-await svc.onboard();
+// Open a client on keys already held. It comes back online, offline or
+// refused, and `connection` says which.
+final client = await Atsign('@alice').open(
+    keys: keys, preference: pref, storage: pref.storageFor('@alice'));
+print(client.connection.current);
 
-// Or, for a previously-onboarded atSign, just authenticate (Phase 3).
-await svc.authenticate();
+// Enrol a new device, quoting a passcode an enrolled client issued, and wait
+// for that client to approve. The keyfile is the resume record: a request
+// already in it is picked up by `resumeEnrollment` rather than repeated.
+final pending = await Atsign('@alice').enroll(
+    otp: otp, app: 'my_app', device: 'laptop',
+    namespaces: {'my_app': 'rw'}, keys: keys, preference: pref);
+final client = await pending.client(pref, storage: pref.storageFor('@alice'));
 
-final AtClient? atClient = await svc.atClient;
-final AtLookUp? atLookup = svc.atLookUp;
+// The approving side, on an enrolled client.
+for (final request in await client.enrollments.pending()) {
+  await client.enrollments.approve(request.enrollmentId!);
+}
+final otp = await client.enrollments.otp();
 ```
+
+`AtOnboardingService` stays for programs written against earlier versions of
+this package: `AtOnboardingServiceImpl('@alice', pref).authenticate()` opens
+the client from `pref.atKeysFilePath`, makes it
+`AtClientManager.getInstance().atClient`, and answers whether it is online.
 
 Worked examples covering each flow:
 [`example/`](example) and
 [`example/legacy_examples/`](example/legacy_examples).
 
 Most **app** developers don't need this library directly — they use
-[`at_cli_commons`](../at_cli_commons)' `CLIBase` which calls
-`AtOnboardingService` internally.
+[`at_cli_commons`](../at_cli_commons)' `CLIBase`, which opens the client
+through at_client.
 
 ## Where to go next
 
-- [`at_auth`](../at_auth) — the lifecycle model this package exposes
-  via CLI
+- [`at_auth`](../at_auth) — the keyfile format and key stores, and the
+  protocol layer under at_client
 - [`at_cli_commons`](../at_cli_commons) — thin layer that gets you from
   already-onboarded atKeys to an authenticated `AtClient` in one line
 - [`at_client_flutter`](../at_client_flutter) — the Flutter-UI

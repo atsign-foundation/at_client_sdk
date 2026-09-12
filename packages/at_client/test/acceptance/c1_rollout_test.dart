@@ -86,15 +86,16 @@ void main() {
     // THEN  no RSA-wrapped apkamSymmetricKey rides the wire; the approver
     //       mints and conveys instead.
     provenIn(
-        'packages/at_onboarding_cli/test/enroll_key_exchange_mode_test.dart',
-        'PqPosture.pqActive submits a pq request',
-        proves: 'the middle the other three do not reach: a real production '
-            'builder reading a posture and choosing the constructor from it. '
-            'The request captured off the AtEnrollment seam under '
-            'PqPosture.pqActive carries EnrollmentKeyExchangeMode.pq and both '
-            'the callbacks a pq request needs, where the same service under '
-            'PqPosture.legacy submits the wrapped-key shape. Mutating the '
-            'service to keep the unnamed constructor reddens it.');
+        'packages/at_client/test/lifecycle/enroll_test.dart',
+        'pqActive advertises an mldsa65 signing key, in the structured '
+            'spelling',
+        proves: 'the middle the other three do not reach: the production '
+            'submitter, Atsign.enroll, reading a posture and choosing the '
+            'request shape from it. The enroll:request captured off the '
+            'mocked atServer under PqPosture.pqActive carries a key package '
+            'and no RSA-wrapped symmetric key, where the same call under '
+            'PqPosture.legacy sends the wrapped-key shape. Mutating enroll '
+            'to take legacy whatever the posture says reddens it.');
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'pqActive is post-quantum by default',
         proves: 'the posture carries EnrollmentKeyExchangeMode.pq');

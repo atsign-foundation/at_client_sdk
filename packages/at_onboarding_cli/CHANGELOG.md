@@ -1,4 +1,36 @@
-## 1.17.0-rc1
+## 2.0.0-rc1
+
+- **BREAKING:** `AtOnboardingService` is the three members programs call:
+  `AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
+  `atClient`, over at_client's `Atsign.open` and `AtClientManager.use`.
+  `authenticate()` answers true only when the client's connection is online;
+  an offline client is still opened and held, and its `connection` says why,
+  while a refusal on a device that has never held the atSign online opens
+  nothing. The other members go, to at_client: `onboard` is
+  `Atsign.activate`; `enroll`, `sendEnrollRequest`, `awaitApproval` and
+  `createAtKeysFile` are `Atsign.enroll`, `Atsign.resumeEnrollment` and
+  `PendingEnrollment.client`; `close` is `atClient.stop()`; `isOnboarded` is
+  the atDirectory's status; and `atLookUp`, `atChops`, `atAuth` and
+  `completeActivation` have no replacement, because the client's own
+  connection does what they exposed.
+- **BREAKING:** the enrollment checkpoint file (`*.enrollment.checkpoint`) is
+  gone. The keyfile named on `enroll` is the resume record: it holds the
+  pending keys from submission, and `at_activate enroll` run again for the
+  same app and device resumes the wait for approval.
+- **BREAKING:** `authenticate()` no longer copies the keyfile's keys into the
+  client's local storage; the client reads them from its key source.
+- **BREAKING:** the keyfile `onboard` writes is at_auth's own, and no longer
+  carries the self-encryption key a second time under the atSign as a JSON
+  key.
+- `at_activate onboard` and `enroll` run over `Atsign.activate` and
+  `Atsign.enroll`; `list`, `fetch`, `approve`, `auto`, `deny`, `revoke`,
+  `unrevoke`, `delete`, `otp` and `spp` run over `client.enrollments`. The
+  lines that echoed the atServer's raw response now say what was done.
+- `createAtClient` opens the client through `Atsign.open` and waits for its
+  connection to come online with a budget of `maxConnectAttempts` tries,
+  three seconds apart, instead of re-authenticating in a loop.
+- `AtOnboardingPreference.storageFor(atSign)` is the store a client for the
+  atSign opens under the preference.
 
 - refactor: `authenticate` takes the enrollment it authenticated as, and the
   keys it persists to the local secondary, from the session at_auth hands

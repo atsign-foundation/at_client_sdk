@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
@@ -156,6 +157,44 @@ void main() {
     expect(stored.apkamSymmetricKey, isNotNull,
         reason: 'a legacy request carries its own symmetric key, which the '
             'handshake needs after approval');
+  });
+
+  test(
+      'a file store takes the pending document, and the completed keyfile '
+      'reads back with the atSign\'s encryption keypair', () async {
+    // The file store is the population: it self-encrypts the flat legacy
+    // fields under a key this device is only given at approval, so a pending
+    // document that put anything in them could not be written at all.
+    final path = '${dir.path}/${atSign}_key.atKeys';
+    final store = FileAtKeysIo(filePath: (_) => path);
+    final server = atServer(decide: (_) async => true);
+
+    final pending = await Atsign(atSign).enroll(
+        otp: 'ABC123',
+        app: 'wavi',
+        device: 'phone',
+        namespaces: {'wavi': 'rw'},
+        keys: store,
+        preference: await preference(),
+        atLookUp: server);
+    expect(File(path).existsSync(), isTrue,
+        reason: 'the submission is on disk before anyone approves it');
+    expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId]);
+
+    final client = await pending.client(await preference(),
+        retryInterval: const Duration(milliseconds: 10));
+
+    final completed = await store.read(atSign);
+    expect(completed.enrollmentToAuthenticateAs(), enrollmentId);
+    expect(
+        completed.encryptionKeyPair?.atPublicKey.publicKey, encryptionPublicKey,
+        reason: 'the public key the submission fetched survives to the '
+            'completed keyfile, beside the private key the approver sealed');
+    // ignore: deprecated_member_use
+    expect(
+        completed.defaultEncryptionPublicKey?.toString(), encryptionPublicKey,
+        reason: 'in the flat field a legacy reader looks for');
+    await client.stop();
   });
 
   test('open refuses a store that holds only a pending enrollment', () async {

@@ -198,6 +198,14 @@ class AuthCliArgs {
           ? AtOnboardingPreference()
           : AtOnboardingPreference(posture: posture);
   static const argNameMaxRetries = 'max-retries';
+
+  /// How many times, two seconds apart, `onboard` asks whether a newly
+  /// registered atSign has been provisioned before giving up.
+  static const int defaultActivationCheckRetries = 50;
+
+  /// How many consecutive failures to reach the atServer `enroll` rides out
+  /// while waiting for its approval.
+  static const int defaultApprovalRetries = 5;
   static const argNameAllowBadRegistrarCerts = 'allow-bad-registrar-certs';
   static const argNameYes = 'yes';
   static const argNameVersion = 'version';
@@ -416,7 +424,7 @@ class AuthCliArgs {
       argNameMaxRetries,
       help:
           'Maximum number of attempts to check if atServer has been activated',
-      defaultsTo: '${AtOnboardingService.defaultMaxActivationCheckRetries}',
+      defaultsTo: '$defaultActivationCheckRetries',
       mandatory: false,
       hide: false,
     );
@@ -529,7 +537,7 @@ class AuthCliArgs {
       argNameMaxRetries,
       help: 'Consecutive failures to reach the atServer to ride out before '
           'giving up. Waiting for the approval itself is not bounded',
-      defaultsTo: '${AtOnboardingService.defaultMaxApkamRetries}',
+      defaultsTo: '$defaultApprovalRetries',
       mandatory: false,
       hide: false,
     );
