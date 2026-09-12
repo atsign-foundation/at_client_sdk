@@ -33,7 +33,26 @@ an enrolled client of one atSign in one process. `Atsign.authenticatesAs` is
 the client-less check ruling 2 allowed for, added because six pack tests
 assert exactly that. `AtClientManager.setCurrentAtSign` and `fromAuthSession`
 are deprecated, removed in 4.0, now that the live packs' fixtures are on
-`open`; what step 6 still owes is the `npt_flutter` port. The work is a
+`open`. The `npt_flutter` port is built on sshnoports branch
+`gkc-client-lifecycle-port` (not pushed): acceptance item 1 measures no
+`package:at_auth` import under its `lib/` and no `at_auth` dependency in its
+pubspec, its analyzer reports no error and only warnings trunk already
+carried, and its 359 tests pass. The port found that the keychain store
+reported an atSign it did not hold as unreadable rather than absent, which
+refused every first enrollment on a fresh keychain; fixed in
+at_client_flutter. Acceptance item 2 was measured on 2026-09-13: against this
+tree, at_client_flutter 1.1.4's `examples/todos` fails on 23 errors, every
+one in its `onboarding.dart` and every one a member the 2.0.0-rc1 CHANGELOG
+names (`AuthService`, the at_auth request and response types the barrel
+used to re-export, and the dialogs' `show` signatures); at_onboarding_cli
+1.16.0's examples fail on 10 errors, all named in its 2.0.0-rc1 CHANGELOG
+(`AtOnboardingService.onboard`, `enroll`, `close` and `atLookUp`, and
+`HomeDirectoryUtil.getCommitLogPath`); at_client 3.14.0's example, 22
+files, reports no error and 3 deprecation infos that predate this work.
+Acceptance item 3, all four live packs green, was met at the at_auth shrink
+(functional 200, e2e 52 and 21, onboarding-CLI 21, proxy 4). Every step in
+[section 7](#7-what-is-owed-in-order) is done except the durable copy of
+the atServer address. The work is a
 **P0** row in the PQ table
 ([`../pq/implementation-plan.md`](../pq/implementation-plan.md)), since it
 gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the

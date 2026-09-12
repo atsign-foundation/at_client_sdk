@@ -40,10 +40,14 @@ nothing from at_auth.
   `deleteEnrollmentData`, `validateEnrollment` and `saveSpp` are gone: an
   enrollment awaiting approval lives in the keys store as pending key
   material, which is how it is resumed.
-- `RegistrarService` is re-exported, so an app driving `RegistrarCramDialog`
-  imports nothing from at_auth; `FileAtKeysIo`, `AtKeysIo`, `WrittenAtKeysIo`,
-  `InMemoryAtKeysIo`, `NamespacePermission` and `EnrollmentKeyExchangeMode`
-  come through at_client.
+- BREAKING: at_auth is no longer re-exported. `AtAuthRequest`, `AuthResponse`
+  and the other request and response types an app reached through this
+  barrel are gone, along with `AtEnrollmentRequest` and `AtEnrollmentResponse`;
+  the dialogs take the atSign, the keys store and the preference and hand back
+  a client. `RegistrarService` is re-exported, so an app driving
+  `RegistrarCramDialog` imports nothing from at_auth; `FileAtKeysIo`,
+  `AtKeysIo`, `WrittenAtKeysIo`, `InMemoryAtKeysIo`, `NamespacePermission` and
+  `EnrollmentKeyExchangeMode` come through at_client.
 - fix: the enrollment request list can approve a pq-mode request, whose
   enrollee expects the approver to mint its key and so wraps none; the old
   approve action null-banged the wrapped key and crashed before anything was
