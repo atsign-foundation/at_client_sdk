@@ -25,11 +25,19 @@ done
 # examples hold 18 uses no figure in this plan counted until 2026-09-11 - one
 # of them a caller of a member family H had already removed. So enumerate
 # every pubspec, not the workspace:
+# ⛔ `dart analyze` REJECTS --no-fatal-infos ("Cannot negate option", exit 64)
+# and greps to a silent zero; only `flutter analyze` takes it. Print the exit
+# code beside every count so a zero has to earn belief.
+printf '%-52s %5s %5s\n' PACKAGE EXIT USES
 for d in $(find . -name pubspec.yaml -not -path '*/.dart_tool/*' -not -path './pubspec.yaml' \
              -not -path '*/build/*' | xargs -n1 dirname | sort); do
-  a=dart; grep -q '^  flutter:' $d/pubspec.yaml && a=flutter
-  (cd $d && printf '%-52s %4s\n' $d \
-    "$($a analyze --no-fatal-infos 2>/dev/null | grep -c deprecated_member_use)")
+  if grep -q '^  flutter:' "$d/pubspec.yaml"; then
+    out=$( (cd "$d" && flutter analyze --no-fatal-infos 2>&1) ); rc=$?
+  else
+    out=$( (cd "$d" && dart analyze 2>&1) ); rc=$?
+  fi
+  n=$(printf '%s' "$out" | grep -c deprecated_member_use)
+  [ "$n" -gt 0 -o "$rc" -gt 3 ] && printf '%-52s %5s %5s\n' "$d" "$rc" "$n"
 done
 # a member's own split, from inside it: dart analyze lib | test | example | tool
 # per symbol, from any of the above analyses saved to a file:
@@ -38,6 +46,12 @@ done
 
 The per-symbol and per-file counts quoted below all come from that last
 line run over the analysis they describe, on 2026-09-11.
+
+⚠️ **This exact trap has now bitten this pass twice**, once in a hand-listed
+loop that recorded two live packs at zero, and once in the recipe above, which
+carried `--no-fatal-infos` into `dart analyze` for a day: every Dart package
+reported zero and only the Flutter ones were really measured. **Neither zero
+looked wrong.** That is why the exit code is printed.
 
 Line numbers in this plan are as of 2026-09-11 and will have moved; the
 symbols beside them are the addresses.
@@ -320,19 +334,39 @@ E, H, A and G are removed; B's callers have moved with its surface held; C
 and D are open on one design question.
 
 **What is owed, in order.** Step 8's C and D — the *enrollment* request and
-response — which carry an open design question stated at that step; then the
-remaining test-tree work in steps 6 and 7; then `LocalSecondary`'s `AtChops`
-tier. Two of those wait on gkc rather
+response — which turn on the question
+[stated below](#what-c-and-d-turn-on); then the remaining test-tree work in
+steps 6 and 7; then `LocalSecondary`'s `AtChops` tier.
+
+⛔ **Start by settling whether C and D are held the way B was.** They very
+likely are: the published at_client_flutter example reads
+`AtEnrollmentResponse.atAuthKeys` at `onboarding.dart:77`, one line above its
+`AtAuthRequest(atAuthKeys:)` — so family **D is app-facing by measurement**,
+not by argument, and gkc's rule is that an application's packages do not
+break. If the hold applies, C and D become what B became: move every caller in
+this repository onto the session, leave the surface deprecated and standing. Two of those wait on gkc rather
 than on code, and both are stated where they arise: whether F's seven flat
 fields keep an annotation no caller can act on (step 8), and where an enrolled
 app's keys should land if `apkam_dialog.dart` supplies a session (step 7).
 
 ⚠️ **Re-derive every figure here before quoting it.** The counts on
-2026-09-11, after step 8's E, H and A: at_auth `lib` 16 and `test` 70 with
-**23** annotations left in `lib`; at_client 28 and 248; at_onboarding_cli 23
-and 186; at_client_flutter 0 and 41, its `lib` zero being four ignores with
-reasons rather than a clearance. The annotation count is the one that measures
-the removals — 28 to 23 is the five declarations family A deleted.
+2026-09-12, from the corrected recipe above — `lib` / `test`: at_auth **16 /
+70** with **20** annotations left in `lib`; at_client **30 / 256**;
+at_onboarding_cli **21 / 182** (plus 36 outside both); at_client_flutter **0 /
+36**, its `lib` zero being four ignores with reasons rather than a clearance.
+Whole-package totals, which include `example/` and `bin/`: at_auth 87,
+at_client 287, at_onboarding_cli 239, at_client_flutter 36, the functional pack
+272, e2e 116, the onboarding-CLI pack 47, at_contact 4, and 16 spread over six
+legacy `*_flutter` packages this plan does not clear.
+
+The annotation count is what measures the removals: **28 to 20** across
+families A, E, G and H.
+
+⚠️ **A THIRD kind of movement that is not progress: a reinstatement.**
+at_client's `lib` went 28 to 30 on 2026-09-12 while the tree got *better* —
+`ApkamSigning`'s reinstated accessors return `AtPkamKeyPair`, which at_chops
+deprecates, so the import and the return type each report. Restoring a
+published signature costs deprecated uses, and that is the correct trade.
 
 ⚠️ **Three of those movements are not work, and one of them is a RISE.** Two
 are gkc's `setCurrentAtSign(atChops:)` deprecation: at_onboarding_cli gained
@@ -1221,6 +1255,44 @@ open for F is the **annotation**: step 0's ruling is that this tree does not
 deprecate what it has no replacement for, and a legacy keyfile has none.
 Whether the seven keep an annotation no caller can act on is gkc's call, and
 this step carries it as a question rather than answering it.
+
+### What C and D turn on
+
+**Measured 2026-09-11**, by deprecation message rather than by member name,
+because the names collide across families:
+
+| member | uses | where |
+| ------ | ---: | ----- |
+| `AtEnrollmentRequest.atSign` | 24 | at_functional 14, at_end2end 5, at_onboarding_cli 3, at_client_flutter's example 2 |
+| `AtEnrollmentRequest.apkamPublicKey` | 1 | at_client_flutter's `apkam_example.dart` |
+| `AtEnrollmentRequest.rootDomain`, `.encryptedAPKAMSymmetricKey` | 0 | — |
+| `AtEnrollmentResponse.atAuthKeys` | 55 | including at_auth's own handshake |
+| `AtEnrollmentResponse.atSign`, `.rootDomain` | 0 | — |
+
+**The design question, which is not the same as B's.** A session carries a key
+*destination*, and an enrollment request that only submits has none — the
+`AtEnrollmentRequest.pq` dartdoc says so itself: *"A request that only wants
+the key exchange — one that inspects what it advertised and never waits for
+approval — has nowhere to persist keys and needs no session."* Almost every
+one of C's 24 sites is that kind: a refusal test that submits an invalid or
+reused OTP and never waits. Requiring a session there means inventing an
+`InMemoryAtKeysIo` that nothing ever writes to — a fixture that says "keys go
+here" where no keys go, which is the deception this plan's helper rule exists
+to stop.
+
+So one of three shapes, and the choice belongs to gkc:
+
+1. **Hold, as B was held** — move the callers that genuinely have a
+   destination, leave the loose `atSign`/`rootDomain` deprecated and standing
+   for the submit-only case. Consistent with the app-facing rule, and family D
+   is app-facing by measurement.
+2. **Require a session** and accept the empty destination at every
+   submit-only site.
+3. **Undeprecate `atSign` and `rootDomain` on the request**, on the grounds
+   that every request needs an atSign and a session is not the only honest
+   carrier — and deprecate only what the session really supersedes. ⚠️ This
+   would drop C's count by 24 with nothing moved, which is the annotation
+   artefact this plan warns about, arriving as policy rather than accident.
 
 ⚠️ Each family lands with the gates the rest of this plan uses, and B, C and D
 run all four live packs before they commit: they change what an authentication
