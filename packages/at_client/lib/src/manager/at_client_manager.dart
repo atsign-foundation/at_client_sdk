@@ -419,7 +419,10 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       AtClient atClient, AtClientManager atClientManager,
       {SecondaryAddressFinder? secondaryAddressFinder}) async {
     return await NotificationServiceImpl.create(atClient,
-        secondaryAddressFinder: secondaryAddressFinder);
+        secondaryAddressFinder: secondaryAddressFinder,
+        // NOTE: the concrete client's, and only when the client is one: a
+        // test double implementing the interface has no state to report into.
+        connection: atClient is AtClientImpl ? atClient.connection : null);
   }
 
   @override

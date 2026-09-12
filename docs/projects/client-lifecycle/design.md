@@ -317,17 +317,17 @@ The four live packs' fixtures build clients through the old paths (the
 functional pack alone has 14 uses of family C) and migrate onto `open` with
 everything else; they are consumers like any other.
 
-An enrolled client offline should authorise its local reads and writes from
-the keyfile's `AtKeysEnrollment` snapshot when `enroll:fetch` cannot reach
-the atServer, logging at `warning` that the grants are the last ones seen.
-Today the check refuses outright (the measurement in
-[section 7](#7-what-is-owed-in-order)), which makes ruling 4 true only for
+An enrolled client offline authorises its local reads and writes from the
+keyfile's `AtKeysEnrollment` snapshot when `enroll:fetch` cannot reach the
+atServer, logging at `warning` that the grants are the last ones seen. Before
+this the check refused outright (the measurement in
+[section 7](#7-what-is-owed-in-order)), which made ruling 4 true only for
 the atSign's own credential. The snapshot is refreshed on every authenticated
 start and a stale grant costs nothing the atServer would not catch: a
 local-first write is refused at sync if the grant has since narrowed, exactly
-as it would be with the record fetched live. A client with no snapshot yet
-(a keyfile written before the snapshot existed, on its first start) keeps
-today's refusal.
+as it would be with the record fetched live. A refusal from an atServer that
+answered is not a fallback case, and a client with no snapshot yet (a keyfile
+written before the snapshot existed, on its first start) keeps the refusal.
 
 `SecondaryNotFoundException`, the atDirectory answering that this atSign has
 no atServer, is neither a transport failure nor a credential refusal. It
@@ -380,9 +380,11 @@ Three measurements, not a review:
    `Failed to fetch the enrollment record`. Every app-enrolled client, which
    is every NoPorts device, is in this population. The keyfile already holds
    a durable copy of the grants, the `AtKeysEnrollment` snapshot the PQ
-   startup refreshes on each authenticated start, so the recommendation in
-   [section 5](#5-recommendations-that-are-not-yet-rulings) is to fall back
-   to it when the fetch cannot reach the atServer.
+   startup refreshes on each authenticated start, and the client now
+   authorises from it when the fetch cannot reach the atServer
+   ([section 5](#5-recommendations-that-are-not-yet-rulings) has the
+   reasoning); the same test file pins the granted, the ungranted and the
+   no-snapshot cases.
 2. at_client's pre-client surface and connection state, over `buildAtClient`
    and `fromAuthSession`; `use(client)`; the AT0027 exception; the durable
    address; the pending enrollment over `CryptographicMaterialStatus.pending`

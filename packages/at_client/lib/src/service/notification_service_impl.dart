@@ -15,6 +15,7 @@ import 'package:at_client/src/crypto/nskey/nskey_provider.dart'
     show NamespaceKeyUnavailableException;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
     show NskeyPrivateFiling;
+import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -219,13 +220,19 @@ class NotificationServiceImpl extends NotificationService {
   }
 
   /// - [monitor] is providable for unit test purposes
+  /// - [connection] is the client's connection state, which the monitor this
+  ///   builds reports `online` into each time it reaches `listening`; the
+  ///   caller that built the client passes it, since this service holds the
+  ///   client as its interface and the interface's double has none.
   static Future<NotificationService> create(AtClient atClient,
       {Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder}) async {
+      SecondaryAddressFinder? secondaryAddressFinder,
+      AtConnection? connection}) async {
     return NotificationServiceImpl._(
         atClient: atClient,
         monitor: monitor,
-        secondaryAddressFinder: secondaryAddressFinder);
+        secondaryAddressFinder: secondaryAddressFinder,
+        connection: connection);
   }
 
   final String myStatsNotifKey;
@@ -233,7 +240,8 @@ class NotificationServiceImpl extends NotificationService {
   NotificationServiceImpl._(
       {required this.atClient,
       Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder})
+      SecondaryAddressFinder? secondaryAddressFinder,
+      AtConnection? connection})
       : myStatsNotifKey = 'statsNotification.${atClient.atSign}' {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
@@ -287,6 +295,7 @@ class NotificationServiceImpl extends NotificationService {
                 preference.monitorHeartbeatResponseTimeout,
           handleNotification: handleNotificationReceipt,
           getLastNotificationTime: getLastNotificationTime,
+          connection: connection,
         );
 
     lastReceivedNotificationAtKey = AtKey.local(

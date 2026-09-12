@@ -78,6 +78,14 @@ class MockSecondaryKeyStore extends Mock
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
+  // NOTE: `implements` erases the concrete getter AtClientImpl carries, and an
+  // unstubbed mocktail getter answers null, which the runtime refuses for the
+  // non-nullable AtConnection; a Monitor built from this mock reads it.
+  @override
+  final AtConnection connection = AtConnection(
+      atSign: '@alice',
+      attempt: (_) async =>
+          AtConnectionState.offline(AtConnectionCause.unattempted));
   @override
   SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
 }

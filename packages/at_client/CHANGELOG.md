@@ -13,6 +13,17 @@
 - feat: `AtClientManager.getInstance().use(client)` makes a client the
   caller built current, notifying the switch listeners, without stopping the
   previous one: an owned client is its owner's to stop.
+- fix: an enrolled client with no atServer reachable authorises its local
+  reads and writes from the grants its keyfile recorded at the last
+  authenticated start, logging at `warning` that it did, instead of refusing
+  every one of them because the enrollment record could not be fetched. A
+  refusal from an atServer that answered is not a fallback case, and a
+  keyfile holding no recorded grants still refuses. The record is fetched
+  again on the next call, so a grant that changed while offline is noticed
+  as soon as the network is back.
+- The notification monitor reports `online` to the client's connection state
+  each time it reaches `listening`, so a client that only reads locally still
+  learns that the network came back.
 - `ApkamSigning.publicSigningKey` and `.privateSigningKey` are back, as the
   synchronous accessors 3.14.0 published and reading the same place they did,
   and both are **deprecated**. They answer the APKAM *authentication*

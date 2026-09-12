@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
@@ -73,5 +74,73 @@ void main() {
 
     await client.stop();
     expect(client.isStopped, isTrue);
+  });
+
+  group('an enrolled client offline authorises from the keyfile snapshot', () {
+    const enrollmentId = 'offline-enrollment';
+
+    /// A keyfile for [atSign] enrolled as [enrollmentId], with the grants the
+    /// last authenticated start recorded, or none.
+    Future<AtKeysIo> enrolledKeys(String atSign,
+        {Map<String, String>? recordedGrants}) async {
+      final io = await typedKeyfile(atSign, enrollmentId: enrollmentId);
+      if (recordedGrants != null) {
+        (await io.read(atSign)).recordEnrollmentSnapshot(enrollmentId,
+            namespaces: recordedGrants, appName: 'test', deviceName: 'here');
+      }
+      return io;
+    }
+
+    Future<AtClient> offlineClient(String atSign, AtKeysIo keys) async =>
+        buildAtClient(
+            atSign: atSign,
+            namespace: 'offline',
+            preference: AtClientPreference()
+              ..rootDomain = InternetAddress.loopbackIPv4.address
+              ..rootPort = await refusedPort()
+              ..hiveStoragePath = dir.path
+              ..namespace = 'offline',
+            atKeysIo: keys);
+
+    test('a granted namespace is written and read', () async {
+      const atSign = '@enrolledoffline';
+      final client = await offlineClient(
+          atSign, await enrolledKeys(atSign, recordedGrants: {'offline': 'rw'}));
+      final key =
+          AtKey.self('phone', namespace: 'offline', sharedBy: atSign).build();
+
+      expect(await client.put(key, 'offline value'), isTrue,
+          reason: 'the atServer cannot be asked, so the grants the keyfile '
+              'recorded at the last authenticated start decide');
+      expect((await client.get(key)).value, 'offline value');
+    });
+
+    test('a namespace the snapshot does not grant is refused', () async {
+      const atSign = '@enrolledother';
+      final client = await offlineClient(
+          atSign, await enrolledKeys(atSign, recordedGrants: {'offline': 'rw'}));
+      final key =
+          AtKey.self('phone', namespace: 'elsewhere', sharedBy: atSign).build();
+
+      await expectLater(
+          () => client.put(key, 'x'),
+          throwsA(isA<AtException>().having(
+              (e) => e.message, 'message', contains('insufficient privilege'))),
+          reason: 'the control: the snapshot was consulted, not waved through');
+    });
+
+    test('with no snapshot the write is refused as it always was', () async {
+      const atSign = '@enrollednosnapshot';
+      final client = await offlineClient(atSign, await enrolledKeys(atSign));
+      final key =
+          AtKey.self('phone', namespace: 'offline', sharedBy: atSign).build();
+
+      await expectLater(
+          () => client.put(key, 'x'),
+          throwsA(isA<AtException>().having((e) => e.message, 'message',
+              contains('Failed to fetch the enrollment record'))),
+          reason: 'a keyfile that recorded no grants gives the client nothing '
+              'to authorise from');
+    });
   });
 }
