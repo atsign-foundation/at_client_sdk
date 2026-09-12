@@ -1,18 +1,25 @@
+import 'dart:convert';
+
 import 'package:at_auth/at_auth.dart' show EnrollmentRequestDecision;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/util/enroll_list_request_param.dart';
+import 'package:at_commons/at_builders.dart' show EnrollVerbBuilder;
 import 'package:at_commons/at_commons.dart';
 
-/// A passcode the atServer issued or accepted, and when it stops working.
+/// A passcode the atServer issued or accepted, and when it stops working;
+/// [expiry] is null when the atServer's own default decides that.
 class Passcode {
   final String value;
-  final DateTime expiry;
+  final DateTime? expiry;
 
   Passcode(this.value, this.expiry);
 
-  bool get isExpired => DateTime.now().isAfter(expiry);
+  bool get isExpired {
+    final expiry = this.expiry;
+    return expiry != null && DateTime.now().isAfter(expiry);
+  }
 
   @override
   String toString() => value;
@@ -89,25 +96,65 @@ class Enrollments {
       _service.revoke(EnrollmentRequestDecision.revoked(enrollmentId, _atSign,
           force: force));
 
-  /// A one-time passcode a new request may quote until [expiry] has passed.
-  Future<Passcode> otp({Duration expiry = defaultPasscodeExpiry}) async {
+  /// Restores a revoked [enrollmentId]; it authenticates again.
+  Future<void> unrevoke(String enrollmentId) =>
+      _decide(EnrollOperationEnum.unrevoke, enrollmentId);
+
+  /// Deletes [enrollmentId]'s record from the atServer. Only a denied or
+  /// revoked enrollment may be deleted; the atServer refuses the rest.
+  Future<void> delete(String enrollmentId) =>
+      _decide(EnrollOperationEnum.delete, enrollmentId);
+
+  /// The atServer's record of [enrollmentId], or null when it holds none.
+  Future<Enrollment?> fetch(String enrollmentId) async {
+    final response = await _execute(EnrollVerbBuilder()
+      ..operation = EnrollOperationEnum.fetch
+      ..enrollmentId = enrollmentId);
+    final decoded = jsonDecode(response);
+    if (decoded == null) return null;
+    return Enrollment.fromJSON(decoded as Map<String, dynamic>)
+      ..enrollmentId = enrollmentId;
+  }
+
+  Future<void> _decide(EnrollOperationEnum operation, String enrollmentId) =>
+      _execute(EnrollVerbBuilder()
+        ..operation = operation
+        ..enrollmentId = enrollmentId);
+
+  /// Runs [builder] on the client's connection and hands back the payload
+  /// after `data:`; anything else is the atServer's refusal, thrown.
+  Future<String> _execute(EnrollVerbBuilder builder) async {
+    final response = await _client.getRemoteSecondary()!.executeVerb(builder);
+    if (!response.startsWith('data:')) {
+      throw AtEnrollmentException(
+          '${builder.buildCommand().trim()} for $_atSign was refused: '
+          '$response');
+    }
+    return response.substring('data:'.length).trim();
+  }
+
+  /// A one-time passcode a new request may quote until [expiry] has passed;
+  /// null leaves the atServer's own default in force.
+  Future<Passcode> otp({Duration? expiry = defaultPasscodeExpiry}) async {
+    final ttl = expiry == null ? '' : ':ttl:${expiry.inMilliseconds}';
     final response = await _client
         .getRemoteSecondary()!
-        .executeCommand('otp:get:ttl:${expiry.inMilliseconds}\n', auth: true);
+        .executeCommand('otp:get$ttl\n', auth: true);
     if (response == null || !response.startsWith('data:')) {
       throw AtEnrollmentException(
           'the atServer issued no passcode for $_atSign: $response');
     }
-    return Passcode(
-        response.substring('data:'.length).trim(), DateTime.now().add(expiry));
+    return Passcode(response.substring('data:'.length).trim(),
+        expiry == null ? null : DateTime.now().add(expiry));
   }
 
-  /// Sets [passcode], six alphanumeric characters, as a passcode any number
-  /// of requests may quote until [expiry] has passed.
-  Future<Passcode> spp(String passcode,
-      {Duration expiry = defaultPasscodeExpiry}) async {
+  /// Sets [passcode], six to sixteen alphanumeric characters, as a passcode
+  /// any number of requests may quote until [expiry] has passed; with none
+  /// it stands until replaced.
+  Future<Passcode> spp(String passcode, {Duration? expiry}) async {
     await _client.setSPP(passcode, expiry: expiry);
-    return Passcode(passcode, DateTime.now().add(expiry));
+    return Passcode(
+        passcode, expiry == null ? null : DateTime.now().add(expiry));
   }
 
   String get _atSign => _client.getCurrentAtSign()!;

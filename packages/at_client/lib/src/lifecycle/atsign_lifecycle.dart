@@ -10,6 +10,7 @@ import 'package:at_client/src/enroll/signing_key_mint.dart'
     show mintAdvertisedSigningKey;
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/pending_enrollment.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
@@ -62,7 +63,10 @@ extension AtsignLifecycle on Atsign {
   /// local storage, borrowed unless it was built with `closedByClient: true`;
   /// with none, a Hive store opens under `preference.hiveStoragePath`.
   /// [atLookUp] is a connection to use instead of one built from the
-  /// preference, for a caller that already holds one.
+  /// preference, for a caller that already holds one. [serviceFactory]
+  /// supplies the client's notification, sync and enrollment services in
+  /// place of the defaults; a process that must not sync hands in a factory
+  /// whose sync service does nothing.
   ///
   /// Refuses, as `buildAtClient` does, while a client for this atSign is
   /// live in this process.
@@ -72,6 +76,7 @@ extension AtsignLifecycle on Atsign {
     String? namespace,
     AtClientStorage? storage,
     AtLookUp? atLookUp,
+    AtServiceFactory? serviceFactory,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
     await _refuseKeysStillPending(keys);
@@ -82,6 +87,15 @@ extension AtsignLifecycle on Atsign {
       storage: storage,
       atKeysIo: keys,
       atLookUp: atLookUp,
+      notificationServiceBuilder: serviceFactory == null
+          ? null
+          : (client) => serviceFactory.notificationService(
+              client, AtClientManager.getInstance()),
+      syncServiceBuilder: serviceFactory == null
+          ? null
+          : (client) => serviceFactory.syncService(client,
+              AtClientManager.getInstance(), client.notificationService),
+      enrollmentServiceBuilder: serviceFactory?.enrollmentService,
     ) as AtClientImpl;
 
     final state = await client.connection.attempt(budget: connectBudget);

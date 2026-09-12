@@ -272,4 +272,116 @@ void main() {
     expect(
         (await store.read(atSign)).pendingEnrollmentIds, [again.enrollmentId]);
   });
+
+  /// The `enroll:request` a submission under [posture] puts on the wire, as
+  /// the atServer would decode it. Only the submission runs: the request is
+  /// what decides how the symmetric key travels and what the enrollment
+  /// advertises, and the atServer parks it pending.
+  Future<Map<String, dynamic>> submittedUnder(PqPosture posture,
+      {EnrollmentKeyExchangeMode? keyExchangeMode}) async {
+    final lookUp = MockAtLookupImpl();
+    final sent = <String>[];
+    when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
+        .thenAnswer((invocation) async {
+      final command = invocation.positionalArguments.first as String;
+      sent.add(command);
+      if (command.startsWith('enroll:request:')) {
+        return 'data:${jsonEncode({
+              'enrollmentId': 'shape-1',
+              'status': 'pending'
+            })}';
+      }
+      throw StateError('the mocked atServer has no answer for: $command');
+    });
+    when(() => lookUp.executeVerb(any())).thenAnswer((invocation) async {
+      final builder = invocation.positionalArguments.first;
+      if (builder is LookupVerbBuilder && builder.atKey.key == 'publicKey') {
+        return 'data:$encryptionPublicKey';
+      }
+      throw StateError('the mocked atServer has no answer for: '
+          '${(builder as VerbBuilder).buildCommand()}');
+    });
+    when(() => lookUp.close()).thenAnswer((_) async {});
+
+    await Atsign(atSign).enroll(
+        otp: 'ABC123',
+        app: 'wavi',
+        device: 'phone',
+        namespaces: {'wavi': 'rw'},
+        keys: InMemoryAtKeysIo(),
+        preference: AtClientPreference(posture: posture)
+          ..rootDomain = InternetAddress.loopbackIPv4.address
+          ..rootPort = 1
+          ..namespace = 'lifecycle',
+        keyExchangeMode: keyExchangeMode,
+        atLookUp: lookUp);
+
+    final command = sent.where((c) => c.startsWith('enroll:request:')).single;
+    return jsonDecode(command.substring(
+            command.indexOf('{'), command.lastIndexOf('}') + 1))
+        as Map<String, dynamic>;
+  }
+
+  group('the posture decides the shape of the request', () {
+    test(
+        'legacy wraps the symmetric key, carries no key package, and '
+        'advertises its authentication key', () async {
+      final request = await submittedUnder(PqPosture.legacy);
+
+      expect(request['signingAlgo'], 'rsa2048');
+      expect(request['encryptedAPKAMSymmetricKey'], isNotNull,
+          reason: 'the approver unwraps the key this request carries');
+      expect(request['metadata'], isNull,
+          reason: 'no key package: nothing is sealed to this enrollment');
+      expect(request['apskLegacy'], request['apkamPublicKey'],
+          reason: 'a legacy posture names no data signing algorithm, so the '
+              'authentication key does both jobs');
+      expect(request['apsk'], isNull);
+    });
+
+    test(
+        'pqReady carries a key package instead of a wrapped key, and '
+        'advertises an rsa2048 signing key of its own', () async {
+      final request = await submittedUnder(PqPosture.pqReady);
+
+      expect(request['signingAlgo'], 'mldsa65');
+      expect(request['encryptedAPKAMSymmetricKey'], isNull,
+          reason: 'nothing RSA-wrapped rides a pq request; the approver seals '
+              'to the key package');
+      expect(request['metadata']?['keyPackage'], isNotNull);
+      expect(request['apskLegacy'], isNotNull);
+      expect(request['apskLegacy'], isNot(request['apkamPublicKey']),
+          reason: 'the enrollment owns a data signing key from its first '
+              'byte, in the bare spelling an un-upgraded peer parses');
+    });
+
+    test(
+        'pqActive advertises an mldsa65 signing key, in the structured '
+        'spelling', () async {
+      final request = await submittedUnder(PqPosture.pqActive);
+
+      expect(request['encryptedAPKAMSymmetricKey'], isNull);
+      expect(request['metadata']?['keyPackage'], isNotNull);
+      expect(request['apskLegacy'], isNull);
+      final keys = request['apsk']['keys'] as List;
+      expect(keys.single['alg'], 'mldsa65');
+      expect(keys.single['pub'], isNot(request['apkamPublicKey']));
+    });
+
+    test('a named mode overrides the posture in both directions', () async {
+      final legacyUnderPq = await submittedUnder(PqPosture.pqActive,
+          keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
+      expect(legacyUnderPq['encryptedAPKAMSymmetricKey'], isNotNull,
+          reason: 'the escape hatch for a known-legacy approver');
+      expect(legacyUnderPq['metadata'], isNull);
+      expect((legacyUnderPq['apsk']['keys'] as List).single['alg'], 'mldsa65',
+          reason: 'the mode decides how the key travels, not what the '
+              'enrollment advertises');
+
+      final pqUnderLegacy = await submittedUnder(PqPosture.legacy,
+          keyExchangeMode: EnrollmentKeyExchangeMode.pq);
+      expect(pqUnderLegacy['encryptedAPKAMSymmetricKey'], isNull);
+      expect(pqUnderLegacy['metadata']?['keyPackage'], isNotNull);
+    });
+  });
 }

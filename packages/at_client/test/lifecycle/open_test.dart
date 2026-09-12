@@ -210,4 +210,133 @@ void main() {
     expect(state.isOnline, isTrue);
     expect(client.connection.current.isOnline, isTrue);
   });
+
+  test('awaitOnline() keeps attempting until the atServer answers', () async {
+    const atSign = '@patient';
+    var attempts = 0;
+    final lookUp = lookUpAnswering(() async {
+      attempts++;
+      if (attempts < 3) {
+        throw SecondaryConnectException(
+            'unable to connect to atServer for $atSign on h:1');
+      }
+      return true;
+    });
+    final client = await Atsign(atSign).open(
+        keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
+        preference: await preference(),
+        atLookUp: lookUp);
+    expect(client.connection.current.cause, AtConnectionCause.unreachable);
+
+    final state = await client.connection.awaitOnline(
+        budget: const Duration(seconds: 5),
+        retryInterval: const Duration(milliseconds: 10));
+
+    expect(state.isOnline, isTrue);
+    expect(client.connection.current.isOnline, isTrue);
+    expect(attempts, 3,
+        reason: 'the open made one attempt and the wait made two more');
+  });
+
+  test(
+      'awaitOnline() stops when the budget is spent, reporting where it '
+      'ended', () async {
+    const atSign = '@unlucky';
+    var attempts = 0;
+    final lookUp = lookUpAnswering(() async {
+      attempts++;
+      throw SecondaryConnectException(
+          'unable to connect to atServer for $atSign on h:1');
+    });
+    final client = await Atsign(atSign).open(
+        keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
+        preference: await preference(),
+        atLookUp: lookUp);
+    final started = DateTime.now();
+
+    final state = await client.connection.awaitOnline(
+        budget: const Duration(milliseconds: 300),
+        retryInterval: const Duration(milliseconds: 20));
+
+    expect(state.cause, AtConnectionCause.unreachable);
+    expect(attempts, greaterThan(2), reason: 'it kept trying until the end');
+    expect(DateTime.now().difference(started),
+        lessThan(const Duration(seconds: 3)),
+        reason: 'and gave up close to the budget');
+  });
+
+  test('awaitOnline() stops at a refusal, which no amount of waiting changes',
+      () async {
+    const atSign = '@turnedaway';
+    var attempts = 0;
+    final lookUp = lookUpAnswering(() async {
+      attempts++;
+      throw UnAuthenticatedException(
+          'Failed connecting to $atSign. error:AT0401:Client authentication '
+          'failed');
+    });
+    // Built below open, which would refuse a first open the atServer turns
+    // away; the wait is what is under test.
+    final client = await buildAtClient(
+        atSign: atSign,
+        namespace: 'lifecycle',
+        preference: await preference(),
+        atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
+        atLookUp: lookUp) as AtClientImpl;
+
+    final state = await client.connection.awaitOnline(
+        budget: const Duration(seconds: 5),
+        retryInterval: const Duration(milliseconds: 10));
+
+    expect(state.isRefused, isTrue);
+    expect(state.cause, AtConnectionCause.unauthenticated);
+    expect(attempts, 1, reason: 'a refusal is an answer, not a retry');
+  });
+
+  test('a service factory supplies the services the client runs on', () async {
+    const atSign = '@factorybuilt';
+    final client = await Atsign(atSign).open(
+        keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
+        preference: await preference(),
+        atLookUp: lookUpAnswering(() async => true),
+        serviceFactory: _NoSyncFactory());
+
+    expect(client.syncService, isA<_NoSync>(),
+        reason: 'the factory\'s sync service, not the default one');
+    expect(client.connection.current.isOnline, isTrue);
+  });
+}
+
+/// A factory whose sync service does nothing, as a CLI that must not sync
+/// supplies.
+class _NoSyncFactory extends DefaultAtServiceFactory {
+  @override
+  Future<SyncService> syncService(
+          AtClient atClient,
+          AtClientManager atClientManager,
+          NotificationService notificationService) async =>
+      _NoSync();
+}
+
+class _NoSync implements SyncService {
+  @override
+  void addProgressListener(SyncProgressListener listener) {}
+
+  @override
+  Future<bool> isInSync() async => false;
+
+  @override
+  bool get isSyncInProgress => false;
+
+  @override
+  void removeAllProgressListeners() {}
+
+  @override
+  void removeProgressListener(SyncProgressListener listener) {}
+
+  @override
+  void setOnDone(Function onDone) {}
+
+  @override
+  void sync({Function? onDone, Function? onError}) {}
 }

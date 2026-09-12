@@ -26,6 +26,12 @@
   new enrollment: it checks that the keyfile now authenticates as the new
   id, and the client's own connection performs the PKAM, reporting a refusal
   into `client.connection`.
+- `client.connection.awaitOnline(budget:, retryInterval:)` attempts until
+  the connection is online, refused, or the budget is spent, and says where
+  it ended; `open` takes a `serviceFactory`, so a process that must not sync
+  supplies the no-op sync service the CLIs use; `client.enrollments` gains
+  `fetch`, `unrevoke` and `delete`, and an `otp` or `spp` asked for with no
+  expiry leaves the atServer's default in force.
 - feat: `Atsign('@alice').enroll(otp: ..., app: ..., device: ...,
   namespaces: ..., keys: ..., preference: ...)` submits an enrollment and
   files the keys it minted in the store the caller named, as `pending` under

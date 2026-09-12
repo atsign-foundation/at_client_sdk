@@ -1,12 +1,17 @@
+import 'dart:convert';
+
 import 'package:at_auth/at_auth.dart' show EnrollmentRequestDecision;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart' show AtResponse;
+import 'package:at_commons/at_builders.dart' show VerbBuilder;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 
 class _FakeListParams extends Fake implements EnrollmentListRequestParam {}
+
+class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
 class _FakeDecision extends Fake implements EnrollmentRequestDecision {}
 
@@ -32,6 +37,7 @@ void main() {
   setUpAll(() {
     registerFallbackValue(_FakeListParams());
     registerFallbackValue(_FakeDecision());
+    registerFallbackValue(_FakeVerbBuilder());
   });
 
   setUp(() {
@@ -153,8 +159,22 @@ void main() {
 
     expect(passcode.value, 'ABC123');
     expect(passcode.isExpired, isFalse);
-    expect(passcode.expiry.difference(DateTime.now()).inMinutes, 4,
+    expect(passcode.expiry!.difference(DateTime.now()).inMinutes, 4,
         reason: 'five minutes from now, less the moment it took');
+  });
+
+  test('otp() with no expiry sends the bare verb, and the expiry is unknown',
+      () async {
+    when(() => remote.executeCommand('otp:get\n', auth: true))
+        .thenAnswer((_) async => 'data:XYZ789');
+
+    final passcode = await client.enrollments.otp(expiry: null);
+
+    expect(passcode.value, 'XYZ789');
+    expect(passcode.expiry, isNull,
+        reason:
+            'the atServer\'s default applies, and the client cannot see it');
+    expect(passcode.isExpired, isFalse);
   });
 
   test('otp() refuses an atServer that issued nothing', () async {
@@ -175,9 +195,71 @@ void main() {
         .spp('ABC123', expiry: const Duration(minutes: 10));
 
     expect(passcode.value, 'ABC123');
-    expect(passcode.expiry.difference(DateTime.now()).inMinutes, 9);
+    expect(passcode.expiry!.difference(DateTime.now()).inMinutes, 9);
     verify(() => client.setSPP('ABC123', expiry: const Duration(minutes: 10)))
         .called(1);
+  });
+
+  test('spp() with no expiry sets a passcode that stands until replaced',
+      () async {
+    when(() => client.setSPP('ABC123', expiry: null))
+        .thenAnswer((_) async => AtResponse()..response = 'ok');
+
+    final passcode = await client.enrollments.spp('ABC123');
+
+    expect(passcode.expiry, isNull);
+    verify(() => client.setSPP('ABC123', expiry: null)).called(1);
+  });
+
+  test(
+      'fetch(), unrevoke() and delete() send the enroll verb, pinned, and '
+      'read the record back', () async {
+    // The verb is a wire contract with every atServer implementation.
+    final sent = <String>[];
+    when(() => remote.executeVerb(any())).thenAnswer((invocation) async {
+      final command =
+          (invocation.positionalArguments.first as VerbBuilder).buildCommand();
+      sent.add(command);
+      if (command.startsWith('enroll:fetch:')) {
+        return 'data:${jsonEncode({
+              'appName': 'wavi',
+              'deviceName': 'phone',
+              'namespace': {'wavi': 'rw'},
+              'status': 'revoked',
+            })}';
+      }
+      return 'data:ok';
+    });
+
+    final record = await client.enrollments.fetch('e-9');
+    await client.enrollments.unrevoke('e-9');
+    await client.enrollments.delete('e-9');
+
+    expect(record?.enrollmentId, 'e-9',
+        reason: 'the record the atServer serves does not repeat its id');
+    expect((record?.appName, record?.status), ('wavi', 'revoked'));
+    expect(sent, [
+      'enroll:fetch:{"enrollmentId":"e-9"}\n',
+      'enroll:unrevoke:{"enrollmentId":"e-9"}\n',
+      'enroll:delete:{"enrollmentId":"e-9"}\n',
+    ]);
+  });
+
+  test('fetch() answers null for a record the atServer does not hold',
+      () async {
+    when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:null');
+
+    expect(await client.enrollments.fetch('nope'), isNull);
+  });
+
+  test('a refused enroll verb is thrown, naming the verb', () async {
+    when(() => remote.executeVerb(any()))
+        .thenAnswer((_) async => 'error:AT0011:enrollment is approved');
+
+    await expectLater(
+        client.enrollments.delete('e-1'),
+        throwsA(isA<AtEnrollmentException>().having((e) => e.message, 'message',
+            contains('enroll:delete:{"enrollmentId":"e-1"}'))));
   });
 
   test('a client with no enrollment service says so', () async {

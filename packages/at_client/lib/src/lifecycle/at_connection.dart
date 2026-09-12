@@ -134,6 +134,33 @@ class AtConnection {
     return state;
   }
 
+  /// Attempts until the connection is online, or refused, or [budget] is
+  /// spent, pausing [retryInterval] between attempts, and returns where it
+  /// ended. A refusal, and an atDirectory with no record of the atSign, are
+  /// answers that waiting does not change, so they end the wait at once.
+  Future<AtConnectionState> awaitOnline({
+    Duration budget = defaultBudget,
+    Duration retryInterval = const Duration(seconds: 3),
+  }) async {
+    final deadline = DateTime.now().add(budget);
+    var state = _current;
+    while (!_settled(state)) {
+      final remaining = deadline.difference(DateTime.now());
+      if (remaining <= Duration.zero) break;
+      state = await attempt(budget: remaining);
+      if (_settled(state)) break;
+      final left = deadline.difference(DateTime.now());
+      if (left <= Duration.zero) break;
+      await Future<void>.delayed(retryInterval < left ? retryInterval : left);
+    }
+    return state;
+  }
+
+  static bool _settled(AtConnectionState state) =>
+      state.isOnline ||
+      state.isRefused ||
+      state.cause == AtConnectionCause.noAtServer;
+
   /// Records [state] as what the connection is now.
   ///
   /// For the client's own connections to call; an application reads
