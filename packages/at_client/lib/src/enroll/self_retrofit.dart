@@ -24,9 +24,10 @@ final _logger = AtSignLogger('selfRetrofit');
 /// [AtSelfEnrollmentRequest] on the legacy [session]'s authenticated
 /// connection (auto-approved, no OTP; idempotent — a keyfile that already
 /// carries an enrollment of the requested algorithm reuses it, nothing is
-/// minted); re-authenticate under the new enrollment id, which resolves the
-/// AtChops and signing algorithm from the keyfile; then build the client for
-/// the new id via [AtClientManager.fromAuthSession].
+/// minted); check the keyfile now authenticates as the new enrollment id;
+/// then build the client for the new id via
+/// [AtClientManager.fromAuthSession], whose own connection is the first to
+/// authenticate as it.
 ///
 /// **The enrollment never changes under a live client _on this path_.** The
 /// switched-to client is a NEW instance under the `(atSign, enrollmentId)`
@@ -138,19 +139,22 @@ Future<AtClientManager> selfRetrofit({
   return switched;
 }
 
-/// The identity half of a self-retrofit: submit the enrollment, then
-/// authenticate under the new id, and hand back the session that carries it.
-/// No client is built and no [AtClientManager] is touched.
+/// The identity half of a self-retrofit: submit the enrollment, check the
+/// keyfile names the new id, and hand back the session that carries it. No
+/// client is built, nothing authenticates, and no [AtClientManager] is
+/// touched.
 ///
 /// Split out of [selfRetrofit] because a client that retrofits during its own
 /// startup cannot use that function: it ends in
 /// [AtClientManager.fromAuthSession], which builds *another* client, whose own
 /// initialisation would retrofit in turn.
 ///
-/// The returned session's `enrollmentId` is the new enrollment. Its `atLookUp`
-/// is authenticated as that enrollment, and its `atKeysIo` reads a keyfile
-/// carrying the new enrollment's typed key material, which is what lets a
-/// caller re-derive its AtChops and connections from the new identity.
+/// The returned session's `enrollmentId` is the new enrollment, and its
+/// `atKeysIo` reads a keyfile carrying the new enrollment's typed key
+/// material, which is what lets a caller re-derive its AtChops and
+/// connections from the new identity. It carries no connection: the caller's
+/// next connection authenticates as the new enrollment, and reports into the
+/// client's connection state if the atServer refuses it.
 ///
 /// See [selfRetrofit] for what [signingAlgo] means, why the advertised signing
 /// key is minted before the request, and why the KEM is decided at this call.
@@ -205,28 +209,35 @@ Future<AtAuthSession> retrofitIdentity({
                   preference.keyEstablishmentAlgorithms.first)),
       atLookUp);
 
-  // NOTE: the retrofit response's session is the legacy one; only
-  // authenticate() mints a session carrying the new id, resolving the chops and
-  // algorithm from the keyfile the successor's material was just filed in.
-  final auth = await AtAuth.create()
-      .authenticate(AtAuthRequest(session.atSign, atKeysIo: session.atKeysIo)
-        // NOTE: the switched-to client's start-time self-heal — the
-        // signing-root pull, the nskey pulls, the store hydration — all key off
-        // its namespace, and a client built without one runs none of them while
-        // looking perfectly healthy.
-        ..namespace = session.namespace ?? preference.namespace
-        ..rootDomain = session.rootDomain);
-  if (auth.isSuccessful != true || auth.session == null) {
+  // NOTE: the retrofit response's session is the legacy one. The keyfile the
+  // successor's material was just filed in names the enrollment it now
+  // authenticates as, and that is checked here; the PKAM that proves it runs
+  // on the client's own connection, which reports a refusal into
+  // `client.connection` rather than failing the retrofit after the fact.
+  final AtKeys retrofitted;
+  try {
+    retrofitted = await session.atKeysIo.read(session.atSign);
+  } on Exception catch (e) {
     throw AtClientException.message(
-        'the retrofitted enrollment ${response.enrollmentId} failed to '
-        'authenticate; the legacy client is untouched');
+        'the retrofit of ${session.atSign} filed enrollment '
+        '${response.enrollmentId} but its keyfile could not be read back: $e; '
+        'the legacy client is untouched');
   }
-  if (auth.session!.enrollmentId != response.enrollmentId) {
+  final authenticatesAs = retrofitted.enrollmentToAuthenticateAs();
+  if (authenticatesAs != response.enrollmentId) {
     throw AtClientException.message(
-        'the keyfile authenticates as ${auth.session!.enrollmentId} after '
-        'retrofitting to ${response.enrollmentId}; the legacy client is '
-        'untouched');
+        'the keyfile authenticates as $authenticatesAs after retrofitting to '
+        '${response.enrollmentId}; the legacy client is untouched');
   }
 
-  return auth.session!;
+  return AtAuthSession(
+      atSign: session.atSign,
+      rootDomain: session.rootDomain,
+      atKeysIo: session.atKeysIo,
+      // NOTE: the switched-to client's start-time self-heal — the signing-root
+      // pull, the nskey pulls, the store hydration — all key off its
+      // namespace, and a client built without one runs none of them while
+      // looking perfectly healthy.
+      namespace: session.namespace ?? preference.namespace,
+      enrollmentId: response.enrollmentId);
 }

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -83,14 +84,16 @@ void main() {
       throw StateError('the mocked atServer has no answer for: '
           '${builder.buildCommand()}');
     });
-    when(() => lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
+    when(() =>
+            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
         .thenAnswer((_) async => true);
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     return (lookUp: lookUp, sent: sent);
   }
 
-  test('a legacy activation writes the first keys, completes, and opens an '
+  test(
+      'a legacy activation writes the first keys, completes, and opens an '
       'online client', () async {
     final store = InMemoryAtKeysIo();
     final server = atServer();
@@ -118,7 +121,9 @@ void main() {
     expect(server.sent.where((c) => c.startsWith('enroll:')).single,
         allOf(contains('"appName":"wavi"'), contains('"deviceName":"laptop"')),
         reason: 'the first enrollment is named as asked');
-    expect(server.sent.any((c) => c.startsWith('update:') && c.contains('public:publickey$atSign')),
+    expect(
+        server.sent.any((c) =>
+            c.startsWith('update:') && c.contains('public:publickey$atSign')),
         isTrue,
         reason: 'completion publishes the encryption public key');
     expect(
@@ -133,6 +138,41 @@ void main() {
     await client.stop();
   });
 
+  test(
+      'pqNativeOnboard activates ML-DSA-65 whatever the preference says, '
+      'and the manager adopts the client', () async {
+    final store = InMemoryAtKeysIo();
+    final server = atServer();
+    final manager = AtClientManager(atSign);
+
+    final adopted = await pqNativeOnboard(
+        atSign: atSign,
+        cramSecret: cramSecret,
+        // A legacy posture, whose authentication algorithm is rsa2048: the
+        // helper's whole point is to override it.
+        preference: await preference(),
+        atKeysIo: store,
+        appName: 'wavi',
+        deviceName: 'pq-native',
+        manager: manager,
+        atLookUp: server.lookUp);
+    expect(adopted, same(manager));
+
+    final keys = await store.read(atSign);
+    expect(keys.signingAlgorithmForEnrollment(enrollmentId),
+        SigningAlgoType.mldsa65);
+    // ignore: deprecated_member_use
+    expect(keys.apkamPublicKey, isNull,
+        reason: 'a PQ-native keyfile keeps its APKAM in the typed section');
+    expect(manager.atClient.enrollmentId, enrollmentId);
+    expect(manager.atClient.connection.current.isOnline, isTrue);
+    final enrollCommand =
+        server.sent.where((c) => c.startsWith('enroll:')).single;
+    expect(enrollCommand, contains('"signingAlgo":"mldsa65"'));
+    expect(enrollCommand, contains('keyPackage'),
+        reason: 'the request that creates the record carries the key package');
+  });
+
   test('a wrong secret is refused and nothing is written', () async {
     final store = InMemoryAtKeysIo();
     final server = atServer();
@@ -144,8 +184,8 @@ void main() {
             preference: await preference(),
             atLookUp: server.lookUp),
         throwsA(isA<AtAuthenticationException>()));
-    await expectLater(() => store.read(atSign),
-        throwsA(isA<AtKeysSourceAbsentException>()),
+    await expectLater(
+        () => store.read(atSign), throwsA(isA<AtKeysSourceAbsentException>()),
         reason: 'nothing was minted for a secret the atServer refused');
     expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty);
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse);

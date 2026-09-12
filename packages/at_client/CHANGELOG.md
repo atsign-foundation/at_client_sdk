@@ -18,7 +18,14 @@
   activation mints into the store named, and opens a client on them that the
   caller owns. The preference's `authenticationKeyAlgorithm` decides whether
   the atSign is post-quantum from birth, in which case the signing key, the
-  key package and the signing root are minted as the PQ-native helpers did.
+  key package and the signing root are minted as the PQ-native helpers did;
+  `signingAlgo` overrides it. `pqNativeOnboard` is that call with ML-DSA-65
+  forced, followed by `AtClientManager.use`, and no longer takes an
+  `AtAuth`; `pqNativeActivationMaterial` is the minting the two share.
+- The self-retrofit no longer authenticates through at_auth after filing the
+  new enrollment: it checks that the keyfile now authenticates as the new
+  id, and the client's own connection performs the PKAM, reporting a refusal
+  into `client.connection`.
 - feat: `Atsign('@alice').enroll(otp: ..., app: ..., device: ...,
   namespaces: ..., keys: ..., preference: ...)` submits an enrollment and
   files the keys it minted in the store the caller named, as `pending` under

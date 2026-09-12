@@ -16,8 +16,12 @@ carries the command that reproduces it in
 
 ## Status
 
-In progress: step 1 of [section 7](#7-what-is-owed-in-order) is measured
-and the rest is being built. The work is a **P0** row in the PQ table
+In progress: steps 1 and 2 of [section 7](#7-what-is-owed-in-order) are
+done except the durable copy of the atServer address, and step 3 is being
+built. `AtClientManager.setCurrentAtSign` and `fromAuthSession` are not yet
+deprecated: that waits until the live packs' fixtures are on `open`, so the
+annotation never lands ahead of the callers it would flag. The work is a
+**P0** row in the PQ table
 ([`../pq/implementation-plan.md`](../pq/implementation-plan.md)), since it
 gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the
 NoPorts `npt_flutter` port. It is built on `gkc-client-lifecycle`, cut from

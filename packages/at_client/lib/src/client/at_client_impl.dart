@@ -6,7 +6,7 @@ import 'package:at_auth/at_auth.dart'
     show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
-import 'package:at_client/src/enroll/pq_native_onboard.dart'
+import 'package:at_client/src/enroll/first_enrollment.dart'
     show firstEnrollmentAppName, firstEnrollmentDeviceName;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
@@ -795,9 +795,7 @@ class AtClientImpl implements AtClient {
     _atChops = atChops;
     _atKeysIo = atKeysIo;
     _connection = AtConnection(
-        atSign: _atSign,
-        attempt: _attemptConnection,
-        onOnline: _recordOnline);
+        atSign: _atSign, attempt: _attemptConnection, onOnline: _recordOnline);
   }
 
   /// One bounded connect and authenticate on this client's own connection,
@@ -819,8 +817,7 @@ class AtClientImpl implements AtClient {
       return AtConnectionState.offline(AtConnectionCause.unreachable,
           error: 'the atServer gave no challenge to sign');
     } on TimeoutException catch (e) {
-      return AtConnectionState.offline(AtConnectionCause.unreachable,
-          error: e);
+      return AtConnectionState.offline(AtConnectionCause.unreachable, error: e);
     } catch (e) {
       return classifyConnectionFailure(e) ??
           AtConnectionState.offline(AtConnectionCause.unreachable, error: e);

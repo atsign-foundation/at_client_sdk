@@ -5,11 +5,7 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_factory.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/enroll/pq_native_onboard.dart'
-    show
-        firstEnrollmentAppName,
-        firstEnrollmentDeviceName,
-        mintSigningRootAfterActivation;
+import 'package:at_client/src/enroll/first_enrollment.dart';
 import 'package:at_client/src/enroll/signing_key_mint.dart'
     show mintAdvertisedSigningKey;
 import 'package:at_client/src/lifecycle/at_connection.dart';
@@ -103,13 +99,13 @@ extension AtsignLifecycle on Atsign {
   /// caller owns.
   ///
   /// The activation is the atSign's first enrollment, named [app] on
-  /// [device] and granted everything. Its APKAM algorithm is the
-  /// preference's `authenticationKeyAlgorithm`; `mldsa65` makes the atSign
-  /// post-quantum from birth, with a data signing key and a key package on
-  /// the request that creates the record, and the signing root minted once
-  /// the client is up. [mintLegacyMaterial] cuts the RSA encryption keypair
-  /// and the self-encryption key, and defaults to the posture's answer.
-  /// [onProgress] hears each step of the activation.
+  /// [device] and granted everything. Its APKAM algorithm is [signingAlgo],
+  /// defaulting to the preference's `authenticationKeyAlgorithm`; `mldsa65`
+  /// makes the atSign post-quantum from birth, with a data signing key and a
+  /// key package on the request that creates the record, and the signing
+  /// root minted once the client is up. [mintLegacyMaterial] cuts the RSA
+  /// encryption keypair and the self-encryption key, and defaults to the
+  /// posture's answer. [onProgress] hears each step of the activation.
   ///
   /// See [open] for [namespace], [storage], [atLookUp] and [connectBudget];
   /// a supplied [atLookUp] serves the activation too, and is taken as having
@@ -123,25 +119,26 @@ extension AtsignLifecycle on Atsign {
     String app = firstEnrollmentAppName,
     String device = firstEnrollmentDeviceName,
     bool? mintLegacyMaterial,
+    SigningAlgoType? signingAlgo,
     void Function(ProgressEvent event)? onProgress,
     AtLookUp? atLookUp,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
-    final algo = preference.authenticationKeyAlgorithm;
+    final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
     final pqNative = algo == SigningAlgoType.mldsa65;
-    ({SigningAlgoType algorithm, String publicKey, String privateKey})?
-        advertisedSigningKey;
+    ({
+      SigningAlgoType algorithm,
+      String publicKey,
+      String privateKey
+    })? advertisedSigningKey;
     FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? metadataBuilder;
     if (pqNative) {
-      // NOTE: the enrollment owns its signing key from its first byte and the
-      // key package is signed with that same key: `_apsk` names one key and
-      // a peer verifies the package against it before sealing anything.
-      advertisedSigningKey =
-          await mintAdvertisedSigningKey(preference.dataSigningKeyAlgorithms);
-      metadataBuilder = enrollmentKeyPackageBuilder(this,
-          signingAlgo: algo,
-          advertisedSigningKey: advertisedSigningKey,
+      final material = await pqNativeActivationMaterial(
+          atSign: this,
+          dataSigningKeyAlgorithms: preference.dataSigningKeyAlgorithms,
           keyEstablishmentAlgo: preference.keyEstablishmentAlgorithms.first);
+      advertisedSigningKey = material.advertisedSigningKey;
+      metadataBuilder = material.metadataBuilder;
     }
     await activateAtSign(
         atSign: this,
@@ -225,7 +222,8 @@ extension AtsignLifecycle on Atsign {
           metadataBuilder: enrollmentKeyPackageBuilder(this,
               signingAlgo: algo,
               advertisedSigningKey: advertisedSigningKey,
-              keyEstablishmentAlgo: preference.keyEstablishmentAlgorithms.first),
+              keyEstablishmentAlgo:
+                  preference.keyEstablishmentAlgorithms.first),
           apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(this));
     } else {
       request = AtEnrollmentRequest(
@@ -309,8 +307,7 @@ extension AtsignLifecycle on Atsign {
           device: device,
           namespaces: info?.namespaces ?? const {},
           keys: keys,
-          rootDomain:
-              AtRootDomain(preference.rootDomain, preference.rootPort),
+          rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
           signingAlgo: SigningAlgoType.values
               .firstWhere((a) => a.name == apkam.algorithm.toString()),
           // A legacy request carries its own symmetric key in; a pq request
@@ -393,19 +390,27 @@ extension AtsignLifecycle on Atsign {
     for (final material in minted.keysForEnrollment(enrollmentId)) {
       pending.addKey(material.withStatus(CryptographicMaterialStatus.pending));
     }
-    final apkamFiled = pending.keysForEnrollment(enrollmentId).any(
-        (m) => m.role == CryptographicMaterialRole.privateAuthentication);
+    final apkamFiled = pending
+        .keysForEnrollment(enrollmentId)
+        .any((m) => m.role == CryptographicMaterialRole.privateAuthentication);
     if (!apkamFiled) {
       // An rsa2048 keypair rides the flat fields of what the submission
       // minted; it is filed typed here so that pending has one shape.
-      final materialAlgorithm = CryptographicMaterialAlgorithm.of(algorithm.name);
+      final materialAlgorithm =
+          CryptographicMaterialAlgorithm.of(algorithm.name);
       final keyId = '${AtKeys.keyIdPrefix('auth', materialAlgorithm)}1';
       final now = DateTime.now().toUtc();
       for (final (role, bytes) in [
         // ignore: deprecated_member_use
-        (CryptographicMaterialRole.privateAuthentication, minted.apkamPrivateKey!),
+        (
+          CryptographicMaterialRole.privateAuthentication,
+          minted.apkamPrivateKey!
+        ),
         // ignore: deprecated_member_use
-        (CryptographicMaterialRole.publicAuthentication, minted.apkamPublicKey!),
+        (
+          CryptographicMaterialRole.publicAuthentication,
+          minted.apkamPublicKey!
+        ),
       ]) {
         pending.addKey(CryptographicMaterial(
             keyId: keyId,
