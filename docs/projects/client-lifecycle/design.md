@@ -25,9 +25,10 @@ annotation never lands ahead of the callers it would flag. The work is a
 ([`../pq/implementation-plan.md`](../pq/implementation-plan.md)), since it
 gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the
 NoPorts `npt_flutter` port. It is built on `gkc-client-lifecycle`, cut from
-`gkc-test-pack-speedup` on gkc's instruction of 2026-09-12 rather than from
-trunk after that branch merges (ruling 7, amended). It supersedes families
-B, C and D of the deprecation plan
+`gkc-test-pack-speedup` on gkc's instruction of 2026-09-12 (ruling 7,
+amended); that branch merged to trunk the same day as PR #2229, and the
+lifecycle branch was rebased onto trunk. It supersedes families B, C and D
+of the deprecation plan
 ([section 8](#8-relationship-to-the-other-plans)).
 
 Those three families, one sentence each, so this document reads without the
@@ -186,9 +187,10 @@ and the manager's adopt; `authenticate()` returns true only for the online
 outcome. The other ten members and the live-object getters go. Seven
 repositories migrate by dependency bump; `CLIBase` moves onto `open` directly.
 
-**Ruling 7, where it lands.** This directory, a P0 row in the PQ table, and a
-branch from trunk after `gkc-test-pack-speedup` merges. Acceptance is in
-[section 6](#6-acceptance).
+**Ruling 7, where it lands.** This directory, a P0 row in the PQ table, and
+the branch `gkc-client-lifecycle`: cut from `gkc-test-pack-speedup` on gkc's
+instruction and rebased onto trunk once that branch merged (the ledger has
+the amendment). Acceptance is in [section 6](#6-acceptance).
 
 ## 3. What each package keeps, gains and loses
 

@@ -152,7 +152,9 @@ plan's families B, C and D are marked superseded by it and the rest of that
 plan continues as P1. The implementation is built on `gkc-client-lifecycle`,
 which gkc directed be cut from `gkc-test-pack-speedup` once that branch's
 work was committed and pushed, rather than from trunk after it merges; the
-branch holds the session plumbing this builds on either way. Acceptance is
+branch holds the session plumbing this builds on either way. That branch
+merged to trunk as PR #2229 on 2026-09-12, and `gkc-client-lifecycle` was
+rebased onto trunk the same day. Acceptance is
 `npt_flutter` compiling with no `package:at_auth` import and no `at_auth:` in
 its pubspec, the published-example rig reporting only the breaks the 2.0
 CHANGELOGs name, and the four live packs green.
