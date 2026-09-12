@@ -12,6 +12,16 @@
   earlier build reads `pending` as a token it does not know: not active, not
   rankable and carried through unchanged, which is the right reading of a
   keypair the atServer has not accepted.
+- The never-lose rule a flush applies to the flat legacy fields now protects
+  a credential and nothing else. A legacy field that was null may gain a
+  value, since the document writer emits every field null or not and a
+  completion is not a change; and a document holding no active typed
+  material and none of the three flat secrets (the APKAM private key, the
+  encryption private key, the self-encryption key) is not a credential, so
+  its legacy fields may be replaced. The typed-material half of the rule is
+  unchanged. Before this, an enrollment's approval could not fill the fields
+  its submission left empty, and a store emptied by a denial could not take
+  the next request.
 - feat: `InMemoryAtKeysIo.holding(atSign, keys)` — an in-memory store already
   holding a key set, for a caller that has keys in hand and needs a *source*
   to authenticate from. at_auth wraps a fixed key set this way internally, so

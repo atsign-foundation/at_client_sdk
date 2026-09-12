@@ -13,6 +13,18 @@
 - feat: `AtClientManager.getInstance().use(client)` makes a client the
   caller built current, notifying the switch listeners, without stopping the
   previous one: an owned client is its owner's to stop.
+- feat: `Atsign('@alice').enroll(otp: ..., app: ..., device: ...,
+  namespaces: ..., keys: ..., preference: ...)` submits an enrollment and
+  files the keys it minted in the store the caller named, as `pending` under
+  the new enrollment with the app, device and namespaces asked for. It hands
+  back a `PendingEnrollment` whose `client(preference)` waits for the
+  decision, completes the keys in that store on approval and opens a client
+  the caller owns; a denial removes the pending keys and throws. After a
+  restart, `resumeEnrollment(app: ..., device: ..., keys: ..., preference:
+  ...)` finds the same request in the store and hands the handle back, so
+  the store is the resume record and nothing else has to be kept. `open` on
+  a store that holds nothing but a pending enrollment refuses with
+  `AtEnrollmentPendingException`, naming that verb.
 - fix: an enrolled client with no atServer reachable authorises its local
   reads and writes from the grants its keyfile recorded at the last
   authenticated start, logging at `warning` that it did, instead of refusing

@@ -1,12 +1,20 @@
-import 'package:at_auth/at_auth.dart' show AtKeysIo;
+import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_factory.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/enroll/signing_key_mint.dart'
+    show mintAdvertisedSigningKey;
 import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/lifecycle/pending_enrollment.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
+    show enrollmentKeyPackageBuilder;
+import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
+    show enrollmentApkamSymmetricKeyResolver;
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookUp;
+import 'package:at_lookup/at_lookup_io.dart';
 
 /// The verbs an application reaches a working client through, on the atSign
 /// it holds keys for.
@@ -17,6 +25,14 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 /// client.connection.current;          // online, offline or refused
 /// client.connection.changes.listen((state) { ... });
 /// AtClientManager.getInstance().use(client);
+///
+/// final pending = await Atsign('@alice').enroll(otp: otp, app: 'wavi',
+///     device: 'phone', namespaces: {'wavi': 'rw'}, keys: FileAtKeysIo(),
+///     preference: preference);
+/// final client = await pending.client(preference);
+/// // after a restart:
+/// final resumed = await Atsign('@alice').resumeEnrollment(app: 'wavi',
+///     device: 'phone', keys: FileAtKeysIo(), preference: preference);
 /// ```
 extension AtsignLifecycle on Atsign {
   /// Builds a client for this atSign from [keys], tries once to reach the
@@ -35,6 +51,9 @@ extension AtsignLifecycle on Atsign {
   /// a device, a refusal comes back as a client in the `refused` state and
   /// the application decides.
   ///
+  /// Keys that hold nothing but an enrollment awaiting approval are refused
+  /// with [AtEnrollmentPendingException]: [resumeEnrollment] picks that up.
+  ///
   /// [namespace] defaults to the preference's. [storage] is the client's
   /// local storage, borrowed unless it was built with `closedByClient: true`;
   /// with none, a Hive store opens under `preference.hiveStoragePath`.
@@ -51,6 +70,7 @@ extension AtsignLifecycle on Atsign {
     AtLookUp? atLookUp,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
+    await _refuseKeysStillPending(keys);
     final client = await buildAtClient(
       atSign: this,
       namespace: namespace ?? preference.namespace,
@@ -68,5 +88,263 @@ extension AtsignLifecycle on Atsign {
       throw AtOpenRefusedException(this, state);
     }
     return client;
+  }
+
+  /// Asks the atSign's manager to enrol this device as [app] on [device] with
+  /// [namespaces], quoting [otp], and files the keys the request minted in
+  /// [keys] as pending under the new enrollment.
+  ///
+  /// Returns at once with a [PendingEnrollment]: its `client` waits for the
+  /// decision, and after a restart [resumeEnrollment] finds the same request
+  /// in [keys]. [keys] must hold nothing live for this atSign; a store that
+  /// already holds a pending enrollment for the same app and device is
+  /// refused in favour of resuming it.
+  ///
+  /// [signingAlgo] is the APKAM algorithm the enrollment authenticates with
+  /// and [keyExchangeMode] how its symmetric key travels; both default to the
+  /// preference's posture. [apkamKeysExpiry] asks the atServer to expire the
+  /// enrollment's keys after that long. [atLookUp] is a connection to submit
+  /// on, for a caller that already holds one; the request itself travels
+  /// unauthenticated, since this device holds no credential yet.
+  Future<PendingEnrollment> enroll({
+    required String otp,
+    required String app,
+    required String device,
+    required Map<String, String> namespaces,
+    required WrittenAtKeysIo keys,
+    required AtClientPreference preference,
+    SigningAlgoType? signingAlgo,
+    EnrollmentKeyExchangeMode? keyExchangeMode,
+    Duration? apkamKeysExpiry,
+    AtLookUp? atLookUp,
+  }) async {
+    final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);
+    final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
+    final mode = keyExchangeMode ?? preference.posture.keyExchangeMode;
+    await _refuseUnlessEnrollable(keys, app, device);
+
+    // NOTE: the enrollment owns its signing key from its first byte: `_apsk`
+    // advertises it and the key package is signed with it, so minting it at a
+    // later start would publish a record naming one key beside a package
+    // signed by another.
+    final advertisedSigningKey =
+        await mintAdvertisedSigningKey(preference.dataSigningKeyAlgorithms);
+    final session = AtAuthSession(
+        atSign: this, rootDomain: rootDomain, atKeysIo: InMemoryAtKeysIo());
+    final AtEnrollmentRequest request;
+    if (mode == EnrollmentKeyExchangeMode.pq) {
+      request = AtEnrollmentRequest.pq(
+          session: session,
+          appName: app,
+          deviceName: device,
+          namespaces: namespaces,
+          otp: otp,
+          signingAlgo: algo,
+          advertisedSigningKey: advertisedSigningKey,
+          metadataBuilder: enrollmentKeyPackageBuilder(this,
+              signingAlgo: algo,
+              advertisedSigningKey: advertisedSigningKey,
+              keyEstablishmentAlgo: preference.keyEstablishmentAlgorithms.first),
+          apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(this));
+    } else {
+      request = AtEnrollmentRequest(
+          session: session,
+          appName: app,
+          deviceName: device,
+          namespaces: namespaces,
+          otp: otp,
+          signingAlgo: algo,
+          advertisedSigningKey: advertisedSigningKey);
+    }
+    request.apkamKeysExpiryDuration = apkamKeysExpiry;
+
+    final lookUp = atLookUp ??
+        AtLookUp.withSecureSocket(
+            atSign: this,
+            rootDomain: rootDomain,
+            transport: secureSocketTransport(SecureSocketConfig()),
+            authenticator: null);
+    final AtEnrollmentResponse response;
+    try {
+      response = await AtEnrollment.create().submit(request, lookUp);
+    } finally {
+      if (atLookUp == null) await lookUp.close();
+    }
+
+    // ignore: deprecated_member_use
+    final minted = response.atAuthKeys!;
+    await _fileAsPending(keys,
+        minted: minted,
+        enrollmentId: response.enrollmentId,
+        algorithm: algo,
+        app: app,
+        device: device,
+        namespaces: namespaces);
+    return PendingEnrollment(
+        atSign: this,
+        enrollmentId: response.enrollmentId,
+        app: app,
+        device: device,
+        namespaces: namespaces,
+        keys: keys,
+        rootDomain: rootDomain,
+        signingAlgo: algo,
+        keyExchangeMode: mode,
+        atLookUp: atLookUp);
+  }
+
+  /// The enrollment [enroll] filed in [keys] for [app] on [device] and has not
+  /// yet completed, or null when there is none: the way an application picks
+  /// up an enrollment it submitted before a restart.
+  ///
+  /// [preference] supplies the root domain; [atLookUp] a connection for the
+  /// approval handshake, for a caller that already holds one.
+  Future<PendingEnrollment?> resumeEnrollment({
+    required String app,
+    required String device,
+    required WrittenAtKeysIo keys,
+    required AtClientPreference preference,
+    AtLookUp? atLookUp,
+  }) async {
+    final AtKeys stored;
+    try {
+      stored = await keys.read(this);
+    } on AtKeysSourceAbsentException {
+      return null;
+    }
+    for (final enrollmentId in stored.pendingEnrollmentIds) {
+      final info = stored.enrollmentInfo(enrollmentId);
+      if (info?.appName != app || info?.deviceName != device) continue;
+      final apkam = stored
+          .keysForEnrollment(enrollmentId)
+          .where((m) =>
+              m.role == CryptographicMaterialRole.privateAuthentication &&
+              m.status == CryptographicMaterialStatus.pending)
+          .first;
+      return PendingEnrollment(
+          atSign: this,
+          enrollmentId: enrollmentId,
+          app: app,
+          device: device,
+          namespaces: info?.namespaces ?? const {},
+          keys: keys,
+          rootDomain:
+              AtRootDomain(preference.rootDomain, preference.rootPort),
+          signingAlgo: SigningAlgoType.values
+              .firstWhere((a) => a.name == apkam.algorithm.toString()),
+          // A legacy request carries its own symmetric key in; a pq request
+          // has none until the approver encapsulates one to its key package.
+          // ignore: deprecated_member_use
+          keyExchangeMode: stored.apkamSymmetricKey == null
+              ? EnrollmentKeyExchangeMode.pq
+              : EnrollmentKeyExchangeMode.legacy,
+          atLookUp: atLookUp);
+    }
+    return null;
+  }
+
+  Future<void> _refuseKeysStillPending(AtKeysIo keys) async {
+    final AtKeys stored;
+    try {
+      stored = await keys.read(this);
+    } on Exception {
+      // Absent or unreadable keys are the client's to report as it always has.
+      return;
+    }
+    final pending = stored.pendingEnrollmentIds.toList();
+    if (!stored.holdsAuthenticationMaterial && pending.isNotEmpty) {
+      throw AtEnrollmentPendingException(this, pending);
+    }
+  }
+
+  /// A store [enroll] may write into: absent, or emptied by a denial. Live
+  /// keys are refused, since enrolling again would overwrite the credential
+  /// this device already has, and so is a pending enrollment for the same
+  /// app and device, which is resumed rather than repeated.
+  Future<void> _refuseUnlessEnrollable(
+      WrittenAtKeysIo keys, String app, String device) async {
+    final AtKeys existing;
+    try {
+      existing = await keys.read(this);
+    } on AtKeysSourceAbsentException {
+      return;
+    }
+    if (existing.holdsAuthenticationMaterial) {
+      throw AtEnrollmentException('$this already holds live keys in this '
+          'store, and enrolling again would overwrite the credential this '
+          'device has; remove them first if a fresh enrollment is meant');
+    }
+    for (final enrollmentId in existing.pendingEnrollmentIds) {
+      final info = existing.enrollmentInfo(enrollmentId);
+      if (info?.appName == app && info?.deviceName == device) {
+        throw AtEnrollmentException('$this already holds the pending '
+            'enrollment $enrollmentId for $app on $device: resume it with '
+            'resumeEnrollment rather than submitting another');
+      }
+    }
+  }
+
+  /// Files what the submission minted under [enrollmentId] as pending, with
+  /// the app, device and namespaces asked for, so a restart can find it.
+  ///
+  /// The APKAM keypair is filed as typed material whatever its algorithm, and
+  /// **not** in the flat fields every published reader authenticates from:
+  /// the store must read as holding no credential until the atServer has
+  /// accepted the enrollment. The flat fields the approval will need are
+  /// carried: the encryption public key, the symmetric key a legacy request
+  /// wraps, and the enrollment id.
+  Future<void> _fileAsPending(
+    WrittenAtKeysIo keys, {
+    required AtKeys minted,
+    required String enrollmentId,
+    required SigningAlgoType algorithm,
+    required String app,
+    required String device,
+    required Map<String, String> namespaces,
+  }) async {
+    final pending = AtKeys(atsign: this)
+      // ignore: deprecated_member_use
+      ..defaultEncryptionPublicKey = minted.defaultEncryptionPublicKey
+      // ignore: deprecated_member_use
+      ..apkamSymmetricKey = minted.apkamSymmetricKey
+      // ignore: deprecated_member_use
+      ..enrollmentId = enrollmentId;
+    for (final material in minted.keysForEnrollment(enrollmentId)) {
+      pending.addKey(material.withStatus(CryptographicMaterialStatus.pending));
+    }
+    final apkamFiled = pending.keysForEnrollment(enrollmentId).any(
+        (m) => m.role == CryptographicMaterialRole.privateAuthentication);
+    if (!apkamFiled) {
+      // An rsa2048 keypair rides the flat fields of what the submission
+      // minted; it is filed typed here so that pending has one shape.
+      final materialAlgorithm = CryptographicMaterialAlgorithm.of(algorithm.name);
+      final keyId = '${AtKeys.keyIdPrefix('auth', materialAlgorithm)}1';
+      final now = DateTime.now().toUtc();
+      for (final (role, bytes) in [
+        // ignore: deprecated_member_use
+        (CryptographicMaterialRole.privateAuthentication, minted.apkamPrivateKey!),
+        // ignore: deprecated_member_use
+        (CryptographicMaterialRole.publicAuthentication, minted.apkamPublicKey!),
+      ]) {
+        pending.addKey(CryptographicMaterial(
+            keyId: keyId,
+            enrollmentId: enrollmentId,
+            role: role,
+            algorithm: materialAlgorithm,
+            bytes: bytes,
+            createdAt: now,
+            status: CryptographicMaterialStatus.pending));
+      }
+    }
+    pending.recordEnrollmentSnapshot(enrollmentId,
+        namespaces: namespaces, appName: app, deviceName: device);
+
+    try {
+      await keys.write(this, pending);
+    } on AtKeysFileOverwriteException {
+      // The store holds a document with nothing live in it (checked before
+      // the request went out), so this pending enrollment goes over it.
+      await keys.flush(this, pending);
+    }
   }
 }

@@ -140,6 +140,7 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/key_stream/key_stream.dart',
   'package:at_client/src/lifecycle/at_connection.dart',
   'package:at_client/src/lifecycle/atsign_lifecycle.dart',
+  'package:at_client/src/lifecycle/pending_enrollment.dart',
   'package:at_client/src/listener/connectivity_listener.dart',
   'package:at_client/src/manager/at_client_manager.dart',
   'package:at_client/src/preference/at_client_preference.dart',

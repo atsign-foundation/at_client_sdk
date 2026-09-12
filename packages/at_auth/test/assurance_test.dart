@@ -149,6 +149,92 @@ void main() {
       );
     });
 
+    test('accepts map update that fills a legacy field that was null', () {
+      // The document writer emits every legacy field, so a keyfile that has
+      // never held an encryption private key carries the key with null. An
+      // enrollment's approval is what fills it, and that is a completion.
+      final existing = _documentMap(
+          keys: [_symmetricMaterial()],
+          legacyJson: {auth_constants.defaultEncryptionPrivateKey: null});
+      final candidate = _documentMap(keys: [
+        _symmetricMaterial()
+      ], legacyJson: {
+        auth_constants.defaultEncryptionPrivateKey: 'bm93IGZpbGxlZA=='
+      });
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('accepts replacing the legacy fields of a document that is not a '
+        'credential', () {
+      // A submitted enrollment's keys wait as pending material beside the
+      // request's own flat fields; nothing here authenticates or decrypts
+      // anything yet, so the next request may replace them.
+      final existing = _documentMap(
+          keys: [],
+          enrollments: {
+            'e-1': [
+              _enrollMaterial()
+                  .withStatus(CryptographicMaterialStatus.pending)
+            ]
+          },
+          legacyJson: {auth_constants.apkamSymmetricKey: 'Zmlyc3Q='});
+      final candidate = _documentMap(
+          keys: [],
+          enrollments: {
+            'e-2': [
+              _enrollMaterial(enrollmentId: 'e-2')
+                  .withStatus(CryptographicMaterialStatus.pending)
+            ]
+          },
+          legacyJson: {auth_constants.apkamSymmetricKey: 'c2Vjb25k'});
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('still refuses replacing a legacy field beside active material', () {
+      // The control for the case above: the same replacement, on a document
+      // that holds a live enrollment, is the loss the rule exists to refuse.
+      final existing = _documentMap(
+          keys: [],
+          enrollments: {'e-1': [_enrollMaterial()]},
+          legacyJson: {auth_constants.apkamSymmetricKey: 'Zmlyc3Q='});
+      final candidate = _documentMap(
+          keys: [],
+          enrollments: {'e-1': [_enrollMaterial()]},
+          legacyJson: {auth_constants.apkamSymmetricKey: 'c2Vjb25k'});
+
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: existing,
+          candidate: candidate,
+        ),
+        throwsA(isA<AtKeysAssuranceException>()
+            .having((e) => e.message, 'message', contains('map.legacy'))),
+      );
+    });
+
+    test('still refuses replacing a legacy field beside a flat secret', () {
+      final existing = _documentMap(keys: [], legacyJson: {
+        auth_constants.defaultSelfEncryptionKey: 'c2VsZg==',
+        auth_constants.apkamSymmetricKey: 'Zmlyc3Q=',
+      });
+      final candidate = _documentMap(keys: [], legacyJson: {
+        auth_constants.defaultSelfEncryptionKey: 'c2VsZg==',
+        auth_constants.apkamSymmetricKey: 'c2Vjb25k',
+      });
+
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: existing,
+          candidate: candidate,
+        ),
+        throwsA(isA<AtKeysAssuranceException>()
+            .having((e) => e.message, 'message', contains('map.legacy'))),
+        reason: 'a self-encryption key is a credential on its own',
+      );
+    });
+
     test('rejects map update when candidate drops all legacy fields', () {
       final existing = _fixtureLegacyJson();
       final candidate = {
