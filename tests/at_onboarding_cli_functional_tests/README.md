@@ -17,11 +17,11 @@ Please read these instructions before adding new/modifying onboarding functional
   This step is performed within the test before testing authenticate method. 
   Check _createKeys() method in at_onboarding_cli_test.dart. 
   You can use demo keys/generate keys file using demo data to test authenticate method.
-* To test onboard method in AtOnboardingService, new key pairs will be generated during onboard flow.
-  Hence demo keys cannot be used to test onboard method. 
-  Use distinct atsign per test method to test onboarding since repeated run of onboard for same atsign 
-  will fail with atsign already activated exception. 
-  Delete the .atKeys file generated during onboard at the end of the test. 
+* To test activation (the CLI's `activate` command, over `Atsign.activate`), new key pairs will be
+  generated during the activation flow. Hence demo keys cannot be used to test activation.
+  Use a distinct atsign per test method to test activation since a repeated run of activation for the
+  same atsign will fail with an atsign already activated exception.
+  Delete the .atKeys file generated during activation at the end of the test.
   e.g enrollment_test.dart
 * If you are running onboarding_cli functional tests in local setup,use virtual environment without pkamLoad 
 
