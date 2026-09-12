@@ -13,6 +13,10 @@
 - feat: `AtClientManager.getInstance().use(client)` makes a client the
   caller built current, notifying the switch listeners, without stopping the
   previous one: an owned client is its owner's to stop.
+- deprecated: `AtClientManager.setCurrentAtSign` and `fromAuthSession`,
+  which built the current client for the caller. Build one with
+  `Atsign.open`, `activate` or an enrollment's `client`, and make it current
+  with `use`; both go in 4.0.
 - feat: `Atsign('@alice').activate(cramSecret: ..., keys: ..., preference:
   ...)` activates a new atSign with its one-time secret, writes the keys the
   activation mints into the store named, and opens a client on them that the

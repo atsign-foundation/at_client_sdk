@@ -46,9 +46,9 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   /// The hand-off session for the newly enrolled app, populated on the
   /// requesting-app success path once the enrollment is approved.
   ///
-  /// Pass it straight into `AtClientManager.fromAuthSession(...)`; the client
-  /// derives its own keys via [AtAuthSession.atKeysIo] rather than adopting the
-  /// deprecated [atAuthKeys] material directly.
+  /// Its [AtAuthSession.atKeysIo] is the key source to open a client on; the
+  /// client derives its own keys from it rather than adopting the deprecated
+  /// [atAuthKeys] material directly.
   AtAuthSession? session;
 
   /// Carried over from `AtEnrollmentRequest.apkamSymmetricKeyResolver` so

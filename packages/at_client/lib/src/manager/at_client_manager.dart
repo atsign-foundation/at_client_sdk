@@ -19,16 +19,16 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
-/// Factory class for creating [AtClient], [SyncService] and [NotificationService] instances
+/// Holds the current [AtClient] and tells the switch listeners when it
+/// changes.
 ///
-/// Usage
+/// ```dart
+/// final client = await Atsign('@alice').open(keys: keys, preference: preference);
+/// AtClientManager.getInstance().use(client);
 /// ```
-/// final atClientManager = AtClientManager.getInstance().setCurrentAtSign(<current_atsign>, <app_namespace>, <preferences>)
-/// Apps have to call the above method again while switching atsign.
-/// ```
-/// atClientManager.atClient - for at client method calls
-/// atClientManager.syncService - for invoking sync. Refer [SyncService] for detailed usage
-/// atClientManager.notificationService - for notification methods. Refer [NotificationService] for detailed usage
+///
+/// `AtClientManager.getInstance().atClient` is the current client; its
+/// `syncService` and `notificationService` are that client's.
 class AtClientManager {
   final AtSignLogger _logger = AtSignLogger('AtClientManager');
 
@@ -105,6 +105,9 @@ class AtClientManager {
   ///
   /// * [serviceFactory] - Overrides service creation (primarily for testing).
   /// * [atChops] - Shared crypto context for the new services.
+  @Deprecated('Build the client with Atsign(atSign).open(keys: ..., '
+      'preference: ...) and make it current with '
+      'AtClientManager.getInstance().use(client); removed in 4.0')
   Future<AtClientManager> setCurrentAtSign(
       String atSign, String? namespace, AtClientPreference preference,
       {AtServiceFactory? serviceFactory,
@@ -278,6 +281,10 @@ class AtClientManager {
   /// [storage] is borrowed unless it was built with `closedByClient: true`, in
   /// which case the client closes it on [AtClient.stop]. Same rule as on
   /// [setCurrentAtSign].
+  @Deprecated('Open a client on the session\'s key source with '
+      'Atsign(session.atSign).open(keys: session.atKeysIo, preference: ...) '
+      'and make it current with AtClientManager.getInstance().use(client); '
+      'removed in 4.0')
   Future<AtClientManager> fromAuthSession(
       AtAuthSession session, AtClientPreference preference,
       {AtServiceFactory? serviceFactory,
@@ -288,6 +295,7 @@ class AtClientManager {
     preference.rootDomain = session.rootDomain.rootDomain;
     preference.rootPort = session.rootDomain.rootPort;
 
+    // ignore: deprecated_member_use_from_same_package
     return setCurrentAtSign(session.atSign, session.namespace, preference,
         serviceFactory: serviceFactory,
         atKeysIo: session.atKeysIo,

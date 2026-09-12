@@ -32,8 +32,8 @@ per **principal** rather than per atSign was needed for: an owner client and
 an enrolled client of one atSign in one process. `Atsign.authenticatesAs` is
 the client-less check ruling 2 allowed for, added because six pack tests
 assert exactly that. `AtClientManager.setCurrentAtSign` and `fromAuthSession`
-are not yet deprecated; with the live packs' fixtures on `open` the
-annotation is what step 6 owes next, with the `npt_flutter` port. The work is a
+are deprecated, removed in 4.0, now that the live packs' fixtures are on
+`open`; what step 6 still owes is the `npt_flutter` port. The work is a
 **P0** row in the PQ table
 ([`../pq/implementation-plan.md`](../pq/implementation-plan.md)), since it
 gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the
