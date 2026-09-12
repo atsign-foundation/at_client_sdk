@@ -30,7 +30,8 @@ void main() {
     expect(Enrollment().enrollmentStatus, isNull);
   });
 
-  test('fromNotification takes the id from the key and the record from the '
+  test(
+      'fromNotification takes the id from the key and the record from the '
       'value, pending when the record names no status', () {
     final notification = AtNotification(
         'n-1',
