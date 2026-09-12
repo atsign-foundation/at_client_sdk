@@ -63,6 +63,10 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
+/// A defect met while stopping a client, paired with the stack of where it was
+/// raised so the step that raised it stays identifiable after the rethrow.
+typedef _HeldDefect = ({Error error, StackTrace stack});
+
 /// Implementation of the [AtClient] interface.
 class AtClientImpl implements AtClient {
   AtClientPreference? _preference;
@@ -116,6 +120,11 @@ class AtClientImpl implements AtClient {
   AtTelemetryService? get telemetry => _telemetry;
 
   @override
+  @Deprecated(
+      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
+      'and it derives what it needs from that; nothing outside at_client needs '
+      'the AtChops it holds. Removed with the AtChops compatibility API in the '
+      'next major release.')
   set atChops(AtChops? atChops) {
     _atChops = atChops;
     if (_remoteSecondary != null) {
@@ -124,6 +133,11 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+  @Deprecated(
+      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
+      'and it derives what it needs from that; nothing outside at_client needs '
+      'the AtChops it holds. Removed with the AtChops compatibility API in the '
+      'next major release.')
   AtChops? get atChops => _atChops;
 
   @override
@@ -866,9 +880,7 @@ class AtClientImpl implements AtClient {
     _pqBootstrap = PqClientBootstrap(
       this,
       keysIo: _atKeysIo,
-      gates: (_preference?.posture.configuresPqProviders ?? true)
-          ? const PqStartupGates()
-          : const PqStartupGates.inert(),
+      gates: _preference?.resolvedPqStartupGates ?? const PqStartupGates(),
       privilege: EnrollmentRecordPrivilegeResolver(this,
           listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
               .fetchEnrollmentRequests),
@@ -1107,42 +1119,85 @@ class AtClientImpl implements AtClient {
 
   Future<void> _stop({required bool keepStorageOpen}) async {
     if (_isStopped) {
-      _logger.info('stop() called: but client is already stopped. Ignoring.');
+      _logger.finer('stop() called: but client is already stopped. Ignoring.');
       return;
     }
 
     _isStopped = true;
     _logger.info('stop() called: stopping at_client for $_atSign');
 
-    await _stopBackgroundProcesses();
-    await _releaseStorage(keepOpen: keepStorageOpen);
+    // Both run before either can raise: a defect in the services must not
+    // leave storage claimed, and neither must leave a stopped client in the
+    // map for the next caller to find.
+    final serviceDefect = await _stopBackgroundProcesses();
+    final storageDefect = await _releaseStorage(keepOpen: keepStorageOpen);
     // NOTE: by identity, not by key — the map is keyed (atSign, enrollmentId),
     // so a client filed under an enrollment is not found under the bare atSign
     // and would be left in the map, stopped, for the next caller to restart.
     atClientInstanceMap.removeWhere((_, client) => identical(client, this));
+
+    final defect = serviceDefect ?? storageDefect;
+    if (defect != null) {
+      // NOTE: rethrown with the stack of where it was RAISED. A bare `throw`
+      // here restacks it onto this line, which names every teardown step
+      // equally and so names none of them.
+      Error.throwWithStackTrace(defect.error, defect.stack);
+    }
   }
 
   /// Drops this client's claim on its storage, closing a client-closed bundle
   /// unless [keepOpen]. A stopped client keeps nothing open and cannot be
   /// restarted.
-  Future<void> _releaseStorage({bool keepOpen = false}) async {
+  Future<_HeldDefect?> _releaseStorage({bool keepOpen = false}) async {
     final storage = _storage;
-    if (storage == null) return;
+    if (storage == null) return null;
     _storageReleased = true;
+    _HeldDefect? defect;
     try {
       await storage.detach(this);
       if (!keepOpen && storage.closedByClient) await storage.close();
-    } catch (e) {
+    } on Exception catch (e) {
       _logger.warning('Error while releasing storage: $e');
+    } on Error catch (e, stack) {
+      _logger.severe('Defect while releasing storage, which names a bug '
+          'rather than a passing condition: $e');
+      defect = (error: e, stack: stack);
     }
     _storage = null;
+    return defect;
   }
 
-  Future<void> _stopBackgroundProcesses() async {
+  /// Stops everything this client runs, and hands back the first DEFECT it
+  /// met rather than the first failure.
+  ///
+  /// The two are not the same thing, and the difference is why this used to
+  /// hide bugs. A teardown step can legitimately fail on an `Exception` — a
+  /// box already closed, a socket already gone — and the remaining steps must
+  /// still run, so those are logged and stepped over. An `Error` is a defect:
+  /// a `TypeError` here means the field held something of the wrong type, and
+  /// swallowing it left this client reporting itself stopped while its
+  /// services ran on. Defects are therefore held, not swallowed, and raised
+  /// by the caller once every step has had its turn.
+  Future<_HeldDefect?> _stopBackgroundProcesses() async {
     // NOTE: first, so a stopped client publishes nothing further — the PQ
     // startup halts at its next step boundary.
     _pqBootstrap?.stop();
-    try {
+
+    _HeldDefect? defect;
+    Future<void> attempt(String what, Future<void> Function() body) async {
+      try {
+        await body();
+      } on Exception catch (e) {
+        _logger.warning('Error while $what: $e');
+      } on Error catch (e, stack) {
+        _logger.severe(
+            'Defect while $what, which names a bug rather than a passing '
+            'condition: $e');
+        defect ??= (error: e, stack: stack);
+      }
+    }
+
+    await attempt('tearing down keystore-event timers', () async {
       _expiryTimer?.cancel();
       _expiryTimer = null;
       await _expirySub?.cancel();
@@ -1152,33 +1207,44 @@ class AtClientImpl implements AtClient {
       await _availableSub?.cancel();
       _availableSub = null;
       if (!_dataEventsCtrl.isClosed) await _dataEventsCtrl.close();
-    } catch (e) {
-      _logger.warning('Error while tearing down keystore-event timers: $e');
+    });
+
+    // NOTE: type-tested, not cast. These fields are declared as the
+    // INTERFACES, and neither interface declares `stop()` — only the concrete
+    // classes have one. So a field holding null (a client that never finished
+    // initialising) or any other implementation of the interface is a legal
+    // state the type system permits, and there is simply nothing to stop.
+    // Casting made that a TypeError, which the old bare `catch` then swallowed
+    // at `warning`: the effect was to hide a genuine defect behind a condition
+    // that is not one.
+    final sync = _syncService;
+    if (sync is SyncServiceImpl) {
+      await attempt('closing sync service', () async => sync.stop());
+    } else if (sync != null) {
+      _logger.info('Nothing to stop for the sync service: '
+          '${sync.runtimeType} implements SyncService but has no concrete '
+          'stop()');
     }
 
-    try {
-      await (_syncService as SyncServiceImpl).stop();
-    } catch (e) {
-      _logger.warning('Error while closing sync service: $e');
-    }
-
-    try {
-      await (_notificationService as NotificationServiceImpl).stop();
-    } catch (e) {
-      _logger.warning('Error while closing notification service: $e');
+    final notifications = _notificationService;
+    if (notifications is NotificationServiceImpl) {
+      await attempt(
+          'closing notification service', () async => notifications.stop());
+    } else if (notifications != null) {
+      _logger.info('Nothing to stop for the notification service: '
+          '${notifications.runtimeType} implements NotificationService but '
+          'has no concrete stop()');
     }
 
     if (_remoteSecondary != null) {
-      try {
-        await _remoteSecondary!.closeConnection();
-      } catch (e) {
-        _logger.warning('Error while closing remote secondary connection: $e');
-      }
+      await attempt('closing remote secondary connection',
+          () async => _remoteSecondary!.closeConnection());
     }
 
     _syncService = null;
     _notificationService = null;
     _enrollmentService = null;
+    return defect;
   }
 
   @Deprecated(
@@ -2048,9 +2114,7 @@ class AtClientImpl implements AtClient {
         );
       }
     } on KeyNotFoundException catch (e) {
-      _logger.warning(
-        '_createAtChops  - Exception while getting encryption key pair from local secondary: ${e.toString()}',
-      );
+      _logger.finer('No encryption key pair in $atSign\'s local store: $e');
     }
     try {
       var pkamPublicKey = await localSecondary!.getPkamPublicKey();
@@ -2060,10 +2124,26 @@ class AtClientImpl implements AtClient {
         atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
       }
     } on KeyNotFoundException catch (e) {
-      _logger.warning(
-        '_createAtChops  - Exception while getting pkam key pair from local secondary: ${e.toString()}',
-      );
+      _logger.finer('No PKAM key pair in $atSign\'s local store: $e');
     }
+
+    // NOTE: said once, after both reads, because what matters is what this
+    // client ended up holding rather than which lookup missed. A store with
+    // neither keypair is the ordinary state before onboarding; a store with
+    // one of the two is a broken store, and only that is worth a warning.
+    // Each miss keeps its own detail at `finer`.
+    if (atEncryptionKeyPair == null && atPkamKeyPair == null) {
+      _logger.info('$atSign\'s local store holds no key material, so this '
+          'client holds none: it authenticates and decrypts nothing until the '
+          'store is populated.');
+    } else if (atEncryptionKeyPair == null || atPkamKeyPair == null) {
+      _logger.warning('$atSign\'s local store holds '
+          '${atPkamKeyPair == null ? 'an encryption' : 'a PKAM'} key pair but '
+          'not the other. A half-populated store is not a state onboarding '
+          'produces, and this client will fail at whichever of the two it '
+          'needs first.');
+    }
+
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     AtChopsImpl chops = AtChopsImpl(atChopsKeys);
     return chops;
@@ -2074,7 +2154,7 @@ class AtClientImpl implements AtClient {
   ///
   /// Two switches saying opposite things: `allowLegacyCryptoFallback` is
   /// "reach this recipient however you can", `disallowLegacyEncryption` is
-  /// "never write legacy". The second wins. Refusing here rather than at
+  /// "never write with the legacy provider". The second wins. Refusing here rather than at
   /// encryption keeps the error the one the caller can act on — the
   /// destination has no post-quantum key.
   @visibleForTesting
@@ -2180,7 +2260,6 @@ class AtClientImpl implements AtClient {
       ..currentAtSign = _atSign
       ..senderAtSign = senderAtSign
       ..fileLength = fileLength;
-    _logger.info('Sending ack for stream notification:$notification');
     await handler.streamAck(
       notification,
       streamCompletionCallBack,
@@ -2397,10 +2476,8 @@ class AtClientImpl implements AtClient {
   @override
   Future<AtResponse> setSPP(String spp, {Duration? expiry}) async {
     if (expiry == null) {
-      _logger.shout(
-        'WARNING: Setting SPP without an expiration'
-        '- defaulting to ${AtClient.defaultSppExpiry}',
-      );
+      _logger.warning('Setting SPP without an expiration, so it defaults to '
+          '${AtClient.defaultSppExpiry}');
       expiry = AtClient.defaultSppExpiry;
     }
     // SPP should be 6 characters PIN. Throw exception if its less

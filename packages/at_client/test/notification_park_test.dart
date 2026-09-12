@@ -123,6 +123,13 @@ void main() {
         providers: [waiting, _HopelessProvider()],
         keyRing: ring,
       ));
+    // NOTE: the service writes the last-received notification id after every
+    // notification it accepts. Unstubbed that answers null into a
+    // non-nullable Future<bool>, and the watermark write is reported as
+    // failed on every delivery this file drives.
+    when(() => atClient.put(any(), any(),
+            putRequestOptions: any(named: 'putRequestOptions')))
+        .thenAnswer((_) async => true);
     return await NotificationServiceImpl.create(atClient,
         monitor: _FakeMonitor()) as NotificationServiceImpl;
   }

@@ -59,7 +59,10 @@ void main() {
                   result = await showDialog<AtAuthResponse>(
                     context: context,
                     builder: (context) => PkamDialog(
-                      request: AtAuthRequest('@alice', atAuthKeys: AtKeys()),
+                      request: AtAuthRequest(
+                        '@alice',
+                        atKeysIo: InMemoryAtKeysIo.holding('@alice', AtKeys()),
+                      ),
                       authService: mockAuthService,
                     ),
                   );
@@ -157,6 +160,7 @@ void main() {
                       appName: 'app',
                       deviceName: 'device',
                       namespaces: const {'*': 'rw'},
+                      atKeysIo: InMemoryAtKeysIo(),
                       themeData: Theme.of(context),
                       enrollmentService: mockEnrollmentService,
                     ),
@@ -188,6 +192,76 @@ void main() {
       // returned — not because of a pop(null).
       expect(result, isNull);
       expect(find.textContaining('Activation failed'), findsOneWidget);
+    });
+
+    testWidgets('ApkamActivationDialog enrolls towards the caller\'s keys', (
+      tester,
+    ) async {
+      final mockEnrollmentService = MockFlutterEnrollmentService();
+      EnrollmentRequest? submitted;
+      when(
+        () => mockEnrollmentService.enroll(
+          any(),
+          waitForApproval: any(named: 'waitForApproval'),
+        ),
+      ).thenAnswer((invocation) async {
+        submitted = invocation.positionalArguments[0] as EnrollmentRequest;
+        return AtEnrollmentResponse('enroll-1', EnrollmentStatus.approved);
+      });
+
+      // The destination for this enrollment's keys, which only the enrolled
+      // app ever holds.
+      final destination = InMemoryAtKeysIo();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showDialog<AtEnrollmentResponse>(
+                  context: context,
+                  builder: (context) => ApkamActivationDialog(
+                    atSign: '@alice',
+                    rootDomain: AtRootDomain.atsignDomain,
+                    appName: 'app',
+                    deviceName: 'device',
+                    namespaces: const {'*': 'rw'},
+                    atKeysIo: destination,
+                    themeData: Theme.of(context),
+                    enrollmentService: mockEnrollmentService,
+                  ),
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.enterText(find.byType(EditableText), '123456');
+      await tester.pump();
+      await tester.pump();
+
+      final request = submitted as AtEnrollmentRequest;
+      expect(
+        request.session?.atKeysIo,
+        same(destination),
+        reason:
+            'the request has to carry the caller\'s own key destination, not '
+            'a copy and not one this widget chose: at_auth\'s handshake '
+            'flushes the completed keyset - the keys plus the encryption '
+            'private key and self-encryption key the approval releases - to '
+            'exactly this object, and hands back a session only when the '
+            'request supplied one',
+      );
+      expect(
+        request.atSign,
+        '@alice',
+        reason: 'and the session is where the atSign comes from now',
+      );
     });
   });
 }

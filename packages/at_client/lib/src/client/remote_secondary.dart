@@ -59,9 +59,9 @@ class RemoteSecondary implements Secondary {
   /// constructor sets `atLookUp.atChops` directly - hooking only the setter
   /// installs nothing on the path that matters.
   ///
-  /// Installed beside `atChops`, not instead of it: at_auth's
-  /// `EnrollmentApprover` reads that field for enrollment crypto, which is not
-  /// authentication.
+  /// The credential fields stay written on the lookup beside it: they are
+  /// at_lookup's ladder, which a lookup from before the seam still
+  /// authenticates from, and they go with that ladder in the at_lookup major.
   void _installAuthenticator() {
     final lookUp = atLookUp;
     // `AtLookUp` does not declare the seam - that interface is frozen because
@@ -70,6 +70,10 @@ class RemoteSecondary implements Secondary {
       return;
     }
 
+    // The keyfile's keypair signs when it holds one for this enrollment; the
+    // AtChops beside it is the door for a keyfile that holds none - a client
+    // built from an AtChops with a stand-in key source, which the live packs
+    // build. The rule is at_auth's, in the authenticator.
     final io = _atKeysIo;
     if (io != null) {
       lookUp.authenticator = authenticatorFor(

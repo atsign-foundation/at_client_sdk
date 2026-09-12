@@ -10,7 +10,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -152,24 +151,23 @@ void main() {
 
       // Authenticate the atSign
       AtAuth atAuth = AtAuth.create(atChops: atChops);
+      // The enrollee's own keys, completed with the two atSign-wide secrets
+      // an approval releases, handed over as the source to authenticate from.
+      final enrolledKeys = atEnrollmentResponse.atAuthKeys!
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(
+            atChops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey)
+        ..defaultSelfEncryptionKey =
+            AtBytes.fromString(atChops.atChopsKeys.selfEncryptionKey!.key);
       AtAuthRequest atAuthRequest = AtAuthRequest(currentAtSign,
-          atKeysIo: FileAtKeysIo(
-            filePath: (_) =>
-                '${ConfigUtil.getYaml()['filePath']}/${currentAtSign}_key.atKeys',
-          ));
-      atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
-      atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          AtBytes.fromString(
-              atChops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
-      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          AtBytes.fromString(atChops.atChopsKeys.selfEncryptionKey!.key);
+          atKeysIo: InMemoryAtKeysIo.holding(currentAtSign, enrolledKeys));
       atAuthRequest.rootDomain = AtRootDomain(
           atClient.getPreferences()!.rootDomain,
           atClient.getPreferences()!.rootPort);
 
       AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
       expect(atAuthResponse.isSuccessful, true);
-      writeAtKeysToFile(currentAtSign, atAuthResponse.atAuthKeys!);
+      writeAtKeysToFile(currentAtSign,
+          await atAuthResponse.session!.atKeysIo.read(currentAtSign));
       print(
           'Completed enrollment setup of the atSign: $currentAtSign with enrollment Id: ${atEnrollmentResponse.enrollmentId} with access to ${enrollmentRequest.namespaces}');
     });

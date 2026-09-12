@@ -25,6 +25,7 @@ import 'package:at_client/src/secret_sharing/secret_envelope.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
+import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:uuid/uuid.dart' show Uuid;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
@@ -325,7 +326,10 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         encryptValue: false,
       );
     } catch (e) {
-      logger.warning('Wake-up notification for $envelopeKey failed '
+      logSwallowed(
+          logger,
+          e,
+          'Wake-up notification for $envelopeKey failed '
           '(envelope is stored; sync clients are unaffected): $e');
     }
   }
@@ -400,7 +404,10 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           sync.addProgressListener(listener);
         }
       } catch (e) {
-        logger.warning('Could not attach the envelope listener to sync for '
+        logSwallowed(
+            logger,
+            e,
+            'Could not attach the envelope listener to sync for '
             '${atClient.getCurrentAtSign()}; envelopes delivered by sync will '
             'wait for the next periodic sweep: $e');
       }
@@ -419,7 +426,10 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               .listen((_) => _sweepInBackground(fromRemote: true));
         }
       } catch (e) {
-        logger.warning('Could not subscribe to envelope wake-ups for '
+        logSwallowed(
+            logger,
+            e,
+            'Could not subscribe to envelope wake-ups for '
             '${atClient.getCurrentAtSign()}; envelopes will wait for sync or '
             'the next periodic sweep: $e');
       }
@@ -515,7 +525,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
             deleteRequestOptions: DeleteRequestOptions()
               ..useRemoteAtServer = fromRemote);
       } catch (e) {
-        logger.warning('Failed to delete consumed envelope $envelopeKey: $e');
+        logSwallowed(
+            logger, e, 'Failed to delete consumed envelope $envelopeKey: $e');
       }
     }
     return consumed;

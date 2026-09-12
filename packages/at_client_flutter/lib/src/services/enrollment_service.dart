@@ -30,8 +30,6 @@ class FlutterEnrollmentService {
   KeychainStorage keychainStorage = KeychainStorage();
 
   @visibleForTesting
-  KeychainAtKeysIo keychainAtKeysIo = KeychainAtKeysIo();
-
   @visibleForTesting
   AtClient? atClientOverride;
 
@@ -81,10 +79,19 @@ class FlutterEnrollmentService {
       await atLookup.close();
     }
 
-    if (atEnrollmentResponse.atAuthKeys != null) {
+    // NOTE: the keys this submission minted, which only the enrollee holds.
+    // A response carries a session only when the request did, and the request
+    // this service builds carries none. An enrollee CAN supply one — its
+    // `atKeysIo` would be the destination the new keys are persisted to, and
+    // at_auth's handshake flushes them there — which would replace this write
+    // rather than move it. That is a decision about where an enrolled app's
+    // keys land; see the dialog that builds the request.
+    // ignore: deprecated_member_use
+    final submittedKeys = atEnrollmentResponse.atAuthKeys;
+    if (submittedKeys != null) {
       EnrollmentData enrollmentData = EnrollmentData(
         atEnrollmentResponse.enrollmentId,
-        atEnrollmentResponse.atAuthKeys!,
+        submittedKeys,
         DateTime.now().toUtc().microsecondsSinceEpoch,
         namespace: (request is AtEnrollmentRequest) ? request.namespaces : null,
       );
@@ -122,12 +129,9 @@ class FlutterEnrollmentService {
       // package, which only the client's enrollment service does — an approval
       // made through at_auth alone can authenticate but decrypt nothing.
       atEnrollmentResponse = await atClient.enrollmentService!.approve(request);
-      // NOTE: the approver holds no enrollee key material — approve() answers
-      // with the id and status, and the enrollee files its own keys.
-      final approvedKeys = atEnrollmentResponse.atAuthKeys;
-      if (approvedKeys != null) {
-        await keychainAtKeysIo.write(request.atSign, approvedKeys);
-      }
+      // NOTE: nothing is filed here. The approver holds no enrollee key
+      // material — approve() answers with the id and status, and the enrollee
+      // files its own keys on its own device.
       await _forgetPendingRequest(request.atSign);
       // ignore: experimental_member_use
     } on EnrollmentConveyanceException {

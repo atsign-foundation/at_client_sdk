@@ -60,6 +60,16 @@ Future<AtClient> buildPipelineBackedClient({
         })}';
   });
 
+  // NOTE: the lookup is answered but its `executeCommand` deliberately is not.
+  // A real AtClientImpl runs its PQ startup, whose steps read the enrollment
+  // id from here; measured, none of them reaches a command against this
+  // fixture, so answering one would put words in the atServer's mouth that no
+  // test asked for. If a step ever does reach it, an unstubbed member raises a
+  // TypeError, which now logs at severe rather than passing for a condition.
+  final atLookUp = MockAtLookupImpl();
+  when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
+  when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+
   // NOTE: the posture is named rather than defaulted because
   // `AtClientPreference.crypto` refuses a config registering the post-quantum
   // providers under a posture that configures none. A caller wanting the

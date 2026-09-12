@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
@@ -204,25 +205,29 @@ Future<Map<String, dynamic>> _selfEncryptLegacyFields(
     Map<String, dynamic> document) {
   return _applyToLegacyFields(
       document,
-      (atChops, value) async => (await atChops.encryptString(
-              value, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
-          .result);
+      (algorithm, value) async => base64.encode(await algorithm.encrypt(
+          Uint8List.fromList(utf8.encode(value)),
+          iv: InitialisationVector.legacy())));
 }
 
 Future<Map<String, dynamic>> _selfDecryptLegacyFields(
     Map<String, dynamic> document) {
   return _applyToLegacyFields(
       document,
-      (atChops, value) async => (await atChops.decryptString(
-              value, EncryptionKeyType.aes256,
-              keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
-          .result);
+      (algorithm, value) async => utf8.decode(await algorithm
+          .decrypt(base64Decode(value), iv: InitialisationVector.legacy())));
 }
 
+/// Applies [transform] to whichever of the self-encrypted legacy fields the
+/// document holds, under the key it carries in the clear.
+///
+/// The all-zero initialisation vector both transforms pass makes this an
+/// at-rest format rather than a choice: every `.atKeys` file on disk was
+/// written that way, and `legacy_field_self_encryption_test.dart` pins the
+/// bytes against openssl.
 Future<Map<String, dynamic>> _applyToLegacyFields(
   Map<String, dynamic> document,
-  Future<String> Function(AtChops atChops, String value) transform,
+  Future<String> Function(AESEncryptionAlgo algorithm, String value) transform,
 ) async {
   final present = _selfEncryptedLegacyFields
       .where((field) => document[field] != null)
@@ -236,11 +241,10 @@ Future<Map<String, dynamic>> _applyToLegacyFields(
     throw AtException(
         'selfEncryptionKey is required to process the self-encrypted legacy atKeys fields');
   }
-  final atChops =
-      AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(selfEncryptionKey));
+  final algorithm = AESEncryptionAlgo(AESKey(selfEncryptionKey));
   final result = Map<String, dynamic>.from(document);
   for (final field in present) {
-    result[field] = await transform(atChops, document[field] as String);
+    result[field] = await transform(algorithm, document[field] as String);
   }
   return result;
 }

@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -40,7 +41,7 @@ void main() {
     final atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
   }
 
   /// Stubs [atClient]'s get of A's `_apsk` key to return [publicKey].
@@ -58,10 +59,12 @@ void main() {
   });
 
   setUp(() {
+    // Two principals of one atSign, so two keys: the pair is what keeps them
+    // apart, and half these tests are about A not passing for B.
     atChopsA = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+        AtChopsKeys.create(null, pkamKeyPairFor(atSign, 'enroll-a')));
     atChopsB = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+        AtChopsKeys.create(null, pkamKeyPairFor(atSign, 'enroll-b')));
 
     atClientA = MockAtClient();
     when(() => atClientA.atChops).thenReturn(atChopsA);

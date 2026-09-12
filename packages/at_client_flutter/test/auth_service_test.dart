@@ -52,35 +52,56 @@ void main() {
     });
   });
   group('AuthService', () {
-    test('assert authenticate() saves keys to keychain', () async {
-      when(() => mockAtAuth.authenticate(any())).thenAnswer(
-        (_) async => AtAuthResponse('@alice')
-          ..isSuccessful = true
-          ..atAuthKeys = fakeAtKeys,
-      );
-      when(
-        () => mockFileAtKeysIo.read(any()),
-      ).thenAnswer((_) async => fakeAtKeys);
-      AuthService authService = AuthService(atAuth: mockAtAuth);
-      AtAuthRequest atAuthRequest = AtAuthRequest(
-        "@alice",
-        atKeysIo: mockFileAtKeysIo,
-      );
+    test(
+      'assert authenticate() backs up the keys it authenticated with',
+      () async {
+        when(() => mockAtAuth.authenticate(any())).thenAnswer(
+          (_) async => AtAuthResponse('@alice')
+            ..isSuccessful = true
+            ..session = AtAuthSession(
+              atSign: '@alice',
+              rootDomain: AtRootDomain.atsignDomain,
+              atKeysIo: mockFileAtKeysIo,
+              enrollmentId: 'enroll-1',
+            ),
+        );
+        when(
+          () => mockFileAtKeysIo.read(any()),
+        ).thenAnswer((_) async => fakeAtKeys);
+        AuthService authService = AuthService(atAuth: mockAtAuth);
+        AtAuthRequest atAuthRequest = AtAuthRequest(
+          "@alice",
+          atKeysIo: mockFileAtKeysIo,
+        );
 
-      //regardless of atKeysIo used in AtAuthRequest, keys should be saved to keychain
-      AtAuthResponse _ = await authService.authenticate(atAuthRequest);
-      var keys = await mockKeychainAtKeysIo.read('@alice');
-      expect(keys.apkamPrivateKey, isNotNull);
-      expect(keys.apkamPublicKey, isNotNull);
-      expect(keys.defaultEncryptionPrivateKey, isNotNull);
-      expect(keys.defaultEncryptionPublicKey, isNotNull);
-    });
+        await authService.authenticate(
+          atAuthRequest,
+          backupKeys: [mockKeychainAtKeysIo],
+        );
+
+        // What the keychain double was HANDED, not what it was stubbed to
+        // answer: `read` here returns fakeAtKeys whatever happened, so
+        // asserting on it passed with the backup path deleted.
+        expect(
+          atKeysList['@alice'],
+          same(fakeAtKeys),
+          reason:
+              'a backup is a copy of what was authenticated with, read '
+              'back through the source the session carries',
+        );
+      },
+    );
 
     test('assert onboard()', () {
       when(() => mockAtAuth.onboard(any(), any())).thenAnswer(
         (_) async => AtOnboardingResponse('@alice')
           ..isSuccessful = true
-          ..atAuthKeys = fakeAtKeys,
+          ..session = AtAuthSession(
+            atSign: '@alice',
+            rootDomain: AtRootDomain.atsignDomain,
+            atKeysIo: mockFileAtKeysIo,
+            enrollmentId: 'enroll-1',
+          ),
       );
       AuthService authService = AuthService(atAuth: mockAtAuth);
       AtOnboardingRequest atOnboardingRequest = AtOnboardingRequest(

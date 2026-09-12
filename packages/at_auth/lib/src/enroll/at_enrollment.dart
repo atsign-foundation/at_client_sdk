@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_auth/src/enroll/models/approver_key_material.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
 import 'package:at_auth/src/enroll/models/enrollment_update_request.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
-import 'package:at_chops/at_chops.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollment {
@@ -125,16 +125,18 @@ abstract class AtEnrollment {
   ///               encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
   ///
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.approve(
-  ///       enrollmentRequestDecision, atLookupImpl);
+  ///       enrollmentRequestDecision, atLookupImpl, approverKeys: myKeys);
   /// ```
   ///
-  /// [approverChops] is the approving client's own crypto. What approval needs
-  /// is not authentication - the atSign's encryption private key, its
-  /// self-encryption key - so it does not belong on the network object. While
-  /// null, the implementation falls back to `atLookUp.atChops`.
+  /// [approverKeys] is what approval reads of the approving client's own
+  /// material, and all of it: the atSign's encryption private key, which
+  /// unwraps the symmetric key a legacy enrollee RSA-wrapped to it, and its
+  /// self-encryption key, one of the two secrets sealed for the enrollee.
+  /// Neither is authentication, so the caller hands them over rather than the
+  /// implementation reaching through [atLookUp] for them.
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp,
-      {AtChops? approverChops});
+      {required ApproverKeyMaterial approverKeys});
 
   /// Denies an enrollment request.
   ///

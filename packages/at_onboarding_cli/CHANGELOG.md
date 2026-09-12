@@ -1,5 +1,32 @@
 ## 1.17.0-rc1
 
+- refactor: `authenticate` takes the enrollment it authenticated as, and the
+  keys it persists to the local secondary, from the session at_auth hands
+  back rather than from the response's own key fields. The source on that
+  session is the one this service passed in, so it is the same key set — and
+  honouring the hand-off means a caller can supply a source this service
+  never has to open itself.
+- refactor: both flows build their client from the keyfile. `enroll` writes
+  the keyfile for its new enrollment first and hands that source over;
+  `authenticate` hands over the source at_auth just read. Neither sets
+  `atChops`, `enrollmentId`, `signingAlgoType` or `hashingAlgoType` on the
+  lookup any more — the client's own connection installs an authenticator
+  from the key source and stamps what a lookup from before that seam reads,
+  so a connection's algorithm now comes from the key material on both flows
+  rather than from the preference on one of them.
+  ⚠️ `enroll` had been failing on a null check after approval and before the
+  keyfile was written, because it read an `AtChops` off the lookup that
+  at_auth's handshake stopped leaving there. The CLI's live packs found that;
+  its unit tests had not, because they stub the lookup's `atChops`.
+  `AtOnboardingService.atChops` is unchanged: it is the door for a signer
+  that is not a keyfile, such as a secure element's.
+- fix: `sendEnrollRequest` no longer sleeps 500ms after announcing itself on
+  the progress stream. The pause existed so the CLI's narration did not scroll
+  past unread, but it delayed the enrollment submission rather than pacing the
+  display where the reader is, and every automated caller paid it too. The
+  progress events are unchanged. `AtOnboardingServiceImpl.waitBriefly` is
+  removed with it; it was public but on no interface, and its only caller was
+  the line above.
 - **BREAKING:** an invocation with no command is refused instead of being
   treated as `onboard`. `auth -a <atSign> -c <secret>` activated an atSign
   without the word appearing anywhere; it now prints the command list and

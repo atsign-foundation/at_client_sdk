@@ -130,7 +130,6 @@ void main() {
     // next is refused as a second holder.
     final manager = await ladderManager.setCurrentAtSign(
         atSign, namespace, TestUtils.getPreference(atSign, posture: posture),
-        atChops: auth.atChops,
         atKeysIo: keysIo,
         enrollmentId: enrollmentId,
         storage: ladderStorage);

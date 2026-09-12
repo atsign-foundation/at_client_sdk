@@ -165,20 +165,16 @@ void main() {
     final notifications =
         receiver.client.notificationService as NotificationServiceImpl;
     // No `regex:` — subscribe to everything and filter here. A wrong regex
-    // fails identically to a notification that never arrived. Every key the
-    // monitor delivers is recorded instead: the atServer's `statsNotification`
-    // arrives every ~15s once a monitor is listening, so it is the positive
-    // control that separates a dead monitor from a missing treaty.
+    // fails identically to a notification that never arrived, so every key the
+    // monitor delivers is recorded and named in the failure instead.
     final seen = <String>[];
     final received = Completer<AtNotification>();
     // The one sent while this listener's monitor is closed; declared here
     // because the listener has to be watching before it is sent.
     final queued = Completer<AtNotification>();
-    final monitorProvenLive = Completer<void>();
     final subscription =
         notifications.subscribe(shouldDecrypt: true).listen((n) {
       seen.add(n.key);
-      if (!monitorProvenLive.isCompleted) monitorProvenLive.complete();
       if (n.key.contains('treaty$runId') && !received.isCompleted) {
         received.complete(n);
       }
@@ -188,24 +184,15 @@ void main() {
     });
     addTearDown(subscription.cancel);
 
-    // NOTE: wait until THIS listener has been handed a notification before
-    // notifying anything. The atServer's inbound notification stream is a
-    // broadcast stream and `MonitorVerbHandler` subscribes to it only when it
-    // processes the `monitor:` command, so a notification enqueued before that
-    // instant is never delivered on that connection at all. The only recovery
-    // is the `monitor:…:<epochMillis>` form, and the client sends an epoch only
-    // once it has a last-received-notification time, which a first-ever monitor
-    // does not. `currentListenerState == listening` is NOT this gate — the
-    // Monitor sets it straight after writing the command, which says nothing
-    // about the atServer having processed it. A `statsNotification` actually
-    // arriving does.
-    await monitorProvenLive.future.timeout(
-      Duration(seconds: 60),
-      onTimeout: () => throw StateError(
-          'no notification of any kind reached the listener within 60s, so the '
-          'monitor is not up; notifying now would repeat the race this gate '
-          'exists to close'),
-    );
+    // NOTE: wait until the monitor is REGISTERED before notifying anything.
+    // `MonitorVerbHandler` subscribes to the atServer's inbound stream only
+    // when it processes the `monitor:` command, and that stream is a broadcast
+    // with no backlog, so a notification enqueued before that instant is never
+    // delivered on that connection at all. The only recovery is the
+    // `monitor:…:<epochMillis>` form, and a first-ever monitor has no
+    // last-received time to send. See [awaitMonitorListening] for why
+    // `listening` now answers this and what it still cannot promise.
+    await awaitMonitorListening(notifications);
 
     // The provider is chosen PER CALL, not by posture: a per-call algorithm
     // overrides the posture's value for that one axis, and the migration
@@ -234,7 +221,7 @@ void main() {
         symmetricAesGcmCryptoProviderId,
         reason: 'providerId must travel ON THE FRAME. A stored key carries its '
             'appMetadata in the record; a notification has to carry it in the '
-            'notification, and without it the receiver falls back to legacy '
+            'notification, and without it the receiver falls back to the legacy provider '
             'and hunts a shared_key a PQ write never created');
 
     expect(notification.value, value,

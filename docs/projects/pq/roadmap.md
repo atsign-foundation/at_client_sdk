@@ -27,8 +27,12 @@ path) and **D2** (the `at/pqmls` group provider, referenced not detailed here).
 
 ## Document map
 
-This is one of **six** docs. Each keeps to its lane; cross-references point at
-the canonical home rather than duplicating it.
+This is one of **six** TRACKED docs. Each keeps to its lane; cross-references
+point at the canonical home rather than duplicating it. ⚠️ `ls docs/projects/pq`
+counts seven: `post-quantum-cryptography.md` is deliberately gitignored
+(`.gitignore:128`), so a collaborator cloning the repo has six. A plan row and a
+memory entry each called this count wrong before checking which files are
+tracked.
 
 | Doc | What lives there |
 |---|---|

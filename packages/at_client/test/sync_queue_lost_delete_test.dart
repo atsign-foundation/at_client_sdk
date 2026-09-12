@@ -68,6 +68,8 @@ void main() {
     when(() => atClient.persistenceBundle).thenReturn(bundle);
     when(() => atClient.notificationService)
         .thenReturn(_MockNotificationService());
+    final syncService = MockSyncService();
+    when(() => atClient.syncService).thenReturn(syncService);
 
     local = LocalSecondary(atClient,
         keyStore: bundle.keyValueStore, onEvent: (_) {});

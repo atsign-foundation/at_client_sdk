@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 
 import 'fake_enrollment_directory.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -52,7 +53,7 @@ void main() {
   MockAtClient buildMockClient(String enrollmentId) {
     final atClient = MockAtClient();
     final atChops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+        AtChopsKeys.create(null, pkamKeyPairFor(atSign, enrollmentId)));
     when(() => atClient.atChops).thenReturn(atChops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
 
@@ -60,7 +61,7 @@ void main() {
     final atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
     final notificationService = MockNotificationService();
     when(() => atClient.notificationService).thenReturn(notificationService);

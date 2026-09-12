@@ -36,9 +36,10 @@ Future<bool> loginWithKeychain(BuildContext context) async {
     request: authRequest,
     backupKeys: [KeychainAtKeysIo()],
   );
-  if (response == null || !response.isSuccessful) return false;
+  final session = response?.session;
+  if (session == null) return false;
 
-  await _setupAtClient(response);
+  await _setupAtClient(session);
   return true;
 }
 
@@ -56,9 +57,10 @@ Future<bool> loginWithFile(BuildContext context) async {
     request: authRequest,
     backupKeys: [KeychainAtKeysIo()],
   );
-  if (response == null || !response.isSuccessful) return false;
+  final session = response?.session;
+  if (session == null) return false;
 
-  await _setupAtClient(response);
+  await _setupAtClient(session);
   return true;
 }
 
@@ -73,12 +75,17 @@ Future<bool> loginWithApkam(BuildContext context) async {
     appName: _namespace,
     deviceName: 'default',
     namespaces: {_namespace: 'rw'},
+    // Where this enrollment's keys land. The enrolled app holds the only
+    // copy, so the destination is the app's choice; at_auth writes the
+    // completed keyset there once the approval releases it.
+    atKeysIo: KeychainAtKeysIo(),
   );
-  if (enrollmentResponse?.atAuthKeys == null || !context.mounted) return false;
+  final enrolled = enrollmentResponse?.session;
+  if (enrolled == null || !context.mounted) return false;
 
   final authRequest = AtAuthRequest(
     request.atSign,
-    atAuthKeys: enrollmentResponse!.atAuthKeys!,
+    atKeysIo: enrolled.atKeysIo,
     rootDomain: request.rootDomain,
   );
   final response = await PkamDialog.show(
@@ -86,9 +93,10 @@ Future<bool> loginWithApkam(BuildContext context) async {
     request: authRequest,
     backupKeys: [KeychainAtKeysIo()],
   );
-  if (response == null || !response.isSuccessful) return false;
+  final session = response?.session;
+  if (session == null) return false;
 
-  await _setupAtClient(response);
+  await _setupAtClient(session);
   return true;
 }
 
@@ -96,41 +104,26 @@ Future<void> logout() async {
   AtClientManager.getInstance().reset();
 }
 
-Future<void> _setupAtClient(AuthResponse response) async {
+/// Every flow here hands authentication a key source, so it always answers
+/// with a session — and the client rebuilds its own connection from the
+/// session's source rather than adopting auth's live objects.
+Future<void> _setupAtClient(AtAuthSession session) async {
   final dir = await getApplicationSupportDirectory();
   final acp = AtClientPreference()..namespace = _namespace;
   // closedByClient: the app picks the backend and the location, and the client
   // still closes the store when it stops, so there is nothing to tear down.
   final storage = HiveAtClientStorage(
-    atSign: response.atSign,
+    atSign: session.atSign,
     storagePath: dir.path,
     closedByClient: true,
   );
 
-  final session = response.session;
-  if (session != null) {
-    // Preferred path: hand over the session; the client rebuilds its own
-    // connection from the session's key source.
-    await AtClientManager.getInstance().fromAuthSession(
-      session,
-      acp,
-      storage: storage,
-    );
-  } else {
-    // Transitional fallback for flows that hand back only atAuthKeys with no
-    // AtKeysIo source (e.g. APKAM enrollment): adopt auth's already-
-    // authenticated AtChops/AtLookUp directly.
-    await AtClientManager.getInstance().setCurrentAtSign(
-      response.atSign,
-      _namespace,
-      acp,
-      enrollmentId: response.enrollmentId,
-      atChops: response.atChops,
-      atLookUp: response.atLookUp,
-      storage: storage,
-    );
-  }
-  _log.info('atClient ready for ${response.atSign}');
+  await AtClientManager.getInstance().fromAuthSession(
+    session,
+    acp,
+    storage: storage,
+  );
+  _log.info('atClient ready for ${session.atSign}');
 }
 
 void _snack(BuildContext context, String message) {

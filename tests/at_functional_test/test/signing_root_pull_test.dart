@@ -22,16 +22,17 @@ import 'test_utils.dart';
 /// already published.
 ///
 /// The full round trip — seeker asks, holder answers, private reaches the
-/// keyfile — is not driven here. It needs APKAM authentication on **both**
-/// sides: the requester to enumerate holders, the responder to authorize the
-/// requester before answering, an authorization that resolves the sender's kpid
-/// against the key packages registered for the namespace as defence in depth
-/// over the atServer's own delivery gate. Both go through `enroll:listns`,
-/// which the atServer refuses for a client authenticating with the atSign's own
-/// keys — what this file does — so the holder picks the request up, fails
-/// authentication and leaves the envelope unconsumed. Proving the round trip
-/// (UC-B5.1) needs two real approved APKAM enrollments, each with its own
-/// authenticated client.
+/// keyfile — is not driven here, because it needs two principals and this
+/// file has one: a seeker that lacks the root and a holder that has it. The
+/// atSign's own credential, which is what this file authenticates with, does
+/// not ask for a root, since its route to a missing one is to mint one.
+/// `signing_root_pull_two_enrollments_test.dart` drives the round trip between
+/// two APKAM enrollments and proves UC-B5.1.
+///
+/// The atServer is not what keeps this file off that path. Since at_server
+/// 3.16.4 a connection authenticated with the atSign's own keys is judged as
+/// the `primary` enrollment, and `enroll:listns` answers it with a roster that
+/// names `primary`; only an unauthenticated connection is refused.
 ///
 /// What this file does prove live is the entitlement guard below.
 void main() {

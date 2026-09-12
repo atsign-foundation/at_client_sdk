@@ -128,6 +128,6 @@ void main() {
     expect(config.lookup(symmetricAesGcmCryptoProviderId), isNotNull);
     expect(config.defaultProviderId, legacyCryptoProviderId,
         reason: 'reads route by the record\'s own stamp; the era default '
-            'only decides what NEW writes use, and in 3.x that is legacy');
+            'only decides what NEW writes use, and in 3.x that is the legacy provider');
   });
 }

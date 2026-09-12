@@ -63,47 +63,25 @@ class EnrollmentHandshake {
       authenticator: null,
     );
 
-    // An enrollment that advertised a key package holds no symmetric key yet,
-    // and `toAtChops` reads its absence as "these are PKAM keys" — which then
-    // demands the encryption private key this enrollment is here to fetch. Its
-    // APKAM keypair is all PKAM authentication needs, so build the chops from
-    // that directly and fill the symmetric key in once it arrives.
+    // PKAM here proves possession of this enrollment's APKAM keypair, which is
+    // all the authenticator reads from these keys: typed material under the
+    // enrollment id where the keyfile holds it, the flat pair as rsa2048
+    // otherwise. The encryption private key and the symmetric key are what
+    // the handshake is about to fetch, and nothing on the way to them is
+    // built around their absence.
     final AtKeys handshakeKeys = enrollmentResponse.atAuthKeys!;
-    final String? handshakeEnrollmentId = enrollmentResponse.enrollmentId;
+    final String handshakeEnrollmentId = enrollmentResponse.enrollmentId;
 
-    // The algorithm this enrollment authenticates with, read from its typed
-    // material. The flat fields carry the keypair's BYTES and no algorithm, so
-    // without this PKAM would sign whatever they hold under at_lookup's
-    // default of rsa2048.
-    final SigningAlgoType? handshakeAlgorithm =
-        handshakeKeys.authenticationAlgorithmFor(handshakeEnrollmentId);
-
-    AtChops atChops = handshakeKeys.apkamSymmetricKey != null
-        ? handshakeKeys.toAtChops()
-        : _apkamChopsAwaitingSymmetricKey(handshakeKeys);
-    atLookup.atChops = atChops;
-
-    // And the algorithm, or PKAM signs this enrollment's challenge with
-    // at_lookup's default — rsa2048 — whatever the keypair actually is. That
-    // fails inside at_chops on a key length, naming neither the enrollment nor
-    // the mismatch.
-    if (handshakeAlgorithm != null) {
-      atLookup.signingAlgoType = handshakeAlgorithm;
-    }
-    // The chops is injected rather than resolved: this enrollment's keys are
-    // deliberately not a complete keyfile yet - the symmetric key is the thing
-    // the handshake is here to fetch - so asking the keystore to build a
-    // signer would demand material that has not arrived.
     if (atLookup is AtLookupMuxable) {
       final memory = InMemoryAtKeysIo();
-      await memory.write(
-          enrollmentResponse.atSign!, enrollmentResponse.atAuthKeys!);
+      await memory.write(enrollmentResponse.atSign!, handshakeKeys);
       atLookup.authenticator = authenticatorFor(
         memory,
         enrollmentResponse.atSign!,
-        enrollmentId: enrollmentResponse.enrollmentId,
-        chops: atChops,
+        enrollmentId: handshakeEnrollmentId,
       );
+    } else {
+      _installLadder(atLookup, handshakeKeys, handshakeEnrollmentId);
     }
 
     await _waitForPkamAuthSuccess(
@@ -128,7 +106,6 @@ class EnrollmentHandshake {
           await resolver(enrollmentResponse.atAuthKeys!, atLookup);
       enrollmentResponse.atAuthKeys!.apkamSymmetricKey =
           AtBytes.fromString(apkamSymmetricKey);
-      atChops.atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
     }
 
     // fetch the following keys from the atServer
@@ -158,8 +135,8 @@ class EnrollmentHandshake {
     // approver's, not this client's.
     InitialisationVector ivOf(Map<String, dynamic> keyResponse) =>
         keyResponse['iv'] == null
-            ? AtChopsUtil.generateIVLegacy()
-            : AtChopsUtil.generateIVFromBase64String(keyResponse['iv']);
+            ? InitialisationVector.legacy()
+            : InitialisationVector.fromBase64(keyResponse['iv']);
 
     String decryptedSelfEncryptionKey = aesEncryption.decrypt(
       selfEncKeyResponse['value'],
@@ -228,23 +205,32 @@ class EnrollmentHandshake {
     return map;
   }
 
-  /// Pkam auth will be retried until server approves/denies/expires the enrollment
-  /// APKAM chops for an enrollment that has not yet been handed its symmetric
-  /// key: enough to PKAM-authenticate, and nothing more.
+  /// The credential-ladder form of the enrollment's APKAM keypair, for a
+  /// caller-supplied lookup from before the authenticator seam: the ladder is
+  /// the only way to authenticate it, and both fields go with that ladder in
+  /// the at_lookup major.
   ///
-  /// Deliberately not `AtKeys.toAtChops`, which branches on the symmetric key's
-  /// presence to tell APKAM keys from PKAM keys and so mis-reads this state.
-  AtChops _apkamChopsAwaitingSymmetricKey(AtKeys atKeys) {
-    return AtChopsImpl(AtChopsKeys.create(
-      AtEncryptionKeyPair.create(
-        atKeys.defaultEncryptionPublicKey!.toString(),
-        '',
-      ),
-      AtPkamKeyPair.create(
-        atKeys.apkamPublicKey!.toString(),
-        atKeys.apkamPrivateKey!.toString(),
-      ),
+  /// The algorithm is stated because the ladder's default is rsa2048 whatever
+  /// the keypair is, and signing an ML-DSA key with the RSA routine fails
+  /// inside at_chops on a key length, naming neither the enrollment nor the
+  /// mismatch.
+  void _installLadder(AtLookUp atLookup, AtKeys keys, String? enrollmentId) {
+    final keyPair = keys.authenticationKeyPairFor(enrollmentId);
+    if (keyPair == null) {
+      throw AtEnrollmentException(
+          'AtKeys holds no authentication keypair for enrollment $enrollmentId, '
+          'so there is nothing to authenticate the handshake with');
+    }
+    // NOTE: the ladder takes an AtChops and nothing else, so one is built here
+    // and only here, around the keypair alone; it leaves with the ladder.
+    // ignore: deprecated_member_use
+    atLookup.atChops = AtChopsImpl(AtChopsKeys.create(
+      null,
+      // ignore: deprecated_member_use
+      AtPkamKeyPair.create(keyPair.publicKey, keyPair.privateKey),
     ));
+    // ignore: deprecated_member_use
+    atLookup.signingAlgoType = keyPair.algorithm;
   }
 
   Future<void> _waitForPkamAuthSuccess(
@@ -269,7 +255,6 @@ class EnrollmentHandshake {
       _logger.info('Attempting pkam auth');
       if (logProgress) {
         _progress.add('PKAM', 'attempting PKAM auth', ProgressEventType.info);
-        await _waitBriefly();
       }
       bool pkamAuthSucceeded = false;
       bool reachedAtServer = true;
@@ -354,7 +339,4 @@ class EnrollmentHandshake {
     }
   }
 
-  Future<void> _waitBriefly({int millis = 500}) async {
-    await Future.delayed(Duration(milliseconds: millis));
-  }
 }

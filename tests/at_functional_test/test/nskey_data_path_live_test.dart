@@ -136,7 +136,7 @@ void main() {
     expect(stored, contains(AtConstants.appMetadata),
         reason: 'the atServer must have stored appMetadata — without it a '
             'cross-atSign lookup returns a null providerId and the reader '
-            'falls back to legacy, hunting a shared_key that was never made');
+            'falls back to the legacy provider, hunting a shared_key that was never made');
     expect(stored, contains(symmetricAesGcmCryptoProviderId),
         reason: 'and the stored routing must name the data provider');
     expect(stored, contains(ckKid),
@@ -279,7 +279,7 @@ void main() {
           reason: 'the namespace this suite minted for is reachable');
     });
 
-    test('with the escape hatch opened, the write goes out under legacy',
+    test('with the escape hatch opened, the write goes out with the legacy provider',
         () async {
       final atClient = atClientManager.atClient;
       atClient.getPreferences()!.allowLegacyCryptoFallback = true;
@@ -292,14 +292,14 @@ void main() {
       final read = await atClient.get(key);
       expect(read.value, 'for me');
       expect(read.metadata?.appMetadata?.providerId, legacyCryptoProviderId,
-          reason: 'the fallback is legacy and says so on the record — a '
+          reason: 'the fallback is the legacy provider and says so on the record — a '
               'downgrade nobody can see afterwards is the thing being guarded '
               'against');
     });
 
     test(
         'a namespace that gains a key takes over, and what the fallback wrote '
-        'stays legacy', () async {
+        'stays legacy-encrypted', () async {
       // UC-A3.3, second and third arms. Self data, no peer involved.
       final atClient = atClientManager.atClient;
       final ns = 'latecomer${DateTime.now().microsecondsSinceEpoch}';
@@ -316,7 +316,7 @@ void main() {
       expect((await atClient.get(k('early'))).metadata?.appMetadata?.providerId,
           legacyCryptoProviderId,
           reason: 'the premise: with no nskey for this namespace and the '
-              'escape hatch open, the write goes out legacy');
+              'escape hatch open, the write goes out with the legacy provider');
 
       // NOTE: this control must be able to stay green while the assertion
       // below goes red — that is what attributes the flip to the key
@@ -342,7 +342,7 @@ void main() {
       final early = await atClient.get(k('early'));
       expect(early.value, 'before the key existed');
       expect(early.metadata?.appMetadata?.providerId, legacyCryptoProviderId,
-          reason: 'and what the fallback already wrote stays legacy and stays '
+          reason: 'and what the fallback already wrote stays legacy-encrypted and stays '
               'readable. Re-encrypting it is an explicit migration, never a '
               'side effect of a later put to the same namespace');
     });

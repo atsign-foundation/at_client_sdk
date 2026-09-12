@@ -84,7 +84,7 @@ void main() {
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
-    when(() => lookUp.enrollmentId).thenReturn('enroll-a');
+    when(() => atClient.enrollmentId).thenReturn('enroll-a');
     when(() => atClient.put(any(), any(),
             putRequestOptions: any(named: 'putRequestOptions')))
         .thenAnswer((_) async => true);
@@ -413,8 +413,7 @@ void main() {
       final c = client();
       // The legacy-PKAM shape: no enrollment, namespaces named by the
       // preference — the path seed() takes without a roster round trip.
-      final lookUp = c.client.getRemoteSecondary()!.atLookUp;
-      when(() => lookUp.enrollmentId).thenReturn(null);
+      when(() => c.client.enrollmentId).thenReturn(null);
       when(() => c.client.getPreferences())
           .thenReturn(AtClientPreference()..namespace = namespace);
       final filer = await filing();
@@ -517,8 +516,7 @@ void main() {
       final c = client();
       // The legacy-PKAM shape: no enrollment, namespaces named by the
       // preference — the path seed() takes without a roster round trip.
-      final lookUp = c.client.getRemoteSecondary()!.atLookUp;
-      when(() => lookUp.enrollmentId).thenReturn(null);
+      when(() => c.client.enrollmentId).thenReturn(null);
       when(() => c.client.getPreferences()).thenReturn(AtClientPreference(
           keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024])
         ..namespace = namespace);

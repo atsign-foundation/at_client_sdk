@@ -86,7 +86,7 @@ void main() {
       //       target and cannot stand in. A pre-flight capability query answers
       //       the same question before the user composes anything. With the
       //       legacy fallback opted in (final 3.x only) the share proceeds
-      //       under legacy — the invitation path, which ends at 4.x. Once bob
+      //       with the legacy provider — the invitation path, which ends at 4.x. Once bob
       //       uses or authorises the namespace his nskey is published and
       //       alice's next ensureCurrent picks it up by plookup.
       provenIn(
@@ -106,7 +106,7 @@ void main() {
         'tests/at_functional_test/test/pq_legacy_interop_live_test.dart',
         'UC-B4.2 outbound · a PQ app on @bob reaches a legacy @alice throu',
         proves: 'the opted-in fallback arm against a real legacy recipient: '
-            'with the flag set the share goes out under legacy rather than '
+            'with the flag set the share goes out with the legacy provider rather than '
             'failing, and the record says so. Without the flag the same send '
             'refuses, which is the sibling arm and what stops this reading as '
             'the default',

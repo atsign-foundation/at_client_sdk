@@ -5,6 +5,7 @@ import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
+import 'test_utils/pkam_pin.dart';
 
 /// Records what the authenticator sent, and with which budgets, and hands back
 /// scripted atServer replies.
@@ -27,11 +28,10 @@ class RecordingExecutor implements AtCommandExecutor {
 }
 
 void main() {
-  // The demo key maps are keyed on the emoji atSigns, so PKAM can sign for
-  // real here rather than with placeholder material.
-  const atSign = '@alice🛠';
-  const challenge = '_9e8169dc-5618-44ec-ab43-1a5b2144c581@alice🛠'
-      ':c3d345fc-5691-4f90-bc34-17cba31f060f';
+  // The PKAM pin's atSign and challenge, so the signature asserted below is
+  // the one frozen in test_utils/pkam_pin.dart.
+  const atSign = pkamPinAtSign;
+  const challenge = pkamPinChallenge;
   const cramSecret = 'cramsecret123';
 
   /// Captured with `shasum -a 512` over `cramsecret123` + the challenge, so
@@ -90,6 +90,9 @@ void main() {
       expect(executor.sent.last, contains('signingAlgo:rsa2048'),
           reason: 'a null algorithm resolves to the flat fields\' RSA keypair, '
               'which is what at_lookup signed with by default');
+      expect(executor.sent.last, contains(':sha256:$expectedPkamSignature'),
+          reason: 'the signature the atServer verifies, not merely that one '
+              'was sent');
       expect(executor.maxWaits, [null, null],
           reason: 'PKAM takes the process-wide defaults, unlike CRAM');
     });
@@ -221,6 +224,9 @@ void main() {
           reason: 'a keyless caller names no enrollment, so it has no record '
               'to read an algorithm from, and rsa2048 is what at_lookup '
               'signed with');
+      expect(executor.sent.last, contains(':sha256:$expectedPkamSignature'),
+          reason: 'the same key signs the same challenge to the same bytes '
+              'whether it arrived in a keyfile or on its own');
     });
 
     test('still refuses a challenge naming another atSign', () async {

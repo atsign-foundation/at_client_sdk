@@ -28,13 +28,13 @@ void main() {
     AtPkamKeyPair atPkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
     AtChopsKeys atChopsKeys =
         AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    atChopsKeys.selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    atChopsKeys.selfEncryptionKey = AESKey.generate(32);
     atChops = AtChopsImpl(atChopsKeys);
 
     atClient = await AtClientImpl.create(
         currentAtSign, namespace, atClientPreference,
         remoteSecondary: mockRemoteSecondary, atChops: atChops);
+    atClient.syncService = MockSyncService();
 
     // During decryption, fetches the encryption public key from local keystore.
     // So, store the encryption public key into local secondary keystore.

@@ -15,7 +15,6 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
-import 'package:at_chops/at_chops.dart';
 
 class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   final List<EnrollmentRequestDecision> approvals = [];
@@ -23,7 +22,7 @@ class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision decision, AtLookUp atLookUp,
-      {AtChops? approverChops}) async {
+      {required ApproverKeyMaterial approverKeys}) async {
     approvals.add(decision);
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);
@@ -112,6 +111,7 @@ void main() {
       {String recordEnrollmentId = enrolleeId}) {
     final approver = buildRemoteBackedMockClient(
         atSign: atSign, enrollmentId: 'approver-1', remoteData: remoteData);
+    stubApproverKeys(approver);
     final key = '$recordEnrollmentId.new.enrollments.__manage$atSign';
     final secondary = approver.getRemoteSecondary()!;
     stubApproveListReads(secondary, 'data:${jsonEncode({key: record})}');

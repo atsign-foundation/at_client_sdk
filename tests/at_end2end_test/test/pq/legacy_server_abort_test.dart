@@ -110,7 +110,7 @@ void main() {
   }
 
   test(
-      'UC-B0.1: the upgrade aborts cleanly, stays legacy, and leaves the '
+      'UC-B0.1: the upgrade aborts cleanly, stays on the legacy provider, and leaves the '
       'server as it found it', () async {
     // GIVEN a legacy atServer, asserted rather than assumed.
     expect(await PqSigningRoot.publishedPublicKey(owner, atSign), isNull,
@@ -150,7 +150,7 @@ void main() {
             'is the "logs why" clause, and it is what tells an operator to '
             'upgrade the atServer rather than to debug the client');
 
-    // (3) stays legacy, and (4) mints no PQ keys.
+    // (3) stays on the legacy provider, and (4) mints no PQ keys.
     final after =
         await FileAtKeysIo(filePath: (_) => keyfileFor('priv')).read(atSign);
     expect(after.keys, isEmpty,

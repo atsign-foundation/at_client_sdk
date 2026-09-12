@@ -16,7 +16,7 @@ void main() {
       // WHEN  alice1 attempts the upgrade sequence.
       // THEN  the new PQ surface (ML-DSA APKAM auth, flattened enroll:listns,
       //       EnrollParams.metadata, authenticated self-retrofit auto-approve)
-      //       is unavailable, so alice1 ABORTS CLEANLY, stays legacy, mints no
+      //       is unavailable, so alice1 ABORTS CLEANLY, stays on the legacy provider, mints no
       //       PQ keys, and logs why. No partial state on the server.
       provenIn('tests/at_end2end_test/test/pq/legacy_server_abort_test.dart',
           'UC-B0.1: the upgrade aborts cleanly',

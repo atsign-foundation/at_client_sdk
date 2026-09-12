@@ -1025,21 +1025,24 @@ class AtKeys {
   // enrollmentId and arbitrary metadata. They stay readable/writable (and
   // merge flatly into the typed-keys document) so existing files keep working.
 
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? apkamPublicKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? apkamPrivateKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? defaultEncryptionPublicKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? defaultEncryptionPrivateKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? defaultSelfEncryptionKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? apkamSymmetricKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   String? enrollmentId;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  /// A legacy keyfile's entries outside the flat key schema: the atSign under
+  /// `atsign` or `name`, and the self-encryption key stored under the atSign
+  /// itself. The typed document has no equivalent, so a read and write cycle
+  /// preserves them only here.
   Map<String, dynamic> metadata = {};
 
   /// Encodes just the legacy flat shape — the hard-coded fields plus
@@ -1098,8 +1101,17 @@ class AtKeys {
     return keys;
   }
 
-  @Deprecated('AtChops is being deprecated, by extension this method as well')
-  AtChops toAtChops() {
+  /// The `AtChops` this keyfile's FLAT fields assemble, APKAM or MPKAM by
+  /// whether they hold an `apkamSymmetricKey`.
+  ///
+  /// Library-private: it was public and deprecated, and nothing outside
+  /// at_auth called it. [authenticationFor] is the public route, and reaches
+  /// here for a keyfile whose enrollment names no algorithm of its own.
+  ///
+  // NOTE: the AtChops names below are the carrier this returns, not work
+  // owed. They were invisible while this method was itself deprecated.
+  // ignore: deprecated_member_use
+  AtChops _toAtChops() {
     //if the keys contain an apkamSymmetricKey, they're a apkam key
     return switch (apkamSymmetricKey) {
       AtBytes() => _createApkamChops(this),
@@ -1113,14 +1125,20 @@ class AtKeys {
   /// This is how a second enrollment held in the same keyfile — a
   /// self-retrofit's, whose APKAM keypair lives in its own `enrollments[]`
   /// entry while the flat fields keep carrying the original enrollment's —
-  /// becomes able to authenticate at all; [toAtChops] reads only the flat
+  /// becomes able to authenticate at all; [_toAtChops] reads only the flat
   /// fields and cannot see it.
   ///
   /// The signing keypair rides the String-typed pkam slot as base64 of the
   /// raw key bytes. A caller authenticating over at_lookup must also set
   /// `signingAlgoType` to what [signingAlgorithmForEnrollment] reports, or
   /// the signature is produced by the wrong routine.
-  AtChops toAtChopsForEnrollment(String enrollmentId) {
+  ///
+  /// Library-private for the reason [_toAtChops] gives; a caller wanting the
+  /// keypair without an `AtChops` around it takes
+  /// [authenticationKeyPairFor], with [encryptionKeyPair] and
+  /// [selfEncryptionKey] for the rest of what one carried.
+  // ignore: deprecated_member_use
+  AtChops _toAtChopsForEnrollment(String enrollmentId) {
     final materials = keysForEnrollment(enrollmentId);
     // Named for the authentication role they hold, not for the pkam slot they
     // ride in: this method reaches the APKAM keypair only. An enrollment's
@@ -1142,17 +1160,27 @@ class AtKeys {
           '$enrollmentId');
     }
 
+    // Through the accessors rather than the flat fields, so a keyfile whose
+    // atSign material is typed produces a working AtChops: this is the only
+    // route from an `AtKeysIo` to a client's crypto, and reading the flat
+    // fields here would hand back empty encryption keys for a document that
+    // holds the pair under `publicEncryption`/`privateDecryption`.
+    final pair = encryptionKeyPair;
+    // ignore: deprecated_member_use
     final atChopsKeys = AtChopsKeys.create(
+        // ignore: deprecated_member_use
         AtEncryptionKeyPair.create(
-          defaultEncryptionPublicKey?.toString() ?? '',
-          defaultEncryptionPrivateKey?.toString() ?? '',
+          pair?.atPublicKey.publicKey ?? '',
+          pair?.atPrivateKey.privateKey ?? '',
         ),
+        // ignore: deprecated_member_use
         AtPkamKeyPair.create(publicAuthentication.bytes.toString(),
             privateAuthentication.bytes.toString()));
-    if (defaultSelfEncryptionKey != null) {
-      atChopsKeys.selfEncryptionKey =
-          AESKey(defaultSelfEncryptionKey!.toString());
+    final selfKey = selfEncryptionKey;
+    if (selfKey != null) {
+      atChopsKeys.selfEncryptionKey = selfKey;
     }
+    // ignore: deprecated_member_use
     return AtChopsImpl(atChopsKeys);
   }
 
@@ -1225,15 +1253,16 @@ class AtKeys {
       String? enrollmentId) {
     final algorithm = authenticationAlgorithmFor(enrollmentId);
     if (algorithm == null) {
-      return (chops: toAtChops(), algorithm: null);
+      return (chops: _toAtChops(), algorithm: null);
     }
-    return (chops: toAtChopsForEnrollment(enrollmentId!), algorithm: algorithm);
+    return (chops: _toAtChopsForEnrollment(enrollmentId!),
+        algorithm: algorithm);
   }
 
   /// The algorithm half of [authenticationFor], without building an AtChops.
   ///
   /// A caller holding an injected AtChops still has to name the algorithm, and
-  /// building one it will discard is not free — [toAtChops] throws on a
+  /// building one it will discard is not free — [_toAtChops] throws on a
   /// keyfile that is missing any of the material it needs, so resolving
   /// eagerly would fail a caller that never needed the keypair at all.
   ///
@@ -1263,24 +1292,122 @@ class AtKeys {
     return null;
   }
 
-  @Deprecated('legacy, please use addKey to add additional keys.')
-  AtKeys copyWith(AtKeys other) {
-    var keys = AtKeys()
-      ..apkamPublicKey = other.apkamPublicKey ?? apkamPublicKey
-      ..apkamPrivateKey = other.apkamPrivateKey ?? apkamPrivateKey
-      ..defaultEncryptionPublicKey =
-          other.defaultEncryptionPublicKey ?? defaultEncryptionPublicKey
-      ..defaultEncryptionPrivateKey =
-          other.defaultEncryptionPrivateKey ?? defaultEncryptionPrivateKey
-      ..defaultSelfEncryptionKey =
-          other.defaultSelfEncryptionKey ?? defaultSelfEncryptionKey
-      ..apkamSymmetricKey = other.apkamSymmetricKey ?? apkamSymmetricKey
-      ..enrollmentId = other.enrollmentId ?? enrollmentId;
-    if (other.metadata.isNotEmpty) {
-      keys.metadata.addAll(other.metadata);
+  /// The authentication keypair [enrollmentId] proves possession of, and the
+  /// algorithm that signs with it.
+  ///
+  /// The typed form of [authenticationFor], resolving the same way and on the
+  /// same terms: typed material wherever this keyfile holds it for
+  /// [enrollmentId], the flat [apkamPublicKey]/[apkamPrivateKey] under
+  /// `rsa2048` only where it holds none. [authenticationFor] documents why
+  /// that order matters on a retrofitted keyfile. Both halves are base64 of
+  /// the raw key bytes.
+  ///
+  /// Null when the keyfile holds no authentication keypair for
+  /// [enrollmentId] at all. Throws [AtKeyNotFoundException] when its typed
+  /// material names an algorithm this build cannot sign with, rather than
+  /// answering from the flat fields, which on such a keyfile are a different
+  /// enrollment's.
+  ({SigningAlgoType algorithm, String publicKey, String privateKey})?
+      authenticationKeyPairFor(String? enrollmentId) {
+    final algorithm = authenticationAlgorithmFor(enrollmentId);
+    if (algorithm != null) {
+      final materials = keysForEnrollment(enrollmentId!);
+      final private = materials
+          .where((m) =>
+              m.role == CryptographicMaterialRole.privateAuthentication &&
+              m.status == CryptographicMaterialStatus.active)
+          .firstOrNull;
+      final public = materials
+          .where((m) =>
+              m.role == CryptographicMaterialRole.publicAuthentication &&
+              m.status == CryptographicMaterialStatus.active)
+          .firstOrNull;
+      if (private == null || public == null) {
+        throw AtKeyNotFoundException(
+            'AtKeys holds no active authentication keypair for enrollment '
+            '$enrollmentId');
+      }
+      return (
+        algorithm: algorithm,
+        publicKey: public.bytes.toString(),
+        privateKey: private.bytes.toString(),
+      );
     }
-    return keys;
+    // ignore: deprecated_member_use_from_same_package
+    final flatPublic = apkamPublicKey;
+    // ignore: deprecated_member_use_from_same_package
+    final flatPrivate = apkamPrivateKey;
+    if (flatPublic == null || flatPrivate == null) return null;
+    return (
+      algorithm: SigningAlgoType.rsa2048,
+      publicKey: flatPublic.toString(),
+      privateKey: flatPrivate.toString(),
+    );
   }
+
+  /// The atSign's active material in [role], whatever algorithm it names.
+  CryptographicMaterial? _activeAtSignMaterial(String role) => atSignKeys
+      .where((m) =>
+          m.role == role && m.status == CryptographicMaterialStatus.active)
+      .firstOrNull;
+
+  /// The atSign's RSA encryption keypair: the key a legacy shared key is
+  /// wrapped to, and whose private half signs public data.
+  ///
+  /// Typed `publicEncryption`/`privateDecryption` material under the atSign
+  /// wins where this keyfile holds an `rsa2048` pair of it, and the flat
+  /// [defaultEncryptionPublicKey]/[defaultEncryptionPrivateKey] answer
+  /// otherwise. Both are writable without a deprecated member — the typed
+  /// pair through [addKey] or the `keysList` constructor — so a caller has a
+  /// route that does not touch the flat fields at all.
+  ///
+  /// The algorithm is checked rather than assumed from the role: the role
+  /// tokens are open strings, and an X25519 or ML-KEM key filed under
+  /// `publicEncryption` is not an [RsaKeyPair] however it is labelled.
+  ///
+  /// Null unless the keyfile holds both halves. An atSign activated with
+  /// `mintLegacyMaterial: false` holds neither.
+  RsaKeyPair? get encryptionKeyPair {
+    final typedPublic =
+        _activeAtSignMaterial(CryptographicMaterialRole.publicEncryption);
+    final typedPrivate =
+        _activeAtSignMaterial(CryptographicMaterialRole.privateDecryption);
+    if (typedPublic != null &&
+        typedPrivate != null &&
+        typedPublic.algorithm == CryptographicMaterialAlgorithm.rsa2048 &&
+        typedPrivate.algorithm == CryptographicMaterialAlgorithm.rsa2048) {
+      return RsaKeyPair.create(
+          typedPublic.bytes.toString(), typedPrivate.bytes.toString());
+    }
+    // ignore: deprecated_member_use_from_same_package
+    final public = defaultEncryptionPublicKey;
+    // ignore: deprecated_member_use_from_same_package
+    final private = defaultEncryptionPrivateKey;
+    if (public == null || private == null) return null;
+    return RsaKeyPair.create(public.toString(), private.toString());
+  }
+
+  /// The atSign's self-encryption key, which opens the records it wrote for
+  /// itself.
+  ///
+  /// Typed `symmetricEncryption` material under the atSign wins where this
+  /// keyfile holds an `aes256` one, and the flat [defaultSelfEncryptionKey]
+  /// answers otherwise — the same two sources, and the same algorithm check,
+  /// as [encryptionKeyPair]. Null where the keyfile holds neither, which an
+  /// atSign activated with `mintLegacyMaterial: false` does not.
+  AESKey? get selfEncryptionKey {
+    final typed =
+        _activeAtSignMaterial(CryptographicMaterialRole.symmetricEncryption);
+    if (typed != null &&
+        typed.algorithm == CryptographicMaterialAlgorithm.aes256) {
+      return AESKey(typed.bytes.toString());
+    }
+    // ignore: deprecated_member_use_from_same_package
+    final key = defaultSelfEncryptionKey;
+    if (key == null) return null;
+    return AESKey(key.toString());
+  }
+
 }
 
 // metadata holds JSON-derived values, so nested maps/lists compare by
@@ -1341,6 +1468,10 @@ int _deepHash(Object? value) {
 ///   - post approval
 /// During approval: the enroll will wait to confirm via PKAM
 /// post approval: we fetch the defaultEncryptionPrivateKey & defaultSelfEncryptionKey
+// NOTE: every deprecated member below is the carrier this function
+// exists to assemble. Its only caller is `_toAtChops`, so they leave with
+// it rather than being work owed.
+// ignore: deprecated_member_use
 AtChops _createApkamChops(AtKeys atKeys) {
   if (atKeys.apkamPublicKey == null) {
     throw AtKeyNotFoundException(
@@ -1350,6 +1481,7 @@ AtChops _createApkamChops(AtKeys atKeys) {
     throw AtKeyNotFoundException(
         "apkamSymmetricKey not found in AtKeys, unable to make atChops instance");
   }
+  // ignore: deprecated_member_use
   final atEncryptionKeyPair = AtEncryptionKeyPair.create(
     atKeys.defaultEncryptionPublicKey!.toString(),
     atKeys.defaultEncryptionPrivateKey == null
@@ -1357,11 +1489,13 @@ AtChops _createApkamChops(AtKeys atKeys) {
         : atKeys.defaultEncryptionPrivateKey!.toString(),
   );
 
+  // ignore: deprecated_member_use
   final atPkamKeyPair = AtPkamKeyPair.create(
     atKeys.apkamPublicKey!.toString(),
     atKeys.apkamPrivateKey!.toString(),
   );
 
+  // ignore: deprecated_member_use
   final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
     ..apkamSymmetricKey = AESKey(atKeys.apkamSymmetricKey!.toString());
 
@@ -1370,9 +1504,14 @@ AtChops _createApkamChops(AtKeys atKeys) {
         AESKey(atKeys.defaultSelfEncryptionKey!.toString());
   }
 
+  // ignore: deprecated_member_use
   return AtChopsImpl(atChopsKeys);
 }
 
+// NOTE: every deprecated member below is the carrier this function
+// exists to assemble. Its only caller is `_toAtChops`, so they leave with
+// it rather than being work owed.
+// ignore: deprecated_member_use
 AtChops _createPkamChops(AtKeys atKeys) {
   if (atKeys.defaultEncryptionPrivateKey == null) {
     throw AtPrivateKeyNotFoundException(
@@ -1392,19 +1531,23 @@ AtChops _createPkamChops(AtKeys atKeys) {
     throw AtKeyNotFoundException('PKAM mode requires defaultSelfEncryptionKey');
   }
 
+  // ignore: deprecated_member_use
   final atEncryptionKeyPair = AtEncryptionKeyPair.create(
     atKeys.defaultEncryptionPublicKey!.toString(),
     atKeys.defaultEncryptionPrivateKey!.toString(),
   );
 
+  // ignore: deprecated_member_use
   final atPkamKeyPair = AtPkamKeyPair.create(
     atKeys.apkamPublicKey!.toString(),
     atKeys.apkamPrivateKey!.toString(),
   );
 
+  // ignore: deprecated_member_use
   final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair)
     ..selfEncryptionKey = AESKey(atKeys.defaultSelfEncryptionKey!.toString());
 
+  // ignore: deprecated_member_use
   return AtChopsImpl(atChopsKeys);
 }
 

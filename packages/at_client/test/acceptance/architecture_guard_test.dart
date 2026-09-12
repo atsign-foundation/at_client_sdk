@@ -19,7 +19,7 @@ void main() {
   test('metadata reaches the wire through one serializer', () {
     // One serializer serves both the stored key and the notification frame. A
     // second, hand-rolled one falls behind it silently: appMetadata stops
-    // reaching the atServer and every cross-atSign read falls back to legacy,
+    // reaching the atServer and every cross-atSign read falls back to the legacy provider,
     // with no error anywhere. The absence of a rival serializer is what no
     // runtime assertion can see, which is why this is a source-text check.
     final lib = Directory('${repoRoot().path}/packages/at_client/lib/src');

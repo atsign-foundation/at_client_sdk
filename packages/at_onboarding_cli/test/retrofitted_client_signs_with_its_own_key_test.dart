@@ -54,7 +54,6 @@ void main() {
   const retrofittedId = 'retrofitted-enrollment';
 
   late String keysFilePath;
-  late AtChops flatRsaChops;
   late AtClient retrofittedClient;
 
   setUp(() async {
@@ -103,10 +102,6 @@ void main() {
     final io = FileAtKeysIo(filePath: (_) => keysFilePath);
     await io.write(atSign, keys);
 
-    // What at_auth hands `_initAtClient`: the signer for the FLAT enrolment,
-    // resolved the way at_auth resolves it.
-    flatRsaChops = (await io.read(atSign)).authenticationFor(null).chops;
-
     // The client as a retrofit leaves it: running as the retrofitted
     // enrolment, with the signer that enrolment owns.
     final retrofittedChops =
@@ -128,21 +123,26 @@ void main() {
     AtClientImpl.atClientInstanceMap.clear();
   });
 
-  /// A service whose `authenticate()` succeeds without a server, handing over
-  /// [flatRsaChops] as at_auth would.
+  /// A service whose `authenticate()` succeeds without a server, reporting the
+  /// flat enrolment in the response as at_auth would.
   AtOnboardingServiceImpl serviceAuthenticatingAsFlatEnrollment() {
     final atAuth = _MockAtAuth();
     when(() => atAuth.progressStream).thenAnswer((_) => const Stream.empty());
-    when(() => atAuth.atChops).thenReturn(flatRsaChops);
     when(() => atAuth.authenticate(any()))
         .thenAnswer((_) async => AtAuthResponse(atSign)
           ..isSuccessful = true
-          // NOTE: at_auth reports the FLAT id here in the field; the rig names
+          // NOTE: at_auth reports the FLAT id on the session; the rig names
           // the retrofitted id because that is the client-cache key, which is
           // what lets it reach the post-retrofit state without an atServer.
           // `_initAtClient` sees only the client and the caller's chops either
-          // way.
-          ..atAuthKeys = (AtKeys()..enrollmentId = retrofittedId));
+          // way. The session's source is the keyfile on disk, which is what
+          // the service reads the keys back through.
+          ..session = AtAuthSession(
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            enrollmentId: retrofittedId,
+            atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
+          ));
 
     return AtOnboardingServiceImpl(
         atSign,

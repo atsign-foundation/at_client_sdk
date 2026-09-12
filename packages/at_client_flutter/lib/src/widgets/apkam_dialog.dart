@@ -25,6 +25,17 @@ class ApkamActivationDialog extends StatefulWidget {
   final String deviceName;
   final Map<String, String> namespaces;
 
+  /// Where this enrollment's keys are persisted, and the source the client
+  /// built from the returned session reads them back through.
+  ///
+  /// Defaults to the platform keychain, as [AuthService.onboard] does for an
+  /// onboarding request: an app that does not name a destination still gets
+  /// one, and the keys this activation mints are the only copy in existence —
+  /// the approval completes them with the atSign's encryption private key and
+  /// self-encryption key. Name a `FileAtKeysIo` or a secure-element store to
+  /// keep them elsewhere.
+  final AtKeysIo? atKeysIo;
+
   final ThemeData themeData;
 
   /// Injection seam for tests; defaults to a real [FlutterEnrollmentService].
@@ -37,6 +48,7 @@ class ApkamActivationDialog extends StatefulWidget {
     required this.appName,
     required this.deviceName,
     required this.namespaces,
+    this.atKeysIo,
     required this.themeData,
     this.enrollmentService,
   });
@@ -48,6 +60,7 @@ class ApkamActivationDialog extends StatefulWidget {
     appName,
     deviceName,
     namespaces,
+    atKeysIo,
   );
 
   /// Show the ApkamActivationDialog and return the activation result.
@@ -58,6 +71,7 @@ class ApkamActivationDialog extends StatefulWidget {
     required String appName,
     required String deviceName,
     required Map<String, String> namespaces,
+    AtKeysIo? atKeysIo,
   }) async {
     return showDialog<AtEnrollmentResponse>(
       context: context,
@@ -67,6 +81,7 @@ class ApkamActivationDialog extends StatefulWidget {
         appName: appName,
         deviceName: deviceName,
         namespaces: namespaces,
+        atKeysIo: atKeysIo,
         themeData: Theme.of(context),
       ),
     );
@@ -84,6 +99,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   final String appName;
   final String deviceName;
   final Map<String, String> namespaces;
+  final AtKeysIo? atKeysIo;
 
   _ApkamActivationDialogState(
     this.atSign,
@@ -91,6 +107,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     this.appName,
     this.deviceName,
     this.namespaces,
+    this.atKeysIo,
   );
 
   @override
@@ -100,9 +117,18 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   }
 
   Future<AtEnrollmentResponse> _sendEnrollment(String otp) async {
+    // NOTE: `atKeysIo` here is a key DESTINATION rather than an already
+    // authenticated source, which is what the session's field means
+    // everywhere else. It is the same object either way, and the enrollment
+    // handshake is the only place that can write the completed keyset: it
+    // holds the encryption private key and self-encryption key the approval
+    // released, and the enrolled app holds the only copy.
     AtEnrollmentRequest request = AtEnrollmentRequest(
-      atSign: atSign,
-      rootDomain: rootDomain,
+      session: AtAuthSession(
+        atSign: atSign,
+        rootDomain: rootDomain,
+        atKeysIo: atKeysIo ?? KeychainAtKeysIo(),
+      ),
       deviceName: deviceName,
       appName: appName,
       namespaces: namespaces,

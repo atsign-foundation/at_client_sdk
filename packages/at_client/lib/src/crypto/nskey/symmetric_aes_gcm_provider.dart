@@ -9,6 +9,7 @@ import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show ckConveyanceKey;
 import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show visibleForTesting;
 
@@ -248,7 +249,10 @@ class SymmetricAesGcmProvider
       } catch (e) {
         // NOTE: an unexpected failure lands here as well and is reported to
         // the caller as "no such record", so the log is its only trace.
-        _logger.warning('Could not read the conveyance $conveyance '
+        logSwallowed(
+            _logger,
+            e,
+            'Could not read the conveyance $conveyance '
             '(remote: $remote), so its content key stays unresolved: $e');
         return false;
       }

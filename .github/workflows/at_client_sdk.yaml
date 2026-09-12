@@ -47,9 +47,9 @@ jobs:
         run: dart format . -o none --set-exit-if-changed
 
       # Run unit tests
-      - name: Run at_client unit tests, with code coverage measurement
+      - name: Run at_client unit tests
         working-directory: packages/at_client
-        run: dart test --concurrency=1 --coverage="coverage" --file-reporter json:acceptance-report.json
+        run: dart test --concurrency=1 --file-reporter json:acceptance-report.json
         env:
           # Makes provenIn record every citation it makes, so the ledger has both
           # halves: which rows cite which tests, and which of those tests ran.
@@ -68,17 +68,6 @@ jobs:
             packages/at_client/acceptance-report.json
             packages/at_client/citations.jsonl
           if-no-files-found: warn
-
-      - name: Convert at_client coverage to LCOV format
-        working-directory: packages/at_client
-        run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=unit_test_coverage.lcov --report-on=lib
-
-      #      Commenting out for now
-      #      - name: Upload at_client coverage to Codecov
-      #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-      #        with:
-      #          file: packages/at_client/unit_test_coverage.lcov
-      #          flags: at_client_unit_tests
 
   unit_at_client_flutter:
     runs-on: ubuntu-latest
@@ -109,20 +98,9 @@ jobs:
         run: dart format . -o none --set-exit-if-changed
 
       # Run unit tests
-      - name: Run at_client_flutter unit tests, with code coverage measurement
+      - name: Run at_client_flutter unit tests
         working-directory: packages/at_client_flutter
-        run: flutter test --concurrency=1 --coverage
-
-      - name: Convert at_client_flutter coverage to LCOV format
-        working-directory: packages/at_client_flutter
-        run: dart run coverage:format_coverage --lcov --check-ignore --in=coverage --out=unit_test_coverage.lcov --report-on=lib
-
-      #      Commenting out for now
-      #      - name: Upload at_client_flutter coverage to Codecov
-      #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-      #        with:
-      #          file: packages/at_client_flutter/unit_test_coverage.lcov
-      #          flags: at_client_flutter_unit_tests
+        run: flutter test --concurrency=1
 
   functional_tests:
     runs-on: ubuntu-latest
@@ -172,7 +150,7 @@ jobs:
       # Run functional tests
       - name: Run functional tests
         working-directory: tests/at_functional_test
-        run: dart test --concurrency=1 --coverage="coverage" --file-reporter json:acceptance-report.json
+        run: dart test --concurrency=1 --file-reporter json:acceptance-report.json
 
       # The atServer's own log is the only record of why it refused a request,
       # and the container does not outlive the job.
@@ -199,17 +177,6 @@ jobs:
           name: acceptance-report-functional-${{ matrix.dart-channel }}
           path: tests/at_functional_test/acceptance-report.json
           if-no-files-found: warn
-
-      - name: Convert coverage to LCOV format
-        working-directory: tests/at_functional_test
-        run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=functional_test_coverage.lcov --report-on=../../packages/at_client/lib
-
-      #      Commenting out for now
-      #      - name: Upload coverage to Codecov
-      #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-      #        with:
-      #          file: tests/at_functional_test/functional_test_coverage.lcov
-      #          flags: functional_tests
 
       # stop docker containers
       - name: stop docker containers
@@ -332,22 +299,7 @@ jobs:
         # Needs a secret, so don't run for Dependabot PRs
         if: ${{ github.actor != 'dependabot[bot]' }}
         working-directory: tests/at_end2end_test
-        run: dart test --concurrency=1 --coverage="coverage"
-
-      - name: Convert coverage to LCOV format
-        # Needs tests to have run, so don't run for Dependabot PRs
-        if: ${{ github.actor != 'dependabot[bot]' }}
-        working-directory: tests/at_end2end_test
-        run: dart run coverage:format_coverage --check-ignore --lcov --in=coverage --out=end2end_test_coverage.lcov --report-on=lib
-
-  #      Commenting out for now
-  #      - name: Upload coverage to Codecov
-  #        # Needs LCOV report to upload, so don't run for Dependabot PRs
-  #        if: ${{ github.actor != 'dependabot[bot]' }}
-  #        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-  #        with:
-  #          file: tests/at_end2end_test/end2end_test_coverage.lcov
-  #          flags: end2end_tests
+        run: dart test --concurrency=1
 
   # The Job runs end-to-end tests between server code running on trunk branch and canary (production ready) server
   #

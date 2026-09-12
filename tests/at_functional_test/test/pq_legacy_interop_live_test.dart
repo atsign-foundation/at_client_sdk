@@ -199,7 +199,7 @@ void main() {
         await legacyClient.get(shared, getRequestOptions: remoteRead);
     final providerId = asWritten.metadata?.appMetadata?.providerId;
     expect(providerId == null || providerId == legacyCryptoProviderId, true,
-        reason: 'a legacy app writes legacy; anything else here means the '
+        reason: 'a legacy app writes with the legacy provider; anything else here means the '
             'sender was not the legacy peer this row describes, and the read '
             'below would prove nothing');
 
@@ -253,7 +253,7 @@ void main() {
           'peer is not reachable',
     );
 
-    // WHEN the app opts in: the write proceeds, under legacy, visibly.
+    // WHEN the app opts in: the write proceeds, with the legacy provider, visibly.
     pqClient.getPreferences()!.allowLegacyCryptoFallback = true;
     final shared = toAlice('memo');
     const plaintext = 'the treaty is signed';

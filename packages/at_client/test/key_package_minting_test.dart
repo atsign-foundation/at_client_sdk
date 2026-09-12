@@ -26,6 +26,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -134,7 +135,7 @@ void main() {
 
   setUp(() async {
     atChops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+        AtChopsKeys.create(null, pkamKeyPairFor(atSign, enrollmentId)));
     keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys(atsign: atSign.toAtsign()));
     updates = [];
@@ -150,7 +151,7 @@ void main() {
     atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
     enrollment = MockAtEnrollment();
     when(() => enrollment.update(any(), any())).thenAnswer((i) async {
@@ -193,7 +194,7 @@ void main() {
     test('an unenrolled client mints nothing', () async {
       // NOTE: enroll:update is self-only, so a client that can name no
       // enrollment can name no record to amend.
-      when(() => atLookUp.enrollmentId).thenReturn(null);
+      when(() => atClient.enrollmentId).thenReturn(null);
       configure(const [SecretSharingAlgos.mlKem1024]);
 
       final reconciled = await minter().reconcileKeyPackage();

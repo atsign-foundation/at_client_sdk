@@ -142,7 +142,9 @@ for the submitting side; the approve/deny side is demonstrated in
 ## The `.atKeys` file format
 
 `FileAtKeysIo` reads and writes `.atKeys` files
-(default path `~/.atsign/keys/<atsign>_key.atKeys`). A file has up to
+(default path `~/.atsign/keys/<atsign>_key.atKeys`). It lives behind the
+`dart:io` barrel, `package:at_auth/at_auth_io.dart`; `package:at_auth/at_auth.dart`
+stays platform-neutral. A file has up to
 three layers, outermost first:
 
 1. **Optional passphrase envelope** — when a `passPhrase` is configured,

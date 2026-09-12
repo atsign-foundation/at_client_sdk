@@ -17,12 +17,13 @@ class _FakeAtAuthRequest extends Fake implements AtAuthRequest {}
 
 /// Key material outranks the preference for an authenticated client.
 ///
-/// `_initAtClient` serves two flows: enrolment hands it a lookup built for a
-/// just-minted APKAM keypair, where the preference is the only source there
-/// is, while authentication hands it nothing and it adopts the client's own
-/// lookup, which has already read the keyfile. The two tests are a pair — the
-/// second holds the preference stamp in place for the flow that needs it,
-/// which asserting the first alone would let a maintainer delete outright.
+/// `_initAtClient` serves two flows, and both hand it the keyfile: enrolment
+/// writes the keyfile for the new enrollment first and builds the client from
+/// it, while authentication hands over the source at_auth just read. The two
+/// tests are a pair — one adopts the client's own lookup, the other hands the
+/// service's own lookup in — and both must come out stamped from the keyfile,
+/// because the client's connection wraps whichever lookup it is given and
+/// resolves the algorithm from the key material.
 void main() {
   AtSignLogger.root_level = 'SHOUT';
 
@@ -75,11 +76,16 @@ void main() {
             'compare mldsa65 with mldsa65 and discriminate nothing');
 
     when(() => atAuth.progressStream).thenAnswer((_) => Stream.empty());
-    when(() => atAuth.atChops).thenReturn(AtChopsImpl(AtChopsKeys()));
     when(() => atAuth.authenticate(any()))
         .thenAnswer((_) async => AtAuthResponse(atSign)
           ..isSuccessful = true
-          ..atAuthKeys = (AtKeys()..enrollmentId = enrollmentId));
+          ..session = AtAuthSession(
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            enrollmentId: enrollmentId,
+            atKeysIo: InMemoryAtKeysIo.holding(
+                atSign, AtKeys()..enrollmentId = enrollmentId),
+          ));
 
     return AtOnboardingServiceImpl(atSign, preference)..atAuth = atAuth;
   }
@@ -113,13 +119,12 @@ void main() {
     expect(adopted.enrollmentId, enrollmentId);
   });
 
-  test('a lookup this service built is still stamped from the preference',
+  test('a lookup this service built is stamped from the keyfile too',
       () async {
     const atSign = '@pq_own_lookup';
     const enrollmentId = 'pq-own-1';
-    // NOTE: a real lookup rather than a mock — it is stamped twice on this
-    // path, once by the RemoteSecondary that wraps it and once here, and only
-    // the last one decides.
+    // NOTE: a real lookup rather than a mock — the client's connection wraps
+    // it and stamps it, and a mock would keep nothing to read back.
     final own = AtLookupImpl(atSign, 'vip.ve.atsign.zone', 64);
     final service = legacyPostureService(atSign,
         await pqKeyfile(atSign, enrollmentId), enrollmentId, _MockAtAuth())
@@ -127,10 +132,16 @@ void main() {
 
     expect(await service.authenticate(), isTrue);
 
-    // Enrolment's case: with no keyfile yet written for the new enrollment,
-    // the posture's axis is the only thing that can say which routine this
-    // connection authenticates with, whatever the keyfile in hand says.
-    expect(own.signingAlgoType, SigningAlgoType.rsa2048);
+    // The service stamps nothing itself any more; what the lookup carries is
+    // what the client's connection resolved from the keyfile, and the
+    // preference's rsa2048 is what it would carry if the service still wrote
+    // the credential ladder over the top.
+    expect(own.signingAlgoType, SigningAlgoType.mldsa65,
+        reason: 'the keyfile holds ML-DSA material for this enrollment; a '
+            'stamp from the preference would sign it with the RSA routine');
     expect(own.enrollmentId, enrollmentId);
+    expect(own.authenticator, isNotNull,
+        reason: 'the connection authenticates from the keyfile through the '
+            'seam, not from credentials parked on the lookup');
   });
 }

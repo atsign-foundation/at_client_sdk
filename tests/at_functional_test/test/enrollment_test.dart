@@ -90,8 +90,10 @@ void main() {
       var atOnboardingResponse =
           await atAuth.onboard(onBoardingRequest, cramKeyMap[apkamAtSign]!);
       expect(atOnboardingResponse.isSuccessful, true);
-      expect(atOnboardingResponse.atAuthKeys, isNotNull);
-      expect(atOnboardingResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
+      expect(atOnboardingResponse.session, isNotNull);
+      final onboardedKeys =
+          await atOnboardingResponse.session!.atKeysIo.read(apkamAtSign);
+      expect(onboardedKeys.apkamSymmetricKey, isNotNull);
       expect(atOnboardingResponse.enrollmentId, isNotEmpty);
 
       // auth using generated keysFile
@@ -102,24 +104,25 @@ void main() {
       )..rootDomain =
           AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort));
       expect(atAuthResponse.isSuccessful, true);
-      expect(atAuthResponse.atAuthKeys, isNotNull);
+      expect(atAuthResponse.session, isNotNull);
 
       // create atclient instance
       var atClientPreference = AtClientPreference(posture: PqPosture.legacy)
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort;
 
-      // NOTE: the enrollment id has to travel with the signer, or this client
-      // authenticates over LEGACY pkam - a bare `pkam:` naming no enrollment.
-      // This atSign was onboarded through enroll:request and so has no legacy
-      // credential at all, and the atServer refuses that authentication by
-      // name.
+      // NOTE: the enrollment id has to travel with the key source, or this
+      // client authenticates over LEGACY pkam - a bare `pkam:` naming no
+      // enrollment. This atSign was onboarded through enroll:request and so
+      // has no legacy credential at all, and the atServer refuses that
+      // authentication by name.
+      final authSession = atAuthResponse.session!;
       final atClientManager = await AtClientManager(apkamAtSign)
           .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
-              atChops: atAuth.atChops,
-              enrollmentId: atAuthResponse.atAuthKeys!.enrollmentId,
+              atKeysIo: authSession.atKeysIo,
+              enrollmentId: authSession.enrollmentId,
               storage: TestUtils.storageForPrincipal(
-                  apkamAtSign, atAuthResponse.atAuthKeys!.enrollmentId!));
+                  apkamAtSign, authSession.enrollmentId!));
       //var scanResult = await atClientManager.atClient.getKeys();
       var scanResult = await atClientManager.atClient
           .getRemoteSecondary()
@@ -457,16 +460,16 @@ void main() {
 
       // Authenticate the atSign
       AtAuth atAuth = AtAuth.create(atChops: atChops);
+      // The enrollee's own keys, completed with the two atSign-wide secrets
+      // an approval releases, handed over as the source to authenticate from.
+      final enrolledKeys = atEnrollmentResponse.atAuthKeys!
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionPrivateKeyMap[atSign]!)
+        ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        atKeysIo:
-            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+        atKeysIo: InMemoryAtKeysIo.holding(atSign, enrolledKeys),
       );
-      atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
-      atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          AtBytes.fromString(aesKeyMap[atSign]!);
       atAuthRequest.rootDomain =
           AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
@@ -565,16 +568,16 @@ void main() {
 
       // Authenticate the atSign
       AtAuth atAuth = AtAuth.create(atChops: atChops);
+      // The enrollee's own keys, completed with the two atSign-wide secrets
+      // an approval releases, handed over as the source to authenticate from.
+      final enrolledKeys = atEnrollmentResponse.atAuthKeys!
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionPrivateKeyMap[atSign]!)
+        ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!);
       AtAuthRequest atAuthRequest = AtAuthRequest(
         atSign,
-        atKeysIo:
-            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
+        atKeysIo: InMemoryAtKeysIo.holding(atSign, enrolledKeys),
       );
-      atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
-      atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          AtBytes.fromString(aesKeyMap[atSign]!);
       atAuthRequest.rootDomain =
           AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
@@ -679,13 +682,14 @@ void main() {
 
       // Authenticate the atSign
       AtAuth atAuth = AtAuth.create(atChops: atChops);
-      AtAuthRequest atAuthRequest =
-          AtAuthRequest(atSign, atKeysIo: FileAtKeysIo());
-      atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
-      atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          AtBytes.fromString(aesKeyMap[atSign]!);
+      final enrolledKeys = atEnrollmentResponse.atAuthKeys!
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionPrivateKeyMap[atSign]!)
+        ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!);
+      AtAuthRequest atAuthRequest = AtAuthRequest(
+        atSign,
+        atKeysIo: InMemoryAtKeysIo.holding(atSign, enrolledKeys),
+      );
       atAuthRequest.rootDomain =
           AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
@@ -847,23 +851,24 @@ void main() {
       );
       expect(ownerAuthResponse.isSuccessful, true);
 
+      final ownerSession = ownerAuthResponse.session!;
       final ownerManager = await AtClientManager.getInstance().setCurrentAtSign(
           cramAtSign,
           namespace,
           TestUtils.getPreference(cramAtSign, posture: PqPosture.legacy),
           storage: TestUtils.storageForPrincipal(
               cramAtSign, onboardResponse.enrollmentId!),
-          atChops: ownerAuth.atChops,
+          atKeysIo: ownerSession.atKeysIo,
           enrollmentId: onboardResponse.enrollmentId);
       final ownerClient = ownerManager.atClient;
 
       // The atSign's default encryption keypair and self-encryption key are
-      // atSign-wide (shared across enrollments). Read them from the owner's
-      // AtChops to hand to the enrollee for authentication later.
-      final encryptionKeyPair =
-          ownerAuth.atChops!.atChopsKeys.atEncryptionKeyPair!;
-      final selfEncryptionKey =
-          ownerAuth.atChops!.atChopsKeys.selfEncryptionKey!.key;
+      // atSign-wide (shared across enrollments). Read them from the keyfile
+      // the owner authenticated with, to hand to the enrollee for
+      // authentication later.
+      final ownerKeys = await ownerSession.atKeysIo.read(cramAtSign);
+      final encryptionKeyPair = ownerKeys.encryptionKeyPair!;
+      final selfEncryptionKey = ownerKeys.selfEncryptionKey!.key;
 
       // The enrollee fetches publickey<atSign> to wrap its apkamSymmetricKey,
       // so ensure it is published.
@@ -934,14 +939,13 @@ void main() {
       final enrolleeChops = AtChopsImpl(enrolleeChopsKeys);
 
       final enrolleeAuth = AtAuth.create(atChops: enrolleeChops);
+      final enrolleeKeys = enrollResponse.atAuthKeys!
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionKeyPair.atPrivateKey.privateKey)
+        ..defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionKey);
       final enrolleeAuthRequest = AtAuthRequest(cramAtSign,
-          atKeysIo: FileAtKeysIo(filePath: keysFilePath))
-        ..atAuthKeys = enrollResponse.atAuthKeys
+          atKeysIo: InMemoryAtKeysIo.holding(cramAtSign, enrolleeKeys))
         ..rootDomain = rootDomain;
-      enrolleeAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionKeyPair.atPrivateKey.privateKey);
-      enrolleeAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          AtBytes.fromString(selfEncryptionKey);
       final enrolleeAuthResponse =
           await enrolleeAuth.authenticate(enrolleeAuthRequest);
       expect(enrolleeAuthResponse.isSuccessful, true);

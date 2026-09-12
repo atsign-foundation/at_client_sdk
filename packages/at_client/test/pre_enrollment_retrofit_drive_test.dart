@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:mocktail/mocktail.dart';
@@ -30,7 +31,7 @@ void main() {
     // this encryption public key, and a stub would not survive that.
     encryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
     pkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
-    selfKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    selfKey = AESKey.generate(32).key;
   });
 
   void dropCachedClients(String atSign) {
@@ -52,9 +53,10 @@ void main() {
       AtClientPreference(posture: posture)
         ..hiveStoragePath = 'test/hive/$atSign'
         ..commitLogPath = 'test/hive/$atSign/commit'
-        // NOTE: unroutable on purpose — the retrofit's final step
-        // re-authenticates under the new enrollment, and failing fast here
-        // keeps this test off the network and off any clock.
+        // NOTE: unroutable as a backstop. The refusal below stops the
+        // retrofit before the step that would dial this, so nothing should
+        // reach it - and if anything ever does, it must fail rather than
+        // find something to talk to.
         ..rootDomain = '127.0.0.1'
         ..rootPort = 1;
 
@@ -67,14 +69,35 @@ void main() {
     await keysIo.write(atSign, legacyKeys());
 
     final mockLookUp = MockAtLookupImpl();
+    // NOTE: the answer must REFUSE. This test asserts the command the client
+    // put on the wire, which mocktail has captured before the answer is
+    // given, so the answer's only job is to decide how far the retrofit then
+    // runs. An approval sends it to a final step that re-authenticates
+    // through a real at_lookup against `rootDomain`, not through this mock.
+    // A failed retrofit is deliberately not fatal, so the client still comes
+    // up either way.
     when(() => mockLookUp.executeCommand(any(), auth: any(named: 'auth')))
-        .thenAnswer((_) async =>
-            'data:{"enrollmentId":"new-from-nothing","status":"approved"}');
+        .thenAnswer((_) async => 'error:AT0011-Internal server exception');
 
     final mockRemote = MockRemoteSecondary();
     when(() => mockRemote.atLookUp).thenReturn(mockLookUp);
-    when(() => mockRemote.executeVerb(any()))
-        .thenAnswer((_) async => 'data:ok');
+    // NOTE: answered by VERB, because the shapes differ and a caller cannot
+    // take the wrong one. A scan returns a JSON array and an empty one is an
+    // empty roster; a lookup of a record nothing stored returns `data:null`.
+    // A single blanket answer put the other shape in front of a caller each
+    // way round - `data:ok` was json-decoded as a payload and failed, and
+    // `data:null` reached `getKeys`, which builds a List from whatever the
+    // scan decoded to.
+    when(() => mockRemote.executeVerb(any())).thenAnswer((inv) async =>
+        inv.positionalArguments[0] is ScanVerbBuilder
+            ? 'data:[]'
+            : 'data:null');
+    // An empty roster: this atSign has no other enrollment to convey to, so
+    // the seeding step has nobody to reach. Matched on the command, because
+    // `listForNamespace` refuses an unreadable answer rather than reading it
+    // as empty.
+    when(() => mockRemote.executeCommand(any(that: startsWith('enroll:listns')),
+        auth: any(named: 'auth'))).thenAnswer((_) async => 'data:[]');
 
     final chops = AtChopsImpl(AtChopsKeys.create(encryptionKeyPair, pkamKeyPair)
       ..selfEncryptionKey = AESKey(selfKey));
@@ -125,7 +148,7 @@ void main() {
             'so there is no approval for a symmetric key to serve. It sent '
             'one until 2026-09-08, purely so the client could approve its own '
             'request against an atServer that parked it');
-  }, timeout: Timeout(Duration(minutes: 2)));
+  });
 
   /// The control: the same keyfile, the same absence of an enrollment, only
   /// the posture differs.
@@ -136,5 +159,5 @@ void main() {
         reason: 'legacy means "do not drive an upgrade"; a client that enrols '
             'here would be converting an atSign whose app asked it not to. '
             'Commands seen: $commands');
-  }, timeout: Timeout(Duration(minutes: 2)));
+  });
 }

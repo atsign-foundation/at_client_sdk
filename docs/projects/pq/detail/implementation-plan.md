@@ -1000,10 +1000,10 @@ taken now because nothing written under the old form exists outside the spike.
 | ~~Cold-start fails by design, with an exception, a fallback and a query~~ — **done on the spike branch.** `NamespaceKeyUnavailableException` carries the atSign and namespace and is raised by the *pre-pass*, so nothing is in flight when it fires; `CryptoRuntime.isReadyFor` answers the same question in advance via the `ReportsReadiness` seam; `AtClientPreference.allowLegacyCryptoFallback` (default false) reroutes the write to legacy, per write, so the fallback is forward-only. Covered live in `nskey_data_path_live_test`'s cold-start group ([decisions.md 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)) | **B-1c** |
 | ~~Advertised-key signature verification~~ — **done on the spike branch, both halves.** `PublishedNskeyKeyRing` signs its own nskey advertisement and `ApkamSignedAdvertisedKeys` verifies a peer's; `KeyPackageRegistration.signedKeyPackagePayload` signs the key package and `VerbEnrollmentDirectory` verifies it against the advertising enrollment's `_apsk`, rejecting unsigned, tampered, wrong-signer and forged-claim packages. No unverified advertised-key path is left. **Owed:** the key-package half has no live coverage — `enroll:listns` is unit-only until SS-2 wires the production path | **SS-1c** / **SS-2** |
 | **Client start got two new side effects with `collectConveyedKeyMaterial`, both deliberate and neither yet measured.** Every client carrying an `AtKeysIo` now (a) calls `KeyPackageRegistration.register()` at start, which **publishes `_apsk`** — redundant for an enrollment, since the atServer publishes it on approval, but the only route for a legacy PKAM client whose peers must verify its envelopes; and (b) does one **remote sweep**. That is one extra write and one extra scan per client start, on an unawaited path. The sweep also **consumes and deletes** the envelopes it finds, so an app subscribing to `receivedSecrets` *after* constructing its client sees no arrival event for anything waiting at start — the secret is in the store, which is where `waitForSecret` looks first, so the pull flow is unaffected but a listener-only app is not. Owed: decide whether the `_apsk` publish should be skipped when the client has an enrollment id, and measure the start-up cost | `at_client` |
-| ~~The acceptance burn-down misreports progress~~ — **repaired 2026-08-04.** Both audited causes are fixed and the figures are now verified rather than estimated. (a) A row proven in another package can be claimed: `provenIn` cites the live test and asserts it is still there — it does not re-run the proof, since this suite runs in `at_client`'s unit tests and cannot reach the functional or e2e packages, but a renamed or deleted live test now turns the citing row red instead of letting its evidence vanish. (b) `blockers.dart` no longer names landed projects: SS-2, SS-4 and B-1's **21** rows were re-labelled from `blocked: <project>` to `owed: scenario not yet written`, because a project landing makes its scenarios *owed a test*, not *proven* — conflating those is what made the number misleading in both directions. Four had a live proof and now cite it (A2.1, A3.3, A4.1, A4.4), so the suite read **5 of 40** scenario rows green, up from **1**, with **17** genuinely owed a test. The old "4 of 43" was itself wrong optimistically: it counted `catalogue_test.dart`'s three guards as scenarios. The guard that tracked B-1's share now tracks the owed count, since a guard pinned to a finished project silently stops guarding. **All 17 were discharged the same day**, taking the suite to **22 of 40** green and **0** owed. Fifteen were written or cited; UC-A3.2 turned out to be a catalogue error rather than a missing test, and UC-B5.1 needed production code that did not exist. Every remaining skip names a project that has not landed (R-1, B-2, RF-SRV, RF-2b, ON-1), so `blockers.dart` is now purely a project ledger. The rows written were: four cross-cutting invariants, UC-A3.4, UC-B5.2, then — once a functional test for the immutable signing-root create existed — the create-once invariant and UC-B5.3's race, and finally UC-A3.2 once its catalogue text was corrected. Then UC-A2.2 and UC-A2.3. Four new live files: `pq_signing_root_create_once_test.dart`, `nskey_seeding_live_test.dart`, `enrollment_namespace_gate_test.dart`, `copied_keyfile_test.dart`. Functional suite **120 green**. UC-A2.3 is proven at two layers deliberately — the row insists the namespace boundary is enforced *at the atServer*, "not by a client-side refusal alone", and a filter in the sender is worth nothing against an enrollment that simply asks for the record; the atServer refuses the scoped enrollment's `llookup` naming the enrollment and the key, while the approver reads the same record, so the refusal is a gate rather than an absent record. UC-B5.1 was then picked up and turned out to be **blocked rather than owed**: `requestSecret` has zero call sites in `lib/`, so nothing ever asks for the signing root, and `PqSigningRoot.mintIfAbsent` says so in its own dartdoc. The substrate's request/answer round trip is complete, on by default and unit-covered — the missing piece is an *initiator*, which is wiring rather than design, and it matters because the root carries no namespace and is therefore excluded from the `enroll:listns` fan-out by construction, leaving the pull as its only route ([decisions 30](decisions.md#30-uc-b51s-pull-backstop-has-no-initiator-2026-08-04)). What remains **owed** is **5**: the no-RSA unit row (which enumerates the auth path, so it waits on the ML-DSA row), ML-DSA record-authoritative auth, the atServer half of advertised-key verification, and the two e2e rows UC-A4.2/UC-A4.3. Two of the six needed no new test: the published nskey's fetchable-not-enumerable property was already proven with controls by `underscore_public_key_hiding_test`, and citing it beat duplicating it. One needed a doc first — the B-1 bench harness had been run when it was built but its numbers were never recorded, so "performance is measured, not assumed" was asking for a budget that existed nowhere a reader could find it ([decisions 28](decisions.md#28-the-pq-performance-budget-measured-2026-08-04)). And one, UC-A3.2, turned out to be a **catalogue error rather than a missing test**: it triggered minting on the first put, which was never built and contradicted UC-A3.3's proven "a keyless write fails". Ruled that the code is right — a put that minted would hide a lock, a keygen, a publish and a per-enrollment conveyance behind one write, on a user action's latency path — and `acceptance.md` 4.2 was amended ([decisions 29](decisions.md#29-uc-a32-describes-a-mint-trigger-that-was-never-built-2026-08-04)). Seeding had unit coverage only, and an `unawaited` call behind a default-false flag is the exact shape that passes every unit assertion while never executing |
+| ~~The acceptance burn-down misreports progress~~ — **repaired 2026-08-04.** Both audited causes are fixed and the figures are now verified rather than estimated. (a) A row proven in another package can be claimed: `provenIn` cites the live test and asserts it is still there — it does not re-run the proof, since this suite runs in `at_client`'s unit tests and cannot reach the functional or e2e packages, but a renamed or deleted live test now turns the citing row red instead of letting its evidence vanish. (b) `blockers.dart` no longer names landed projects: SS-2, SS-4 and B-1's **21** rows were re-labelled from `blocked: <project>` to `owed: scenario not yet written`, because a project landing makes its scenarios *owed a test*, not *proven* — conflating those is what made the number misleading in both directions. Four had a live proof and now cite it (A2.1, A3.3, A4.1, A4.4), so the suite read **5 of 40** scenario rows green, up from **1**, with **17** genuinely owed a test. The old "4 of 43" was itself wrong optimistically: it counted `catalogue_test.dart`'s three guards as scenarios. The guard that tracked B-1's share now tracks the owed count, since a guard pinned to a finished project silently stops guarding. **All 17 were discharged the same day**, taking the suite to **22 of 40** green and **0** owed. Fifteen were written or cited; UC-A3.2 turned out to be a catalogue error rather than a missing test, and UC-B5.1 needed production code that did not exist. Every remaining skip names a project that has not landed (R-1, B-2, RF-SRV, RF-2b, ON-1), so `blockers.dart` is now purely a project ledger. The rows written were: four cross-cutting invariants, UC-A3.4, UC-B5.2, then — once a functional test for the immutable signing-root create existed — the create-once invariant and UC-B5.3's race, and finally UC-A3.2 once its catalogue text was corrected. Then UC-A2.2 and UC-A2.3. Four new live files: `pq_signing_root_create_once_test.dart`, `nskey_seeding_live_test.dart`, `enrollment_namespace_gate_test.dart`, `copied_keyfile_test.dart`. Functional suite **120 green**. UC-A2.3 is proven at two layers deliberately — the row insists the namespace boundary is enforced *at the atServer*, "not by a client-side refusal alone", and a filter in the sender is worth nothing against an enrollment that simply asks for the record; the atServer refuses the scoped enrollment's `llookup` naming the enrollment and the key, while the approver reads the same record, so the refusal is a gate rather than an absent record. UC-B5.1 was then picked up and turned out to be **blocked rather than owed**: `requestSecret` has zero call sites in `lib/`, so nothing ever asks for the signing root, and `PqSigningRoot.mintIfAbsent` says so in its own dartdoc. The substrate's request/answer round trip is complete, on by default and unit-covered — the missing piece is an *initiator*, which is wiring rather than design, and it matters because the root carries no namespace and is therefore excluded from the `enroll:listns` fan-out by construction, leaving the pull as its only route ([decisions 30](decisions.md#30-uc-b51s-pull-backstop-has-no-initiator-2026-08-04)). What remains **owed** is **5**: the no-RSA unit row (which enumerates the auth path, so it waits on the ML-DSA row), ML-DSA record-authoritative auth, the atServer half of advertised-key verification, and the two e2e rows UC-A4.2/UC-A4.3. Two of the six needed no new test: the published nskey's fetchable-not-enumerable property was already proven with controls by `underscore_public_key_hiding_test`, and citing it beat duplicating it. One needed a doc first — the B-1 bench harness had been run when it was built but its numbers were never recorded, so "performance is measured, not assumed" was asking for a budget that existed nowhere a reader could find it ([decisions 28](decisions.md#28-the-pq-performance-budget-measured-2026-08-04)). And one, UC-A3.2, turned out to be a **catalogue error rather than a missing test**: it triggered minting on the first put, which was never built and contradicted UC-A3.3's proven "a keyless write fails". Ruled that the code is right — a put that minted would hide a lock, a keygen, a publish and a per-enrollment conveyance behind one write, on a user action's latency path — and `acceptance.md` 4.2 was amended ([decisions 29](decisions.md#29-uc-a32-describes-a-mint-trigger-that-was-never-built-2026-08-04)). Seeding had unit coverage only, and an `unawaited` call behind a default-false flag is the exact shape that passes every unit assertion while never executing | — |
 | ~~UC-A2.1 is not met, though SS-2 reads complete~~ — **built 2026-08-04**, [decisions.md 23](decisions.md#23-uc-a21-reversing-the-enrollment-key-exchange-2026-08-04). `EnrollmentKeyExchangeMode.pq` stops the enrollee generating and RSA-wrapping `apkamSymmetricKey`; the approver mints it and seals it to the advertised key package over the substrate, and `enrollmentApkamSymmetricKeyResolver` collects it after PKAM. Nothing RSA-wrapped rides the request. Covered live in `enrollment_pq_key_exchange_live_test.dart`, including the enrollee recovering the key over its own namespace-scoped PKAM connection. **Owed:** the test cannot pass against `vip` until the atServer relaxation is promoted | **SS-2** residual |
 | **A notification whose transform throws is never re-delivered — a data-loss path, not a log-level one.** The `__ck` race that produced it is fixed (conveyance now goes remote-first) and the drop is now logged at `warning` rather than `finer`, so it is visible. But nothing retries the notification itself: if a transform fails for any reason — a key that has not arrived, a provider not yet registered — that notification is gone, and no later event re-delivers it once the missing piece lands. Recorded at [decisions.md 26.3](decisions.md#26-uc-a44-a-conveyance-that-loses-the-race-to-its-own-announcement-2026-08-04); previously captured only inside the struck-through `B-1e` row, where it would have been lost when that row was read as resolved. Needs a decision on where redelivery belongs (the monitor's own queue, or a client-side hold-and-retry) before it needs code | **unowned** |
-| ~~BOTH test packs' rails are pointed away from CI's image and must be reverted before any PR~~ — **resolved 2026-08-10.** Both composes commit `image: ${VIRTUALENV_IMAGE:-atsigncompany/virtualenv:vip}`, so CI and a clean checkout resolve the published image with no environment set, and each `runLocal.sh` opts a local run into `at_virtual_env:local` and skips `docker compose pull` for a name no registry serves. Nothing is pointed away from CI's image and there is nothing to revert. What survives is the underlying fact, not the rails problem: the published `vip` does not store `EnrollParams.metadata`, so the key-package path cannot be exercised against it until a canary→prod promotion. |
+| ~~BOTH test packs' rails are pointed away from CI's image and must be reverted before any PR~~ — **resolved 2026-08-10.** Both composes commit `image: ${VIRTUALENV_IMAGE:-atsigncompany/virtualenv:vip}`, so CI and a clean checkout resolve the published image with no environment set, and each `runLocal.sh` opts a local run into `at_virtual_env:local` and skips `docker compose pull` for a name no registry serves. Nothing is pointed away from CI's image and there is nothing to revert. What survives is the underlying fact, not the rails problem: the published `vip` does not store `EnrollParams.metadata`, so the key-package path cannot be exercised against it until a canary→prod promotion. | — |
 | **A PQ-capable client cannot tell a legacy atServer from an old peer.** Against an atServer that drops `EnrollParams.metadata`, the key package vanishes silently and the approver reads absence — which [decisions.md 20](decisions.md#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03) ruling 2 treats as *ordinary*, because it also means "an older client". So conveyance no-ops fleet-wide with nothing saying why. UC-B0.1 requires aborting cleanly and logging the reason; `info` returns only a version string, with no feature list to check | **RF-SRV** / UC-B0.1 |
 | **Parity across every atServer implementation for the `mldsa65` verify branch.** At least one rejects `signingAlgo:mldsa65` while *parsing* the command, so a PQ client meets an invalid-syntax error rather than an authentication failure. It already stores `signingAlgo` but never reads it, and carries no ML-DSA support — a dependency decision, not an edit | **SS-3** |
 | **D1 GA critical path, re-derived 2026-08-05 after the three-scenario re-examination** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)–[41](decisions.md#41-the-to-define-list-2026-08-05)). **R-1 is DELIVERED, shrunk to D1-D**: `disallowLegacyEncryption` landed 2026-08-05; the marker/negotiation half was built, proven at three layers, and removed the same day; C3 deferred unbuilt. **Newly ON the GA path:** **SH-1** (M, key-material self-heal — the conveyance hole meant an enrollment created after a mint was stranded; in progress 2026-08-05) and **RF-SRV** (L, server self-enroll — every scenario's "upgrade the enrollment", was mis-filed off-path). **Re-timed:** ON-1 mints/publishes legacy material by default (decisions 37); R-2 keeps the flag flip but loses phase-4 stop-existing to a later ecosystem-gated release; B-3 phase 3's client-side stop likewise. Remaining on the GA path: **SH-1**, **RF-SRV**, **B-2** (L), **ON-1** (M), **R-2** (M), **S-3** (L). The to-define list ([decisions 41](decisions.md#41-the-to-define-list-2026-08-05)) is the authoritative open-questions ledger — 12 items with owners; **all 12 ruled 2026-08-05** ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)), so the definitions now land in their owner projects as implementation | plan |
@@ -1023,7 +1023,7 @@ taken now because nothing written under the old form exists outside the spike.
 | ~~The bench harness `acceptance.md` says lands with B-1~~ — **built 2026-08-04**, `packages/at_client/benchmark/crypto_bench.dart`. Reports three **separately-based** groups and refuses to combine them: *per record* (what every put/get pays once a CK exists — AES-256-GCM vs the legacy AES-256-CTR path), *per (owner, namespace) conveyance* (where PQ actually costs something — X-Wing `pqSeal`/`pqOpen` vs RSA-2048 wrap, paid **once** and then covering every record in scope), and *per authentication* (the ML-DSA-65 ↔ RSA-2048 signature swap). Mixing them is what would produce a headline "PQ is N% slower" from incomparable denominators. **The desktop baseline is now recorded** in [decisions 28](decisions.md#28-the-pq-performance-budget-measured-2026-08-04) — the harness had been run when it was built, but its numbers were never written down, so the acceptance row was asking for a budget that existed nowhere a reader could find it. Headline: at the 256 B size that dominates real traffic, GCM costs **3 µs** more than CTR; the ML-DSA sign a client pays per authentication is **2.7 ms**. **The ceiling is still NOT pinned:** `acceptance.md` requires one reference *low-end* device and the recorded run is a 16-core arm64 Mac, which is the opposite. Nothing here is a regression gate — one desktop run is a baseline, not a threshold | **B-1** |
 | ~~`at_chops` `pqOpen` lets an `ArgumentError` escape~~ — **fixed in at_chops 3.4.2** (unpublished): a wrong-length secret key or KEM ciphertext now arrives as `PqOpenException(malformedEnvelope)`. `NskeyProvider`'s client-side guard stays until at_client's floor rises past 3.4.1 | `at_chops` |
 | ~~The CK cache and the owner's own nskey privates are process memory only~~ — **half of this was wrong.** Content keys are a genuine cache: the read path re-fetches the `__ck` conveyance record and re-opens it, so a restart costs a round trip, not data. The nskey private is the real exposure, and [decisions.md 21](decisions.md#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03) ruling 1 files it into `AtKeys` on arrival. **Owed:** implement that filing, plus the current-`ckKid` pointer (ruling 2) so a restart stops minting a fresh CK per destination | **SS-3** / **SS-4** |
-| ~~`B-1e` does not work~~ — **found and fixed 2026-08-04** ([decisions.md 26](decisions.md#26-uc-a44-a-conveyance-that-loses-the-race-to-its-own-announcement-2026-08-04)). The two-client harness exposed it on its first run: the content-key conveyance was written local-first, so it reached the recipient's atServer only via sync — 31 seconds later in the captured reproduction — while the notification went out immediately over the monitor. The receive path raised `ContentKeyUnavailableException` correctly and the dispatch loop swallowed it at `finer`, dropping the notification silently with no retry. Both notify entry points now route the conveyance remote-first (the same rule as the `__ssenv` ordering fix), and the dispatch `catch` logs at `warning`. **UC-A4.4 is met**, live-covered in `tests/at_end2end_test/test/pq/nskey_notify_test.dart` (split out of `concurrent_notify_test.dart` 2026-08-08). ~~**UC-A3.4 is NOT** — corrected 2026-08-09: both live notify tests are alice→bob, so the SELF direction (alice1→alice2) is asserted against a mock only … owed rather than blocked (#2093)~~ — ✅ **UC-A3.4's self direction is live-proven** (`tests/at_functional_test/test/nskey_self_notify_live_test.dart`, "a self notification reaches a second enrollment and decrypts"). ~~Still open, recorded in 26.3: a notification whose transform throws is gone, with nothing re-delivering it when the missing piece lands~~ — ✅ **for the case that names, closed by the park and re-drive** ([14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it), [decisions 106.5](decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16)). ⚠️ The park is typed to `NskeyPrivateUnavailableException` alone (`notification_service_impl.dart:539`), so a transform that throws anything else is still gone with nothing re-delivering it |
+| ~~`B-1e` does not work~~ — **found and fixed 2026-08-04** ([decisions.md 26](decisions.md#26-uc-a44-a-conveyance-that-loses-the-race-to-its-own-announcement-2026-08-04)). The two-client harness exposed it on its first run: the content-key conveyance was written local-first, so it reached the recipient's atServer only via sync — 31 seconds later in the captured reproduction — while the notification went out immediately over the monitor. The receive path raised `ContentKeyUnavailableException` correctly and the dispatch loop swallowed it at `finer`, dropping the notification silently with no retry. Both notify entry points now route the conveyance remote-first (the same rule as the `__ssenv` ordering fix), and the dispatch `catch` logs at `warning`. **UC-A4.4 is met**, live-covered in `tests/at_end2end_test/test/pq/nskey_notify_test.dart` (split out of `concurrent_notify_test.dart` 2026-08-08). ~~**UC-A3.4 is NOT** — corrected 2026-08-09: both live notify tests are alice→bob, so the SELF direction (alice1→alice2) is asserted against a mock only … owed rather than blocked (#2093)~~ — ✅ **UC-A3.4's self direction is live-proven** (`tests/at_functional_test/test/nskey_self_notify_live_test.dart`, "a self notification reaches a second enrollment and decrypts"). ~~Still open, recorded in 26.3: a notification whose transform throws is gone, with nothing re-delivering it when the missing piece lands~~ — ✅ **for the case that names, closed by the park and re-drive** ([14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it), [decisions 106.5](decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16)). ⚠️ The park is typed to `NskeyPrivateUnavailableException` alone (`notification_service_impl.dart:539`), so a transform that throws anything else is still gone with nothing re-delivering it | — |
 | An enrollment authorised for one namespace must be unable to **decrypt** another's nskey data, not merely unable to fetch it. Not testable yet and deliberately not written: nskey privates are per-ring in-memory until the substrate conveys them, so a second enrollment cannot decapsulate anything at all — the crypto half of the assertion would pass vacuously while the test read as covering it | **SS-4** |
 | ~~The notify **receive** half has no live coverage~~ — **closed 2026-08-04.** It did need harness work rather than a test, and the lever was `AtClientManager`'s public constructor: one manager per atSign, each owning its own client, `notificationService` and `syncService`, with `AtClientImpl`'s cache keyed by atSign so two *different* atSigns never collide. `ConcurrentClients` (`lib/src/concurrent_clients.dart`) plus `concurrent_notify_test.dart` now show a monitor on bob receiving and **decrypting** what alice sent, live — the existing `notify_test.dart` had worked around the limitation by switching atSigns and polling `notifyList`, which reads the atServer's queue and exercises neither the monitor nor decryption. Negative control run: reinstating the singleton fails with `@alice stopped=true` from `open`'s own guard. **The constraint to respect:** while a `ConcurrentClients` is open, nothing may call `getInstance().setCurrentAtSign` for either atSign — the cached `AtClientImpl` would be handed a fresh `notificationService`, and the symptom is a subscription that never fires, which reads as a product defect | `at_end2end_test` |
 | ~~Rename the atSign-level key in code, delete the `root-pqpublickey` variant~~ — **done.** `NskeyRecipientKind` has one member; no Dart source says `pqpublickey`; the cold-start throw now states why there is no PQ target rather than promising a fallback | **B-1c** |
@@ -3024,7 +3024,7 @@ its own. None blocks anything.
    hole rather than a live defect. [14.18](#1418-the-remaining-d1-initial-development-sequence)
    step 10 is what makes it a one-line fix: the decision now lives in one
    place.
-8. **Typed key material is not self-encrypted at rest; the flat fields are.**
+8. ~~**Typed key material is not self-encrypted at rest; the flat fields are.**~~
    `file_io.dart`'s `_selfEncryptedLegacyFields` names exactly four keys —
    `aesPkamPublicKey`, `aesPkamPrivateKey`, `aesEncryptPublicKey`,
    `aesEncryptPrivateKey` — and nothing else in `packages/at_auth/lib/src/keys/`
@@ -4536,6 +4536,8 @@ D1 gate and is in the live plan's [`## TODO`](../implementation-plan.md#todo).
 
 ### 15.1 Open work — re-derive before acting
 
+⛔ **Reconciled against `## TODO` on 2026-09-11: every row below that is not marked done is either a row in the live plan (step 20's arm, 14.11 via the deprecation plan, 14.12, 14.16, 14.19, the carve stack) or parked (14.7). Read the live table, not this snapshot.**
+
 | # | What is owed | Owner | State |
 |---|---|---|---|
 | 1 | ✅ **14.22 is COMPLETE — all seven rows landed 2026-08-15** | [14.22](#1422-making-the-signing-root-rotatable--decisions-101) | Row 6 made the record mutable behind `_rootlock@<atSign>` and generalised `NskeyMintLock` into `MintLock`; row 7 proved the boundary and needed no new mechanism, only the composite scenario. **`decisions.md` 101 is fully built.** Nothing in this row is owed. ⚠️ **Step 27 (row 5) has since landed too**, 2026-08-15, and it was the right one to take first for the reason recorded there: it changed the signed bytes, so everything signed after it is signed under the shape that stays |
@@ -4967,7 +4969,7 @@ re-derive with `git log --oneline`. ⛔ **4 is DROPPED** ([ruling
 127](decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30)).
 ✅ **Nine numbered, one dropped, EIGHT DONE — the programme is complete as of
 2026-08-30.** What each turned out to be, and what proves it, is
-[below](../implementation-plan.md#why-commit-7-needs-no-atserver-change). 1
+[below](#why-commit-7-needs-no-atserver-change). 1
 at_auth files the advertised signing key's private half on the ordinary
 enrollment path. 2 at_onboarding_cli mints and advertises **the one algorithm
 the enrollment will keep** — rsa2048 at pqReady and mldsa65 at pqActive, not
@@ -5037,7 +5039,7 @@ an enrolment approved while its approver was unpossessed.
 ⛔ **1 and 2 are a pair** — advertising without filing is worse than today. 1 is
 separable only because it is a no-op alone. ✅ **7 IS DONE, and it needed no
 atServer change — measured live 2026-08-30,
-[below](../implementation-plan.md#what-commit-7-turned-out-to-be).** Only the
+[below](#what-commit-7-turned-out-to-be).** Only the
 self-enrolment AUTO-APPROVE branch refuses a pre-enrollment connection; the
 route that works is request → approve on the same connection, because
 `isAuthorized` grants a null enrollment id full access, so such a client is its
@@ -8519,14 +8521,14 @@ the live plan.
 | S-5 residual | ⛔ **POST-D1 CLEAN-UP, not a D1 gate** (gkc, 2026-08-23). ⚠️ **This row read "D1 GATE, and it lands on [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) while that is open" earlier the same day**, and the PR-#2179 window no longer constrains it — after D1 that PR will be long merged, so the test goes wherever `RegistrarService` then lives. It is `G1` in [THE NEXT MOVE](#15-the-lettered-d1-gates-g0g8-as-they-were-discharged), below the gates rather than at the top of them. Everything below is the harness, kept intact for whoever picks it up. **The registrar's switch to validating TLS certificates is untested, here and in CI.** `RegistrarService`'s default client used to accept ANY certificate - `badCertificateCallback` returning true unconditionally, on calls carrying the registrar API key. It is now a plain `package:http` client that validates, with the bypass behind `RegistrarIoClient.allowBadCertificates`, off by default and shouted when used. **Neither arm has a test**, and CI cannot catch a regression: `RegistrarIoClient` appears in ZERO CI job logs (control: `RegistrarService` appears), and `RegistrarIoClient.create()` has **no in-tree caller at all** - it is a public opt-in for consumers, which is deliberate, so do not delete it as dead code. Owed: a test pinning both arms against a self-signed local server. ⚠️ **Attempted and parked 2026-08-22**, so the next reader does not start cold: the shape works — mint a cert at test time with `openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=localhost`, serve it with `HttpServer.bindSecure`, and point `RegistrarService` at `localhost:<port>`, which `Uri.https` accepts as an authority. Three arms, and the third is the positive control that proves the server is up: the default client refuses, `RegistrarIoClient.create()` with the flag off refuses, and with it on succeeds — without that third arm a refusal is indistinguishable from a server that never started, because `package:http` wraps connection-refused in the same `ClientException`. ⛔ **Do not commit a PEM fixture** — GitHub push protection can block a private key; mint it in `setUpAll`. | Nothing |
 | [14.16](implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | ⛔ **STEP 29 LEAVES D1 — all four dispositioned 2026-08-23.** ① perf ceiling on real low-end hardware → post-D1 cleanup (#2153). ② UC-A3.4 → done 2026-08-17. ③ SS-4 resume → **ruled NO RESUME** (the election makes republishing a filed pair a regression) and **re-filed as orphan growth**: `store()` calls `addKey`, nothing in `crypto/nskey/` retires a filed private, so every abandoned mint — crash or the designed lease-expiry abandon — permanently adds key material to the user's `.atKeys`. ④ IS-1 drift → not D1; at_server #2683 is open, untouched since 2026-08-06, and already ruled to be pared back | Only ③'s orphan-growth half is owed here, and it is a decision before it is code |
 | [14.12](../implementation-plan.md#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | ⛔ **NOT D1 (gkc, 2026-08-23) — it gates the post-R-2 stop-release.** A `mintLegacyMaterial:false` atSign cannot write a public record. Out of D1 because both moves it needs are B-3 phase 1, which is parked, and nothing about it blocks the carve; the live assertion in `pq_legacy_interop_live_test.dart` keeps it pinned and the flag must still not be recommended | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
-| [14.42](../implementation-plan.md#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20 — **not a D1 gate (2026-08-23), but owed to him rather than plan-generated hygiene, so do not quietly demote it.** ⚠️ **What this row still lacks is the thing that would let anyone start:** how to obtain `config14.yaml` and the `@ce2e` keyfiles locally. Until that is written down, the only route is a CI round trip. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
+| [14.42](#enrollment-approval-on-the-long-lived-cicd-atsigns-fixed-2026-09-09) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20 — **not a D1 gate (2026-08-23), but owed to him rather than plan-generated hygiene, so do not quietly demote it.** ⚠️ **What this row still lacks is the thing that would let anyone start:** how to obtain `config14.yaml` and the `@ce2e` keyfiles locally. Until that is written down, the only route is a CI round trip. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
 | [14.47](../implementation-plan.md#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | **NOT a D1 gate (gkc, 2026-08-23) — hygiene.** It is green alone and green in the full suite, and reddens only in one hand-constructed non-alphabetical ordering that nothing actually runs, so no rail as invoked is at risk. Keep the reproduction recipe. **A unit-tree isolation flake**: `local_secondary_sync_queue_test.dart` failed 1-in-4 when run after the nskey/pq files in one non-alphabetical invocation — a same-file test's queue entry leaked into a later test, so the per-test store isn't always fresh. Green alone, green in the full suite | Reproduce at rate (~10 runs of the four-file order), then read the file's setUp for what makes the store per-test fresh |
 | [14.46](../implementation-plan.md#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing** — declared, never read, on at_client's both secondaries AND at_lookup. **Decided and phase 1 shipped 2026-08-20**: `@Deprecated` on all six declarations for 3.x, removal in 4.0; every cross-package and every prose-reasoned call site cleaned. ⛔ **NOT D1 (gkc, 2026-08-23)** — the removal rides at_client/at_lookup **4.0**, and nothing in the acceptance set asserts the parameter (its one catalogue mention is prose about a mock). Still in the section: a stale at_server comment #2169 will falsify, which lands in a sibling repo | **Removal at 4.0** — delete the parameter from all six declarations and let the compiler enumerate the ~76 remaining same-package sites |
 | [14.44](../implementation-plan.md#1444-residuals-from-the-at_chops-pr-review) | Residuals from the at_chops PR review. ✅ **The first is DONE 2026-08-22**, in the at_auth carve as this row said it should be — `encode` refuses an `ArgonHashParams` whose `hashLength` is not the value `decode` will use, which was the section's own preferred option over persisting it. **Two remain:** `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths — ⛔ **both remaining residuals are POST-D1 (gkc, 2026-08-23)**, and the severity is worth recording: it is **correct for X-Wing**, whose four inputs are all 32 bytes, and **latent and silent** otherwise, because `setRange(0, 32, …)` takes the first 32 bytes of a longer input without error and yields a well-formed but wrong digest; and at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence whose durable record is ruling 110's addendum | Nothing. Both remaining ones go whenever at_chops is next open |
 | [14.11](../implementation-plan.md#1411-deprecated_member_use-findings-across-the-workspace) | **STAYS IN D1, with the bucket-B migration** (gkc, 2026-08-23). Re-measured 2026-08-23: **754** findings — at_client 396, at_onboarding_cli 205, at_auth 153, at_lookup **0** (the section's table now carries both columns — the 2026-08-18 figures and these, so it needs no further update). Five buckets, and only **B** has a replacement that exists today: 71 credential-ladder uses (`enrollmentId` 59, `signingAlgoType` 12) moving onto the `AtAuthenticator` seam at_lookup 3.7.0 ships — **24 sites in `lib/`, 47 in tests**. A (AtChops compatibility API, 530) and C (legacy flat keyfile fields, 118) are transient and get **no ignores yet**; D (27) is at v5 | Nothing. Every package exits 0, so none of this blocks a carve |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | ⛔ **D1 GATE (gkc, 2026-08-23).** `self_enrollment_retrofit_live_test.dart` failed **once in five** pack runs. D1 now ends when every rail is green, and an unexplained live failure at that rate makes "green" a rate rather than a state — so it has to be understood before D1 closes | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](../implementation-plan.md#1429-the-residuals-1425-surfaced) | ⛔ **NOT D1 (2026-08-23)** — the section's own text says none of these blocks D1's remaining sequence, and SS-2's `__ssenv` half is explicitly *deferred, not owed*: the 2026-08-03 ruling took DEP4 off SS-2 and what is left is a pure optimisation. SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
-| [14.39](../implementation-plan.md#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Client-driven retrofit at start is BUILT 2026-08-19**, sequenced into `_init` rather than re-pointing a live client; unit-green and **live-green** — functional 174/174 (after one 173/174 whose single failure was [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)), e2e pq 54/54, and the `legacy-server` arm 2/2 against the pinned `atsigncompany/virtualenv:vip-p3.15.0`. **Owed: public-data signature verification** (undesigned) — ⛔ **POST-D1, and deliberately NOT in the acceptance catalogue (gkc, 2026-08-23)**: `dataSignature` appears zero times in `acceptance.md`, against 28 mentions of "signature" as a control, so nothing asserts it. ⚠️ Worth stating plainly since it reads as an omission otherwise: `pqActive` already **signs** public data and nothing anywhere verifies it — not at_client, not the atServer — so we emit a signature no one checks, knowingly | Nothing |
+| [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Client-driven retrofit at start is BUILT 2026-08-19**, sequenced into `_init` rather than re-pointing a live client; unit-green and **live-green** — functional 174/174 (after one 173/174 whose single failure was [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)), e2e pq 54/54, and the `legacy-server` arm 2/2 against the pinned `atsigncompany/virtualenv:vip-p3.15.0`. **Owed: public-data signature verification** (undesigned) — ⛔ **POST-D1, and deliberately NOT in the acceptance catalogue (gkc, 2026-08-23)**: `dataSignature` appears zero times in `acceptance.md`, against 28 mentions of "signature" as a control, so nothing asserts it. ⚠️ Worth stating plainly since it reads as an omission otherwise: `pqActive` already **signs** public data and nothing anywhere verifies it — not at_client, not the atServer — so we emit a signature no one checks, knowingly | Nothing |
 
 ### The envelope-listener race, fixed 2026-09-08
 
@@ -8542,7 +8544,7 @@ Removed from the `## TODO` P0 table on 2026-09-08: everything it owed is done ex
 
 ### The clause burn-down row as it stood on 2026-09-08
 
-Shrunk in the `## TODO` P0 table on 2026-09-08 to the objectives, the meter and the one rejected proposal; the full text, rulings and history are kept here. The row's item read **[the clause burn-down: every provable THEN clause proven](../implementation-plan.md#the-clause-burn-down-every-provable-then-clause-proven)**, its "Blocked on" cell read *Nothing*, and its "what is owed" cell read:
+Shrunk in the `## TODO` P0 table on 2026-09-08 to the objectives, the meter and the one rejected proposal; the full text, rulings and history are kept here. The row's item read **[the clause burn-down: every provable THEN clause proven](#the-clause-burn-down-every-provable-then-clause-proven)**, its "Blocked on" cell read *Nothing*, and its "what is owed" cell read:
 
 **The definition of done, and the campaign to reach it** (gkc, 2026-08-27). **Objective 1:** every **provable** THEN clause in the catalogue proven by some test — restated 2026-08-31 (gkc). It used to read *every THEN clause*, and one clause cannot be proven by construction, so the objective as written was unreachable and the burn-down’s `N of T` implied a target of `T` that nothing could ever hit. The exceptions are enumerated in `unprovableClauses` in `packages/at_client/test/acceptance/manifest.dart`, each carrying the reason it cannot be closed, and two rails keep the list honest: one fails if an entry names a use case or clause index that does not exist, or names a clause that has since been PROVEN (an entry that has been overtaken must be deleted, not left standing); the other prints `REACHABLE  provable clauses: P of T   proven: N   still to prove: K` beside the burn-down. Today the list holds exactly one clause — **UC-G2.9 c3**, which asserts that step 3’s verifier-side accept lever DOES NOT EXIST: building the lever falsifies the clause, and pinning the absence would count a hole as proven. ⛔ **This is NOT the third state rejected at the foot of this row.** That rejection forbade splitting the proven figure by what a clause is waiting on; the proven count here is still one number over the whole catalogue. What the list changes is the *denominator’s* reachable part, so the target can be read off rather than assumed. **Objective 2:** every clause proven only in-process gains a proof against a real atServer wherever feasible. Read the meter by running the acceptance suite: it prints `BURN-DOWN  clauses proven: N of T   server-proven: M of T`. ⚠️ **A pin is a claim, not a run** — `tool/acceptance_ledger.dart` is what says the cited test passed. This row **absorbs the old "what the citation audit left owed"**, whose five findings (F16, F15, F8, F1, F3) are clause gaps by another name.<br><br>✅ **Sixteen clauses closed, 2026-08-28 and 29**, and one WITHDRAWN. The test files that did it are named here, which was necessary because no rail could see them at the time: the naming rail walked `tests/` for `pq_*_test.dart` alone, so a file under `packages/at_client/test/` was out of its root and a file under `tests/` not named `pq_*` was out of its filter. ✅ **Both gaps are now covered** — the root takes in every package's `test/` tree, and a second rail requires every file a `provenIn` citation names to appear in the doc set, which reaches these whatever they are called. The names below are kept as the record of what closed each clause, not because anything now depends on them being here. **UC-G2.6 c4 and c6** in `packages/at_client/test/nskey_seeding_test.dart` and `packages/at_client/test/nskey_minting_test.dart`: c4 measured as a COUNT of the kids `_addMissing` attempts to convey, so a re-send shows as a second entry instead of being invisible; c6 by minting under one enrollment and adding under another, with a control reading the signer before the add. **UC-G2.11 c1 and c2** in `tests/at_functional_test/test/nskey_rollout_ladder_live_test.dart` — two real enrollments of one atSign at different algorithm configurations against a live atServer, which UC-G2.11's `liveProofOwed` entry said no pack did; that entry is now spent and deleted. ⚠️ **The live file runs both installs at `PqPosture.legacy` with the seeding driven by hand**, because a seeding posture makes each client's tail take the mint lock at the production two-minute ttl and the second install's add is then refused — the interlock working, not a defect. What that file proves is the mint, the add and the data path; not their scheduling. **UC-B1.3 c1** across `tests/at_end2end_test/test/pq/retrofit_e2e_test.dart`, `packages/at_client/test/pq_signing_root_test.dart`, `packages/at_client/test/secret_sharing_approver_test.dart` and `tests/at_functional_test/test/enrollment_namespace_gate_test.dart` — four of its parts, three of which already had proofs that nothing had pinned. What was genuinely missing was the *reason* the decline gives: `requestPrivateIfAbsent` returns 0 for three different causes — already holding the root, having no enrollment id, and not being entitled — so a silent decline leaves an operator no way to tell them apart, and the log is the only signal. Asserted with the privileged arm of the same method as its control. **UC-A3.4 c3** in `tests/at_functional_test/test/nskey_self_notify_live_test.dart`, whose last arm destroys the receiving enrollment's monitor socket, notifies from the sender over its own verb connection, and asserts the value arrives and decrypts after the reconnect. ⚠️ **It was unwritable until [ruling 125](decisions.md#125-a-hive-stores-identity-is-its-storage-path-not-its-atsign-2026-08-28)**: two enrollments of one atSign shared a Hive box whatever `hiveStoragePath` each was given, so they shared the notification replay watermark — a self notification reaches every listening monitor of the atSign, the SENDER's received this one and advanced the shared watermark past it, and the receiver's reconnect then asked for everything after the notification it had missed. Putting both enrollments back on one path reddens the arm with exactly that diagnosis. ⚠️ **The same fix exposed three tests that were green for the wrong reason** — see the P1 row on removing the override. **UC-A2.3 c1** in `tests/at_functional_test/test/enrollment_namespace_gate_test.dart`, which gains a second test for the row's last sentence — the ordinary records an application reads and writes, as against the `__ssenv` delivery channel its first test already covered. Both verbs, because the atServer answers them separately: an `llookup` and an `update` in the ungranted namespace are each refused under their own verb name, while both succeed in the granted one on the same connection, with the approver reading both records first so the refusals are a gate rather than an absent record. **The behaviour was probed against a live atServer before any assertion was written** — a clause about what a server enforces cannot be settled by reading the client. **UC-G2.7 c4** across `packages/at_client/test/nskey_rotation_test.dart` and `packages/at_client/test/published_nskey_key_ring_test.dart`, the second of which already existed and was unpinned. ⛔ **Its JUSTIFICATION was false and the assertion was not.** The clause said three writers produce a retired entry — the key package's mint, the signing key's mint and the signing root's — and there are two: `PqSigningRoot._publish` is the root record's only writer, emits a single-entry `keys` list carrying no `status`, and production says beside it that *no rotation exists to repair it with*, so nothing can add a second entry. Corrected in the catalogue in the same commit. A test written to the three-writer sentence would have gone red and the natural fix would have been to weaken it until it passed, which is how a false clause gets enshrined. The new arm proves the generational half: after a rotation every entry of the successor is still offered for new work — an absence, asserted over the whole list with the list proven non-empty — and what opens history is the previous generation's private, still filed. Mutation-proven against production: dropping `offeredForNewOperations` from `bestKeyFor` reddens the reader arm. ⛔ **UC-G2.7 c5 was WITHDRAWN the same day** (gkc): it scoped the row against UC-G2.3 rather than asserting a behaviour, and nothing could close it — after a retirement and after a compromise the key material is in the same state, so the two differ only in the status token, of which `KeyEntryStatus` has one. Pinning it against an unknown token would have proven UC-G2.3's clause under this row's name. The sentence stays under the row as prose, and the denominator went 190 to 189. **UC-B1.1 c3** in a new file, `tests/at_end2end_test/test/pq/retrofit_cap_value_e2e_test.dart`, which measures the cap as a VALUE rather than as an outcome. `retrofit_retirement_e2e_test.dart` proves what the cap does, but runs at a **zero-hour** grace where `min(now + grace, its own remaining lifetime)` always takes `now` — so an atServer that set the expiry unconditionally would satisfy every assertion in it. The new file runs at the ordinary grace with three parents straddling it: one expiring in an hour keeps its own expiry, one expiring in 2000 hours is pulled in by more than a day, and one with no expiry at all gains one. ⚠️ **Every comparison is between two values the atServer produced**, never against the test process's clock, which would be measuring clock agreement between two machines. Three things the probe behind it established, none of them guessable: `apkamKeysExpiryDuration` is honoured on an ordinary OTP enrollment and reaches the wire as `apkamKeysExpiryInMillis`; the enrollment record stays at `<id>.new.enrollments.__manage@<atSign>` after approval, there being no `.approved.` address; and **the cap is per-parent, not per-atSign** — retrofitting one leaves its siblings at record version 1, which is what makes the file safe on an atSign other rows share. **UC-A5.1 c2** across `tests/at_functional_test/test/nskey_rotation_live_test.dart` and `packages/at_client/test/ck_manager_test.dart`. The live file proved the keys — published, pushed, excluded, retained — and never that the data path then picks the successor up, so a rotation whose successor no writer used would have satisfied every assertion in it. It now writes on the nskey data path either side of the rotation and reads which generation each content key's conveyance was sealed to: same client, same ring, same namespace, and the rotation the only thing that changed. The unit file carries the peer half — a sender re-checking on its next `ensureCurrent` and cutting a fresh CK rather than sealing to the superseded generation. ⚠️ **The conveyance is read LOCALLY, through `getMeta`.** A self conveyance is written local-first and reaches the atServer when sync gets round to it, so asking the atServer races the push and fails with *does not exist in keystore* — the address right and the record not yet travelled; nothing in that pack syncs. **UC-A2.1 c4** in a new file, `tests/at_functional_test/test/pq_scoped_enrollment_self_read_test.dart`. Its two halves were each covered separately and never together: `pq_native_app_enrollment_test.dart` shows an ML-DSA enrollment is post-quantum from birth but is fully privileged and reads nothing, and `enrollment_namespace_gate_test.dart` shows the atServer refusing a scoped enrollment the envelope channel of an ungranted namespace but authenticates with RSA-2048 and never builds a client. One enrollment now does both — ML-DSA APKAM, opening @alice's own record in its granted namespace, refused the other namespace's key channel on the same connection. Submitting the same enrollment as `rsa2048` reddens it, because the client then retrofits onto a replacement. ⚠️ **A scoped enrollment cannot heal a missing private by pulling** — the per-enrollment secret-request gate serves only fully privileged requesters — so what this proves is the approval-time PUSH; and the read must come after `pqBootstrap.startupComplete`, because the sweep that files an arriving private is a fire-and-forget startup step. Without that wait it fails with *no nskey private held … or has not yet received that generation*, which is true and is not the claim. **UC-A4.1 c3** in `tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart`, whose two live enrollments of @bob are the fixture the arm needed. @alice shares a second post-quantum record into a namespace the second enrollment was never granted; @bob's atServer refuses it the fetch, naming the verb, the enrollment id and the namespace, while the same client reads the granted namespace on the same call — so only the grant varies. Making the fully privileged client the refused one reddens it, printing the decrypted value: the refusal is a property of the reader, not of the record. ⚠️ **It cannot be shown by `llookup` on @bob's atServer** — a record @alice shares lives on ALICE's atServer, so that verb answers *does not exist in keystore* whatever the grants are, which is an absent record dressed as a gate. That is what the first attempt did, and its control caught it. **UC-A4.4 c3** in the same file, and NOT in the `monitor_reconnect_live_test.dart` its row named — that file shows a queued notification surviving an outage with one atSign notifying itself and no namespace key in it, which is a different claim. The second enrollment's monitor socket is closed, @alice sends again from her own client on a different socket to a different atServer, and the value still opens on the key that enrollment already held. ⚠️ **The outage has to be proven, not staged**: a notification handed to a live monitor and one replayed to a reconnecting one satisfy the same assertion, so the connection-down event is watched for before the close and gated on before anything is sent; removing the close reddens that gate with an empty event list. ⚠️ **`isNotifying` cannot serve as that gate and reads as though it can** — it is a session flag cleared only by `stopNotifications`, and the reconnect loop reads it to decide whether to keep trying, so it stays true across exactly the drop being staged. `AtLookUp.notificationConnectionUp` is the observable that answers it. **UC-A4.4 c1** in `tests/at_end2end_test/test/pq/nskey_notify_test.dart`, which delivered the cross-atSign notification to a single bob client and so could not see the failure the clause names — delivered to every monitor, readable on one. It gains a second authorised enrollment of @bob on a monitor of its own, holding no nskey private of its own, so opening the value means the namespace private reached it by conveyance. Its monitor is gated on a notification actually arriving before anything is sent, since `subscribe()` returns before the socket has written `monitor:` and the monitor asks for no backlog; the atServer's own `statsNotification` is both the gate and the positive control. Mutation-proven: subscribing that enrollment with `shouldDecrypt` false reddens the value assertion with the ciphertext while the frame still arrives. **UC-A4.3 c1** in `tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart`, which already ran one alice client against two of bob's enrollments and so established only half a clause that also says *whichever of alice's enrollments wrote it*. It gains a second enrollment of @alice — its own store, because a content key is a client-side cache and a shared store would let alice2 resume the current-CK pointer alice1 left behind — writing a second record that both of bob's enrollments then read. The differing `ckKid` is what carries the claim, and it is mutation-proven: moving that write back onto alice1 reddens exactly that assertion, because `CurrentCkPointer` is read from local storage. bob's second enrollment needs no such separation — nskey privates are filed through `AtKeysIo`, and an enrollment made by the e2e fixture carries an in-memory one of its own. **UC-B5.6 c1** across `tests/at_functional_test/test/nskey_rotation_live_test.dart` and `packages/at_client/test/nskey_rotation_test.dart` — the clause bundles four assertions and two of them were unasserted, which is why it stood unproven while the row above it read PROVEN. Live: the refusal now has to carry the retry guidance as well as the cooldown's name, since an error that says only *refused* sends an operator looking for a stuck lock to clear and there is none — nothing releases a mint lock but its ttl. Unit: the namespace `revokeEnrollmentAndRotate` could not rotate is named at **SEVERE**, because a namespace that failed is simply absent from the returned outcomes and is otherwise indistinguishable from one that needed nothing. That log assertion carries its own control — an INFO line the same call emits regardless — so an unbound recorder is reported as unbound instead of passing every level assertion by matching nothing.<br><br>⛔ **PROPOSED AND REJECTED 2026-08-28: do not add a third state to distinguish "needs a test" from "needs a feature".** Some unproven clauses wait on a test and others on an unbuilt mechanism — the signature key identifier, the durable revocation record, step 3's verifier lever — and it is tempting to declare blockers for the second kind so the figure reads honestly. gkc ruled against it: one number is easier to hold than three, the distinction is discoverable by reading the rows, and [`decisions.md` 35](decisions.md#35-the-owed-a-test-backlog-reached-zero-2026-08-04) already records that conflating *blocked* with *owed* made this very burn-down **misleading in both directions at once**. The project killed an "in progress" state on the same reasoning. Adding states risks the measure becoming something to game rather than something to close
 
@@ -8595,3 +8597,1517 @@ Asked for by gkc, 2026-09-07. Seven of the ten clusters were read and fixed on 2
 Struck from the `## TODO` P1 table the day it was written, because both items were finished the same day and a row leaves the table when it is done. The one thing it recorded that is NOT owed work — the direct-put branch in `SigningKeyMinting._publish` possibly being dead now — is stated as a deferred finding, not a debt. The row read:
 
 **Ruled 2026-09-08**, [134](decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08): a posture move replaces the enrollment, `primary` is legacy-only, and the authentication key is never retained. Two consequences are unbuilt. ✅ **⓵ is DONE 2026-09-08.** [Ruling 127](decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30) is marked superseded in place, and `signing_key_minting_test.dart`'s group is reframed: it now says it characterises a path nothing reaches, names where the retrofit that prevents it is pinned, and states that nothing in it may be cited as evidence about production. The tests themselves stand, because the code path is live and would still be taken if something called it that way — what 134 removes is the caller, not the branch. Two other tests in that file stub a null enrollment id purely to reach the simpler publish path and already say so; they make no claim about identity. ⚠️ **A finding deferred rather than acted on:** `SigningKeyMinting._publish` selects the direct-put writer on `isAtSignCredential`, and after 134 no minting caller reaches it, so that branch may be dead code. Removing it is a separate decision and needs its other callers named first — `KeyPackageRegistration.register` and `PublishedNskeyKeyRing` reach the direct writer by another route. ✅ **⓶ is DONE 2026-09-08, by documenting rather than refusing.** `PqPosture.dataSigningKeyAlgorithms` and `authenticationKeyAlgorithm` now each carry the hazard: pinning the authentication axis to `rsa2048` while the data set wants `mldsa65` suppresses the retrofit, so the same enrollment mints ML-DSA and drops the authentication key that signed everything. ⛔ **Refusing it at construction was rejected, and the reason is a test:** `signing_key_minting_test.dart`'s *a legacy enrollment at pqActive mints ML-DSA too* builds exactly that combination and asserts the mint, so a construction-time refusal would delete deliberate behaviour. The named postures never produce the combination; reaching it needs both axes set by hand.
+
+### Enrollment approval on the long-lived cicd atSigns, fixed 2026-09-09
+
+Struck from the `## TODO` P1 table on 2026-09-11, two days after its own cell
+recorded the fix: the correction landed in the body and the row was never
+removed, which is how gkc found it still listed. The fix is at_client
+3.15.0-rc1's CHANGELOG entry *"approving an enrollment no longer reads the
+atSign's entire enrollment roster"*. What the row said, verbatim:
+
+**Measured 2026-09-08 by a temporary probe timing each phase of `tests/at_end2end_test/test/enrollment_setup.dart`, CI run 34241596495, job 102113003165.** Per atSign: initializer 12-32ms, getOTP 160-711ms, submit 804-4020ms, `enroll:fetch` 29-38ms, **approve 143649-152794ms**, authenticate 1041-1170ms. Four atSigns at about 150s each is the whole of that job's eight-minute *Submit and approve enrollment request* step. **The same file run locally against a fresh virtualenv puts approve at 9-18ms.** ⛔ **This row used to say "Not new, and not this branch's doing", and that is FALSE — corrected 2026-09-09.** It reasoned from a single fast comparison run on `st/aes-ctr-ffi` and dismissed it as an unrelated branch, without checking trunk itself. **Trunk runs the same four atSigns against the same atServers** — `tests/at_end2end_test/config/config14.yaml` is byte-identical on both branches, naming `@ce2e1`, `@ce2e4`, `@ce2e3`, `@ce2e2` on `root.atsign.wtf` — and trunk's *Submit and approve enrollment request* step took **25s, 20s and 26s** on runs 33990715443 (2026-09-05), 34088734742 and 34101685064 (both 2026-09-07), while the spike ran 285-634s over the same days. Same server, same roster, same week: the difference is branch-side, and the old sentence sent every reader away from the cause. It also follows that the 9-18ms local figure does **not** show the client code is innocent — an empty roster explains it just as well. ⚠️ **The run-to-run spread is larger than any single comparison:** two runs of identical pre-flip code measured 4m45s and 10m14s, so no two-run comparison decides anything here. ✅ **DONE 2026-09-09 — mechanism confirmed, fixed, and the fix verified in CI.** **After the fix, the same step took 24 seconds** (run 34331906133, 09:01:03 to 09:01:27), against 620 seconds on the run before it — and inside trunk's own 20-26 second range, which is what says the branch no longer pays anything trunk does not. **The measurement that found it:** Measured by a second probe, CI run 34328258930: `enroll:list` **unfiltered** returned 2416 records in **46,614ms**; the same call narrowed to `approved` returned 1 in **140ms**, to `pending` 1 in **132ms**, to `denied`/`expired` 0 in ~135ms. `approve` measured **92,831ms** against 2 × 46,614 = 93,228 — the two reads were the whole of it, to within 400ms. All four atSigns agree. The unfiltered call sat BETWEEN filtered ones in the probe, so a warming server cannot account for it. **The cost tracks records RETURNED, not scanned** — gkc's reading that atServer-internal scan time is minimal is confirmed by the 90-140ms filtered calls. **The fix:** `EnrollmentServiceImpl.approve` now passes `[pending, approved]` on the pre-approval read and `[approved]` on the post-approval one, and `EnrollmentRecordPrivilegeResolver.isEnrollmentFullyPrivileged` — a THIRD unfiltered read on the same path, reached through an injected `_listEnrollments` alias that no `fetchEnrollmentRequests` grep finds — now passes `[approved]`. ⚠️ **`enroll:fetch` cannot serve this**, which is why the fix filters rather than fetching by id: at_server's `_fetchEnrollmentInfoById` (read on `origin/trunk`) returns `appName`, `deviceName`, `namespace`, `encryptedAPKAMSymmetricKey`, `status`, `expiresAt` and **no `metadata`**, and `metadata.keyPackage` is exactly what both reads want. See the fetch-by-id row in P2.
+
+It answered 14.42, *"Why enrollment setup takes four minutes"*, which was owed
+to gkc personally (he asked for the cause on 2026-08-20) and is moved here from
+the live plan with the P2 row that pointed at it. That row read *Why `enrollment_setup.dart` takes ~4 minutes. gkc asked for the cause, 2026-08-20 — not a D1 gate, but owed to him rather than plan-generated hygiene*,
+blocked on *⛔ **@ce2e-only — it does not reproduce locally***. The section, verbatim:
+
+⛔ **Not a D1 gate (gkc, 2026-08-23), but owed to gkc personally** — he asked
+for the cause on 2026-08-20, so this is not plan-generated hygiene and is not
+to be quietly demoted.
+
+`tests/at_end2end_test/test/enrollment_setup.dart` submits and approves one
+enrollment for each of the four @ce2e atSigns. Measured 2026-08-20 in the
+`end2end_test_14` job: **3:56** on one run and **4:59** on another. The budget
+is now `@Timeout(Duration(minutes: 15))` (`enrollment_setup.dart:13`), which
+stops the job failing and explains nothing.
+
+⛔ **Do not spend a local loop on it, and do not re-derive the sync backlog.**
+Both hypotheses are closed on measurement — see `decisions.md`.
+
+**The first move is a CI round trip with instrumentation**, through
+`.github/workflows/at_client_sdk.yaml`'s `end2end_test_14` job.
+
+**Only one piece is missing locally, not two.**
+`tests/at_end2end_test/config/config14.yaml` **is checked in** — it names
+@ce2e1–4 against `root.atsign.wtf` — and CI does nothing more exotic than `mv
+config/config14.yaml config/config.yaml`. What is missing is the
+**`AT_CICD_CREDENTIALS`** repository secret, which CI writes over
+`tests/at_end2end_test/lib/src/at_credentials.dart` (a 4-line stub in every
+checkout) and from which every @ce2e keypair is built. Ask gkc for it, or
+budget the CI round trip. ⚠️ Two traps if you try: `runLocal.sh` regenerates
+`config/config.yaml` from `at_demo_data` (`runLocal.sh:28`) and would clobber
+the config14 copy, so drive `dart test --concurrency=1
+test/enrollment_setup.dart` directly; and `test_initializers.dart`'s
+`_seedCredentialsForLocalRun` fills an empty credentials map from
+`AtTestCredentials` (demo atSigns only), which covers no @ce2e atSign — so
+with config14 in place and no secret you get a null check, not a silent demo
+run.
+
+### The TODO table as it stood on 2026-09-11, before the reconciliation
+
+The four `## TODO` bands as they stood before the reconciliation gkc asked for on
+2026-09-11 (*"a whole lot of old rubbish … nearly impossible to read"*), kept whole
+because the analysis in these cells — measurements, mechanisms, rejected fixes — is
+what the short rows in the live plan now point back to. Links are written relative
+to this directory. Rows found done or obsolete that day were struck from the live
+table, not from here; `git log` says what closed each.
+
+**P0 — on D1's critical path**
+
+| Item | What is owed | Blocked on |
+| ---- | ------------ | ---------- |
+| **the acceptance catalogue still specifies the behaviour the legacy rulings replaced** | **Raised by gkc 2026-09-08**: *"you will need to revisit quite a few of the use cases so their intent is brought in line."* ⚠️ **This is the specification-drift shape, not a test gap** — a clause the tree will contradict reads as *untested* to every instrument here, and the wrong repair is to weaken an assertion until it passes. Each clause gets a verdict of *still true*, *now false* or *now unreachable*, decided against the production path, before any test is written or edited. ✅ **The audit ran 2026-09-08: nothing in the catalogue is false about today's tree.** What is left is the pass that must land **in the same commit as the 4.0 default flip**, never before — editing sooner would make the catalogue describe a tree that does not exist. ⛔ **Re-derive which rows that pass touches rather than reading a list here.** This row carried one until 2026-09-09, quoting the correction notes it would re-invert; the pass that made `acceptance.md` state requirements rather than their history deleted every sentence it quoted, so the list described a document that no longer exists. The way to find them at flip time is a search of `acceptance.md` for the posture names and for `pqReady`, against the flip's own diff | the 4.0 default flip, which has not happened — `AtClientPreference`'s constructor still defaults `posture` to `PqPosture.legacy` |
+| [the clause burn-down: every provable THEN clause proven](#the-clause-burn-down-every-provable-then-clause-proven) | **The definition of done** (gkc, 2026-08-27; restated 2026-08-31). ✅ **Objective 1 CLOSED 2026-09-09** — the meter reads `still to prove: 0`, and what is left of this row is objective 2. Why the last two clauses closed by being recorded rather than pinned is in the section this row links to. The unprovable ones are enumerated in `unprovableClauses` in `packages/at_client/test/acceptance/manifest.dart`, each with the reason it cannot close, and two rails keep that list honest: an entry naming a clause that does not exist or has since been proven fails, and the meter prints the reachable denominator beside the burn-down. **Objective 2:** every clause proven only in-process gains a proof against a real atServer wherever feasible. **Scoped 2026-09-09** — re-derive it, never quote it, with a probe over `clauseCoverageOf` and the two live-proof maps in `manifest.dart`: the clauses proven in-process only are not one backlog but four. Most are already in `liveProofOwed`, each naming what owes it; a second group sits in rows that DO have live proof, where those particular clauses do not; three rows are permanently exempt with reasons; and a handful are in NEITHER map, which is the bookkeeping hole — a row owing live proof with nothing saying so. ⛔ **The first tranche is not writing tests** (gkc's choice, 2026-09-09): a citation naming a live pack test but carrying no `clauses:` list claims the row and pins nothing, so a clause it already establishes can be pinned with no new fixture and no atServer time. Measured 2026-09-09 — **7 rows, 9 such citations, 16 clauses within reach**; re-derive rather than trusting those figures. ⛔ **An unpinned live citation is a CANDIDATE, not a licence.** Some are unpinned on purpose and say so in their own `proves:` text: `apsk_server_side_test.dart`'s on UC-G3.3 establishes what at_client publishes and is silent on what at_auth writes at enrolment, so pinning it would record both composers as server-proven when only one is, and `nskey_mint_lock_live_test.dart`'s on UC-G2.6 is evidence for the lock rather than for any clause. Read the `proves:` before pinning. ⚠️ **This row said UC-G2.6 and UC-G3.3 had no live citation at all until a cold read corrected it the same day** — the claim came from a grep with a 40-line window that truncated both scenarios, where the probe over `clauseCoverageOf` and the citation details would have shown them. Read the meter by running the acceptance suite: `BURN-DOWN  clauses proven: N of T   server-proven: M of T`. ⛔ A third state separating "needs a test" from "needs a feature" was proposed and rejected 2026-08-28 (gkc): one number over the whole catalogue, no states. The row's full text as it stood, with the rulings behind each sentence, is in [the detail file](#the-clause-burn-down-row-as-it-stood-on-2026-09-08). | Nothing |
+| [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | **Live state, measured 2026-09-08** — re-derive it, never quote it: `for pkg in at_commons at_utils at_chops at_lookup at_server_status at_auth at_client at_client_flutter at_onboarding_cli; do grep ^version: packages/$pkg/pubspec.yaml; curl -s https://pub.dev/api/packages/$pkg \| jq -r '.versions[-1].version'; done` (the versions list, never `latest`, which hides prereleases). The tree is ahead of pub.dev in seven of nine: at_commons `5.18.0` vs `5.17.0` (`primaryEnrollmentId`), at_utils `3.4.1` vs `3.4.0`, at_lookup `3.7.0-rc2` vs `-rc1`, at_auth `4.0.0-rc2` vs `-rc1`, at_client `3.15.0-rc1` vs `3.14.0`, at_client_flutter `1.1.5-rc1` vs `1.1.4`, at_onboarding_cli `1.17.0-rc1` vs `1.16.1-rc1`; at_chops `3.6.1` and at_server_status `1.1.2-rc1` are level. Publish in dependency order — at_utils, at_commons, at_lookup, at_auth, at_client, at_client_flutter, at_onboarding_cli — and at_client cannot go before at_commons `5.18.0` and at_auth `4.0.0-rc2`, which it pins. ⚠️ Merged is not published, and they gate different things. The 2026-08-31 reading (the rc1 collision and its three ways out, resolved by cutting rc2) is in [the detail file](#the-release-train-reading-of-2026-08-31-overtaken). | gkc — publishing is his act |
+| **at_server legacy-PKAM enrollment: the client-side half of the `primary` migration** | ✅ The fixtures, the rewritten retrofit test, the corrected comments, the client-side half under [ruling 132](decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07) and the seeding ruling are done (2026-09-04 to 2026-09-07); the record is in [the detail file](#the-primary-migration-row-as-it-stood-on-2026-09-08). ✅ **① is DONE 2026-09-08.** Proved dead first, by a probe logging at SEVERE inside the submitter so it survived the CLI pack's `warning` level: `server answered 'approved' for <id>; selfApproves=true sessionEnrollment=primary` — the session names `primary`, the flag computes true, and the `pending` branch never fires. Then removed: the `selfApproves` decision, the symmetric key minted only to approve itself, the `..encryptedAPKAMSymmetricKey` the request carried, and the self-approval branch. A `pending` answer is now denied and thrown whatever the session names. at_auth's *a client holding no enrollment approves its own request* group specified the removed path in three tests and is rewritten to the new mechanism; at_client's `pre_enrollment_retrofit_drive_test.dart` pinned the symmetric key and now pins its absence. Safe on the wire: the atServer requires `encryptedAPKAMSymmetricKey` only for a request carrying an otp, and a retrofit sends none. Green after: at_auth 369, at_client 1,820, onboarding-CLI 21, functional 201, e2e 21 and 51. **Still owed:** ② Two model questions for gkc: whether `primary`'s signing-root request and its `_apsk` route stay on the pre-post-quantum route now that an enrollment created by legacy-PKAM onboarding is fully privileged server-side (the sentence said *"stay on the legacy path now that a legacy client is fully privileged"*, which used the word in two senses inside one question). ③ UC-B5.1's recorded reason for being undrivable from `signing_root_pull_test.dart` is false now that `enroll:listns` answers a legacy connection — for the next catalogue pass. The `blocked on a VE image built from at_server 7118d2e4` this row carried is discharged: `at_virtual_env:local` was built 2026-09-05, after that commit, and the onboarding-CLI pack's retrofit test passed against it on 2026-09-07. | Nothing for ③; gkc for ② |
+| **predecessor/successor vocabulary sweep** | ✅ **The `legacy` half is PARTLY DONE 2026-09-09.** `acceptance.md` gained [section 1.0](../acceptance.md#10-overloaded-words--legacy-primary-owner), a glossary naming **eight** senses with the phrase to write instead of each — every one checked against the tree that day, not listed from recall. The row had said seven and named the notation table's three; the eighth is `rsa2048` glossed *(legacy)* in that table's own `APKAM` column. The three axis rows now each say which axis they are and link the glossary, and the posture table in section 16 — about 2,900 lines away, with a backticked `legacy` in the same leftmost-column position — now says it is the posture and not those three. Both concrete bad uses are fixed, and one of them corrects this row: *"198 tests passed at legacy postures"* was not *"this file's own"* any more, having been demoted to `detail/implementation-plan.md` when the item completed. ✅ **The CLAUSES are done too.** Thirteen `Given`/`When`/`Then` lines in `acceptance.md` carried a bare `legacy`; six were genuinely ambiguous and are rewritten to name their axis, using vocabulary this same row already ruled rather than inventing any — *the predecessor enrollment* where the text meant the enrollment a retrofit replaced, *the legacy provider* where it meant the provider id, *its RSA APKAM keypair* where it meant the algorithm. The other seven already named their axis and were left. ✅ **`legacy enrollment` is settled by DEFINITION rather than by editing 45 uses**: it has one consistent sense across the doc set — an enrollment holding a single `rsa2048` keypair for both authentication and signing, with a flat keyfile — so section 1.0 now states it, and states that it is neither `primary` nor the right name for a retrofit's predecessor. Editing the 45 would have churned the set without telling any reader what the term means. ✅ **The bare verb-complement form is cleared across all five live docs.** `legacy` used as the bare object of a verb — *writes legacy*, *stays legacy*, *never write legacy* — is the most ambiguous form the word takes, because no noun names the axis and the reader has to supply one. Thirteen were rewritten to name it (*writes with the legacy provider*, *stay legacy-encrypted*), including one use-case heading and its status table row changed together so they cannot diverge; the rails match use cases by **id**, not by title prose, and stayed green through the heading change. ⚠️ **A measurement error worth knowing about, since the next pass will want the same search:** the first pattern reported *zero remaining* and was wrong — its lookahead matched `legacy` only at end-of-clause, so it never saw *writes legacy and stops*. The positive control caught it. Any sweep here needs a control that a KNOWN-bad string matches, or the zero is a claim about the regex. ✅ **`primary` and `owner` are DONE 2026-09-09, on gkc's definitions.** **`primary`** is the root enrollment the atServer constructs, so that the auth credentials an atSign held before enrollments existed have a consistent name — verified against at_server `origin/trunk`, whose `EnrollmentManager.primaryEnrollmentId` dartdoc reads *"the id of the enrollment the atSign's flat legacy credential migrates into"* and which the atServer mints rather than any client requesting. So it is a wire literal, and the doc set now bans the ordinary adjective outright: three adjectival uses in `design.md` were rewritten (*original sources*, *chief producer*). **`owner`** is the atSign's owner, a person or entity, and nothing else; the two uses naming a connection are rewritten as *a connection carrying no enrollment id*, while `@owner` inside a key pattern stays, being a shape rather than a person. ⛔ **A STANDING RULE WAS MANUFACTURING THIS COLLISION and is now fixed at the source**: the no-load-bearing memory listed *primary* as its first substitution, in the one doc set where the word is a wire literal. It now names *key*, *critical*, *chief*, *main* and refuses *primary* here. **Also found while checking:** a ninth sense of `legacy` — `primaryEnrollmentName` IS the string `legacy`, so `primary`'s recorded app and device name is that word. The glossary heading no longer carries a count, because a count in a heading rots silently. ⛔ **STILL OWED, and it is the DART TREE rather than the docs — found by a cold read 2026-09-09 that correctly called the previous wording of this sentence untestable.** The docs half is done; the same vocabulary survives in **51 places under `packages/` and `tests/`**, production dartdocs included (`crypto.dart`, `pq_posture.dart`, `at_client_preference.dart`, `at_client_impl.dart`). ⚠️ **This is NOT the free sweep the docs half was**, and the reason is a rail: several of the 51 are TEST NAMES, and `provenIn(path, testName)` citations in the acceptance catalogue match the start of a test name, so renaming one reddens the catalogue unless its citation moves in the same commit. **Completion test:** a search over `packages/` and `tests/` for *writes*, *written*, *stays* or *remains* immediately followed by `legacy` — excluding a following *provider*, *posture* or *-encrypted* — returns nothing. ⚠️ **Run it with a control**: an earlier pass here reported a false zero from a lookahead that only matched `legacy` at end-of-clause, so prove the pattern still matches a known-bad string before believing the zero. The remaining bare uses in the five live docs are qualified in context and are not owed. **Ruled 2026-08-31** (gkc): a retrofit's two enrollments are **predecessor** and **successor**; parent/child is reserved for the approver ↔ requester relationship. Swept in the ledger and in the clauses touched that day; **24 hits in the PQ doc set and 8 in `packages` were measured** and the rest are unswept. ⛔ In this repo they are all prose — `parentEnrollmentId` appears in **zero** `.dart` files here. Renaming that at_server field is a separate decision with its own blast radius, it being on the wire and at rest ⚠️ **Three more collisions, found by a cold read 2026-09-01 and NOT yet swept.** `primary` now names both the housekeeping enrollment's literal id and the ordinary adjective — `design.md` uses the bare word for *first in the algorithm list* and the backticked one for the enrollment id, ~2100 lines apart — and the disambiguator *housekeeping enrollment* appears in one test comment and nowhere in `docs/`. ⛔ **Aggravated by a standing instruction**: the writing rule that replaces *load-bearing* with *primary* manufactures this collision in the one doc set where `primary` is a wire literal. `owner` names both an id-less connection and the atSign, and the tree is mid-migration from the first sense to `primary` with no doc recording the rule. `legacy enrollment` reads as either the pre-retrofit enrollment being capped or the housekeeping one. ⛔ **AND THIS ROW UNDERSTATES `legacy` BY AT LEAST FOUR SENSES — found by a cold read 2026-09-08, after the day's rulings gave the word another job.** It names two; the doc set uses the bare word for at least seven: `PqPosture.legacy`; `EnrollmentKeyExchangeMode.legacy`; the flat at-rest keyfile shape; the `legacy-server` test tag; and — worst, because every acceptance clause is read against it — **three separate axes in `acceptance.md`'s own notation table**, where an atSign, an atServer and an app *stage* each take a value spelled `legacy`, all backticked as though they were one constant. The stage ladder there is `legacy`/`cap`/`active`, a near-homonym of the posture ladder `legacy`/`pqReady`/`pqActive` and **not the same thing**. ⚠️ **There is no glossary entry for the word anywhere in the doc set** — the only vocabulary sections are that notation table and the ledger's status vocabulary, and neither defines it. Two concrete bad uses to fix beyond the table: this file's own *"198 tests passed at legacy postures"* (plural, so it cannot be the single constant, and the neighbouring sentence introduces `legacyPlusPqProviders`, which is explicitly not it), and the primary-migration row's *"stay on the legacy path now that a legacy client is fully privileged"* — two senses in one sentence, inside an open question being put to gkc. ⛔ **MOVED FROM P2 TO P0 on 2026-09-08 — two buckets, not one, and gkc named the `legacy` half as what a new session picks up.** It is on the critical path rather than merely wanted: the two P0 rows above it — the catalogue revisit and the clause burn-down — are both read against `acceptance.md`'s notation table, which is exactly where three of the senses live. Disambiguating after those passes would mean re-reading every clause they touched. | Nothing |
+
+**P1 — must do before D1 closes**
+
+| Item | What is owed | Blocked on |
+| ---- | ------------ | ---------- |
+| **deprecation debt: 1317 `deprecated_member_use` across the workspace's members** | gkc ruled 2026-09-11 that these packages do not publish carrying hundreds of deprecation warnings, which supersedes [14.11](#1411-deprecated_member_use-findings-across-the-workspace)'s 2026-08-26 reading that only the ladder bucket was D1 work. The list is [its own plan](../../deprecations/plan.md): 5 unrelated families (the AtChops compatibility API, the AtLookUp credential ladder, the flat keyfile fields, the `AtClientPreference` storage fields, and the inert `sync:` flag that [14.46](../implementation-plan.md#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) already holds), 8 ordered steps, and the two decisions the plan makes itself: the carrier replacement is typed exits on `AtKeys`, and at_client's public `atChops` surface deprecates in 3.15 and goes in 4.0. ⚠️ **The figures are analyzer counts, not greps**, and at_client_flutter's come from `flutter analyze`, which `dart analyze` never sees, and the two live packs carry 411 of them; the plan says how to re-derive all of them. The at_lookup major's own rows below are its gate for the ladder bridge, and are not duplicated here | The F3 decision in the plan's [section 3](../../deprecations/plan.md#3-decisions-this-plan-needs-and-the-ones-it-makes), which is gkc's |
+| **reconcile this table: gkc bets most of it is done or obsolete** | gkc, 2026-09-11: *"there's a whole lot of old rubbish in the implementation plan which makes it nearly impossible to read, and I'm going to bet that a large amount of it has been completed or rendered obsolete at this point."* The example that prompted it: the `enrollmentService.approve` row sat in this band on 2026-09-11 with **✅ DONE 2026-09-09** written inside its own cell, so a correction had landed in the body and the row was never struck; it and 14.42, the same phenomenon, are now in [the detail file](#enrollment-approval-on-the-long-lived-cicd-atsigns-fixed-2026-09-09). The shape of the problem: line 12 of this file says discharged material lives in `detail/`, and 30 `###` sections sit between the P3 band and `## PARKED` in the live file (count with `awk '/^### P3/,/^## PARKED/' docs/projects/pq/implementation-plan.md \| grep -c '^### '`). The work is to walk every row and every one of those sections against the tree and the CHANGELOGs, striking or moving each, and to read each cell to its end for a DONE marker before believing its heading Also found 2026-09-11 by resolving every link in the two plan files and the detail file: 5 links in `detail/implementation-plan.md` do not resolve, and all 5 predate this session. Its lines 10, 11 and 3665 link `design.md` and `roadmap.md` as if they were beside it, but they live in the parent directory; its lines 32 and 36 carry a literal `…` inside the anchor. Nothing in the repo checks a link's target, so these stood until someone resolved them by hand A cold read of this table on 2026-09-11 found the same shape in P0: 3 of its rows carry a ✅ marker inside the cell, so the rule *pick a P0 first* cannot be followed until that band is reconciled, and reconciling it is this P1 row | Nothing |
+| **the PQ e2e job fails on a keyfile lock nothing released** | **New red 2026-09-08, CI run 34231264558, `pqe2e_tests`** — that job was green on the four runs before it (34224637682, 34205926815, 34200675382, 34160882867). Three tests fail in `test/pq/nskey_cross_atsign_test.dart` and `nskey_multi_enrollment_test.dart`, all downstream of one cause: `PublishedNskeyKeyRing._mint` throws *could not store the x-wing nskey private for `@bob🛠`, so its public half is deliberately not published*, which is the mint refusing to advertise a key it cannot file. **The filing failure names its own reason:** `NskeyPrivateFiling` logs *this atSign has no writable AtKeys: FileSystemException: Could not acquire the keyfile lock within 0:00:10. Nothing was written. The last failure was: PathExistsException: Cannot create file, path = `test/hive/client/@bob🛠.nskey.atKeys.lock`* — 15 such lines across five namespaces in one job, so the lock is held for a long time rather than missed once. **Not caused by the commits it first appeared on:** between that job's last green and this red the tree gained a unit test, dartdocs and plan rows only, none of which this job loads. **Read to its mechanism 2026-09-08.** `AtKeysFileLock` defaults are `timeout: 10s` and `staleAfter: 30s`, and a waiter breaks a lock only once its mtime is older than `staleAfter`. So a lock abandoned less than 20 seconds ago can be broken by NO single acquire: every waiter gives up at 10 seconds while the corpse still looks fresh, and the staleness break the class exists for arrives only after 30. The log shows exactly that window — the first filing failure is at 13:22:39 and the last at 13:23:09, thirty seconds apart, after which the corpse aged out and was broken. **What abandoned it is a hypothesis, not a measurement:** eleven seconds earlier, at 13:22:27, three clients of `@bob🛠` and `@alice🛠` are stopped within milliseconds and new ones built at once — the same in-flight-at-stop family as the P2 store-write row, but on the keyfile lock, where the cost is a thirty-second outage for every writer rather than one logged warning. `synchronized` releases in a `finally`, so an abandoned lock means that `finally` never ran. ⛔ **Pairing the constants was tried on 2026-09-08 and REVERTED — do not re-propose it.** Raising the default timeout to 35 seconds against the 30 second staleness made `at_keys_update_test`'s *update must not be called from inside another update* stop throwing: the re-entrant acquire waited out the window and broke the lock its own caller still held, putting two writers in the critical section, which is the one thing the class exists to prevent. A waiter that outlasts `staleAfter` cannot tell a dead holder from a slow one. The constraint is now stated on the field, the right way round. **So the levers are:** ⓵ make the staleness signal mean what it claims — a heartbeat a live holder refreshes, after which a waiter may safely outlast the window; ⓶ find and close the abandonment. Neither is a constant change. ⚠️ **A SIXTH observation, 2026-09-08: `pqe2e_tests` was GREEN in CI run 34273592723.** That makes five green of six on that job, the red being the middle one — a rate, not a fix, and this row stays open on that basis. ⛔ **Do not pool it with the local runs**: four bare `./runLocal.sh` runs on this Mac the same day saw no lock failure either, but a Mac and a CI runner are different instruments and two numbers from different instruments are not a comparison. Reproduce with `./runLocal.sh 26000 test/pq -x legacy-server` and watch for `@bob🛠.nskey.atKeys.lock` outliving the client that took it. | Nothing |
+| **at_server: a `*:rw` enrollment can forge signatures as another enrollment** | ⛔ **gkc is closing this himself** (stated 2026-09-01) — recorded here because our tree DOCUMENTS the property as holding and reasons from it. `packages/at_client/lib/src/crypto/nskey/pq_signing_chain.dart:79` says *"`_apsk` writes are restricted to the owning enrollment's own authenticated connection, so the signer is not a permitted writer"* and uses that as the justification for the parent-signs/child-publishes design. **That sentence is false until this lands**, and it is a claim about at_server made in at_client's shipping dartdoc. ⚠️ **Verified from at_server `origin/trunk`, not taken on report:** `isForeignPerEnrollmentReservedKey` returns false for any key starting with `public:` (`abstract_verb_handler.dart:166`), and `_apsk` lives at `public:_apsk.<enrollmentId>.a.__e@<atSign>`; the predicate feeds `isAuthorizedSync`, which takes an `operation` and is the general decision, so the exemption reaches WRITES; and `_protectedKeys` is four entries, none of them `_apsk`. The server's own comments say the per-enrollment reserved space is *private to the enrollment that owns it* and that the guard exists to deny *"one with `'*:rw'`, which would otherwise reach it via the wildcard fallback"* — so this needs the **wildcard**, and pointedly NOT `__manage`: an enrollment that cannot approve, deny, revoke or even `enroll:fetch` another enrollment can overwrite its published signing-key advertisement. **Consequence here:** verification resolves the record wholesale (`getApkamPublicKey(signerAtSign, id)` → `verifyEnvelope(signerPublicKey:)`), so a co-tenant can withdraw a victim's advertised key — unverifying everything it signed — or substitute one and forge. ⛔ **The `kid` lookup narrows NOTHING here**; an earlier note of mine said it did. An attacker who writes the record controls the algorithm set and the kid set, so naming the key is free to them. ⚠️ **NOT probed against a live atServer** — the decision path was read, the write was not attempted | Nothing — gkc is taking it |
+| **a restored pre-retrofit `.atKeys` mints ANOTHER uncapped enrollment** | ⚠️ **Found in the 2026-08-30 wrap-up, read from source and NOT probed.** at_auth decides a keyfile is already retrofitted by looking in the KEYFILE (`enrollment_submitter.dart`, active `privateAuthentication` material with an enrollment id), so a keyfile restored from a backup taken before the retrofit has none and retrofits again. On the pre-enrollment path there is no parent to cap — `_capEnrollmentExpiry` has exactly ONE call site on at_server `origin/trunk`, in the apkam branch, applied to the parent — and the record is written with the request's own expiry, which defaults to zero, meaning never. So each restore leaves a further fully privileged, never-expiring enrollment and supersedes none of the earlier ones. For an ENROLLED client this is bounded, because the atServer caps the parent. **Settle it with a probe before treating it as true**: retrofit, restore the old keyfile, start again, read `enroll:list`. Then decide — it may be correct (it is the sibling-clone case, which is deliberate) or it may want the client to recognise its own enrollment from the atServer rather than only from the keyfile. | Nothing |
+| **the at_persistence_secondary_server override must come out** | The workspace root carries a `dependency_overrides` entry pointing `at_persistence_secondary_server` at a merge sha of at_server, which fixes [ruling 125](decisions.md#125-a-hive-stores-identity-is-its-storage-path-not-its-atsign-2026-08-28) — `hiveStoragePath` was silently ignored for the second AtClient of an atSign in one process, so co-located clients shared one keystore and one sync queue. ⛔ **BOTH of the two things this listed are now discharged or half-done, and the cell said otherwise until 2026-09-06.** It read: *"Two things are owed, in order: at_persistence_secondary_server publishes (pub.dev tops out at 5.2.1, published 2026-08-11, which predates the fix); then the override is deleted here and the constraint raised."* **5.3.0 published 2026-09-06** and carries `HiveInstances.forPath`. The deletion is **done on `gkc-at-client-storage-release`** ([#2208](https://github.com/atsign-foundation/at_client_sdk/pull/2208)), which resolves it `source: hosted` at `^5.3.0`. **What remains is this branch only:** delete the `dependency_overrides` block from the spike's root `pubspec.yaml` and take `^5.3.0`. ✅ **The merge is DONE and this row listed it as the first of three** — PR 2776 merged 2026-08-30 at `5c0e603c`, verified an ancestor of at_server trunk. ⚠️ **This cell said the committed override pins the BRANCH, and warned that a force-push would change what the tree compiles against, until 2026-08-31.** It pins a **sha** now, and the real hazard was the opposite one: the branch was DELETED on merge, so every cold checkout failed `dart pub get` with *Could not find git ref* (exit 69) while this machine kept working off its `~/.pub-cache` mirror. `pubspec.lock` is gitignored, so nothing else caught it. ⚠️ **at_client's own half is already on this branch and does not depend on the publish**: `AtSyncQueue` takes a storage path, and at_client tests close `HiveInstances.closeAll()` as well as the global `Hive.close()` — count them with `git grep -l 'HiveInstances.closeAll' -- packages/at_client/test \| wc -l` rather than from a figure here, which said **four** and was already five. Those stop compiling the moment the override is removed without the published fix behind it <br><br>⚠️ **The fix exposed three tests that were green for the wrong reason, all now corrected — do not "simplify" them back.** `pq_advance_ladder_test` gave every rung its own storage path, so its central claim — *nothing an install wrote stops being readable when it upgrades* — was only ever asserting that one store reads its own writes; it now uses **one** directory across rungs, as an install upgrading in place does. `pq_posture_grid_test`'s *"each with its own store"* checked that a DIRECTORY existed, which was true under the bug because the encryption-secret `<sha>.hash` lands at the path a client names even when its box opens elsewhere; it now asserts a `.hive` file. And `side_by_side_storage_test`'s own sync-queue arm read an in-memory replay taken at open, so it passed with the queue back on the global instance until the second client was built AFTER the first's write. ⚠️ `sync_multiple_client_test` drives two clients of ONE atSign at two paths and was therefore driving one store — it needed no change and still passes, which is the evidence that real sync works | Nothing. ⚠️ **This said &#34;a publish&#34; until 2026-09-06, and that publish has happened** — pub.dev now lists 5.3.0, so under this table's own rule the row was wrongly unpickable. Re-derive with `curl -s https://pub.dev/api/packages/at_persistence_secondary_server`, reading the versions list rather than `latest`. ⚠️ **It said &#34;merging, then a publish&#34; until 2026-08-31**: [PR #2776](https://github.com/atsign-foundation/at_server/pull/2776) merged to at_server trunk on 2026-08-30 (merge commit `5c0e603c`), so only the publish is left — trunk declares 5.3.0 and pub.dev tops out at 5.2.1. ⚠️ Check it with `gh pr view`, not `git merge-base --is-ancestor`: the branch was deleted after the merge, and that command exits non-zero for a MISSING ref exactly as it does for an unmerged one |
+| [14.11](#1411-deprecated_member_use-findings-across-the-workspace) **bucket B** | Migrate the **88** credential-ladder uses (`enrollmentId` 75, `signingAlgoType` 13) onto the `AtAuthenticator` seam. 26 in `lib/`, 62 in `test/`, across at_client, at_onboarding_cli, at_client_flutter and at_auth. It is what "that package's own work is done" means in [14.18](#1418-the-remaining-d1-initial-development-sequence), so it gates the carves | Nothing |
+| **advertisement fetch volume, ttr and client caching** | Three questions, one subject, raised by gkc 2026-08-26 after a wire capture showed **110 `_apsk` lookups in a single short client run** — more than either control atSign made. (1) Why are there so many? Establish what re-fetches, and whether anything is re-reading per operation what it could hold. (2) Should an advertisement carry a `ttr`, and if so how long — it is a public record that peers must not read stale after a rotation, and rotation is the revocation lever. (3) How should a client cache advertisements it has fetched, and for how long? ⛔ **These interact**: a client-side cache with no server-side `ttr` is a rotation that does not take effect, and a `ttr` shorter than a session is the fetch volume in (1) by design.<br><br>⚠️ **A change on 2026-08-27 moved this baseline and the measurement must be taken after it, not before.** `NskeyResolver` no longer answers null from a remembered miss: when a walk finds nothing *and* the memory made it skip a level, it re-walks the skipped levels for real. That is deliberately paid only where a resolution is about to return null — for a write, one about to throw — so a repeated write that *resolves* is unchanged. But a client repeatedly writing toward a recipient who has published nothing now re-probes each time instead of once per window, which is exactly the shape question (1) is counting. Read [the write-up](#how-the-negative-cache-falsified-three-clauses) before attributing any number here<br><br>⛔ **A FOURTH question, and it is a defect rather than a measurement — found 2026-08-28 by reading, not by running.** The `_apsk` cache in `EnvelopeSigning` is **on by default** (`AtClientEnvelopeSigner`: `cacheExpiry: 5 minutes, resetOnLookup: true`) and `lookupPubKey` **cancels and recreates the timer on every read** — so the expiry slides from the last READ, and a signer verified more often than every five minutes is cached **indefinitely** in that verifier's process. Walk the `pqReady → pqActive` swap the project already ships: `reconcileSigningKeys` retires `rsa2048`, mints `mldsa65` and republishes `_apsk`; a busy verifier still holds the rsa-only advertisement, the envelope now carries an ML-DSA signature, `shared` is empty and it refuses with *"no algorithm in common"*. ⛔ **And the refusal is self-sustaining**: `getApkamPublicKey` resets the timer *before* verification is attempted, and `verifyEnvelopeSignature` catches the failure and rethrows with context **without invalidating the key it just failed against**. Recovery needs a five-minute lull in traffic to that peer, or a process restart. It reaches beyond app envelopes: the same path verifies **nskey advertisements** (`published_nskey_key_ring.dart:126`) and signing-chain links, so a wedged verifier cannot validate an advertisement and therefore cannot seal to that peer at all. ⚠️ **Same class as the negative cache fixed on 2026-08-27** — answering from memory and never re-checking — in a different cache. **Unproven by measurement**: the probe is a live differential with three arms, and the one that matters is *keep verifying every 60s and see whether it EVER recovers*, which a short test would miss <br><br>⚠️ **A fifth per-start round trip landed 2026-09-09, and it belongs to this measurement rather than to the row that added it.** `NskeySeeding.seed()` now asks `enroll:infons:<ns>` once per authorised namespace at every start — the revocation backstop of [ruling 130](decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31). It settles on that answer alone in the ordinary case, so a namespace nothing has been revoked in costs one round trip and no advertisement read, and a client running as the atSign's own credential asks nothing. Only a posture that seeds namespace keys pays it, so the shipped 3.x default pays nothing | Nothing. It needs a measurement, then a ruling |
+| **the PQ upgrade guide does not exist** | The cleanup deliverable, ruled instructions-not-tooling by [decisions.md 118](decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27), which names the content it must carry. [Decision 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05) item 7 routed that content to a guide on 2026-08-05 and `docs/projects/pq/` has no such file. It is here rather than in the catalogue because a document is not a THEN clause | gkc, on where it lives |
+| **there is no best-practices guide for application owners** | **The mitigation for the repopulation window, and it is the only one** (gkc, 2026-08-27). Between an nskey rotation and the adds that repopulate it, a sender whose policy refuses everything in the generation is refused outright. **Open it with gkc's analogy (2026-08-28), which is the clearest statement of the whole thing:** a company's official language is English and it wants to change to French — rollout 1 teaches everyone to speak and understand French while they go on speaking English; rollout 2 is when everyone speaks French. It extends to the asymmetry: **encryption is a conversation** (ask which languages the other person speaks, pick one, never say anything twice) and **signing is a notice on the wall** (you do not know who will read it, so covering a reader who has not learnt French means posting both languages, at twice the paper). **The recipe gkc gave on 2026-08-27, which the guide must carry verbatim in substance:** **rollout 1** mints both the old and the new algorithms and seals only to the **old** — every advertisement gains the new material while nothing senders do changes, so it cannot strand anybody; **rollout 2** mints only the new and sends only to the new, after which rotation's garbage collection retires the old by itself and a loud refusal to a peer that skipped rollout 1 is correct. The two levers are `keyEstablishmentAlgorithms` (what this atSign mints) and `sealsToKeyAlgorithms` (what this client will seal to), and the whole recipe is that they move in **different** releases. It must also say that `AtClientPreference.sealsToKeyAlgorithms` **is** the send-policy lever — an ordered list where omitting an algorithm refuses it. ⚠️ **This row claimed that lever's dartdoc "does not say" so, and was false when written on 2026-08-28**: it has said *"Narrowing it is choosing to refuse … the write is refused rather than downgraded"* since 2026-08-19. What the guide owes is reaching an app developer, not the dartdoc's content. ⚠️ **Distinct from the PQ upgrade guide row**, which is about retrofit cleanup; whether they are one document is unsettled | gkc, on whether it joins the upgrade guide |
+| **step 3 of a signing migration has no lever** | **Ruled 2026-08-28** as [decisions.md 120](decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28). A verifier cannot decline an algorithm it implements: `verifyEnvelope` takes `strongestOf(shared)` with no minimum-algorithm check, no signature-count check, and no accepted-algorithms field for **signatures**. The encryption side already has one — `keyEstablishmentAlgorithms`, *"the receiver's side of the choice"* by its own dartdoc. So a **retired signing key is a standing forgery surface**: it stays advertised so history verifies, nothing dates an envelope, and whoever breaks that algorithm can mint one that verifies. What is owed is the verifier-side set, mirroring `sealsToKeyAlgorithms`, narrowing `shared` before `strongestOf` and refusing with both sides named. ⚠️ **Not every caller may be narrowed** — verifying one's own advertisement is not the same act as verifying a peer's data. It gates [UC-G2.9](../acceptance.md#179-uc-g29--step-3-has-no-lever-so-a-retired-signing-key-verifies-forever) **c3 — the one clause in the catalogue that cannot be proven**, because the clause asserts this lever DOES NOT EXIST and building it therefore *falsifies* the clause rather than proving it. ⛔ **So this row does not block goal 1, and stays P1** even though the clause it gates is unproven; the exception is enumerated in `unprovableClauses` in `packages/at_client/test/acceptance/manifest.dart`. What the work does close is the standing forgery surface above, which is why it is still owed before D1 | Nothing |
+| **the double-signing writer may now be dead code** | **Consequence of [decisions.md 120](decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28)**, which retired the two-signature overlap: it covers nothing a verifier can insist on, and the three-step ladder replaces it. ✅ **The blast-radius sweep reported 2026-08-28 and the change is contained.** Neither the signing root nor the APKAM fallback can produce a plural envelope — the root returns a bare map with one ML-DSA signature and never uses the envelope shape; the fallback returns a one-element list. A chain link can, but only by borrowing the data-signing keys, so plurality has exactly one source and `heldSigningKeys.length == dataSigningKeyAlgorithms.length`. **No library code produces a plural envelope**: three production call sites, one funnel, and every two-member set in the tree is in `packages/at_client/test`. ⛔ **The multi-signature READER must stay** — `SignedEnvelope.fromJson`'s differing-`kid` and differing-`typ` refusals stop an attacker APPENDING an entry in flight, which a single-key writer does nothing to prevent. Removing both because "we no longer sign twice" opens exactly the hole they close. Two tests are CITED from the catalogue as pinning the writer (`apkam_signing_keys_test.dart` and the arm added to `signing_key_minting_test.dart` on 2026-08-28), and both were deliberately kept when their clause citations were withdrawn. ⚠️ **Four tests in total emit two signatures** and would go red — the count in [ruling 120](decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28) is the one to work from; these two are simply the ones the catalogue names | Nothing. The blast radius reported 2026-08-28 and the change is contained |
+| **an orphaned enrolment may never expire** | Found 2026-08-28 alongside the cascade gap, and independent of it. A self-enrollment inherits its parent's `apkamKeysExpiryDuration` at creation, and **a zero duration is the keystore's "never expires"** — so a subtree spawned under a never-expiring parent is bounded by nothing at all once revocation fails to reach it. Even with the cascade built this stays true of any enrollment the cascade misses. Decide whether a self-enrollment may inherit an unbounded expiry | gkc's ruling |
+| **the `_apsk` sign/verify matrix is untested** | **Tests, asked for by gkc 2026-08-27.** ⚠️ **The specification landed 2026-08-28** as [`acceptance.md` section 17](../acceptance.md#17-g2--crypto-agility--add-never-replace) — this row is the harness half, which no clause can express: which pack, which shape, one namespace per variation. It would prove UC-G2.3, UC-G2.7 and UC-G2.8. Originally: the same shape as the encrypt/decrypt matrix and for the same reason: `_apsk` is an array so that a signing-algorithm upgrade is an *add*. Sign **and** verify, self→self and self→other, against an advertiser offering `rsa2048` only, both, or `mldsa65` only. Nothing today asserts that adding an entry leaves the existing one verifying, or that a one-algorithm reader accepts a two-entry advertisement — ⛔ **and `bareApskValueOf` makes this sharper than it looks**: a single active `rsa2048` entry serialises as a **bare string** and everything else as the array, so the one-entry and two-entry cases are different wire shapes, not different lengths | Nothing |
+| **the secret-sharing substrate's matrix is untested** | **Tests, asked for by gkc 2026-08-27.** ⚠️ **Specification landed 2026-08-28** in [section 17](../acceptance.md#17-g2--crypto-agility--add-never-replace); this row is the harness half. It would prove UC-G2.1 and UC-G2.4. The third operation pair: encrypt/decrypt through the pairwise substrate — key packages and `__ssenv` — against a recipient whose key package advertises x-wing only, both, or ml-kem-1024 only. UC-A2.5 proves the *add* live (a package gains a second key, the original kid stays active, an envelope at the old kid still opens) and `key_package_amendment_live_test.dart`'s negotiation arm proves a sender picks by its own order over a both-advertising recipient. What is missing is the rest of the grid, and the self→self direction entirely | Nothing |
+| **the advertised-algorithm matrix is untested** | **Tests, asked for by gkc 2026-08-27.** ⚠️ **Specification landed 2026-08-28** in [section 17](../acceptance.md#17-g2--crypto-agility--add-never-replace); this row is the harness half. It would prove UC-G2.2, UC-G2.10 and UC-G2.11 — and UC-G2.11 is the self→self direction this row already calls the one a bug hides in. Send **and** receive, **self→self** and **self→other**, against a receiver advertising **x-wing only**, **both**, or **ml-kem-1024 only** — twelve cells, and today almost none of them run. What exists is one live negotiation arm over a **both**-advertising recipient (`key_package_amendment_live_test.dart`, two senders differing only in `sealsToKeyAlgorithms` order) and unit coverage of the selector; there is no live x-wing-only or ml-kem-only *recipient* anywhere, and nothing at all for the self→self direction. ⚠️ **The self→self cells are the ones a bug hides in**: with one atSign the configured `keyEstablishmentAlgorithms` and the published advertisement both belong to it, so a client consulting the wrong one is invisible — see [the mirrors](../implementation-plan.md#the-four-missing-self-to-self-mirrors), whose UC-A4.5 row is this matrix's specification half. ⛔ **The receive side is not the send side reversed**: a holder opens every construction its KEM supports (`openableSuitesFor`), while a sender takes the first of its own order the recipient offers, so an ml-kem-only recipient and an ml-kem-only *sender* exercise different code.<br><br>**How to build it** (gkc, 2026-08-27): **one namespace per variation**, not one atSign per variation — an nskey is scoped to `(owner, namespace)`, so a single recipient can advertise x-wing for one namespace and ML-KEM for another by setting `keyEstablishmentAlgorithms` before each `mintAndPublish`. That keeps the whole matrix on the atSigns a pack already has, and avoids the exclusive-atSign trap (a test that publishes a signing root poisons rows asserting its absence). ✅ **The "both" column is producible, since 2026-08-28.** This said it needed checking, on the grounds that `PublishedNskeyKeyRing` minted under `keyEstablishmentAlgorithms.first` — one key per nskey generation — so a both-advertising *key package* was mintable and a both-advertising *nskey* might not be. The mint now writes a key per configured algorithm and `add` puts one client's material into an existing generation, so a both-advertising nskey is produced by setting `keyEstablishmentAlgorithms` before `mintAndPublish`, exactly as the key package's is | Nothing |
+| **no rail resolves a cross-file `#anchor`** | **A rail, and it would guard a property that currently HOLDS rather than fix a break.** Found by a cold read 2026-08-27, whose manual pass was the first time this doc set's cross-file anchors had ever been resolved — every link in both live docs resolved. `docs_structure_test.dart` checks that no *linked* heading slug is duplicated, that the ledger index and its bodies correspond, and that the catalogue's counts agree; it never opens a link's target. The edit-time hook catches a bad anchor in the file being written, so the hole is **a heading renamed in one file and linked from another** — which happened on 2026-08-27 (`Two clauses pinned…` → `Clauses pinned…`) and was caught only because the same session moved the pointer. ⚠️ Scripted doc edits bypass the hook entirely.<br><br>⚠️ **Evidence arrived the same day the row was written: I wrote TWO broken anchors on 2026-08-27**, both after that cold read had flagged exactly this shape. One pointed at a **table row**, which is not a heading and can never be one; the other was invented outright for a section that does not exist. Both were caught only by resolving every anchor by hand, which is the check this row proposes. ⛔ **So it is no longer "a rail guarding a property that holds"** — the property does not hold reliably, it is held up by whoever remembers to check | Nothing |
+| [the four missing self-to-self mirrors](../implementation-plan.md#the-four-missing-self-to-self-mirrors) | **A ruling from gkc on which become catalogue rows**, then the rows and their scenarios. He set the rule 2026-08-27: a `put`/`notify` row — or a `get`/notification-receipt row — is about self→self **or** self→other, never both, and where one direction has a row so should the other. Five pairs already hold; **four self→other rows have no self→self mirror** and they are not equally worth having. The section ranks them with what each would assert and whether the tree can tell it apart: UC-A4.5's and UC-A4.7's mirrors both have live production paths that nothing exercises for self, and UC-A4.7's is *commented for exactly that case*. ⛔ **Landing any of them raises the denominator** and the burn-down percentage falls, which is correct — the clauses were always owed and their absence flattered the figure | gkc's ruling |
+| [the at_client carve stack](../implementation-plan.md#the-at_client-carve-stack) | Get the nine-layer stack plan into git, and make the **five decisions** it cannot make for itself. A file in no layer never lands | Whoever cuts the stack |
+| [arm 1 vs arm 3 bucketing](../implementation-plan.md#arm-1-vs-arm-3-bucketing) | **A ruling from gkc** — the measuring is done. Arm 3 cannot be scoped and the catalogue's count table stays wrong until it is settled | gkc's ruling. Nothing else |
+| [a wildcard enrolment seeds nothing](../implementation-plan.md#a-wildcard-enrolment-seeds-nothing) | **A ruling from gkc** on whether an atSign reachable only through a wildcard (`*`) enrolment is expected to publish namespace keys. Today it publishes none, so nobody can seal to it in any namespace, and the doc comment that said otherwise was false | gkc's ruling. The measuring is done |
+| [content keys per scope](../implementation-plan.md#content-keys-per-scope) | **A ruling from gkc** on whether one content key per writing enrollment per scope is the intent. If not: `CurrentCkPointer` needs a remote-first write through an atomic verb, and rotation needs to supersede every CK in scope | gkc's ruling, then the fix |
+| [the late-arriving nskey private](../implementation-plan.md#the-late-arriving-nskey-private) | File a late-arriving nskey private **only for a generation this client actually asked for**. The reverted attempt filed any arrival, which breached the seeding guarantee. ⛔ **Ruled 2026-09-07 (gkc): build a standing subscriber for conveyances** — nskey privates and content keys — so an arrival is filed when it lands rather than at the next start. A HANDLER on the envelope listener that already runs (`PqClientBootstrap._startEnvelopeListener`), not a second listener; it competes with `collectConveyedKeyMaterial`'s start sweep for the same envelopes, and the reverted attempt above is the constraint it has to honour. The analysis is in [`docs/projects/wasm/implementation-plan.md`](../../wasm/implementation-plan.md), the X6 row, under "conveyance has no standing subscriber". | Nothing |
+| **two clients of one atSign sharing a store** | ⛔ **Ruled 2026-09-07 (gkc): sweep for the shape anywhere two clients of one atSign exist**, not only the nskey family. The store split exposed two functional tests green only because two "installs" shared one local keystore — `nskey_rollout_ladder_live_test` never exercised its seal end to end, `enrollment_test` read records it had never written — and the functional pack is now isolated per file, so what remains is the e2e pack and the unit tree. Shortlist by cross-reads: `tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart` (the name is the shape), `at_client_lifecycle_functional_test.dart`, `pq_posture_grid_test.dart` and the unit `enrollment_service_test.dart`. Re-derive the candidates rather than quoting a count: files with two or more `setCurrentAtSign`/`buildAtClient`/`fromAuthSession` calls for one atSign. A test found sharing gets its second client its own bundle (`forPrincipal`) or, for a succession, a hand-over. | Nothing |
+| [14.18](#1418-the-remaining-d1-initial-development-sequence) **step 20's rotation arm** | Add the `pending` enrollment status value and build the rotation arm against its own dedicated CRAM atSign. ⛔ There is **no** fleet-adoption wait — see the standing premise | The at_auth publish, and a dedicated CRAM atSign |
+| **CI at head** |  ⛔ **NO VERDICT LIVES IN THIS CELL, deliberately.** ⚠️ **It said "RED AT HEAD, and unverified since" until 2026-08-31**, and a run that had already happened falsified it: the newest run was `e2af5db26` on 2026-08-28, SUCCESS, and an ancestor of HEAD — every red it named was 2026-08-27 or earlier. The standing fact is not a colour but a DISTANCE, because nothing fires on push here. Re-derive before reading anything below: `gh run list --branch gkc-pq-d1-spike`. ⛔ **RECURRING — this row never completes**, which a cold read on 2026-08-27 found it failing to say: its cell states a green result and nothing about what remains, so it reads as done while sitting in P1. What is owed is a dispatch-and-read **at each new head**, because nothing fires on push here. Dispatch both workflows at head and read them. "Every rail green" is half of D1's definition, and **nothing fires on push on this branch** — the workflows are `workflow_dispatch` plus `push`/`pull_request` on `trunk` only, so the newest run is only ever as new as the last manual dispatch. ⚠️ **Dispatch matters beyond staleness**: CI's at_client job runs a **bare** `dart analyze` that reads `benchmark/`, which the routine `dart analyze lib test` never opens — that hid five errors for six days. ⛔ **And docs are build inputs here**, so a plan edit alone can redden the acceptance rail. Re-derive, never quote:<br>`gh run list --branch gkc-pq-d1-spike --limit 4 --json headSha,conclusion,workflowName --jq '.[] \| [.headSha[0:9], .workflowName, .conclusion] \| @tsv'`<br>`gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike` ⚠️ **A format-gate risk found 2026-08-27, and it predates any current work.** `packages/at_client/test/acceptance/manifest.dart` and `a3_self_data_test.dart` **as committed at `762a91c38`** fail `dart format . -o none --set-exit-if-changed` under local Dart **3.12.2 stable**, while three untouched neighbours pass — the diverging constructs are an empty-condition `for (;;)` and a wrapped ternary, both places the formatter changed style between versions. CI installs `sdk: stable` **unpinned** (`actions/setup-flutter-and-dart/action.yaml:41`), so whether the gate is red at head depends on what stable is on the day. ⛔ **Do not "fix" this with a write-format** — that churns committed code to whichever style the local SDK happens to hold, which is the trap the toolchain rules already name. Dispatch CI and read the gate before touching a byte. ⚠️ **A rail gap found by a cold read 2026-08-27: `docs_structure_test.dart` does NOT check that a link RESOLVES.** Its group is *no LINKED heading is duplicated* — it collects slugs without resolving the target, so a **renamed heading breaks every link to it silently**. That happened the same day: renaming `### Three clauses pinned…` to `### Two clauses pinned…` left a dead anchor in the plan and the suite stayed green. The edit-time hook catches this on files it sees; a heading renamed in one file and linked from another is the hole. Worth a rail that resolves each cross-file `#anchor` across the doc set. ⚠️ **A cold read on 2026-08-27 did that check by hand for the first time and it came back clean** — every link in both live docs resolves — so the rail would be guarding a property that currently holds rather than fixing a break. | Nothing. ✅ **Dispatched and read 2026-08-27**: green, 11 of 11 jobs, at `44617edb6`. The format gate above **fired and was fixed** — 17 files, all of them ones we had edited since the previous green, so `stable` moving was ruled out rather than assumed. ⚠️ **CI runs Dart 3.13.2 and this machine has 3.12.2**, so formatting locally is a guess CI judges; it happened to be right. ⚠️ The run is behind the head by however many doc commits have landed since — re-derive with `git rev-list --count 44617edb6..HEAD` rather than reading a number here. It said "two" and was falsified by the commit that introduced it <br><br>⚠️ **The green in this cell is stale, found by a cold read 2026-08-28.** Two later `at_client_sdk` runs both **failed** — `9414f8bd2` and `02999c453`, the latter an ancestor of HEAD. ⛔ **But it is not an unattributed red**: `02999c453`'s failing job is `pqe2e_tests`, the notify namespace fold diagnosed and fixed in `d43a5acb3` — **the very next commit**. ⚠️ **That was true on 2026-08-28 and is not now**: a later run the same day, `e2af5db26`, SUCCEEDED and is an ancestor of HEAD, so the reds above are superseded rather than standing. What remains true is the distance between the newest run and head — re-derive it, and never read a colour out of this cell. ⛔ **No count here** — one was written as "six" on 2026-08-28 and was already seven when the commit carrying it landed, in the very cell that records that trap two sentences earlier. Re-derive: `git rev-list --count 02999c453..HEAD`. Re-derive with `gh run list --branch gkc-pq-d1-spike`; never read a result out of this cell |
+| **two shipping dartdocs assert a security property the tree does not have** | **Found 2026-08-29 by an adversarial review of the secret-sharing substrate, and neither is about any in-flight change.** `secret_store.dart:65-70` says key material the SDK needs to survive a restart is filed into `AtKeys` instead, *"which keeps the atSign's private keys out of whatever backend an app happens to supply"*. Five sites write exactly that material into the store — every held nskey private re-primed at each client start (`nskey_seeding.dart:370`), a freshly minted one (`:525`), a rotated one (`nskey_rotation.dart:198`), the atSign-level signing-root **private** (`pq_signing_root.dart:1048`) and every arriving conveyed secret (`pairwise_secret_sharing.dart:990`) — and `putSecret` calls `_persist()` on every write, handing `persistence.save` the complete list with `Secret.value` as plaintext base64. `nskey_private_filing.dart:36-39` likewise promises a filed private lands with *"the at-rest protection those implementations already provide"*, which is untrue of `FileAtKeysIo` with no passphrase. The SDK ships no persistence implementation, so this bites only apps that wire one — which is the documented supported case (*"platform keystore, biometric storage"*). What is owed is a ruling on which half moves: the promise or the behaviour. Related at-rest work is already tracked as KF-1 in `roadmap.md` and this row must not duplicate it | Nothing |
+| **`AtRpc` request ids collide, and the responder drops the second request without a NACK** | **Found 2026-08-29 while dartdocking the RPC traps. A defect, not a doc gap: there is no caller-side way to avoid it, because the id is minted inside the factory.** `AtRpcReq.create` uses `reqId: DateTime.now().microsecondsSinceEpoch` (`packages/at_client/lib/src/rpc/at_rpc_types.dart:17`), and the clock ticks about once per 15-20 microseconds on this machine, so ids minted back to back repeat. Measured 2026-08-29: **926 of 1000 mints collided (92.6%), and 968 of 1000 adjacent pairs were identical**; 10,000 mints yielded 553 distinct values. <br><br>Three consequences, worst first. **(1)** With `enableRequestMutex`, the responder puts an **immutable** record named `${reqId}.session_mutexes...` with a 30s ttl (`at_rpc.dart:483-488`) whose key does **not** include the requester, so two genuinely different requests colliding inside that window look like one request delivered twice: the second loses the immutable put and the responder returns at `at_rpc.dart:462` without even a NACK. That arm is cross-process, so awaiting each call does not avoid it. **(2)** `AtRpcClient.call` does `completerMap[reqId] = Completer()` and then returns `completerMap[reqId]!.future` (`at_rpc.dart:60,63`), so a second call in the same tick overwrites the first's completer: the first caller's future never completes, and both callers receive whichever response arrives first. **(3)** `call` has **no timeout**, so each of those is a permanent hang rather than an error. <br><br>⛔ **Live outside this tree.** `sshnoports` trunk uses AtRpc in 7 Dart files; `noports_core/lib/src/npa/npa_impl.dart:152` sets `enableRequestMutex: true`; `noports_core` pins `at_client: ^3.11.0`, so it takes any 3.x published here. `sshnpd_impl.dart:1992-2018` also reimplements the same completerMap pattern with the same overwrite, and caches the id per client atSign at `:2002` — sshnpd sends one auth-check request per incoming client connection, which is exactly the several-in-one-tick shape. <br><br>**What is owed is a ruling from gkc, then the fix.** He would prefer **UUIDs** (2026-08-29). The obstacle is that `reqId` is not only a payload field: it is carried in the atKey name (`request.${reqId}...` at `at_rpc.dart:333`, `${respType}.${reqId}...` at `:594`) and parsed back with `int.parse` at both ends (`:429` responder, `:545` requester), which logs a warning and **drops** the message on failure. So a String id is a major-version, reader-ships-first change: every responder must be deployed before any requester mints one, and with sshnpd on customer machines that window is long. The non-breaking alternative is a random 53-bit int from `Random.secure()` — 53 bits being the largest range every JSON parser round-trips exactly — giving a collision chance of about N²/2⁵⁴, or 5×10⁻⁹ at 10,000 live ids. Nothing reads the id as a time: every `.reqId` use in at_client and in all seven NoPorts files stores, compares or echoes it, with no arithmetic and no ordering. Whichever way it goes, `call` should also **refuse** a duplicate id rather than overwrite one (the `AtRpcReq({required reqId})` constructor is public, so callers can supply and repeat their own), and should take a timeout | gkc's ruling: UUID (breaking — String on the wire, responders deployed first, 4.0) or a random int (non-breaking, ships in 3.x) |
+| **the client half of ruling 128** | **Drop `namespaces` from `selfRetrofit` and `retrofitIdentity`, and the scoped signing-root branch with it** ([ruling 128](decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31), gkc 2026-08-31). Both are exported through `at_client_mixins.dart`, so this is a **breaking** change to public API. ⚠️ The at_server half REFUSES rather than forces, so it is safe to land first and this is cleanup rather than a coordination gate. Eleven call sites were measured against their own predecessors and none narrows — but that rig was built to refute *narrowing* verdicts, so no EQUAL verdict was ever challenged. **Challenge the EQUALs before relying on the zero**: removing a required parameter is exactly where a missed caller compiles fine here and breaks a consumer outside the tree | Nothing |
+| **`retiredAt` on the `_apsk` advertisement** | **Ruled 2026-08-31** (gkc). `ApskSigningKey` is `{kid, alg, pub, status}` — a verifier can see *that* a key is retired but never *when*, so there is nothing to compare a record date against. The advertiser stamps a retirement timestamp when it moves an entry to `retired`. ⚠️ It is a wire **and** at-rest shape change to `_apsk`, so it owes the doc sweep and the JAMS unit tree in the same commit. ⛔ A record's `createdAt` is a **caller assertion** the atServer honours (`:cAt`), not a server attestation — do not design against it as an unforgeable clock | Nothing |
+| **ruling 129's blast radius: 14 statements still assert the retired client-side subtree walk** | **Swept 2026-08-31 over 9,139 files** (unignored recursive, so 5,966 more than `git grep` alone sees; `git status` empty, so no untracked misses). ✅ **Already corrected:** ruling 121's doctrinal sentences — it said the exclusion set must be the subtree and ordered client-side work FIRST, both superseded — **UC-A5.3** c2, rewritten to assert the cascade, and **UC-G2.5** c4, WITHDRAWN 2026-08-31 rather than rewritten, because UC-A5.3 already asserts the cascade and restating it would claim one behaviour under two rows (denominator 232 → 231). Its closing *"both halves are unbuilt"* is corrected too: the record is unbuilt, the walk is retired. ⛔ **Still asserting the retired design, FALSIFIED:** UC-A5.2 c2's closing sentence; `acceptance.md`'s *"Both halves are unbuilt"*; the UC-A5.x `Impl/verify` paragraph calling the subtree clauses unpinned; `implementation-plan.md`'s row scheduling client-side-subtree-first; `detail/acceptance.md`'s clause-gap register listing the one-element exclusion set as a defect owed a fix — it is now correct behaviour and that entry is spent; `detail/decisions.md` section 122's tail citing a subtree gap; and `a5_rotation_test.dart`'s GIVEN/WHEN/THEN comment, the only `.dart` file asserting the retired framing. ⚠️ **True today, false the day the cascade ships, so reword rather than delete:** `published_nskey_key_ring.dart`'s *"the conveyance excludes nobody"* dartdoc; `pairwise_secret_sharing_test.dart`'s `reason:` prose that excluding the predecessor *"buys nothing"*; the UC-A5.2 `provenIn` filing roster-membership-is-the-whole-gate as proof of a HAZARD when post-cascade it proves the mechanism suffices; and `implementation-plan.md`'s *"any enrollment the cascade misses"*, an empty set once the cascade is transitive. ⛔ **Separately owed:** [ruling 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05) item 2 is the canonical statement of unrevoke semantics and says only *"unrevoke restores the named enrollment"* — it must carry 129's guard, that the atServer refuses an un-revoke whose predecessor is not currently `approved` | Nothing |
+| **a v(N-1) `.atKeys` migration test** ([#2154](https://github.com/atsign-foundation/at_client_sdk/issues/2154)) | **Nothing in any pack reads a keyfile written by a previously published at_auth**, and D1 publishes at_auth 4.0.0-rc1 with keyfile changes — so this is the only test that would catch the new build failing to read a 3.3.0 document. Verified 2026-09-01 rather than inherited: a fixture IS checked in at `packages/at_auth/test/data/@alice🛠_key.atKeys`, but it came from `2f844f097 feat: at_auth package initial commit` and **nothing records what wrote it** — that directory holds the one file and no version note — so it cannot serve as the v(N-1) capture. Four at_auth tests read it (`at_keys_io_test`, `at_keys_test`, `assurance_test`, `at_auth_test`) and assert PRESENCE only: six `isNotNull` fields, plus authentication and assurance. `at_keys_io_test.dart` does hold three read→flush cycles and **all three write their own file first** from a synthesized `AtKeys` into a temp path — exactly the defect the issue names, showing only that the writer and reader agree with each other; a fourth uses the `legacyAtKeys()` helper the issue names. ⚠️ **The issue names `pq_rollout_matrix_test.dart`, which DOES NOT EXIST** — the matrix is `tests/pq_matrix/`, with `packages/at_client/test/acceptance/g1_rollout_matrix_test.dart` on the acceptance side. Its substance holds: `published/lib/arm.dart` and `published/bin/read_apsk.dart` carry no keyfile handling at all. ✅ **The capture dependency the issue calls the hard part is ALREADY SATISFIED** — `tests/pq_matrix/published/pubspec.lock` resolves **at_auth 3.3.0**, the previous published at_auth, so that arm can write the fixture. ⛔ **A SECOND ARM, and it is what makes this a blocker rather than a nice-to-have ([ruling 137](decisions.md#137-auth_cli-has-two-roles-and-they-take-opposite-postures-2026-09-08)).** auth_cli's approver commands default to `pqReady`, so the first approver run against a legacy-flat keyfile retrofits it and rewrites it as a version 1 document — every operator's keyfile, on first use. Nothing anywhere tests whether the *previously published* at_auth can parse a version 1 document, which is the mirror of the direction below and the one this default now exercises in the field. The same `tests/pq_matrix/published/` arm that writes the v(N-1) capture is what reads it. Acceptance is the issue's: the document checked in with its package version recorded beside it, every field surviving a read → mutate → flush cycle, backend-agnostic and naming any legacy Hive box explicitly, and a mutation that reddens it when a reader drops a legacy field. ⚠️ **`detail/implementation-plan.md` states this as owed in S-3's body and in section 14.25's table** — those are history; this row is the one home | Nothing |
+| **the onboarding-CLI proxy pack cannot run locally** | **Make `tests/at_onboarding_cli_functional_tests_proxy` runnable on this Mac.** All four of its tests cascade from step 1, the CRAM onboard through the proxy: `Onboarding failed : Exception: The connection went away before a response arrived`, raised by at_lookup's `outbound_message_listener.dart` when the socket closes mid-read. ⚠️ **Not a branch regression, and do not re-derive that:** measured 2026-09-06 as a three-arm differential — with the X6 work in the tree, without it, and at the exact commit whose CI run passed that same pack — 0 of 4 every time, identical failure. CI runs the same compose file and the same images (`atsigncompany/virtualenv:vip` plus `atsigncompany/at_proxyserver`) and passes, so the variable is the host: macOS Docker Desktop with the proxy bound to host port 443, versus a Linux runner. `/etc/hosts` already maps `vip.ve.atsign.zone`, so the documented prerequisite is not the cause. Until this is fixed the pack is unverifiable locally and the Linux runner is the only place it is a real check, which is why a storage, connection or lifecycle change cannot be fully gated before pushing. | Nothing |
+| **two rails cannot see what they claim to guard, found by a cold read 2026-09-08** | ⓵ **`docs_structure_test.dart`'s *no TODO row names a section whose body declares itself done* cannot see a row that names no `###` section.** The legacy-posture build row sat in P0 with all five of its pieces marked DONE and nothing went red, because its cell is bold prose and `detail/decisions.md` links rather than a section reference. It was struck by hand. The guard's reach is narrower than its name, and a row that carries its own body — which is most of them now — is outside it. ⓶ **`detail/implementation-plan.md` holds 8 malformed table rows**, measured by rebuilding the check over `HEAD` and over the working tree and diffing: 8 either side, 0 introduced. They RENDER, with content silently dropped past the header's cell count, so nothing but the hook reports them and the hook fires on every write to that file whoever caused it — which trains a reader to ignore it. Neither is urgent; both are the kind of thing that is only ever found by accident | Nothing |
+
+**P2 — should be done if there is time**
+
+| Item | What is owed | Blocked on |
+| ---- | ------------ | ---------- |
+| **the test-pack speed-up branch: what it still owes before its PR** | Branch `gkc-test-pack-speedup`, off trunk, pushed to origin on 2026-09-11 with no PR open; re-derive its log and its remote state rather than quoting them. Landed there in 2026-09-10/11: the functional pack from 1.478s to 0.707s per test, the at_client unit suite from 91.1s to 52.9s summed, its swallowed `TypeError`s from 121 to 0 and its SHOUT/SEVERE/WARNING from 811 to 235, all classified. Still owed: (1) the 4 live packs last ran at `e616e4cbc`, and `git rev-list --count e616e4cbc..HEAD` says how far the tree has moved since, 3 of those commits touching `packages/at_client/lib`; (2) the functional pack is at 0.707s/test against a 0.5s target, and the gap sits in 3 undiagnosed tests measured 2026-09-10 at `seeding_tail_abandoned` 15.5s, `key_package_amendment UC-A2.5` 8.2s and `pq_released_peer` 6.4s (re-measure with `--file-reporter json:` on `tests/at_functional_test/runLocal.sh`); (3) at_client test lints other than deprecations, counted by `dart analyze test \| grep -oE '\- [a-z_]+$' \| sort \| uniq -c` from `packages/at_client`, none of them behavioural; (4) fixtures that still mint an RSA keypair per test, each worth ~140ms per client: `grep -rn 'generateAtPkamKeyPair\|generateAtEncryptionKeyPair' packages/at_client/test` lists the sites, and on 2026-09-11 21 of them across 11 files sat inside a `test` or `setUp` body rather than a `setUpAll`, `legacy_shared_key_encryption_test.dart` (4) and `wire_literal_pins_test.dart` (3) the largest; `test/test_utils/test_keypairs.dart` is the cache they would use, keyed by (atSign, enrollmentId) and never by the atSign alone. ⛔ **Rejected, and recorded so it is not re-derived:** `Mock.throwOnMissingStub()` suite-wide was probed in 3 files and turned 14 of 39 tests red, dominated by `getPreferences` and `getRemoteSecondary`, whose unstubbed nulls are harmless, so it conflates a null that is fine with a null into a non-nullable type; and moving the unit tests off hive onto `InMemoryAtClientStorage` was measured at 3.25ms for a client's whole lifecycle on either backend against 142ms for one RSA keypair, so storage was never where the time went | Nothing |
+| **a client running as the atSign's own credential gets no revocation backstop** | **A ruling from gkc, and it is a question now because the REASON moved rather than the behaviour.** `NskeySeeding.rotateIfRevoked` skips a client whose enrollment id is absent or `primary`, which is what [UC-G2.5](../acceptance.md#175-uc-g25--an-nskey-rotation-mints-fresh-material-and-carries-nothing-forward) states and what [ruling 130](decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31) point 8 accepted — on the ground that such a client "returns before fetching anything", so there was no roster fetch for the check to ride. **The check as built makes its own `enroll:infons` call**, and a legacy-PKAM connection to a migrated atServer authenticates AS `primary` (at_server's `pkam_verb_handler` assigns it), so the verb would answer one — verified on at_server `origin/trunk`, not inferred. So the exclusion is now a deliberate refusal, kept only to leave the catalogue clause true. Decide whether the atSign's own credential — often the only client running — should get the backstop; if yes it is one predicate, and the clause and its justification move with it | gkc's ruling |
+| **`enroll:fetch` should carry `metadata`, so a caller can ask for ONE enrollment** | **Ruled 2026-09-09 (gkc): "fetch by ID should always just fetch that single enrollment."** It cannot today. **Verified on at_server `origin/trunk`**, not taken from at_client's dartdoc: `_fetchEnrollmentInfoById` in `enroll_verb_handler.dart` returns `appName`, `deviceName`, `namespace`, `encryptedAPKAMSymmetricKey`, `status` and `expiresAt`, and no `metadata` — while `metadata.keyPackage` is what `approve` needs for both its reads, and what conveyance seals to. So the client-side fix filters instead, and this row is the direction. **A multi-repo seam**: at_server adds `metadata` to the fetch response, at_commons ships nothing new (the field already round-trips), at_client then switches `_enrollmentById` to `enroll:fetch`. ✅ **The authorization worry is RESOLVED, and there is no regression to guard against.** It looked like one: `enroll:fetch` of another enrollment demands `__manage` and access to every namespace the target holds. But both gates loop over the target's namespaces and call the same `isAuthorized`, differing only in an `operation` string — and **verified here against at_server `origin/trunk`, not taken on report**, that string is read in exactly one conditional, `operation.isNotEmpty` in `_applyEnrollmentValidations`, and otherwise appears only in a log message. Nothing branches on its value, so the per-namespace verdict is identical for the two operations, while `approve` *adds* requirements fetch lacks (the target must be pending and hold at least one namespace). Callers who can approve are a strict subset of those who can fetch. Fetch is also more permissive for self, short-circuiting before the namespace loop. ✅ **MERGED to at_server trunk 2026-09-09** (PR #2803). **Verified here against `origin/trunk`, not taken from the merge notice**: `'metadata': enrollDataStoreValue.metadata` is in `_fetchEnrollmentInfoById`'s projection, and both shas the at_server session named are on `origin/trunk`. The key is **always present** and null when the record carries none, so absent-versus-unparsed needs no second call. ⛔ **A VERSION SKEW TO DECIDE BEFORE SWITCHING, raised by at_server:** `metadata` on fetch is in `at_secondary_server` **3.16.5** and not in `c3.16.4` or earlier, which shipped 2026-09-07. Against an older atServer a fetch returns the six old fields and **no `metadata` key at all** — which, read through the always-present assumption, looks like *this enrollment has no metadata* rather than *this server cannot tell you*. Those two lead opposite ways: the first says approve as a legacy request, the second says fall back to `enroll:list`. Decide explicitly whether the client detects the older server or requires the newer one; silently treating absent as empty is the one option that is wrong. ⚠️ **One asymmetry to know before switching:** `enroll:list` gives `metadata` only to a caller whose own `__manage` grant is writable, withholding it from a read-only administrator, while `enroll:fetch` will give it to anyone its gate admits. That was ruled acceptable — a key package is a public bundle for sealing *to* an enrollment — and the two verbs now deliberately disagree, with an atServer test pinning the disagreement. What is owed here: settle the skew question above, then switch `_enrollmentById` to `enroll:fetch`. | Nothing — at_server merged it 2026-09-09 |
+| **three client-startup paths still read the whole enrollment roster to find their OWN record** | **Audited 2026-09-09 under gkc's ruling that every call site be questioned; the decision is made and unbuilt.** `NskeyRotation` (before revoking, to check its own `__manage` access), `NskeySeeding.authorisedNamespaces` (its own granted namespaces) and `selfRetrofit`'s signing-root step (the new session's namespaces) each call `fetchEnrollmentRequests()` unfiltered and then `.where((e) => e.enrollmentId == <its own id>)`. **All three want one field of their own record, and none needs the roster.** ⚠️ **They need no at_server change and no filter argument**: `LocalSecondary.getEnrollmentDetails()` already exists, already issues `enroll:fetch` for the client's own enrollment, is already memoised per client, and is already public *"so the second caller shares this one rather than issuing its own `enroll:fetch`"*. `enroll:fetch` returns `namespace`, which is all three want, and a caller may always fetch its OWN enrollment with no privilege test. **Why it matters beyond CI:** these run at client START, so on an atSign whose roster has grown they cost what the approval cost — 46.6 seconds each, measured. What is owed: redirect the three to `getEnrollmentDetails()`, and check whether `selfRetrofit`'s freshly-switched client can use the memo or needs its own read. | Nothing |
+| **`subscribe()` returns before the monitor attaches, and a notification sent in that window is lost** | **Measured 2026-09-09**, CI run 34335539241. `NotificationService.subscribe()` returns its stream immediately while the monitor attaches to the atServer asynchronously — 424ms after the send had already begun, in the run that exposed it. The atServer accepts a notification sent in that window and reports **`delivered`**, but does not hand it to a monitor that attaches afterwards. ⚠️ **This row first said the notification was LOST, and that is wrong — corrected 2026-09-09 after the at_server session traced it.** `NotificationManager.notify` persists to the notification store *before* it enqueues — its own dartdoc reads *"Persists the notification and calls [enqueue]"* — and `monitor:<epochMillis>` replays persisted notifications since that epoch, which is what `fetchOfflineNotifications` drives. **Only the live hand-off is lost, and the record survives.** What makes the hand-off silent: `received` and `self` are `StreamController.broadcast()`, which discards on `add` when nothing is subscribed, and there is **no `hasListener` guard anywhere** in `at_secondary_server/lib` (verified 2026-09-09 across its 98 Dart files, with both controls). ⚠️ **And `delivered` never meant what it looks like on this path**: the SENDER's atServer stamps it when the RECIPIENT's atServer answers `data:success`, so it reports server-to-server acceptance and says nothing about a monitor. ✅ **The harness half is fixed**: `concurrent_notify_test.dart` now polls `NotificationService.listening` before notifying, and says why. ⛔ **Setting `fetchOfflineNotifications` in that pack was the WRONG fix for this test and was rejected** — the replay would have made it pass without the live monitor ever receiving anything, and proving live monitor delivery is the entire reason the test exists. It would have gone green for the wrong reason, which is worse than the red. **The product question is open**: an app that subscribes and immediately notifies hits exactly this, and the API gives it no signal that it must wait — `subscribe()` returning reads as readiness. Three ways out, all unexamined: have `subscribe()` await attachment; redeliver what arrived while unattached; or document the wait and expose the readiness check on the barrel where a caller would look for it. ⚠️ **This was latent for two months and green the whole time** — the e2e enrollment approval took ten minutes, so the clients were always long attached before any test notified. Making the approval fast did not cause it, it stopped paying for it. | Nothing |
+| **five table rows in `detail/implementation-plan.md` silently drop their content** | **Found 2026-09-09** by the Markdown table-cell hook, which fires on any write to that file. Five rows have a cell count that disagrees with their header, so a renderer either DROPS everything past the header's last column or shifts the cells left and renders the tail empty. Lines 1015, 2797, 3941, 8509 and 8512 as the file stands at `f1bbea08f`; each was checked byte-identical to HEAD, so none is recent damage. **The content is not lost from the file, only from the rendering**, which is why nothing has noticed — a reader on GitHub sees a truncated row with no way to know. ⚠️ **Line numbers rot**: re-derive them by writing to the file and reading what the hook prints, rather than trusting these five. The fix is to rebuild each row from its cells and escape any pipe belonging to the content, never to append. Deferred rather than fixed on the day it was found: it surfaced during the `legacy` vocabulary sweep and is unrelated to it. | Nothing |
+| **tidy up the revoked enrollment backlog on `@ce2e1`-`@ce2e4`** | ⛔ **gkc is doing this himself, once the performance fix has landed** (stated 2026-09-09) — recorded so it is not forgotten, not so that someone else does it. **The backlog, measured 2026-09-09** by a temporary probe in CI run 34328258930: `@ce2e1` 2416 enrollments, `@ce2e4` 2431, `@ce2e3` 2408, `@ce2e2` 2411 — of which **2406-2429 are `revoked`** and exactly one is `approved`, one `pending`, none `denied` or `expired`. Every end-to-end run adds four more, because `enrollment_teardown.dart` **revokes** rather than deletes and the atServer keeps a revoked record for good. ✅ **The bleeding is stopped**: `enrollment_setup.dart` now sets `apkamKeysExpiryDuration` to three hours on each request, so the atServer retires a run's enrollment instead of leaving another revoked record behind. That does nothing about the 2400 already there, which is what this row is. ⚠️ **Do not treat this as the fix for the slow approval** — the client-side filtering is, and it has to hold on an atSign whose roster is large, because a real atSign's roster only grows too. Deleting the backlog would hide a regression in that filtering rather than prevent one. ⛔ **DELETING A REVOKED RECORD RELEASES ITS KEYPAIR, and that is not obvious** — reported by the at_server session 2026-09-09: the atServer's key-uniqueness rule refuses any request installing key material already held by a stored enrollment **in any status**, expired and revoked included, so a revoked record is what stops that keypair being enrolled again. Deleting it silently re-enables enrolling a revoked keypair, which is the opposite of what revocation is for. **Fine here** — these are CI atSigns whose keys are demo material — but it makes the deletion a deliberate act rather than tidying, and it is the reason at_server will not build automatic reaping of revoked records without a ruling on that trade. The revocation history lives in separate records and survives the deletion either way. | gkc — he is taking it |
+| **the functional pack's CI time stepped up about 20% and the posture flip is NOT the cause** | ⛔ **Recorded so it is not re-derived.** The suspicion, raised 2026-09-09, was that flipping the 3.x default posture to `legacy` slowed the functional jobs. **It cannot have, and the reason is structural rather than a timing argument:** every functional client is built through `TestUtils.getPreference`, whose `posture` is a **required** parameter with no default — written that way on purpose, so that a release moving the default cannot change what an existing test exercises. An unscoped sweep of the repository (1450 Dart files) finds 225 bare `AtClientPreference()` constructions, of which exactly one is a functional client: `TestUtils.sdkDefaultPosture`, read by the single test in `crypto_era_default_test.dart` whose subject IS the default. The only production bare construction is in `HiveAtClientStorage.openBackend`, a parameter bag carrying a storage path into `StorageManager`, from which no client is built. **The CI numbers agree:** the one post-flip run measured `functional_tests (stable)` at 11m21s and beta at 11m36s, against 11m35s and 11m32s for the pre-flip run five hours before it. **The real step is at a different commit.** Every run carrying `9c84011df`, the trunk merge-back of 2026-09-07, measures 8m23s-11m35s on stable; every run before it measures 5m30s-9m52s, and the two storage jobs appear at the same boundary. What is owed: decide whether roughly two minutes a run is worth chasing, and if so bisect within the merge-back rather than around the posture default. | Nothing |
+| **`useRemoteAtServer` on a key another atSign shared reads the wrong name and fails** | **Measured 2026-09-08 while rewriting `bypasscache_test`**, 115 identical failures in one run: a RECEIVER calling `client.get(key, GetRequestOptions()..useRemoteAtServer = true)` for a key whose `sharedBy` is another atSign gets `key not found : @bob🛠:<key>.<ns>@alice🛠 does not exist in keystore`. It issues an `llookup` of the UNCACHED name against the receiver's own atServer, where the copy is stored as `cached:@bob🛠:<key>@alice🛠`, so it can never match — and it does not fall through to a `lookup:` at the publisher either. The option's stated job is to skip local storage, and for a key shared by someone else the remote read of it is a `lookup:`. A caller following the dartdoc therefore gets a not-found where the value exists. **Not the same thing as `bypassCache`**, which does reach the publisher: that is why the rewritten test uses raw verbs and why an earlier attempt at it failed. What is owed: decide whether the option should resolve a shared key through `lookup:` or refuse the combination, then say so in its dartdoc either way — today it does neither. | Nothing |
+| **`apsk_server_side_test.dart` poisons the shared atSign for the rest of the run** | Found 2026-09-08 reading CI-log cluster 4. Two records are left on `@alice🛠` and never restored, and every later `listForNamespace` re-verifies both and logs SEVERE — 314 lines in CI run 34205926815, 20 locally: ⓵ the cross-enrollment-overwrite test's own positive control writes the literal `this enrollment may write its own` over the ATTACKER enrollment's `_apsk`; base64-decoding that string fails at the space after `this`, which is the `FormatException: Invalid character (at character 5)` in the logs. ⓶ the healing test leaves an enrollment whose published key package is still signed by the authentication key that its first mint drops from `_apsk`, so the package is rejected until a restart re-signs it — no client restarts for it, so it is rejected for the rest of the run. **Neither is a product defect**: ⓶ is the state [ruling 134](decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08) covers — a posture move replaces the enrollment rather than reclassifying its key, and the superseded enrollment keeps its own `_apsk`, so nothing it signed is stranded outside the pinned-axis case that ruling leaves open. The test reaches it by healing an enrollment in place, which no posture move does. The pack's rule covers both: a test that destroys shared server-side state gets its own atSign. Either give the file one, or restore what it overwrites and restart the healed client. ⚠️ Fixing ⓵ removes about half the cluster; do not read the quieter log as ⓶ being gone. ✅ **The wording the reading did falsify is corrected** (2026-09-08): `apskEntries`, `authenticationSigningKey`, `design.md` and this row's clause in the catalogue all justified the deletion with *an enrollment that holds signing keys held them from birth*, which the ledger itself calls false in general; each now states the premise instead. | Nothing |
+| **bypassCache: the publisher's atServer answers with the old value for a minute after its client reports the update pushed** | ✅ **CLOSED 2026-09-08 by rewriting the test, on gkc's design.** The failure was always the same poll — the test read the publisher's atServer through a client until it held the value just written, and that read kept returning the pre-update value for the full minute: red in 5 of the Dart 14 e2e job's last 6 attempts and never once in the other e2e job. **The rewrite removes the question rather than answering it.** Every verb now runs on an atServer, for both atSigns: the publisher writes with a built `update:` carrying the `ttr`, so the value is on its atServer when the verb returns and there is nothing to poll for. Auto-notify stays ON — it is what carries each write to the receiver's cache — and staleness is made by DELETING the cached copy instead of by suppressing the notification. The receiver then reads `llookup:cached:…` to see the copy, deletes it, asserts it is gone, and `lookup:`s the key, which its atServer answers by fetching from the publisher. No client `put`, `get` or sync is involved, so values travel as plaintext and the test measures two atServers rather than the client's storage. ⚠️ **One wait remains and it is the only asynchronous step**: the hop that carries a shared value to the receiver's cache, polled by name with a deadline. A gate before the delete waits for the UPDATE to reach the cache, or a late notification would re-create the copy after the deletion. ⚠️ **`autoNotify=false` is gone from the tree**, which also removes the persisted-state hazard `sharing_key_test` and `deletion_key_test` work around in their own setUp. ⚠️ **What is no longer covered: the `bypassCache` FLAG itself.** With auto-notify on, cache and origin agree, so the flag is unobservable; the test now exercises the atServer path the flag also reaches. Recorded in the test's own header. Evidence: 4 clean runs of the file and the full non-PQ e2e set at +51, plus a mutant — replacing the delete with a read — which goes red on the absence assertion quoting its own reason. | Nothing |
+| **`CkManager`&#39;s missing-cut-time guard cannot fire** | **Found 2026-08-31 while writing [UC-A5.6](../acceptance.md#66-uc-a56--where-a-lever-is-deliberately-not-asked-and-where-a-yes-is-refused-out-loud).** `CkManager.ensureCurrent` returns early when the cache holds a current content key with no recorded `cutAt`, and the comment explains the absence as a cache entry predating cut-time recording. **There is no such entry.** `ContentKeyCache` is in-memory and built per client (`crypto.dart` is its only production construction site); `putAsCurrent` is the sole writer of all three `current` maps and always records a cut-time (`cutAt ?? DateTime.now().toUtc()`); `evict` removes the three together; and nothing in the workspace subclasses or reimplements the class or passes `cutAt: null` — measured with `grep -rn "extends ContentKeyCache\|implements ContentKeyCache"` (0) and `grep -rn "cutAt: null"` (0). So the branch is unreachable and its justification describes a persistence the cache does not have. ⛔ **It was written as an acceptance clause and removed rather than kept** — stating it would enshrine dead code as the specification. **Two ways out, and they are different decisions:** delete the guard and the comment, or make the cache durable, which is a real feature (a restart currently re-resumes from the conveyance record instead). Deleting is the smaller claim and the one the evidence supports. | Nothing |
+| **where `mintAdvertisedSigningKey` lives was never put to gkc** | ⛔ **A decision I said I would bring back and did not** — the transcript has me saying it is "a public-API placement call in at_auth rather than something I should pick silently", and then picking it silently. It sits in `packages/at_client/lib/src/enroll/signing_key_mint.dart`, exported from `at_client_mixins.dart`, with three consumers: `pq_native_onboard`, `self_retrofit`, and **`at_onboarding_cli`, which imports it across a package boundary** — the smell that prompted the question. Either it belongs in at_auth beside the enrollment machinery that uses it, or at_client is the right home and the cross-package import is fine; both are defensible and neither is written down. Surfaced by the wrap-up's transcript sweep, 2026-08-30. | gkc |
+| **`runCliCommand` streams the CLI child's log unprefixed, so two processes are indistinguishable in one transcript** | `tests/at_onboarding_cli_functional_tests/test/utils/at_client_cache.dart` does `proc.stdout.transform(utf8.decoder).listen(stdout.write)` — the child's output goes verbatim into the parent's stdout with no prefix. Loggers that carry the atSign (`SyncService (@x)`, `AtClientImpl (@x)`) can still be told apart; the ones that matter for PQ diagnosis cannot — `AtClientSecretSharing`, `SigningKeyMinting` and `VerbEnrollmentDirectory` name neither an atSign nor a pid. **Measured 2026-08-30:** a whole line of reasoning was built on attributing barrier warnings to the approver by adjacency to a neighbouring log line, and adjacency in an interleaved stream is not evidence. The only instrument in that harness that attributes unambiguously is the `StateError` from `proc.exitCode.timeout` naming the command. <br><br>**Owed**: prefix the child's lines (e.g. `at_activate>` ) or tag them with the pid, and say so in `runCliCommand`'s dartdoc so the next reader does not repeat the inference. Also note there that `auth_cli` sets `AtSignLogger.root_level = 'shout'`, so an un-`-v`'d child logs almost nothing and a silenced child reads exactly like a stalled one. | Nothing |
+| **the CLI functional pack cannot run beside the main one** | `tests/at_onboarding_cli_functional_tests` binds the same ports as `tests/at_functional_test` (64, 443, 25000-25999, 6379), so the two cannot run together — run them sequentially, or shift one with the `BASE_PORT` argument its `runLocal.sh` takes. ⚠️ Salvaged 2026-08-29 from a struck-through row that was otherwise spent: the row's claim (that the CLI pack had no local harness) was false and had been retracted, but this consequence of the harness it does have was true and lived nowhere else | Nothing |
+| **test-helper cleanup: a shared package, and no silent `signingAlgo` default** | **Proposed by gkc 2026-08-28, and I agree with it.** Three parts.<br>**1. Make `enrolAndAuthenticate`'s `signingAlgo` REQUIRED** and fix the resulting compile errors. It defaults to `rsa2048` today, so a caller passing a post-quantum posture silently gets a legacy enrollment that retrofits itself on first client construction and comes up as a **different enrollment id**. That is not hypothetical: it cost this session three rounds of a live test failing on its own controls before the cause was traced. It is also exactly the *“a cross-cutting change that must reach every call site: make the parameter required and let the compiler enumerate them”* shape — the two axes (`signingAlgo` and the preference's `authenticationKeyAlgorithm`) must be chosen together, and a default lets one move without the other.<br>**2. Reconcile the drift** — see the row above; the e2e copy is an ancestor missing `signingAlgo`, `atKeysIo`, `keyExchangeMode`, `reuse` and the `kpid`/`kpidOrNull` split.<br>**3. A `tests/packages/test_helpers` package**, never published, holding what is genuinely shareable across the test packs. The drift is the argument for it: *“Keep them in step if the enrollment flow changes”* is a convention, and the measured result of relying on it is 200 diff lines. ⚠️ **A same-package precedent exists and is deliberately NOT this**: `packages/at_client/test/test_utils/recorded_logs.dart` was extracted on 2026-08-28 when a third copy of one log-capture helper was about to be written, and it stayed inside at_client because that is where all three copies were. It is a candidate for the shared package the day a live pack needs to assert a log level, and not before.<br><br>⚠️ **One caveat, offered rather than a blocker.** A shared package couples the packs: a change wanted by the functional suite lands in the e2e suite too, and the e2e suite is slower and harder to run, so a breakage there is found later. That is a real cost — but it is the cost of *noticing*, where the drift's cost is not noticing. Worth taking. ⚠️ **Do the required-parameter change FIRST**, while there are still two copies: the compiler will enumerate every call site in both packs, which is a free inventory of what each actually needs before deciding what belongs in the shared package | Nothing |
+| **the two `EnrolledClient` helper copies have drifted** | **Found 2026-08-28 while tracing why an enrolled client signs under a different id from the one the helper returns.** `tests/at_functional_test/lib/src/enrolled_client.dart` (264 lines) and `tests/at_end2end_test/lib/src/enrolled_client.dart` (169) are **200 diff lines apart**, and the e2e copy's own header says *“Deliberately a copy … Keep them in step if the enrollment flow changes.”* They are not in step.<br>The e2e copy is a strict **ancestor**, not a divergent fix — checked, because a copy can carry something the canonical one lacks and this one does not. What it is missing: the `signingAlgo` parameter (it hard-codes `rsa2048`, so **every** enrollment it makes retrofits under a PQ posture with no way to opt out), the `atKeysIo` parameter, `keyExchangeMode`, `reuse: true`, legacy mode, and `kpid`/`kpidOrNull` — where it still has a plain `final String kpid` rather than the throwing getter that tells a caller why a legacy-mode enrollment has none.<br><br>**What was done now:** the `enrollmentId` dartdoc was hardened in BOTH copies, each worded against its own code — the e2e one says it has no `signingAlgo` and always retrofits, because a doc asserting what other code does is a doc that ships a false claim. **What is owed** is porting the parameters, which is a change to a pack this session could not run: `at_end2end_test` needs its own virtualenv and its only consumer of the helper is `test/pq/nskey_multi_enrollment_test.dart`. ⚠️ **Do not port blind** — the `kpid` field becoming a getter changes what a legacy-mode caller sees, and the e2e pack must be run, not merely analyzed | Nothing |
+| **there is no supported way to wait for the PQ startup tail** | **An interface gap, found 2026-08-28 while fixing the onboarding functional test.** A client's PQ startup runs as `unawaited(_pqBootstrap!.startup())` (`at_client_impl.dart:754`) and its steps write the `.atKeys` file through `AtKeysIo.update`. An application that must know the tail is quiet — before deleting or replacing the keyfile, before exiting, before handing the file to another process — has nothing on the `AtClient` interface to ask. `AtClient.ensureReachable(namespace)` is the supported wait and answers a narrower question: it publishes **one** namespace's advertisement, which is a single startup step of twelve. The only thing that answers *has the startup finished* is `PqClientBootstrap.startupComplete`, reached through `AtClientImpl.pqBootstrap`, which is `@experimental` — so a caller needs both a downcast off the interface and an `ignore` for `experimental_member_use`. `tests/at_onboarding_cli_functional_tests/test/at_onboarding_cli_test.dart` now does exactly that, in `quiesceStartupTail`, and the comment there records why `ensureReachable` was not used. ⚠️ **The decision is whether the interface should carry it**, not whether the test should — an in-repo test can reach through, an application cannot without taking on the experimental marker | gkc, on whether this belongs on the interface |
+| **a rotating atSign could tell its senders, and probably can** | **A post-compromise-security tightening, raised by gkc 2026-08-28.** A sender learns of a recipient's rotation only by re-resolving that recipient's advertisement — `CkManager.ensureCurrent` compares the cached generation kid against the advertised one on every write and cuts a fresh content key when they differ, which its own dartdoc calls the only signal there is. `PublishedNskeyKeyRing` holds a peer's advertisement for `advertisementTtl` (15 minutes) plus `advertisementStaleGrace` (15 more if a re-fetch fails), so after a rotation a sender can keep sealing to the superseded generation — the one a revoked enrollment still opens — for that long. Shortening the ttl bounds it directly, at one `plookup` per destination per period. ⚠️ **UNMEASURED and the interesting half:** `ckConveyanceKey` addresses a conveyance `sharedBy` the sender and `sharedWith` the recipient, so every sender that has conveyed a content key to an atSign has left a `.__ck.` record addressed to it — which suggests a rotating atSign can enumerate exactly the peers that must re-cut, from its own atServer, and notify them. Probe that scan before designing anything on it; the addressing is read from the code, the enumerability is not | Nothing. It needs a probe before a design |
+| **the enroll responses that return details carry no expiry** | An at_server change, ruled by gkc 2026-08-27 and recorded in [decisions.md 118](decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27). ⛔ **POST-D1**, which is why it is a row and not a THEN clause: `acceptance.md` is D1's burn-down target, so a post-D1 behaviour cannot live in it | Nothing. It needs an at_server PR |
+| **`notificationStatusEnum` is not an outcome, and its name says it is** | **A dartdoc fix, not a behaviour change** — raised by the at_talk demo session 2026-08-26 and routed here by gkc, because every app author meets it and only one of them is that session. `NotificationResult.notificationStatusEnum` initialises to `undelivered`. With `checkForFinalDeliveryStatus: true`, which is the **default**, `_waitForAndHandleFinalNotificationSendStatus` polls and sets it from the atServer, so it means what it says. Pass **`false`** and that method returns early: the field is never assigned on the success path, so an accepted send, a refused send and a failed send all read `undelivered`. The only signal left is `atClientException == null`, which no field name suggests. ⚠️ **Verified here against the source, and the request understated one thing and overstated another**: the enum *is* assigned `delivered` on the default path, so the trap is narrower than "only ever assigned undelivered" — it needs the caller to opt out of polling. And the `on AtException` handler's own comment reads *"Setting notificationStatusEnum to errored"* while it sets `undelivered`, naming a value the enum does not have (`{delivered, undelivered}`). **Owed, and the comment comes first**: a reader who reaches that handler while debugging is told the distinction they are hunting for exists, goes looking for where `errored` is set, and concludes their build is stale — worse than an undocumented field, which at least does not mislead. Then the qualifier on `notificationStatusEnum` and on `NotificationResult`, naming `atClientException == null` as what to read instead. ✅ **Confirmed by the requesting session 2026-08-26**: `bin/at_talk.dart` passes `checkForFinalDeliveryStatus: false`, so the mis-scored cells were the inert opted-out path and the narrowing above is the accurate statement of the defect. ⛔ **No change to when the exception is caught rather than thrown was asked for, and none should be smuggled into a docs fix**.<br><br>⚠️ **A second, narrower shape found live 2026-08-27, and it survives the default.** A send-side failure never reaches the atServer, so the polling that assigns the enum has nothing to poll: the call returns `undelivered` with the real cause in `atClientException`, **whatever `checkForFinalDeliveryStatus` says**. Observed with a cold-start refusal. So the field reads the same for "the atServer said undelivered" and for "this never left the device", and only the exception distinguishes them — which is the same trap as the opt-out path, reached by a different route | Nothing |
+| **a pq enrolment costs a post-approval round trip** | Measure it, and decide whether the enrolment APIs should say so. A legacy enrollee carries its own symmetric key in and is done at approval; a pq enrollee must then **collect** the key the approver encapsulated to its key package, polling for the envelope (`enrollmentApkamSymmetricKeyResolver`, 30 s budget, 2 s interval). ⚠️ **Found 2026-08-26 by it breaking two tests**, not by design review: two authorisation tests in the CLI functional pack wait 10 s before approving and have a 30 s budget, and under the `pqReady` default that no longer fit — they now name `legacy` because they assert authorisation, not key exchange. The pin keeps them honest; it does not measure the cost | Nothing. It needs a measurement and then a judgement about whether callers are told |
+| [the registrar certificate test](../implementation-plan.md#the-registrar-certificate-test) | Three arms against a self-signed cert. The last S-5 behaviour change that exercises nothing, and the only one with a security consequence. ⛔ **POST-D1 clean-up, not a gate** (gkc, 2026-08-23) | Nothing. It lands wherever at_auth is next touched |
+| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Item 8 is the only one still waiting on a ruling. Items 20 and 21 are examined-and-left, not work; item 35 lands in `atGettingStarted` | gkc, on item 8 |
+| **at_auth `enrollment_submitter`** | Both defects are fixed in at_auth on both branches. What is left: **the at_client half of (b)** is not on the at_auth carve branch, because at_client's PQ secret sharing is not there at all. ⛔ **Do not apply the one-liner the review recommends** — it breaks the PQ OTP flow; see [detail](#the-enrollment_submitter-review-and-why-the-recommended-fix-is-wrong) | gkc scheduling it |
+| **a retrofit leaves the enrolment record memo stale** | `LocalSecondary.getEnrollmentDetails()` memoises into a field for the object's lifetime (`enrollment ??=`), and `_settleEnrollmentIdentity` is what populates it — with the OLD record, because it reads appName/deviceName/grants off it in order to carry them over. `_rederiveFromEnrollment` rebuilds the signer, the lookup and the id and does **not** clear it, so afterwards the client runs as the new enrolment while the record describing what it may do is the old one's. ⚠️ **Benign today and only by luck**: the retrofit copies the grants verbatim, so both records answer `isEnrollmentAuthorizedForOperation` identically. Two live readers — that gate on every non-`local:` local write, and `PqClientBootstrap._reconcileEnrollmentSnapshot`, which writes the stale record's appName/deviceName/namespaces into the keyfile under the NEW id. Found by a sweep after the [retrofitted-enrolment fix](#a-retrofitted-enrolment-cannot-run-an-authenticated-verb) and verified here | Nothing |
+| **at_lookup `OutboundMessageListener.read`** | `AT0014 "Unexpected response found"` pops one entry off `_queue` and clears `_buffer` **without draining the queue or closing the connection**, unlike both timeout paths beside it. A stale queued response is then handed to the next command, offsetting every read after it. It fired in none of the relayed-lookup runs that found it; it is a hazard on its own merits | Nothing |
+| [14.50](../implementation-plan.md#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | Scope the e2e teardown to the run that created the enrollments | Nothing. Needs no permission and no publish. ⚠️ **It cost a red on this branch 2026-08-27**: an `at_client_sdk` run on **trunk** overlapped a run on this branch (12:37–12:47 against 12:24–12:49) and the enrollment was denied mid-run at 12:44:42 — *"Cannot approve a denied enrollment"*. The next run, with no concurrent one, passed. **N=2 bounds no rate**; what it does show is that the collision is between runs rather than within one. ⚠️ **A THIRD occurrence 2026-08-27 18:08–18:25**, same signature — `AT0027 … revoked` **19 times** across six unrelated e2e files (`bypasscache`, `concurrent_notify`, `deletion_key`, `encryption`, `key_stream`, `notify`), all `@ce2e1`/`@ce2e4`. The overlapping run was found rather than assumed: `ek/fix-onboard-passphrase` ran 18:09–18:21, **entirely inside** that window. So it is now three observations, all cross-run, and the branch is not the variable — the *concurrency* is. ⛔ **This costs somebody a red roughly every time two branches build at once, and it is nobody's code that is wrong** ⚠️ **A FOURTH and FIFTH on 2026-08-31**, both `end2end_test_14`, both the *"Cannot approve a denied enrollment"* signature: runs at 19:35 and 20:01, carrying **4** and **3** concurrent `at_client_sdk` runs. ✅ **And the control that had been missing** — a run dispatched at 21:03 with **zero** others in flight went **11 of 11 green**, on newer code than either red. Five observations and one clean-room control. Filed with the timestamps as [#2197](https://github.com/atsign-foundation/at_client_sdk/issues/2197) |
+| [14.47](../implementation-plan.md#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | A unit-tree isolation flake in `local_secondary_sync_queue_test.dart`. Green alone and green in the full suite; red only in one hand-constructed ordering nothing runs | Reproduce at rate first |
+| [14.44](../implementation-plan.md#1444-residuals-from-the-at_chops-pr-review) | Two remain, both ⛔ **POST-D1** (gkc, 2026-08-23): at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence (amend that section in place), and `XWingCore.combine` sizes its buffer from its inputs' actual lengths while writing at literal offsets 0/32/64/96/128 | Nothing. Both ride the next at_chops touch |
+| **third-party dependency floors** | at_client alone declares **seven** below what it resolves — `path`, `crypto`, `uuid`, `archive`, `http`, `async`, `meta` — all minor or patch gaps, none checked against first use. The sibling floors were swept 2026-08-25; these were not.<br><br>✅ **The `at_persistence_secondary_server` half is FIXED on `gkc-at-client-storage-release`, 2026-09-06** — the floor is `^5.3.0` there, matching what the tree resolves. ⛔ **It had become a live compile break and this row is where it should have been caught:** X4a made `at_client/lib` call `HiveInstances`, which 5.3.0 is the first release to carry, while the package's own floor still said `^5.1.0`; the workspace root's own `^5.3.0` hid it, so nothing local would ever fail. A consumer taking 5.1.0, 5.2.0 or 5.2.1 would not compile. Found by a cold read 2026-09-06, not by any rail. ⚠️ **This paragraph said "at_client declares ^5.1.0 and this workspace resolves 5.1.0 … any consumer resolving fresh today takes 5.2.1" until then**; both numbers have moved. Found 2026-08-26 by the at_talk demo session, whose external resolution took 5.2.1 while mine took 5.1.0 and neither side would have noticed. That layer owns local storage, the commit log and the keystore. ⚠️ The same version pair already cost time once, when the local keystore's expired-record handling was characterised from 5.2.1's source while the workspace resolved 5.1.0 — the claims held in 5.1.0 by luck. "Readable as interchangeable" is what makes this expensive | Nothing. Two questions, not one: are the seven floors too low, and is at_client actually correct against the top of the range it already admits |
+| **at_client README says nothing about the PQ surface** | Raised 2026-08-27 while adding `AtClient.ensureReachable`. `packages/at_client/README.md` is 382 lines and mentions **none** of: the PQ startup, namespace-key seeding, reachability, or the send/receive asymmetry that an app meets first. Grep it for `startup`, `reachab`, `seed`, `nskey`, `pq`, `post-quantum` — zero hits. ⚠️ **The consequence is the one the at_talk demo session actually hit**: an app author meets the asymmetry — you can send the moment you are up, you cannot receive until your key is published — only when a *peer* reports them as unreachable, which names the wrong party. The dartdoc on `ensureReachable` now states it, but a dartdoc is read by someone who already found the method. ⛔ **Pre-existing rather than something the PQ work broke**, and deliberately not smuggled into the feature commit | Nothing. It needs a decision about how much of the PQ surface belongs in a README at all |
+| **at_auth README** | `packages/at_auth/README.md` describes `FileAtKeysIo` at `:144` and `:191` and never mentions `at_auth_io.dart`, which is the barrel it now lives behind. One or two sentences where `FileAtKeysIo` is first named | Nothing |
+| [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Only ③'s **orphan-growth** half is owed here, and it is a decision before it is code. SS-4 resume was ruled NO RESUME | The decision |
+| **rebuild `at_virtual_env:local`** | The concurrent-relayed-lookup fix merged to at_server trunk; the local tag is whatever tree last built it, so it did not become a fixed atServer by virtue of the merge. Rebuild from a named ref before the next live run that needs one. ⛔ Trunk is now a **fixed** arm — an unfixed control has to come from `a37e3e3b` | Nothing. The recipe is in [Re-deriving the state](../implementation-plan.md#re-deriving-the-state) |
+| **a sequential, abort-on-failure `batch`** | **A protocol enhancement, raised by gkc 2026-08-27**: "do these N things in this sequential order, abort when any one fails". ⛔ **Multi-repo** — at_commons, at_client/at_lookup and at_server in one coordinated sweep. **What `batch` does today**, read from `at_server` **`origin/trunk`** (`batch_verb_handler.dart`) rather than from the local checkout, which is on another branch: it takes `batch:<json>`, a list of `{id, command}`, runs them **in the given order**, and returns `{id, response}` for each. The ordering is already there. What is missing is the **abort**: each command is wrapped in its own `try`, an `Exception` becomes an error response and the loop **carries on**, so a batch whose third command failed still runs the fourth. There is no all-or-nothing and no rollback. **Why it matters here:** it would remove the mint lock's take-to-write window *structurally* rather than by shortening it, which is all [the CPU hoist](#a-client-that-exits-during-its-startup-tail-abandons-seeding) could do — a create-lock-then-write sequence that aborts as one leaves no window in which a client holds the lock and has not yet written. The same shape recurs wherever this design writes a guard record and then the thing it guards: the signing-root mint under `_rootlock`, and any future write-once-then-publish pair. ⚠️ **Two silent drops found in that handler while checking, and they are prerequisites rather than extras** — an abort-on-failure contract is unimplementable while a command can vanish without a verdict. (a) A command no handler accepts is skipped with **no response entry at all**; (b) when `getErrorCode` returns null the failure is logged `severe` and, again, **no response is added** — so the response list can be shorter than the request list, and only an id-set comparison reveals it. Also `on Exception` does not catch `Error`, which escapes the loop and abandons the rest of the batch with no per-command verdict for any of them | ⚠️ **It would also shrink the signing-root mint lock's ttl.** That lock is held for `signingRootMintLockTtl` because the winner must survive several round trips, and the ttl is simultaneously how long a client that died mid-mint is refused on its next start — see [ruling 124](decisions.md#124-the-signing-roots-mint-lock-is-sized-against-starvation-not-contention-2026-08-28), which sized it. A batch collapses the round trips, so the ttl could shrink to the measured mint cost. Nothing. A design and a cross-repo sweep, both after D1 |
+| **the "ONE list" claim is still false — `docs/projects/wasm/` is a whole second project** | ⛔ **Found by a cold read 2026-08-27, after the at_lookup carve-out was supposedly the last one.** `docs/projects/wasm/` holds **six** documents — `roadmap.md`, `design.md`, `implementation-plan.md` (task series R/S/T/P/I/C/W/J/D plus the client storage X series), `decisions.md`, `acceptance.md`, `js-api.md`; there is no `plan.md`, and its `P1`–`P5` are at_server persistence task ids, not a priority band Task backlog` (P1–P4, with undone rows) and `## 9. Open questions`. The PQ plan mentions WASM once, as a discharged at_auth barrel split, and the "it is the ONLY one" sentence added 2026-08-27 is therefore **wrong on the day it was written**. ⚠️ **Do not fix this by adding a third carve-out sentence** — that is the pattern that hid at_lookup. Either its open items come into these bands, or `docs/projects/` gets an index that names every live project and the PQ plan stops claiming to be the only list. Three other unlisted homes the same read found: `detail/implementation-plan.md` **§15.1** (a 13-row open-work table, in the file that is supposed to hold only discharged material, and it **disagrees with the live P1 row on a figure** — 71 credential-ladder uses against 88); the at_lookup plan's `monitor:multiplexed` item, which says *"Owed elsewhere"* and appears in no list; and **20 `lib/` doc comments citing planning-doc paths**, enumerated by `file:line`, which violate a global non-negotiable <br><br>⚠️ **And two of its links resolve to a path that does not exist, found 2026-08-28 while resolving the whole doc tree.** ⚠️ This row first said the links "leave the repository", which its own evidence contradicted in the next sentence — they resolve *inside* the repo, to a directory that is not there. `docs/projects/wasm/implementation-plan.md` lines 278 and 314 point at `../../../plans/wasm/api-designing.md` and `../../../plans/wasm/key-storage.md`, which resolve to `<repo>/plans/wasm/` — a directory that does not exist. A doc sending a reader outside the repository is a broken handoff whatever the target holds, and nothing in this tree checks that project's links. Recorded here rather than fixed, because the wasm workstream is not this one ⚠️ **And a second leak, found by a cold read 2026-08-29:** `docs/projects/at-lookup-consolidation/plan.md` carries a *"Next is the deletion's preconditions"* sentence — a ranked next move living outside this table, in a project the memory index calls FINISHED. Its three items were carved into the P2 and P3 rows here, so the sentence now duplicates them and a reader landing there is told to start work that is already listed. Reported rather than fixed: it arrived after this wrap-up's fix pass ⚠️ **One more second home found by a cold read 2026-08-31, flagged in place rather than fixed.** `detail/implementation-plan.md` section 15 was headed *"D1 burn-down — the single index of what D1 owes"* and its own table of contents said *"start here for what is left"* — it is retitled as a superseded snapshot, but its `### 15.1 Open work` table still holds live rows duplicated from `## TODO` (step 20&#39;s rotation arm among them), so reconciling it row by row and leaving a pointer is still owed. | Nothing. It needs a ruling on where the index of projects lives |
+| **`roadmap.md` says it is "one of six docs" and there are seven** | Trivial and recorded because it is the *same* miscount memory already carries a correction for — `post-quantum-cryptography.md` is the omitted one. `ls docs/projects/pq/*.md \| wc -l` returns 7. The memory copy got fixed and the repo doc carrying the identical error did not, which is the direction the rules say to watch | Nothing |
+| **key packages and envelopes are APKAM-signed with `rsa2048` by default** | **Raised 2026-08-29 by the same review, as the one place RSA still touches the post-quantum path.** No post-quantum key is ever *conveyed* under RSA — every conveyance is KEM-sealed and `sendEnvelope` has no classical branch, which was measured and adversarially refuted three ways. But the signature that authenticates a key package and an envelope defaults to `SigningAlgoType.rsa2048` (`enrollment_key_package.dart:76`), so an adversary who breaks RSA can forge a key package advertisement or an envelope signature. That is an active attack on the conveyance's **integrity**, not a harvest-now-decrypt-later read, so it does not touch the confidentiality invariant — but it is the remaining RSA dependency in the substrate and deserves a ruling rather than being left implicit | Nothing |
+| **no non-test caller is known to reach `sendEnrollRequest` at a PQ posture** | ⛔ **Carried over 2026-08-31 from `untracked/pq-data-signing-key-states.md`, which was deleted that day when its design moved into [`design.md` 9.8](../design.md#98-the-data-signing-key-an-enrollment-owns-from-birth). This was the one item in its "Not asserted" list with no tracked home** — the other three are either recorded elsewhere (the `getApkamPublicKey` cache, more sharply, in this file's own advertisement-fetch row) or spent. **The question:** the whole creation-time minting design turns on an enrolment being created at `pqReady` or `pqActive`, and it was never established that anything but a test does that. ⚠️ **It is a reachability claim, so grep the CALLERS, not the capability** — `sendEnrollRequest` is reached through `at_activate enroll` and through `AtOnboardingService`, and a caller that names no posture gets `AtClientPreference`'s default, which is `pqReady` today and becomes `legacy` under [ruling 138](decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08) — so the answer this row is looking for changes with the ladder, and the check must name which default it was run against. On today's default the likely answer is "every default caller", and if that is right the row closes by recording it rather than by building anything. Worth an hour, because a NO would mean the creation-time path is unexercised outside tests and the heal path is what everything actually uses | Nothing |
+| **the conveyance catch still swallows too much** | The read now rethrows `CryptoProviderNotRegistered` and logs the rest, but the broad `catch` remains. Its own dartdoc specifies the inverse: *a record that is nowhere is not an error*, and everything else is. **Probe what an absent record actually throws on the local and the remote leg**, then swallow only that. Deliberately deferred 2026-08-31 rather than guessed at | Nothing |
+| **a signing key can be advertised before it is filed** | `apkam_signing.dart` names the window in its own dartdoc: a mint publishes before it files, so on an enrollment holding no signing key a read takes the authentication fallback *at the moment the advertisement stops naming it, and the envelope verifies against nothing*. ⚠️ **Reversing the order does not fix it** — the keyfile would then hold a key the advertisement does not name, and an envelope signed with it verifies against nothing for the same reason. The fix is not to sign during the transition, or to keep the authentication key advertised until both writes land. Reachable only by an enrollment that authenticates post-quantum and holds no signing key | Nothing |
+| **four refusals for two user errors, one of them uncatchable** | Withdrawing UC-G2.10 c6 surfaced this. A sender that omits an algorithm and one that cannot implement it reach **four** refusals across three exception branches, and two give opposite advice for the same symptom. ⚠️ `AtSigningVerificationException` extends `AtException`, not `AtClientException`, so an application catching `AtClientException` around a write catches three of the four and misses that one. Changing its supertype is an at_commons change with cross-package blast radius | Nothing |
+| **UC-A2.6 c2 is pinned by a citation that admits an unproven arm** | The `proves:` text ends *"⚠️ NOT proven: an enrollment revoked while it holds an already open, already authenticated connection — this arm reconnects"*, and the clause is counted proven anyway. Under the project's own strict rule that is an over-claim no rail can see. ✅ **It is now closable live**: at_server `trunk` closes every open connection carrying a revoked enrollment id, and the ordering race that made it unreliable was fixed 2026-08-12. Hold E4's authenticated connection open, revoke over a second connection, assert the existing connection is closed rather than merely refused at reconnect | Nothing |
+| **three plan sentences still describe a retired exemption as live design** | `preserveFirstEnrollmentOnRetrofit` is retired by [ruling 118](decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27), and three sentences in this file still reason from it — including settled-question 6, *"What caps the legacy root credential afterwards?"*, whose answer the ruling inverts. Found by grepping the retired mechanism's vocabulary unscoped; not fixed in the same session by gkc's choice | Nothing |
+| **an `at_lookup` unit test resolves a hardcoded production FQDN, and its deadline equals the test timeout** | `packages/at_lookup/test/secondary_address_cache_test.dart:16` calls `CacheableSecondaryAddressFinder('root.atsign.wtf', 64).findSecondary('@cicd1')` — a live network call to the **production** atDirectory, sitting in the **unit** pack. Its own group name already reads *"this should be moved to functional tests"*, so the misplacement is known and unacted. ⚠️ **It reddens unrelated PRs.** Measured 2026-09-06 on [#2208](https://github.com/atsign-foundation/at_client_sdk/pull/2208): `build_and_test (at_lookup)` failed at `136 tests passed, 1 failed` on this test alone, while that branch changed nothing it depends on — `git diff origin/trunk..HEAD -- packages/at_lookup packages/at_commons` is empty, at_lookup does not reference `at_persistence_secondary_server` anywhere, and the run's entire 247-package resolution diff was the one overridden package. The same call answered in **0.37s** on the previous CI run and produced nothing in **30.13s** on this one; the atDirectory was accepting TLS and then not answering, so the failure is a property of the network, not the diff. The same outage took `end2end_tests` and `end2end_test_14` down in the same window. <br><br>⚠️ **A second, separable defect in the same test.** The finder's deadline is `AtNetworkTimeouts.effectiveDefault` = **30s** and the dart-test default per-test timeout is also **30s**, so a single non-answering attempt consumes the whole budget and the retry delays `[50, 100, 150, 200]` can never run. Confirmed from the log by **zero** `will retry in` lines where the neighbouring `root.no.no.no` test emits four — the emitter works; that path is simply unreachable. The test therefore cannot exercise the retry behaviour it was written around, whatever the network does. **Owed:** move it to a functional pack as its own group name asks, and give whichever pack keeps it a timeout longer than the finder's deadline | Nothing |
+| **`bypasscache_test` reads a stale value, and did so before X4a** | ✅ **CLOSED 2026-09-08, same rewrite as the row above** — one fact had two rows here, and this is the older of them. The stale read was neither client-side cache invalidation nor the ttr: it was the test reading the publisher's atServer through a client and waiting a minute for a value the publisher had not yet been given, because `put` is local-first and the push had not happened. The rewrite writes with a verb on the publisher's atServer, so there is nothing to wait for. | Nothing |
+| **the local e2e fixture cannot reproduce an APKAM enrollment-id defect** | `tests/at_end2end_test/test/local_setup.dart` mints each keyfile straight from `at_demo_data`'s PKAM keys, so every local `atKeys/*.atKeys` carries **`enrollmentId: null`** — read out of all four to confirm. `config.yaml` meanwhile declares `authType: 'apkam'`, so a local run *looks* like the APKAM CI job while authenticating with no enrollment id. That is why the defect fixed in `6f1c7770f` — 18 failures and 67 `AT0401 pkam authentication failed` in CI's `end2end_test_14` — was invisible locally at a clean +32, and why the fix could only be proven in CI. ⚠️ **Not a server-version difference:** the pack was re-run against the newer locally built `at_virtual_env:local` and still passed +32 with zero AT0401, which falsified that hypothesis. **Owed:** either have `local_setup.dart` perform a real APKAM enrollment so the local pack exercises a non-null enrollment id, or say plainly in its dartdoc that it cannot, so the next reader does not take a local green as covering that job | Nothing |
+| **the nskey ladder's state-1 assertion races the in-process holder** | 2 red in 7 CI functional jobs (beta of run 34160882867 on 2026-09-07, stable of run 34200675382 on 2026-09-08), 0 in 4 local runs. **Chronology from the 2026-09-08 window:** the rollout-1 install's bootstrap asked the other enrollment for the private at 07:51:59.9, five seconds before the state-1 read; the holder, primed by `hydrateStoreFromFiling` just before c2, answered on its next sweep; sync pulled the answer at 07:52:04.5, and the read running at that moment found it, so the read that must miss returned `written by the previous build`. An ask is an envelope — a durable record the holder's sweep finds whenever its listener runs — and the sweep deletes a request it has handled, so a holder that sweeps before it is primed consumes the ask unanswered; moving the assertion ahead of the priming alone would not do. **Fixed in the test:** the holder's listener starts only after state 1 has been asserted and the holder primed; its start-up sweep then answers the asks its sync has pulled (the bootstrap's, the add-time one, the miss's), and state 2 waits on those. Functional pack green on 201 with the fix, the arm included; after it, 0 red in the 4 functional jobs of CI run 34205926815, the arm on stable green. One run is not a rate for an intermittent that fired 2 in 7: what is owed is the count over the next CI runs, and nothing else. | Nothing |
+| **a store write in flight when `stop()` lands still reaches the closed store** | The 2026-09-08 guards check the stopped flag on entry, and a flag cannot reach a write that had already passed its check. In the functional pack's second run that day, `enrollment_namespace_gate_test.dart`'s teardown logged `stop()` at 09:27:45.676 and, seven milliseconds later, `Failed to persist the pull cursor at 324 … Box not found` and `Failed to save last received notification ID … Box not found`: the round's `persistPullCursor` and the receipt handler's watermark put had each entered before the flag flipped, and the fixture's `storage.closeAll()` ran while their `put`s were awaiting the store (the `abandoned: the service was stopped` line follows the failed persist — the bail-out after it). The `connection went away` pair at the same instant is the monitor's own socket closing under its in-flight verb. Rate: 0 such lines in the first of three runs that day, 4 in each of the next two, all three green on 201 — the third run's four are inside `key_package_amendment_live_test.dart`'s UC-A2.5 body (cursor 1013, with an `Unexpected exception in sync`), the same family at a site not yet read. Candidate fix, unbuilt: `stop()` drains work in flight — a completer the round and the receipt handler hold while writing — before it returns, so a `closeAll()` after `stop()` finds nothing writing. A lifecycle change, so all three packs. | Nothing |
+
+**P3 — nice to have, explicitly after D1, or in another repo**
+
+| Item | What is owed | Blocked on |
+| ---- | ------------ | ---------- |
+| **a pull cut by `stop()` keeps none of its batches' progress** | `_syncFromServer` persists the pull cursor once, in a `finally` after the last batch, and the stop-path guard skips that persist, so a client stopped mid-pull re-pulls from its previous cursor at the next start. Measured on the atServer logs CI keeps (`ve-atserver-logs-stable` of run 34200675382): the twenty clients `enrollment_test.dart` built in a row each pulled from `-1` (711 commits, 29 batches). Not a regression of the guard: the beta log of run 34160882867, before the guard existed, shows three consecutive clients in the same file pulling from 237 — the `finally` reached a closed store and persisted nothing either. Persisting after each batch makes progress durable at batch granularity, so a fresh install with a long history stopped mid-pull resumes rather than restarts. Reproduce from such a log: list the first `sync:from:N` verb each inbound connection id sends (fields split on the bar character; the id is the fourth). | Nothing |
+| **the detail file has five broken table rows** | ✅ The diary half is done 2026-09-08: the P0 row is shrunk to what is unread and its body moved to the detail file. What remains is the five rows, plus three links in that file that resolve to nothing because they were written relative to the plan's directory (`design.md` twice, `roadmap.md`; found 2026-09-08 by resolving every link in both files). A cold read of the P0 row `the CI logs carry hundreds of errors that are not test failures` on 2026-09-08 found it usable but hard: its measurements and its remedies share one cell, so the same fact appears in two tenses ("forces" as the pre-fix world and "forces … only for an app-sourced request" as the post-fix one), and four words carry two senses within it — *round* (a sync round, a network round trip), *key* (a record, key material), *stop* (the lifecycle call, plain ceasing), *primary* (the enrollment id, the house word for important). Three verbs there read either way — *holds* ("the atServer holds it"), *bails* (to which boolean?), *stands down* (returns early, or hands off?) — and *system-sourced* is used in the P2 `bypassCache` row before the P0 row defines it. What is owed: demote the measurement narrative (the clusters, the four factors, the before/after figures) to `detail/implementation-plan.md` and leave the row stating only what is still owed (clusters 4, 8 and 9), with each ambiguous word qualified at its use. Separately, `detail/implementation-plan.md` has five table rows whose cell count disagrees with their header (lines 1015, 2797, 3941, 8490, 8493 on 2026-09-08 — the table hook names them on any edit to the file), all older than this session; rebuild each from its cells. | Nothing |
+| **an invariant nobody wrote down: no ML-DSA-authenticating client without a data signing key** | Flagged during the design discussion as "worth naming" and then not named — it appears in no doc and no comment (grepped 2026-08-30). It follows from ruling 113's coherence rules rather than from any single decision, which is exactly why it has no home: `AtClientPreference` refuses an empty `dataSigningKeyAlgorithms` beside a non-rsa2048 authentication key, so the combination cannot be constructed. Worth one sentence in [113](decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18), because a reader meeting the refusal has no way to see that it is an invariant rather than a validation quirk. | Nothing |
+| **at_server: revoking the first enrollment does not retire its key material** | ⚠️ **A READING, not a measurement — three files on at_server `origin/trunk` at `5c0e603c`, and deliberately not probed.** The CRAM branch writes `privatekey:at_pkam_publickey` = the first enrollment's APKAM public key (`enroll_verb_handler.dart:387-389`). Exactly two references to that record exist in all of `at_secondary_server/lib` — that put and `pkam_verb_handler.dart:74`'s get — so nothing else writes it, revoke included. A holder of the first enrollment's private key can therefore present it with **no** enrollment id, land on the `pkamLegacy` branch, and be granted **full unscoped access**, because `isAuthorized` returns true unconditionally for a null enrollment id (`abstract_verb_handler.dart:216-219`) — after that enrollment has been revoked. **Settle it with a probe before treating it as true**: enrol, revoke, then authenticate with the same keypair and no enrollment id. If it holds, the fix is a decision, not a derivation — the record cannot simply be cleared on revoke, because on a pre-enrollment atSign it is the only credential there is, and clearing it locks the owner out. Surfaced 2026-08-30 while measuring commit 7's route ([why](#why-commit-7-needs-no-atserver-change)), which is where the reading of each of those three files is recorded. | Nothing, except that it lands in `at_server` |
+| **at_server: a String `apsk` on any enroll verb returns an internal error** | Measured 2026-08-30 against a live atServer: `enroll:update:{"enrollmentId":"…","apsk":"x"}` answers `Internal server error : type 'String' is not a subtype of type 'Map<String, dynamic>?' in type cast` instead of an `IllegalArgumentException`. `EnrollParams.fromJson` casts `json['apsk'] as Map<String, dynamic>?`, and that parse runs at `enroll_verb_handler.dart:109`, **before** `_validateParams` at `:114` and before the OTP check — and `enroll:request` is allowed on an unauthenticated connection (`:94`), so an unauthenticated caller reaches it. Low severity: a Dart type name is all that leaks. It is still an unhandled cast on a public verb, and `apskLegacy`'s `as String?` has the same shape. Found in passing while probing commit 7's route. | Nothing, except that it lands in `at_server` |
+| **at_lookup major: deleting the ladder makes a keystore mandatory** | Moved into this list 2026-08-27 — previously reachable only from `MEMORY.md`, so a session reading the repo concluded it was not owed. ⛔ **Gates the later at_lookup MAJOR, not D1**; the consolidation itself is finished and shipped as a minor. [Measured](../../at-lookup-consolidation/plan.md#blocks-the-major--deletion-does-not-remove-the-ladder-it-makes-a-keystore-mandatory) by attributing 107 ladder authentications: the remaining traffic is **not un-migrated code**, it is callers who supply **no `AtKeysIo`** and correctly get no authenticator. So deleting the ladder makes a keystore **required** to authenticate — breaking for every consumer that builds a client from a preference alone, and at_tools' `at_cli` is named as exactly such a consumer, outside this tree. A bridge exists and the ladder shows it: its legacy leg signs with an empty public half, a shape at_auth already builds elsewhere | Nothing. A decision about the bridge before it is code |
+| **at_lookup major: `atLookUp.enrollmentId` has 51 uses, not 7** | Moved into this list 2026-08-27, same reason. ⛔ **Gates the later at_lookup MAJOR.** [51 uses across 34 files](../../at-lookup-consolidation/plan.md#blocks-the-major--atlookupenrollmentid-has-51-uses-not-the-7-first-recorded) workspace-wide, from `dart analyze` rather than a grep. ⚠️ **Two denominators, and quoting one for the other is the error already made**: "how many modules ask the lookup which enrollment they are" is 7; "how many uses break when the member goes" is 51. ⛔ **Do not re-derive with a grep on the member name** — it is reached through at least eight differently-named receivers, so a bare `enrollmentId` grep over-counts wildly and `atLookUp.enrollmentId` **under**-counts, returning 9. Only the analyzer separates them by receiver type | Nothing |
+| [the `monitor:` verb has no acknowledgement](../implementation-plan.md#the-monitor-verb-has-no-acknowledgement) | A protocol seam across three repositories. ⚠️ **NOT D1.** The caller-side mitigation is already built and live-proven | gkc scheduling it, after the release train |
+| [atServer outbound connection pooling](../implementation-plan.md#atserver-outbound-connection-pooling) | ⚠️ **In another repo (`at_server`), and gkc asked for it as a discussion rather than a change** | gkc scheduling it |
+| **doc-set reduction, phases 3–5** | ⛔ **RULED BY gkc 2026-08-23, AFTER D1 — do not start it while D1 is open.** End state is five files: `roadmap.md` (stale, needs a pass), `design.md`, `acceptance.md`, `decisions.md` and this plan. Phases 1 and 2 landed 2026-08-23 | D1 closing |
+| [14.46](../implementation-plan.md#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **Removal at 4.0** — delete the parameter from all six declarations and let the compiler enumerate the ~76 remaining same-package sites. Phase 1 (`@Deprecated`) shipped 2026-08-20 | The 4.0 majors |
+| [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | ⛔ **NOT D1** — it gates the post-R-2 stop-release. Both moves it needs are B-3 phase 1, which is parked | Two unscheduled moves its body names |
+| [14.29](../implementation-plan.md#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` half is *deferred, not owed* — a pure optimisation since the 2026-08-03 ruling took DEP4 off it. Two small S-3 items, none blocking | Nothing blocks D1 |
+| [14.43](#1443-the-functional-suites-convergence-race) residue | ⛔ **NOT D1, and NOT PQ** (gkc, 2026-08-23) — it is at_client's general sync, and no use case asserts sync ordering. The test-side fix landed in `ccf4987a4` | Nothing |
+| [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) residue | ⚠️ **In another repo: `at_persistence_secondary_server`.** Its keystore `get()` does not filter expired records | Separately owned |
+| [14.39](#1439-pqposture-and-the-rollout-it-drives) **public-data signature verification** | ⛔ **POST-D1, and deliberately not in the acceptance catalogue** (gkc, 2026-08-23). Stated plainly because it reads as an omission otherwise: `pqActive` already **signs** public data and nothing anywhere verifies it — not at_client, not any atServer — so we emit a signature no one checks, knowingly | Design. Undesigned |
+| **`acceptance-report.json` is ignored only on this branch** | ⚠️ **Deferred by gkc 2026-08-25 — recorded so the deferral is not silent.** `.gitignore` here carries `acceptance-report.json`, `citations.jsonl` and `acceptance-ledger.md`; **trunk carries none of them** | Nothing. It resolves itself when this branch lands; until then, name files rather than directories when staging on the carve |
+| **at_server's `at_server_spec` hosted fallback** | In another repo, and gkc has deliberately left it for a considered decision. at_server's `unit_tests` job runs `dart pub get` per package with no melos step, so a PR changing `at_server_spec` and `at_secondary_server` together tests the new server against the old published spec, green | gkc |
+| **eight ragged table rows in `detail/implementation-plan.md`** | Measured 2026-08-30 while moving a row body there, with a checker that splits on the unescaped separator so a correctly-escaped `\|` is not reported as a break: **8 rows carry a different cell count from their table's header.** ⚠️ **The line numbers this row used to list had ALREADY ROTTED** — it named 8464 and 8467, which are now a prose line and a table HEADER; the two ragged rows moved to 8484 and 8487 as the file grew. A row that exists to point at malformed rows pointed at the wrong ones, which is the same defect it reports. Re-derive rather than quoting, and the command is the citation: split each row of each table on the unescaped `\|` and compare its cell count with its header's. They pre-date that day — the same eight are present at the commit before it, two of them merely shifted by the insert. ⚠️ **A ragged row still RENDERS**, as a plausible row with its content in the wrong column, which is worse than a broken one. Two of the eight (8464, 8467) sit under a header naming *Item* and *What is owed*, the shape where the displaced cell is a `Blocked on` — invisible to the rule that picks the next task. The other six are in demoted bodies where nothing is picked. **Fix by rebuilding each row from its cells**, never by appending: split on the unescaped separator, replace the one cell, rejoin; then re-count every row of that table. Re-derive rather than trusting these line numbers, which move with every insert above them | Nothing |
+| **#2161's deferral note is now false, and gkc declined to correct it** | ⛔ **A REJECTED PROPOSAL, recorded so it is not raised a third time.** [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) is closed, and its *Deliberately not doing now* section says the `AtLookupImpl.signingAlgoType` default *“rides the next at_lookup version whenever one is opened for another reason”*. That did not happen: at_lookup reached `3.7.0-rc1` without it, and the defect was instead fixed one layer up in at_auth — `authenticatorForChops` now requires `signingAlgo` and `hashingAlgo` ([#2198](https://github.com/atsign-foundation/at_client_sdk/pull/2198), merged 2026-09-01). So a reader of that issue is told the wrong thing about where the fix went. gkc was offered the correction twice on 2026-09-01 and declined both times; it is a comment on a closed issue, not code. ⚠️ **The deprecated field itself needs nothing** — it dies with the credential ladder in the next major, and requiring it or making it nullable is breaking, so neither could land in 3.x | Nothing — this is a record, not a task |
+| **at_lookup major: the CLI's authenticator install is unit-green only** | ⛔ **Found missing from every list by a cold read 2026-09-01** — memory asserted this had been moved into this table on 2026-08-27 and it had not, so it has been owed by nobody since. The harness half IS discharged: `tests/at_onboarding_cli_functional_tests/runLocal.sh` exists and the pack passes locally. What survives is in [section 6 of the consolidation plan](../../at-lookup-consolidation/plan.md): the CLI's authenticator install has **54 unit tests and no live check**, and its six remaining construction sites are not uniform — some authenticate, one only checks `isOnboarded`, and two send a bare `from:` through a proxy. Installing an authenticator is harmless where unused, since it only runs when authentication is required, but the absence of a live check means the migration wants a runner exercising the CLI first. Re-derive the sites rather than quoting them; the plan names line numbers that will have moved | Nothing |
+| **`docs/knowledge/sdk.md` cites line numbers in nugget BODIES, which its own rule forbids and its rail cannot see** | **Found by a cold read 2026-09-01.** `README.md` rules that Evidence cites a PATTERN, not a coordinate, because *“a line number that rots usually keeps resolving and now points at something unrelated, so it reads as verified while being wrong”*. Five coordinates survive in nugget PROSE rather than in Evidence bullets, and `knowledge_test.dart` only scans lines beginning `**Evidence:**` or `- `, so the rail is blind to them. All five were verified correct at the ref they name, which is precisely the state the rule calls dangerous. ⚠️ **The fix is not only to rewrite them** — a rail that cannot see half its own file's citations is the deeper defect; widening the scan is what stops this recurring | Nothing |
+| **a functional client built on an empty keys store** | Found 2026-09-07: `tests/at_functional_test/test/crypto_era_default_test.dart` builds its client through `TestUtils.initAtClient` on an `InMemoryAtKeysIo` holding nothing for the atSign, relying on the injected AtChops. The construction-time read that decides the enrollment ([ruling 132](decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07)) now logs "Could not read the keys" at warning — once per functional run, measured — and the client runs as the caller's id, null. Either write the demo keys into that store or stop passing one: a warning that fires on every run of a fixture is noise that hides the real case. | Nothing |
+
+### Why commit 7 needs no atServer change
+
+⛔ **This section used to propose an atServer change and leave its central
+question open. Both were wrong, and both were settled by measurement on
+2026-08-30** — two throwaway probes against a live `at_virtual_env:local`, run
+from `tests/at_functional_test` and deleted afterwards. A pre-enrollment atSign
+can create an approved, fully privileged enrollment for itself on **today's**
+atServer, and the credential question the proposal called "the crux" is already
+answered by a mechanism the atServer ships.
+
+**What is genuinely refused is one branch, not the outcome.** A pre-enrollment
+atSign authenticates with the flat `at_pkam_publickey`.
+`pkam_verb_handler.dart:72-76` takes the no-enrollment-id branch, sets
+`AuthType.pkamLegacy` and leaves `enrollmentId` null on the connection.
+`enroll_verb_handler.dart:406` gates the self-enrolment **auto-approve** on
+`authType == AuthType.apkam`, and `:410-414` refuses a null parent id outright,
+so such a connection cannot enter that branch. Read from at_server
+`origin/trunk` at `5c0e603c`; that much of the original reading holds. What did
+not hold was reading "this branch refuses it" as "the atServer refuses it".
+
+**The route that works: request, then approve on the same connection.**
+`isAuthorized` returns **true unconditionally** for a connection whose
+enrollment id is null (`abstract_verb_handler.dart:216-219`), and
+`_handleApproveDenyRevokeUnrevoke` authorises through it — so the pre-enrollment
+client is its own approver. An authenticated connection is asked for no OTP
+(`enroll_verb_handler.dart:300`), so the request carries nothing the client does
+not already hold; it lands `pending`, and the next verb on the same connection
+approves it.
+
+Measured, one connection, one test:
+
+| step | the atServer answered |
+| ---- | --------------------- |
+| `enroll:request` — appName, deviceName, a fresh APKAM public key, `{"*": "rw", "__manage": "rw"}`, the symmetric key RSA-wrapped to the atSign's encryption public key, **no OTP** | `{"enrollmentId":"e893f69a-…","status":"pending"}` |
+| `enroll:approve` on the same connection, payload built as `EnrollmentApprover` builds it | `{"status":"approved","enrollmentId":"e893f69a-…"}` |
+| `pkam:enrollmentId:…` under the newly minted keypair | authenticated |
+| `enroll:list` | `namespaces {"*":"rw","__manage":"rw"}`, `approval.state approved`, `apkamKeysExpiryInMillis 0` |
+
+⛔ **Both probes were deleted after they were read, so neither table above nor
+the `@bob🛠` one below can be re-run from anything in this tree.** What survives
+as a rail is `pq_pre_enrollment_retrofit_test.dart`, which re-establishes the
+same preconditions from scratch on every run; the tables are evidence for a
+ruling, not a harness. Re-deriving them means re-writing the probes.
+
+⚠️ **What that proves is the verb path, not key conveyance.** The probe sent the
+approve IVs under field names the atServer does not read, so the stored
+encryption keys are not decryptable by the new enrollment — irrelevant to the
+question asked, which was whether the atServer accepts the sequence, and stated
+here so nobody reads the row as "the enrollment is fully provisioned".
+
+**The control that makes this a measurement rather than a coincidence.** The
+first probe's control was inert: an `enroll:update` carrying a String where the
+wire type is a Map, which crashed the handler before authorisation and so
+discriminated nothing. Rewritten, it reads the atServer's own words —
+`enroll:update` is self-only, and its refusal **names the caller**, so a
+connection carrying an enrollment id is distinguishable from one that is not.
+It answered
+
+> `enroll:update is self-only: this connection is authenticated as the owner,
+> not cd365c8a-…`
+
+which is the atServer stating that this connection carries no enrollment id, the
+property the whole route rests on.
+
+**The one thing commit 7 had to get right, and did.** `preventDuplicateEnrollRequest` runs
+on this path — it is skipped for CRAM and for apkam, and this is neither.
+Measured: a second self-enrolment naming the same `(appName, deviceName)` is
+refused with *"Another enrollment with id … exists … in approved state"*, while
+one naming a different device lands `pending` — the positive control, without
+which the refusal could have been about the second request rather than about the
+duplicate. **So sibling clones of one pre-enrollment keyfile must retrofit under
+distinct device names**, which is what they should do anyway: two devices
+deserve two distinguishable enrollments.
+
+#### Question 6 answered — nothing caps the legacy root credential, and nothing should
+
+The proposal called this the crux and left it unresolved: after the retrofit the
+flat `at_pkam_publickey` stays valid, a permanent, unexpiring, fully privileged
+credential. Three things settle it, and none is new work.
+
+**It is not specific to pre-enrollment atSigns — it is what the atServer already
+does.** At the successor's first authentication the atServer settles the
+predecessor ([ruling 118](decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)):
+a predecessor that is not fully privileged is revoked as `superseded`, and a root
+predecessor keeps its life. The `preserveFirstEnrollmentOnRetrofit` exemption this
+paragraph once relied on is retired; the reason it recorded still holds for the
+root — it is the one credential this server cannot re-issue, so retiring it stays
+the owner's explicit act. On both paths the atSign's root credential survives its
+own retrofit, by design.
+
+**On a CRAM-onboarded atSign the flat key IS the first enrollment's key.** The
+CRAM branch writes `at_pkam_publickey` = the first enrollment's APKAM public key
+(`enroll_verb_handler.dart:387-389`, *"store this apkam as default pkam public
+key for old clients"*). Exactly two references to that record exist in all of
+`at_secondary_server/lib` — that put and the pkam handler's get — so nothing
+else ever touches it. The two cases are one case.
+
+**The owner's act exists today and is one verb.** `at_pkam_publickey` is a
+protected key: a scoped enrollment is refused, a `*:rw` enrollment without
+`__manage` is refused, and **a root enrollment may write it** — three tests in
+at_server's `root_key_authz_test.dart`, each asserting the stored value rather
+than merely the throw. A pre-enrollment retrofit produces a root enrollment, so
+the owner can retire the legacy credential whenever they choose. Measured on
+`@bob🛠`, its own atSign because the last step destroys shared state:
+
+| step | measured |
+| ---- | -------- |
+| the flat key, after the retrofit | authenticates |
+| `update:privatekey:at_pkam_publickey <a public key whose private half is discarded>`, from the new root enrollment | accepted |
+| the flat key again | `AT0401 pkam authentication failed` |
+| the new enrollment again | authenticates |
+
+⛔ **Overwrite, never delete.** `delete:privatekey:at_pkam_publickey` is refused
+as a syntax error — the delete grammar requires an atSign and this record has
+none. Writing a public key nobody holds the private half of is what retires it.
+
+⛔ **And it must NOT be part of the retrofit.** Sibling clones of one
+pre-enrollment keyfile share the flat keypair, and the retrofit mints a *fresh*
+APKAM keypair per enrollment (at_auth: *"a new enrollment never reuses the legacy
+key object"*), so overwriting the record at retrofit time locks out every clone
+that has not yet upgraded — with no CRAM secret left to recover with. That is the
+harm the retired `preserveFirstEnrollmentOnRetrofit` exemption existed to
+prevent, arriving by another route — and the reason ruling 118's settlement keeps
+a root predecessor alive.
+
+#### The remaining questions, and what each is now
+
+| # | Question | Answer |
+| - | -------- | ------ |
+| 1 | May a `pkamLegacy` connection self-enrol, auto-approved? | It does not need to be auto-approved. It requests and approves, on one connection, today |
+| 2 | What grants? | Whatever it asks for. The connection is unscoped, so there is nothing to bound it by and no escalation to check. `_validateParams` requires a non-empty set only for an apkam connection or an OTP request, so a client must name its grants deliberately; the probe used `{"*": "rw", "__manage": "rw"}` |
+| 3 | Does it overwrite `at_pkam_publickey`? | **No** — it locks out every sibling clone, as above |
+| 4 | Is `preventDuplicateEnrollRequest` skipped? | It is not, and cannot be without a server change. The client uses distinct device names |
+| 5 | A new `AuthType`? | Moot on the route that works. `AuthType.pkamLegacy` is set at exactly one production site and only where the enrollment id is absent, so it already *is* the discriminator if one is ever wanted |
+| 6 | What caps the legacy root credential afterwards? | **Nothing, deliberately** — ruling 118's settlement revokes only a predecessor that is not fully privileged, and a root predecessor keeps its life. The retirement act is the owner's, and it exists |
+
+**What an atServer change would still buy, and it is small.** Widening the
+auto-approve branch to `AuthType.pkamLegacy` would save one round trip, close a
+brief `pending` window, and let sibling clones share one `(appName, deviceName)`.
+None was a correctness gap, and each of the branch's four parent-dependent
+mechanisms — `verifyNoEscalation`, `parentEnrollmentId`, the inherited key-expiry
+posture and the cap — would need a no-parent answer first. Optional, and it was
+not what commit 7 turned out to wait on.
+
+#### What commit 7 turned out to be
+
+✅ **Built 2026-08-30, in two packages and no atServer change.**
+
+- **at_client** — `_settleEnrollmentIdentity` no longer returns at
+  `enrollmentId == null`. A pre-enrollment atSign compares as rsa2048, because
+  the flat key is what at_lookup signs with, so a post-quantum posture moves it
+  exactly as it moves a legacy enrollment. What its new enrollment asks to be
+  comes from `AtClientImpl.firstEnrollmentIdentity()`. ⛔ **Its device name is
+  `firstDevice-<uuid>`, not the bare constant this section's plan named.** The
+  bare constant is a permanent silent failure: sibling clones of one keyfile all
+  name the same pair, so the first device upgrades and every other one is refused
+  at every start, for ever, with nothing on the device saying why.
+- **at_auth** — `_handleSelfEnrollmentRequest`, in
+  `packages/at_auth/lib/src/enroll/enrollment_submitter.dart`, mints a symmetric
+  key, wraps it to the atSign's own encryption public key on the **request**, and
+  then approves over the same connection through the ordinary
+  `EnrollmentApprover`. Wrapping to the atSign's own key is what keeps the
+  record's copy recoverable, so nothing is stranded by a key minted in a process
+  that then forgets it. ⛔ **Filing it into the keyfile instead was rejected, and
+  the reason is a trap worth knowing**: `AtKeys.toAtChops()` switches on
+  `apkamSymmetricKey` — its presence is what the class uses to tell an APKAM
+  keyfile from a PKAM one — so writing that field into a pre-enrollment keyfile
+  silently changes how every reader interprets it, and 69 files across the
+  workspace touch it. ⚠️ **The discriminator is the SESSION's enrollment id, not
+  the connection's**, because `pending` has a second cause — an APKAM
+  self-enrolment against an atServer too old to auto-approve — and that one keeps
+  its deny-and-throw.
+- **at_client**, third change — `_settleEnrollmentIdentity` gained an `on Error`
+  clause beside its `on Exception` one. Its dartdoc promises nothing is fatal,
+  and `retrofitIdentity` throws `ArgumentError` while an `AtKeysIo` may throw
+  `UnimplementedError` from `read`. Unreachable behind the old null guard;
+  reachable now for every default-preference client.
+
+⚠️ **The consequence nobody asked for, ruled INTENDED by gkc on the day.**
+`AtOnboardingPreference extends AtClientPreference`, so its default posture is
+`pqReady` as well — ⚠️ **both halves of that sentence are being changed**: [ruling 138](decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08)
+makes at_client 3.x default to `legacy`, and [ruling 137](decisions.md#137-auth_cli-has-two-roles-and-they-take-opposite-postures-2026-09-08) stops auth_cli inheriting the
+library's default at all, writing the approver's `pqReady` in the CLI. Until both
+land, what follows is what happens — which means `at_onboarding_cli`'s `authenticate()` on a
+pre-enrollment atSign now self-enrols it and rewrites its `.atKeys`. Every
+`at_activate` command does that. It is what already happened to an **enrolled**
+atSign at a post-quantum posture; the null-id guard was the only asymmetry. Two
+tests were re-fixtured at `PqPosture.legacy` — both legacy-shaped groups of
+`tests/at_onboarding_cli_functional_tests/test/at_onboarding_cli_test.dart`, on
+every call rather than only the two that noticed, because one atSign in one
+process holds one posture and a client cached at another is refused outright.
+
+**What proves it, and what each proof is worth.**
+
+- `packages/at_client/test/first_enrollment_identity_test.dart` — the identity a
+  client with no enrollment asks for, and a pin tying the constants to at_auth's
+  own `AtOnboardingRequest` defaults, which are field defaults no other package
+  can reference. Mutation: returning the bare constant reddens exactly the two
+  device-name assertions, quoting their own reasons.
+- `packages/at_client/test/pre_enrollment_retrofit_drive_test.dart` — the
+  DECISION, driven through `AtClientImpl.create` rather than through the
+  pieces, and added because nothing in at_client drove it: re-adding the
+  `enrollmentId == null` return left all 1688 unit tests green, and only a
+  Docker-dependent pack on a separate CI job noticed. It asserts the
+  `enroll:request` the client puts on the wire — the app, the device and the
+  grants it chose — because asserting that it merely *tried* would be
+  asserting the test double. Mutation: re-adding that return reddens exactly
+  the post-quantum arm, quoting *"a client with no enrollment id … sent no
+  enroll:request. Commands seen: []"*, while the legacy control stays green.
+- `packages/at_auth/test/at_self_enrollment_test.dart` — a group whose two arms
+  differ in the session's enrollment id and in nothing else, meeting the same
+  `pending` response. Its control is that an APKAM retrofit is still denied.
+  Mutations: never-self-approve reddens exactly the two new arms, and with the
+  right failure — *"expected the self-enrollment to be auto-approved; the
+  atServer returned status pending"*; always-self-approve reddens the control
+  plus twelve pre-existing tests.
+- `tests/at_onboarding_cli_functional_tests/test/pq_pre_enrollment_retrofit_test.dart`
+  — the live proof. It makes `@barbara🛠` genuinely pre-enrollment by hand
+  (CRAM once, then the flat key and nothing else — deliberately **not**
+  `onboard()`, which would create the enrollment whose absence is the point) and
+  asserts against the atServer over a connection it opens with the flat key:
+  roster empty before, one approved enrollment after, `{*: rw, __manage: rw}`, a
+  device name starting `firstDevice-`, and the flat credential still
+  authenticating afterwards. `@jagan🛠` at `PqPosture.legacy` is the control and
+  stays at zero. ⚠️ **The pack runs at `WARNING`, so the mechanism's own INFO
+  lines are absent from a green run** — what carries it is the device name,
+  which the preference cannot produce, and `approved`, which a `pkamLegacy`
+  connection cannot reach without the self-approve leg.
+- **Not proven by the functional pack.** It went 199/199 unchanged, and four
+  clients newly took the widened door — all four declined, on empty in-memory
+  keyfiles. That run establishes no regression and nothing about the feature.
+
+**Measured 2026-08-30:** unit at_auth 363, at_client 1688, at_onboarding_cli 69,
+at_client_flutter 37; functional 199/199; CLI pack 21/21 against a baseline of
+19/19 measured by stashing; e2e 67/67, where no client took the widened door at
+all. ⚠️ **A `62` for that pack appears in the detail plan's demoted section and
+is a DIFFERENT run** — an earlier one whose five failures were self-inflicted
+edits since reverted; 62 + 5 = 67, and the pack has 67 tests. Neither figure is
+wrong; they are two runs, which is why both docs say to re-derive. Re-derive rather than quoting these — the commands are in
+[Re-deriving the state](../implementation-plan.md#re-deriving-the-state).
+
+### The acceptance audit
+
+⛔ **A D1 GATE, and the one D1's own definition rests on** (gkc, 2026-08-23).
+**The rationale, in gkc's words:** *"we have literally hundreds of functional and
+end to end tests which cover the acceptance tests together. But there is no
+definitive place where it is easy to see the entirety of the pq project's
+acceptance tests being proven. The posture matrix test is the logical place to
+build test out."* So the problem is **legibility, not coverage**.
+
+**The build is done.** Arms 1–3, the ledger, its local driver, its wiring rail
+and the clause level all landed between 2026-08-23 and 2026-08-24; arm 4 was
+cancelled. Their design and measurements are in
+[ruling 115](decisions.md#115-the-acceptance-suite-is-4-arms-and-a-ledger-not-one-grid-2026-08-23)
+and in
+[detail](#15-the-lettered-d1-gates-g0g8-as-they-were-discharged).
+
+⛔ **THE READING IS DONE — every cluster and the bucket that belonged to none,
+finished 2026-08-26.** What it was: read each scenario's `proves:` prose against
+the test it cites and record where the citation does not establish the clause.
+The pins compute the *known* overclaim; they cannot tell you a cited test proves
+something narrower than the clause it is attached to, and that judgement is what
+no rail can make.
+
+**What it covered.** 161 citations, measured 2026-08-26 by the recorder and
+again by `git grep -c 'provenIn('` minus the two declarations in
+`proven_elsewhere.dart`, which agree. ⛔ **Re-derive rather than quoting that
+figure, and `rm -f` the file first** — `provenIn` appends, so a stale file reads
+as twice the corpus. The command is in
+[Re-deriving the state](../implementation-plan.md#re-deriving-the-state).
+Cluster A (37 citations, 20 rows), C1 (25, 6), B (42, 25), G1 (37, 16), and the
+cross-cutting bucket (14 citations over 6 of its 10 scenarios). **Eighteen
+findings, thirteen closed and five open** — re-derive both by tallying the
+`F<n>` headings in that detail file, since one of them recorded itself CLOSED
+in its body while its heading was never struck, and every command keying on
+headings counted it open.
+
+⚠️ **The bucket is the part worth remembering.** Four clusters were audited, each
+one finished, and none of them was the corpus: the passes were scoped by the
+`UC-` ids in the catalogue, and a scenario with no id belongs to no cluster, so
+the cross-cutting invariants sat at `—` in the enumeration table from the day it
+was built. An audit organised by the ids in a catalogue cannot see work that has
+no id. It held the largest legibility gap in the corpus.
+
+**What is left is the fixing**, and it is a row of its own:
+[the clause burn-down](#the-clause-burn-down-every-provable-then-clause-proven).
+
+**The running record, the method and every finding** are in
+[detail — the citation audit](acceptance.md#the-citation-audit--cluster-a-2026-08-26)
+and the cluster sections below it. The headline findings, one line each:
+
+- **UC-A4.5** — its central clause was true in the code and established by
+  neither citation, because both arms co-varied the sender's configuration with
+  the recipient's. Closed by an isolating arm in
+  `packages/at_client/test/nskey_kem_selection_test.dart`.
+- **C1** — a posture axis pinned by nothing, proven by a mutation that left 1573
+  tests green; a count stale in six places; a row reading PROVEN while its axis
+  reached no production caller; a scenario still describing the pre-flip default.
+- **B** — UC-B0.1 stated "No partial state on the server" unconditionally while
+  its own second scenario disproved it. ⛔ **The number a reader counting PROVEN
+  cannot see: 22 of B's 28 rows have LIVE proof** — three rest wholly on unit
+  citations and three cite nothing at all. Not a defect, since PROVEN means a
+  scenario asserts it and runs; it is what the status column does not
+  distinguish.
+- **G1** — the catalogue refused an empty `keys` array that the code, the
+  scenario and the citations had all accepted since 2026-08-22; and two clauses
+  whose proof existed in the tree and was cited from a neighbouring row or from
+  no row at all.
+- **cross-cutting** — the security clause of "advertised recipient keys are
+  signed and verified" was described in a comment naming two test files and
+  cited nowhere, while 16 of the 17 rejection tests in those files carried no
+  citation. ⚠️ **A comment naming a test file is not a citation** — it reads like
+  one, it is usually true, and the ledger counts none of it.
+
+⛔ **Enumerate with the suite's own recorder, and `rm` the file first** —
+`provenIn` appends, and a stale file reads as twice the citations. The command
+is in that detail section; it cost a wrong figure of 284 before one file run
+alone exposed it.
+
+**Coverage was never the gap**, measured 2026-08-23 **against the 69-row
+catalogue of that date**: of its 68 live rows, 59 had live proof of some kind
+and 9 had none (12 LIVE_DIRECT, 43 LIVE_PARTIAL, 4 LIVE_INCIDENTAL, 9
+NO_LIVE_PROOF), and only 29 of the 69 use-case ids were nameable anywhere in the
+live suite. ⚠️ **Dated deliberately: the catalogue is 73 rows now**, so these
+are a snapshot rather than the current state — the figure to trust for cluster B
+is the one the audit measured directly, 22 of 28 rows with live proof.
+
+⚠️ **`tests/` holds 6 Dart packages, of which 4 are live test packs.** The other
+2 are `tests/pq_matrix/{published,scenario}` — the child processes the pair grid
+spawns, which is why the `published` column can hold a released at_client this
+tree cannot. ⚠️ **This read "7 … `{current,published,scenario}`" until
+2026-08-26**, which was true when written and stopped being true when
+`tests/pq_matrix/current` was deleted; the sentence survived because its own
+warning was about a *different* miscount. Count with
+`find tests -name pubspec.yaml`, never `tests/*/` — a depth-2 glob returns 4 and
+reads as the whole answer.
+
+⚠️ **The live corpus is 4 packs, not 2**, and this entry was scoped to 2 of them
+for a long time. `tests/at_onboarding_cli_functional_tests` and
+`tests/at_onboarding_cli_functional_tests_proxy` are live packs as well. ⚠️ **This
+read "no citation reaches either" until 2026-08-31 and had been false since
+2026-08-26**: three citations reach the CLI pack over two rows — UC-G3.11 cites
+`pq_pre_enrollment_retrofit_test.dart` twice and UC-B1.4 cites
+`pq_native_enroll_test.dart` once. None reaches the **proxy** pack, which is the
+half that still holds. The CLI one builds clients from a `PqPosture` in two
+arms — which makes it the best live evidence for UC-C1.6 and a second live proof
+of UC-A1.1.
+
+⚠️ **A citation count is not a coverage count.** An earlier pass reported "27 of
+68 have no live proof" when what it had measured was 27 with no live proof *cited
+from their acceptance scenario*. Do not restate it as coverage.
+
+### Crypto agility, and the matrices that would prove it
+
+**The property, as gkc states it** (2026-08-27): converging *all* advertisements
+on an array — enrollment key packages, nskeys and `_apsk` — exists so that an
+algorithm upgrade is an **ADD by the advertiser**. Nobody coordinates a flag
+day; apps upgrade through successive rollouts and the wire moves when both ends
+happen to be ready. **Add, never replace** is the whole design.
+
+⛔ **It does not hold for all three today, and the exception is the nskey.**
+
+| Advertisement | Can the advertiser ADD? | Evidence |
+| ------------- | ----------------------- | -------- |
+| **enrollment key package** | ✅ **Yes.** `KeyPackageMinting` mints across the whole `AtClientPreference.keyEstablishmentAlgorithms` list, and `reconcileKeyPackage` adds one at the next start after a preference edit — no rotation | Proven live: `key_package_amendment_live_test.dart`. A package created with one key gains a second, **the original kid stays `active`**, `suites` widens, and an envelope already sealed to the old kid still opens |
+| **`_apsk`** | ✅ **Structurally yes** — `apskAdvertisement({required List<ApskSigningKey> keys})`, and `bareApskValueOf` collapses to a bare string only for a single active `rsa2048` entry, so the array is the general case | ⚠️ **Untested as an agility property.** **Five** producers write it — three call `apskAdvertisement` directly (`enrollment_submitter`, `enrollment_updater`, `pq_signing_root`) and two go through `apskValueOf`, the function that *chooses the wire shape* (`signing_key_minting.dart`, `apkam_signing.dart`). ⚠️ It said "three" until 2026-08-27, counting only the direct callers and omitting the minting path — the one a matrix author most needs. Nothing asserts that adding an entry leaves the existing one verifying, or that a one-algorithm reader accepts a two-entry advertisement |
+| **nskey** | ✅ **YES, since 2026-08-28.** ⚠️ This said **NO**, quoting `_prepareMint`'s own *"an nskey is one key: only the enrollment's own key package advertises the whole configured list"*. The mint now writes a key per configured algorithm, and `PublishedNskeyKeyRing.add` joins one client's newly minted material to an existing generation in place | The **reader** shipped first and correctly (`NskeyAdvertisement.usableFor` walks `keys[]`), and the writer followed. ⚠️ Reader-ships-first was **not** free: `NskeyProvider` read the advertisement's single-key `alg`/`publicKey`/`nskeyKid` getters and could not address a second entry at all — fixed the same day, before the writer landed |
+
+✅ **RULED 2026-08-27, and the investigation below it is superseded** — see
+[decisions.md 119](decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27).
+An nskey generation reaches its full set in **two** steps: a **rotation** mints
+only new material and carries nothing forward, and a client that then finds its
+own algorithm missing mints it and **adds** it to the current generation in
+place, under the mint lock. Rotation is therefore also the garbage collection —
+an algorithm nobody still runs never comes back — and an add never removes, so
+nothing flaps.
+
+⚠️ **Three conclusions this section used to carry were retracted in reaching
+that, and each is worth keeping because each looked right.**
+
+- *"The expensive part is that `nskeyKid` stops being a generation's identity,
+  so `CkManager.ensureCurrent` must compare generations."* **False under the
+  ruled design.** Fresh-only material means a rotation changes every `kid`, so
+  every peer re-cuts; an add changes the preference-narrowed `kid` only for
+  clients that prefer the added algorithm, so exactly those take it up. The
+  existing comparison is correct and no change is owed.
+- *"A rotation could carry the old keys forward."* Ruled out: it leaves nothing
+  to ever remove an algorithm, and it hands a revoked enrollment back the private
+  it already holds, because `revokeEnrollmentAndRotate` reaches the mint through
+  the same `rotateNamespaceKey`.
+- *"The minting client could compute the fleet's superset from the authorised
+  enrollments' key packages."* Impossible: **only a build that implements an
+  algorithm can mint material for it**, so no client can mint on another
+  version's behalf. That single fact forecloses every pre-population scheme and
+  is why population is incremental.
+
+**What survives:** a private is filed and conveyed per `nskeyKid`, so more
+algorithms means more `__ssenv` traffic — read the advertisement-fetch-volume row
+before attributing any number there. The reader costs nothing (`usableFor`
+already walks `keys[]`), one signature covers the document however many entries,
+and the mint lock is one per `(owner, namespace)` regardless.
+
+**The window, and whose it is.** Between a rotation and the adds that repopulate
+it, the generation is a strict subset of what the fleet needs, so a sender whose
+policy refuses everything in it is refused outright. That is the application
+owner's to manage, by the ladder this project uses on itself: roll out the new
+**receive** capability first, so receivers begin minting the new material while
+senders still seal to the least-preferred member of their allowed set; roll out
+the new **send** policy second, after which a loud refusal is the right answer.
+
+✅ **They landed on 2026-08-28 as [`acceptance.md` section 17](../acceptance.md#17-g2--crypto-agility--add-never-replace),
+eleven use cases (`UC-G2.1`–`UC-G2.11`) — count the clauses rather than reading a
+figure here; it said 53 until 2026-08-28, when the next commit made it 54 — with scenarios in
+`packages/at_client/test/acceptance/g2_agility_test.dart`.** This paragraph
+listed five drafts and said they were "drafted, not landed"; where each went:
+
+| The draft | Where it landed |
+| --------- | --------------- |
+| a reader accepts more entries than it understands | **split three ways**, one per advertisement — UC-G2.1, UC-G2.2, UC-G2.3 — because each parses independently |
+| an ADD moves nothing peers already address | UC-G2.4, plus UC-G2.5 and UC-G2.6 for the nskey's two-step path, which is not an in-place add |
+| a sender picks from the intersection under its own fixed order | **already existed** as [UC-A4.5](../acceptance.md#55-uc-a45--a-sender-follows-the-recipients-advertised-algorithm-not-its-own-preference); no new row |
+| no shared entry is a refusal, never a guess | **already existed** as [UC-A4.6](../acceptance.md#56-uc-a46--the-construction-is-negotiated-from-suites-and-no-shared-entry-is-a-refusal); no new row |
+| a retired entry stops being OFFERED but keeps opening history | UC-G2.7, with the signature-matching half split out as UC-G2.8 |
+
+Three rows have no draft above them because the section grew past this list:
+UC-G2.9 — which was the two-signature escape hatch when this was written and is
+now its refutation — and the ladder pair UC-G2.10 and UC-G2.11.
+
+**The three matrices are the evidence, one per operation pair**, each run
+send-and-receive × self→self and self→other × advertiser offering `{A}`, `{A,B}`,
+`{B}` — one namespace per variation:
+
+- **encrypt / decrypt**, the nskey data path — the row *the advertised-algorithm
+  matrix is untested*, in P1 above. (Named rather than linked: it is a table row,
+  not a heading, so there is nothing to anchor to.)
+- **sign / verify**, `_apsk`.
+- **encrypt / decrypt in the secret-sharing substrate**, key packages and
+  `__ssenv`.
+
+⚠️ **A matrix cell is not a use case, and neither replaces the other.** The
+matrix says *this combination works*; the use case says *why that combination
+existing is what removes the flag day*. The clauses are proven by the cells, and
+a cell with no clause is a test nobody can say the purpose of.
+
+### How the negative cache falsified three clauses
+
+**Found by the clause sweep on 2026-08-27 and then measured**, because three
+separate clauses turned out to contradict the tree in the same way and one cause
+is likelier than three coincidences.
+
+**What the tree does.** `NskeyResolver` remembers *misses*
+(`nskey_resolver.dart` — `missMemory`, defaulting to `const Duration(minutes:
+15)`; `_missedAt`, keyed `owner|namespace`; `_recentlyMissed`, which makes
+`resolve` **skip the probe entirely**). The resolver is not per write: a client
+builds one `CkManager` and therefore one resolver, and `crypto.dart` says so in
+as many words — *built once per client*. So the first write toward a recipient
+who has not published stamps a miss, and every later probe of that recipient is
+skipped for the rest of the window.
+
+**Measured live** (an e2e probe against the local virtualenv, since a claim
+about mechanism is a hypothesis until something names it):
+
+| step | result |
+| ---- | ------ |
+| bob has no key for the namespace | `false` — the premise |
+| `isReadyFor(bob, ns)` before | `false` |
+| alice's first `put` toward bob | throws — **and this is what warms the miss** |
+| bob mints and publishes; **control**: a *fresh* key ring on alice's own client asks for bob's key | **`true`** — bob is genuinely reachable |
+| `isReadyFor(bob, ns)` on the same client | **`false`** |
+| alice's second `put` on the same client | **throws** |
+
+The control is what makes it a measurement rather than a guess: a ring that never
+probed sees bob's key over the same connection at the same moment the client that
+did probe cannot.
+
+**Why it matters beyond the clauses.**
+
+- **It is app-visible through the pre-flight query.** `CryptoRuntime.isReadyFor`
+  resolves through the *same* resolver
+  (`symmetric_aes_gcm_provider.dart`), so an app that asks "can I reach bob yet?"
+  is told no for up to fifteen minutes after the answer became yes. Its dartdoc
+  — *"'yes' here is as current as the write's own would be"* — is true and
+  reads as a freshness guarantee; both are stale together.
+- **The refusal an app is shown asserts something false.** It says the namespace
+  "has never been used or authorised there", which was true when the miss was
+  stamped and is not true when the message is produced.
+- **Nothing can clear it.** `NskeyKeyRing.forget` and
+  `PublishedNskeyKeyRing.forgetRemote` invalidate the *ring*; the resolver's
+  negative cache has no equivalent, and the resolver skips the probe **before**
+  the ring is consulted, so forgetting the ring entry changes nothing. The only
+  reset is a new client.
+- **It sits against `ensureCurrent`'s own stated purpose.** That method's dartdoc
+  says *"the re-fetch is the point, not an optimisation … the only way it learns
+  of a rotation"*. Rotations are safe, because only misses are remembered and a
+  rotation is a changing hit. Cold starts are not.
+
+⚠️ **The cache's own justification never mentions the owner.** It reasons about
+not re-probing the *levels* of a composed namespace on a repeated write — a real
+cost, and the unit tests that cover it measure exactly that. But the key includes
+`owner`, so the optimisation reaches a dimension its reasoning does not.
+
+**The ruling** (gkc, 2026-08-27): **a remembered miss may make a resolution
+cheaper, never wrong.** `NskeyResolver.resolve` walks with the memory as before;
+if it *hits*, nothing changes. If it finds nothing **and** the memory made it
+skip a level, it re-walks the skipped levels for real before answering null.
+
+⚠️ **A narrower fix was ruled and then withdrawn the same hour, and why is worth
+keeping.** The first ruling was to make `CryptoRuntime.isReadyFor` bypass the
+cache — appealing because a *query* means "now", and because a hit already clears
+the remembered miss, so an app that pre-flighted would unblock its own next write
+too. gkc asked when an app would *not* pre-flight. The answer settled it:
+`isReadyFor` has **zero production callers**, so "an app that pre-flights" was no
+app at all. It would have left every ordinary `put`, every `notify`, the natural
+catch-and-retry, every background write, and all self data exactly as broken.
+**The lesson is general** — a fix routed through an API nobody calls is a fix
+nobody gets.
+
+**Where the cost lands.** A repeated write that resolves walks no further than it
+did before, which is the case the optimisation was built for. The extra probes
+fall only on a resolution about to return null — for a write, one about to throw
+— so a caller already in its error path pays them.
+
+**Proven both ways.** Unit (`nskey_resolver_test.dart`): a key published after a
+miss is found on the very next resolve; a resolution that skips nothing probes
+each level once, so the second walk does not double an ordinary cold write; and
+a repeated cold resolve pays the walk again, deliberately. Reverting `resolve` to
+the single walk reddens the first and third while the pre-existing
+*a level already found empty is not re-probed* guard and the no-waste test both
+stay green — so the optimisation is not entangled with the fix. Live
+(`pq_cold_start_recovery_test.dart`): mutated once per assertion, the readiness
+arm and the write arm each redden on their own, with the control — a key ring
+that never probed, on the same client over the same connection — green in both.
+
+⛔ **That live file is separate from `nskey_recipient_not_ready_test.dart` and
+uses `thirdAtSign`, and it has to be.** A successful nskey write publishes the
+writer's signing root, and `retrofit_e2e_test.dart` asserts `firstAtSign` has
+none — that row is about the root being *created* by the retrofit. Written as a
+second test inside the sibling file it took two unrelated rows down with it, and
+the failure it produced blamed a virtualenv that had in fact been recycled: the
+e2e compose file declares no volumes, so every run starts clean. **The
+precondition was the destructive write**, exactly as the tree's own rule says.
+
+### The clause burn-down: every provable THEN clause proven
+
+**What done means** (gkc, 2026-08-27), and the reason every earlier audit
+failed to answer it. Done is *every **provable** THEN clause proven* — the
+clauses that cannot be proven by construction are enumerated in
+`unprovableClauses` in `packages/at_client/test/acceptance/manifest.dart`
+(gkc, 2026-08-31), and there is one — and every instrument
+this catalogue had measured **rows**. A row reads `PROVEN` on a single
+citation however many separate things its THEN states, so the row-level
+verdict could not come out badly and could not reassure anybody — which is
+what weeks of measuring produced.
+
+Two columns, tracked separately, both printed by the acceptance suite on every
+run:
+
+```
+BURN-DOWN  clauses proven: <N> of <T>   server-proven: <M> of <T>
+REACHABLE  provable clauses: <P> of <T>   proven: <N>   still to prove: <K>
+UNPROVABLE <U>, and why is in manifest.dart: <the ids>
+```
+
+The third line exists because the first invites a question it does not answer:
+`<N> of <T>` reads as a shortfall, and the ids of the clauses that make up the
+difference are what a reader wants next. It prints them from the same map the
+denominator is computed from, so the names and the count cannot drift.
+
+⚠️ **`<N>` and `<M>` are deliberate.** Both figures were written out here and in
+`acceptance.md` on 2026-08-27 and were stale within the hour — and disagreed with
+each other, 95 against 93, while the tree said 99. A number with two homes and no
+rail over either is a number that lies; the live figures are in `manifest.dart`,
+where a guard fails in both directions if they drift from the tree.
+
+- **proven** — some citation pins the clause. Objective 1 is every clause, and
+  ✅ **it closed on 2026-09-09**: the meter's reachable line reads `still to
+  prove: 0`. Read it rather than trusting this sentence — the whole point of the
+  line is that nothing here has to be believed.
+- **server-proven** — the citation pinning it drove a real atServer.
+  Objective 2 is to raise this wherever a live test is feasible, which
+  [the evidence standard](../acceptance.md#0-purpose-scope--how-to-read-this-doc)
+  says is everywhere it is not impossible. It is what is left of this item.
+
+⛔ **A clause the OTHER TIER pins is recorded, not re-asserted here** (gkc,
+2026-09-09). The last two clauses objective 1 was waiting on were UC-A5.3's
+cascade and its successor clause, and neither was a test gap: every sentence of
+both belongs to the atServer, whose own suite pins each by name in its unit tree
+and its functional pack. A pin on this side would have rebuilt their fixture and
+re-asserted their behaviour through one this side controls — green for the wrong
+reason the day the cascade breaks in a shape that fixture does not construct. Both are
+in `unprovableClauses` with the at_server test names in the reason, which is
+where a reader goes to check the claim.
+
+⚠️ **The denominator counts clauses AS WRITTEN, and the clusters do not slice
+their prose the same way — so a percentage from one cluster does not compare
+with a percentage from another.** Some rows state each asserted behaviour on its
+own `*And*` line; others pack several into one `*Then*`, controls included.
+UC-G1.2's single `*Then*` carries three separate behaviours (the new material is
+active, the legacy keypair is left byte-identical, and the resolver returns the
+new id), and UC-G1.7's carries its assertion *and* its control arm; a row in
+section 18's style would state each of those separately. Neither convention is
+wrong, but they measure differently in both directions: the packed form yields
+fewer clauses that are each **harder** to pin, since a clause is pinned only
+when every arm of it is established, and the split form yields more clauses that
+are each easier. Read the total as *how finely this catalogue chose to state
+itself*, never as a count of behaviours, and re-derive per-cluster densities from
+`clausesOf()` in `manifest.dart` rather than assuming they are alike. Recorded
+2026-08-31, after a burn-down move of +30 clauses from eleven rows prompted the
+question; the eleven were not unusually dense against the catalogue as a whole,
+only against the neighbouring cluster written in the packed style.
+
+⚠️ **A jump in `proven` is not by itself a jump in evidence.** A clause written
+*after* the code and its tests is pinnable the moment it is written, so a
+catalogue catching up with work already landed raises both columns together
+while nothing new has been proven. Section 18 is the worked example: of the
+citations backing its clauses, exactly one names a test written by the same
+work — the commit that wrote the clauses added no test at all — and that one
+moved the count by nothing, because its clause was already pinned by a sibling
+citation. The rest name tests that already existed. What such a move buys is real —
+the behaviours become checkable and the tests become findable — but it is
+bookkeeping, and it should be reported as bookkeeping.
+
+⚠️ **Pins are strict.** A clause is pinned only when the cited test
+establishes it *as written*. Clauses routinely carry several arms in one
+sentence — a value and a refusal, a shape and its control — and a test proving
+two arms of three leaves the clause unpinned with the missing arm recorded.
+Pinning generously would make a full burn-down worth nothing.
+
+⚠️ **A pin is a claim, not a run**, and the two guards say different things.
+`catalogue_test.dart` checks that every pin resolves to exactly one clause and
+that the recorded counts match the tree, failing in **both** directions so a
+landed pin and its count move in one diff. `tool/acceptance_ledger.dart` is
+what says the cited test actually ran and passed.
+
+**Where the remaining work is enumerated**, measured 2026-08-27 by reading every
+clause against the tree — ⚠️ **and the enumeration has not kept up.** Two clusters
+landed after that measurement and neither is in any of the four lists below:
+section 18's eleven `UC-G3.x` rows (2026-08-31, +30 clauses) and section 6's
+`UC-A5.4`/`UC-A5.5`/`UC-A5.6` (2026-08-31, +15). Between them they carry **two**
+of the unproven clauses — `UC-A5.5` clause 3, *"there is no third ask"*, and one
+in section 18 — so a reader working the four lists top-down will not reach them.
+`grep -c 'UC-G3' detail/acceptance.md` returns 0. Re-derive which clauses are
+unproven from the tree rather than from these lists:
+
+| List | Size | What it is |
+| ---- | ---: | ---------- |
+| [the partial clauses](acceptance.md#the-partial-clauses--objective-1s-remaining-work) | count the table | a test exercises the clause and does not establish it as written. **The in-process ones are all closed**; all that remain are live and are the only route that raises server-proven. ⚠️ **Read the array-shape warning above before writing a test for any of them** — three of the six examined on 2026-08-27 were superseded clauses rather than test gaps |
+| [clauses owed a citation](acceptance.md#the-proven-clauses-still-owed-a-citation) | 0 | proven, but no citation names the proof. ⚠️ **Was 33, then 1, and is now empty** — the last, UC-A2.4's `pqSeal ver 0x03`, was withheld until the live test stopped asserting the byte against the function that generates it. Pinned to the raw literal 2026-08-27, with the discrimination measured against a consistent wire renumbering rather than reasoned about |
+| [pinned but partial](acceptance.md#clauses-pinned-in-the-tree-that-the-map-calls-partial) | 1 | pins that predate the mapping, where the cited test misses an arm. Candidate over-claims — if they do not survive review the recorded figure falls. ⚠️ **Was 2**: UC-G1.1 c2 was closed 2026-08-27 by an arm on a *retrofitted* keyfile, the only shape where the flat field and the resolver both answer and disagree. It defends the figure rather than raising it — the clause was already counted, by a test that never called `authenticate` |
+| [section 17's clauses](acceptance.md#section-17--the-crypto-agility-clauses-and-what-each-waits-on) | count them | never mapped, and the **bulk of what is unproven**. Most were not test gaps: they described the plural nskey mint, the `add`, the signature key identifier, the durable revocation record and step 3's verifier lever. ⚠️ **The first two landed 2026-08-28**; the rest are open `## TODO` rows above. The subsection maps clause to row, measured 2026-08-28 against the production paths, and says which six have not been read against the tree at all |
+
+⛔ **Nothing MAPPED is untested.** Every clause the 2026-08-23 mapping walked has
+something exercising it, and the single absence it found was refuted; for those,
+the gap is the precision of assertions rather than the absence of tests.
+⚠️ **That is no longer a statement about the whole catalogue.** Section 17's
+clauses — count them, do not read a figure here; it said "seventeen" until
+2026-08-28 when there were 53 — were added by
+[decisions.md 119](decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27),
+and several of them had nothing exercising them at all. ⚠️ **This said "the
+nskey mint they describe is unbuilt", which stopped being true on 2026-08-28**;
+what remains unbuilt is named by the subsection this paragraph points at. **What each one waits on is now enumerated**, in
+[section 17's own subsection](acceptance.md#section-17--the-crypto-agility-clauses-and-what-each-waits-on).
+Re-derive rather than reading this paragraph as current.
+
+⛔ **And a clause can be FALSE rather than imprecise, which no instrument here
+reports as anything but a test gap.** A sweep of the 29 partials on 2026-08-27
+classified **11 of them as specification defects** — the tree contradicts what
+they say — against 18 ordinary gaps, a split an adversarial pass over all 12
+original calls upheld but for one. **They were not 11 coincidences, and that is
+the reusable part**: three shared one cause,
+[the negative cache](#how-the-negative-cache-falsified-three-clauses), fixed the
+same day; two were the signing-root privilege gate stated from both sides, which
+the tree refuses deliberately while both clauses said it grants; two were the
+retrofit cap, whose formula the clauses had right and whose *re-arming* they
+missed; two were the self-copy, an AtCollection behaviour these rows do not
+assert. **All eleven are discharged** — four in the code, seven in the
+catalogue —
+and the [remaining defects](acceptance.md#the-partial-clauses--objective-1s-remaining-work)
+are counted by the table that lists them rather than by a figure here. **Open the production path a clause describes before writing its
+test** — a test written to a false clause fails confusingly, and the tempting fix
+is to weaken the assertion until it passes, which enshrines the wrong behaviour
+as the specification. The live proof of the fixed one is
+`pq_cold_start_recovery_test.dart`, and the notify half of UC-A4.4 is
+`pq_notify_fallback_test.dart` — ⛔ **a separate file on purpose.** `notify`
+folds a key outside the client's app namespace into the key name and
+substitutes the client's, and `AtClientManager` caches a client per
+`(atSign, enrollmentId)` — so a second test in one file inherits the FIRST
+test's namespace and every notify in it is silently redirected there. Measured
+2026-08-27: the arm passed alone and failed in CI, resolving against a namespace
+the recipient had been made to publish for by the file's own first test.
+
+⛔ **Why the catalogue drifted, named by gkc 2026-08-27 — and the reason to
+expect more of it.** The use cases were never updated after the agility decision
+that **all advertisements must hold ARRAYS** — enrollment key packages, nskeys,
+and `_apsk` at the pqActive posture. Every stale clause found on 2026-08-27 is a
+pre-array single-key assumption, and they were found one at a time by tripping
+over them:
+
+| Clause | What it assumed |
+| ------ | --------------- |
+| UC-A3.5 c3 | a bare shape where an absent `alg` could only mean the one KEM that existed |
+| UC-A2.4 c5 | that no client sends `enroll:update`, so a second key could never be advertised |
+| UC-C1.6 c1 | every posture axis is individually overridable |
+
+**So this is one uncorrected consequence, not three coincidences, and the
+remaining partials have not been searched for it.** A clause written against the
+single-key shape reads as a test gap rather than as a specification defect, which
+is exactly how the mapping classified all three. ⚠️ **Sweep the catalogue for
+clauses reasoning from "there is only one KEM", from a flat or bare
+advertisement, or from an entry rather than a list — before writing a test for
+any of them.** Writing a test for a superseded clause fails confusingly, and the
+tempting fix is to weaken the assertion until it passes, which enshrines the
+wrong behaviour as the specification.
+
+**The instances, found by a cold read on 2026-08-27 and CORRECTED the same day.**
+All were in `acceptance.md`; each was verified against the tree before editing,
+and two of the cold read's rows did not survive that check. The corrections are
+in `acceptance.md` itself, each stale sentence replaced in place with a dated
+⚠️ note saying what it used to claim.
+
+| Where | What it assumed | What the tree says |
+| ----- | --------------- | ------------------ |
+| **UC-A4.5**, "the KEM is configured, never negotiated" | "each atSign advertises **one** KEM per generation, and rotation is the only moment that can change" | **Both halves false**, and the clause was pinned. `KeyPackageMinting` mints a keypair for *every* configured algorithm; `reconcileKeyPackage` adds one at the next start after a preference edit, no rotation. The SP 800-227 conclusion survives on a different mechanism — the offer is APKAM-signed and the sender's order is fixed — so the clause was rewritten and re-pinned to four tests that establish *that* |
+| **Section 1**, key objects | the nskey is "**one** X-Wing KEM keypair"; the key package is "the per-enrollment **X-Wing** recipient keypair" | The nskey's *cardinality* held when this was written — a mint wrote one key, under `keyEstablishmentAlgorithms.first` — but naming the algorithm was stale. ⚠️ **The cardinality has since moved too**: from 2026-08-28 a mint writes a key per configured algorithm. The key package's is false outright: it carries a key per configured algorithm, and `kpid` names whichever entry is active |
+| **Section 1**, state table | "its **X-Wing** key package"; "the namespace's **one** nskey private" | Same algorithm staleness; and an enrollment holds every superseded generation's private too, filed per `nskeyKid` — `rotate` retains rather than replaces, which Section 1's own nskey bullet already said |
+| **Section 1**, `appMetadata` | only `at/nskey/XWING` | Both ids are in the tree (`nskey_records.dart`) and both are registered on every client |
+| **UC-A3.2** mint step | mints "the **one** … X-Wing keypair" | The "one" was right when this was written and the algorithm was not. ⚠️ **Neither is right now**: from 2026-08-28 a mint writes a key per configured algorithm |
+| **UC-A3.1** / **UC-A4.1** data paths | "**X-Wing-seal** the CK" | The seal follows the *destination's* advertised `alg` — which is UC-A4.5's own subject |
+| **UC-A2.1** steps 1–2 | "**X-Wing** key package", "(X-Wing)" | Under UC-A2.4 a configured deployment produces an ML-KEM package here |
+| **UC-A2.1** step 3 and Then | E2's `_apsk` is "the **bare** key value, exactly as today" | **False for UC-A2.1's own Given.** `bareApskValueOf` returns bare only for a single *active `rsa2048`* entry; a pq-native E2 advertises `mldsa65`, so it gets the array. The point the sentence was making — the value is not wrapped in an envelope, and the chain link rides the *metadata* — survives and now says so. ⚠️ The cold read guessed the condition was the posture and cited "section 15.7"; the condition is the entry's algorithm, and the table is in section 16 |
+| **UC-A1.1** step 4, **UC-B1.1** step 2 | onboarding and retrofit mint an "**X-Wing** key package" | Both mint under `keyEstablishmentAlgorithms.first`; the rest arrive at the next start |
+| ~~**UC-A1.1** Then, "no RSA-wrapped (`apkamSymmetricKey` rides X-Wing)"~~ | — | **Mis-cited.** The phrase occurs once in the document and it is in **UC-A2.1**'s Then, not UC-A1.1's. Corrected there |
+| ~~**UC-C1.7**, the two signing-set axes "overridable per preference"~~ | — | **False alarm — the sentence is TRUE.** `AtClientPreference` resolves both `authenticationKeyAlgorithm` and `dataSigningKeyAlgorithms` as `?? posture.<axis>`, so an explicit argument beats the posture on each. UC-C1.6's exception was `disallowLegacyEncryption`, which has no constructor argument at all; the two are not the same sentence |
+
+**What the corrections cost the burn-down: nothing** — the figure was
+unchanged across that commit, in both columns. (Read the current one by running
+the suite; it has moved since for unrelated reasons.) Every stale sentence but
+two lived in a **Steps** block or in Section 1, and only **Then** clauses are
+counted; the
+two that were clauses kept their pins, UC-A4.5's by re-pointing them at four
+tests and UC-A2.1's because its fragments were short enough to survive the edit.
+
+⚠️ **The sweep also found a defect in the citation rail itself.** `provenIn`
+matched a cited test name against the raw source with one spelling, so a test
+whose name contains an apostrophe — 22 files in `at_client` alone — could never
+be cited, and the failure read as "no test there starts with that name", which
+sends a reader looking for a rename. It now tries both source spellings, and a
+citation naming a genuinely absent test still goes red quoting the name.
+
+⚠️ **Six live partials sit under use cases in that table**, so the
+clause a test would be written to has just moved. (The one in-process partial
+that did — `UC-A1.1` c3 — is closed.) Re-read the clause in `acceptance.md`
+before writing its test — the
+partial-clause table in [detail](acceptance.md#the-partial-clauses--objective-1s-remaining-work)
+quotes the wording as it stood on 2026-08-27, which for those six is no longer
+what the catalogue says.
+
+⚠️ **Check the production path before writing the test.** Of the six clauses
+examined closely on 2026-08-27, **three were false rather than untested**. The
+check is cheap — open the code the clause describes — and it is the only thing
+that separates the two.
+
+The five findings below are clause gaps under another name, and are counted
+here rather than in a list of their own.
+
+Five open findings, recorded in full in
+[detail — the citation audit](acceptance.md#the-citation-audit--cluster-a-2026-08-26)
+and the cluster sections under it. **Tally them by the `F<n>` headings in that
+file rather than from this list** — one finding recorded itself CLOSED in its
+body while its heading was never struck, so a command keying on headings counted
+it open and disagreed with the prose. Both were honest and one was wrong.
+
+⚠️ **F11, F12 and F18 closed on 2026-08-26**, and what closing them turned up is
+worth reading before writing any refusal test. F11 was that all seven refusals in
+`enroll_update_live_test.dart` were `throwsA(isA<Object>())`, which cannot tell
+the guard firing from a timeout. Probing first — rather than inferring from the
+handler — showed all five come back as `AtLookUpException` with distinct
+messages, so they are now asserted by name and each was mutated to prove it
+discriminates.
+
+⛔ **F18 came out of that probe and is the sharper defect.** UC-G1.12's arm sent
+`enroll:update` naming `namespaces` **and nothing else**, so the atServer refused
+it for naming no recognised field at all — an earlier well-formedness check,
+which says nothing about namespaces. The escalation guard the row names was never
+reached, and deleting it would have left the test green. Naming one valid field
+alongside reaches it. **The shape generalises: a refusal arm must differ from the
+accepted case in the forbidden thing and in nothing else**, and stripping a
+request down to only the illegal field is the natural way to write the test and
+the reliable way to miss the guard.
+
+**F16 is now the one that matters, and it shares a measurement with
+[the seeding failure mode](#a-client-that-exits-during-its-startup-tail-abandons-seeding).**
+⚠️ That was a P0 row until 2026-08-28, when the row was retired as done; the
+`###` section it named is still here and is what this points at. `neither key record is immutable; the lock that mints them is`
+names `_rootlock@owner` and `_nskeylock.<ns>@owner`, and proves the live refusal
+for the first only. The nskey lock is covered by a raw-literal pin of the
+client's intent and by a mock that models the refusal on the key name — and a
+mock cannot test a refusal it does not model, so the guard's presence and its
+absence look the same.
+[The seeding section](#a-client-that-exits-during-its-startup-tail-abandons-seeding)
+recorded its self-perpetuating-interlock arm as reasoned from the code rather
+than measured; ⚠️ **that stopped being true on 2026-08-28** —
+`mint_lock_self_contention_test.dart` measures it in-process, and the live
+half below is what remains. **It is the same measurement, and one live test
+discharges both.**
+`pq_signing_root_mint_lock_test.dart` already takes, releases and re-takes a lock
+against a live atServer; a fourth test doing that with `nskeyMintLockKey` is the
+same shape against a different key.
+
+**The remaining four:**
+
+- **F15** — UC-G1.2 promises the resolver returns the new enrollment id after a
+  retrofit, and nothing calls it. Sharper than it looks: the flat `enrollmentId`
+  stays at the legacy enrolment, so the keyfile answers the question two ways
+  depending on which field a reader takes, and the row promises one of them.
+- **F8** — every UC-B1 assertion is a restriction, so an enrolment that gained
+  nothing and can do nothing satisfies the whole cluster. Partly answered by
+  UC-B1.4 to UC-B1.7, which assert capabilities; the review question it
+  generalises to is worth keeping: *does this row assert a capability, or only a
+  restriction?*
+- **F1** — the clause level was 9% adopted when this was written (2026-08-26; it is 59% at 2026-08-29, so re-derive rather than reading either), so the ledger could not show which part
+  of a row an individual citation is for.
+- **F3** — about 8 citations rest on tests they do not pin.
+
+⚠️ **Also still open from cluster B**: UC-B1.3's `nskey`-subset clause is stated
+in the catalogue and established by no citation, recorded at the row.
+
+### A client that exits during its startup tail abandons seeding
+
+⛔ **Confirmed live in both directions, 2026-08-26, by the at_talk demo
+session.** The variable is the client's LIFETIME and nothing else — same
+client, same keyfile, same posture, same environment, same minute, with stdin
+held open for 35 s instead of piped and closed:
+
+| | lock frame | advertisement |
+| --- | --- | --- |
+| stdin piped and closed | never reached the atServer | never |
+| stdin held open 35 s | `19:48:12.191Z` | `19:48:12.243Z` — 52 ms later |
+
+After the second run the atSign was reachable as a recipient for the first time
+that day.
+
+**The mechanism.** Seeding is unawaited work: `AtClientImpl._init` fires
+`PqClientBootstrap.startup()` without awaiting it, deliberately, because
+construction must not block on network round trips. A client that finishes its
+job and exits takes the process down wherever the tail has got to. In the
+failing run it got as far as forming the mint interlock write — the client
+logged `update to remote: …_nskeylock.<ns>@<atSign>` — and the wire capture,
+which ran another 26 seconds, carries no such frame from that atSign at all.
+The bytes never left the process.
+
+⚠️ **The retrofit is not the cause**, though that is where a day of
+investigation went. Every route that retrofits publishes, because each keeps
+its client alive:
+[UC-B1.4](../acceptance.md#84-uc-b14--a-retrofitted-scoped-enrollment-runs-an-authenticated-verb)'s
+file carries arms for the in-process route, the cold-keyfile route and
+`at_activate list`. The retrofit merely produced an atSign with nothing
+published whose every later client was short-lived.
+
+⛔ **Two failure modes, and the second is worse.**
+
+1. **Silent abandonment.** Nothing tells the caller. The only symptom is at the
+   FAR end, where a *different* atSign reports "@X has no published nskey" —
+   naming the wrong party, which is what sent the investigation to the retrofit.
+2. **A self-perpetuating interlock.** A client that dies *after* the lock lands
+   rather than before leaves an immutable `_nskeylock.<ns>@<atSign>` with a
+   120-second ttl that nothing deletes, and a successor that finds it held with
+   nothing published throws rather than minting. ✅ **Both of those are measured
+   as of 2026-08-27** — see `nskey_mint_lock_live_test.dart`. ✅ **And the LOOP
+   is measured as of 2026-08-28** — `mint_lock_self_contention_test.dart`,
+   three arms in which the only thing that varies is
+   `ownLockIsNotContention`. ⛔ **The answer splits by path, and this
+   paragraph's "could never get through" is FALSE for the nskey lock it
+   names.** `mintAndPublish` passes the flag and `MintLock._holder` is the
+   enrollment id — an identity, not an instance — so a relaunched client meets
+   its own token and proceeds. It is the **signing root** that has no such
+   escape, because its mint does not pass the flag; that is
+   [ruling 124](decisions.md#124-the-signing-roots-mint-lock-is-sized-against-starvation-not-contention-2026-08-28),
+   which shortened `signingRootMintLockTtl` to 15 seconds rather than leaving
+   the window at two minutes.
+
+**And `startupComplete` cannot be the answer as it stands.** It is the only
+signal a caller has, and `stop()` breaks the step loop and completes it anyway,
+so it resolves identically whether the work ran or was skipped. A caller that
+waits for it still cannot tell.
+
+✅ **REPRODUCED IN-TREE 2026-08-27**, as a two-file differential against the
+local virtualenv. Same atSign, same posture, same construction, same minute,
+run-unique namespace each — the only variable is whether the tail was stopped:
+
+| arm | file | advertisement | `startupComplete` |
+| --- | --- | ---: | --- |
+| left alive | `seeding_tail_runs_live_test.dart` | **published in ~1s** | — |
+| stopped as the client was returned | `seeding_tail_abandoned_live_test.dart` | **nothing after 15s** | **resolved at 185 ms** |
+
+⚠️ **Two files because `AtClientManager` is a per-isolate singleton** that
+re-serves the client it already built — two arms in one file share one
+bootstrap, and whichever ran second measures nothing. Break-it checked:
+removing the `stop()` reddens the second arm, so it measures the stop and not
+the environment.
+
+⛔ **Why the earlier attempts failed, now that a control exists.** They were
+lost on the rig, not on the hypothesis, and attempt 3's diagnosis was wrong:
+it concluded "the rig could not seed for those namespaces at all" when a
+living client at a **seeding posture** publishes in about a second. The trap
+is that `seedNamespaceKeys` is **false** at `PqPosture.legacy`, so a client
+built there correctly publishes nothing and the red says nothing about
+stopping.
+
+⚠️ **And `nskey_seeding_live_test.dart` is blind to this defect**, though its
+own doc comment says it exists to catch "whether the path runs at all — a
+client whose seeding silently never fired". It builds at `PqPosture.legacy`
+and calls `NskeySeeding.seed()` by hand, so a client whose tail never fires
+passes it. Nothing else covered it either: `pq_posture_grid_test.dart` builds
+cells at seeding postures and depends on the tail having run, but only
+indirectly — its writes would fail otherwise. That is the hole this shipped
+through.
+
+**Item 3 measured.** The abandonment is not silent, but it is not loud either:
+`AtSignLogger`'s default `_root_level` is `info`, so the line *is* emitted in
+production —
+
+    INFO|…|PqClientBootstrap (@alice)|PQ startup stopped for @alice; the
+    remaining steps will not run (the next start retries them)
+
+— at `info`, among 31 other `info` lines in a 15-second run, naming neither
+which steps were skipped nor the consequence (this atSign is now unreachable
+as a recipient). ⚠️ **And "the next start retries them" is reassuring in a way
+that is false for the shape that hits this**: a cron job or a piped-stdin CLI
+does have a next start, and it abandons too.
+
+⚠️ **The tree already contradicts itself about whether `startupComplete` is
+for callers.** `at_client_impl.dart:308` says "tests do; production code must
+not"; `:696` says "Awaitable via `pqBootstrap`'s `startupComplete` for callers
+that need the tail to have run". That is request item 5 made concrete, and it
+is a defect in the tree today.
+
+✅ **FIXED 2026-08-27.** Both halves of the app author's stated minimum:
+
+- **Item 3** — the abandonment logs at `warning`, naming each skipped step and
+  saying that peers cannot seal here, and deliberately dropping "the next start
+  retries them".
+- **Item 1** — **`AtClient.ensureReachable(namespace)`**, on the **interface**
+  rather than on `pqBootstrap`. ⛔ **Ruled by gkc 2026-08-27**, and the
+  deciding argument was not cost: a perfectly typed outcome on the bootstrap
+  still answers a question about *our* twelve internal steps, and the app's
+  question is "can peers send to me". `pqBootstrap` is also `@experimental` and
+  documented as not for app authors, so an outcome surfaced there does not
+  reach the caller who reported this. Returns `AtReachabilityResult` —
+  `alreadyReachable` / `published` / `postureDoesNotSeed` / `notAuthorised` /
+  `timedOut` / `failed`. Item 2 is folded in: it *is* the "do not exit until I
+  am reachable" call. Items 4 and 5 (the asymmetry, and pointing
+  `startupComplete` at the alternative) are covered by the new dartdoc, which
+  states the send/receive asymmetry where an app author meets it.
+
+**Proven by a three-file live differential**, each file its own isolate because
+`AtClientManager` is a per-isolate singleton: `seeding_tail_runs_live_test.dart`
+(alive → publishes), `seeding_tail_abandoned_live_test.dart` (stopped →
+nothing), `ensure_reachable_live_test.dart` (stopped, then rescued → published,
+and a second call reports `alreadyReachable` rather than minting again).
+
+⚠️ **What the live arm caught that a mock could not.** Extracting a
+per-namespace `NskeySeeding.seedNamespace` initially let a **conveyance**
+failure sink the whole seed, so `ensureReachable` reported `failed` for an
+atSign whose advertisement had just been published. A legacy PKAM client has
+no APKAM keypair, the conveyance enumerates members with `enroll:listns`, and
+the atServer refuses that without APKAM authentication. Publishing is what
+makes an atSign reachable; conveying is what gives its *other* enrollments the
+private, and an enrollment that misses the push pulls at its next start — so
+the two are now guarded separately. The original `seed()` counted the namespace
+as minted *before* conveying, so this also restores behaviour the extraction
+had changed.
+
+✅ **Failure mode 2's two mechanisms are now MEASURED**, in
+`nskey_mint_lock_live_test.dart` against a live atServer, each with its own
+control and each mutation-proven:
+
+- **The atServer refuses a second create of `_nskeylock.<ns>@<atSign>`**, on
+  its own message — so the refusal is the interlock and not an unrelated write
+  failure. Control: the same write is accepted once the lock is released.
+  Mutation: skip the first take and the second write succeeds.
+- **A client meeting a lock held by another enrollment, with nothing
+  published, refuses to mint and publishes nothing.** Control: the same call
+  succeeds once the lock is gone. Mutation: give the lock **this** client's own
+  holder id and it mints instead of refusing — which is `ownLockIsNotContention`
+  working as documented, and is what makes the sibling case the thing under
+  test rather than "a lock exists".
+
+⚠️ **What is still reasoned rather than measured is the LOOP**, and only that:
+whether a short-lived client relaunched repeatedly could in principle never get
+through. Both ingredients are now observed; the rate claim is not, and "could in
+principle" is where it should stay until something counts it.
+[The `batch` P2 row](../implementation-plan.md#p2--should-be-done-if-there-is-time) would remove the
+window structurally rather than shortening it.
+
+⚠️ **The three earlier reproduction attempts**, recorded so they are not
+repeated:
+
+1. **Stop the client the enrolment handed back.** Vacuous green — that client
+   was built seconds earlier inside the enrolment dance and its tail had long
+   finished, so `stop()` had nothing to interrupt.
+2. **Build a second client and stop it in the turn `create` returns.** Vacuous
+   green for a different reason: the assertion was that `startupComplete` had
+   resolved, and it resolves on a stopped startup by design.
+3. **Assert the outcome instead — `startupComplete` resolved, so the
+   advertisement must exist.** Went red, and then its own positive control went
+   red too: an identical client left ALIVE on a second run-unique namespace
+   also published nothing, so the rig could not seed for those namespaces at
+   all and the red said nothing about stopping. Not committed.
+
+✅ **That is what the successful attempt did**, and it is why it worked where
+three others had not. The unexplained difference turned out to be the
+**posture**: `seedNamespaceKeys` is false at `PqPosture.legacy`, so a client
+built there correctly publishes nothing, and a red from that arm says nothing
+about stopping. Establish a living client at a **seeding** posture first, and
+the rest follows.
+
+**What an app author says they need, written down at gkc's request
+2026-08-26.** This is a request with a use case attached, not a ruling and not a
+design — the shape is still owed. It comes from the session that hit the defect
+while building a real chat client, and the case is ordinary: a client driven
+from a script with piped stdin sends one message and exits, which is the same
+shape as a CLI tool, a cron job or a one-shot notifier.
+
+1. **An outcome, not a completion.** Whatever a caller awaits must resolve to
+   *what happened* — published / already published / nothing to do and why /
+   abandoned / failed with this error. ⛔ A future that resolves identically for
+   "did the work" and "was stopped before doing it" is not something an
+   application can branch on, and `startupComplete` is exactly that today.
+2. **A supported way to say "do not exit until I am reachable."** The property
+   an app cares about is not "startup finished" but "other atSigns can now send
+   to me" — different sentences, and only the second is meaningful to an app
+   author. Sketched as `await atClient.ensureReachable(namespace, timeout: …)`:
+   idempotent, safe on every start, cheap when there is nothing to do. **Not
+   asked for as a default.**
+3. **Loud failure when the tail is abandoned or fails** — at warning, naming the
+   atSign and what was not done. Same class as an event dropped on a delivery
+   path, and for the same reason: the cost is paid by a different principal in a
+   different process.
+4. **The asymmetry written down where an app author will see it.** Sending works
+   the moment the client is up; receiving does not, until the tail has run. That
+   one sentence on `AtClient` would have saved the day this cost.
+5. **If `startupComplete` stays as it is**, its dartdoc should name the supported
+   alternative. `pqBootstrap` is `@experimental` and says "tests do; production
+   code must not", so today the only thing that would have helped is explicitly
+   not for app authors — which reads as "there is no way to do this".
+
+**Stated minimum: 1 and 3.** If what a caller awaits tells the truth and an
+abandoned publish is loud, an app author can build the rest.
+
+⛔ **Explicitly NOT requested: making the tail awaited by default.** The reason
+it is unawaited is good — construction must not block on the network — and
+blocking it would trade this problem for a worse one in every app that never
+needs to receive.
+
+✅ **That live probe is built and green: `nskey_mint_lock_live_test.dart`**,
+and it discharged both directions at once. It was owed because `_nskeylock` was
+covered only by a raw-literal pin of the client's *intent* and by a mock that
+models the refusal — and a mock cannot test a refusal it does not model, so the
+interlock's presence and its absence were indistinguishable. It now takes,
+releases and re-takes the lock live, exactly as
+`pq_signing_root_mint_lock_test.dart` does for `_rootlock`.
+
+⚠️ **And the interlock half is the sharper one**: if the lock cannot be made
+self-healing, a client that takes it should release it on shutdown, and one that
+finds it held with nothing published should say so at warning rather than
+throwing something the caller cannot interpret. A cron-driven notifier is
+precisely a short-lived client relaunched in a loop.
+
+### An enrolment could race itself and publish two namespace keys
+
+⛔ **FIXED 2026-08-27 (`9b51265a5`), and nothing is owed here.** Kept
+because the shape recurs and because how it was caught matters more than
+the fix. Out of `## TODO` deliberately: a row leaves that table when it is
+done rather than gaining a ✅, and this one sat there with **Blocked on:
+Nothing**, which is the exact signature of a pickable item.
+
+✅ **FIXED 2026-08-27** (`9b51265a5`), recorded because the shape recurs. **Found by the at_talk demo session**, live: `@alpha` published two advertisements **7.5ms apart** with different key material, the second overwriting the first, both conveyed — a peer fetching in that window holds a generation whose private the owner may have replaced. **The cause:** the wire lock's value is the enrolment id, an *identity* rather than an *instance*, so a second concurrent mint by the same enrolment is refused the lock, reads it back, sees its own id, concludes it holds it, and mints. `ownLockIsNotContention` was built so an enrolment re-entering its own **cooldown** adopts; it also admitted this. ⛔ **Deliberately NOT fixed with a per-instance wire token** — the winner never releases the lock, the ttl does, so a client restarting inside the two-minute cooldown meets its own lock and must adopt; a per-instance token would make it refuse to mint for the rest of the ttl, and an ordinary restart falls inside that window. `MintLock` now keeps an **in-flight map keyed by lock record**: the second caller waits, then declines to its ordinary re-read-and-adopt path. ⚠️ **Two lessons worth more than the fix.** (1) The claim it falsified was in a shipped dartdoc and CHANGELOG — *"safe to call while the startup step is running… the loser adopts"* — corrected before the fix was written. (2) The test that should have caught it, `ensure_reachable_live_test.dart`, calls `stop()` **before** `ensureReachable`, so the two never race: **a probe that has to disable the very thing the claim is about in order to run at all** (at_talk's phrasing, and a better tell than the fan-out one).
+
+**The app author's verdict on the API itself, 2026-08-27: "good enough, and
+I'd ship it."** Recorded because the request came from them and a verdict is
+what closes it. What they measured: the workaround block in their retrofit
+script — a FIFO, a 60-iteration advertisement poll, a bounded shutdown and a
+`pkill`, 3383 characters — collapsed to one call; **320ms** from connect to
+advertisement on loopback; and a probe run **after the client process exited**
+confirming the "you may exit the moment it returns" contract in the real
+piped-stdin shape. `postureDoesNotSeed` answered in 35ms and reads as a fact
+rather than a failure — they asked for the name to be kept. ⚠️ **Two arms of
+their report are gaps rather than passes, and they said so**: `timedOut` never
+fired, so it is untested; and nothing was abandoned in any of their runs, so
+the `warning` this session added has never been seen to fire outside a unit
+test.
+
+✅ **Confirmed live by the reporting session, 2026-08-27, on the pinned fix**
+(`9b51265a5`), and the confirmation is worth more than the count:
+
+| | unfixed | fixed |
+| --- | ---: | ---: |
+| advertisement writes for one atSign | **2** (different kids, 7.5ms apart) | **1** |
+| `_nskeylock` write attempts | **2** (second refused `AT0032`) | **1** |
+
+The second lock attempt is gone entirely — the loser never reaches the wire,
+which is a better outcome than one advertisement.
+
+⚠️ **A 1 on its own would have been a claim about timing, not about the fix**,
+so they proved the race *occurred*: the in-flight log line captured with a
+negative control (50 INFO lines in that run) and a positive control (the line
+itself). ⛔ **Their first attempt nearly reported "the race did not occur"** —
+they grepped a log that carried **zero** INFO lines because `at_talk` pins
+`AtSignLogger.root_level = 'SHOUT'`. A filtered stream, and the absence was a
+fact about the log level. Re-run with `-v` on a second fresh environment.
+
+**Scope, stated by them and kept here:** one observation per arm. It bounds no
+rate, and "the race occurred in the run I have the log line for" is the whole
+claim.
+
+### A retrofitted enrolment cannot run an authenticated verb
+
+⛔ **FIXED 2026-08-26, and nothing is owed here.** Kept because the mechanism is
+counter-intuitive and the coverage gap that let it ship is a separate finding
+that is still open. Reported by the at_talk demo session from a live ephemeral
+environment, with shipped code: same `at_activate` binary, same atSign, same
+environment, interleaved control then test on one keyfile, varying only whether
+the retrofit had run.
+
+| | |
+| --- | --- |
+| `at_activate list`, keyfile NOT retrofitted | exit 0, one enrolment listed |
+| `at_activate list`, SAME keyfile, retrofitted | **exit 1** — `this PKAM key is 1218 bytes, and an ML-DSA-65 secret key is 4032` |
+
+**The mechanism: three values, two sources.**
+`AtOnboardingServiceImpl._initAtClient` adopts the client's own lookup on the
+authentication path and stamps three things on it. The enrolment id and the
+signing algorithm came from the client — deliberately, and with a comment
+naming the retrofit as the reason. The signer came from the caller:
+`authenticate()` passes `atAuth.atChops`, which at_auth built for the enrolment
+the keyfile's flat fields name, *before* the client existed. A client that
+retrofits during `AtClientImpl._init` comes up on a new enrolment holding an
+ML-DSA-65 keypair, so the lookup then declared `mldsa65` over an RSA-2048 key.
+
+⛔ **`authenticatorFor` cannot reconcile them, and that is what makes it
+silent.** Given an injected signer it takes only the ALGORITHM from the keyfile
+(at_auth's `_pkam`, the `injectedChops != null` branch) — so the two halves are
+read from the same file, for the same enrolment id, and still disagree.
+Measured with three arms over one keyfile, varying only the enrolment id:
+
+| arm | outcome |
+| --- | --- |
+| injected RSA signer, the enrolment it belongs to | authenticates |
+| injected RSA signer, the retrofitted enrolment | **at_chops refuses: an RSA-2048 key under the ML-DSA-65 routine** |
+| no injected signer, the retrofitted enrolment | authenticates |
+
+The third arm places the fault: the keyfile resolves this correctly on its own,
+so it is the injection of another enrolment's signer that breaks it — not the
+retrofit, and not the key material.
+
+**Why authentication reported success.** at_auth authenticates on its own
+connection, before the client is built. The verb runs over the client's rebuilt
+connection, which authenticates lazily through the mismatched pair. So both runs
+print "Connected" and only the second fails, **on every run** — the retrofit
+deliberately leaves the keyfile's own `enrollmentId` at the capped legacy
+enrolment, so it is due again at each start.
+
+⛔ **The retention is CORRECT — do not "fix" it.**
+[UC-G1.2](../acceptance.md) specifies the legacy keypair staying in the flat fields
+byte-identical and statusless, so the capped legacy enrolment keeps
+authenticating until the atServer expires it.
+
+**The fix**: `_initAtClient` resolves the signer beside the id and the
+algorithm, from whichever source that flow trusts — the client on the
+authentication path, the caller on the enrolment path, where the APKAM keypair
+was minted moments ago and no keyfile holds it yet. `_atLookUp.atChops` stays
+the caller's on both, deliberately: that field is what at_auth's
+`EnrollmentApprover` reads for enrollment crypto, where what matters is the
+encryption keypair and the APKAM symmetric key, and a retrofitted client's
+AtChops carries no symmetric key.
+
+**Proven at two layers.**
+`packages/at_onboarding_cli/test/retrofitted_client_signs_with_its_own_key_test.dart`
+drives `authenticate()` against a client already running as a retrofitted
+enrolment and runs the installed authenticator, with two mutations red for
+different reasons — restoring the caller's signer reddens on at_chops' refusal,
+and "fixing" it by weakening the declaration to `rsa2048` instead reddens on the
+algorithm assertion. And a third arm in
+`tests/at_onboarding_cli_functional_tests/test/pq_native_enroll_test.dart` runs
+the reported command, `at_activate list`, against a real atServer on a keyfile
+a real retrofit has moved, with the keyfile read on both sides so that a green
+from a run where no retrofit happened fails instead.
+
+⛔ **The coverage gap that let it through was per-ROUTE, and closing it took
+four new use cases.** The behaviour had been proven — for the *other* route.
+`self_enrollment_retrofit_live_test.dart` has had a `selfRetrofit` client
+running a verb, receiving over a monitor and signing envelopes on a scoped
+enrolment since before this defect existed. So "is a retrofitted enrolment
+proven to work?" answered yes, and the answer was true of `selfRetrofit` and
+false of `AtClientImpl._settleEnrollmentIdentity` — the route `at_activate` and
+every SDK consumer take.
+
+[UC-B1.4](../acceptance.md#84-uc-b14--a-retrofitted-scoped-enrollment-runs-an-authenticated-verb)
+to
+[UC-B1.7](../acceptance.md#87-uc-b17--holds-the-parent-enrollments-grants-verbatim)
+now state the property with the route named: a retrofitted scoped enrolment runs
+an authenticated verb, reads and writes inside its namespace, is refused outside
+it, and holds the parent's grants verbatim. The startup route is
+`tests/at_functional_test/test/pq_retrofitted_scope_test.dart` — four arms, each
+asserting the retrofit happened before asserting anything else, with two
+mutations red: a `legacy` posture reddens every arm's precondition, and widening
+the grant reddens exactly the two arms that measure the boundary.
+
+⚠️ **Still open from the same audit**: B1.3 states that a restricted enrolment
+receives only its authorised subset of `nskey` keys, and its citation
+establishes three other things and not that one — recorded at the row. See the
+B1 audit in
+[detail — the citation audit](acceptance.md#the-citation-audit--cluster-a-2026-08-26).
+
+### 14.39 `PqPosture` and the rollout it drives
+
+**Two things are owed here, and they sit in different priority bands.** The
+rename, the three postures, the posture-only refusal flag, the sender-side
+algorithm list, the CLI's `--posture`, the client-driven retrofit at start and
+the `pqReady` default all shipped and are live-green; none of that is repeated
+here.
+
+**The key-exchange axis now reaches the CLI's enrolment**, landed 2026-08-26,
+and it is recorded here because what it changed is a **default**, not because
+anything is owed. `sendEnrollRequest` chooses between `AtEnrollmentRequest` and
+`AtEnrollmentRequest.pq` from `preference.posture.keyExchangeMode`, and
+`enroll` gained `--key-exchange legacy|pq` to override it. Guarded by
+`packages/at_onboarding_cli/test/enroll_key_exchange_mode_test.dart` — 7 tests,
+three mutations, one of which is the reason the file has a seventh.
+
+⛔ **`PqPosture.pqReady.keyExchangeMode` is `pq` and pqReady is the SDK default,
+so this moved what an `at_activate enroll` naming no `--posture` does.** A pq
+request carries no RSA-wrapped key and relies on the approver sealing one to
+the advertised key package; against an approver that predates conveyance the
+enrolment is approved and then **cannot decrypt anything**, where before it
+silently degraded to legacy. gkc ruled the trade on 2026-08-26: route it
+faithfully, and add the escape hatch for the case the posture cannot see —
+**which approver will pick the request up**. That is why `--key-exchange` is a
+separate argument rather than another thing the posture implies, and why it
+sits on `enroll` alone rather than on the shared parser.
+
+⚠️ **The CLI is the FIRST production caller of `AtEnrollmentRequest.pq`.**
+Before this, every `.pq(` in the workspace was a test. Nothing else in any
+package's `lib/` routes the axis, and for at_client that is by design
+(`pq_posture.dart`: *"at_client submits no app enrollment, so they take effect
+when the app builds its `AtEnrollmentRequest` from the posture"*).
+
+⚠️ **A mutation that should have failed came back green, and the seventh test
+exists because of it.** Hardcoding `SigningAlgoType.rsa2048` into the
+`enrollmentKeyPackageBuilder(...)` call left all six original cells passing:
+`request.signingAlgo` is a *different field* from the one handed to the
+builder, so asserting it says nothing about what the key package is signed
+with. Running the builder against an ML-DSA APKAM keypair is the only way to
+observe that algorithm, and the reddened failure now quotes
+`RsaSigningAlgo.sign` parsing an ML-DSA private key — the mechanism itself.
+
+⛔ **Two things that sound true and are NOT**, both measured:
+
+1. *"Abstention falls out for free from `keyExchangeMode`."* No: a legacy-mode
+   enrollment still registers a key package at runtime, because
+   `conveyed_key_collection.dart` calls `register()` unconditionally at every
+   client start. Measured — a legacy-mode cell enrolled without a key package
+   and prepared one anyway.
+2. *"The harness should derive the mode from `preference.posture`, as app
+   authors are told to."* Tried and reverted: seven substrate tests went red,
+   because a caller naming no posture used to get `legacy` silently. The
+   functional harness now always builds pq, which is the opposite failure from
+   the CLI's — the two real callers ignore the axis **in opposite directions**,
+   and only the CLI half ships.
+
+**(P3) Public-data signature verification — POST-D1, undesigned, and deliberately
+NOT in the acceptance catalogue** (gkc, 2026-08-23): `dataSignature` appears 0
+times in `acceptance.md`, so nothing asserts it. ⚠️ `pqActive` already
+**signs** public data — `_signPublicData` in
+`packages/at_client/lib/src/transformer/request_transformer/put_request_transformer.dart`
+sets `metadata.dataSignature` — and **nothing anywhere verifies it**: not
+at_client (no verifier symbol exists), and not the atServer, which only
+stores, merges and forwards the field. So we knowingly emit a signature no one
+checks, and this builds the first verifier rather than extending one. The
+design: `pqActive` signs with the enrollment's data signing key in the `_apsk`
+envelope form, and the verifier walks the signer's `_apsk` through the
+approval chain to `pq_signing_root`
+(`packages/at_client/lib/src/signing/apsk_composition.dart`). `pqReady`
+changes nothing. Verification runs automatically on public reads, non-fatally,
+with the outcome exposed to the caller; it needs the signer's `_apsk` cached
+or every public read pays a remote lookup on another atSign. Both `_apsk`
+forms are read, and the legacy form permanently, because every public record a
+released at_client signed sits on a live atSign.
+
+**[#2016](https://github.com/atsign-foundation/at_client_sdk/issues/2016)
+(R-2) still reads as blocked.** Its title and body were rewritten for ruling
+113, but the closing paragraph says *"State at 2026-08-18: not started, and
+now blocked on 14.39. The default posture is `ReleasePosture.migration()`;
+`ReleasePosture.postQuantum()` already exists"* — and `ReleasePosture` is gone
+from the tree (`git grep -l ReleasePosture -- packages` hits at_client's
+CHANGELOG only). Replace it: 14.39 shipped, so R-2 is unblocked; the default
+is `PqPosture.legacy` (`at_client_preference.dart:138`) and the target
+`PqPosture.pqActive` exists.
+
+**`enrollmentlId` is misspelled in a PUBLISHED public API, not just in
+at_lookup.** The field is declared at
+`packages/at_commons/lib/src/verb/pkam_verb_builder.dart:5` and read at 11
+sites — at_commons (`:29,:30` plus its tests), at_auth
+(`at_authenticator.dart:118,189,257`), at_lookup (`at_lookup_impl.dart:700`)
+and two functional tests. at_commons **5.16.0** is published, so the rename is
+breaking and rides an at_commons major. Record the ruling either way; this has
+been sitting as a passing note since 2026-08-19 with a location
+(`at_lookup_impl.dart:563`) that has since moved.
+
+⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** A rejected-design
+record kept on purpose: the two objects that hold a stale `RemoteSecondary`
+and so would break a live enrolment re-point, plus the reason rebuilding the
+sync service is the wrong answer. The section states outright that it was
+recorded because sequencing sidesteps the hazard rather than removing it —
+i.e. it is being held for whoever builds the live re-point. It is in no commit
+(the re-point was never built) and nowhere in decisions.md: ruling 113 records
+only the monitor half of this audit.
+
+⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** If the triage's three
+promotes for 14.39 include the stream-audit result, it must NOT go to
+decisions.md as a standing ruling: the audit is dated 2026-08-19 and the
+at_lookup consolidation has since falsified it. Promoting it would ship a
+false absence claim into the ledger, and a future live-re-point builder would
+trust it and orphan subscribers.

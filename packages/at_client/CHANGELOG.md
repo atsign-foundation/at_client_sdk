@@ -1,5 +1,127 @@
 ## 3.15.0-rc1
 
+- `ApkamSigning.publicSigningKey` and `.privateSigningKey` are back, as the
+  synchronous accessors 3.14.0 published and reading the same place they did,
+  and both are **deprecated**. They answer the APKAM *authentication*
+  keypair. Two reasons to move off them, the first being the one that bites:
+  `_apsk` lists that key only while the enrollment holds no signing keys of
+  its own, so a signature made with it can verify against nothing; and a key
+  per algorithm is the model now, which one key cannot describe.
+  **Migration:** read `signingKeys` — every key this enrollment signs with,
+  strongest first — and `publicSigningKeyValue` for what gets advertised.
+  They are removed with `AtClient.atChops` in at_client 4.0.
+  - They **refuse** when the enrollment authenticates with anything but
+    `rsa2048`: the slot then holds base64 raw bytes of a post-quantum key,
+    and handing those to a caller expecting RSA is a corrupted value rather
+    than a policy mismatch. They also refuse, naming the client, where
+    3.14.0 met an absent keypair with a null-check failure.
+  - They log at `shout` under a posture that configures post-quantum
+    providers, which is where the advertisement may already have stopped
+    naming this key.
+- **BREAKING:** the asynchronous `ApkamSigning.publicSigningKey` — the
+  strongest held signing key — is removed, its name returned to the accessor
+  above. It had no caller outside this package's own tests, and choosing one
+  key out of several was the signer's decision to make: read `signingKeys`.
+- Approving an enrollment refuses, naming what is missing, when this
+  client cannot read its own encryption private key and
+  self-encryption key. at_auth used to refuse it at the end of a
+  nullable hand-off; its `approverKeys` is required now, so the refusal
+  belongs on this side, where the local secondary's tiers are what was
+  asked and the message can say so.
+- refactor: `AtClientPreference.pqStartupGates` is for tests. Nothing in
+  any package's `lib` builds its own set, so a client runs every
+  post-quantum startup step or none, and which of the two is the
+  posture's business — one `@internal` getter derives it now, where the
+  client used to restate the rule beside it.
+- refactor: every reader of "which enrollment am I" reads
+  `AtClient.enrollmentId` rather than the connection's `atLookUp.enrollmentId`.
+  `RemoteSecondary` writes the connection's id from the client's at every
+  build and rebuild, so the two agree by construction; the e2e retrofit test
+  now asserts it at the one moment they could have parted.
+- `AtClient.atChops` is deprecated, getter and setter. Build the client from a
+  keyfile — `AtClientImpl.create(atKeysIo:)` — and it derives what it needs
+  from that; nothing outside at_client needs the `AtChops` it holds. The
+  constructor's `atChops:` was already deprecated.
+- refactor: a client's remote connections — its own and sync's — authenticate
+  from the keyfile's keypair when the keyfile holds one; the client's
+  `AtChops` is the door when it holds none, which a client built from an
+  `AtChops` with an empty key source beside it needs — the shape the
+  functional pack builds, where a first form of this change that dropped the
+  `AtChops` failed 36 of its tests. Same bytes: a test verifies the PKAM
+  signature under the keyfile's public key when the keyfile holds one, and
+  under the `AtChops`' when it holds none. The credential fields at_lookup
+  reads are still written on the lookup, for a lookup from before the
+  authenticator seam; they go with that ladder in the at_lookup major.
+- refactor: `ApkamSigning.authenticationSigningKey` reads the enrollment's
+  APKAM authentication keypair from the keyfile, typed material first and
+  the flat pair as `rsa2048` otherwise, the way `heldSigningKeys` already
+  reads the signing keys; the client's `AtChops` answers only for a client
+  built without a key source. It is now asynchronous, since a keyfile is
+  read rather than held.
+- refactor: approving an enrollment hands at_auth this client's encryption
+  private key and self-encryption key, resolved by the local secondary
+  across its three tiers, rather than the client's `AtChops`. A client with
+  no local secondary, or holding neither key, passes none and at_auth
+  refuses the approval as before.
+- feat: `AtClientPreference.pqStartupGates` names which post-quantum startup
+  steps a client runs; null keeps today's behaviour and lets the posture
+  decide. The set is read once, by a startup the constructor fires, so a
+  set handed to a running client cannot be applied, and
+  `rolloutDifferencesFrom` reports it as a rollout difference rather than
+  leaving a client describing a configuration it never ran.
+  `PqStartupGates` compares by value.
+- refactor: the legacy shared key is wrapped and unwrapped with the atSign's
+  own RSA key taken from the client's key material rather than from its
+  `AtChops`, so those three calls no longer need one. Unwrapping asks only for
+  the private half, which is all RSA decryption reads and the only half a
+  keystore-backed client is guaranteed to hold.
+- feat: `LocalSecondary`'s encryption key getters resolve across three tiers
+  rather than two: an injected `AtChops`, then the client's `atKeysIo`, then
+  the keystore. A client handed a key source now serves its encryption
+  keypair and self-encryption key from it, which is what lets a caller pass
+  `atKeysIo:` instead of building an `AtChops`. The two PKAM getters
+  deliberately do not consult the source: `authenticationKeyPairFor` refuses
+  an enrollment whose material this build cannot sign with, and falling
+  through that refusal to the keystore is the thing it exists to prevent.
+- refactor: the legacy self-key paths read the local secondary rather than
+  reaching into `atClient.atChops` first and falling back to it. Same
+  resolution, one tier deeper, and they now see a key source.
+- refactor: envelope signing and the public-data signature use
+  `RsaSignatureAlgo` instead of the deprecated `RsaSigningAlgo` and
+  `AtChops.sign`. Both produce the same bytes: the committed JWS vector
+  re-signs identically, and a new pin in `put_request_test.dart` holds the
+  base64 `dataSignature` for a fixed key and value, which the old and new
+  classes were measured to agree on.
+- refactor: signing a public value now uses the encryption private key the
+  caller already passes in, which was previously only null-checked while the
+  key came from `AtChops`. Same key in a correctly wired client, and one
+  fewer reader of a surface that is going away.
+- refactor: RSA envelope signing refuses a key whose modulus is not 2048
+  bits, where `RsaSigningAlgo` checked nothing. Envelope signing is
+  rsa2048-only — `signEnvelope` throws for any other RSA size before reaching
+  the algorithm — so the check can only fire on key material that disagrees
+  with the algorithm its own document names, and such a signature never
+  verified against a reader that trusts the label.
+- refactor: the legacy encryption paths call their AES and RSA algorithms
+  directly instead of going through `AtChops.encryptString` and
+  `decryptString`. Two helpers beside them carry the base64 and utf8 steps the
+  wrapper did and keep its exception mapping, so a failure inside a cipher
+  still arrives as `AtEncryptionException` or `AtDecryptionException` and a
+  malformed input still surfaces as whatever the conversion throws. The
+  encrypt path's chained diagnostic now names `Intent.shareData` and
+  `ExceptionScenario.encryptionFailed`; the wrapper named the decrypt pair on
+  both sides. `AtEncryptionResult` leaves these paths with them. The three RSA
+  calls that pass no algorithm stay, because they read the client's key pair
+  out of `AtChops`.
+- refactor: the two legacy hashing calls build their algorithm directly
+  instead of going through `AtChops.hashWith`, whose class is deprecated. The
+  shared-key write hashes with `SHA512HashingAlgo`, and the read maps a
+  record's `pubKeyHash.hashingAlgo` through an exhaustive switch over
+  `HashingAlgoType`, so a new member of that enum stops this package
+  compiling rather than failing at runtime. `Md5HashingAlgo` stands in for the
+  `DefaultHash` the old factory returned, which subclasses it with no body of
+  its own.
+
 - **BREAKING (within this unpublished rc):** the CK-conveyance provider ids
   drop their AEAD segments — `at/nskey/XWING/AES/GCM` becomes `at/nskey/XWING`,
   and `at/nskey/MLKEM1024/AES/GCM` becomes `at/nskey/MLKEM1024`. X-Wing seals
@@ -3018,6 +3140,57 @@ hunting for a constructor argument that never existed in a release. -->
   question — privilege is a property of an enrollment that is currently
   approved, so a revoked record answering it would grant authority the
   atServer no longer honours.
+- fix: `stop()` and the atSign switch that calls it no longer report success
+  after a teardown step failed to run. Each step caught everything and logged
+  it at `warning`, so a `TypeError` — a field holding the wrong type, meaning
+  the step never happened — was indistinguishable from a socket that was
+  already gone. A failure is now separated from a defect: an `Exception` is
+  logged and stepped over, because the remaining steps must still run, while
+  an `Error` is held with the stack of where it was raised and thrown once
+  every step has had its turn. Storage is released and the client removed from
+  the instance map first, so a defect cannot leave storage claimed or a
+  stopped client discoverable. The sync and notification services are now
+  type-tested rather than cast: neither interface declares `stop()`, so a
+  field holding null or another implementation is a legal state with nothing
+  to stop, and the cast turned that into the very defect the catch then hid.
+- fix: a write whose sync trigger failed no longer reports that the write was
+  not queued. `LocalSecondary` queued the write and then asked the sync
+  service to drain, both inside one `try`, so any failure of the second was
+  logged as `failed to enqueue <key>` at `shout` — naming the durable half,
+  which had already succeeded. Measured over the unit suite, 79 of those lines
+  were the trigger and none of them was a genuine enqueue failure. The two are
+  now separate: a write that cannot be queued is still shouted about and named,
+  because nothing will push it until the periodic safety net finds it, while a
+  write that is queued but could not ask for a drain says so, and says that it
+  waits for the next trigger. Neither failure fails the write.
+- fix: a background path that swallows an error now logs a defect at `severe`
+  and a condition at the level it always used. Sixteen sites — the PQ startup's
+  steps, the envelope listener and its sweeps, the notification watermark, the
+  conveyance read, the collection envelope fetches and the sync trigger —
+  caught everything and logged it at `warning`, so a defect sat among the
+  conditions and read as one. Two errors are defects, and both mean the same
+  thing — a null reached a place that needed a value: a `TypeError` is a value
+  of the wrong type arriving at the call, and a `NoSuchMethodError` is a member
+  invoked on a null receiver. Neither is anything the network or the store can
+  produce. Every other error stays a condition, `StateError` included, because
+  this codebase raises it for a store that is not open yet and a service that
+  is not wired yet. The errors are still swallowed: these
+  paths run on background triggers with nobody to hand an error to, and one
+  escaping into the zone a timer fired in can take the isolate down.
+- fix: `setSPP` without an expiry logs at `warning` rather than `shout`.
+  Applying a documented default is not the loudest thing a client can say, and
+  the line contradicted itself by carrying the word "WARNING" while logging a
+  level above `severe`. The text loses that prefix and gains the space it was
+  missing between the sentence and the default.
+- fix: a client reports the key material it found in its own local store once,
+  and at a level that says which situation it is in. It used to log a warning
+  for each of the two keypairs it failed to read, so every client built before
+  onboarding produced two warnings about the ordinary state — 244 of them in
+  the unit suite alone, which is where the lines that mean something were
+  sitting. A store holding neither keypair is now one `info` line; a store
+  holding one and not the other is a `warning`, because onboarding does not
+  produce half a store and such a client fails at whichever key it needs
+  first. Each individual miss keeps its detail at `finer`.
 
 ## 3.14.0
 - feat (experimental): per-APKAM same-atSign secret-sharing substrate —

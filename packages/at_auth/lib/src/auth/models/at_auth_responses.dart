@@ -3,7 +3,12 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
-@Deprecated('remove in v5 in favour of AtAuthSession')
+/// The result of onboarding or authenticating an atSign.
+///
+/// [session] is the typed hand-off to the client, and supersedes the
+/// deprecated [atAuthKeys], [atLookUp] and [atChops] fields. It is populated
+/// on success for every request that carried an [AtKeysIo] — which is every
+/// request that did not hand over a fixed key set instead.
 sealed class AuthResponse {
   String atSign;
   bool isSuccessful = false;
@@ -20,13 +25,17 @@ sealed class AuthResponse {
   /// deprecated [atLookUp]/[atChops] fields.
   AtAuthSession? session;
 
-  // todo: only functional for old-style keys... needs rethinking.
-  String? get enrollmentId => atAuthKeys?.enrollmentId;
+  /// The enrollment this authenticated as.
+  ///
+  /// From [session] where there is one, which is every request carrying an
+  /// [AtKeysIo]; from the deprecated keys otherwise, so a caller that passed
+  /// a fixed key set still gets an answer.
+  String? get enrollmentId =>
+      // ignore: deprecated_member_use_from_same_package
+      session?.enrollmentId ?? atAuthKeys?.enrollmentId;
 
   AuthResponse(this.atSign);
 }
-
-@Deprecated('remove in v5 in favour of AtAuthSession')
 
 /// Represents an onboarding response of an atSign.
 class AtOnboardingResponse extends AuthResponse {
@@ -40,7 +49,7 @@ class AtOnboardingResponse extends AuthResponse {
   }
 }
 
-@Deprecated('remove in v5 in favour of AtAuthSession')
+/// Represents an authentication response of an atSign.
 class AtAuthResponse extends AuthResponse {
   /// Constructor that takes an @sign as a parameter
   AtAuthResponse(super.atSign);

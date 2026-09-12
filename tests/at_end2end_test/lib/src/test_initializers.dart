@@ -114,17 +114,18 @@ class TestSuiteInitializer {
             ConfigUtil.getYaml()['root_server']['url'],
             ConfigUtil.getYaml()['root_server']['port'] ?? 64);
         atAuthResponse = await authenticate(atAuthRequest);
-        atChops = createAtChopsFromAtAuthKeys(atAuthResponse.atAuthKeys!);
+        // Read back through the source the session carries, which is the
+        // keyfile this request authenticated from.
+        final authenticated =
+            await atAuthResponse.session!.atKeysIo.read(atSign);
+        atChops = createAtChopsFromAtAuthKeys(authenticated);
 
         AtCredentials.credentialsMap[atSign] = {
-          'pkamPublicKey': atAuthResponse.atAuthKeys!.apkamPublicKey,
-          'pkamPrivateKey': atAuthResponse.atAuthKeys!.apkamPrivateKey,
-          'encryptionPublicKey':
-              atAuthResponse.atAuthKeys!.defaultEncryptionPublicKey,
-          'encryptionPrivateKey':
-              atAuthResponse.atAuthKeys!.defaultEncryptionPrivateKey,
-          'selfEncryptionKey':
-              atAuthResponse.atAuthKeys!.defaultSelfEncryptionKey
+          'pkamPublicKey': authenticated.apkamPublicKey,
+          'pkamPrivateKey': authenticated.apkamPrivateKey,
+          'encryptionPublicKey': authenticated.defaultEncryptionPublicKey,
+          'encryptionPrivateKey': authenticated.defaultEncryptionPrivateKey,
+          'selfEncryptionKey': authenticated.defaultSelfEncryptionKey
         };
       } else {
         atChops = createAtChopsFromDemoKeys(atSign);
@@ -149,13 +150,13 @@ class TestSuiteInitializer {
       // rebuilds the client, and a rebuild with no credentials cannot
       // authenticate an APKAM enrollment - see [switchToAtSign].
       _authCache[atSign] =
-          _AuthCredentials(atChops, atAuthResponse?.atAuthKeys?.enrollmentId);
+          _AuthCredentials(atChops, atAuthResponse?.enrollmentId);
       // Create the atClientManager for the atSign
       var atClientManager = await (manager ?? AtClientManager.getInstance())
           .setCurrentAtSign(atSign, namespace, atClientPreference,
               atChops: atChops,
               atKeysIo: await _nskeyKeyfileFor(atSign, atClientPreference),
-              enrollmentId: atAuthResponse?.atAuthKeys?.enrollmentId);
+              enrollmentId: atAuthResponse?.enrollmentId);
       // Set Encryption Keys for currentAtSign
       await AtEncryptionKeysLoader.getInstance()
           .setEncryptionKeys(atClientManager.atClient, atSign);

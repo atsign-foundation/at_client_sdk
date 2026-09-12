@@ -145,8 +145,8 @@ abstract interface class AtLookUp {
   /// Deprecated as a *credential*. Authentication runs through an injected
   /// [AtAuthenticator] instead, so at_lookup no longer needs to hold key
   /// material to authenticate. Callers that read this for crypto which is not
-  /// authentication should be handed their own [AtChops] - that is what
-  /// at_auth EnrollmentApprover.approve takes an approverChops for.
+  /// authentication should be handed their own key material - that is what
+  /// at_auth EnrollmentApprover.approve takes its approverKeys for.
   @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
       'instead - at_auth builds one with authenticatorForChops(). '
       'Removed with the credential ladder in the next major release.')

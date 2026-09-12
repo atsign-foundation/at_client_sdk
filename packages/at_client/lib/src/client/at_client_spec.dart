@@ -99,9 +99,20 @@ abstract class AtClient {
   Future<AtReachabilityResult> ensureReachable(String namespace,
       {Duration timeout = const Duration(seconds: 30)});
 
-  /// Set an instance of [AtChops] for data encryption and signing operations
+  /// The `AtChops` this client encrypts, decrypts and signs with: derived from
+  /// its keyfile at construction, or injected.
+  @Deprecated(
+      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
+      'and it derives what it needs from that; nothing outside at_client needs '
+      'the AtChops it holds. Removed with the AtChops compatibility API in the '
+      'next major release.')
   set atChops(AtChops? atChops);
 
+  @Deprecated(
+      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
+      'and it derives what it needs from that; nothing outside at_client needs '
+      'the AtChops it holds. Removed with the AtChops compatibility API in the '
+      'next major release.')
   AtChops? get atChops;
 
   /// The client's key source (`package:at_auth`), injected at construction

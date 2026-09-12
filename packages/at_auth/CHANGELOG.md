@@ -1,5 +1,180 @@
 ## 4.0.0-rc2
 
+- feat: `InMemoryAtKeysIo.holding(atSign, keys)` — an in-memory store already
+  holding a key set, for a caller that has keys in hand and needs a *source*
+  to authenticate from. at_auth wraps a fixed key set this way internally, so
+  this is the same object the authentication would have built.
+- `AuthResponse.enrollmentId` answers from `session` where there is one, and
+  from the deprecated keys otherwise. Same signature, and it now works for a
+  request that supplied only an `AtKeysIo` — previously it read the keys
+  alone, so a keyfile-sourced authentication reported no enrollment at all.
+- refactor: every caller of `AtAuthRequest.atAuthKeys` and of
+  `AuthResponse.atAuthKeys`/`.atLookUp`/`.atChops` in this repository reads
+  the session instead — `session.atKeysIo` for the keys, `enrollmentId` for
+  the enrollment. **The fields themselves stay**, deprecated as before: an
+  application reaches them through at_client_flutter's `AuthService`, and
+  those packages do not break. Measured, not assumed: at_client_flutter
+  1.1.4's published example app compiles against this tree with zero errors
+  and seven deprecation infos.
+- **BREAKING:** `AtKeys.toAtChops` and `.toAtChopsForEnrollment` are no
+  longer public. Nothing outside at_auth called either, and the assembly they
+  wrap was already library-private, so they became private too and
+  `AtKeys.authenticationFor` — the public route — returns exactly what it
+  returned before. A caller that wants the keypair without an `AtChops`
+  around it takes `authenticationKeyPairFor`, with `encryptionKeyPair` and
+  `selfEncryptionKey` for the rest of what one carried.
+- **BREAKING:** `AtKeys.copyWith` is removed. Its declaration was its only
+  occurrence in this repository; use `addKey`.
+- **BREAKING:** the registrar's legacy aliases are removed —
+  `ActivateApiEndpoint`, and `RegistrarApiEndpoint.login`/`.validate`. Use
+  `RegistrarApiEndpoint`, `.requestOtp` and `.validateOtp`. Nothing in this
+  repository named any of the three.
+- **BREAKING:** `KeyIOMixin` and its four serialization helpers are removed,
+  and `WrittenAtKeysIo`/`GeneratedAtKeysIo` no longer mix it in:
+  `decryptAtKeysWithSelfEncKey`, `encryptAtKeysWithSelfEncKey`,
+  `generateKeyPairs` and `decodeAtKeys`. A `.atKeys` document is read and
+  written through the store itself — `FileAtKeysIo.read`/`.write` — which
+  does the passphrase and self-encryption decoding; `passphraseCodec` on
+  `AtKeysIo` remains for a caller that needs the envelope alone. No caller
+  outside at_auth named any of them.
+- **BREAKING:** `AtAuth.atChops` is removed. Build the client from the
+  `AtKeysIo` you authenticated with, which `AtAuthResponse.session` carries,
+  rather than from an `AtChops` at_auth hands out; the responses' own
+  `atChops` stay deprecated for now. Injecting a signer through
+  `AtAuth.create(atChops:)` is unchanged, because a hardware-backed key has
+  no other door yet — the implementation holds it privately, for the
+  authentication it was always for. Nothing outside at_auth wrote the field;
+  the seven places that read it were fixtures passing it back to a client
+  built from the same keyfile.
+- refactor: one rule for a signer beside a keyfile, in every authenticator
+  at_auth builds: the keyfile's keypair signs when it holds one for the
+  enrollment, and an injected `AtChops` signs when it holds none — the door
+  for a hardware-backed key, or for a client built from an `AtChops` with a
+  stand-in key source beside it. `AtAuth.authenticate` used to inject the
+  `AtChops` it builds for its `atChops` field, so at_auth's own authentication
+  never took the keypair path. Same bytes: the openssl-captured PKAM
+  signature is asserted on the authenticator `authenticate` installs, and two
+  arms hold the rule from each side.
+- refactor: the enrolment handshake authenticates from the enrollee's keys
+  alone. It used to build an `AtChops` around them and inject it as the
+  signer, with a special shape for an enrollee still awaiting its symmetric
+  key; `authenticatorFor` reads only the APKAM keypair, which those keys
+  always hold, so neither is needed. Same bytes: the openssl-captured PKAM
+  signature is now asserted on the handshake's own authenticator, and an
+  ML-DSA enrollment's signature is checked with at_chops' verifier. A lookup
+  without the authenticator seam still gets at_lookup's credential fields,
+  built from the keypair alone.
+  ⚠️ The handshake no longer copies the unwrapped symmetric key into an
+  `AtChops`; it never left the handshake, and nothing read it.
+- **BREAKING:** `AtEnrollment.approve` takes `approverKeys`, an
+  `ApproverKeyMaterial` holding the atSign's encryption private key and its
+  self-encryption key, which is all approval reads — and it is now
+  **required**. `approverChops` is removed, and with it the older fallback to
+  `atLookUp.atChops`: a connection is not where an app's key material lives,
+  and requiring the material means the compiler names every caller rather
+  than a refusal arriving at run time. A caller that cannot resolve its own
+  two keys refuses instead of approving and failing afterwards. The two
+  secrets sealed for the enrollee are sealed through `AESEncryptionAlgo`
+  directly,
+  and a new test opens them with the enrollee's own `StringAESEncryptor`, a
+  different AES implementation, so the pair is the contract.
+  ⚠️ `approve` no longer writes the unwrapped APKAM symmetric key into the
+  caller's `AtChops`. Nothing in this repository read it back; a caller that
+  did should keep the key from its own decision.
+- fix: `AtAuth.authenticate` and `onboard` install an authenticator on a
+  lookup that can take one and set at_lookup's credential fields only on a
+  lookup that cannot. They used to write both, and `AtLookUp` prefers the
+  authenticator, so on the lookup at_auth builds for itself the fields were
+  written and never read. A lookup handed in through
+  `AtAuth.create(atLookUp:)` without the seam authenticates from the fields
+  as before. A test covers which wiring each kind of lookup gets.
+  ⚠️ A caller that took `AtAuthResponse.atLookUp` and passed it to
+  `approve` was reading key material at_auth had left on the lookup.
+  `approve` requires `approverKeys` now and reads the lookup for nothing,
+  so there is no longer a way to depend on that.
+- refactor: the legacy flat fields of a `.atKeys` document are
+  self-encrypted through `AESEncryptionAlgo` directly rather than through
+  an `AtChops` built for the purpose. Same bytes: a new test pins the
+  at-rest ciphertext against openssl and re-encrypts the committed legacy
+  fixture byte-for-byte.
+- fix: the enrolment handshake installs an authenticator on a muxable lookup
+  and reaches for at_lookup's credential ladder only when it cannot. It used
+  to set both, and `AtLookUp` prefers the authenticator, so the ladder fields
+  were being written and never read. The chops instance is shared with the
+  authenticator, so the symmetric key filled in once it arrives still reaches
+  whichever path authenticates.
+  ⚠️ Which wiring authenticates was covered by nothing: removing the
+  authenticator outright left every handshake test green, because the lookup
+  is mocked past the point where it would be used. There is a test for the
+  wiring itself now.
+- chore: the two private functions that assemble the `AtChops` for
+  `toAtChops` say so, and their deprecated uses are ignored rather than
+  counted. Their only caller is that deprecated method, so they are the
+  carrier being built and leave with it in the major.
+- refactor: the `enroll:update` possession proof is signed by
+  `signPkamChallenge` too, which is what its own documentation said it needed:
+  the atServer verifies the proof and a PKAM challenge through one verifier,
+  so the two have to frame a signature identically, and now they do it by
+  calling the same function. Its tests verify the signature the way the
+  atServer does, for both rsa2048 and mldsa65.
+- refactor: a PKAM challenge is signed from the keypair rather than through
+  `AtChops`, wherever the keyfile is the whole answer. `signPkamChallenge`
+  takes the algorithm from the material it signs with, so a key cannot be put
+  through the wrong routine, and `authenticationKeyPairFor` is what resolves
+  it. The bare-private-key authenticator signs with `RsaSignatureAlgo`
+  likewise. A caller that injects its own `AtChops` still signs with it: that
+  is the shape the injection exists for.
+  ⚠️ The bytes are unchanged, and pinned: `at_authenticator_test.dart` now
+  carries the base64 PKAM signature for a fixed challenge and demo key,
+  captured with `openssl dgst -sha256 -sign` so the expectation does not come
+  from the code it checks.
+- refactor: the ML-DSA PKAM key-length diagnostic moves here with the
+  signing. A key of about 1.2 kB is an RSA-2048 private key, and the way a
+  caller holds one while naming mldsa65 is a retrofitted keyfile whose flat
+  fields carry another enrollment's pair; saying so beats reporting a byte
+  count.
+- fix: `toAtChopsForEnrollment` takes the encryption keypair and
+  self-encryption key through those accessors rather than off the flat
+  fields, so a keyfile whose atSign material is typed derives a working
+  `AtChops`. This is the only route from an `AtKeysIo` to a client's crypto —
+  `AtClientImpl.create(atKeysIo:)` goes through `authenticationFor` — so
+  before this a typed-only document produced empty encryption keys.
+- feat: `AtKeys.encryptionKeyPair` and `.selfEncryptionKey` prefer typed
+  `publicEncryption`/`privateDecryption`/`symmetricEncryption` material under
+  the atSign, falling back to the flat fields. `addKey` with no enrollment id
+  already files that material, so the atSign's encryption keypair and
+  self-encryption key can now be both written and read without naming a
+  deprecated member. The algorithm is checked rather than assumed from the
+  role, because the role tokens are open strings and an X-Wing key filed
+  under `publicEncryption` is not an RSA keypair however it is labelled.
+- feat: `AtKeys.authenticationKeyPairFor`, `.encryptionKeyPair` and
+  `.selfEncryptionKey` — the typed form of what an `AtChops` carried, so a
+  caller can take the key material without building one.
+  `authenticationKeyPairFor` resolves exactly as `authenticationFor` does,
+  typed material first and the flat APKAM pair under `rsa2048` only where
+  there is none, and refuses an algorithm this build cannot sign with rather
+  than falling back to another enrollment's credentials. The two flat-backed
+  getters read the legacy fields, because nothing files an atSign encryption
+  keypair or self-encryption key as typed material; a writer that starts to
+  would make them prefer it.
+- `toAtChopsForEnrollment` is deprecated, joining `toAtChops`, and names
+  those three as the replacement.
+- refactor: keys and initialisation vectors are generated from the key
+  classes' own statics rather than through `AtChopsUtil`, whose bodies were
+  one-line wrappers around them. 25 call sites; 13 of those sit inside the
+  deprecated `KeyIOMixin`, where nothing warned, and at_chops removes the
+  utility in its next major.
+
+- fix: `waitForApproval` no longer sleeps 500ms before every PKAM attempt when
+  `logProgress` is set. The pause paced a text CLI's progress output so its
+  lines did not scroll past unread, but it sat in the handshake rather than in
+  the consumer, so every caller paid it — a Flutter app that renders progress
+  on its own frame schedule, and any automated enrolment, as much as the CLI.
+  Measured at 500ms of the 549ms a fully approved enrolment spent in
+  `waitForApproval`. The progress events themselves are unchanged: the stream
+  is broadcast and delivers without the pause. Retry pacing is unaffected —
+  `retryInterval` is awaited separately, so a pending enrollment still polls on
+  its stated interval rather than in a tight loop.
 - feat: `FileAtKeysIo` keeps a copy of the keyfile at the moment its shape
   stops being the flat one every published build reads. The `.bak` beside it
   is rolling — the next write replaces it, and a client's startup makes
@@ -41,6 +216,18 @@
 - feat: `AtKeys.holdsAuthenticationMaterial` — whether the document holds
   typed authentication material or the flat APKAM keypair. A document holding
   neither authenticates as nothing, whatever its flat id says.
+- fix: the deprecation on `AuthResponse`, `AtOnboardingResponse` and
+  `AtAuthResponse` moves onto the fields that have replacements. `authenticate`
+  and `onboard` return those types and are not themselves deprecated, so the
+  class-level annotation warned every caller with nothing to move to, and a
+  caller that names the return type in its own signature could not clear it at
+  all. `session` is still the typed hand-off, and `atAuthKeys`, `atLookUp` and
+  `atChops` keep their annotations.
+- fix: `AtKeys.metadata` is no longer deprecated. It carries a legacy keyfile's
+  entries outside the flat key schema — the atSign under `atsign` or `name`,
+  and the self-encryption key stored under the atSign itself — and the typed
+  document has no equivalent, so the replacement the annotation promised does
+  not exist.
 
 ## 4.0.0-rc1
 

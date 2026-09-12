@@ -41,7 +41,16 @@ void main() {
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
-    when(() => lookUp.enrollmentId).thenReturn(null);
+    when(() => atClient.enrollmentId).thenReturn(null);
+    // NOTE: an EMPTY roster, and said rather than left unstubbed. A read miss
+    // broadcasts a pull to the namespace's other enrollments, and here there
+    // are none - which is the situation these tests are in. Matched on the
+    // command so no other verb is answered by accident;
+    // `listForNamespace` refuses to read an unparseable response as an empty
+    // roster on purpose, because that would withhold key material from every
+    // member of the namespace.
+    when(() => secondary.executeCommand(any(that: startsWith('enroll:listns')),
+        auth: any(named: 'auth'))).thenAnswer((_) async => 'data:[]');
     when(() => atClient.getPreferences())
         .thenReturn(AtClientPreference()..namespace = namespace);
     return atClient;
@@ -228,7 +237,7 @@ void main() {
       when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
       when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
       when(() => secondary.atLookUp).thenReturn(lookUp);
-      when(() => lookUp.enrollmentId).thenReturn('enrollment-1');
+      when(() => atClient.enrollmentId).thenReturn('enrollment-1');
       when(() => atClient.getPreferences())
           .thenReturn(AtClientPreference()..namespace = namespace);
       when(() => atClient.enrollmentService)

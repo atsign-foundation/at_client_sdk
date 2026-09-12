@@ -23,6 +23,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -66,7 +67,7 @@ void main() {
 
   setUp(() async {
     atChops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+        AtChopsKeys.create(null, pkamKeyPairFor(atSign, enrollmentId)));
     keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys(atsign: atSign.toAtsign()));
     updates = [];
@@ -83,7 +84,7 @@ void main() {
     atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
     enrollment = MockAtEnrollment();
     when(() => enrollment.update(any(), any())).thenAnswer((i) async {
@@ -266,7 +267,7 @@ void main() {
     late List<String> published;
 
     setUp(() {
-      when(() => atLookUp.enrollmentId).thenReturn(null);
+      when(() => atClient.enrollmentId).thenReturn(null);
       published = [];
       when(() => atClient.get(any(),
               getRequestOptions: any(named: 'getRequestOptions')))
@@ -535,7 +536,7 @@ void main() {
 
     test('an envelope signed before the withdrawal still verifies', () async {
       asRetrofittedEnrollment();
-      when(() => atLookUp.enrollmentId).thenReturn(null);
+      when(() => atClient.enrollmentId).thenReturn(null);
       final published = <String>[];
       when(() => atClient.get(any(),
           getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
@@ -583,7 +584,7 @@ void main() {
         'a two-member in-use set signs twice, and a one-algorithm verifier '
         'still verifies', () async {
       asRetrofittedEnrollment();
-      when(() => atLookUp.enrollmentId).thenReturn(null);
+      when(() => atClient.enrollmentId).thenReturn(null);
       final published = <String>[];
       when(() => atClient.get(any(),
           getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {

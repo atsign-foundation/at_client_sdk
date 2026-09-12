@@ -91,7 +91,7 @@ class KeyPackageMinting with ApkamSigning {
     }
 
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
-    final enrolment = atLookUp?.enrollmentId;
+    final enrolment = atClient.enrollmentId;
     if (enrolment == null || isAtSignCredential(enrolment)) {
       logger.info('Not reconciling the key package for $atSign: the atSign\'s '
           'own credential has no enrollment record to amend');

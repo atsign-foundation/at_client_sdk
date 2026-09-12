@@ -10,7 +10,6 @@ import 'package:at_utils/at_progress.dart';
 
 /// Interface for onboarding and authentication to a secondary server of an atsign
 abstract interface class AtAuth {
-  AtChops? atChops;
   AtLookUp? atLookUp;
   Stream<ProgressEvent> get progressStream;
 

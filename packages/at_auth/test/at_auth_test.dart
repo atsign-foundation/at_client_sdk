@@ -115,7 +115,9 @@ void main() {
       final response = await atAuth.authenticate(atAuthRequest);
 
       expect(response.isSuccessful, true);
-      expect(response.atAuthKeys!.enrollmentId, testEnrollmentId);
+      expect(response.session!.enrollmentId, testEnrollmentId,
+          reason: 'the session is where an authentication reports the '
+              'enrollment it authenticated as');
     });
 
     /// A retrofitted keyfile: the flat fields keep the legacy enrollment's
@@ -275,7 +277,9 @@ void main() {
       final response = await atAuth.authenticate(atAuthRequest);
 
       expect(response.isSuccessful, false);
-      expect(response.atAuthKeys!.enrollmentId, testEnrollmentId);
+      expect(response.session, isNull,
+          reason: 'a failed authentication hands nothing across: there is no '
+              'authenticated connection and no enrollment to name');
     });
 
     test('Test authenticate() invalid keys file path', () async {
@@ -297,17 +301,13 @@ void main() {
           throwsA(isA<AtException>()));
     });
 
-    test('Test authenticate() with atAuthKeys set', () async {
+    test('Test authenticate() with keys handed over in memory', () async {
       when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(true));
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
               enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(true));
-      final atAuthRequest = AtAuthRequest(
-        '@alice🛠',
-        atKeysIo: fileAtKeysIo,
-      );
-      atAuthRequest.atAuthKeys = AtKeys()
+      final keys = AtKeys()
         ..apkamPublicKey =
             AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
         ..apkamPrivateKey =
@@ -319,6 +319,10 @@ void main() {
         ..defaultSelfEncryptionKey = AtBytes.fromString(
             base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = testEnrollmentId;
+      final atAuthRequest = AtAuthRequest(
+        '@alice🛠',
+        atKeysIo: InMemoryAtKeysIo.holding('@alice🛠', keys),
+      );
 
       atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
       atAuth.probeSocket = (host, port) async {};
@@ -326,7 +330,9 @@ void main() {
       final response = await atAuth.authenticate(atAuthRequest);
 
       expect(response.isSuccessful, true);
-      expect(response.atAuthKeys!.enrollmentId, testEnrollmentId);
+      expect(response.session!.enrollmentId, testEnrollmentId,
+          reason: 'the session is where an authentication reports the '
+              'enrollment it authenticated as');
     });
 
     test(
@@ -337,11 +343,7 @@ void main() {
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
               enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(true));
-      final atAuthRequest = AtAuthRequest(
-        '@alice🛠',
-        atKeysIo: fileAtKeysIo,
-      );
-      atAuthRequest.atAuthKeys = AtKeys()
+      final keys = AtKeys()
         ..defaultEncryptionPublicKey = AtBytes.fromString(
             base64Encode(utf8.encode('defaultEncryptionPublicKey')))
         ..defaultEncryptionPrivateKey = AtBytes.fromString(
@@ -349,6 +351,10 @@ void main() {
         ..defaultSelfEncryptionKey = AtBytes.fromString(
             base64Encode(utf8.encode('defaultSelfEncryptionKey')))
         ..enrollmentId = testEnrollmentId;
+      final atAuthRequest = AtAuthRequest(
+        '@alice🛠',
+        atKeysIo: InMemoryAtKeysIo.holding('@alice🛠', keys),
+      );
 
       atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
       atAuth.probeSocket = (host, port) async {};
@@ -358,7 +364,7 @@ void main() {
     });
 
     test(
-        'Test authenticate throws exception when keysfile path and atAuthKeys is not set in request',
+        'Test authenticate throws exception when the key source cannot be read',
         () async {
       when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: testEnrollmentId))
           .thenAnswer((_) => Future.value(true));

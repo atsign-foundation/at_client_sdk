@@ -413,7 +413,7 @@ void main() {
                     ..useRemoteAtServer = true),
               isTrue,
               reason: '$name -> $ns must write: '
-                  '${ns == nsReady ? "the recipient has published a key" : "this posture writes legacy, which needs none"}');
+                  '${ns == nsReady ? "the recipient has published a key" : "this posture writes with the legacy provider, which needs none"}');
           wrote['$name -> $ns'] = key;
         }
       }
@@ -596,24 +596,18 @@ void main() {
     // socket has connected, PKAMed and written `monitor:`, and the atServer's
     // inbound stream is a BROADCAST stream with no backlog, so a notification
     // enqueued in that window is never delivered to that connection at all.
-    // Waiting on a notification actually arriving is the only sufficient gate;
-    // `currentListenerState == listening` is set straight after writing the
-    // command and says nothing about the atServer having processed it.
-    //
-    // The atServer's periodic `statsNotification` is both that readiness
-    // signal and the positive control: seeing it and not ours distinguishes a
-    // monitor that receives nothing from one that receives everything except
+    // `listening` is the gate - see [awaitMonitorListening] for what that
+    // does and does not prove. Every key the monitor delivers is still
+    // recorded, so a failure can say whether it received everything except
     // the thing under test.
     final listener = cells['r-pqActive']!.client.notificationService
         as NotificationServiceImpl;
 
     final seen = <String>[];
-    final monitorProvenLive = Completer<void>();
     final arrived = <String, Completer<AtNotification>>{};
 
     final subscription = listener.subscribe(shouldDecrypt: true).listen((n) {
       seen.add(n.key);
-      if (!monitorProvenLive.isCompleted) monitorProvenLive.complete();
       for (final entry in arrived.entries) {
         if (n.key.toLowerCase().contains(entry.key) &&
             !entry.value.isCompleted) {
@@ -623,14 +617,8 @@ void main() {
     });
     addTearDown(subscription.cancel);
 
-    await monitorProvenLive.future.timeout(
-      const Duration(seconds: 90),
-      onTimeout: () => throw StateError(
-          'no notification of any kind reached the listener within 90s, so '
-          'the monitor is not up. Notifying now would repeat the race this '
-          'gate exists to close, and a delivery failure afterwards would be '
-          'attributed to the posture rather than to readiness'),
-    );
+    await awaitMonitorListening(listener,
+        timeout: const Duration(seconds: 90));
 
     final stamp = DateTime.now().microsecondsSinceEpoch;
     for (final entry in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {

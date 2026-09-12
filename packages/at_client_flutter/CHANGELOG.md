@@ -2,6 +2,42 @@
 
 ## 1.1.5-rc1
 
+- `AuthService.authenticate` writes `backupKeys` from the keys the session's
+  own source holds, rather than from the response's own — which is what its
+  dartdoc said it would do once at_auth handed a source across. It also
+  *awaits* those writes, which it did not.
+- fix: the test that claimed authentication saves keys to the keychain passed
+  no `backupKeys` at all and asserted on a mock `read` stubbed to answer
+  whatever happened, so it was green with the backup path deleted. It asks
+  for the backup and asserts what the keychain double was handed.
+- `ApkamActivationDialog` takes an optional `atKeysIo`, the destination for
+  the keys its enrollment mints, defaulting to the platform keychain as
+  `AuthService.onboard` already does. The enrolled app holds the
+  only copy, and the approval completes the keyset with the atSign's
+  encryption private key and self-encryption key, so an app that wants them
+  elsewhere names a `FileAtKeysIo` or a secure-element store. The dialog puts
+  the destination on the request as a session, which is what makes at_auth
+  write the completed keyset there and answer with a session of its own —
+  before this, the completed keys lived only in memory on the response, and
+  the keychain held the pre-approval set that nothing reads back.
+- The three examples build their client from that session, like their other
+  flows, and the branch that adopted auth's live `AtChops`/`AtLookUp` is
+  gone — it was reachable only while an enrollment could hand back keys with
+  nowhere to put them.
+- fix: approving an enrollment no longer tries to file the enrollee's keys in
+  the keychain. An approval answers with the enrollment id and its status
+  and carries no key material — the enrollee files its own keys on its own
+  device — so the branch never ran, and `keychainAtKeysIo` existed only for
+  it. The test that stated the approver files nothing now asserts the
+  contract it rests on: an approval response carries no keys.
+- refactor: the three remaining reads of a deprecated member each carry the
+  reason they cannot move yet, in the code beside them. The keys backed up
+  by `authenticate` and filed by `enroll` come from the response, because a
+  `session` is populated only when the request supplied an `AtKeysIo` and
+  both callers accept a request that supplies keys directly or enrols
+  through the OTP door; the activation dialog keeps its loose `atSign` and
+  `rootDomain`, because the session the annotation asks for would be a key
+  destination and would decide where an enrolled app's keys land.
 - refactor: the APKAM activation dialog names `signingAlgo: rsa2048` on the
   enrolment it submits, which `AtEnrollmentRequest` now requires. The dialog
   has no rollout position to read one from — it knows the atSign, the app and

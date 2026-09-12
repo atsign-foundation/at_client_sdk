@@ -47,9 +47,9 @@ class AtOnboardingRequest extends AuthRequest {
   ///
   /// `mldsa65` makes the atSign PQ-native from activation: the keypair is
   /// filed as typed material under the enrollment id and the flat
-  /// `apkamPublicKey` / `apkamPrivateKey` fields stay empty, so any reader
-  /// calling [AtKeys.toAtChops] on that keyfile fails loudly instead of
-  /// signing an ML-DSA key with the RSA routine.
+  /// `apkamPublicKey` / `apkamPrivateKey` fields stay empty, so a reader
+  /// asking [AtKeys.authenticationFor] for the flat fields fails loudly
+  /// instead of signing an ML-DSA key with the RSA routine.
   SigningAlgoType signingAlgoType;
 
   // Default root domain and port

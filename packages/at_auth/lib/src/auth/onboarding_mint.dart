@@ -43,16 +43,16 @@ Future<OnboardingMint> mintOnboardingKeys({
   final keys = AtKeys();
 
   if (mintLegacyMaterial) {
-    final encryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+    final encryptionKeyPair = RsaKeyPair.generate();
     keys
       ..defaultEncryptionPublicKey =
           AtBytes.fromString(encryptionKeyPair.atPublicKey.publicKey.toString())
       ..defaultEncryptionPrivateKey = AtBytes.fromString(
           encryptionKeyPair.atPrivateKey.privateKey.toString())
       ..defaultSelfEncryptionKey = AtBytes.fromString(
-          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key)
+          AESKey.generate(32).key)
       ..apkamSymmetricKey = AtBytes.fromString(
-          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key);
+          AESKey.generate(32).key);
   }
 
   final apkam = await mintApkamKeyPair(signingAlgo);
@@ -94,7 +94,7 @@ Future<({String publicKey, String privateKey})> mintApkamKeyPair(
         privateKey: apkam.atPrivateKey.privateKey,
       );
     case SigningAlgoType.rsa2048:
-      final apkam = AtChopsUtil.generateAtPkamKeyPair();
+      final apkam = RsaKeyPair.generate();
       return (
         publicKey: apkam.atPublicKey.publicKey.toString(),
         privateKey: apkam.atPrivateKey.privateKey.toString(),

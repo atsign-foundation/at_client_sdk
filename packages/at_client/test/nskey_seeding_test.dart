@@ -38,7 +38,7 @@ void main() {
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
-    when(() => lookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
     when(() => atClient.getPreferences())
         .thenReturn(AtClientPreference()..namespace = preferenceNamespace);
 
@@ -176,7 +176,7 @@ void main() {
   test('seeding follows the posture, and the shipped default does not seed',
       () async {
     expect(AtClientPreference().seedNamespaceKeys, isFalse,
-        reason: 'the shipped default is legacy, which publishes no '
+        reason: 'the shipped default is the legacy posture, which publishes no '
             'discoverable record at all');
     expect(AtClientPreference(posture: PqPosture.pqReady).seedNamespaceKeys,
         isTrue,

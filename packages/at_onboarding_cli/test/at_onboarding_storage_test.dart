@@ -48,6 +48,7 @@ void main() {
   setUp(() {
     dir = Directory.systemTemp.createTempSync('onboarding_storage_');
     reset(mockAtLookup);
+    when(() => mockAtLookup.close()).thenAnswer(Future.value);
     reset(mockAtAuth);
     registerFallbackValue(FakeAtAuthRequest());
     when(() => mockAtAuth.progressStream).thenAnswer((_) => Stream.empty());
@@ -68,23 +69,27 @@ void main() {
     final service =
         AtOnboardingServiceImpl(atSign, preference, atServiceFactory: factory);
     service.atLookUp = mockAtLookup;
-    mockAtAuth.atChops = AtChopsImpl(AtChopsKeys());
     service.atAuth = mockAtAuth;
     when(() => mockAtLookup.pkamAuthenticate())
         .thenAnswer((_) => Future.value(true));
-    when(() => mockAtAuth.atChops)
-        .thenAnswer((_) => AtChopsImpl(AtChopsKeys()));
     when(() => mockAtAuth.authenticate(any()))
         .thenAnswer((_) => Future.value(AtAuthResponse(atSign)
           ..isSuccessful = true
-          ..atAuthKeys = (AtKeys()
-            ..apkamPublicKey = AtBytes.fromString('dumm')
-            ..apkamPrivateKey = AtBytes.fromString('dumm')
-            ..defaultSelfEncryptionKey = AtBytes.fromString('dumm')
-            ..defaultEncryptionPrivateKey = AtBytes.fromString('dumm')
-            ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
-            ..apkamSymmetricKey = AtBytes.fromString('dumm')
-            ..enrollmentId = 'dummy_enroll_id')));
+          ..session = AtAuthSession(
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            enrollmentId: 'dummy_enroll_id',
+            atKeysIo: InMemoryAtKeysIo.holding(
+                atSign,
+                AtKeys()
+                  ..apkamPublicKey = AtBytes.fromString('dumm')
+                  ..apkamPrivateKey = AtBytes.fromString('dumm')
+                  ..defaultSelfEncryptionKey = AtBytes.fromString('dumm')
+                  ..defaultEncryptionPrivateKey = AtBytes.fromString('dumm')
+                  ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
+                  ..apkamSymmetricKey = AtBytes.fromString('dumm')
+                  ..enrollmentId = 'dummy_enroll_id'),
+          )));
 
     expect(await service.authenticate(), isTrue);
     return service;

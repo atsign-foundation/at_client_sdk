@@ -20,8 +20,6 @@ class MockEnrollmentService extends Mock implements EnrollmentService {}
 
 class MockKeychainStorage extends Mock implements KeychainStorage {}
 
-class MockKeychainAtKeysIo extends Mock implements KeychainAtKeysIo {}
-
 class MockAtLookUp extends Mock implements AtLookUp {}
 
 class FakeEnrollmentRequestDecision extends Fake
@@ -38,7 +36,6 @@ void main() {
   late MockAtClient mockAtClient;
   late MockEnrollmentService mockEnrollmentService;
   late MockKeychainStorage mockKeychainStorage;
-  late MockKeychainAtKeysIo mockKeychainAtKeysIo;
   late MockAtLookUp mockAtLookUp;
   late FlutterEnrollmentService service;
 
@@ -51,7 +48,6 @@ void main() {
     mockAtClient = MockAtClient();
     mockEnrollmentService = MockEnrollmentService();
     mockKeychainStorage = MockKeychainStorage();
-    mockKeychainAtKeysIo = MockKeychainAtKeysIo();
     mockAtLookUp = MockAtLookUp();
 
     when(
@@ -64,14 +60,9 @@ void main() {
       () => mockAtClient.enrollmentService,
     ).thenReturn(mockEnrollmentService);
     when(() => mockAtLookUp.close()).thenAnswer((_) async {});
-    when(
-      () => mockKeychainAtKeysIo.write(any(), any()),
-    ).thenAnswer((_) async {});
-
     service = FlutterEnrollmentService()
       ..atClientOverride = mockAtClient
-      ..keychainStorage = mockKeychainStorage
-      ..keychainAtKeysIo = mockKeychainAtKeysIo;
+      ..keychainStorage = mockKeychainStorage;
   });
 
   test(
@@ -92,7 +83,19 @@ void main() {
 
       expect(response.enrollStatus, EnrollmentStatus.approved);
       expect(response.enrollmentId, enrollmentId);
-      verifyNever(() => mockKeychainAtKeysIo.write(any(), any()));
+      // The precondition that makes filing here wrong, asserted where this
+      // package depends on it: at_auth answers an approval with the id and
+      // the status alone. A build that started returning the enrollee's keys
+      // would redden this, which is when an approver filing them could even
+      // be considered.
+      // ignore: deprecated_member_use
+      expect(
+        response.atAuthKeys,
+        isNull,
+        reason:
+            'the enrollee files its own keys on its own device; nothing '
+            'reaches the approver for it to store',
+      );
       verify(() => mockKeychainStorage.deleteEnrollmentData(atSign)).called(1);
       verify(() => mockAtLookUp.close()).called(1);
     },

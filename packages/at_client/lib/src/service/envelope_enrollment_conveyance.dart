@@ -223,8 +223,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
       return 0;
     }
 
-    final ownEnrollmentId =
-        _atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
+    final ownEnrollmentId = _atClient.enrollmentId;
 
     final approved = await _listEnrollments(
         enrollmentListParams: EnrollmentListRequestParam()
