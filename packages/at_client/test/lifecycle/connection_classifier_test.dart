@@ -20,8 +20,10 @@ void main() {
       'Failed connecting to @alice. error:AT0401:Client authentication failed';
   const expiredText =
       'Failed connecting to @alice. error:AT0029:Apkam Enrollment Expired';
-  const deniedText = 'Failed connecting to @alice. error:AT0025:Apkam Auth Denied';
-  const pendingText = 'Failed connecting to @alice. error:AT0026:Apkam Auth Failed';
+  const deniedText =
+      'Failed connecting to @alice. error:AT0025:Apkam Auth Denied';
+  const pendingText =
+      'Failed connecting to @alice. error:AT0026:Apkam Auth Failed';
 
   // What the address finder raises when the atDirectory refuses the connect,
   // as captured from a run; once at_lookup's executeVerb has wrapped it, the
@@ -38,8 +40,7 @@ void main() {
     expect(state!.outcome, outcome, reason: reason);
     expect(state.cause, cause, reason: reason);
     if (outcome != AtConnectionOutcome.online) {
-      expect(state.error, same(error),
-          reason: 'the state carries what threw');
+      expect(state.error, same(error), reason: 'the state carries what threw');
     }
   }
 
@@ -77,7 +78,8 @@ void main() {
           'a refusal carrying no code is still a refusal');
     });
 
-    test('wrapped by executeVerb, whose code names the type and whose message '
+    test(
+        'wrapped by executeVerb, whose code names the type and whose message '
         'keeps the atServer\'s finer one', () {
       expectClassified(
           AtLookUpException('AT0401', 'Exception: $revokedText'),
@@ -148,7 +150,8 @@ void main() {
           'a raw socket failure');
     });
 
-    test('the atDirectory or atServer cannot be reached, type lost in the '
+    test(
+        'the atDirectory or atServer cannot be reached, type lost in the '
         'wrapper and read from the text', () {
       expectClassified(
           AtLookUpException('AT0014', refusedConnectText),

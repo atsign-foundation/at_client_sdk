@@ -52,8 +52,9 @@ void main() {
   /// A lookup whose PKAM attempt does what [onPkam] says.
   MockAtLookupImpl lookUpAnswering(Future<bool> Function() onPkam) {
     final lookUp = MockAtLookupImpl();
-    when(() => lookUp.pkamAuthenticate(
-        enrollmentId: any(named: 'enrollmentId'))).thenAnswer((_) => onPkam());
+    when(() =>
+            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
+        .thenAnswer((_) => onPkam());
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     return lookUp;
@@ -86,7 +87,8 @@ void main() {
     expect(await (client as AtClientImpl).hasBeenOnline(), isFalse);
   });
 
-  test('the atServer accepting the credentials yields online, and the device '
+  test(
+      'the atServer accepting the credentials yields online, and the device '
       'remembers having been online as this principal', () async {
     const atSign = '@online';
     final client = await Atsign(atSign).open(
@@ -100,7 +102,8 @@ void main() {
             'refusal on this device hands back a client');
   });
 
-  test('a refusal on a device that has never been online throws, and leaves '
+  test(
+      'a refusal on a device that has never been online throws, and leaves '
       'nothing behind', () async {
     const atSign = '@refusedfirst';
     final revoked = lookUpAnswering(() async => throw UnAuthenticatedException(
@@ -119,11 +122,13 @@ void main() {
         reason: 'the part-built client was stopped and unfiled');
   });
 
-  test('an atSign the atDirectory has no atServer for counts as a refusal on '
+  test(
+      'an atSign the atDirectory has no atServer for counts as a refusal on '
       'first open', () async {
     const atSign = '@noserver';
     final missing = lookUpAnswering(() async =>
-        throw SecondaryNotFoundException('No entry in atDirectory for noserver'));
+        throw SecondaryNotFoundException(
+            'No entry in atDirectory for noserver'));
 
     await expectLater(
         () async => Atsign(atSign).open(
@@ -134,21 +139,24 @@ void main() {
             (e) => e.state.cause, 'cause', AtConnectionCause.noAtServer)));
   });
 
-  test('a refusal on a device that has been online comes back as a client in '
+  test(
+      'a refusal on a device that has been online comes back as a client in '
       'the refused state', () async {
     const atSign = '@refusedlater';
     final pref = await preference();
     final keys = await typedKeyfile(atSign, enrollmentId: 'primary');
 
-    final first = await Atsign(atSign)
-        .open(keys: keys, preference: pref, atLookUp: lookUpAnswering(() async => true));
+    final first = await Atsign(atSign).open(
+        keys: keys,
+        preference: pref,
+        atLookUp: lookUpAnswering(() async => true));
     expect(first.connection.current.isOnline, isTrue);
     await first.stop();
 
     final revoked = lookUpAnswering(() async => throw UnAuthenticatedException(
         'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked'));
-    final second =
-        await Atsign(atSign).open(keys: keys, preference: pref, atLookUp: revoked);
+    final second = await Atsign(atSign)
+        .open(keys: keys, preference: pref, atLookUp: revoked);
 
     final state = second.connection.current;
     expect(state.isRefused, isTrue,
@@ -158,11 +166,13 @@ void main() {
     expect(state.error, isA<UnAuthenticatedException>());
   });
 
-  test('a verb that comes back moves the state to online, and changes '
+  test(
+      'a verb that comes back moves the state to online, and changes '
       'reports it', () async {
     const atSign = '@flips';
-    final lookUp = lookUpAnswering(() async => throw RootServerConnectivityException(
-        'Connecting to 127.0.0.1:1 : SocketException: Connection refused'));
+    final lookUp = lookUpAnswering(() async =>
+        throw RootServerConnectivityException(
+            'Connecting to 127.0.0.1:1 : SocketException: Connection refused'));
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
@@ -173,8 +183,7 @@ void main() {
         client.connection.changes,
         emits(isA<AtConnectionState>()
             .having((s) => s.isOnline, 'isOnline', isTrue)));
-    when(() => lookUp.executeVerb(any()))
-        .thenAnswer((_) async => 'data:[]');
+    when(() => lookUp.executeVerb(any())).thenAnswer((_) async => 'data:[]');
     await client.getRemoteSecondary()!.executeVerb(ScanVerbBuilder());
     await flipped;
     expect(client.connection.current.isOnline, isTrue);

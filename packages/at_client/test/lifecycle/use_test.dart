@@ -44,7 +44,8 @@ void main() {
         ..namespace = 'lifecycle',
       atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'));
 
-  test('use makes the client current, notifies the listeners, and stops '
+  test(
+      'use makes the client current, notifies the listeners, and stops '
       'nothing', () async {
     final manager = AtClientManager('@usefirst');
     final listener = _RecordingListener();

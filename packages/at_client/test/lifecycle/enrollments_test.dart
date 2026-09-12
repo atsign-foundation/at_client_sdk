@@ -94,13 +94,14 @@ void main() {
             'is what the approver unwraps');
   });
 
-  test('approve() hands an empty wrapped key through, which asks the service '
+  test(
+      'approve() hands an empty wrapped key through, which asks the service '
       'to mint one', () async {
     when(() => service.fetchEnrollmentRequests(
             enrollmentListParams: any(named: 'enrollmentListParams')))
         .thenAnswer((_) async => [record('e-2')]);
-    when(() => service.approve(any())).thenAnswer((_) async =>
-        throw UnimplementedError('the response is not read'));
+    when(() => service.approve(any())).thenAnswer(
+        (_) async => throw UnimplementedError('the response is not read'));
 
     await expectLater(
         client.enrollments.approve('e-2'), throwsA(isA<UnimplementedError>()));
@@ -141,7 +142,8 @@ void main() {
     expect(revoked.force, isTrue);
   });
 
-  test('otp() sends the passcode verb with its ttl, pinned, and reads the '
+  test(
+      'otp() sends the passcode verb with its ttl, pinned, and reads the '
       'passcode back', () async {
     // The verb is a wire contract with every atServer implementation.
     when(() => remote.executeCommand('otp:get:ttl:300000\n', auth: true))
@@ -163,13 +165,14 @@ void main() {
         client.enrollments.otp(), throwsA(isA<AtEnrollmentException>()));
   });
 
-  test('spp() sets the passcode through the client and hands it back with '
+  test(
+      'spp() sets the passcode through the client and hands it back with '
       'its expiry', () async {
     when(() => client.setSPP('ABC123', expiry: const Duration(minutes: 10)))
         .thenAnswer((_) async => AtResponse()..response = 'ok');
 
-    final passcode =
-        await client.enrollments.spp('ABC123', expiry: const Duration(minutes: 10));
+    final passcode = await client.enrollments
+        .spp('ABC123', expiry: const Duration(minutes: 10));
 
     expect(passcode.value, 'ABC123');
     expect(passcode.expiry.difference(DateTime.now()).inMinutes, 9);

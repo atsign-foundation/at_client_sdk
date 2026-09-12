@@ -85,8 +85,9 @@ class Enrollments {
 
   /// Revokes [enrollmentId], closing its connections; [force] lets a client
   /// revoke the enrollment it is itself running as.
-  Future<void> revoke(String enrollmentId, {bool force = false}) => _service
-      .revoke(EnrollmentRequestDecision.revoked(enrollmentId, _atSign, force: force));
+  Future<void> revoke(String enrollmentId, {bool force = false}) =>
+      _service.revoke(EnrollmentRequestDecision.revoked(enrollmentId, _atSign,
+          force: force));
 
   /// A one-time passcode a new request may quote until [expiry] has passed.
   Future<Passcode> otp({Duration expiry = defaultPasscodeExpiry}) async {
@@ -97,8 +98,8 @@ class Enrollments {
       throw AtEnrollmentException(
           'the atServer issued no passcode for $_atSign: $response');
     }
-    return Passcode(response.substring('data:'.length).trim(),
-        DateTime.now().add(expiry));
+    return Passcode(
+        response.substring('data:'.length).trim(), DateTime.now().add(expiry));
   }
 
   /// Sets [passcode], six alphanumeric characters, as a passcode any number

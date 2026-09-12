@@ -150,7 +150,8 @@ class PendingEnrollment {
     // ignore: deprecated_member_use
     stored.enrollmentId = enrollmentId;
     // ignore: deprecated_member_use
-    stored.defaultEncryptionPrivateKey ??= completed.defaultEncryptionPrivateKey;
+    stored.defaultEncryptionPrivateKey ??=
+        completed.defaultEncryptionPrivateKey;
     // ignore: deprecated_member_use
     stored.defaultSelfEncryptionKey ??= completed.defaultSelfEncryptionKey;
     // ignore: deprecated_member_use
@@ -175,7 +176,8 @@ class PendingEnrollment {
         // it, so the store reads as holding nothing for the atSign.
         // ignore: deprecated_member_use
         if (stored.enrollmentId == enrollmentId) stored.enrollmentId = null;
-        if (stored.enrollmentIds.isEmpty && !stored.holdsAuthenticationMaterial) {
+        if (stored.enrollmentIds.isEmpty &&
+            !stored.holdsAuthenticationMaterial) {
           stored
             // ignore: deprecated_member_use
             ..apkamSymmetricKey = null

@@ -241,7 +241,8 @@ AtConnectionState? classifyConnectionFailure(Object error) {
   }
   if (error is AtException) {
     final refusal = _refusalCauseIn(error.message);
-    if (refusal != null) return AtConnectionState.refused(refusal, error: error);
+    if (refusal != null)
+      return AtConnectionState.refused(refusal, error: error);
     if (_readsUnreachable(error.message)) {
       return AtConnectionState.offline(AtConnectionCause.unreachable,
           error: error);

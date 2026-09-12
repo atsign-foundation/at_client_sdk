@@ -104,8 +104,8 @@ void main() {
 
     test('a granted namespace is written and read', () async {
       const atSign = '@enrolledoffline';
-      final client = await offlineClient(
-          atSign, await enrolledKeys(atSign, recordedGrants: {'offline': 'rw'}));
+      final client = await offlineClient(atSign,
+          await enrolledKeys(atSign, recordedGrants: {'offline': 'rw'}));
       final key =
           AtKey.self('phone', namespace: 'offline', sharedBy: atSign).build();
 
@@ -117,8 +117,8 @@ void main() {
 
     test('a namespace the snapshot does not grant is refused', () async {
       const atSign = '@enrolledother';
-      final client = await offlineClient(
-          atSign, await enrolledKeys(atSign, recordedGrants: {'offline': 'rw'}));
+      final client = await offlineClient(atSign,
+          await enrolledKeys(atSign, recordedGrants: {'offline': 'rw'}));
       final key =
           AtKey.self('phone', namespace: 'elsewhere', sharedBy: atSign).build();
 

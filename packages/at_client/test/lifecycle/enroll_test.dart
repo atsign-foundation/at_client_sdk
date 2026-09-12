@@ -66,7 +66,8 @@ void main() {
   /// [decide] answers each PKAM attempt after submission: `true` approves,
   /// and an exception is the atServer's refusal, `AT0026` for not-yet-decided
   /// and `AT0025` for denied.
-  MockAtLookupImpl atServer({required Future<bool> Function(int attempt) decide}) {
+  MockAtLookupImpl atServer(
+      {required Future<bool> Function(int attempt) decide}) {
     final lookUp = MockAtLookupImpl();
     String? wrappedSymmetricKey;
     var attempts = 0;
@@ -90,18 +91,20 @@ void main() {
         .thenAnswer((invocation) async {
       final command = invocation.positionalArguments.first as String;
       if (command.startsWith('enroll:')) {
-        final json = jsonDecode(
-            command.substring(command.indexOf('{'), command.lastIndexOf('}') + 1));
+        final json = jsonDecode(command.substring(
+            command.indexOf('{'), command.lastIndexOf('}') + 1));
         wrappedSymmetricKey = json['encryptedAPKAMSymmetricKey'] as String;
         return 'data:${jsonEncode({
               'enrollmentId': enrollmentId,
               'status': 'pending'
             })}';
       }
-      if (command.startsWith('keys:get:keyName:$enrollmentId.default_enc_private_key')) {
+      if (command.startsWith(
+          'keys:get:keyName:$enrollmentId.default_enc_private_key')) {
         return 'data:${jsonEncode(await sealed(encryptionPrivateKey))}';
       }
-      if (command.startsWith('keys:get:keyName:$enrollmentId.default_self_enc_key')) {
+      if (command
+          .startsWith('keys:get:keyName:$enrollmentId.default_self_enc_key')) {
         return 'data:${jsonEncode(await sealed(selfEncryptionKey))}';
       }
       throw StateError('the mocked atServer has no answer for: $command');
@@ -114,14 +117,16 @@ void main() {
       throw StateError('the mocked atServer has no answer for: '
           '${(builder as VerbBuilder).buildCommand()}');
     });
-    when(() => lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
+    when(() =>
+            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
         .thenAnswer((_) => decide(++attempts));
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     return lookUp;
   }
 
-  Future<PendingEnrollment> submit(InMemoryAtKeysIo store, MockAtLookupImpl server,
+  Future<PendingEnrollment> submit(
+          InMemoryAtKeysIo store, MockAtLookupImpl server,
           {String device = 'phone'}) async =>
       Atsign(atSign).enroll(
           otp: 'ABC123',
@@ -132,7 +137,8 @@ void main() {
           preference: await preference(),
           atLookUp: server);
 
-  test('submission files the minted keys as pending in the store named', () async {
+  test('submission files the minted keys as pending in the store named',
+      () async {
     final store = InMemoryAtKeysIo();
     final pending = await submit(store, atServer(decide: (_) async => true));
 
@@ -157,7 +163,8 @@ void main() {
     await submit(store, atServer(decide: (_) async => true));
 
     await expectLater(
-        () async => Atsign(atSign).open(keys: store, preference: await preference()),
+        () async =>
+            Atsign(atSign).open(keys: store, preference: await preference()),
         throwsA(isA<AtEnrollmentPendingException>()
             .having((e) => e.pendingEnrollmentIds, 'pending', [enrollmentId])));
   });
@@ -181,12 +188,16 @@ void main() {
         reason: 'another device\'s request is not this one');
     expect(
         await Atsign(atSign).resumeEnrollment(
-            app: 'wavi', device: 'phone', keys: InMemoryAtKeysIo(), preference: pref),
+            app: 'wavi',
+            device: 'phone',
+            keys: InMemoryAtKeysIo(),
+            preference: pref),
         isNull,
         reason: 'and a store holding nothing resumes nothing');
   });
 
-  test('a second request for the same app and device is refused in favour of '
+  test(
+      'a second request for the same app and device is refused in favour of '
       'resuming', () async {
     final store = InMemoryAtKeysIo();
     final server = atServer(decide: (_) async => true);
@@ -194,11 +205,12 @@ void main() {
 
     await expectLater(
         () => submit(store, server),
-        throwsA(isA<AtEnrollmentException>()
-            .having((e) => e.message, 'message', contains('resumeEnrollment'))));
+        throwsA(isA<AtEnrollmentException>().having(
+            (e) => e.message, 'message', contains('resumeEnrollment'))));
   });
 
-  test('approval completes the store, moves the keys to active, and opens a '
+  test(
+      'approval completes the store, moves the keys to active, and opens a '
       'client', () async {
     final store = InMemoryAtKeysIo();
     // Not yet decided on the first poll, approved on the second: the wait is
@@ -234,7 +246,8 @@ void main() {
     await client.stop();
   });
 
-  test('a denial removes the pending keys, throws, and leaves the store ready '
+  test(
+      'a denial removes the pending keys, throws, and leaves the store ready '
       'for the next request', () async {
     final store = InMemoryAtKeysIo();
     final denying = atServer(
@@ -256,6 +269,7 @@ void main() {
 
     // The emptied store takes the next request, which mints new keys.
     final again = await submit(store, atServer(decide: (_) async => true));
-    expect((await store.read(atSign)).pendingEnrollmentIds, [again.enrollmentId]);
+    expect(
+        (await store.read(atSign)).pendingEnrollmentIds, [again.enrollmentId]);
   });
 }
