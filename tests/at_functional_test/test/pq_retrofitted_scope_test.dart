@@ -199,8 +199,8 @@ void main() {
   /// or no peer can seal to it: it sends post-quantum and cannot receive.
   ///
   /// Not a catalogue row, and narrow — it covers the in-process retrofit only:
-  /// keys held in memory, one process, `pqReady`, and the `fromAuthSession`
-  /// route. The cold-start arm below is the durable form.
+  /// keys held in memory, one process, `pqReady`, and the `open` route. The
+  /// cold-start arm below is the durable form.
   test('a retrofitted scoped enrollment publishes its own namespace key',
       () async {
     final enrolled = await retrofittedScopedClient('seed');
@@ -266,15 +266,14 @@ void main() {
 
     // Drop everything the process holds for this atSign, so the client below
     // is built the way a later run builds one: from the keyfile.
-    await enrolled.manager.atClient.getRemoteSecondary()?.atLookUp.close();
+    await enrolled.client.getRemoteSecondary()?.atLookUp.close();
     AtClientImpl.atClientInstanceMap.clear();
 
-    final cold = await AtClientManager(atSign).setCurrentAtSign(atSign,
-        namespace, TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
-        atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
-        enrollmentId: enrolled.enrollmentId,
+    final client = await Atsign(atSign).open(
+        keys: FileAtKeysIo(filePath: (_) => keysFilePath),
+        preference: TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
+        namespace: namespace,
         storage: TestUtils.storageForPrincipal(atSign, enrolled.enrollmentId));
-    final client = cold.atClient;
 
     expect(client.enrollmentId, isNot(enrolled.enrollmentId),
         reason: 'the cold client must retrofit — pqReady asks for mldsa65 and '

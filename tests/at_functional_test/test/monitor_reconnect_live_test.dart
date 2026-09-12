@@ -19,10 +19,10 @@ import 'test_utils.dart';
 /// superset, so the notification arrives anyway; only a still-null watermark
 /// loses it, and a full pack has already seeded this atSign's record.
 ///
-/// NOTE: one atSign, notifying itself. `setCurrentAtSign` tears the previous
-/// client down, so a second client for the sender would stop this one's
-/// notification listener. Sending is unaffected by the monitor connection
-/// being down, because a notify travels the verb connection.
+/// NOTE: one atSign, notifying itself. `TestUtils.initAtClient` stops the
+/// client that was current, so a second client for the sender would stop this
+/// one's notification listener. Sending is unaffected by the monitor
+/// connection being down, because a notify travels the verb connection.
 void main() {
   TestUtils.isolateStorage('monitor_reconnect_live_test');
   late AtClientManager atClientManager;

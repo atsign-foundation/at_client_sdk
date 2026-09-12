@@ -82,13 +82,20 @@ void main() {
   }
 
   /// Authenticates from [label]'s keyfile with no enrollment id named, so the
-  /// flat fields decide — i.e. as the LEGACY enrollment, which is exactly what
-  /// an un-upgraded copy of the keyfile does.
-  Future<AtAuthResponse> authenticateLegacy(String label) async =>
-      AtAuth.create().authenticate(AtAuthRequest(atSign,
-          atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)))
-        ..namespace = namespace
-        ..rootDomain = rootDomain());
+  /// keys decide — i.e. as the LEGACY enrollment, which is exactly what an
+  /// un-upgraded copy of the keyfile does — and hands back its session; a
+  /// refusal throws.
+  Future<AtAuthSession> authenticateLegacy(String label) async {
+    final keysIo = FileAtKeysIo(filePath: (_) => pathFor(label));
+    final enrollmentId = await Atsign(atSign)
+        .authenticatesAs(keys: keysIo, rootDomain: rootDomain());
+    return AtAuthSession(
+        atSign: atSign,
+        rootDomain: rootDomain(),
+        atKeysIo: keysIo,
+        namespace: namespace,
+        enrollmentId: enrollmentId);
+  }
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
@@ -108,30 +115,28 @@ void main() {
     await mintLegacyEnrollment('l1');
     await mintLegacyEnrollment('l2');
 
-    expect((await authenticateLegacy('l1')).isSuccessful, isTrue,
+    expect((await authenticateLegacy('l1')).enrollmentId, isNotNull,
         reason: 'precondition: the legacy enrollment works BEFORE its '
             'retrofit — this is the "before" of a before/after pair');
-    expect((await authenticateLegacy('l2')).isSuccessful, isTrue);
+    expect((await authenticateLegacy('l2')).enrollmentId, isNotNull);
 
     // The un-upgraded copy of UC-B2.1: the same legacy keypair on a second
     // host, taken before the retrofit and never upgraded.
     File(pathFor('l1')).copySync(pathFor('l1b'));
 
-    final session = (await authenticateLegacy('l1')).session!;
-    final manager = await selfRetrofit(
+    final session = await authenticateLegacy('l1');
+    final upgraded = await selfRetrofit(
       // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
-      // Its own store location: the owner client holds the atSign's, and a
-      // dedicated manager carries nothing across.
+      // Its own store location: the owner client holds the atSign's, and
+      // nothing carries across.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rt-l1-$runId'),
       appName: 'rt-l1',
       deviceName: 'rt-l1-$runId',
       namespaces: {namespace: 'rw'},
-      manager: AtClientManager(atSign),
     );
-    final upgraded = manager.atClient;
     expect(AtClientImpl.signingAlgoOf(upgraded), SigningAlgoType.mldsa65,
         reason: 'the retrofit itself must have succeeded, or the revocation '
             'below is being attributed to a retrofit that never happened');
@@ -155,7 +160,7 @@ void main() {
     // The control arm, re-run in the same session, so the refusal above is
     // attributable to this retrofit rather than to the environment or the
     // clock.
-    expect((await authenticateLegacy('l2')).isSuccessful, isTrue,
+    expect((await authenticateLegacy('l2')).enrollmentId, isNotNull,
         reason: 'a second legacy enrollment of the same atSign, minted at the '
             'same moment and never a parent of any retrofit, must be '
             'unaffected — this is what makes the lockout attributable');
@@ -163,7 +168,7 @@ void main() {
     // The remedy, asserted rather than left as advice: a stranded device comes
     // back by an ordinary OTP enrollment.
     await mintLegacyEnrollment('l1c');
-    expect((await authenticateLegacy('l1c')).isSuccessful, isTrue,
+    expect((await authenticateLegacy('l1c')).enrollmentId, isNotNull,
         reason: 'a fresh enrollment authenticates on the same atSign moments '
             'after the superseded one was refused: the route back is enrolling '
             'again, and nothing about the atSign itself is broken');

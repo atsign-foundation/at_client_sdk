@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
@@ -71,7 +72,17 @@ void main() {
         .syncData(syncSvc: atClientManager.atClient.syncService);
     logger.info("Post-put sync complete");
 
-    var atLookup = atClient.getRemoteSecondary()!.atLookUp;
+    // NOTE: a connection of its own, and unauthenticated: the lookups below
+    // are public lookups, and on the client's own connection, which `open`
+    // authenticated as the owner, a `lookup` of the owner's key asks for a
+    // key shared with the owner rather than the public one.
+    final atLookup = AtLookUp.withSecureSocket(
+        atSign: atSign,
+        rootDomain:
+            AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
+        transport: secureSocketTransport(SecureSocketConfig()),
+        authenticator: null);
+    addTearDown(atLookup.close);
 
     int numRequests = 10;
     List<String> fooGetResponses = [];

@@ -107,6 +107,55 @@ summary is:
    compromised scoped key can only damage data in its granted
    namespaces.
 
+### In code: one import, four verbs
+
+`at_client` owns the whole of that lifecycle. An app holds an `AtKeysIo`
+(a `.atKeys` file, the platform keychain, or memory) and asks the atSign
+for a client; every verb hands back an `AtClient` the app owns and stops.
+
+```dart
+import 'package:at_client/at_client.dart';
+
+// Log in: a client on keys the app already holds. It comes back online,
+// offline or refused, and says which; offline it serves its local store.
+final client = await Atsign('@alice').open(
+    keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
+    preference: AtClientPreference()..namespace = 'todos');
+client.connection.current;                  // online | offline | refused
+client.connection.changes.listen((state) => print(state));
+await client.connection.awaitOnline();      // wait, with a budget
+
+// Onboard: activate a newly registered atSign with its CRAM secret. The
+// keys it mints land in `keys`, and the client opens on them.
+final owner = await Atsign('@alice').activate(
+    cramSecret: secret, keys: keys, preference: preference);
+
+// Enroll: ask the atSign's owner to approve this app. The request is filed
+// in `keys` as pending, so a restart resumes it rather than repeating it.
+final pending = await Atsign('@alice').enroll(otp: otp, app: 'todos',
+    device: 'phone', namespaces: {'todos': 'rw'}, keys: keys,
+    preference: preference);
+final enrolled = await pending.client(preference);      // waits for approval
+final resumed = await Atsign('@alice').resumeEnrollment(app: 'todos',
+    device: 'phone', keys: keys, preference: preference);
+
+// Approve, from an enrolled client: the atSign's roster and passcodes.
+final requests = await owner.enrollments.pending();
+await owner.enrollments.approve(requests.first.enrollmentId!);
+owner.enrollments.requests.listen((request) => print(request.appName));
+final passcode = await owner.enrollments.otp();
+
+// An app that keeps one current client for its screens makes it so.
+AtClientManager.getInstance().use(client);
+```
+
+`Atsign.authenticatesAs(keys: ..., rootDomain: ...)` answers which
+enrollment a keys store authenticates as without building a client.
+Flutter apps get the same verbs behind dialogs in
+[`at_client_flutter`](../at_client_flutter); CLI apps get them behind
+[`at_onboarding_cli`](../at_onboarding_cli)'s commands and
+[`at_cli_commons`](../at_cli_commons)' `CLIBase`.
+
 ## Collections
 
 For the common "CRUD on typed, shareable records" use case,

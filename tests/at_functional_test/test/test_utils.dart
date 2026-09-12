@@ -150,18 +150,17 @@ class TestUtils {
   static PqPosture get sdkDefaultPosture => AtClientPreference().posture;
 
   /// A preference for [atsign] at [posture], carrying no storage path: what
-  /// opens the store is the bundle passed to `setCurrentAtSign`, so a call
-  /// site that forgets one fails loudly there rather than quietly opening the
-  /// shared directory.
+  /// opens the store is the bundle passed to `open`, so a call site that
+  /// forgets one fails loudly there rather than quietly opening the shared
+  /// directory.
   ///
   /// [keyEstablishmentAlgorithms] is what this atSign mints and advertises;
   /// [sealsToKeyAlgorithms] is the order in which, as a sender, it picks among
   /// the keys a recipient advertises.
   ///
   /// ⚠️ One atSign in one process holds one posture: every axis here is final
-  /// at construction and `setCurrentAtSign` refuses a preference differing
-  /// from the running client's, so two tests sharing an atSign share a
-  /// posture.
+  /// at construction and [initAtClient] refuses a preference differing from
+  /// the running client's, so two tests sharing an atSign share a posture.
   static AtClientPreference getPreference(String atsign,
       {required PqPosture posture,
       SigningAlgoType? authenticationKeyAlgorithm,
@@ -203,13 +202,23 @@ class TestUtils {
   }
 
   /// Builds this file's client for [currentAtSign] in [namespace] at
-  /// [posture], with its encryption keys loaded.
+  /// [posture], with its encryption keys loaded, and makes it the current
+  /// client of the process-wide manager.
   ///
-  /// A [preference] built at a different posture is refused rather than
-  /// silently winning; passing [atKeysIo] also forces `setCurrentAtSign` past
-  /// its same-atSign short-circuit; and [storage] is for a caller with no
-  /// file-level bundle, such as a child isolate, where [isolateStorage]'s
-  /// static is null.
+  /// The client opens on [atKeysIo], or on the demo atSign's credentials
+  /// held in memory with none; a store handed in that holds no credential is
+  /// given the demo atSign's, so a test keeps what the client files there
+  /// and the client authenticates from the same store. A [preference] built
+  /// at a different
+  /// posture is refused rather than silently winning; [storage] is for a
+  /// caller with no file-level bundle, such as a child isolate, where
+  /// [isolateStorage]'s static is null.
+  ///
+  /// The same atSign already current is kept, with its preference reset;
+  /// passing [atKeysIo] rebuilds it, since a client's key source is fixed at
+  /// construction. Another atSign current is stopped first, as switching
+  /// always has, and so is any client already running as the principal the
+  /// keys name, since `open` refuses a second one.
   static Future<AtClientManager> initAtClient(
       String currentAtSign, String namespace,
       {required PqPosture posture,
@@ -230,20 +239,98 @@ class TestUtils {
           'posture you want.');
     }
     preference ??= TestUtils.getPreference(currentAtSign, posture: posture);
-    final encryptionKeysLoader = AtEncryptionKeysLoader.getInstance();
-    var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
-        currentAtSign, namespace, preference,
-        atKeysIo: atKeysIo,
-        atChops: encryptionKeysLoader.createAtChopsFromDemoKeys(currentAtSign),
+    // The client reads its namespace off its preference, so a preference
+    // built without one is given this call's before it reaches the client.
+    preference.namespace ??= namespace;
+    final manager = AtClientManager.getInstance();
+    final loader = AtEncryptionKeysLoader.getInstance();
+
+    final current = currentClientOf(manager);
+    if (current != null &&
+        current.getCurrentAtSign() == currentAtSign &&
+        atKeysIo == null &&
+        !current.isStopped) {
+      AtClientImpl.refuseChangedRolloutAxes(
+          running: current.getPreferences(),
+          asked: preference,
+          cacheKey:
+              AtClientImpl.instanceKey(currentAtSign, current.enrollmentId));
+      // Some other test may have messed with the preferences.
+      current.setPreferences(preference);
+      await loader.setEncryptionKeys(current, currentAtSign);
+      return manager;
+    }
+
+    await current?.stop();
+    final keys = atKeysIo ??
+        InMemoryAtKeysIo.holding(
+            currentAtSign, loader.createAtKeysFromDemoKeys(currentAtSign));
+    await seedIfCredentialless(currentAtSign, keys);
+    await stopClientRunningAs(currentAtSign, keys);
+    final client = await Atsign(currentAtSign).open(
+        keys: keys,
+        preference: preference,
+        namespace: namespace,
         storage: storage ?? storageFor(currentAtSign));
-    // Set the preferences again because (1) setCurrentAtSign might do nothing
-    // because currentAtSign is the same, and (2) some other test may have messed
-    // with the preferences
-    atClientManager.atClient.setPreferences(preference);
+    manager.use(client);
+    client.setPreferences(preference);
     // To setup encryption keys
-    await encryptionKeysLoader.setEncryptionKeys(
-        atClientManager.atClient, currentAtSign);
-    return atClientManager;
+    await loader.setEncryptionKeys(client, currentAtSign);
+    return manager;
+  }
+
+  /// The manager's current client, or null while it holds none:
+  /// `AtClientManager.atClient` throws rather than answering null.
+  static AtClient? currentClientOf(AtClientManager manager) {
+    try {
+      return manager.atClient;
+    } on StateError {
+      return null;
+    }
+  }
+
+  /// Files the demo atSign's credentials into [keys] when it holds none, or
+  /// holds nothing at all: a test hands in a store of its own to keep what
+  /// the client files there, and the client authenticates from that same
+  /// store. Whatever the store already holds is kept.
+  static Future<void> seedIfCredentialless(String atSign, AtKeysIo keys) async {
+    if (keys is! WrittenAtKeysIo) return;
+    final demo = AtEncryptionKeysLoader.getInstance().createAtKeysFromDemoKeys(
+        atSign);
+    final AtKeys held;
+    try {
+      held = await keys.read(atSign);
+    } on Exception {
+      await keys.write(atSign, demo);
+      return;
+    }
+    // ignore: deprecated_member_use
+    if (held.holdsAuthenticationMaterial &&
+        held.defaultEncryptionPrivateKey != null) {
+      return;
+    }
+    await keys.update(Atsign(atSign), (stored) {
+      // ignore: deprecated_member_use
+      stored.apkamPublicKey ??= demo.apkamPublicKey;
+      // ignore: deprecated_member_use
+      stored.apkamPrivateKey ??= demo.apkamPrivateKey;
+      // ignore: deprecated_member_use
+      stored.defaultEncryptionPublicKey ??= demo.defaultEncryptionPublicKey;
+      // ignore: deprecated_member_use
+      stored.defaultEncryptionPrivateKey ??= demo.defaultEncryptionPrivateKey;
+      // ignore: deprecated_member_use
+      stored.defaultSelfEncryptionKey ??= demo.defaultSelfEncryptionKey;
+      return true;
+    });
+  }
+
+  /// Stops any client of [atSign] running as the principal [keys] name, so a
+  /// client opened on [keys] replaces it rather than being refused.
+  static Future<void> stopClientRunningAs(String atSign, AtKeysIo keys) async {
+    final principal = (await keys.read(atSign)).enrollmentToAuthenticateAs();
+    for (final live in AtClientImpl.liveClientsFor(atSign)) {
+      if (live.enrollmentId == principal) await live.stop();
+    }
   }
 
   static String formatCommand(String command) {

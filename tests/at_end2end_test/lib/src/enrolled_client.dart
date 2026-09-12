@@ -7,7 +7,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show SignedEnvelope;
-import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:uuid/uuid.dart';
 
@@ -20,9 +19,8 @@ import 'package:uuid/uuid.dart';
 ///
 /// `AtClientImpl` caches clients by `(atSign, enrollmentId)`, so a second
 /// enrollment of one atSign is a genuinely separate client with its own
-/// connection carrying its own enrollment id. Use one `AtClientManager` per
-/// client (the public constructor), never `getInstance().setCurrentAtSign`,
-/// which would stop the other client.
+/// connection carrying its own enrollment id; `Atsign.open` builds one beside
+/// the owner client, and the caller owns it.
 class EnrolledClient {
   /// The enrolled client, authenticated as [enrollmentId].
   final AtClient client;
@@ -54,25 +52,19 @@ class EnrolledClient {
   /// from the approver's conveyance.
   final AtKeys keys;
 
-  /// The manager owning [client]. Its own instance rather than the singleton —
-  /// `AtClientManager.getInstance()` is per-process and keyed by atSign, so a
-  /// second enrollment of the SAME atSign would otherwise evict the first.
-  final AtClientManager manager;
-
   EnrolledClient({
     required this.client,
     required this.enrollmentId,
     required this.kpid,
     required this.keys,
-    required this.manager,
   });
 }
 
 /// Enrols a new APKAM enrollment on [atSign], approves it from [approver], and
 /// returns a client authenticated as it.
 ///
-/// [approver] must be a privileged client able to call `otp:get` and approve —
-/// in this package, the ordinary `TestUtils.initAtClient` client.
+/// [approver] must be a privileged client able to issue a passcode and
+/// approve — in this package, the client `TestSuiteInitializer` brings up.
 ///
 /// [namespaces] overrides the grants requested, which defaults to `rw` on
 /// [namespace] alone. Pass `{'*': 'rw', '__manage': 'rw', …}` for a fully
@@ -92,7 +84,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
   String? deviceName,
   Map<String, String>? namespaces,
 }) async {
-  final otp = (await approver.getOTP()).response;
+  final otp = (await approver.enrollments.otp()).value;
 
   final session = AtAuthSession(
     atSign: atSign,
@@ -105,52 +97,56 @@ Future<EnrolledClient> enrolAndAuthenticate({
   Map<String, dynamic>? built;
   final build = enrollmentKeyPackageBuilder(atSign);
 
-  final response = await AtEnrollment.create().submit(
-    AtEnrollmentRequest.pq(
-      session: session,
-      appName: namespace,
-      deviceName: deviceName ?? 'enrolled-${Uuid().v4().hashCode}',
-      namespaces: namespaces ?? {namespace: 'rw'},
-      otp: otp,
-      // pq mode, so the approver mints the symmetric key and seals it to the
-      // advertised key package rather than RSA-wrapping one the enrollee sent.
-      metadataBuilder: (keysIo) async => built = await build(keysIo),
-      apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-      // pq is the key EXCHANGE; the APKAM authentication keypair stays
-      // RSA-2048.
-      signingAlgo: SigningAlgoType.rsa2048,
-    ),
-    AtLookUp.withSecureSocket(
-      atSign: atSign,
-      rootDomain: AtRootDomain(rootDomain, rootPort),
-      transport: secureSocketTransport(SecureSocketConfig()),
-      authenticator: null,
-    ),
-  );
-
-  await approver.enrollmentService!.approve(EnrollmentRequestDecision.approved(
+  final atLookUp = AtLookUp.withSecureSocket(
     atSign: atSign,
-    enrollmentId: response.enrollmentId,
-    // Empty: pq mode means the approver mints it rather than unwrapping one
-    // the enrollee sent.
-    apkamSymmetricKey: AtBytes.fromString(''),
-  ));
+    rootDomain: AtRootDomain(rootDomain, rootPort),
+    transport: secureSocketTransport(SecureSocketConfig()),
+    authenticator: null,
+  );
+  final AtEnrollmentResponse response;
+  try {
+    response = await AtEnrollment.create().submit(
+      AtEnrollmentRequest.pq(
+        session: session,
+        appName: namespace,
+        deviceName: deviceName ?? 'enrolled-${Uuid().v4().hashCode}',
+        namespaces: namespaces ?? {namespace: 'rw'},
+        otp: otp,
+        // pq mode, so the approver mints the symmetric key and seals it to the
+        // advertised key package rather than RSA-wrapping one the enrollee sent.
+        metadataBuilder: (keysIo) async => built = await build(keysIo),
+        apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
+        // pq is the key EXCHANGE; the APKAM authentication keypair stays
+        // RSA-2048.
+        signingAlgo: SigningAlgoType.rsa2048,
+      ),
+      atLookUp,
+    );
+  } finally {
+    await atLookUp.close();
+  }
+
+  // pq mode: the approver mints the symmetric key rather than unwrapping one
+  // the enrollee sent, which it reads off the request.
+  await approver.enrollments.approve(response.enrollmentId);
 
   await AtEnrollment.create().waitForApproval(response);
+  // The handshake's connection is not the client's: the client opens its own.
+  await response.session?.atLookUp?.close();
 
-  // reuse: true asks for the AtLookUp that already authenticated as this
-  // enrollment during waitForApproval, instead of opening a fresh
-  // unauthenticated one.
-  final manager = await AtClientManager(atSign)
-      .fromAuthSession(response.session ?? session, preference, reuse: true);
+  final keys = (response.session ?? session).atKeysIo;
+  final client = await Atsign(atSign).open(
+      keys: keys,
+      preference: preference
+        ..rootDomain = rootDomain
+        ..rootPort = rootPort);
 
   final payload =
       SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
   return EnrolledClient(
-    client: manager.atClient,
+    client: client,
     enrollmentId: response.enrollmentId,
     kpid: ((payload['keys'] as List).single as Map)['kid'] as String,
-    keys: await (response.session ?? session).atKeysIo.read(atSign),
-    manager: manager,
+    keys: await keys.read(atSign),
   );
 }

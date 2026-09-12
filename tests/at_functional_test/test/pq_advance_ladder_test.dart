@@ -7,8 +7,7 @@ library;
 
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart'
-    show AtAuth, AtAuthRequest, AtKeys, InMemoryAtKeysIo;
+import 'package:at_auth/at_auth.dart' show InMemoryAtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/at_keys_initializer.dart'
@@ -55,31 +54,28 @@ void main() {
 
   late InMemoryAtKeysIo keysIo;
   late String legacyEnrollmentId;
-  late AtClientManager ladderManager;
+  late AtClient ladderClient;
   late AtClientStorage ladderStorage;
 
   setUpAll(() async {
-    final approverKeys = InMemoryAtKeysIo();
-    await approverKeys.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
-    final approverManager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign,
-        namespace,
-        TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
-        atKeysIo: approverKeys,
-        atChops: loader.createAtChopsFromDemoKeys(atSign),
+    final approver = await Atsign(atSign).open(
+        keys: InMemoryAtKeysIo.holding(
+            atSign, loader.createAtKeysFromDemoKeys(atSign)),
+        preference:
+            TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
+        namespace: namespace,
         storage: TestUtils.storageFor(atSign));
-    await loader.setEncryptionKeys(approverManager.atClient, atSign);
-    await AtClientSecretSharing.forClient(approverManager.atClient).register();
+    await loader.setEncryptionKeys(approver, atSign);
+    await AtClientSecretSharing.forClient(approver).register();
 
     // The rung-0 enrollment: `enrolAndAuthenticate` submits over OTP, and that
     // path mints RSA-2048 unconditionally — the starting state rung 1 advances
     // FROM. An enrollment born ML-DSA would make rung 1 a no-op.
     keysIo = InMemoryAtKeysIo();
-    await keysIo.write(atSign, AtKeys());
     final deviceName = 'ladder-$runId';
     final enrolled = await enrolAndAuthenticate(
-      approver: approverManager.atClient,
+      approver: approver,
       atSign: atSign,
       namespace: namespace,
       preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
@@ -93,7 +89,7 @@ void main() {
     legacyEnrollmentId = enrolled.client.enrollmentId!;
     // The install's one store: the enrolment built it under the device name,
     // and every rung below is a restart of the same install over it.
-    ladderManager = enrolled.manager;
+    ladderClient = enrolled.client;
     ladderStorage = TestUtils.storageForPrincipal(atSign, deviceName);
     expect(ladderStorage.isHeldBy(enrolled.client), isTrue,
         reason: 'the ladder must walk the store the enrolment built, or the '
@@ -107,33 +103,32 @@ void main() {
   Future<AtClient> clientAt(PqPosture posture, String enrollmentId) async {
     // The keyfile names the enrollment: once a rung has retrofitted, the
     // successor's typed material is the one active authentication key, so
-    // at_auth resolves it; the flat id — the OTP enrollment — is what it
-    // falls back to only before any retrofit.
-    final auth = AtAuth.create();
-    final response = await auth.authenticate(AtAuthRequest(
-      atSign,
-      rootDomain: AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
-      atKeysIo: keysIo,
-    ));
-    expect(response.isSuccessful, isTrue,
-        reason: 'could not authenticate from the ladder keyfile');
-    expect(response.session!.enrollmentId, enrollmentId,
-        reason: 'the ladder keyfile must resolve to the rung being asked for');
+    // the keys resolve it; the flat id — the OTP enrollment — is what they
+    // fall back to only before any retrofit.
+    expect(
+        await Atsign(atSign).authenticatesAs(
+            keys: keysIo,
+            rootDomain:
+                AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)),
+        enrollmentId,
+        reason: 'the ladder keyfile must authenticate, and resolve to the '
+            'rung being asked for');
 
     // NOTE: ONE store for the whole ladder. An install does not move its
     // storage on every upgrade, and the durability assertions below only mean
     // something if the later rung reads the SAME store the earlier one wrote
-    // to. A rung is a restart of the one install: the manager stops the
-    // previous rung's client, which unfiles it and releases the store, and the
-    // next client attaches to it as the principal that last held it. A fresh
-    // manager per rung leaves the previous client holding the store, and the
-    // next is refused as a second holder.
-    final manager = await ladderManager.setCurrentAtSign(
-        atSign, namespace, TestUtils.getPreference(atSign, posture: posture),
-        atKeysIo: keysIo,
-        enrollmentId: enrollmentId,
+    // to. A rung is a restart of the one install: the previous rung's client
+    // stops, which unfiles it and releases the store, and the next client
+    // attaches to it as the principal that last held it. Leaving the previous
+    // client running would leave it holding the store, and the next would be
+    // refused as a second holder.
+    await ladderClient.stop();
+    ladderClient = await Atsign(atSign).open(
+        keys: keysIo,
+        preference: TestUtils.getPreference(atSign, posture: posture),
+        namespace: namespace,
         storage: ladderStorage);
-    return manager.atClient;
+    return ladderClient;
   }
 
   /// Waits until the keyfile holds a signing key for every algorithm [posture]
@@ -141,7 +136,7 @@ void main() {
   ///
   /// `SigningKeyMinting.reconcileSigningKeys` runs from the client's startup
   /// and is fire-and-forget, so the keyfile is not guaranteed to have caught
-  /// up the instant `setCurrentAtSign` returns. Reading it immediately reports
+  /// up the instant `open` returns. Reading it immediately reports
   /// the PREVIOUS rung's key material and fails as though the stage moved
   /// nothing.
   ///

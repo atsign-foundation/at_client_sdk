@@ -7,7 +7,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show SignedEnvelope;
-import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:uuid/uuid.dart';
@@ -17,9 +16,8 @@ import 'package:uuid/uuid.dart';
 ///
 /// `AtClientImpl` caches clients by `(atSign, enrollmentId)`, so a second
 /// enrollment of one atSign is a genuinely separate client with its own
-/// connection carrying its own enrollment id. Use one `AtClientManager` per
-/// client (the public constructor), never `getInstance().setCurrentAtSign`,
-/// which would stop the other client.
+/// connection carrying its own enrollment id; `Atsign.open` builds one beside
+/// the owner client, and the caller owns it.
 class EnrolledClient {
   final AtClient client;
 
@@ -68,11 +66,6 @@ class EnrolledClient {
   /// from the approver's conveyance.
   final AtKeys keys;
 
-  /// The manager owning [client] — its own instance rather than the
-  /// per-process singleton, which is keyed by atSign and would otherwise evict
-  /// the first enrollment of the same atSign.
-  final AtClientManager manager;
-
   /// Wraps an enrollment that is already approved and authenticated;
   /// [enrolAndAuthenticate] is what produces one.
   EnrolledClient({
@@ -80,7 +73,6 @@ class EnrolledClient {
     required this.enrollmentId,
     required this.kpidOrNull,
     required this.keys,
-    required this.manager,
   });
 
   /// Stops [client], for silencing one mid-test; the pack's teardown stops
@@ -91,7 +83,8 @@ class EnrolledClient {
 /// Enrols a new APKAM enrollment on [atSign], approves it from [approver], and
 /// returns a client authenticated as it.
 ///
-/// [approver] must be a privileged client able to call `otp:get` and approve.
+/// [approver] must be a privileged client able to issue a passcode and
+/// approve.
 ///
 /// [keyExchangeMode] decides how the enrollment's `apkamSymmetricKey` travels,
 /// and therefore whether this enrollment advertises a key package at all. It
@@ -140,7 +133,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
   SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
   EnrollmentKeyExchangeMode keyExchangeMode = EnrollmentKeyExchangeMode.pq,
 }) async {
-  final otp = (await approver.getOTP()).response;
+  final otp = (await approver.enrollments.otp()).value;
 
   final session = AtAuthSession(
     atSign: atSign,
@@ -172,61 +165,54 @@ Future<EnrolledClient> enrolAndAuthenticate({
   // two can disagree.
   final resolvedDeviceName = deviceName ?? 'enrolled-${Uuid().v4().hashCode}';
 
-  final response = await AtEnrollment.create().submit(
-    legacyMode
-        // No metadataBuilder and no resolver: a legacy request advertises no
-        // key package, and the symmetric key travels RSA-wrapped on the
-        // enrollment record.
-        ? AtEnrollmentRequest(
-            session: session,
-            appName: namespace,
-            deviceName: resolvedDeviceName,
-            namespaces: namespaces ?? {namespace: 'rw'},
-            otp: otp,
-            signingAlgo: signingAlgo,
-          )
-        : AtEnrollmentRequest.pq(
-            session: session,
-            appName: namespace,
-            deviceName: resolvedDeviceName,
-            namespaces: namespaces ?? {namespace: 'rw'},
-            otp: otp,
-            metadataBuilder: (keysIo) async => built = await build(keysIo),
-            apkamSymmetricKeyResolver:
-                enrollmentApkamSymmetricKeyResolver(atSign),
-            signingAlgo: signingAlgo,
-          ),
-    atLookUp,
-  );
-
-  // NOTE: the approver's half differs by mode too, and getting it wrong is
-  // silent — a legacy request carries its own RSA-wrapped symmetric key on the
-  // record for the approver to hand back, where a pq approver mints one.
-  final AtBytes apkamSymmetricKey;
-  if (legacyMode) {
-    final record = (await approver.enrollmentService!.fetchEnrollmentRequests())
-        .firstWhere((e) => e.enrollmentId == response.enrollmentId);
-    apkamSymmetricKey = AtBytes.fromString(record.encryptedAPKAMSymmetricKey!);
-  } else {
-    // Empty: in pq mode the approver mints it rather than unwrapping one the
-    // enrollee sent.
-    apkamSymmetricKey = AtBytes.fromString('');
+  final AtEnrollmentResponse response;
+  try {
+    response = await AtEnrollment.create().submit(
+      legacyMode
+          // No metadataBuilder and no resolver: a legacy request advertises no
+          // key package, and the symmetric key travels RSA-wrapped on the
+          // enrollment record.
+          ? AtEnrollmentRequest(
+              session: session,
+              appName: namespace,
+              deviceName: resolvedDeviceName,
+              namespaces: namespaces ?? {namespace: 'rw'},
+              otp: otp,
+              signingAlgo: signingAlgo,
+            )
+          : AtEnrollmentRequest.pq(
+              session: session,
+              appName: namespace,
+              deviceName: resolvedDeviceName,
+              namespaces: namespaces ?? {namespace: 'rw'},
+              otp: otp,
+              metadataBuilder: (keysIo) async => built = await build(keysIo),
+              apkamSymmetricKeyResolver:
+                  enrollmentApkamSymmetricKeyResolver(atSign),
+              signingAlgo: signingAlgo,
+            ),
+      atLookUp,
+    );
+  } finally {
+    await atLookUp.close();
   }
 
-  await approver.enrollmentService!.approve(EnrollmentRequestDecision.approved(
-    atSign: atSign,
-    enrollmentId: response.enrollmentId,
-    apkamSymmetricKey: apkamSymmetricKey,
-  ));
+  // The approver reads the mode off the request: a legacy request carries
+  // its own RSA-wrapped symmetric key on the record, where a pq approver
+  // mints one.
+  await approver.enrollments.approve(response.enrollmentId);
 
   await AtEnrollment.create().waitForApproval(response);
+  // The handshake's connection is not the client's: the client opens its own.
+  await response.session?.atLookUp?.close();
 
-  // reuse: true asks for the AtLookUp that already authenticated as this
-  // enrollment during waitForApproval, instead of opening a fresh
-  // unauthenticated one.
-  final manager = await AtClientManager(atSign).fromAuthSession(
-      response.session ?? session, preference,
-      reuse: true, storage: storage.forPrincipal(atSign, resolvedDeviceName));
+  final keys = (response.session ?? session).atKeysIo;
+  final client = await Atsign(atSign).open(
+      keys: keys,
+      preference: preference
+        ..rootDomain = rootDomain
+        ..rootPort = rootPort,
+      storage: storage.forPrincipal(atSign, resolvedDeviceName));
 
   // Null in legacy mode: only the pq metadataBuilder populates `built`, and
   // there is no key package to read a kid out of.
@@ -236,10 +222,9 @@ Future<EnrolledClient> enrolAndAuthenticate({
               as Map)['keys'] as List)
           .single['kid'] as String;
   return EnrolledClient(
-    client: manager.atClient,
+    client: client,
     enrollmentId: response.enrollmentId,
     kpidOrNull: kpid,
-    keys: await (response.session ?? session).atKeysIo.read(atSign),
-    manager: manager,
+    keys: await keys.read(atSign),
   );
 }

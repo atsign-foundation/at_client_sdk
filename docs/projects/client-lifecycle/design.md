@@ -21,7 +21,13 @@ are done, except the durable copy of the atServer address, and step 3 is
 next. at_onboarding_cli's and at_client_flutter's own consumers of at_auth's
 DTOs are gone with steps 4 and 5, so the removal in step 3 no longer has
 either package in its way; their CHANGELOGs, READMEs and example trees from
-step 6 went with them. `AtClientManager.setCurrentAtSign` and `fromAuthSession` are not yet
+step 6 went with them, and so did at_client's README. The functional and
+e2e packs build their clients through `open` (their fixtures, and every
+test that authenticated or onboarded through at_auth), which is what
+`open` refusing a second client per **principal** rather than per atSign
+was needed for: an owner client and an enrolled client of one atSign in
+one process. `Atsign.authenticatesAs` is the client-less check ruling 2
+allowed for, added because six pack tests assert exactly that. `AtClientManager.setCurrentAtSign` and `fromAuthSession` are not yet
 deprecated: that waits until the live packs' fixtures are on `open`, so the
 annotation never lands ahead of the callers it would flag. The work is a
 **P0** row in the PQ table

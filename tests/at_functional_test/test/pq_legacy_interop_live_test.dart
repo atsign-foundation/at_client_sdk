@@ -10,7 +10,6 @@ library;
 
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
@@ -58,27 +57,22 @@ void main() {
         ..namespace = namespace;
 
   /// A CRAM activation with the default (RSA) signing algorithm — a pre-PQ
-  /// atSign.
+  /// atSign. Its client is the caller's, opened beside whatever else is
+  /// live: the two sides of an interop test have to be live at the same time.
   Future<AtClient> onboardLegacy(String atSign) async {
-    final atKeysIo = FileAtKeysIo(filePath: keysFilePath);
-    final response = await AtAuth.create().onboard(
-        AtOnboardingRequest(atSign,
-            signingAlgoType: SigningAlgoType.rsa2048, rootDomain: rootDomain)
-          ..atKeysIo = atKeysIo
-          ..appName = 'wavi'
-          ..deviceName = 'legacy'
-          ..namespace = namespace,
-        cramKeyMap[atSign]!);
-    expect(response.isSuccessful, true,
+    final client = await Atsign(atSign).activate(
+        cramSecret: cramKeyMap[atSign]!,
+        keys: FileAtKeysIo(filePath: keysFilePath),
+        preference: preferenceFor(atSign),
+        namespace: namespace,
+        app: 'wavi',
+        device: 'legacy',
+        signingAlgo: SigningAlgoType.rsa2048,
+        storage: TestUtils.storageFor(atSign));
+    expect(client.connection.current.isOnline, isTrue,
         reason: 'the legacy peer must activate before anything can be said '
             'about reaching it');
-    // Its own manager, not the singleton: the two sides of an interop test
-    // have to be live at the same time, and `getInstance().setCurrentAtSign`
-    // stops the outgoing client.
-    final manager = await AtClientManager(atSign).fromAuthSession(
-        response.session!, preferenceFor(atSign),
-        storage: TestUtils.storageFor(atSign));
-    return manager.atClient;
+    return client;
   }
 
   /// `plookup` for a public record, as the value or null when the atServer has

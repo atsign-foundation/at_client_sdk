@@ -252,7 +252,7 @@ void main() {
 
       // Notify first, THEN switch to the receiver and subscribe. A live
       // listener on atSign_2 cannot survive the getAtClient(atSign_1) switch:
-      // AtClientManager is a singleton and setCurrentAtSign stops the previous
+      // AtClientManager is a singleton and a switch stops the previous
       // current AtClient, tearing down its monitor. Subscribing after the
       // notify relies on the receiver's catch-up to replay the stored
       // notification through the provider's decrypt path (decrypt() -> 'twin').

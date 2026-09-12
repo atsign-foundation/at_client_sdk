@@ -24,14 +24,10 @@ void main() {
     AtSignLogger.root_level = logLevelToRestore;
   });
 
-  Future<AtClient> getAtClient(String atSign) async {
-    return (await AtClientManager.getInstance().setCurrentAtSign(
-            atSign,
-            namespace,
-            TestUtils.getPreference(atSign, posture: PqPosture.legacy),
-            storage: TestUtils.storageFor(atSign)))
-        .atClient;
-  }
+  Future<AtClient> getAtClient(String atSign) async =>
+      (await TestUtils.initAtClient(atSign, namespace,
+              posture: PqPosture.legacy))
+          .atClient;
 
   int ttl = 60000;
   group('Test encryption for self', () {

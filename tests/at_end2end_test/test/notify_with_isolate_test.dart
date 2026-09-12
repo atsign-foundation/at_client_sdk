@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
@@ -20,18 +22,21 @@ void main() {
 
   test('A test to send and receive notification with isolate', () async {
     ReceivePort mainIsolateReceivePort = ReceivePort('MainIsolateReceivePort');
+    final listening = Completer<void>();
+    final received = Completer<AtNotification>();
 
     // Spawn an isolate to listen for notifications
     Isolate childIsolate =
         await Isolate.spawn(initSharedAtSign, mainIsolateReceivePort.sendPort);
-    // Listen for messages from isolate
-    mainIsolateReceivePort.listen(expectAsync1((data) {
-      expect(data.value, constValue);
-      expect(data.key, notifyKey);
-      expect(data.from, currentAtSign);
-      expect(data.to, sharedWithAtSign);
-      childIsolate.kill();
-    }));
+    // The child says it is listening once its monitor is up; anything else
+    // it sends is the notification.
+    mainIsolateReceivePort.listen((data) {
+      if (data == 'listening') {
+        listening.complete();
+      } else if (!received.isCompleted) {
+        received.complete(data as AtNotification);
+      }
+    });
 
     // Initialize another atSign to send notifications
     await TestSuiteInitializer.getInstance().testInitializer(
@@ -39,6 +44,11 @@ void main() {
         enableInitialSync: false,
         atClientPreference: getAtClientPreferences(currentAtSign),
         posture: PqPosture.legacy);
+
+    // NOTE: the child's subscribe() returns long before its monitor has
+    // connected, and the atServer keeps no backlog for a monitor, so a
+    // notification sent in that window reports delivered and never arrives.
+    await listening.future.timeout(const Duration(seconds: 60));
 
     NotificationResult notificationResult = await AtClientManager.getInstance()
         .atClient
@@ -48,7 +58,14 @@ void main() {
 
     expect(notificationResult.notificationStatusEnum,
         NotificationStatusEnum.delivered);
-  });
+
+    final data = await received.future.timeout(const Duration(seconds: 60));
+    expect(data.value, constValue);
+    expect(data.key, notifyKey);
+    expect(data.from, currentAtSign);
+    expect(data.to, sharedWithAtSign);
+    childIsolate.kill();
+  }, timeout: const Timeout(Duration(minutes: 3)));
 
   tearDown(() {
     // Remove hive directories
@@ -64,17 +81,26 @@ Future<void> initSharedAtSign(SendPort mainIsolateSendPort) async {
       atClientPreference: getAtClientPreferences(sharedWithAtSign),
       posture: PqPosture.legacy);
 
-  AtClientManager.getInstance()
-      .atClient
-      .notificationService
-      .subscribe(shouldDecrypt: true)
-      .listen((onData) {
+  final notifications =
+      AtClientManager.getInstance().atClient.notificationService;
+  notifications.subscribe(shouldDecrypt: true).listen((onData) {
     // Ignore stats notifications
     if (onData.value != constValue) {
       return;
     }
     mainIsolateSendPort.send(onData);
   });
+
+  // Tell the sender once the monitor is up: subscribe() returns before it is.
+  final service = notifications as NotificationServiceImpl;
+  final deadline = DateTime.now().add(const Duration(seconds: 60));
+  while (service.currentListenerState != NotificationListenerState.listening) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw StateError('the monitor never reached listening within 60s');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+  mainIsolateSendPort.send('listening');
 }
 
 /// Builds the client preferences for a spawned isolate, which cannot reach the

@@ -39,7 +39,7 @@ void main() {
 
       await (atClient as AtClientImpl).stop();
       expect(
-        AtClientImpl.atClientInstanceMap.containsKey(firstAtSign),
+        AtClientImpl.holdsLiveClient(firstAtSign),
         false,
         reason: 'a stopped client releases its storage and leaves the map',
       );
@@ -58,7 +58,7 @@ void main() {
       await atClient.stop();
       await atClient.stop();
 
-      expect(AtClientImpl.atClientInstanceMap.containsKey(secondAtSign), false,
+      expect(AtClientImpl.holdsLiveClient(secondAtSign), false,
           reason: 'stop() is idempotent, and the first call already released');
     });
 
@@ -100,10 +100,10 @@ void main() {
       atKey = AtKey()..key = 'bob_data';
       await atClient2.put(atKey, 'Bob value');
 
-      expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), false,
+      expect(AtClientImpl.holdsLiveClient(firstAtSign), false,
           reason: 'the outgoing client is stopped, and a stopped client leaves '
               'the map');
-      expect(AtClientImpl.atClientInstanceMap.containsKey(secondAtSign), true);
+      expect(AtClientImpl.holdsLiveClient(secondAtSign), true);
 
       // Verify current atSign is correct
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(),
@@ -157,7 +157,7 @@ void main() {
           secondAtSign, namespace,
           posture: PqPosture.legacy);
 
-      expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), false);
+      expect(AtClientImpl.holdsLiveClient(firstAtSign), false);
       expect(atClient1.isStopped, true);
 
       await atClient1.stop();
@@ -187,9 +187,9 @@ void main() {
             'v');
       }
 
-      expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), false,
+      expect(AtClientImpl.holdsLiveClient(firstAtSign), false,
           reason: 'every switch away released the outgoing client');
-      expect(AtClientImpl.atClientInstanceMap.containsKey(secondAtSign), true);
+      expect(AtClientImpl.holdsLiveClient(secondAtSign), true);
       await (atClientManager.atClient as AtClientImpl).stop();
     });
   });

@@ -14,6 +14,7 @@ import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, parseApskValue, verifyEnvelope;
@@ -99,11 +100,20 @@ void main() {
   /// serves the one arm that walks the full retrofit.
   Future<AtAuthSession> legacySession(
       [String Function(String)? pathFor]) async {
-    final auth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
-        atKeysIo: FileAtKeysIo(filePath: pathFor ?? keysFilePath))
-      ..rootDomain = rootDomain);
-    expect(auth.isSuccessful, true);
-    return auth.session!;
+    final keysIo = FileAtKeysIo(filePath: pathFor ?? keysFilePath);
+    final enrollmentId = await Atsign(atSign)
+        .authenticatesAs(keys: keysIo, rootDomain: rootDomain);
+    // The session carries a connection authenticated as the legacy
+    // enrollment: the arms below submit their self-enrollments on it, and
+    // read the successor's advertisement over it before the successor's
+    // first authentication revokes it.
+    return AtAuthSession(
+        atSign: atSign,
+        rootDomain: rootDomain,
+        atKeysIo: keysIo,
+        enrollmentId: enrollmentId,
+        atLookUp: await authenticatedLookUp(atSign, keysIo, rootDomain,
+            enrollmentId: enrollmentId));
   }
 
   test(
@@ -136,14 +146,13 @@ void main() {
             'same algorithm as legacy, a new key object, its own enrollment '
             'id — and needs no ML-DSA anywhere');
 
-    final rsaAuth = await AtAuth.create().authenticate(
-        AtAuthRequest(atSign, atKeysIo: FileAtKeysIo(filePath: t1Path))
-          ..rootDomain = rootDomain);
-    expect(rsaAuth.isSuccessful, true,
+    expect(
+        await Atsign(atSign).authenticatesAs(
+            keys: FileAtKeysIo(filePath: t1Path), rootDomain: rootDomain),
+        newId,
         reason: 'the retrofit that carries the rollout window must be usable '
-            'immediately, exactly as the PQ one is');
-    expect(rsaAuth.session!.enrollmentId, newId,
-        reason: 'the keyfile alone names the successor: nothing passed an id');
+            'immediately, exactly as the PQ one is, and the keyfile alone '
+            'names the successor: nothing passed an id');
   });
 
   test(
@@ -203,14 +212,14 @@ void main() {
 
     // PKAM is record-authoritative: this passes only with a genuine ML-DSA
     // signature, and an RSA one, whatever it claims, is refused.
-    final pqAuth = await AtAuth.create().authenticate(
-        AtAuthRequest(atSign, atKeysIo: FileAtKeysIo(filePath: keysFilePath))
-          ..rootDomain = rootDomain);
-    expect(pqAuth.isSuccessful, true,
+    expect(
+        await Atsign(atSign).authenticatesAs(
+            keys: FileAtKeysIo(filePath: keysFilePath),
+            rootDomain: rootDomain),
+        newId,
         reason: 'the retrofitted enrollment must be usable IMMEDIATELY: '
-            'keyfile → AtChops → pkam dispatch, all genuinely ML-DSA');
-    expect(pqAuth.session!.enrollmentId, newId,
-        reason: 'the keyfile alone names the successor: nothing passed an id');
+            'keyfile → signer → pkam dispatch, all genuinely ML-DSA, and the '
+            'keyfile alone names the successor: nothing passed an id');
   });
 
   test(
@@ -221,7 +230,7 @@ void main() {
     await mintLegacyKeyfile(t3Path);
     final session = await legacySession(t3Path);
     final deviceRF2C = 'rf2c-${Uuid().v4().hashCode}';
-    final manager = await selfRetrofit(
+    final client = await selfRetrofit(
         // Explicit: the parameter default is the rollout-window RSA mode.
         signingAlgo: SigningAlgoType.mldsa65,
         session: session,
@@ -229,13 +238,11 @@ void main() {
         appName: 'rf2b-app',
         deviceName: deviceRF2C,
         namespaces: {namespace: 'rw'},
-        // Its own manager and store, named by the device: the owner client
-        // stays live over the atSign's bundle, so this cold retrofit is a
-        // SECOND principal rather than a succession from it.
-        manager: AtClientManager(atSign),
+        // Its own store, named by the device: the owner client stays live
+        // over the atSign's bundle, so this cold retrofit is a SECOND
+        // principal rather than a succession from it.
         storage: TestUtils.storageForPrincipal(atSign, deviceRF2C));
 
-    final client = manager.atClient;
     expect(client.enrollmentId, isNotNull);
     expect(client.enrollmentId, isNot(session.enrollmentId));
     expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65,
@@ -329,30 +336,24 @@ void main() {
     // one.
     String posturePath(String a) => 'test/testData/rf2d-posture$a.atKeys';
     await mintLegacyKeyfile(posturePath);
-    final auth = await AtAuth.create().authenticate(
-        AtAuthRequest(atSign, atKeysIo: FileAtKeysIo(filePath: posturePath))
-          ..rootDomain = rootDomain);
-    expect(auth.isSuccessful, true);
-    final session = auth.session!;
+    final session = await legacySession(posturePath);
 
     // No signingAlgo argument: under the legacy posture this call resolves
     // rsa2048 and mints RSA, and the assertions below are what tell the two
     // apart.
     final deviceRF2D = 'rf2d-${Uuid().v4().hashCode}';
-    final manager = await selfRetrofit(
+    final client = await selfRetrofit(
         session: session,
         preference:
             TestUtils.getPreference(atSign, posture: PqPosture.pqActive),
         appName: 'rf2b-app',
         deviceName: deviceRF2D,
         namespaces: {namespace: 'rw'},
-        manager: AtClientManager(atSign),
         // Its own store, named by the device: the owner client is live and
         // holds the atSign's bundle, so this cold retrofit is a SECOND
         // principal rather than a succession from it.
         storage: TestUtils.storageForPrincipal(atSign, deviceRF2D));
 
-    final client = manager.atClient;
     expect(client.enrollmentId, isNot(session.enrollmentId));
     expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65,
         reason: 'nothing in this test named an algorithm — the posture is '
@@ -397,19 +398,17 @@ void main() {
     await mintLegacyKeyfile(t5Path);
     final session = await legacySession(t5Path);
     final deviceRF2E = 'rf2e-${Uuid().v4().hashCode}';
-    final manager = await selfRetrofit(
+    final client = await selfRetrofit(
         session: session,
         preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
         appName: 'rf2b-app',
         deviceName: deviceRF2E,
         namespaces: {namespace: 'rw'},
-        manager: AtClientManager(atSign),
         // Its own store, named by the device: the owner client is live and
         // holds the atSign's bundle, so this cold retrofit is a SECOND
         // principal rather than a succession from it.
         storage: TestUtils.storageForPrincipal(atSign, deviceRF2E));
 
-    final client = manager.atClient;
     expect(client.enrollmentId, isNot(session.enrollmentId));
     expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.rsa2048,
         reason: 'a consult replaced by a mldsa65 constant would land this '

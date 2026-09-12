@@ -9,7 +9,7 @@ library;
 import 'dart:convert' show LineSplitter, jsonDecode;
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeys, InMemoryAtKeysIo;
+import 'package:at_auth/at_auth.dart' show InMemoryAtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/at_keys_initializer.dart'
@@ -99,22 +99,20 @@ void main() {
         reason: 'pub get failed in the released arm:\n'
             '${pubGet.stdout}\n${pubGet.stderr}');
 
-    final keysIo = InMemoryAtKeysIo();
-    await keysIo.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
-    final manager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign,
-        namespace,
-        TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
-        atKeysIo: keysIo,
-        atChops: loader.createAtChopsFromDemoKeys(atSign),
+    final approver = await Atsign(atSign).open(
+        keys: InMemoryAtKeysIo.holding(
+            atSign, loader.createAtKeysFromDemoKeys(atSign)),
+        preference:
+            TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
+        namespace: namespace,
         storage: TestUtils.storageFor(atSign));
-    await loader.setEncryptionKeys(manager.atClient, atSign);
-    await AtClientSecretSharing.forClient(manager.atClient).register();
+    await loader.setEncryptionKeys(approver, atSign);
+    await AtClientSecretSharing.forClient(approver).register();
 
     for (final entry in stages.entries) {
       cells[entry.key] = await enrolAndAuthenticate(
-        approver: manager.atClient,
+        approver: approver,
         atSign: atSign,
         namespace: namespace,
         preference: TestUtils.getPreference(atSign, posture: entry.value),

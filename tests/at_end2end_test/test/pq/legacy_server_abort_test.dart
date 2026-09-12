@@ -87,16 +87,21 @@ void main() {
     return response.enrollmentId;
   }
 
+  /// The legacy enrollment's session, authenticated first: the connection the
+  /// upgrade submits on IS the upgrade's authority, so a keyfile that cannot
+  /// authenticate has no upgrade to attempt.
   Future<AtAuthSession> sessionFor(String label) async {
-    final auth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
-        atKeysIo: FileAtKeysIo(filePath: (_) => keyfileFor(label)))
-      ..namespace = namespace
-      ..rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'],
-          ConfigUtil.getYaml()['root_server']['port'] ?? 64));
-    expect(auth.isSuccessful, true,
-        reason: 'the legacy enrollment must authenticate before it can attempt '
-            'the upgrade — that connection IS the upgrade\'s authority');
-    return auth.session!;
+    final keysIo = FileAtKeysIo(filePath: (_) => keyfileFor(label));
+    final rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'],
+        ConfigUtil.getYaml()['root_server']['port'] ?? 64);
+    final enrollmentId = await Atsign(atSign)
+        .authenticatesAs(keys: keysIo, rootDomain: rootDomain);
+    return AtAuthSession(
+        atSign: atSign,
+        rootDomain: rootDomain,
+        atKeysIo: keysIo,
+        namespace: namespace,
+        enrollmentId: enrollmentId);
   }
 
   Future<int> enrollmentsWithStatus(
@@ -134,7 +139,6 @@ void main() {
         appName: 'b01-priv',
         deviceName: 'b01-priv-rf-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw'},
-        manager: AtClientManager(atSign),
       );
     } catch (e) {
       thrown = e;
@@ -198,7 +202,6 @@ void main() {
         appName: 'b01-scoped',
         deviceName: 'b01-scoped-rf-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw'},
-        manager: AtClientManager(atSign),
       );
     } catch (e) {
       thrown = e;
