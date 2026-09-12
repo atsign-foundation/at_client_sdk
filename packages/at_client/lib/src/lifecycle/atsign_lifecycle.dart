@@ -1,8 +1,15 @@
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_factory.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/enroll/pq_native_onboard.dart'
+    show
+        firstEnrollmentAppName,
+        firstEnrollmentDeviceName,
+        mintSigningRootAfterActivation;
 import 'package:at_client/src/enroll/signing_key_mint.dart'
     show mintAdvertisedSigningKey;
 import 'package:at_client/src/lifecycle/at_connection.dart';
@@ -15,6 +22,7 @@ import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_utils/at_progress.dart';
 
 /// The verbs an application reaches a working client through, on the atSign
 /// it holds keys for.
@@ -86,6 +94,79 @@ extension AtsignLifecycle on Atsign {
     if (refusesFirstOpen && !await client.hasBeenOnline()) {
       await client.stop();
       throw AtOpenRefusedException(this, state);
+    }
+    return client;
+  }
+
+  /// Activates this atSign with its one-time [cramSecret], writing the keys
+  /// the activation mints into [keys], and opens a client on them that the
+  /// caller owns.
+  ///
+  /// The activation is the atSign's first enrollment, named [app] on
+  /// [device] and granted everything. Its APKAM algorithm is the
+  /// preference's `authenticationKeyAlgorithm`; `mldsa65` makes the atSign
+  /// post-quantum from birth, with a data signing key and a key package on
+  /// the request that creates the record, and the signing root minted once
+  /// the client is up. [mintLegacyMaterial] cuts the RSA encryption keypair
+  /// and the self-encryption key, and defaults to the posture's answer.
+  /// [onProgress] hears each step of the activation.
+  ///
+  /// See [open] for [namespace], [storage], [atLookUp] and [connectBudget];
+  /// a supplied [atLookUp] serves the activation too, and is taken as having
+  /// already reached the atServer.
+  Future<AtClient> activate({
+    required String cramSecret,
+    required WrittenAtKeysIo keys,
+    required AtClientPreference preference,
+    String? namespace,
+    AtClientStorage? storage,
+    String app = firstEnrollmentAppName,
+    String device = firstEnrollmentDeviceName,
+    bool? mintLegacyMaterial,
+    void Function(ProgressEvent event)? onProgress,
+    AtLookUp? atLookUp,
+    Duration connectBudget = AtConnection.defaultBudget,
+  }) async {
+    final algo = preference.authenticationKeyAlgorithm;
+    final pqNative = algo == SigningAlgoType.mldsa65;
+    ({SigningAlgoType algorithm, String publicKey, String privateKey})?
+        advertisedSigningKey;
+    FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? metadataBuilder;
+    if (pqNative) {
+      // NOTE: the enrollment owns its signing key from its first byte and the
+      // key package is signed with that same key: `_apsk` names one key and
+      // a peer verifies the package against it before sealing anything.
+      advertisedSigningKey =
+          await mintAdvertisedSigningKey(preference.dataSigningKeyAlgorithms);
+      metadataBuilder = enrollmentKeyPackageBuilder(this,
+          signingAlgo: algo,
+          advertisedSigningKey: advertisedSigningKey,
+          keyEstablishmentAlgo: preference.keyEstablishmentAlgorithms.first);
+    }
+    await activateAtSign(
+        atSign: this,
+        cramSecret: cramSecret,
+        keys: keys,
+        signingAlgo: algo,
+        rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
+        appName: app,
+        deviceName: device,
+        mintLegacyMaterial:
+            mintLegacyMaterial ?? preference.posture.mintLegacyMaterial,
+        metadataBuilder: metadataBuilder,
+        advertisedSigningKey: advertisedSigningKey,
+        onProgress: onProgress,
+        atLookUp: atLookUp);
+
+    final client = await open(
+        keys: keys,
+        preference: preference,
+        namespace: namespace,
+        storage: storage,
+        atLookUp: atLookUp,
+        connectBudget: connectBudget);
+    if (pqNative) {
+      await mintSigningRootAfterActivation(client, atKeysIo: keys);
     }
     return client;
   }

@@ -13,6 +13,12 @@
 - feat: `AtClientManager.getInstance().use(client)` makes a client the
   caller built current, notifying the switch listeners, without stopping the
   previous one: an owned client is its owner's to stop.
+- feat: `Atsign('@alice').activate(cramSecret: ..., keys: ..., preference:
+  ...)` activates a new atSign with its one-time secret, writes the keys the
+  activation mints into the store named, and opens a client on them that the
+  caller owns. The preference's `authenticationKeyAlgorithm` decides whether
+  the atSign is post-quantum from birth, in which case the signing key, the
+  key package and the signing root are minted as the PQ-native helpers did.
 - feat: `Atsign('@alice').enroll(otp: ..., app: ..., device: ...,
   namespaces: ..., keys: ..., preference: ...)` submits an enrollment and
   files the keys it minted in the store the caller named, as `pending` under

@@ -12,6 +12,14 @@
   earlier build reads `pending` as a token it does not know: not active, not
   rankable and carried through unchanged, which is the right reading of a
   keypair the atServer has not accepted.
+- feat: `activateAtSign(atSign: ..., cramSecret: ..., keys: ...,
+  signingAlgo: ...)` is CRAM activation as a parameter list: it waits for
+  the atServer, authenticates with the secret, mints the keys, submits and
+  authenticates as the first enrollment, writes the keys to the store named
+  and completes the activation, answering the enrollment id. A supplied
+  `atLookUp` is taken as having already reached the atServer, so the
+  provisioning wait is skipped. `AtAuth.onboard` and its request and
+  response objects are what it replaces.
 - The never-lose rule a flush applies to the flat legacy fields now protects
   a credential and nothing else. A legacy field that was null may gain a
   value, since the document writer emits every field null or not and a

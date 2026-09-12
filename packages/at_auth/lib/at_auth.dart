@@ -7,6 +7,9 @@ export 'src/auth_constants.dart';
 // at_lookup cannot name AtKeys or AtKeysIo, so the credential, the enrollment
 // and the signing algorithm all stay on this side of that seam.
 export 'src/auth/at_authenticator.dart';
+// CRAM activation as a parameter list: the verb at_client's `activate` builds
+// on, and the shape the request object above is being replaced by.
+export 'src/auth/activation.dart';
 // Reachability probes. `httpsProbe` is WASM-safe; `defaultProbe` is
 // whichever of it and `secureSocketProbe` suits the platform compiled for.
 export 'src/auth/probe_default.dart';
