@@ -390,7 +390,7 @@ class AuthCliArgs {
         help: 'How far into the post-quantum rollout to run. legacy drives no '
             'upgrade and configures no post-quantum providers, so it cannot '
             'read post-quantum data; pqReady moves the credentials and keeps '
-            'writes legacy; '
+            'writes on the legacy provider; '
             'pqActive makes post-quantum writes the default. onboard and '
             'enroll default to legacy, so the keys they write stay usable by a '
             'legacy app; every other command defaults to pqReady and refuses '

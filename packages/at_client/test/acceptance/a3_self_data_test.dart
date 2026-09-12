@@ -216,8 +216,8 @@ void main() {
       //       namespace with no nskey has no PQ path at all. The failure is a
       //       distinct exception naming the namespace, not a generic encryption
       //       error. With the legacy fallback opted in (final 3.x only) the
-      //       write proceeds under legacy, and every SUBSEQUENT write uses the
-      //       nskey once it exists; records already written stay legacy, and
+      //       write proceeds with the legacy provider, and every SUBSEQUENT write uses the
+      //       nskey once it exists; records already written stay legacy-encrypted, and
       //       re-encrypting them is an explicit migration. Rare in practice:
       //       a client mints for its preference namespace and its rw namespaces
       //       at init.
@@ -232,7 +232,7 @@ void main() {
         'a namespace that gains a key takes over, and what the fallback wrote',
         proves: 'the fallback clause on every arm it states, live and in one '
             'run: with the escape hatch open a write to a keyless namespace '
-            'goes out legacy; the namespace then GAINS a key and the very next '
+            'goes out with the legacy provider; the namespace then GAINS a key and the very next '
             'write uses it, with no opt-in and no flag to flip; and the record '
             'the fallback already wrote comes back legacy and readable, so '
             'nothing was re-encrypted behind a later put. ⚠️ The middle arm '
@@ -241,10 +241,12 @@ void main() {
             'appearing changed nothing for the rest of that window. '
             'Mutation-proven: reverting that fix leaves the later write on '
             'legacy, quoting this assertion, while the control — a second '
-            'write taken BEFORE the key exists, which must stay legacy — is '
+            'write taken BEFORE the key exists, which must stay legacy-encrypted — is '
             'green, so the flip is attributed to the key appearing rather '
             'than to writing twice',
-        clauses: ['Records already written under the fallback stay legacy'],
+        clauses: [
+          'Records already written under the fallback stay legacy-encrypted'
+        ],
       );
       provenIn(
         'packages/at_client/test/nskey_seeding_test.dart',

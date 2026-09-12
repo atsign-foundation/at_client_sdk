@@ -74,7 +74,7 @@ void main() {
       final request = await submittedUnder(PqPosture.legacy);
 
       expect(request.keyExchangeMode, EnrollmentKeyExchangeMode.legacy,
-          reason: 'PqPosture.legacy.keyExchangeMode is legacy, so the request '
+          reason: 'PqPosture.legacy.keyExchangeMode is EnrollmentKeyExchangeMode.legacy, so the request '
               'must be the wrapped-key shape');
       expect(request.metadataBuilder, isNull,
           reason: 'a legacy request advertises no key package: the approver '

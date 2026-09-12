@@ -90,7 +90,7 @@ void main() {
     // so it holds nsB and can seal to it. The sender must also be able to SEE
     // nsB's advertisement: `currentPublic` is local-first, so a namespace
     // minted while a client is already running is invisible to it and the send
-    // silently falls back to legacy.
+    // silently falls back to the legacy provider.
     final receiver = await enrol('park-receiver');
     await (receiver.client as AtClientImpl).pqBootstrap!.startupComplete;
 
@@ -153,8 +153,9 @@ void main() {
     addTearDown(parkedSubscription.cancel);
 
     // NOTE: `cryptoProviderId` is required here. The era default is
-    // `readsNskeyWritesLegacy` — it reads the nskey path and writes legacy —
-    // so a notify that does not ask for the PQ provider goes out legacy, the
+    // `readsNskeyWritesLegacy` — it reads the nskey path and writes with the
+    // legacy provider — so a notify that does not ask for the PQ provider goes
+    // out with the legacy provider, the
     // receiver opens it with no nskey private involved, and the park is never
     // entered.
     await sender.client.notificationService.notify(

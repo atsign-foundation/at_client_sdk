@@ -135,8 +135,8 @@ class SyncServiceImpl implements SyncService {
   /// the keystore — so there is nothing for value-level encryption to protect.
   /// Saying so explicitly keeps them off the shared-data crypto path, where
   /// every post-quantum provider declines a local key and the fallback from
-  /// that decline is legacy, which a client refusing legacy then refuses
-  /// outright.
+  /// that decline is the legacy provider, which a client that refuses it then
+  /// refuses outright.
   ///
   /// A fresh instance per call: [PutRequestOptions] is mutable and the put
   /// pipeline may rewrite the options it is handed.

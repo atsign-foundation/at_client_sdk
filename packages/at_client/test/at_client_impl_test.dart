@@ -520,7 +520,8 @@ void main() {
               'the preference still holds the untouched marker');
     });
 
-    test('the default posture keeps writes legacy in the adopted era set',
+    test(
+        'the default posture keeps writes on the legacy provider in the adopted era set',
         () async {
       // NOTE: a bare preference is `PqPosture.pqReady`, not legacy — pqReady
       // reads post-quantum records and legacy does not, so this arm covers the
@@ -538,7 +539,7 @@ void main() {
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
       expect(config.defaultProviderId, legacyCryptoProviderId,
-          reason: 'the 3.x default writes legacy');
+          reason: 'the 3.x default writes with the legacy provider');
       expect(config.lookup(symmetricAesGcmCryptoProviderId), isNull,
           reason: 'the default posture registers no post-quantum provider, so '
               'a record sent by a later peer does not open here');

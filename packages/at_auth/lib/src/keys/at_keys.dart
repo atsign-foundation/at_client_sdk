@@ -1025,19 +1025,19 @@ class AtKeys {
   // enrollmentId and arbitrary metadata. They stay readable/writable (and
   // merge flatly into the typed-keys document) so existing files keep working.
 
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? apkamPublicKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? apkamPrivateKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? defaultEncryptionPublicKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? defaultEncryptionPrivateKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? defaultSelfEncryptionKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   AtBytes? apkamSymmetricKey;
-  @Deprecated('hard-coded keys are legacy, see new methods')
+  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
   String? enrollmentId;
   /// A legacy keyfile's entries outside the flat key schema: the atSign under
   /// `atsign` or `name`, and the self-encryption key stored under the atSign

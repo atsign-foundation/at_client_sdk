@@ -413,7 +413,7 @@ void main() {
                     ..useRemoteAtServer = true),
               isTrue,
               reason: '$name -> $ns must write: '
-                  '${ns == nsReady ? "the recipient has published a key" : "this posture writes legacy, which needs none"}');
+                  '${ns == nsReady ? "the recipient has published a key" : "this posture writes with the legacy provider, which needs none"}');
           wrote['$name -> $ns'] = key;
         }
       }

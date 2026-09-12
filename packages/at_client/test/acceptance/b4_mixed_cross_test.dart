@@ -19,7 +19,7 @@ void main() {
       //       build, so public:__nskey.<ns>@bob does not exist.
       // WHEN  alice1 shares or notifies @bob:<k>.<ns>@alice.
       // THEN  the write fails cold start BY NAME, unless the app opted into
-      //       allowLegacyCryptoFallback — in which case it goes out legacy,
+      //       allowLegacyCryptoFallback — in which case it goes out with the legacy provider,
       //       stamped as such on the record. Never a silent downgrade.
       provenIn(
           'tests/at_end2end_test/test/pq/nskey_recipient_not_ready_test.dart',
@@ -29,9 +29,9 @@ void main() {
               'namespace — cross-atSign, against two live atServers, on a '
               'run-unique namespace so the absence is genuine');
       provenIn('tests/at_functional_test/test/nskey_data_path_live_test.dart',
-          'with the escape hatch opened, the write goes out under legacy',
+          'with the escape hatch opened, the write goes out with the legacy provider',
           proves: 'the explicit opt-in arm: with allowLegacyCryptoFallback set '
-              'the same cold-start write proceeds under legacy and the record '
+              'the same cold-start write proceeds with the legacy provider and the record '
               'is stamped legacy — the downgrade is visible, never silent');
       provenIn('tests/at_end2end_test/test/pq/pq_cold_start_recovery_test.dart',
           'UC-B4.1: with the fallback opted in, the cold write goes legacy',
@@ -153,7 +153,7 @@ void main() {
               'arrived and the write simply has to start going out PQ. It '
               'does, on the first write after the key appears, with the '
               'control (a second write taken BEFORE the key exists, which '
-              'stays legacy) green — so the flip is the key appearing rather '
+              'stays legacy-encrypted) green — so the flip is the key appearing rather '
               'than the second write. What the fallback already wrote stays '
               'legacy',
           clauses: ['the recipient\'s key appearing is the whole trigger']);

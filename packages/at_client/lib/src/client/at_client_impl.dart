@@ -2154,7 +2154,7 @@ class AtClientImpl implements AtClient {
   ///
   /// Two switches saying opposite things: `allowLegacyCryptoFallback` is
   /// "reach this recipient however you can", `disallowLegacyEncryption` is
-  /// "never write legacy". The second wins. Refusing here rather than at
+  /// "never write with the legacy provider". The second wins. Refusing here rather than at
   /// encryption keeps the error the one the caller can act on — the
   /// destination has no post-quantum key.
   @visibleForTesting

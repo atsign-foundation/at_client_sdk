@@ -97,7 +97,7 @@ class CryptoRuntime {
   /// The provider id a write will use, before anything has stamped the key.
   ///
   /// When [atKey] is supplied and the selected provider declines it
-  /// ([HandlesSelectively]), a *defaulted* id falls back to legacy, while an
+  /// ([HandlesSelectively]), a *defaulted* id falls back to the legacy provider, while an
   /// *explicitly requested* id throws instead — quietly writing under another
   /// scheme is how an app comes to believe data is post-quantum when it is not.
   static String providerIdFor(AtClient atClient, String? requested,
@@ -109,7 +109,7 @@ class CryptoRuntime {
       refuseLegacyIfDisallowed(atClient, atKey, id,
           because: requested != null
               ? 'it was requested explicitly'
-              : 'this client is configured to write legacy');
+              : 'this client is configured to write with the legacy provider');
       return id;
     }
 
@@ -123,7 +123,7 @@ class CryptoRuntime {
       }
       refuseLegacyIfDisallowed(atClient, atKey, legacyProviderId,
           because: 'the configured provider "$id" cannot handle this key, and '
-              'the fallback is legacy');
+              'the fallback is the legacy provider');
       _logger.finer(
           'default provider "$id" declined ${atKey.key}; using $legacyProviderId');
       return legacyProviderId;

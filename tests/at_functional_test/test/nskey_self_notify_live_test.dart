@@ -221,7 +221,7 @@ void main() {
         symmetricAesGcmCryptoProviderId,
         reason: 'providerId must travel ON THE FRAME. A stored key carries its '
             'appMetadata in the record; a notification has to carry it in the '
-            'notification, and without it the receiver falls back to legacy '
+            'notification, and without it the receiver falls back to the legacy provider '
             'and hunts a shared_key a PQ write never created');
 
     expect(notification.value, value,

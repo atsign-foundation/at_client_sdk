@@ -596,7 +596,7 @@ void main() {
               'conveyance needs it in every mode');
     });
 
-    test('the default mode is legacy', () async {
+    test('the default key exchange mode is EnrollmentKeyExchangeMode.legacy', () async {
       final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
 
       await AtEnrollmentImpl().submit(requestWith(null), mockAtLookUp);

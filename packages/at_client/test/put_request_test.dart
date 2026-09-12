@@ -306,7 +306,7 @@ void main() {
   /// decrypt it and nothing an adversary can capture; the keystore already
   /// encrypts it at rest. Routing one through the shared-data crypto path also
   /// makes it unwritable under `disallowLegacyEncryption`, because every
-  /// post-quantum provider declines a local key and the fallback is legacy.
+  /// post-quantum provider declines a local key and the fallback is the legacy provider.
   group('local: keys are not encrypted', () {
     late PutRequestTransformer transformer;
 

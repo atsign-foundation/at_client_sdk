@@ -165,7 +165,7 @@ void main() {
       // and actual algorithms agree. ML-DSA authentication is what makes this a
       // heal at all: with an rsa2048 authentication keypair and no typed
       // signing material, that one keypair IS the data signing keypair, so the
-      // mint is correctly a no-op. The posture stays legacy so key exchange
+      // mint is correctly a no-op. The posture stays `PqPosture.legacy` so key exchange
       // does not also move to pq, which this test is not about.
       signingAlgo: SigningAlgoType.mldsa65,
       preference: TestUtils.getPreference(atSign,

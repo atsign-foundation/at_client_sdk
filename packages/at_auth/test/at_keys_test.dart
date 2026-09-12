@@ -63,7 +63,7 @@ void main() {
       expect(atKeys.metadata, isNotEmpty);
     });
 
-    test('fromJson falls back to legacy for json without a version field', () {
+    test('fromJson reads json without a version field as a legacy document', () {
       expect(AtKeys.fromJson(encryptedAtKeysMap), equals(createKeys()));
     });
 

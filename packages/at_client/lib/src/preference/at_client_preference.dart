@@ -453,7 +453,7 @@ class AtClientPreference {
   ///
   /// ⚠️ Off by default: the fallback is a silent downgrade to RSA, and it is
   /// forward-only — the first write after the destination publishes a key is
-  /// post-quantum, but records already written under it stay legacy.
+  /// post-quantum, but records already written under it stay legacy-encrypted.
   bool allowLegacyCryptoFallback = false;
 
   /// Whether this client mints and publishes namespace keys at start.
