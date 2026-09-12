@@ -122,8 +122,9 @@ extension AtsignLifecycle on Atsign {
   /// posture's answer. [onProgress] hears each step of the activation.
   ///
   /// A newly registered atSign can take minutes to be provisioned: the
-  /// activation asks up to [provisioningRetries] times,
-  /// [provisioningPollInterval] apart, before giving up.
+  /// activation polls every [provisioningPollInterval] until the atServer
+  /// answers or [provisioningBudget] is spent, five minutes with none, and
+  /// then throws [AtTimeoutException].
   ///
   /// See [open] for [namespace], [storage], [atLookUp] and [connectBudget];
   /// a supplied [atLookUp] serves the activation too, and is taken as having
@@ -138,7 +139,7 @@ extension AtsignLifecycle on Atsign {
     String device = firstEnrollmentDeviceName,
     bool? mintLegacyMaterial,
     SigningAlgoType? signingAlgo,
-    int provisioningRetries = RetryOptions.defaultMaxRetries,
+    Duration? provisioningBudget,
     Duration provisioningPollInterval = RetryOptions.defaultRetryDelay,
     void Function(ProgressEvent event)? onProgress,
     AtLookUp? atLookUp,
@@ -173,8 +174,9 @@ extension AtsignLifecycle on Atsign {
         metadataBuilder: metadataBuilder,
         advertisedSigningKey: advertisedSigningKey,
         retryOptions: RetryOptions(
-            maxRetries: provisioningRetries,
-            retryDelay: provisioningPollInterval),
+            maxRetries: RetryOptions.defaultMaxRetries,
+            retryDelay: provisioningPollInterval,
+            overallTimeout: provisioningBudget),
         onProgress: onProgress,
         atLookUp: atLookUp);
 

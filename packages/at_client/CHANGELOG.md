@@ -32,8 +32,9 @@
   supplies the no-op sync service the CLIs use; `client.enrollments` gains
   `fetch`, `unrevoke` and `delete`, and an `otp` or `spp` asked for with no
   expiry leaves the atServer's default in force.
-- `activate` takes `provisioningRetries` and `provisioningPollInterval`, the
-  wait for a newly registered atSign to be provisioned. The pending document
+- `activate` takes `provisioningBudget` and `provisioningPollInterval`: it
+  polls for a newly registered atSign to be provisioned until the budget,
+  five minutes with none, is spent. The pending document
   `enroll` files carries the atSign's encryption public key as typed
   material rather than in its flat field, which a file store self-encrypts
   under a key the device is only given at approval; the completion copies it

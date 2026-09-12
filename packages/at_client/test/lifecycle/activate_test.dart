@@ -173,6 +173,23 @@ void main() {
         reason: 'the request that creates the record carries the key package');
   });
 
+  test('the provisioning wait ends when its budget is spent', () async {
+    // No atLookUp: the activation polls the preference's atDirectory, which
+    // refuses every connection, until the budget runs out.
+    final started = DateTime.now();
+    await expectLater(
+        () async => Atsign(atSign).activate(
+            cramSecret: cramSecret,
+            keys: InMemoryAtKeysIo(),
+            preference: await preference(),
+            provisioningBudget: const Duration(milliseconds: 600),
+            provisioningPollInterval: const Duration(milliseconds: 100)),
+        throwsA(isA<AtTimeoutException>()));
+    expect(DateTime.now().difference(started),
+        lessThan(const Duration(seconds: 10)),
+        reason: 'the budget bounds the wait; with none it is five minutes');
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
   test('a wrong secret is refused and nothing is written', () async {
     final store = InMemoryAtKeysIo();
     final server = atServer();

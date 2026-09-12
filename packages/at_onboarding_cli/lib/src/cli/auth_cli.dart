@@ -470,8 +470,8 @@ Future<int> status(ArgResults ar) async {
 }
 
 /// How often a client waiting for its enrollment to be approved asks again,
-/// and how many times an activation asks whether a newly registered atSign
-/// has been provisioned.
+/// and how often an activation asks whether a newly registered atSign has
+/// been provisioned.
 const Duration approvalPollInterval = Duration(seconds: 10);
 const Duration provisioningPollInterval = Duration(seconds: 2);
 
@@ -527,7 +527,7 @@ Future<bool> onboard(ArgResults argResults, {AtLookUp? atLookUp}) async {
 /// before this returns: a command's process ends with the command.
 ///
 /// [maxRetries] bounds the wait for a newly registered atSign to be
-/// provisioned, [provisioningPollInterval] apart.
+/// provisioned: that many polls, [provisioningPollInterval] apart.
 @visibleForTesting
 Future<void> activate(String atSign, AtOnboardingPreference preference,
     {int maxRetries = 50, AtLookUp? atLookUp}) async {
@@ -546,7 +546,7 @@ Future<void> activate(String atSign, AtOnboardingPreference preference,
           filePath: (_) => atKeysFilePath, passPhrase: preference.passPhrase),
       preference: preference,
       storage: preference.storageFor(atSign),
-      provisioningRetries: maxRetries,
+      provisioningBudget: provisioningPollInterval * maxRetries,
       provisioningPollInterval: provisioningPollInterval,
       onProgress: printProgress,
       atLookUp: connection);
