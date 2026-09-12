@@ -549,6 +549,13 @@ class AtClientImpl implements AtClient {
   static bool holdsLiveClient(String atSign) =>
       liveClientsFor(atSign).isNotEmpty;
 
+  /// Whether a live client is filed for [atSign] as [enrollmentId], null
+  /// meaning the atSign's own credential; a supersession is followed to the
+  /// client that now runs under it.
+  static bool holdsLiveClientAs(String atSign, String? enrollmentId) =>
+      atClientInstanceMap.containsKey(_currentInstanceKey(
+          instanceKey(AtUtils.fixAtSign(atSign), enrollmentId)));
+
   /// Every client filed for [atSign], under any enrollment.
   ///
   /// One atSign can hold several entries, one per enrolled principal, so a
@@ -665,6 +672,12 @@ class AtClientImpl implements AtClient {
     AtLookUp? atLookUp,
     String? enrollmentId,
     AtClientStorage? storage,
+
+    /// When true, [enrollmentId], or what the keys name, is the principal
+    /// exactly: a null means the atSign's own credential and never falls
+    /// back to a lone enrolled client, which a caller naming no enrollment
+    /// is otherwise handed.
+    bool exactEnrollment = false,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -702,7 +715,9 @@ class AtClientImpl implements AtClient {
       }
     }
     // Fetch cached AtClientImpl for re-use, or create a new one and init it.
-    final cacheKey = _resolveCacheKey(currentAtSign, enrollmentId);
+    final cacheKey = exactEnrollment
+        ? _currentInstanceKey(instanceKey(currentAtSign, enrollmentId))
+        : _resolveCacheKey(currentAtSign, enrollmentId);
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(cacheKey)) {
       atClientImpl = atClientInstanceMap[cacheKey];
@@ -2095,8 +2110,8 @@ class AtClientImpl implements AtClient {
           // Null for a pre-enrollment atSign, which is how at_auth decides it
           // must approve its own request.
           enrollmentId: id,
-          atLookUp: _remoteSecondary!.atLookUp,
         ),
+        atLookUp: _remoteSecondary!.atLookUp,
         preference: _preference!,
         appName: appName,
         deviceName: deviceName,
@@ -2122,9 +2137,8 @@ class AtClientImpl implements AtClient {
       _logger.warning('The retrofit of $subject did not complete, so this '
           'client comes up on $subject and the next start will try again: $e');
     } on Error catch (e, stackTrace) {
-      // NOTE: an escaping Error would fail construction, and it is reachable —
-      // `retrofitIdentity` throws `ArgumentError` for a session with no
-      // AtLookUp, and an `AtKeysIo` is free to throw from `read`.
+      // NOTE: an escaping Error would fail construction, and it is reachable:
+      // an `AtKeysIo` is free to throw from `read`.
       _logger.severe('The retrofit of $subject failed with an error rather '
           'than an exception, which names a defect rather than a passing '
           'condition. This client comes up on $subject: $e\n$stackTrace');

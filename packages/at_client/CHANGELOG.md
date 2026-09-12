@@ -32,6 +32,20 @@
   supplies the no-op sync service the CLIs use; `client.enrollments` gains
   `fetch`, `unrevoke` and `delete`, and an `otp` or `spp` asked for with no
   expiry leaves the atServer's default in force.
+- `open` refuses a second client for the same principal, the enrollment the
+  keys name, rather than for the atSign: another enrollment of the atSign
+  opens beside the first, on a store of its own, as `buildAtClient` now also
+  allows. `AtClientImpl.create` takes `exactEnrollment`, which the factory
+  sets so a client naming no enrollment never stands in for a lone enrolled
+  one, and `AtClientImpl.holdsLiveClientAs` asks about one principal.
+- feat: `Atsign('@alice').authenticatesAs(keys: ..., rootDomain: ...)`
+  authenticates once as the enrollment the keys name and hands back its id,
+  building no client; a refusal throws `UnAuthenticatedException`.
+- `selfRetrofit` hands back the client it opens on the successor, over
+  `Atsign.open`, and no longer takes a manager or stops a legacy client; a
+  retrofit over the legacy client's own store is that client's to arrange.
+  `retrofitIdentity` takes the connection to submit on as `atLookUp`, and
+  with none authenticates one from the session's keys for the submission.
 - `activate` takes `provisioningBudget` and `provisioningPollInterval`: it
   polls for a newly registered atSign to be provisioned until the budget,
   five minutes with none, is spent. The pending document

@@ -9,6 +9,7 @@ import 'package:at_client/src/enroll/first_enrollment.dart';
 import 'package:at_client/src/enroll/signing_key_mint.dart'
     show mintAdvertisedSigningKey;
 import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
 import 'package:at_client/src/lifecycle/pending_enrollment.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -68,8 +69,9 @@ extension AtsignLifecycle on Atsign {
   /// place of the defaults; a process that must not sync hands in a factory
   /// whose sync service does nothing.
   ///
-  /// Refuses, as `buildAtClient` does, while a client for this atSign is
-  /// live in this process.
+  /// Refuses, as `buildAtClient` does, while a client for this atSign as the
+  /// same enrollment is live in this process; another enrollment of the
+  /// atSign opens beside it, on a store of its own.
   Future<AtClient> open({
     required AtKeysIo keys,
     required AtClientPreference preference,
@@ -106,6 +108,26 @@ extension AtsignLifecycle on Atsign {
       throw AtOpenRefusedException(this, state);
     }
     return client;
+  }
+
+  /// Authenticates once as the enrollment [keys] name, closes the
+  /// connection, and hands back that enrollment id, `primary` for a keyfile
+  /// that predates enrollments. No client is built and nothing is stored.
+  /// Throws [UnAuthenticatedException] when the atServer refuses.
+  ///
+  /// [atLookUp] is a connection to authenticate on instead of one built
+  /// from [rootDomain], for a caller that already holds one; it is left
+  /// open.
+  Future<String> authenticatesAs({
+    required AtKeysIo keys,
+    required AtRootDomain rootDomain,
+    AtLookUp? atLookUp,
+  }) async {
+    final enrollmentId = (await keys.read(this)).enrollmentToAuthenticateAs();
+    final lookUp = await authenticatedLookUp(this, keys, rootDomain,
+        enrollmentId: enrollmentId, on: atLookUp);
+    if (atLookUp == null) await lookUp.close();
+    return enrollmentId;
   }
 
   /// Activates this atSign with its one-time [cramSecret], writing the keys

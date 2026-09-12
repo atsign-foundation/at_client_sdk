@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart' show AtEnrollment, AtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtEnrollment, AtKeys, AtKeysIo;
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -35,10 +35,13 @@ import 'package:at_lookup/at_lookup.dart';
 /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
 /// logged at shout level and ignored.
 ///
-/// Throws a [StateError] when a client for [atSign] is already live, rather
-/// than handing back one this caller does not own; [stop] releases it. A
-/// failure while building leaves nothing behind — the part-built client is
-/// stopped, which unfiles it and releases its claim on [storage].
+/// Throws a [StateError] when a client for [atSign] as the same principal
+/// (the enrollment the keys name, or the atSign's own credential) is already
+/// live, rather than handing back one this caller does not own; [stop]
+/// releases it. Another enrollment of the atSign is another principal and
+/// builds beside it, on a store of its own. A failure while building leaves
+/// nothing behind — the part-built client is stopped, which unfiles it and
+/// releases its claim on [storage].
 Future<AtClient> buildAtClient({
   required String atSign,
   required AtClientPreference preference,
@@ -52,11 +55,13 @@ Future<AtClient> buildAtClient({
   FutureOr<SyncService> Function(AtClient)? syncServiceBuilder,
   FutureOr<EnrollmentService> Function(AtClient)? enrollmentServiceBuilder,
 }) async {
-  if (AtClientImpl.holdsLiveClient(atSign)) {
+  final principal = await _principalOf(atSign, atKeysIo, enrollmentId);
+  if (AtClientImpl.holdsLiveClientAs(atSign, principal)) {
     throw StateError(
-        'A client for $atSign is already live. buildAtClient builds a '
-        'client the caller owns, so it will not hand back one owned '
-        'elsewhere; stop() the existing client first.');
+        'A client for $atSign as ${principal == null ? "its own credential" : "enrollment $principal"} '
+        'is already live. buildAtClient builds a client the caller owns, so '
+        'it will not hand back one owned elsewhere; stop() the existing '
+        'client first.');
   }
   if (storage != null && !preference.isLocalStoreRequired) {
     throw ArgumentError.value(
@@ -73,6 +78,7 @@ Future<AtClient> buildAtClient({
     atLookUp: atLookUp,
     enrollmentId: enrollmentId,
     storage: storage,
+    exactEnrollment: true,
   );
   try {
     client.notificationService = notificationServiceBuilder == null
@@ -91,4 +97,21 @@ Future<AtClient> buildAtClient({
     rethrow;
   }
   return client;
+}
+
+/// The enrollment the client will run as: the keys' own answer when they
+/// hold authentication material, otherwise [enrollmentId]. The same rule
+/// `AtClientImpl.create` applies, asked here so the refusal above names the
+/// principal that would be built.
+Future<String?> _principalOf(
+    String atSign, AtKeysIo? atKeysIo, String? enrollmentId) async {
+  if (atKeysIo == null) return enrollmentId;
+  final AtKeys keys;
+  try {
+    keys = await atKeysIo.read(atSign);
+  } on Exception {
+    return enrollmentId;
+  }
+  if (!keys.holdsAuthenticationMaterial) return enrollmentId;
+  return keys.enrollmentToAuthenticateAs();
 }
