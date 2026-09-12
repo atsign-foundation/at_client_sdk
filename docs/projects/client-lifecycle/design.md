@@ -24,6 +24,17 @@ NoPorts `npt_flutter` port. It starts on a branch from trunk **after**
 carries the session plumbing this builds on). It supersedes families B, C and
 D of the deprecation plan ([section 8](#8-relationship-to-the-other-plans)).
 
+Those three families, one sentence each, so this document reads without the
+plan. **B** is `AtAuthRequest.atAuthKeys` and `AuthResponse.atAuthKeys`,
+`.atLookUp` and `.atChops`: the fields through which an app hands
+authentication a fixed key set and gets back the keys, a live connection and
+a crypto engine. **C** is the loose `atSign`, `rootDomain`, `apkamPublicKey`
+and `encryptedAPKAMSymmetricKey` parameters of `AtEnrollmentRequest`'s
+constructors, deprecated in favour of a `session` that carries the atSign and
+a key destination. **D** is `AtEnrollmentResponse.atSign`, `.rootDomain` and
+`.atAuthKeys`: the enrollment's identity and its completed keys, handed back
+on the response rather than written to the store the app named.
+
 ## 1. The problem, measured
 
 Five things, each observed in source rather than argued.
