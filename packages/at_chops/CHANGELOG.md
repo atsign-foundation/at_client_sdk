@@ -1,3 +1,7 @@
+## 3.7.0
+
+- fix: prevent `TypeError` when a non-existent `keyName` is passed to `encryptString`, `decryptString`, `encryptBytes`, or `decryptBytes` by throwing an `AtEncryptionException`.
+
 ## 3.6.1
 
 - chore: dart format, and a stale symbol name in one test comment
