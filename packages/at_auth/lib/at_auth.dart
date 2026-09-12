@@ -1,7 +1,6 @@
 /// The [AtAuth] package contains common logic for onboarding/authenticating an atSign to a secondary server
 library;
 
-export 'src/at_auth.dart';
 export 'src/auth_constants.dart';
 // Builds the AtAuthenticator at_lookup takes, over this package's keystore.
 // at_lookup cannot name AtKeys or AtKeysIo, so the credential, the enrollment
@@ -16,8 +15,7 @@ export 'src/auth/probe_default.dart';
 export 'src/auth/server_probe.dart';
 
 // Contains models related to onboarding and authentication requests and responses.
-export 'src/auth/models/at_auth_requests.dart';
-export 'src/auth/models/at_auth_responses.dart';
+export 'src/auth/models/retry_options.dart';
 export 'src/auth/models/at_auth_session.dart';
 // Contains method related to submit, approve and deny an enrollment.
 export 'src/enroll/at_enrollment.dart';
@@ -31,7 +29,6 @@ export 'src/enroll/apsk_advertisement.dart';
 // APKAM public key. A cross-tier contract with every atServer implementation.
 export 'src/enroll/apkam_possession_proof.dart';
 // What an approved enrollment is asking to change about its own record.
-export 'src/enroll/models/enrollment_update_request.dart';
 // The status every advertised key entry in the protocol carries: an open
 // token whose two known values are active and retired.
 export 'src/enroll/key_entry_status.dart';
@@ -40,7 +37,6 @@ export 'src/enroll/models/at_enrollment_response.dart';
 // Contains the NamespacePermission model
 export 'src/enroll/models/namespace_permission.dart';
 // Contains the Otp model
-export 'src/enroll/models/otp.dart';
 // The abstract class contains fields related to enrollment request
 /// The class contains fields to submit enrollment request for APKAM keys which generate keys for
 /// an application with restricted access to the namespaces.

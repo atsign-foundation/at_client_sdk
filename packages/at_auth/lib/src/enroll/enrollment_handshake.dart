@@ -55,6 +55,7 @@ class EnrollmentHandshake {
           'AtAuthKeys are not avaialbe in the enrollemnt response');
     }
 
+    final builtHere = atLookup == null;
     atLookup ??= AtLookUp.withSecureSocket(
       atSign: enrollmentResponse.atSign!,
       rootDomain: enrollmentResponse.rootDomain!,
@@ -62,6 +63,25 @@ class EnrollmentHandshake {
       // Installed below, from the in-memory keys this handshake just wrote.
       authenticator: null,
     );
+    try {
+      await _handshake(enrollmentResponse, atLookup,
+          retryInterval: retryInterval,
+          logProgress: logProgress,
+          maxRetries: maxRetries);
+    } finally {
+      // A connection built for the handshake ends with it; the client that
+      // opens on the completed keys makes one of its own.
+      if (builtHere) await atLookup.close();
+    }
+  }
+
+  Future<void> _handshake(
+    AtEnrollmentResponse enrollmentResponse,
+    AtLookUp atLookup, {
+    required Duration retryInterval,
+    required bool logProgress,
+    required int maxRetries,
+  }) async {
 
     // PKAM here proves possession of this enrollment's APKAM keypair, which is
     // all the authenticator reads from these keys: typed material under the
@@ -167,7 +187,6 @@ class EnrollmentHandshake {
         rootDomain: enrollmentResponse.rootDomain!,
         atKeysIo: keysIo,
         enrollmentId: enrollmentResponse.enrollmentId,
-        atLookUp: atLookup,
       );
     } else {
       enrollmentResponse.session = null;

@@ -2,17 +2,17 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart'
     show
-        AtEnrollment,
         AtEnrollmentResponse,
         AtKeys,
         CryptographicMaterialRole,
-        EnrollmentUpdateRequest,
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         KeyEntryStatus,
         CryptographicMaterialStatus;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart'
+    show EnrollmentUpdateRequest, EnrollmentUpdater;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, EnvelopeType, signEnvelope, verifyEnvelope;
 import 'package:at_client/src/signing/signing_key_minting.dart'
@@ -27,7 +27,7 @@ import 'test_utils/test_keypairs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
-class MockAtEnrollment extends Mock implements AtEnrollment {}
+class MockEnrollmentUpdater extends Mock implements EnrollmentUpdater {}
 
 /// Giving an enrollment signing keys of its own, per the in-use set.
 void main() {
@@ -35,7 +35,7 @@ void main() {
   const enrollmentId = 'enroll-a';
 
   late MockAtClient atClient;
-  late MockAtEnrollment enrollment;
+  late MockEnrollmentUpdater enrollment;
   late MockAtLookUp atLookUp;
   late AtChops atChops;
   late InMemoryAtKeysIo keysIo;
@@ -86,7 +86,7 @@ void main() {
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
     when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
-    enrollment = MockAtEnrollment();
+    enrollment = MockEnrollmentUpdater();
     when(() => enrollment.update(any(), any())).thenAnswer((i) async {
       updates.add(i.positionalArguments[0] as EnrollmentUpdateRequest);
       heldWhenPublished.add(await heldKeyIds());
@@ -95,7 +95,7 @@ void main() {
   });
 
   SigningKeyMinting minter() =>
-      SigningKeyMinting(atClient, enrollment: enrollment);
+      SigningKeyMinting(atClient, updater: enrollment);
 
   /// Makes this client a **retrofitted** enrollment: its authentication key is
   /// ML-DSA-65, so the authentication and data signing keys are two different

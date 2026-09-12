@@ -995,8 +995,8 @@ declaration and the analyzer enumerates them.
 | G | `AtKeys.toAtChops`, `.toAtChopsForEnrollment` | 0 | ✅ removed from the public API, by becoming library-private |
 | H | `KeyIOMixin` and its four serialization helpers | 0 | remove |
 | A | `AtAuth.atChops` and `approve`'s `approverChops` | 7 | ✅ removed |
-| B | `AtAuthRequest.atAuthKeys` + `AuthResponse.atAuthKeys` | 35 | held in the tree; removed with the auth DTOs by the [client-lifecycle design](../client-lifecycle/design.md) |
-| B | `AuthResponse.atLookUp`, `AuthResponse.atChops` | 10 | ″ |
+| B | `AtAuthRequest.atAuthKeys` + `AuthResponse.atAuthKeys` | 35 | ✅ removed with the auth DTOs, under the [client-lifecycle design](../client-lifecycle/design.md) |
+| B | `AuthResponse.atLookUp`, `AuthResponse.atChops` | 10 | ✅ removed with the auth DTOs, as above |
 | C | `AtEnrollmentRequest.atSign` | 24 | superseded: under that design the request is an internal shape of at_auth and the app passes parameters |
 | C | `AtEnrollmentRequest`'s `rootDomain`, `apkamPublicKey`, `encryptedAPKAMSymmetricKey` | 1 | ″ |
 | D | `AtEnrollmentResponse.atAuthKeys` | 55 | superseded: the completed keys reach the app through the store it named, and the response goes the way of the request |

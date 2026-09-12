@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
+import 'package:at_auth/src/auth/models/retry_options.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;

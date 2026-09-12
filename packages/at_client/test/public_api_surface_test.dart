@@ -189,6 +189,10 @@ const Set<String> _atClientMixinsBarrelExports = {
   'package:at_client/src/mixins/envelope_signing.dart',
   'package:at_client/src/enroll/pq_native_onboard.dart',
   'package:at_client/src/enroll/self_retrofit.dart',
+  // `EnrollmentUpdater` is the one emitter of `enroll:update`, and the live
+  // packs drive it directly to rekey and amend an enrollment they hold.
+  'package:at_client/src/enroll/enrollment_update_request.dart',
+  'package:at_client/src/enroll/enrollment_updater.dart',
   // `mintAdvertisedSigningKey` is the one home for minting the data signing
   // keypair an enrollment owns from birth, and `at_onboarding_cli` mints one
   // on the enrolment path — so it has to be reachable from outside at_client,

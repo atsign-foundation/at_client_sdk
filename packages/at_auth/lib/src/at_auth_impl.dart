@@ -126,126 +126,6 @@ class AtAuthImpl implements AtAuth {
     }
   }
 
-  @override
-
-  /// Authenticate using PKAM
-  /// The AtAuthRequest must contain either:
-  /// - 1. atAuthRequest.atKeysIo - An implementation of AtKeysIo to read the keys
-  /// - 2. atAuthRequest.atAuthKeys - An instance of AtKeys containing the keys
-  ///
-  /// If both are provided, atAuthRequest.atAuthKeys will be used.
-  ///
-  /// The enrollment authenticated as is the keys' own answer,
-  /// [AtKeys.enrollmentToAuthenticateAs], never a caller-supplied id.
-  ///
-  /// returns an `AtAuthResponse` indicating success or failure of authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
-    AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
-    await validateAtServer(atAuthRequest);
-    try {
-      atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
-    } on AtKeyException catch (e) {
-      _addProgress(
-        "authentication",
-        "Unable to read keys for atSign: ${atAuthRequest.atSign}",
-        ProgressEventType.error,
-      );
-      throw AtAuthenticationException(
-        'Unable to read keys for atSign: ${atAuthRequest.atSign} | Cause: ${e.message}',
-      );
-    }
-
-    final enrollmentId = atAuthKeys.enrollmentToAuthenticateAs();
-    atLookUp ??= AtLookUp.withSecureSocket(
-      atSign: atAuthRequest.atSign,
-      rootDomain: atAuthRequest.rootDomain,
-      transport: secureSocketTransport(SecureSocketConfig()),
-      // Installed a few lines below, once the algorithm has been resolved
-      // from the keyfile.
-      authenticator: null,
-    );
-    // A typed-material enrollment (a self-retrofit's) authenticates with its
-    // own signing keypair and algorithm, resolved from the keyfile rather
-    // than caller-supplied; the flat fields keep carrying the original
-    // enrollment's RSA credentials. AtKeys owns that resolution — it is the
-    // only reader of either source. ??= to support mocking.
-    final algorithm = atAuthKeys.authenticationAlgorithmFor(enrollmentId);
-    // NOTE: the keyfile's keypair signs when it holds one for this
-    // enrollment, and an injected signer is the door when it does not -
-    // `authenticatorFor` holds that rule. The AtChops resolved here serves
-    // only AtAuthResponse.atChops and at_lookup's credential ladder, which is
-    // all that still reads one.
-    final injectedChops = _chops;
-    _chops ??= atAuthKeys.authenticationFor(enrollmentId).chops;
-    _installAuthenticator(
-        atLookUp!,
-        authenticatorFor(
-          await _keysSourceFor(atAuthRequest.atSign, atAuthKeys,
-              // Only when the request supplied a source and no keys of its
-              // own. An explicit AtKeys wins here exactly as it wins above,
-              // so the authenticator reads what this method read.
-              reReadable: atAuthRequest.atAuthKeys == null
-                  ? atAuthRequest.atKeysIo
-                  : null),
-          atAuthRequest.atSign,
-          enrollmentId: enrollmentId,
-          chops: injectedChops,
-        ),
-        signingAlgo: algorithm);
-
-    _logger.finer('Authenticating using PKAM');
-    pkamAuthenticator ??= PkamAuthenticator();
-    var pkamResponse = AtAuthResponse(atAuthRequest.atSign);
-    try {
-      pkamResponse
-        ..isSuccessful = (await pkamAuthenticator!.authenticate(
-            atAuthRequest.atSign, atLookUp!,
-            enrollmentId: enrollmentId))
-        ..atAuthKeys = atAuthKeys
-        ..atLookUp = atLookUp
-        ..atChops = _chops;
-
-      // Build the explicit hand-off session from the request's confirmed
-      // subset — only when the request supplied an AtKeysIo source. The legacy
-      // atAuthKeys-only path has no source to hand across, so it gets no
-      // session.
-      if (pkamResponse.isSuccessful && atAuthRequest.atKeysIo != null) {
-        pkamResponse.session = AtAuthSession(
-          atSign: atAuthRequest.atSign,
-          rootDomain: atAuthRequest.rootDomain,
-          namespace: atAuthRequest.namespace,
-          atKeysIo: atAuthRequest.atKeysIo!,
-          enrollmentId: enrollmentId,
-          atLookUp: atLookUp,
-        );
-      }
-
-      if (!pkamResponse.isSuccessful) {
-        _addProgress(
-          "authentication",
-          "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.error,
-        );
-      } else {
-        _addProgress(
-          "authentication",
-          "PKAM authentication successful for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.success,
-        );
-      }
-    } catch (e, s) {
-      _addProgress(
-        "authentication",
-        "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
-        ProgressEventType.error,
-      );
-      throw AtAuthenticationException(
-          'Unable to authenticate | Cause: $e \n $s');
-    }
-
-    return pkamResponse;
-  }
-
   /// Keep some state so callers can call [completeActivation] later
   late AtKeys _atAuthKeys;
   late AtOnboardingRequest _atOnboardingRequest;
@@ -463,16 +343,10 @@ class AtAuthImpl implements AtAuth {
       await completeActivation();
     }
 
-    atOnboardingResponse
-      ..isSuccessful = true
-      ..atAuthKeys = _atAuthKeys
-      ..atLookUp = atLookUp
-      ..atChops = _chops;
+    atOnboardingResponse.isSuccessful = true;
 
-    // Hand back the same explicit session as authenticate(), so a
-    // freshly-onboarded atSign flows straight into the client. atKeysIo is
-    // guaranteed non-null here - onboarding refuses without one above; the
-    // guard mirrors authenticate() for parity.
+    // The session a freshly activated atSign's client opens from. atKeysIo
+    // is non-null here: onboarding refuses without one above.
     if (atOnboardingRequest.atKeysIo != null) {
       atOnboardingResponse.session = AtAuthSession(
         atSign: atOnboardingRequest.atSign,
@@ -480,7 +354,6 @@ class AtAuthImpl implements AtAuth {
         namespace: atOnboardingRequest.namespace,
         atKeysIo: atOnboardingRequest.atKeysIo!,
         enrollmentId: enrollmentIdFromServer,
-        atLookUp: atLookUp,
       );
     }
 
@@ -700,28 +573,6 @@ class AtAuthImpl implements AtAuth {
           }
         }
 
-        // 3 Checks for authentication:
-        //   1. Root server should be found
-        //   2. Secondary server should be running
-        //   3. atSign should be activated already
-        else if (atRequest is AtAuthRequest) {
-          if (atStatus.rootStatus == RootStatus.notFound ||
-              atStatus.rootStatus == RootStatus.error) {
-            throw AtException(
-                'Could not find root server: ${atRequest.rootDomain.rootDomain}');
-          }
-          if (atStatus.serverStatus == ServerStatus.stopped ||
-              atStatus.serverStatus == ServerStatus.error ||
-              atStatus.serverStatus == ServerStatus.unavailable) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform Authentication.');
-          }
-          if (atStatus.atSignStatus == AtSignStatus.teapot ||
-              atStatus.serverStatus == ServerStatus.teapot) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} has not been onboarded. Cannot perform Authentication.');
-          }
-        }
 
         // AtServer availability probing
         _addProgress(

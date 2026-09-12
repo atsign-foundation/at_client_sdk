@@ -1,25 +1,32 @@
 # at_auth
 
-Platform-neutral core of **onboarding**, **authentication**, and **APKAM
-enrollment** for the Atsign Protocol. Used by both
-[`at_onboarding_cli`](../at_onboarding_cli) (CLI / server apps) and
-[`at_client_flutter`](../at_client_flutter) (Flutter apps) — most
-application developers will pick up one of those higher-level packages
-rather than consuming `at_auth` directly.
+Platform-neutral core of **activation**, **authentication** and **APKAM
+enrollment** for the Atsign Protocol: the key material, the `.atKeys` store
+and the handshakes. Applications reach it through
+[`at_client`](../at_client)'s `Atsign` verbs — `activate`, `open`, `enroll` —
+and through [`at_onboarding_cli`](../at_onboarding_cli) (CLI / server apps)
+and [`at_client_flutter`](../at_client_flutter) (Flutter apps), which build
+on those, rather than consuming `at_auth` directly.
 
 ## What `at_auth` does
 
-| Capability                      | Entry point                                            |
-| ------------------------------- | ------------------------------------------------------ |
-| CRAM-based initial onboarding   | `AtAuth.onboard(AtOnboardingRequest, cramSecret)`      |
-| PKAM authentication             | `AtAuth.authenticate(AtAuthRequest)`                   |
-| APKAM enrollment (request side) | `AtEnrollment.submit(...)`                             |
-| APKAM enrollment (approve side) | `AtEnrollment.approve(...)` / `AtEnrollment.deny(...)` |
-| APKAM enrollment (self side)    | `AtEnrollment.update(...)` — an approved enrollment amending its own record |
-| Free atSign registration        | `RegistrarService` (fetches CRAM key by email)         |
+| Capability                      | Entry point                                                                  |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| CRAM activation of a new atSign | `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ...)`  |
+| APKAM enrollment (request side) | `AtEnrollment.submit(...)`, then `AtEnrollment.waitForApproval(...)`         |
+| APKAM enrollment (approve side) | `AtEnrollment.approve(...)`                                                  |
+| The `.atKeys` store             | `AtKeys`, `AtKeysIo` and its file, in-memory and keychain implementations    |
+| Free atSign registration        | `RegistrarService` (fetches CRAM key by email)                               |
 
-See [`example/onboard.dart`](example/onboard.dart),
-[`example/authenticate.dart`](example/authenticate.dart), and
+Logging in is at_client's: `Atsign('@alice').open(keys: ..., preference: ...)`
+builds the client and authenticates on the client's own connection, and
+`Atsign('@alice').authenticatesAs(keys: ...)` checks which enrollment a key
+source authenticates as without building one. So are denying and revoking an
+enrollment (`client.enrollments.deny(...)` / `.revoke(...)`) and an approved
+enrollment amending its own record (`EnrollmentUpdater`, from
+`package:at_client/at_client_mixins.dart`).
+
+See [`example/onboard.dart`](example/onboard.dart) and
 [`example/enrollment_request.dart`](example/enrollment_request.dart) for
 end-to-end usage.
 
@@ -79,25 +86,26 @@ through it end-to-end.
 
 #### Post-quantum onboarding (opt-in)
 
-Set `AtOnboardingRequest.signingAlgoType` to `mldsa65` and step 2 mints an
-**ML-DSA-65** PKAM keypair instead of an RSA one. Two consequences are worth
+Pass `signingAlgo: SigningAlgoType.mldsa65` to `activateAtSign` and step 2
+mints an **ML-DSA-65** PKAM keypair instead of an RSA one. Two consequences are worth
 knowing before turning it on:
 
 - The APKAM is filed as **typed material** under the enrollment id, and the
   `.atKeys` flat `apkamPublicKey`/`apkamPrivateKey` fields are left **empty**.
   That is deliberate: `AtKeys.toAtChops()` reads only the flat fields, so a
   tool that has not been taught about PQ enrollments fails outright instead of
-  signing an ML-DSA key with the RSA routine. `AtAuth.authenticate` resolves
-  such an enrollment on its own, via `signingAlgorithmForEnrollment` and
-  `toAtChopsForEnrollment`.
-- `AtOnboardingRequest.mintLegacyMaterial` governs the RSA encryption keypair,
+  signing an ML-DSA key with the RSA routine. The authenticator at_auth
+  builds resolves such an enrollment on its own:
+  `AtKeys.enrollmentToAuthenticateAs()` names it and
+  `signingAlgorithmForEnrollment` picks the routine.
+- `activateAtSign`'s `mintLegacyMaterial` governs the RSA encryption keypair,
   the self-encryption key, and whether `public:publickey` is published. It is
   an **opt-out**: leave it null and all three are still produced, because
   whether this atSign will ever need to talk to a pre-quantum peer is decided
   by the apps that adopt it rather than at activation. Set it false and a
   pre-quantum peer cannot send to the atSign at all.
 
-`AtOnboardingRequest.metadataBuilder` attaches metadata to the first
+`activateAtSign`'s `metadataBuilder` attaches metadata to the first
 enrollment's record. It runs on the request that creates that record, whose
 metadata is never rewritten — so it is the only opportunity there will be.
 

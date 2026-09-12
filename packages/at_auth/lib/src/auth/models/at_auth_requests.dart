@@ -1,10 +1,11 @@
 import 'dart:async' show FutureOr;
 
-import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/auth/models/retry_options.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
+/// What an activation asks for; its one shape is [AtOnboardingRequest].
 sealed class AuthRequest {
   String atSign;
   AtRootDomain rootDomain;
@@ -101,66 +102,4 @@ class AtOnboardingRequest extends AuthRequest {
     String publicKey,
     String privateKey
   })? advertisedSigningKey;
-}
-
-class AtAuthRequest extends AuthRequest {
-  /// Constructor for [AtAuthRequest]
-  /// [atSign] is the atSign for authentication
-  ///
-  /// Must provide one of the following!
-  /// atKeysIo - method of authentication
-  ///    or
-  /// atAuthKeys - the actual keys themselves
-  ///
-  /// [atKeysIo] controls how AtKeys are loaded and saved (e.g. file system, keychain, secure element)
-  /// [atAuthKeys] are the keys for authentication of an atSign
-  ///
-  /// optional:
-  /// [rootDomain] is the default domain of the root server (e.g. root.atsign.org, 64)
-  AtAuthRequest(
-    super.atSign, {
-    super.rootDomain,
-    super.retryOptions,
-    this.atKeysIo,
-    this.atAuthKeys,
-  }) {
-    if (atKeysIo == null && atAuthKeys == null) {
-      throw Exception(
-          "Either method of authentication(atKeysIo) or atAuthKeys need to be provided");
-    }
-  }
-
-  // Controls how the authentication is performed
-  AtKeysIo? atKeysIo;
-
-  /// The keys for authentication of an atSign.
-  @Deprecated('remove in v5')
-  AtKeys? atAuthKeys;
-}
-
-class RetryOptions {
-  static const int defaultMaxRetries = 10;
-  static const Duration defaultRetryDelay = Duration(seconds: 2);
-  static const defaultRetryOptions = RetryOptions(
-      maxRetries: defaultMaxRetries, retryDelay: defaultRetryDelay);
-
-  final int maxRetries;
-  final Duration retryDelay;
-
-  /// The maximum total wall-clock to spend reaching/validating the atServer —
-  /// the whole retry/poll loop. When null, the default depends on the request:
-  /// authentication uses the short process-wide default
-  /// (`AtNetworkTimeouts.effectiveDefault`, 30s) so a dead network fails fast,
-  /// while ONBOARDING uses `AtNetworkTimeouts.defaultOnboardingTimeout` (5 min)
-  /// because a newly-registered atSign can take minutes to be provisioned. This
-  /// bounds the loop and is deliberately NOT clamped to
-  /// `AtNetworkTimeouts.maxAllowed` — that cap applies to individual network
-  /// operations. Note [maxRetries] no longer bounds this loop; this deadline
-  /// does (the loop retries every [retryDelay] until the budget is spent).
-  final Duration? overallTimeout;
-
-  const RetryOptions(
-      {required this.maxRetries,
-      required this.retryDelay,
-      this.overallTimeout});
 }

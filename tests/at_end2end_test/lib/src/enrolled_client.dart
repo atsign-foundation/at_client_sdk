@@ -131,8 +131,6 @@ Future<EnrolledClient> enrolAndAuthenticate({
   await approver.enrollments.approve(response.enrollmentId);
 
   await AtEnrollment.create().waitForApproval(response);
-  // The handshake's connection is not the client's: the client opens its own.
-  await response.session?.atLookUp?.close();
 
   final keys = (response.session ?? session).atKeysIo;
   final client = await Atsign(atSign).open(

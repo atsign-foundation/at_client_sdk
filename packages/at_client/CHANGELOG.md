@@ -77,6 +77,17 @@
   made here conveys this atSign's secrets to the enrollee's key package as
   well as wrapping them under the legacy key, which an approval issued
   through at_auth alone does not. No at_auth type is named by any of it.
+  `deny` and `revoke` run the `enroll:` verb on the client's own connection
+  and answer what the atServer answered; a refusal throws
+  `AtEnrollmentException` quoting it.
+- `EnrollmentUpdater` and `EnrollmentUpdateRequest`, an approved enrollment
+  amending its own record over `enroll:update`, move here from at_auth and
+  are exported from `package:at_client/at_client_mixins.dart`.
+- **BREAKING:** `AtClientManager.fromAuthSession` loses `reuse`: an
+  `AtAuthSession` carries no connection, so the client always opens its own.
+  `makeActivationPqNative` is gone with the `AtOnboardingRequest` it stamped;
+  `Atsign.activate` with `signingAlgo: SigningAlgoType.mldsa65`, or
+  `pqNativeActivationMaterial` for the minting alone, replaces it.
 - fix: an enrolled client with no atServer reachable authorises its local
   reads and writes from the grants its keyfile recorded at the last
   authenticated start, logging at `warning` that it did, instead of refusing

@@ -13871,9 +13871,11 @@ retrofit replaced, unless it named the successor itself, and nothing told it
 to.
 
 Pinned by `packages/at_commons/test/pkam_verb_builder_test.dart` (the bare
-`pkam:` for `primary`, as a raw literal), `packages/at_auth/test/at_auth_test.dart`
-and `packages/at_auth/test/plural_enrollments_test.dart` (which id reaches
-pkam from each keyfile shape, and the refusal), `packages/at_auth/test/at_keys_test.dart`
+`pkam:` for `primary`, as a raw literal),
+`packages/at_client/test/lifecycle/authenticates_as_test.dart` (which held
+these pins in at_auth's `at_auth_test.dart` until the check moved to
+`Atsign.authenticatesAs`) and `packages/at_auth/test/plural_enrollments_test.dart`
+(which id reaches pkam from each keyfile shape, and the refusal), `packages/at_auth/test/at_keys_test.dart`
 (the derivation itself), and
 `packages/at_client/test/at_client_create_derives_enrollment_test.dart` (the
 keys win over a caller's id, and the client is filed under them). The

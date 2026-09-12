@@ -82,49 +82,6 @@ void main() {
       ]);
       expect(json['enrollmentId'], 'id-1');
     });
-
-    test('enroll:deny is the builder form', () async {
-      final l =
-          lookUp(response: 'data:{"status":"denied","enrollmentId":"id-1"}');
-
-      await AtEnrollmentImpl()
-          .deny(EnrollmentRequestDecision.denied('id-1', atSign), l.lookUp);
-
-      expect(l.commands.single, 'enroll:deny:{"enrollmentId":"id-1"}\n');
-    });
-
-    test('enroll:revoke is the builder form', () async {
-      final l =
-          lookUp(response: 'data:{"status":"revoked","enrollmentId":"id-1"}');
-
-      await AtEnrollmentImpl()
-          .revoke(EnrollmentRequestDecision.denied('id-1', atSign), l.lookUp);
-
-      expect(l.commands.single, 'enroll:revoke:{"enrollmentId":"id-1"}\n');
-    });
-
-    test('enroll:list without filters is the bare verb', () async {
-      final l = lookUp(response: 'data:{}');
-
-      await AtEnrollmentImpl().list(null, l.lookUp);
-
-      expect(l.commands.single, 'enroll:list\n');
-    });
-
-    test('enroll:list joins all statuses into ONE array element', () async {
-      final l = lookUp(response: 'data:{}');
-
-      await AtEnrollmentImpl().list(
-          [EnrollmentStatus.approved, EnrollmentStatus.pending], l.lookUp);
-
-      // Not a JSON list of names — the filter values are comma-joined inside
-      // a single array element. The atServer parses this form, so it is the
-      // contract, however it looks; EnrollVerbBuilder would generate a proper
-      // string list, which is precisely why this hand-built emitter needs its
-      // own pin before any consolidation onto the builder.
-      expect(l.commands.single,
-          'enroll:list:{"enrollmentStatusFilter":["approved,pending"]}\n');
-    });
   });
 
   group('FROZEN: the post-approval handshake key fetches', () {
@@ -177,24 +134,6 @@ void main() {
         'keys:get:keyName:123.default_enc_private_key.__manage$atSign\n',
         'keys:get:keyName:123.default_self_enc_key.__manage$atSign\n',
       ]);
-    });
-  });
-
-  group('FROZEN: the otp verb commands', () {
-    test('otp:get with the default 5-minute ttl', () async {
-      final l = lookUp(response: 'data:ABC123');
-
-      await AtEnrollmentImpl().generateOtp(l.lookUp);
-
-      expect(l.commands.single, 'otp:get:ttl:300000\n');
-    });
-
-    test('otp:put carries the spp and ttl', () async {
-      final l = lookUp(response: 'data:ok');
-
-      await AtEnrollmentImpl().setSpp('ABC123', l.lookUp);
-
-      expect(l.commands.single, 'otp:put:ABC123:ttl:300000\n');
     });
   });
 

@@ -2098,7 +2098,7 @@ one over every file a `provenIn` citation names.
 | `packages/at_client/test/key_package_minting_test.dart` | the key package's mint under a configured KEM, its `enroll:update` amendment, and the sender following the recipient (UC-A2.4, UC-A2.5, UC-A4.5). |
 | `packages/at_client/test/nskey_private_filing_test.dart` | how an nskey private is filed and read back, under UC-A3.5. |
 | `packages/at_client/test/at_client_impl_test.dart` | the era axis — a postured client writing PQ by default (UC-C1.1). |
-| `packages/at_auth/test/at_auth_test.dart` | the keyfile derivation being offered rather than applied (UC-G1.1). ⚠️ In **at_auth**. |
+| `packages/at_client/test/lifecycle/authenticates_as_test.dart` | which enrollment each keyfile shape authenticates as — the flat stored id, a retrofit's successor, or `primary` for a keyfile naming none — after one PKAM as it and nothing built (UC-G1.1). |
 | `packages/at_auth/test/at_self_enrollment_test.dart` | a retrofit leaving one active auth key and touching nothing legacy (UC-G1.2). |
 | `tests/at_functional_test/test/pkam_record_authoritative_test.dart` | the cross-cutting invariant that ML-DSA APKAM auth is record-authoritative. |
 | `packages/at_client/test/pq_client_bootstrap_test.dart` | the PQ startup itself, and cited by nothing: the step order, what a `stop()` between steps halts, that an abandoned startup says so at WARNING naming what it skipped, that a gated-off step is skipped rather than waited on, and the enrollment snapshot's grant handling. |

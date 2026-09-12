@@ -182,7 +182,7 @@ void main() {
 
     // Arm 1: one approved enrollment reaching for another's record.
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
                 enrollmentId: other.enrollmentId, metadata: amendment()),
             lookupOf(mine)),
@@ -196,7 +196,7 @@ void main() {
     // connection to TRUE, so a check written as an authorization lookup rather
     // than an identity test passes here.
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
                 enrollmentId: mine.enrollmentId, metadata: amendment()),
             approver.getRemoteSecondary()!.atLookUp),
@@ -208,7 +208,7 @@ void main() {
     // The control: the same shape of request on its OWN connection is
     // accepted. Without it the two refusals would prove only that the verb
     // refuses everything.
-    final ok = await AtEnrollment.create().update(
+    final ok = await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
             enrollmentId: mine.enrollmentId, metadata: amendment()),
         lookupOf(mine));
@@ -231,14 +231,14 @@ void main() {
 
     // A field this build has no opinion about, standing in for one a later
     // build adds.
-    await AtEnrollment.create().update(
+    await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
             enrollmentId: client.enrollmentId,
             metadata: {'somethingLaterBuildsAdded': 'keep me'}),
         lookupOf(client));
 
     final pub = base64Encode(List<int>.filled(1216, 11));
-    await AtEnrollment.create().update(
+    await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(enrollmentId: client.enrollmentId, metadata: {
           'keyPackage': KeyPackage.payloadFor(
             createdAt: DateTime.now().toUtc(),
@@ -553,7 +553,7 @@ void main() {
     // The control, and it runs FIRST: the same request on the same connection
     // is accepted while the enrollment is approved. Without it, the refusal
     // below is equally explained by a malformed request or a broken fixture.
-    final accepted = await AtEnrollment.create().update(
+    final accepted = await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
             enrollmentId: victim.enrollmentId, metadata: amendment('a')),
         lookupOf(victim));
@@ -570,7 +570,7 @@ void main() {
     // Arm 1: the enrollment itself. It is refused before the request is even
     // considered — the connection cannot re-authenticate.
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
                 enrollmentId: victim.enrollmentId, metadata: amendment('b')),
             lookupOf(victim)),
@@ -585,7 +585,7 @@ void main() {
     // the first arm leaves open: an owner connection is not revoked and could
     // otherwise write the record on its behalf.
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
                 enrollmentId: victim.enrollmentId, metadata: amendment('c')),
             approver.getRemoteSecondary()!.atLookUp),

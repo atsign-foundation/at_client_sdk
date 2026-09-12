@@ -6,37 +6,12 @@ import 'package:at_client/src/enroll/first_enrollment.dart';
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
-import 'package:at_client/src/secret_sharing/algo_ids.dart'
-    show SecretSharingAlgos;
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:meta/meta.dart' show experimental;
 
 export 'package:at_client/src/enroll/first_enrollment.dart';
-
-/// Stamps [request] with what [pqNativeActivationMaterial] mints, and the
-/// ML-DSA-65 APKAM algorithm that goes with it.
-///
-/// Says nothing about [AtOnboardingRequest.mintLegacyMaterial]: whether an
-/// atSign keeps legacy material is a separate decision from whether its APKAM
-/// is post-quantum, and a caller's opt-out is left standing.
-@experimental
-Future<void> makeActivationPqNative(
-  AtOnboardingRequest request, {
-  required String atSign,
-  required Set<SigningAlgoType> dataSigningKeyAlgorithms,
-  String keyEstablishmentAlgo = SecretSharingAlgos.xWing,
-}) async {
-  final material = await pqNativeActivationMaterial(
-      atSign: atSign,
-      dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
-      keyEstablishmentAlgo: keyEstablishmentAlgo);
-  request
-    ..signingAlgoType = SigningAlgoType.mldsa65
-    ..advertisedSigningKey = material.advertisedSigningKey
-    ..metadataBuilder = material.metadataBuilder;
-}
 
 /// CRAM-activates a brand-new atSign **PQ-native** and hands back a manager
 /// whose current client runs under its first enrollment.

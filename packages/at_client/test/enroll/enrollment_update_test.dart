@@ -10,7 +10,8 @@ library;
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
+import 'package:at_client/at_client_mixins.dart'
+    show EnrollmentUpdateRequest, EnrollmentUpdater;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_demo_data/at_demo_data.dart';
@@ -156,7 +157,7 @@ void main() {
         () async {
       final l = lookUp();
 
-      await AtEnrollmentImpl().update(
+      await EnrollmentUpdater().update(
           EnrollmentUpdateRequest(enrollmentId: enrollmentId, signingKeys: [
             ApskSigningKey.forPublicKey(
                 alg: SigningAlgoType.mldsa65, pub: 'AAEC'),
@@ -185,7 +186,7 @@ void main() {
       final l = lookUp();
       final publicKey = pkamPublicKeyMap[atSign]!;
 
-      await AtEnrollmentImpl().update(
+      await EnrollmentUpdater().update(
           EnrollmentUpdateRequest(
             enrollmentId: enrollmentId,
             apkamPublicKey: publicKey,
@@ -229,7 +230,7 @@ void main() {
       // EnrollVerbBuilder: that builder does carry a `namespaces` field — it
       // is what enroll:request uses — so building one here and observing it
       // empty says only that this test did not set it.
-      await AtEnrollmentImpl().update(
+      await EnrollmentUpdater().update(
           EnrollmentUpdateRequest(
             enrollmentId: enrollmentId,
             apkamPublicKey: pkamPublicKeyMap[atSign]!,
@@ -270,7 +271,7 @@ void main() {
       final l = lookUp();
       final privateKey = pkamPrivateKeyMap[atSign]!;
 
-      await AtEnrollmentImpl().update(
+      await EnrollmentUpdater().update(
           EnrollmentUpdateRequest(
             enrollmentId: enrollmentId,
             apkamPublicKey: pkamPublicKeyMap[atSign]!,
@@ -285,7 +286,7 @@ void main() {
     test('the bare legacy form rides apskLegacy, unquoted as JSON', () async {
       final l = lookUp();
 
-      await AtEnrollmentImpl().update(
+      await EnrollmentUpdater().update(
           EnrollmentUpdateRequest(
               enrollmentId: enrollmentId,
               apskLegacy: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A'),
@@ -301,7 +302,7 @@ void main() {
         () async {
       final l = lookUp();
 
-      await AtEnrollmentImpl().update(
+      await EnrollmentUpdater().update(
           EnrollmentUpdateRequest(
               enrollmentId: enrollmentId, metadata: {'keyPackage': 'kp'}),
           l.lookUp);
@@ -313,7 +314,7 @@ void main() {
     test('it runs authenticated, on the enrollment it names', () async {
       final l = lookUp();
 
-      await AtEnrollmentImpl().update(
+      await EnrollmentUpdater().update(
           EnrollmentUpdateRequest(
               enrollmentId: enrollmentId, metadata: {'a': 'b'}),
           l.lookUp);
@@ -324,7 +325,7 @@ void main() {
     test('the response is the enrollment id and its status', () async {
       final l = lookUp();
 
-      final response = await AtEnrollmentImpl().update(
+      final response = await EnrollmentUpdater().update(
           EnrollmentUpdateRequest(
               enrollmentId: enrollmentId, metadata: {'a': 'b'}),
           l.lookUp);
@@ -337,7 +338,7 @@ void main() {
       final l = lookUp(response: 'error:AT0009:enroll:update is self-only');
 
       expect(
-          () => AtEnrollmentImpl().update(
+          () => EnrollmentUpdater().update(
               EnrollmentUpdateRequest(
                   enrollmentId: enrollmentId, metadata: {'a': 'b'}),
               l.lookUp),

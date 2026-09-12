@@ -103,18 +103,20 @@ void main() {
     final keysIo = FileAtKeysIo(filePath: pathFor ?? keysFilePath);
     final enrollmentId = await Atsign(atSign)
         .authenticatesAs(keys: keysIo, rootDomain: rootDomain);
-    // The session carries a connection authenticated as the legacy
-    // enrollment: the arms below submit their self-enrollments on it, and
-    // read the successor's advertisement over it before the successor's
-    // first authentication revokes it.
     return AtAuthSession(
         atSign: atSign,
         rootDomain: rootDomain,
         atKeysIo: keysIo,
-        enrollmentId: enrollmentId,
-        atLookUp: await authenticatedLookUp(atSign, keysIo, rootDomain,
-            enrollmentId: enrollmentId));
+        enrollmentId: enrollmentId);
   }
+
+  /// A connection authenticated as [session]'s legacy enrollment: the arms
+  /// that submit their self-enrollments directly do so on it, and read the
+  /// successor's advertisement over it before the successor's first
+  /// authentication revokes it.
+  Future<AtLookUp> legacyLookUp(AtAuthSession session) =>
+      authenticatedLookUp(atSign, session.atKeysIo, rootDomain,
+          enrollmentId: session.enrollmentId);
 
   test(
       'the rollout-window retrofit: an rsa2048 self-enrollment auto-approves '
@@ -124,6 +126,7 @@ void main() {
     String t1Path(String a) => 'test/testData/rf2b-t1$a.atKeys';
     await mintLegacyKeyfile(t1Path);
     final session = await legacySession(t1Path);
+    final lookUp = await legacyLookUp(session);
 
     final response = await AtEnrollment.create().submit(
         AtSelfEnrollmentRequest(
@@ -134,7 +137,7 @@ void main() {
             signingAlgo: SigningAlgoType.rsa2048,
             metadataBuilder: enrollmentKeyPackageBuilder(atSign,
                 signingAlgo: SigningAlgoType.rsa2048)),
-        session.atLookUp!);
+        lookUp);
 
     expect(response.enrollStatus, EnrollmentStatus.approved);
     final newId = response.enrollmentId;
@@ -159,6 +162,7 @@ void main() {
       'the full retrofit: no-OTP submit auto-approves, the keyfile holds '
       'both enrollments, and ML-DSA PKAM succeeds under the new id', () async {
     final session = await legacySession();
+    final lookUp = await legacyLookUp(session);
 
     Map<String, dynamic>? built;
     final build = enrollmentKeyPackageBuilder(atSign,
@@ -170,7 +174,7 @@ void main() {
             deviceName: 'rf2b-${Uuid().v4().hashCode}',
             namespaces: {'buzz': 'rw'},
             metadataBuilder: (keysIo) async => built = await build(keysIo)),
-        session.atLookUp!);
+        lookUp);
 
     expect(response.enrollStatus, EnrollmentStatus.approved,
         reason: 'auto-approved: no OTP and no human step — the authenticated '
@@ -186,9 +190,8 @@ void main() {
 
     // NOTE: read over the legacy connection BEFORE the successor
     // authenticates — that first authentication revokes the legacy enrollment
-    // and drops its connections, so nothing on `session.atLookUp` runs after
-    // it.
-    final apskResponse = await session.atLookUp!.executeCommand(
+    // and drops its connections, so nothing on `lookUp` runs after it.
+    final apskResponse = await lookUp.executeCommand(
         'llookup:public:_apsk.$newId.a.__e$atSign\n',
         auth: true);
     final published =
@@ -424,6 +427,7 @@ void main() {
     String t6Path(String a) => 'test/testData/rf2b-rerun$a.atKeys';
     await mintLegacyKeyfile(t6Path);
     final session = await legacySession(t6Path);
+    final lookUp = await legacyLookUp(session);
 
     final first = await AtEnrollment.create().submit(
         AtSelfEnrollmentRequest(
@@ -433,7 +437,7 @@ void main() {
             namespaces: {'buzz': 'rw'},
             metadataBuilder: enrollmentKeyPackageBuilder(atSign,
                 signingAlgo: SigningAlgoType.mldsa65)),
-        session.atLookUp!);
+        lookUp);
     expect(first.enrollStatus, EnrollmentStatus.approved);
 
     final again = await AtEnrollment.create().submit(
@@ -442,7 +446,7 @@ void main() {
             appName: 'rf2b-app',
             deviceName: 'rf2b-rerun-${Uuid().v4().hashCode}',
             namespaces: {'buzz': 'rw'}),
-        session.atLookUp!);
+        lookUp);
 
     expect(again.enrollStatus, EnrollmentStatus.approved);
     expect(again.enrollmentId, first.enrollmentId,

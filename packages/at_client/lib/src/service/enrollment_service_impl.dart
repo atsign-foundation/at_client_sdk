@@ -212,15 +212,33 @@ class EnrollmentServiceImpl implements EnrollmentService {
 
   @override
   Future<AtEnrollmentResponse> deny(
-      EnrollmentRequestDecision enrollmentRequestDecision) async {
-    return _atEnrollmentImpl.deny(
-        enrollmentRequestDecision, _atClient.getRemoteSecondary()!.atLookUp);
-  }
+          EnrollmentRequestDecision enrollmentRequestDecision) =>
+      _decide(EnrollVerbBuilder()
+        ..enrollmentId = enrollmentRequestDecision.enrollmentId
+        ..operation = EnrollOperationEnum.deny);
 
   @override
   Future<AtEnrollmentResponse> revoke(
-      EnrollmentRequestDecision enrollmentRequestDecision) async {
-    return _atEnrollmentImpl.revoke(
-        enrollmentRequestDecision, _atClient.getRemoteSecondary()!.atLookUp);
+          EnrollmentRequestDecision enrollmentRequestDecision) =>
+      _decide(EnrollVerbBuilder()
+        ..enrollmentId = enrollmentRequestDecision.enrollmentId
+        ..operation = EnrollOperationEnum.revoke
+        ..force = enrollmentRequestDecision.force);
+
+  /// Runs a decision verb on the client's own connection and hands back the
+  /// enrollment and status the atServer answered with; anything but `data:`
+  /// is the atServer's refusal, thrown.
+  Future<AtEnrollmentResponse> _decide(EnrollVerbBuilder builder) async {
+    final command = builder.buildCommand();
+    final response = await _atClient.getRemoteSecondary()!.executeVerb(builder);
+    if (!response.startsWith('data:')) {
+      throw AtEnrollmentException(
+          '${command.trim()} for ${_atClient.getCurrentAtSign()} was '
+          'refused: $response');
+    }
+    final decoded = jsonDecode(response.substring('data:'.length).trim())
+        as Map<String, dynamic>;
+    return AtEnrollmentResponse(decoded['enrollmentId'] as String,
+        getEnrollStatusFromString(decoded['status'] as String));
   }
 }

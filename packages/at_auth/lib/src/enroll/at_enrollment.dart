@@ -5,9 +5,6 @@ import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/approver_key_material.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
-import 'package:at_auth/src/enroll/models/enrollment_update_request.dart';
-import 'package:at_auth/src/enroll/models/otp.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -29,10 +26,6 @@ abstract class AtEnrollment {
   /// Whether [waitForApproval] narrates itself on [progressStream] when a
   /// caller states no preference.
   static const bool defaultLogProgress = true;
-
-  /// How long a passcode from [generateOtp] or [setSpp] stays valid when a
-  /// caller states no expiry of its own.
-  static const Duration defaultOtpExpiry = Duration(minutes: 5);
 
   Stream<ProgressEvent> get progressStream;
 
@@ -137,107 +130,6 @@ abstract class AtEnrollment {
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp,
       {required ApproverKeyMaterial approverKeys});
-
-  /// Denies an enrollment request.
-  ///
-  /// Accepts [EnrollmentRequestDecision] which encapsulates the enrollment request details necessary to deny an enrollment.
-  /// The [atLookUp] parameter is used to perform lookups during approval management.
-  ///
-  /// Returns a [Future] containing an [AtEnrollmentResponse] representing the result of the approval/denial of an enrollment.
-  ///
-  /// ```dart
-  ///  To deny an enrollment request
-  ///
-  /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// final atLookup = AtLookUp.withSecureSocket(
-  ///   atSign: '@alice',
-  ///   rootDomain: AtRootDomain.atsignDomain,
-  ///   transport: secureSocketTransport(SecureSocketConfig()),
-  ///   authenticator: authenticatorFor(keysIo, '@alice'),
-  /// );
-  ///
-  /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.denied('dummy-enrollment-id');
-  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.deny(enrollmentRequestDecision, atLookupImpl);
-  /// ```
-  Future<AtEnrollmentResponse> deny(
-      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
-
-  /// Revokes an approved enrollment, closing any active connections and making it inactive for future use.
-  ///
-  /// Accepts [EnrollmentRequestDecision] which encapsulates the enrollment request details necessary to revoke an enrollment.
-  /// The [atLookUp] parameter is used to perform lookups during approval management.
-  ///
-  /// Returns a [Future] containing an [AtEnrollmentResponse] representing the result of the revoke of an enrollment.
-  ///
-  /// ```dart
-  ///  To revoke an enrollment request
-  ///
-  /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// final atLookup = AtLookUp.withSecureSocket(
-  ///   atSign: '@alice',
-  ///   rootDomain: AtRootDomain.atsignDomain,
-  ///   transport: secureSocketTransport(SecureSocketConfig()),
-  ///   authenticator: authenticatorFor(keysIo, '@alice'),
-  /// );
-  ///
-  /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('dummy-enrollment-id');
-  /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.revoke(enrollmentRequestDecision, atLookupImpl);
-  /// ```
-  Future<AtEnrollmentResponse> revoke(
-      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
-
-  /// Amends this enrollment's own record — its APKAM authentication key, the
-  /// signing keys it advertises, or its metadata.
-  ///
-  /// Self-only: [atLookUp] must be authenticated as the enrollment named by
-  /// [EnrollmentUpdateRequest.enrollmentId], and the enrollment must already be
-  /// approved. Unlike [approve], [deny] and [revoke], this needs no `__manage`
-  /// privilege — and holding `__manage` does not substitute for being the
-  /// enrollment, because the atServer refuses an owner connection here rather
-  /// than waving it through.
-  ///
-  /// Nothing this reaches can widen the enrollment's own grant: the namespaces
-  /// and the approval state are permanently out of reach, and a request naming
-  /// them is refused rather than partly obeyed.
-  ///
-  /// ⚠️ Rotating the APKAM keypair changes what every later authentication is
-  /// judged against, and nothing here writes the new keypair to a keyfile —
-  /// see [EnrollmentUpdateRequest.apkamPublicKey].
-  ///
-  /// ```dart
-  /// AtEnrollmentResponse response = await atEnrollment.update(
-  ///     EnrollmentUpdateRequest(
-  ///         enrollmentId: enrollmentId,
-  ///         signingKeys: [
-  ///           ApskSigningKey.forPublicKey(
-  ///               alg: SigningAlgoType.mldsa65, pub: publicKey)
-  ///         ]),
-  ///     atLookUp);
-  /// ```
-  Future<AtEnrollmentResponse> update(
-      EnrollmentUpdateRequest enrollmentUpdateRequest, AtLookUp atLookUp);
-
-  /// Lists all enrollments.
-  ///
-  /// Accepts [EnrollmentStatus] inside the [statusFilters] parameter to filter enrollments with their current status.
-  ///
-  /// Returns a [Future] containing a [List<EnrollmentServerRequest>] representing all the enrollments.
-  Future<List<EnrollmentServerResponse>> list(
-      List<EnrollmentStatus>? statusFilters, AtLookUp atLookUp,
-      {String? arx, String? drx});
-
-  /// Generates a one-time passcode from the server.
-  ///
-  /// [expiry] defaults to [defaultOtpExpiry].
-  Future<Otp> generateOtp(AtLookUp atLookUp,
-      {Duration expiry = defaultOtpExpiry});
-
-  /// Sets a semi-permanent passcode on the server.
-  ///
-  /// [spp] must be alphanumeric and exactly 6 characters.
-  /// [expiry] defaults to [defaultOtpExpiry].
-  Future<Otp> setSpp(String spp, AtLookUp atLookUp,
-      {Duration expiry = defaultOtpExpiry});
 
   /// Polls for the approval or denial of an enrollment request, and on
   /// approval collects and decrypts what the approval released.

@@ -182,8 +182,7 @@ Future<AtAuthSession> retrofitIdentity({
   SigningAlgoType? signingAlgo,
   AtLookUp? atLookUp,
 }) async {
-  // ignore: deprecated_member_use
-  final given = atLookUp ?? session.atLookUp;
+  final given = atLookUp;
   final connection = given ??
       await authenticatedLookUp(
           session.atSign, session.atKeysIo, session.rootDomain,

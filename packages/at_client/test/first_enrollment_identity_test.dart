@@ -2,7 +2,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/enroll/pq_native_onboard.dart'
     show firstEnrollmentAppName, firstEnrollmentDeviceName;
-import 'package:at_auth/at_auth.dart' show AtOnboardingRequest;
+import 'package:at_auth/src/auth/models/at_auth_requests.dart'
+    show AtOnboardingRequest;
 import 'package:test/test.dart';
 
 /// What a client holding no enrollment asks its first one to be.
@@ -52,7 +53,7 @@ void main() {
     });
   });
 
-  /// at_auth carries the same values as field defaults on
+  /// at_auth carries the same values as field defaults on its internal
   /// [AtOnboardingRequest], and a default is not a constant this package can
   /// reference, so nothing but this pins the two together.
   group('the first-enrollment constants match at_auth\'s own defaults', () {

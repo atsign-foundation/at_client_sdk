@@ -275,17 +275,12 @@ class AtClientManager {
   /// opens a fresh socket that PKAMs itself. Costs one extra PKAM handshake at
   /// startup — the accepted price of clean auth/client separation.
   ///
-  /// Set [reuse] to adopt auth's already-authenticated connection
-  /// ([session.atLookUp]) and skip the second handshake — the perf escape hatch.
-  /// When false (default) the client opens its own fresh socket.
-  ///
   /// [storage] is borrowed unless it was built with `closedByClient: true`, in
   /// which case the client closes it on [AtClient.stop]. Same rule as on
   /// [setCurrentAtSign].
   Future<AtClientManager> fromAuthSession(
       AtAuthSession session, AtClientPreference preference,
       {AtServiceFactory? serviceFactory,
-      bool reuse = false,
       AtClientStorage? storage,
       bool principalChange = false}) async {
     // Destructure rootDomain onto the preference for now. A follow-up will add
@@ -293,15 +288,9 @@ class AtClientManager {
     preference.rootDomain = session.rootDomain.rootDomain;
     preference.rootPort = session.rootDomain.rootPort;
 
-    if (reuse && session.atLookUp == null) {
-      _logger.warning('fromAuthSession(reuse: true) but the session carries no '
-          'authenticated AtLookUp; opening a fresh connection instead.');
-    }
-
     return setCurrentAtSign(session.atSign, session.namespace, preference,
         serviceFactory: serviceFactory,
         atKeysIo: session.atKeysIo,
-        atLookUp: reuse ? session.atLookUp : null,
         enrollmentId: session.enrollmentId,
         storage: storage,
         principalChange: principalChange);

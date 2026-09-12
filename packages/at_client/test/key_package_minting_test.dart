@@ -3,17 +3,17 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart'
     show
-        AtEnrollment,
         AtEnrollmentResponse,
         AtKeys,
         CryptographicMaterial,
         CryptographicMaterialRole,
-        EnrollmentUpdateRequest,
         InMemoryAtKeysIo,
         KeyEntryStatus,
         CryptographicMaterialStatus;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart'
+    show EnrollmentUpdateRequest, EnrollmentUpdater;
 import 'package:at_client/src/secret_sharing/key_package.dart'
     show KeyPackage, PackageKey;
 import 'package:at_client/src/secret_sharing/key_package_minting.dart'
@@ -30,7 +30,7 @@ import 'test_utils/test_keypairs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
-class MockAtEnrollment extends Mock implements AtEnrollment {}
+class MockEnrollmentUpdater extends Mock implements EnrollmentUpdater {}
 
 /// An enrollment amending its own advertised key package.
 ///
@@ -44,7 +44,7 @@ void main() {
   const enrollmentId = 'enroll-a';
 
   late MockAtClient atClient;
-  late MockAtEnrollment enrollment;
+  late MockEnrollmentUpdater enrollment;
   late MockAtLookUp atLookUp;
   late AtChops atChops;
   late InMemoryAtKeysIo keysIo;
@@ -153,7 +153,7 @@ void main() {
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
     when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
-    enrollment = MockAtEnrollment();
+    enrollment = MockEnrollmentUpdater();
     when(() => enrollment.update(any(), any())).thenAnswer((i) async {
       updates.add(i.positionalArguments[0] as EnrollmentUpdateRequest);
       heldWhenPublished.add(await heldKpids());
@@ -162,7 +162,7 @@ void main() {
   });
 
   KeyPackageMinting minter() =>
-      KeyPackageMinting(atClient, enrollment: enrollment);
+      KeyPackageMinting(atClient, updater: enrollment);
 
   group('what it does not do', () {
     test('an enrollment already holding what the list names does nothing',
