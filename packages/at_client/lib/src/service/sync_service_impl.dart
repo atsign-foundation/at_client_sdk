@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
@@ -199,7 +200,10 @@ class SyncServiceImpl implements SyncService {
           atChops: atClient.atChops,
           enrollmentId: atClient.enrollmentId,
           signingAlgoType: signingAlgoOf(atClient),
-          atKeysIo: atClient.atKeysIo);
+          atKeysIo: atClient.atKeysIo,
+          secondaryAddressFinder: atClient is AtClientImpl
+              ? atClient.secondaryAddressFinder
+              : null);
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
     _logger = AtSignLogger('SyncService'

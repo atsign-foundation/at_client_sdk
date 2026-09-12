@@ -42,6 +42,12 @@
   allows. `AtClientImpl.create` takes `exactEnrollment`, which the factory
   sets so a client naming no enrollment never stands in for a lone enrolled
   one, and `AtClientImpl.holdsLiveClientAs` asks about one principal.
+- feat: the atServer address the atDirectory answers is kept in the client's
+  storage, and a start that cannot reach the atDirectory connects to the
+  address it last gave: every connection of a client, its own, the monitor's
+  and sync's, resolves through one finder that remembers the answer for the
+  client's own atSign. The atDirectory saying the atSign has no atServer is
+  never masked, and a client with no local storage remembers nothing.
 - feat: `Atsign('@alice').authenticatesAs(keys: ..., rootDomain: ...)`
   authenticates once as the enrollment the keys name and hands back its id,
   building no client; a refusal throws `UnAuthenticatedException`.

@@ -14,6 +14,8 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/at_reachability.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/client/durable_address_finder.dart';
+import 'package:at_client/src/client/secondary_address_finder_source.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
@@ -844,6 +846,40 @@ class AtClientImpl implements AtClient {
   String get _onlineMarkerKey =>
       AtKey.local('lifecycle.online', _atSign).build().toString();
 
+  /// The local record of where this atSign's atServer is, as the atDirectory
+  /// last answered, for a start that cannot reach the atDirectory.
+  String get _atServerAddressKey =>
+      AtKey.local('lifecycle.atserver', _atSign).build().toString();
+
+  SecondaryAddressFinder? _defaultAddressFinder;
+  DurableSecondaryAddressFinder? _secondaryAddressFinder;
+
+  /// The atDirectory lookup every connection of this client resolves its
+  /// atServer with: the process-wide finder when one is registered, else one
+  /// of this client's own, either way remembering the answer in this
+  /// client's storage so a start with the atDirectory unreachable still
+  /// finds the atServer. A client with no local storage remembers nothing.
+  SecondaryAddressFinder get secondaryAddressFinder =>
+      _secondaryAddressFinder ??= DurableSecondaryAddressFinder(_atSign,
+          inner: () =>
+              processSecondaryAddressFinder() ??
+              (_defaultAddressFinder ??= CacheableSecondaryAddressFinder(
+                  _preference!.rootDomain, _preference!.rootPort)),
+          read: () async {
+            final store = localSecondary?.keyStore;
+            if (store == null) return null;
+            try {
+              return (await store.get(_atServerAddressKey))?.data;
+            } on KeyNotFoundException {
+              return null;
+            }
+          },
+          write: (record) async {
+            final local = localSecondary;
+            if (local == null || _isStopped) return;
+            await local.putValue(_atServerAddressKey, record);
+          });
+
   /// Whether this client's principal has ever been online over this storage.
   Future<bool> hasBeenOnline() async {
     final store = localSecondary?.keyStore;
@@ -1397,6 +1433,7 @@ class AtClientImpl implements AtClient {
         signingAlgoType: signingAlgoType,
         atKeysIo: _atKeysIo,
         connection: _connection,
+        secondaryAddressFinder: secondaryAddressFinder,
       );
 
   @override

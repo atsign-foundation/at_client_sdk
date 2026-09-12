@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/durable_address_finder.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
@@ -41,6 +44,35 @@ void main() {
 
     await client.stop();
     await storage.close();
+  });
+
+  test(
+      'every connection of the client resolves its atServer through one '
+      'durable finder', () async {
+    final client = await buildAtClient(
+        atSign: '@factoryaddr', namespace: 'wavi', preference: pref());
+
+    final own = (client as AtClientImpl).secondaryAddressFinder;
+    expect(own, isA<DurableSecondaryAddressFinder>());
+    expect((own as DurableSecondaryAddressFinder).atSign, '@factoryaddr');
+    expect(
+        (client.getRemoteSecondary()!.atLookUp as AtLookupImpl)
+            .secondaryAddressFinder,
+        same(own),
+        reason: 'the client\'s own connection');
+    expect(
+        (client.notificationService as NotificationServiceImpl)
+            .secondaryAddressFinder,
+        same(own),
+        reason: 'the monitor\'s connection');
+    expect(
+        (SyncServiceImpl.remoteSecondaryFor(client).atLookUp as AtLookupImpl)
+            .secondaryAddressFinder,
+        same(own),
+        reason: 'sync\'s connection; a start that cannot reach the '
+            'atDirectory has to find the atServer on all three');
+
+    await client.stop();
   });
 
   test('the client is filed in the instance map, though not as the current one',

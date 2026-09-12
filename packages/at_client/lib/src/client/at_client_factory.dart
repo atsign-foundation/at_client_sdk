@@ -83,7 +83,8 @@ Future<AtClient> buildAtClient({
   try {
     client.notificationService = notificationServiceBuilder == null
         ? await NotificationServiceImpl.create(client,
-            secondaryAddressFinder: secondaryAddressFinder,
+            secondaryAddressFinder: secondaryAddressFinder ??
+                (client is AtClientImpl ? client.secondaryAddressFinder : null),
             connection: client.connection)
         : await notificationServiceBuilder(client);
     client.syncService = syncServiceBuilder == null

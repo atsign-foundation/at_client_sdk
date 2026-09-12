@@ -32,6 +32,10 @@ class RemoteSecondary implements Secondary {
 
   late AtLookUp atLookUp;
 
+  /// The atDirectory lookup this connection resolves its atServer with, or
+  /// null to read the process-wide one per lookup.
+  SecondaryAddressFinder? _secondaryAddressFinder;
+
   AtChops? _atChops;
 
   AtChops? get atChops => _atChops;
@@ -149,6 +153,9 @@ class RemoteSecondary implements Secondary {
   ///
   /// [connection] is the client's connection state, which every verb here
   /// then reports into; a secondary built without one reports nowhere.
+  ///
+  /// [secondaryAddressFinder] resolves the atServer address; with none, the
+  /// process-wide finder is read per lookup.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
       AtChops? atChops,
@@ -156,8 +163,10 @@ class RemoteSecondary implements Secondary {
       String? enrollmentId,
       SigningAlgoType? signingAlgoType,
       AtKeysIo? atKeysIo,
-      AtConnection? connection}) {
+      AtConnection? connection,
+      SecondaryAddressFinder? secondaryAddressFinder}) {
     _atSign = AtUtils.fixAtSign(atSign);
+    _secondaryAddressFinder = secondaryAddressFinder;
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
     _connection = connection;
@@ -180,7 +189,8 @@ class RemoteSecondary implements Secondary {
           rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
           transport: secureSocketTransport(secureSocketConfig),
           authenticator: null,
-          secondaryAddressFinder: processSecondaryAddressFinder(),
+          secondaryAddressFinder:
+              secondaryAddressFinder ?? processSecondaryAddressFinder(),
           clientConfig: _getClientConfig(),
         );
     this.atLookUp.enrollmentId = enrollmentId;
@@ -331,7 +341,8 @@ class RemoteSecondary implements Secondary {
 
   Future<String?> findSecondaryUrl() async {
     var secondaryAddress =
-        await processSecondaryAddressFinder()!.findSecondary(_atSign);
+        await (_secondaryAddressFinder ?? processSecondaryAddressFinder()!)
+            .findSecondary(_atSign);
     return secondaryAddress.toString();
   }
 

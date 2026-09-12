@@ -16,8 +16,7 @@ reproduces it in [section 9](#9-re-deriving-the-figures).
 
 ## Status
 
-In progress: steps 1 to 5 of [section 7](#7-what-is-owed-in-order) are
-done, except the durable copy of the atServer address. at_auth keeps
+Every step of [section 7](#7-what-is-owed-in-order) is done. at_auth keeps
 `activateAtSign`, `AtEnrollment.submit`, `approve` and `waitForApproval`,
 the `.atKeys` store and the registrar: `AtAuth`, `authenticate` and the six
 DTOs are gone, `AtAuthSession` carries no connection, `deny`, `revoke`,
@@ -50,9 +49,10 @@ used to re-export, and the dialogs' `show` signatures); at_onboarding_cli
 `HomeDirectoryUtil.getCommitLogPath`); at_client 3.14.0's example, 22
 files, reports no error and 3 deprecation infos that predate this work.
 Acceptance item 3, all four live packs green, was met at the at_auth shrink
-(functional 200, e2e 52 and 21, onboarding-CLI 21, proxy 4). Every step in
-[section 7](#7-what-is-owed-in-order) is done except the durable copy of
-the atServer address. The work is a
+(functional 200, e2e 52 and 21, onboarding-CLI 21, proxy 4). The durable
+copy of the atServer address came last: the address the atDirectory answers
+is kept in the client's storage and a start that cannot reach the
+atDirectory connects to it, on every connection the client holds. The work is a
 **P0** row in the PQ table
 ([`../pq/implementation-plan.md`](../pq/implementation-plan.md)), since it
 gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the
