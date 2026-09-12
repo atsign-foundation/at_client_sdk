@@ -25,6 +25,13 @@
   the store is the resume record and nothing else has to be kept. `open` on
   a store that holds nothing but a pending enrollment refuses with
   `AtEnrollmentPendingException`, naming that verb.
+- feat: `client.enrollments` is the approving side: `pending()` and `list()`
+  read the roster, `approve(id)`, `deny(id)` and `revoke(id)` decide an
+  enrollment by its id, and `otp()` and `spp(...)` issue the passcodes a new
+  request quotes, each answering a `Passcode` with its expiry. An approval
+  made here conveys this atSign's secrets to the enrollee's key package as
+  well as wrapping them under the legacy key, which an approval issued
+  through at_auth alone does not. No at_auth type is named by any of it.
 - fix: an enrolled client with no atServer reachable authorises its local
   reads and writes from the grants its keyfile recorded at the last
   authenticated start, logging at `warning` that it did, instead of refusing

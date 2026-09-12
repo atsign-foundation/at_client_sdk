@@ -15,6 +15,7 @@ export 'package:at_client/src/crypto/crypto_runtime.dart';
 export 'package:at_client/src/key_stream/key_stream.dart';
 export 'package:at_client/src/lifecycle/at_connection.dart';
 export 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
+export 'package:at_client/src/lifecycle/enrollments.dart';
 export 'package:at_client/src/lifecycle/pending_enrollment.dart';
 export 'package:at_client/src/listener/connectivity_listener.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';
