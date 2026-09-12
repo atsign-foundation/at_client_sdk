@@ -12,6 +12,7 @@ import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/at_reachability.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -93,6 +94,11 @@ class AtClientImpl implements AtClient {
   @visibleForTesting
   LocalSecondary? localSecondary;
   RemoteSecondary? _remoteSecondary;
+
+  late final AtConnection _connection;
+
+  @override
+  AtConnection get connection => _connection;
   static final upperCaseRegex = RegExp(r'[A-Z]');
 
   PutRequestTransformer putRequestTransformer = PutRequestTransformer();
@@ -788,6 +794,69 @@ class AtClientImpl implements AtClient {
     _encryptionService = encryptionService;
     _atChops = atChops;
     _atKeysIo = atKeysIo;
+    _connection = AtConnection(
+        atSign: _atSign,
+        attempt: _attemptConnection,
+        onOnline: _recordOnline);
+  }
+
+  /// One bounded connect and authenticate on this client's own connection,
+  /// classified into the three outcomes; what [AtConnection.attempt] runs.
+  ///
+  /// A connection that is already authenticated answers at once. An attempt
+  /// that outlives [budget] is reported offline and left to finish on its own,
+  /// so a slow network that eventually answers still moves the state.
+  Future<AtConnectionState> _attemptConnection(Duration budget) async {
+    final remote = _remoteSecondary;
+    if (remote == null) {
+      return AtConnectionState.offline(AtConnectionCause.unattempted);
+    }
+    try {
+      final authenticated = await remote.atLookUp
+          .pkamAuthenticate(enrollmentId: enrollmentId)
+          .timeout(budget);
+      if (authenticated) return AtConnectionState.online();
+      return AtConnectionState.offline(AtConnectionCause.unreachable,
+          error: 'the atServer gave no challenge to sign');
+    } on TimeoutException catch (e) {
+      return AtConnectionState.offline(AtConnectionCause.unreachable,
+          error: e);
+    } catch (e) {
+      return classifyConnectionFailure(e) ??
+          AtConnectionState.offline(AtConnectionCause.unreachable, error: e);
+    }
+  }
+
+  /// The local record that this principal has been online on this device,
+  /// which is what lets a later refusal hand back a client rather than throw.
+  String get _onlineMarkerKey =>
+      AtKey.local('lifecycle.online', _atSign).build().toString();
+
+  /// Whether this client's principal has ever been online over this storage.
+  Future<bool> hasBeenOnline() async {
+    final store = localSecondary?.keyStore;
+    if (store == null) return false;
+    try {
+      final data = await store.get(_onlineMarkerKey);
+      final recorded = jsonDecode(data?.data ?? '{}');
+      return recorded is Map &&
+          recorded['enrollmentId'] ==
+              (enrollmentId ?? EnrollmentConstants.primaryEnrollmentId);
+    } on KeyNotFoundException {
+      return false;
+    }
+  }
+
+  Future<void> _recordOnline() async {
+    final local = localSecondary;
+    if (local == null || _isStopped) return;
+    await local.putValue(
+        _onlineMarkerKey,
+        jsonEncode({
+          'enrollmentId':
+              enrollmentId ?? EnrollmentConstants.primaryEnrollmentId,
+          'at': DateTime.now().toUtc().toIso8601String(),
+        }));
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
@@ -1240,6 +1309,7 @@ class AtClientImpl implements AtClient {
       await attempt('closing remote secondary connection',
           () async => _remoteSecondary!.closeConnection());
     }
+    await attempt('closing the connection state', _connection.close);
 
     _syncService = null;
     _notificationService = null;
@@ -1314,6 +1384,7 @@ class AtClientImpl implements AtClient {
         enrollmentId: enrollmentId,
         signingAlgoType: signingAlgoType,
         atKeysIo: _atKeysIo,
+        connection: _connection,
       );
 
   @override

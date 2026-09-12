@@ -8,6 +8,7 @@ import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -155,6 +156,11 @@ abstract class AtClient {
   /// still-open local keystore, rather than building a new one with the
   /// preference it was passed.
   bool get isStopped;
+
+  /// Whether this client has reached its atServer: online, offline or
+  /// refused, as a current value and a stream of changes, with a way to try
+  /// again now.
+  AtConnection get connection;
 
   /// Stops all background services for this atSign: cancels the
   /// keystore-event timers, closes the data-event stream, and stops the sync

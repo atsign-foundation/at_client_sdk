@@ -1,5 +1,18 @@
 ## 3.15.0-rc1
 
+- feat: `Atsign('@alice').open(keys: ..., preference: ...)` builds a client
+  from a key source, tries once to reach the atServer within a short budget,
+  and hands back a client the caller owns and stops. The client comes back
+  offline as readily as online, serving everything its local storage holds;
+  `client.connection.current` says which of `online`, `offline` or `refused`
+  it reached and why, `client.connection.changes` reports every change, and
+  `client.connection.attempt()` tries again now. The one refusal that throws,
+  as `AtOpenRefusedException`, is the first open of a principal on a device:
+  with nothing held locally there is nothing to serve. Every verb on the
+  client's own connection keeps the state current.
+- feat: `AtClientManager.getInstance().use(client)` makes a client the
+  caller built current, notifying the switch listeners, without stopping the
+  previous one: an owned client is its owner's to stop.
 - `ApkamSigning.publicSigningKey` and `.privateSigningKey` are back, as the
   synchronous accessors 3.14.0 published and reading the same place they did,
   and both are **deprecated**. They answer the APKAM *authentication*

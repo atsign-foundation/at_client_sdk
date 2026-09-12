@@ -12,6 +12,7 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/secondary_address_finder_source.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -51,6 +52,18 @@ class RemoteSecondary implements Secondary {
   /// The algorithm the constructor resolved, so an authenticator built from a
   /// bare signer names the same one the lookup was told to use.
   late final SigningAlgoType _signingAlgoType;
+
+  /// Where this connection's outcomes are reported, when the client gave it
+  /// one: every verb that comes back says online, every one that cannot get
+  /// out or is refused says which.
+  AtConnection? _connection;
+
+  void _reportSuccess() => _connection?.report(AtConnectionState.online());
+
+  void _reportFailure(Object error) {
+    final state = classifyConnectionFailure(error);
+    if (state != null) _connection?.report(state);
+  }
 
   /// Hands the lookup an authenticator, so authentication is decided from the
   /// keystore rather than from credentials parked on at_lookup.
@@ -133,16 +146,21 @@ class RemoteSecondary implements Secondary {
   /// [signingAlgoType] overrides the preference's PKAM signing algorithm: the
   /// algorithm is a property of the enrollment record, and one preference can
   /// serve clients on two enrollments of one atSign with different algorithms.
+  ///
+  /// [connection] is the client's connection state, which every verb here
+  /// then reports into; a secondary built without one reports nowhere.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
       AtChops? atChops,
       AtLookUp? atLookUp,
       String? enrollmentId,
       SigningAlgoType? signingAlgoType,
-      AtKeysIo? atKeysIo}) {
+      AtKeysIo? atKeysIo,
+      AtConnection? connection}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
+    _connection = connection;
     privateKey ??= preference.privateKey;
     SecureSocketConfig secureSocketConfig = SecureSocketConfig()
       ..decryptPackets = preference.decryptPackets
@@ -217,12 +235,15 @@ class RemoteSecondary implements Secondary {
       logger.finer('Command sent to server: ${builder.buildCommand()}');
       verbResult = (await atLookUp.executeVerb(builder))!;
       logger.finer('Response from server: $verbResult');
+      _reportSuccess();
       return verbResult;
     } on AtException catch (e) {
+      _reportFailure(e);
       throw e
         ..stack(AtChainedException(_getIntent(builder),
             ExceptionScenario.remoteVerbExecutionFailed, e.message));
     } on AtLookUpException catch (e) {
+      _reportFailure(e);
       var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
         ..stack(AtChainedException(_getIntent(builder),
@@ -257,12 +278,18 @@ class RemoteSecondary implements Secondary {
     try {
       String? verbResult;
       verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
+      // NOTE: only an authenticated command proves the credentials; an
+      // unauthenticated one that comes back says the atServer is reachable,
+      // which is not the same thing, and is reported by the next one.
+      if (auth) _reportSuccess();
       return verbResult;
     } on AtException catch (e) {
+      _reportFailure(e);
       e.stack(AtChainedException(Intent.fetchData,
           ExceptionScenario.remoteVerbExecutionFailed, e.message));
       rethrow;
     } on AtLookUpException catch (e) {
+      _reportFailure(e);
       var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
         ..stack(AtChainedException(Intent.fetchData,
@@ -292,7 +319,14 @@ class RemoteSecondary implements Secondary {
       ..limit = _preference.syncPageLimit;
 
     var atCommand = syncVerbBuilder.buildCommand();
-    return await atLookUp.executeCommand(atCommand, auth: true);
+    try {
+      final result = await atLookUp.executeCommand(atCommand, auth: true);
+      _reportSuccess();
+      return result;
+    } catch (e) {
+      _reportFailure(e);
+      rethrow;
+    }
   }
 
   Future<String?> findSecondaryUrl() async {

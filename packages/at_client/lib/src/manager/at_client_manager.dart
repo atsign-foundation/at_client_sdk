@@ -243,6 +243,22 @@ class AtClientManager {
     return this;
   }
 
+  /// Makes [client], which the caller built and owns, the current client.
+  ///
+  /// The previous current client is not stopped: it is its owner's to stop,
+  /// and an application that keeps two clients open and switches between
+  /// them has not finished with either. The switch listeners are notified as
+  /// they are for [setCurrentAtSign]. Making the current client current
+  /// again does nothing.
+  void use(AtClient client) {
+    final previous = _currentAtClient;
+    if (identical(previous, client)) return;
+    _atSign = client.getCurrentAtSign()!;
+    _currentAtClient = client;
+    _logger.info('use: ${previous?.getCurrentAtSign()} -> $_atSign');
+    _notifyListeners(SwitchAtSignEvent(previous, client));
+  }
+
   /// Whether [storage] would leave the current client's storage as it is:
   /// either none was offered, or it is the object that client already holds.
   bool _storageIsUnchanged(AtClientStorage? storage) {

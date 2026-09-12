@@ -13,6 +13,8 @@ export 'package:at_client/src/storage/hive_at_client_storage.dart';
 export 'package:at_client/src/crypto/crypto.dart';
 export 'package:at_client/src/crypto/crypto_runtime.dart';
 export 'package:at_client/src/key_stream/key_stream.dart';
+export 'package:at_client/src/lifecycle/at_connection.dart';
+export 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
 export 'package:at_client/src/listener/connectivity_listener.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';
 export 'package:at_client/src/preference/at_client_preference.dart';
