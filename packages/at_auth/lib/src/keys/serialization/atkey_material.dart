@@ -180,6 +180,13 @@ extension type const CryptographicMaterialStatus._(String value)
   /// would break the round-trip promise above.
   const CryptographicMaterialStatus.of(String value) : this._(value);
 
+  /// Filed at submission, and not yet accepted by the atServer: an
+  /// enrollment's keypair between the request and its approval. Not in use,
+  /// so a reader selecting active material never selects it, and a flush may
+  /// drop it, since it has protected nothing. Approval moves it to [active].
+  static const CryptographicMaterialStatus pending =
+      CryptographicMaterialStatus._('pending');
+
   /// In use. The default when a document omits the field entirely.
   static const CryptographicMaterialStatus active =
       CryptographicMaterialStatus._('active');
@@ -195,16 +202,23 @@ extension type const CryptographicMaterialStatus._(String value)
 
   /// The tokens this version knows about. For warn-level tooling only —
   /// never reject a value for not being in this set.
-  static const Set<CryptographicMaterialStatus> known = {active, retired, dead};
+  static const Set<CryptographicMaterialStatus> known = {
+    pending,
+    active,
+    retired,
+    dead
+  };
 
   /// Where [status] sits in the forward order, or null when this build has
   /// never heard of it.
   ///
-  /// Status only moves forward. As an enum that order was declaration index,
-  /// which is to say it was implicit and free; an open String has no such
-  /// order, so it is stated here instead. Stating it is the better position
-  /// anyway — reordering the declarations used to silently redefine every
-  /// transition check in the package.
+  /// Status only moves forward, `pending` → `active` → `retired` → `dead`.
+  /// As an enum that order was declaration index, which is to say it was
+  /// implicit and free; an open String has no such order, so it is stated
+  /// here instead. Stating it is the better position anyway — reordering the
+  /// declarations used to silently redefine every transition check in the
+  /// package. [pending] sits before [active] at -1, so the three positions
+  /// every earlier build pinned are unchanged.
   ///
   /// **An unrecognised status has no rank, and that is not a gap to fill.**
   /// A build cannot know whether a token it has never seen sits before or
@@ -212,6 +226,7 @@ extension type const CryptographicMaterialStatus._(String value)
   /// than guessing a direction. Guessing "newest is furthest forward" would
   /// let a future value silently reactivate a key its owner withdrew.
   static int? rankOf(CryptographicMaterialStatus status) => switch (status) {
+        pending => -1,
         active => 0,
         retired => 1,
         dead => 2,

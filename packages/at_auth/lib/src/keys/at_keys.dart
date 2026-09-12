@@ -597,12 +597,94 @@ class AtKeys {
     }
   }
 
+  /// Every enrollment whose material is filed as
+  /// [CryptographicMaterialStatus.pending]: submitted, and not yet approved.
+  /// The ones [activatePending] or [discardEnrollment] will settle.
+  Iterable<String> get pendingEnrollmentIds => _enrollments.values
+      .where((slot) => slot.materialsByKeyId.values.any((byType) =>
+          byType[CryptographicMaterialRole.privateAuthentication]?.status ==
+          CryptographicMaterialStatus.pending))
+      .map((slot) => slot.enrollmentId);
+
+  /// Moves every [CryptographicMaterialStatus.pending] material of
+  /// [enrollmentId] to active: the approval of an enrollment whose keypair
+  /// was filed at submission.
+  ///
+  /// The write policy [addKey] holds applies here too, because an approval is
+  /// the other way a keyfile gains a live enrollment: activating a second one
+  /// beside an enrollment that already holds active authentication material
+  /// is refused, and so is a material that would break the one-active-per
+  /// role-and-algorithm rule. Throws [ArgumentError] for those, and for an
+  /// enrollment holding nothing pending.
+  void activatePending(String enrollmentId) {
+    final slot = _enrollments[enrollmentId];
+    final pending = [
+      for (final byType in slot?.materialsByKeyId.values ??
+          const <Map<String, CryptographicMaterial>>[])
+        for (final material in byType.values)
+          if (material.status == CryptographicMaterialStatus.pending) material
+    ];
+    if (pending.isEmpty) {
+      throw ArgumentError.value(enrollmentId, 'enrollmentId',
+          'AtKeys holds no pending material for this enrollment');
+    }
+    const assurance = AtKeysAssurance();
+    final others = keys
+        .where((material) =>
+            material.enrollmentId != enrollmentId ||
+            material.status != CryptographicMaterialStatus.pending)
+        .toList();
+    for (final material in pending) {
+      final activated =
+          material.withStatus(CryptographicMaterialStatus.active);
+      assurance.refuseSecondLiveEnrollment(
+          existing: others, candidate: activated);
+      assurance.validateAddKey(existing: others, candidate: activated);
+    }
+    for (final material in pending) {
+      slot!.materialsByKeyId[material.keyId]![material.role] =
+          material.withStatus(CryptographicMaterialStatus.active);
+    }
+  }
+
+  /// Removes [enrollmentId] from the keyfile: its snapshot and every material
+  /// filed under it.
+  ///
+  /// Only for an enrollment that never went live — a submission that was
+  /// denied or expired — so an enrollment holding any active material is
+  /// refused with [ArgumentError]: key material that protected anything is
+  /// retired, never removed, and [retireKey] is the operation for it. Throws
+  /// too for an enrollment the keyfile does not hold.
+  void discardEnrollment(String enrollmentId) {
+    final slot = _enrollments[enrollmentId];
+    if (slot == null) {
+      throw ArgumentError.value(
+          enrollmentId, 'enrollmentId', 'AtKeys holds no such enrollment');
+    }
+    final live = [
+      for (final byType in slot.materialsByKeyId.values)
+        for (final material in byType.values)
+          if (material.status == CryptographicMaterialStatus.active)
+            material.keyId
+    ];
+    if (live.isNotEmpty) {
+      throw ArgumentError.value(
+          enrollmentId,
+          'enrollmentId',
+          'this enrollment holds active material (${live.toSet().join(', ')}), '
+              'which is retired rather than discarded');
+    }
+    _enrollments.remove(enrollmentId);
+  }
+
   /// Marks every material of [enrollmentId]'s [keyId] as [to]
   /// ([CryptographicMaterialStatus.retired] by default). Key material is never removed —
   /// retired/dead bytes are still needed to decrypt data they protected — so
-  /// this is the delete operation. Status only moves forward (active →
-  /// retired → dead): a same-status call is a no-op and a backward transition
-  /// throws, as does an unknown [keyId] or `to: CryptographicMaterialStatus.active`.
+  /// this is the delete operation. Status only moves forward (pending →
+  /// active → retired → dead): a same-status call is a no-op and a backward
+  /// transition throws, as does an unknown [keyId] or `to:
+  /// CryptographicMaterialStatus.active`, which is [activatePending]'s move
+  /// alone.
   void retireKey(String enrollmentId, String keyId,
           {CryptographicMaterialStatus to =
               CryptographicMaterialStatus.retired}) =>

@@ -531,14 +531,22 @@ void main() {
       // The at-rest tokens, pinned individually as well as as a set. Asserting
       // only `known` would follow a renamed constant silently, which is the
       // failure a raw-literal pin exists to stop.
+      expect(CryptographicMaterialStatus.pending, 'pending');
       expect(CryptographicMaterialStatus.active, 'active');
       expect(CryptographicMaterialStatus.retired, 'retired');
       expect(CryptographicMaterialStatus.dead, 'dead');
-      expect(CryptographicMaterialStatus.known, {'active', 'retired', 'dead'});
+      expect(CryptographicMaterialStatus.known,
+          {'pending', 'active', 'retired', 'dead'});
 
       // And the forward order, which stopped being declaration index when
       // status became an open String. It is a stated ranking now, so it is
       // pinned like any other contract.
+      expect(
+          CryptographicMaterialStatus.rankOf(
+              CryptographicMaterialStatus.of('pending')),
+          -1,
+          reason: 'before active, and without moving the three positions '
+              'every earlier build pinned');
       expect(
           CryptographicMaterialStatus.rankOf(
               CryptographicMaterialStatus.of('active')),
@@ -553,7 +561,7 @@ void main() {
           2);
       expect(
           CryptographicMaterialStatus.rankOf(
-              CryptographicMaterialStatus.of('pending')),
+              CryptographicMaterialStatus.of('provisional')),
           isNull,
           reason: 'a token this build has never seen has no position in the '
               'forward order, and must not acquire one by accident');

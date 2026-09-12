@@ -213,6 +213,40 @@ void main() {
       );
     });
 
+    test('accepts map update that drops a pending key record', () {
+      final existing = _documentMap(keys: [
+        _symmetricMaterial().withStatus(CryptographicMaterialStatus.pending)
+      ]);
+      final candidate = _documentMap(keys: const []);
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('accepts map update when a pending key status moves to active', () {
+      final existing = _documentMap(keys: [
+        _symmetricMaterial().withStatus(CryptographicMaterialStatus.pending)
+      ]);
+      final candidate = _documentMap(keys: [_symmetricMaterial()]);
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('rejects map update when an active key status moves back to pending',
+        () {
+      final existing = _documentMap(keys: [_symmetricMaterial()]);
+      final candidate = _documentMap(keys: [
+        _symmetricMaterial().withStatus(CryptographicMaterialStatus.pending)
+      ]);
+
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: existing,
+          candidate: candidate,
+        ),
+        throwsA(isA<AtKeysAssuranceException>()),
+      );
+    });
+
     test('accepts map update when a key status moves forward', () {
       final existing = _documentMap(keys: [_symmetricMaterial()]);
       final candidate = _documentMap(

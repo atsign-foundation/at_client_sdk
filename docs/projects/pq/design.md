@@ -1403,9 +1403,12 @@ read — secret-sharing envelopes and key-package copies are stored that way.
 ### `AtKeys`/`AtKeysIo` extend-in-place + key stores
 
 The existing **`AtKeys`** is **extended in place** — additive PQ-safe methods
-(`addKey` / `retireKey`; material is **never removed** — `retireKey` moves status
-forward-only, `active` → `retired` → `dead`, since retired bytes are still needed
-to decrypt data they protected), with the legacy key fields/methods **deprecated**
+(`addKey` / `retireKey`; material is **never removed** once live — `retireKey`
+moves status forward-only, `pending` → `active` → `retired` → `dead`, since
+retired bytes are still needed to decrypt data they protected; the one
+exception is `pending` material, an enrollment's keys filed at submission and
+never accepted, which `discardEnrollment` removes), with the legacy key
+fields/methods **deprecated**
 but retained for back-compat so call sites migrate over time (ratified 2026-07-06,
 #2045; the retire-never-remove and `flush()` shapes ratified 2026-07-17 — see
 [`decisions.md`](decisions.md); supersedes the earlier `WritableAtKeys` holder

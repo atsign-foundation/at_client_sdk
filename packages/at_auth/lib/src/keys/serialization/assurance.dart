@@ -359,8 +359,12 @@ class AtKeysAssurance {
 
   /// Every existing `(enrollmentId, keyId, role)` must survive in the
   /// candidate with identical fields, except `status`, which may move forward
-  /// (active → retired → dead) but never backward. New keyIds — and new parts
-  /// on an existing keyId — are additions, not losses, so they pass.
+  /// (pending → active → retired → dead) but never backward. New keyIds — and
+  /// new parts on an existing keyId — are additions, not losses, so they
+  /// pass. The one material that may go missing is a **pending** one: it was
+  /// filed at an enrollment's submission and the atServer never accepted it,
+  /// so it protected nothing, and a denied or expired enrollment is removed
+  /// rather than retired.
   ///
   /// Keyed by owner as well as keyId because identity is
   /// `(enrollment, keyId)`. Without it, two enrollments each holding
@@ -385,6 +389,7 @@ class AtKeysAssurance {
         material.role
       )];
       if (counterpart == null) {
+        if (material.status == CryptographicMaterialStatus.pending) continue;
         throw AtKeysAssuranceException('$path is not preserved');
       }
       if (material.withStatus(counterpart.status) != counterpart) {

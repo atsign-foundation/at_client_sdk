@@ -1,5 +1,17 @@
 ## 4.0.0-rc2
 
+- feat: `CryptographicMaterialStatus.pending`, the status of an enrollment's
+  key material between its submission and its approval. It ranks before
+  `active`, so the forward order is `pending → active → retired → dead` and
+  the three positions every earlier build pinned are unchanged.
+  `AtKeys.activatePending` moves an enrollment's pending material to active
+  under the same one-live-enrollment policy `addKey` holds,
+  `AtKeys.discardEnrollment` removes an enrollment that never went live,
+  `AtKeys.pendingEnrollmentIds` lists the ones still waiting, and a flush may
+  drop pending material, which protected nothing. A store written by an
+  earlier build reads `pending` as a token it does not know: not active, not
+  rankable and carried through unchanged, which is the right reading of a
+  keypair the atServer has not accepted.
 - feat: `InMemoryAtKeysIo.holding(atSign, keys)` — an in-memory store already
   holding a key set, for a caller that has keys in hand and needs a *source*
   to authenticate from. at_auth wraps a fixed key set this way internally, so
