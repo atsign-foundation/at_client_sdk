@@ -142,21 +142,24 @@ size migrates 7 repositories by dependency bump; deleting the class would
 change 33 call sites including teaching material; keeping all fourteen
 members would preserve a second, unused vocabulary for enrollment.
 
-## 7. A new project, a P0 row, and a branch from trunk after the speed-up branch merges
+## 7. A new project, a P0 row, and a branch cut from the speed-up branch
 
-`LIVE`. The design lives in `docs/projects/client-lifecycle/`; the PQ table
-carries it as a **P0** row (it gates at_auth 4.0 final, at_client_flutter
-2.0, at_onboarding_cli 2.0 and the `npt_flutter` port, so it is on D1's
-critical path); the deprecation plan's families B, C and D are marked
-superseded by it and the rest of that plan continues as P1. The
-implementation starts on a branch from trunk after `gkc-test-pack-speedup`
-merges, since a stacked PR gets no real CI and that branch holds the session
-plumbing this builds on. Acceptance is `npt_flutter` compiling with no
-`package:at_auth` import and no `at_auth:` in its pubspec, the
-published-example rig reporting only the breaks the 2.0 CHANGELOGs name, and
-the four live packs green.
+`AMENDED` 2026-09-12, the same day. The design lives in
+`docs/projects/client-lifecycle/`; the PQ table carries it as a **P0** row
+(it gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0
+and the `npt_flutter` port, so it is on D1's critical path); the deprecation
+plan's families B, C and D are marked superseded by it and the rest of that
+plan continues as P1. The implementation is built on `gkc-client-lifecycle`,
+which gkc directed be cut from `gkc-test-pack-speedup` once that branch's
+work was committed and pushed, rather than from trunk after it merges; the
+branch holds the session plumbing this builds on either way. Acceptance is
+`npt_flutter` compiling with no `package:at_auth` import and no `at_auth:` in
+its pubspec, the published-example rig reporting only the breaks the 2.0
+CHANGELOGs name, and the four live packs green.
 
 Why: a client-lifecycle design filed inside the PQ design (1,000 lines of
 cryptography) or as step 9 of a clean-up plan would be read by nobody looking
-for the client's public API, and branching from the speed-up branch would
-carry 82 commits through every rebase.
+for the client's public API. The ruling as first made preferred a branch from
+trunk so as not to carry the speed-up branch's 82 commits through every
+rebase; gkc chose to start at once on top of them instead, accepting that
+this PR stacks on #2229 until that merges.

@@ -16,13 +16,15 @@ carries the command that reproduces it in
 
 ## Status
 
-Design ruled, not started. The work is a **P0** row in the PQ table
+In progress: step 1 of [section 7](#7-what-is-owed-in-order) is measured
+and the rest is being built. The work is a **P0** row in the PQ table
 ([`../pq/implementation-plan.md`](../pq/implementation-plan.md)), since it
 gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the
-NoPorts `npt_flutter` port. It starts on a branch from trunk **after**
-`gkc-test-pack-speedup` merges (a stacked PR gets no real CI, and that branch
-carries the session plumbing this builds on). It supersedes families B, C and
-D of the deprecation plan ([section 8](#8-relationship-to-the-other-plans)).
+NoPorts `npt_flutter` port. It is built on `gkc-client-lifecycle`, cut from
+`gkc-test-pack-speedup` on gkc's instruction of 2026-09-12 rather than from
+trunk after that branch merges (ruling 7, amended). It supersedes families
+B, C and D of the deprecation plan
+([section 8](#8-relationship-to-the-other-plans)).
 
 Those three families, one sentence each, so this document reads without the
 plan. **B** is `AtAuthRequest.atAuthKeys` and `AuthResponse.atAuthKeys`,
@@ -315,6 +317,26 @@ The four live packs' fixtures build clients through the old paths (the
 functional pack alone has 14 uses of family C) and migrate onto `open` with
 everything else; they are consumers like any other.
 
+An enrolled client offline should authorise its local reads and writes from
+the keyfile's `AtKeysEnrollment` snapshot when `enroll:fetch` cannot reach
+the atServer, logging at `warning` that the grants are the last ones seen.
+Today the check refuses outright (the measurement in
+[section 7](#7-what-is-owed-in-order)), which makes ruling 4 true only for
+the atSign's own credential. The snapshot is refreshed on every authenticated
+start and a stale grant costs nothing the atServer would not catch: a
+local-first write is refused at sync if the grant has since narrowed, exactly
+as it would be with the record fetched live. A client with no snapshot yet
+(a keyfile written before the snapshot existed, on its first start) keeps
+today's refusal.
+
+`SecondaryNotFoundException`, the atDirectory answering that this atSign has
+no atServer, is neither a transport failure nor a credential refusal. It
+should be a typed cause on the connection state rather than text, since
+NoPorts already tells it apart from "no network"; under the first-open rule
+it counts as refused (the atSign has never worked on this device), and with a
+store present it is reported as offline carrying that cause. Whether it
+deserves a fourth outcome instead is gkc's call.
+
 ## 6. Acceptance
 
 Three measurements, not a review:
@@ -331,18 +353,36 @@ Three measurements, not a review:
 
 ## 7. What is owed, in order
 
-1. **Measure today's offline open.** Nothing in
-   `AtClientImpl._init` awaits the network (keys, storage, chops, a
-   `RemoteSecondary` built but not connected, the enrollment identity from
-   the keyfile); the monitor starts from the sync service's stats
-   subscription and retries with backoff; the warm-start sync catches and
-   logs; `PqClientBootstrap.startup()` is unawaited. So an offline open should
-   already succeed silently. That is a reading of the code, not a run: no
-   fixture builds a real client against a dead socket (the unit tests that
-   build real clients inject a mocked remote). A probe with a real
-   `RemoteSecondary` at an unroutable address, a keyfile from
-   `tests/at_functional_test/test/testData/`, and a temporary Hive path
-   settles it, and its result is what ruling 4 is built on.
+1. **Today's offline open, measured.** `buildAtClient` returns in 52 to
+   57 ms with no atServer reachable, whether the atDirectory refuses the
+   connection, cannot be resolved, or drops packets: nothing in
+   `AtClientImpl._init` awaits the network. The client then serves everything
+   local storage holds, a `put` in about 22 ms and the `get` that reads it
+   back in about 6 ms, and `stop()` returns in under 5 ms. What the client
+   does **not** do is say so: its connection reports
+   `isConnectionAvailable() == false` and no authentication, the warm-start
+   sync logs its failure at `warning` half a second later (or after the 30 s
+   connect timeout against a blackhole, by which time a short-lived process
+   has moved on), and the monitor never starts, because the stats
+   subscription delays it 30 s. That silence is the gap ruling 4 fills.
+   Pinned by `packages/at_client/test/lifecycle/offline_open_test.dart`,
+   which builds a client against a refused local port; the three variants
+   were run by hand on 2026-09-12 against
+   `tests/at_functional_test/test/testData/@alice🛠_key.atKeys` and a
+   temporary Hive path.
+
+   **Only for the atSign's own credential.** The same build as an enrolled
+   client (`enrollmentId` other than `primary`) throws on its first `put`:
+   `LocalSecondary` authorises every non-`local:` read and write against the
+   enrollment record, fetches that record with `enroll:fetch` and, in its
+   own words, keeps "deliberately no durable cache", so with no atServer the
+   check cannot run and the write is refused as
+   `Failed to fetch the enrollment record`. Every app-enrolled client, which
+   is every NoPorts device, is in this population. The keyfile already holds
+   a durable copy of the grants, the `AtKeysEnrollment` snapshot the PQ
+   startup refreshes on each authenticated start, so the recommendation in
+   [section 5](#5-recommendations-that-are-not-yet-rulings) is to fall back
+   to it when the fetch cannot reach the atServer.
 2. at_client's pre-client surface and connection state, over `buildAtClient`
    and `fromAuthSession`; `use(client)`; the AT0027 exception; the durable
    address; the pending enrollment over `CryptographicMaterialStatus.pending`
