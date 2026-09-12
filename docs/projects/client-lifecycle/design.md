@@ -10,15 +10,17 @@ what each package keeps and loses, the shape a developer sees, and what is
 owed to get there. The rulings themselves are one row each in
 [`decisions.md`](decisions.md).
 
-Nothing here is built. The figures were measured on 2026-09-12 and every one
-carries the command that reproduces it in
-[section 9](#9-re-deriving-the-figures).
+How far the build has got is in the [status](#status) below. The figures
+were measured on 2026-09-12 and every one carries the command that
+reproduces it in [section 9](#9-re-deriving-the-figures).
 
 ## Status
 
-In progress: steps 1 and 2 of [section 7](#7-what-is-owed-in-order) are
-done except the durable copy of the atServer address, and step 3 is being
-built. `AtClientManager.setCurrentAtSign` and `fromAuthSession` are not yet
+In progress: steps 1, 2 and 5 of [section 7](#7-what-is-owed-in-order)
+are done, except the durable copy of the atServer address, and step 3 is
+being built. at_onboarding_cli's own consumers of at_auth's DTOs are gone
+with step 5, so the removal in step 3 no longer has that package in its
+way. `AtClientManager.setCurrentAtSign` and `fromAuthSession` are not yet
 deprecated: that waits until the live packs' fixtures are on `open`, so the
 annotation never lands ahead of the callers it would flag. The work is a
 **P0** row in the PQ table

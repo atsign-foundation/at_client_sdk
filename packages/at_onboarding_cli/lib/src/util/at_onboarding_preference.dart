@@ -1,6 +1,7 @@
 import 'dart:core';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
 import 'package:at_onboarding_cli/src/util/registrar_api_constants.dart';
 
 class AtOnboardingPreference extends AtClientPreference {
@@ -62,12 +63,19 @@ class AtOnboardingPreference extends AtClientPreference {
   AtClientStorage? storage;
 
   /// The store a client for [atSign] opens: [storage] when set, else a fresh
-  /// Hive store under [storagePath] that the client closes when it stops.
+  /// Hive store that the client closes when it stops, under [storagePath],
+  /// the deprecated `hiveStoragePath`, or the per-atSign directory under the
+  /// user's home.
   ///
   /// Fresh each call, because a closed store cannot reopen and every client
   /// this package opens closes the store it was given.
   AtClientStorage storageFor(String atSign) =>
       storage ??
       HiveAtClientStorage(
-          atSign: atSign, storagePath: storagePath!, closedByClient: true);
+          atSign: atSign,
+          storagePath: storagePath ??
+              // ignore: deprecated_member_use
+              hiveStoragePath ??
+              HomeDirectoryUtil.getHiveStoragePath(atSign),
+          closedByClient: true);
 }

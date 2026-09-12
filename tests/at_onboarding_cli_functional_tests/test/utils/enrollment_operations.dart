@@ -1,143 +1,96 @@
 import 'dart:io';
 
-import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
-
-import 'package:at_client/src/service/enrollment_service_impl.dart';
+import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 
 import 'at_client_cache.dart';
 import 'test_keys_dir.dart';
 import 'virtualenv_ports.dart';
 
-/// Contains methods that perform common enrollment operations like getOtp, approve, etc.
+/// The approving side of an enrollment, driven from a keyfile that holds
+/// `__manage`: a passcode for a request to quote, and the decision on it.
 ///
-/// Each method requires an atKeysFile that has authorization to perform operations
-///
-/// ⚠️ **Every method here builds its own client at `$storageDir/hive/<atSign>/1`,
+/// ⚠️ **Every method here opens its own client at `$storageDir/hive/<atSign>/1`,
 /// and must evict the cache first.** These run inside tests that have already
 /// built a client for the same atSign somewhere else, and
 /// `AtClientImpl.atClientInstanceMap` is static and keyed only by
-/// `(atSign, enrollmentId)` — so without [evictCachedAtClients] the service
-/// below silently reuses the caller's client and its storage path, and every
-/// operation runs against a store this class did not choose. The
-/// `AtClientManager.getInstance().reset()` each method ends with does not cover
-/// that: it runs afterwards, and it leaves the static map populated.
+/// `(atSign, enrollmentId)` — so without [evictCachedAtClients] the open
+/// below is refused for a client that is already live. The
+/// `AtClientManager.getInstance().reset()` each method ends with does not
+/// cover that: it runs afterwards, and it leaves the static map populated.
 class EnrollmentOperations {
   late String atsign;
   String storageDir = 'test/storage/temp';
 
   EnrollmentOperations(this.atsign);
 
+  /// A client on [atKeysFilePath], online, through the adapter a program
+  /// built on this package uses.
+  Future<AtClient> _clientFor(String atKeysFilePath) async {
+    await evictCachedAtClients();
+    final service = AtOnboardingServiceImpl(
+        atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
+    if (!await service.authenticate()) {
+      throw StateError('$atsign did not come online from $atKeysFilePath: '
+          '${service.atClient?.connection.current}');
+    }
+    return service.atClient!;
+  }
+
+  Future<void> _release(AtClient client) async {
+    await client.stop();
+    AtClientManager.getInstance().reset();
+  }
+
   Future<String?> getOtp(String atKeysFilePath) async {
-    await evictCachedAtClients();
-    AtOnboardingService? onboardingService = AtOnboardingServiceImpl(
-        atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
-    await onboardingService.authenticate();
-    String? response = await onboardingService.atClient
-        ?.getRemoteSecondary()
-        ?.executeCommand('otp:get\n', auth: true);
-    stdout.writeln('[Test | EnrollmentOps] Fetch OTP response: $response');
-    response = response?.replaceFirst(RegExp(r'^data:'), '');
-    await onboardingService.close();
-    onboardingService = null;
-    AtClientManager.getInstance().reset();
-    return response;
+    final client = await _clientFor(atKeysFilePath);
+    final passcode = await client.enrollments.otp();
+    stdout.writeln('[Test | EnrollmentOps] Fetched OTP ${passcode.value}');
+    await _release(client);
+    return passcode.value;
   }
 
-  Future<AtEnrollmentResponse> approve(
-      {required String atKeysFilePath,
-      String? enrollmentId,
-      String? encApkamSymmetricKey,
-      String? appName,
-      String? deviceName}) async {
-    await evictCachedAtClients();
-    AtOnboardingService onboardingService = AtOnboardingServiceImpl(
-        atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
-    await onboardingService.authenticate();
-    EnrollmentService enrollmentService = EnrollmentServiceImpl(
-        onboardingService.atClient!, AtEnrollment.create());
-
-    // when enrollmentId is not provided. Fetches all enrollment requests for
-    // the given appName and deviceName and uses the data of the first request
-    //
-    // the assumption is that the first request with the given appName and
-    // deviceName is the one that needs to be approved
-    Enrollment? enrollment;
-    if (enrollmentId == null) {
-      enrollment = await fetchEnrollment(enrollmentService,
-          appName: appName!, deviceName: deviceName!);
-      enrollmentId = enrollment.enrollmentId;
-      encApkamSymmetricKey = enrollment.encryptedAPKAMSymmetricKey;
-    }
-    // NOTE: `?? ''`, not `!` — a pq-mode request carries no wrapped symmetric
-    // key, and that absence is what `EnrollmentServiceImpl.approve` reads to
-    // mint one of its own and swap in `approvedWithMintedKey`.
-    EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
-      enrollmentId: enrollmentId!,
-      atSign: atsign,
-      apkamSymmetricKey: AtBytes.fromString(encApkamSymmetricKey ?? ''),
-    );
-    AtEnrollmentResponse? enrollmentResponse =
-        await enrollmentService.approve(decision);
-    print('Enroll Approve Response: $enrollmentResponse');
-    await onboardingService.close();
-    AtClientManager.getInstance().reset();
-    return enrollmentResponse;
-  }
-
-  Future<AtEnrollmentResponse> deny(
+  /// Approves [enrollmentId], or with none the first pending request for
+  /// [appName] on [deviceName], and hands back the id approved.
+  Future<String> approve(
       {required String atKeysFilePath,
       String? enrollmentId,
       String? appName,
       String? deviceName}) async {
-    await evictCachedAtClients();
-    AtOnboardingService onboardingService = AtOnboardingServiceImpl(
-        atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
-    await onboardingService.authenticate();
-    EnrollmentService enrollmentService = EnrollmentServiceImpl(
-        onboardingService.atClient!, AtEnrollment.create());
-
-    // when enrollmentId is not provided. Fetches all enrollment requests for
-    // the given appName and deviceName and uses the data of the first request
-    //
-    // the assumption is that the first request with the given appName and
-    // deviceName is the one that needs to be denied
-    Enrollment? enrollment;
-    if (enrollmentId == null) {
-      enrollment = await fetchEnrollment(enrollmentService,
-          appName: appName!, deviceName: deviceName!);
-      enrollmentId = enrollment.enrollmentId;
-    }
-    EnrollmentRequestDecision decision =
-        EnrollmentRequestDecision.denied(enrollmentId!, atsign);
-    AtEnrollmentResponse? enrollmentResponse =
-        await enrollmentService.deny(decision);
-    print('Enroll Approve Response: $enrollmentResponse');
-    await onboardingService.close();
-    AtClientManager.getInstance().reset();
-    return enrollmentResponse;
+    final client = await _clientFor(atKeysFilePath);
+    enrollmentId ??= await _pendingFor(client, appName!, deviceName!);
+    await client.enrollments.approve(enrollmentId);
+    print('Enroll approved: $enrollmentId');
+    await _release(client);
+    return enrollmentId;
   }
 
-  /// Fetches enrollment requests from server based on the [appName] and [deviceName] provided
-  ///
-  /// Always returns the first enrollment from the list fetched from server
-  Future<Enrollment> fetchEnrollment(EnrollmentService enrollmentService,
-      {required String appName, required String deviceName}) async {
-    EnrollmentListRequestParam requestParam = EnrollmentListRequestParam()
-      ..appName = appName
-      ..deviceName = deviceName
-      ..enrollmentListFilter = [EnrollmentStatus.pending];
+  /// Denies [enrollmentId], or with none the first pending request for
+  /// [appName] on [deviceName], and hands back the id denied.
+  Future<String> deny(
+      {required String atKeysFilePath,
+      String? enrollmentId,
+      String? appName,
+      String? deviceName}) async {
+    final client = await _clientFor(atKeysFilePath);
+    enrollmentId ??= await _pendingFor(client, appName!, deviceName!);
+    await client.enrollments.deny(enrollmentId);
+    print('Enroll denied: $enrollmentId');
+    await _release(client);
+    return enrollmentId;
+  }
 
-    List<Enrollment> enrollments = await enrollmentService
-        .fetchEnrollmentRequests(enrollmentListParams: requestParam);
-
-    if (enrollments.isEmpty) {
-      throw Exception(
-          'No pending enrollment requests found for appName: $appName, deviceName: $deviceName');
+  /// The first pending request for [appName] on [deviceName]; the assumption
+  /// is that it is the one the test just submitted.
+  Future<String> _pendingFor(
+      AtClient client, String appName, String deviceName) async {
+    final pending = await client.enrollments.list(
+        statuses: [EnrollmentStatus.pending], app: appName, device: deviceName);
+    if (pending.isEmpty) {
+      throw Exception('No pending enrollment requests found for appName: '
+          '$appName, deviceName: $deviceName');
     }
-
-    return enrollments[0];
+    return pending.first.enrollmentId!;
   }
 
   AtOnboardingPreference getOnboardingPreference(

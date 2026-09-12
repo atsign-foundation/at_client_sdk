@@ -1,5 +1,10 @@
 ## 3.7.0-rc2
 
+- fix: `createConnection` is single-flight. Two callers racing through it —
+  a `pkamAuthenticate` beside a verb's own authentication — each opened a
+  socket, the second replacing the first while the handshake ran on the
+  first, so the authenticated flag landed on a socket the atServer had seen
+  no PKAM on and every verb on it was refused as unauthenticated.
 - fix: opening and closing a connection, and sending the monitor command, are
   logged at `finer` rather than `info`
 

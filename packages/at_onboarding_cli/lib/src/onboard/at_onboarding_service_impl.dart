@@ -52,11 +52,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
   @override
   Future<bool> authenticate() async {
-    final held = atClient;
-    if (held != null) {
-      await held.stop();
-      atClient = null;
+    // NOTE: `open` refuses while a client for the atSign is live, and a
+    // program built on this adapter authenticates the same atSign again
+    // expecting the earlier client replaced, the way the manager's
+    // `setCurrentAtSign` replaced it.
+    for (final live in AtClientImpl.liveClientsFor(_atSign)) {
+      await live.stop();
     }
+    atClient = null;
     if (atOnboardingPreference.skipSync) {
       atServiceFactory = ServiceFactoryWithNoOpSyncService();
     }

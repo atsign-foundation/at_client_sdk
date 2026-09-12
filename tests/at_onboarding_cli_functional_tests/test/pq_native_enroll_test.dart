@@ -3,14 +3,15 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart' show PqPosture;
-import 'package:at_commons/at_commons.dart' show EnrollmentStatus;
+import 'package:at_client/at_client.dart'
+    show Atsign, AtsignLifecycle, PqPosture;
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'utils/at_client_cache.dart';
+import 'utils/lifecycle.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
 
@@ -26,14 +27,13 @@ void main() {
   final logger = AtSignLogger('PqNativeEnroll');
 
   setUpAll(() async {
-    final onboardingService = AtOnboardingServiceImpl(
+    // CRAM activation is one-shot per virtualenv: if this is not the first
+    // run against this VE, recycle it before reading anything into a failure
+    // here.
+    await activateThroughCli(
         atSign,
         _preference(atSign, masterKeysFilePath)
           ..cramSecret = cramKeyMap[atSign]);
-    expect(await onboardingService.onboard(), true,
-        reason: 'CRAM onboarding of $atSign failed. It is one-shot per '
-            'virtualenv, so if this is not the first run against this VE, '
-            'recycle it before reading anything into the failure');
 
     // NOTE: every CLI command below builds its own client through
     // `createAtClient`, which mints a fresh storage path per call, and each
@@ -62,14 +62,17 @@ void main() {
         String keysFilePath
       })> enrolAt(SigningAlgoType signingAlgo, String label) async {
     final apkamKeysFilePath = testKeysFile(atSign, suffix: label);
-    final service =
-        AtOnboardingServiceImpl(atSign, _preference(atSign, apkamKeysFilePath));
+    final preference = _preference(atSign, apkamKeysFilePath);
 
-    final response = await service.sendEnrollRequest(
-        'buzz', label, 'ABC123', {'e2etest': 'rw'},
+    final pending = await Atsign(atSign).enroll(
+        otp: 'ABC123',
+        app: 'buzz',
+        device: label,
+        namespaces: {'e2etest': 'rw'},
+        keys: keyfileOf(preference),
+        preference: preference,
         signingAlgo: signingAlgo);
-    final enrollmentId = response.enrollmentId;
-    expect(response.enrollStatus, EnrollmentStatus.pending);
+    final enrollmentId = pending.enrollmentId;
     logger.info('$label: submitted $enrollmentId as ${signingAlgo.name}');
 
     // Approved by the real CLI, so the approver half of this is the shipped
@@ -82,22 +85,23 @@ void main() {
         ]),
         0);
 
-    await service.awaitApproval(response);
-    await service.createAtKeysFile(response,
-        atKeysFile: File(apkamKeysFilePath));
+    // The approval completes the keyfile.
+    await pending.awaitApproval();
 
     final keys =
         await FileAtKeysIo(filePath: (_) => apkamKeysFilePath).read(atSign);
 
-    // A FRESH service: an AtOnboardingService binds to the enrollment it last
-    // authenticated as, so reusing one across enrolments fetches keys it is
-    // not authorized to read. At the legacy posture deliberately —
-    // authenticate() builds a client, and at the SDK default that client
-    // retrofits an rsa2048 enrolment on the spot, revoking the enrolment this
-    // helper hands back.
-    final authenticated = await AtOnboardingServiceImpl(atSign,
-            _preference(atSign, apkamKeysFilePath, posture: PqPosture.legacy))
-        .authenticate();
+    // A FRESH service, its client stopped afterwards: a client stays live in
+    // this process until stopped, and a second open for the atSign is refused
+    // while one is. At the legacy posture deliberately — authenticate()
+    // builds a client, and at the SDK default that client retrofits an
+    // rsa2048 enrolment on the spot, revoking the enrolment this helper hands
+    // back.
+    await evictCachedAtClients();
+    final reader = AtOnboardingServiceImpl(atSign,
+        _preference(atSign, apkamKeysFilePath, posture: PqPosture.legacy));
+    final authenticated = await reader.authenticate();
+    await reader.atClient?.stop();
 
     stdout.writeln('##CLI## $label (${signingAlgo.name}): id=$enrollmentId '
         'keyfileAlgo=${keys.authenticationAlgorithmFor(enrollmentId)} '
@@ -124,15 +128,12 @@ void main() {
             'Nothing there means the algorithm never reached the wire and the '
             'atServer recorded the absent-field default');
 
-    // The flat fields hold the SAME keypair, and that is deliberate: one
-    // enrollment, named by the keyfile's own enrollmentId, so flat and typed
-    // resolve to one key. What must not happen is them naming DIFFERENT
-    // enrollments, which is a retrofitted keyfile and not this.
     // ignore: deprecated_member_use
-    expect(native.keys.apkamPublicKey, isNotNull,
-        reason: 'the flat fields carry this enrollment\'s keypair too, so the '
-            'approval handshake can build one AtChops holding both it and the '
-            'symmetric key');
+    expect(native.keys.apkamPublicKey, isNull,
+        reason: 'a PQ-native keyfile keeps its APKAM in the typed section, as '
+            'an activation does, so a reader that cannot handle a PQ '
+            'enrollment fails loudly rather than signing an ML-DSA key with '
+            'the RSA routine');
 
     // The assertion about the SERVER rather than about this process.
     expect(native.authenticated, isTrue,
@@ -158,13 +159,12 @@ void main() {
             'measuring a broken enrolment path rather than an algorithm');
   }, timeout: Timeout(Duration(minutes: 6)));
 
-  // `authenticated == true` is at_auth's own connection, built before the
-  // client exists; the client is built afterwards, retrofits itself, and runs
-  // every verb over a different connection — so a legacy enrolment can
-  // authenticate and still be unable to do anything. `at_activate list` runs
-  // the shipped binary path: it builds its own client through `createAtClient`,
-  // which names no posture and so runs at the SDK default, then sends
-  // `enroll:list` with `auth: true`.
+  // `authenticated == true` is a client opened at the legacy posture, which
+  // retrofits nothing. `at_activate list` runs the shipped binary path: it
+  // builds its own client through `createAtClient`, which names no posture
+  // and so runs at the SDK default, retrofits the enrolment on the spot, and
+  // then sends `enroll:list` with `auth: true` over the retrofitted client's
+  // connection.
   //
   // The retrofit is asserted rather than assumed — the keyfile is read on both
   // sides, legacy shape before and typed ML-DSA material under a second
@@ -232,10 +232,12 @@ void main() {
     ]);
     expect(published, 0, reason: 'the master keys must still work');
 
-    final nskey = await AtOnboardingServiceImpl(
+    await evictCachedAtClients();
+    final nskey = AtOnboardingServiceImpl(
         atSign, _preference(atSign, masterKeysFilePath));
     expect(await nskey.authenticate(), isTrue);
-    final record = await nskey.atLookUp!
+    final record = await nskey.atClient!
+        .getRemoteSecondary()!
         .executeCommand('llookup:public:__nskey.e2etest$atSign\n', auth: true);
     stdout.writeln('##CLI## nskey after retrofit: '
         '${record?.substring(0, record.length.clamp(0, 80))}');

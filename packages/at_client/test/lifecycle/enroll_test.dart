@@ -266,7 +266,11 @@ void main() {
 
     final stored = await store.read(atSign);
     expect(stored.pendingEnrollmentIds, isEmpty);
-    expect(stored.authenticatableEnrollmentIds, [enrollmentId]);
+    expect(stored.authenticatableEnrollmentIds, isEmpty,
+        reason: 'an rsa2048 enrollment holds no typed authentication material '
+            'once approved; the flat fields are its credential, as every '
+            'published reader and the self-retrofit expect');
+    expect(stored.authenticationAlgorithmFor(enrollmentId), isNull);
     expect(stored.enrollmentToAuthenticateAs(), enrollmentId);
     // ignore: deprecated_member_use
     expect(stored.defaultEncryptionPrivateKey?.toString(), encryptionPrivateKey,
@@ -308,6 +312,46 @@ void main() {
 
     // The emptied store takes the next request, which mints new keys.
     final again = await submit(store, atServer(decide: (_) async => true));
+    expect(
+        (await store.read(atSign)).pendingEnrollmentIds, [again.enrollmentId]);
+  });
+
+  test('a denial empties a file store too, which then takes the next request',
+      () async {
+    // The file store validates every rewrite against what it held; the
+    // in-memory double does not, so it is the population for this.
+    final path = '${dir.path}/${atSign}_key.atKeys';
+    final store = FileAtKeysIo(filePath: (_) => path);
+    final denying = atServer(
+        decide: (_) async => throw UnAuthenticatedException(
+            'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied'));
+    final pending = await Atsign(atSign).enroll(
+        otp: 'ABC123',
+        app: 'wavi',
+        device: 'phone',
+        namespaces: {'wavi': 'rw'},
+        keys: store,
+        preference: await preference(),
+        atLookUp: denying);
+
+    await expectLater(
+        () => pending.awaitApproval(
+            retryInterval: const Duration(milliseconds: 10)),
+        throwsA(isA<AtEnrollmentException>()));
+
+    final stored = await store.read(atSign);
+    expect(stored.pendingEnrollmentIds, isEmpty,
+        reason: 'the denied request is gone from the file on disk');
+    expect(stored.enrollmentIds, isEmpty);
+
+    final again = await Atsign(atSign).enroll(
+        otp: 'ABC123',
+        app: 'wavi',
+        device: 'phone',
+        namespaces: {'wavi': 'rw'},
+        keys: store,
+        preference: await preference(),
+        atLookUp: atServer(decide: (_) async => true));
     expect(
         (await store.read(atSign)).pendingEnrollmentIds, [again.enrollmentId]);
   });

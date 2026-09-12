@@ -280,8 +280,16 @@ class AtKeysAssurance {
     // version, so only pin them when the existing file is already a
     // typed-keys document.
     if (existing.containsKey('version')) {
-      _assertSame(existing['atsign'], candidate['atsign'], 'map.atsign');
-      _assertSame(existing['version'], candidate['version'], 'map.version');
+      // NOTE: a typed document holding no credential — every material
+      // pending, none of the flat secrets — is a request awaiting approval,
+      // and a candidate that drops the typed header is that request
+      // discarded, leaving a store that reads as holding nothing.
+      final emptied = !candidate.containsKey('version') &&
+          !_holdsCredential(existingMaterials, existingLegacy);
+      if (!emptied) {
+        _assertSame(existing['atsign'], candidate['atsign'], 'map.atsign');
+        _assertSame(existing['version'], candidate['version'], 'map.version');
+      }
     } else if (candidate.containsKey('version') &&
         existingLegacy.containsKey('atsign')) {
       // A legacy document may already name its owner under `atsign` — the

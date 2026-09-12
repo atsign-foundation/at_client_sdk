@@ -1,5 +1,10 @@
 ## 4.0.0-rc2
 
+- fix: the never-lose assurance lets a typed document that holds no
+  credential — every material pending, none of the flat secrets — go back to
+  the legacy shape. That is what a denied enrollment leaves behind once its
+  pending keys are discarded, and pinning the typed header there refused the
+  write and left the denied request in the file.
 - feat: `CryptographicMaterialStatus.pending`, the status of an enrollment's
   key material between its submission and its approval. It ranks before
   `active`, so the forward order is `pending → active → retired → dead` and

@@ -1,15 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
+import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
+import 'package:at_server_status/at_server_status.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'utils/at_client_cache.dart';
-import 'utils/onboarding_service_impl_override.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
 
@@ -73,7 +76,8 @@ void main() {
       AtOnboardingService atOnboardingService =
           AtOnboardingServiceImpl(atSign, preference);
       await atOnboardingService.authenticate();
-      AtLookUp? atLookUp = atOnboardingService.atLookUp;
+      AtLookUp? atLookUp =
+          atOnboardingService.atClient?.getRemoteSecondary()?.atLookUp;
       AtKey key = AtKey();
       key.key = 'testKey1';
       await atLookUp?.update(key.key, 'value1');
@@ -117,8 +121,7 @@ void main() {
     });
   });
 
-  group(
-      'A group of tests to assert encryption keys persist into local secondary',
+  group('A group of tests to assert the client answers the keyfile\'s keys',
       () {
     String atSign = '@eve🛠'.trim();
     AtOnboardingPreference atOnboardingPreference =
@@ -128,7 +131,7 @@ void main() {
     AtClient? atClient;
 
     test(
-        'A test to authenticate atSign and verify PKAM keys and encryption keys are updated to local secondary',
+        'A test to authenticate atSign and verify the PKAM keys and encryption keys the client answers are the keyfile\'s',
         () async {
       await generateAtKeysFile(atSign, atOnboardingPreference.atKeysFilePath!);
       await _createKeys(atSign);
@@ -155,69 +158,53 @@ void main() {
     });
   });
 
-  group('A group of tests to verify onboard functionality', () {
-    test('Onboard and verify failure modes', () async {
+  group('A group of tests to verify activation', () {
+    test('Activate and verify failure modes', () async {
       String atSign = '@egcovidlab🛠';
       AtOnboardingPreference atOnboardingPreference = getPreferences(atSign);
+      File atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
 
-      Future<void> onboard({
-        bool autoCompleteActivation = true,
-        bool cleanup = true,
-      }) async {
-        AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(
-          atSign,
-          atOnboardingPreference,
-        );
-        File atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
-        await atOnboardingService.onboard(
-          autoCompleteActivation: autoCompleteActivation,
-        );
-        expect(await atOnboardingService.isOnboarded(), autoCompleteActivation);
+      Future<bool> activated() async =>
+          (await AtStatusImpl(
+                      rootUrl: atOnboardingPreference.rootDomain,
+                      rootPort: atOnboardingPreference.rootPort)
+                  .get(atSign))
+              .status() ==
+          AtSignStatus.activated;
 
-        // Assert .atKeys file is generated for the atSign
-        expect(await atKeysFile.exists(), true);
-        if (cleanup) {
-          await quiesceStartupTail(atOnboardingService);
-          await atKeysFile.delete();
-          expect(await atKeysFile.exists(), false);
-        }
-      }
+      // The protocol half alone: the keys are minted and filed, and the CRAM
+      // secret is left on the atServer, so the atDirectory does not yet
+      // report the atSign activated.
+      await activateAtSign(
+          atSign: atSign,
+          cramSecret: atOnboardingPreference.cramSecret!,
+          keys: FileAtKeysIo(
+              filePath: (_) => atOnboardingPreference.atKeysFilePath!),
+          signingAlgo: atOnboardingPreference.authenticationKeyAlgorithm,
+          rootDomain: AtRootDomain(atOnboardingPreference.rootDomain,
+              atOnboardingPreference.rootPort),
+          completeActivation: false);
+      expect(await activated(), false);
+      expect(await atKeysFile.exists(), true);
+      await atKeysFile.delete();
 
-      // onboard without removing cram secret
-      await onboard(
-        autoCompleteActivation: false,
-      );
+      // The whole activation, as `at_activate onboard` runs it.
+      await auth_cli.activate(atSign, atOnboardingPreference);
+      expect(await activated(), true);
+      expect(await atKeysFile.exists(), true);
+      await atKeysFile.delete();
 
-      // do it again, but remove the cram secret (should succeed)
-      await onboard();
-
-      // try to do it again (should fail)
-      await expectLater(() async {
-        try {
-          await onboard();
-        } catch (e) {
-          print('Caught an ${e.runtimeType} as expected ($e)');
-          rethrow;
-        }
-      },
+      // Again: refused before anything is minted.
+      await expectLater(
+          auth_cli.activate(atSign, atOnboardingPreference),
           throwsA(predicate((dynamic e) =>
               e is AtActivateException &&
               e.message == 'atsign $atSign is already activated')));
 
-      // try to onboard with keys in place
-      await expectLater(() async {
-        try {
-          File atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
-          if (await atKeysFile.exists()) {
-            await atKeysFile.create(recursive: true);
-          }
-          await onboard();
-        } catch (e) {
-          print('Caught an ${e.runtimeType} as expected ($e)');
-          rethrow;
-        }
-      }, throwsA(predicate((dynamic e) => e is AtException)));
-      ;
+      // With a keyfile in place: refused as an overwrite.
+      await atKeysFile.create(recursive: true);
+      await expectLater(auth_cli.activate(atSign, atOnboardingPreference),
+          throwsA(predicate((dynamic e) => e is AtException)));
     });
 
     tearDown(() async {
@@ -231,7 +218,7 @@ void main() {
     String atSign = '@murali🛠';
     AtOnboardingPreference onboardingPreference = getPreferences(atSign);
     AtOnboardingService onboardingService =
-        OnboardingServiceImplOverride(atSign, onboardingPreference);
+        AtOnboardingServiceImpl(atSign, onboardingPreference);
     test(
         'A test to verify atSign is activated and .atKeys file is generated using activate_cli',
         () async {
@@ -269,23 +256,6 @@ void main() {
       await tearDownFunc();
     });
   });
-}
-
-/// Waits for the client an onboard brought up to finish its startup tail —
-/// successfully or not — before a test deletes the `.atKeys` file that tail
-/// is still writing to.
-///
-/// A post-quantum activation runs its startup as an unawaited task that files
-/// key material through `AtKeysIo.update`, which reads the keyfile and writes
-/// it back, so a delete landing mid-update is undone and the next onboard
-/// refuses at `AtFileUtil.ensureWritable` instead of reaching the activation
-/// check under test.
-Future<void> quiesceStartupTail(AtOnboardingService service) async {
-  final client = service.atClient;
-  if (client is AtClientImpl) {
-    // ignore: experimental_member_use
-    await client.pqBootstrap?.startupComplete;
-  }
 }
 
 /// Builds the onboarding preference these tests share.

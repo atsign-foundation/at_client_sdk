@@ -6,7 +6,8 @@
   `authenticate()` answers true only when the client's connection is online;
   an offline client is still opened and held, and its `connection` says why,
   while a refusal on a device that has never held the atSign online opens
-  nothing. The other members go, to at_client: `onboard` is
+  nothing. Any client already live for the atSign in the process is stopped
+  first, as the manager's `setCurrentAtSign` stopped the one it replaced. The other members go, to at_client: `onboard` is
   `Atsign.activate`; `enroll`, `sendEnrollRequest`, `awaitApproval` and
   `createAtKeysFile` are `Atsign.enroll`, `Atsign.resumeEnrollment` and
   `PendingEnrollment.client`; `close` is `atClient.stop()`; `isOnboarded` is
@@ -30,7 +31,9 @@
   connection to come online with a budget of `maxConnectAttempts` tries,
   three seconds apart, instead of re-authenticating in a loop.
 - `AtOnboardingPreference.storageFor(atSign)` is the store a client for the
-  atSign opens under the preference.
+  atSign opens under the preference: `storage`, else a Hive store under
+  `storagePath`, the deprecated `hiveStoragePath`, or the per-atSign
+  directory under the user's home.
 
 - refactor: `authenticate` takes the enrollment it authenticated as, and the
   keys it persists to the local secondary, from the session at_auth hands

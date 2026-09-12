@@ -345,34 +345,45 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return putResult.isNotEmpty;
   }
 
+  /// Serialises [createConnection]: two callers racing through it would
+  /// each open a socket, the second replacing the first as `_connection`
+  /// while the first is still the one being authenticated, so the
+  /// authenticated flag lands on a socket the atServer never saw a PKAM on.
+  final Mutex _createConnectionMutex = Mutex();
+
   Future<void> createConnection() async {
-    if (!isConnectionAvailable()) {
-      if (_connection != null) {
-        // Clean up the connection before creating a new one
-        logger.finer('Closing old connection');
-        await _closeConnection();
+    await _createConnectionMutex.acquire();
+    try {
+      if (!isConnectionAvailable()) {
+        if (_connection != null) {
+          // Clean up the connection before creating a new one
+          logger.finer('Closing old connection');
+          await _closeConnection();
+        }
+        logger.finer('Creating new connection');
+        //1. find secondary url for atsign from lookup library
+        SecondaryAddress secondaryAddress =
+            await secondaryAddressFinder.findSecondary(_currentAtSign);
+        var host = secondaryAddress.host;
+        var port = secondaryAddress.port;
+        //2. create a connection to secondary server
+        await createOutBoundConnection(
+            host, port.toString(), _currentAtSign, _secureSocketConfig);
+        //3. listen to server response
+        messageListener = socketListenerFactory.createListener(_connection!);
+        // Re-established on every connection, because createConnection builds
+        // a fresh listener each time. Installed only when somebody has asked
+        // for the stream: with no controller there is nowhere to put a
+        // notification, and routing one into a void drops it silently.
+        if (_notificationController != null) {
+          messageListener.onNotification = _routeNotification;
+          messageListener.onDisconnect = _onNotificationConnectionLost;
+        }
+        messageListener.listen();
+        logger.finer('New connection created OK');
       }
-      logger.finer('Creating new connection');
-      //1. find secondary url for atsign from lookup library
-      SecondaryAddress secondaryAddress =
-          await secondaryAddressFinder.findSecondary(_currentAtSign);
-      var host = secondaryAddress.host;
-      var port = secondaryAddress.port;
-      //2. create a connection to secondary server
-      await createOutBoundConnection(
-          host, port.toString(), _currentAtSign, _secureSocketConfig);
-      //3. listen to server response
-      messageListener = socketListenerFactory.createListener(_connection!);
-      // Re-established on every connection, because createConnection builds a
-      // fresh listener each time. Installed only when somebody has asked for
-      // the stream: with no controller there is nowhere to put a notification,
-      // and routing one into a void drops it silently.
-      if (_notificationController != null) {
-        messageListener.onNotification = _routeNotification;
-        messageListener.onDisconnect = _onNotificationConnectionLost;
-      }
-      messageListener.listen();
-      logger.finer('New connection created OK');
+    } finally {
+      _createConnectionMutex.release();
     }
   }
 

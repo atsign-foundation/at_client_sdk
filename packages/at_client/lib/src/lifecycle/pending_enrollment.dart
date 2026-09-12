@@ -110,8 +110,12 @@ class PendingEnrollment {
     }
 
     await keys.update(atSign, (stored) {
-      stored.activatePending(enrollmentId);
       _completeFrom(stored, handshakeKeys);
+      if (signingAlgo == SigningAlgoType.rsa2048) {
+        _fileFlat(stored);
+      } else {
+        stored.activatePending(enrollmentId);
+      }
       return true;
     });
     _logger.info('enrollment $enrollmentId of $atSign is approved and its '
@@ -144,8 +148,7 @@ class PendingEnrollment {
   /// Copies onto [stored] what the approval released into [completed]: the
   /// atSign's encryption private key and self-encryption key, the symmetric
   /// key that carried them, and the flat spelling of the enrollment every
-  /// published reader looks for. An rsa2048 keypair is copied into the flat
-  /// APKAM fields too, so the completed keyfile reads as a legacy one would.
+  /// published reader looks for.
   void _completeFrom(AtKeys stored, AtKeys completed) {
     // ignore: deprecated_member_use
     stored.enrollmentId = enrollmentId;
@@ -164,15 +167,34 @@ class PendingEnrollment {
     stored.defaultSelfEncryptionKey ??= completed.defaultSelfEncryptionKey;
     // ignore: deprecated_member_use
     stored.apkamSymmetricKey ??= completed.apkamSymmetricKey;
-    if (signingAlgo == SigningAlgoType.rsa2048) {
-      final pair = stored.authenticationKeyPairFor(enrollmentId);
-      if (pair != null) {
-        // ignore: deprecated_member_use
-        stored.apkamPublicKey ??= AtBytes.fromString(pair.publicKey);
-        // ignore: deprecated_member_use
-        stored.apkamPrivateKey ??= AtBytes.fromString(pair.privateKey);
-      }
-    }
+  }
+
+  /// Moves an rsa2048 keypair from the typed pending material into the flat
+  /// APKAM fields, leaving the enrollment slot holding its snapshot and no
+  /// keys: the shape a legacy enrollment has always had, and the one every
+  /// published reader and the self-retrofit expect. Typed active material
+  /// under the enrollment would read as a retrofit already done and block
+  /// the upgrade a post-quantum posture asks for.
+  void _fileFlat(AtKeys stored) {
+    final materials = stored.keysForEnrollment(enrollmentId);
+    AtBytes? bytesOf(CryptographicMaterialRole role) => materials
+        .where((m) =>
+            m.role == role &&
+            m.algorithm == CryptographicMaterialAlgorithm.rsa2048)
+        .firstOrNull
+        ?.bytes;
+    // ignore: deprecated_member_use
+    stored.apkamPublicKey ??=
+        bytesOf(CryptographicMaterialRole.publicAuthentication);
+    // ignore: deprecated_member_use
+    stored.apkamPrivateKey ??=
+        bytesOf(CryptographicMaterialRole.privateAuthentication);
+    final info = stored.enrollmentInfo(enrollmentId);
+    stored.discardEnrollment(enrollmentId);
+    stored.recordEnrollmentSnapshot(enrollmentId,
+        namespaces: info?.namespaces,
+        appName: info?.appName,
+        deviceName: info?.deviceName);
   }
 
   Future<void> _discard() async {

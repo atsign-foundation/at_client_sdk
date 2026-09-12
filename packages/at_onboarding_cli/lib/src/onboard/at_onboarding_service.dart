@@ -16,8 +16,9 @@ abstract class AtOnboardingService {
   /// False means the client opened but is not online; its `connection` says
   /// whether the atServer was unreachable or refused it. A refusal on a
   /// device that has never held this atSign online opens nothing, and
-  /// [atClient] stays null. Calling again stops the client the previous call
-  /// opened and opens a fresh one.
+  /// [atClient] stays null. Any client already live for the atSign in this
+  /// process is stopped first, this call's earlier one included, and a fresh
+  /// one opened.
   Future<bool> authenticate();
 
   /// The client the last [authenticate] opened, or null before one has.

@@ -11,6 +11,7 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
+import 'utils/lifecycle.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
 
@@ -43,7 +44,7 @@ void main() {
         ..deviceName = 'pq-cli';
 
   setUp(() {
-    // AtAuth.onboard refuses if a keyfile already exists, so a leftover from an
+    // An activation refuses to overwrite a keyfile, so a leftover from an
     // earlier run would make this pass in isolation and fail in the suite.
     for (final path in [keysFilePath, '$keysFilePath.bak']) {
       final file = File(path);
@@ -51,9 +52,8 @@ void main() {
     }
   });
 
-  test('a CLI activation under the pqReady posture is PQ-native', () async {
-    final service = AtOnboardingServiceImpl(atSign, preference());
-    expect(await service.onboard(), true);
+  test('an activation under the pqReady posture is PQ-native', () async {
+    await activateThroughCli(atSign, preference());
 
     final keys = await FileAtKeysIo(filePath: (_) => keysFilePath).read(atSign);
     final enrollmentId = keys.enrollmentId;
@@ -78,11 +78,8 @@ void main() {
     // agrees with it. A client reading its algorithm off the preference signs
     // an ML-DSA key with the RSA routine and every command below throws.
     //
-    // In one process the activation client is still cached under
-    // `(atSign, enrollmentId)` holding the `pqReady` axes, which
-    // `AtClientImpl.create` refuses to hand to a caller naming different ones.
-    // Dropping it here is what process exit does for `at_activate`.
-    await service.atClient!.stop();
+    // The activation's client, built under `pqReady`, was stopped with it;
+    // the reader below is a fresh client under a bare preference.
     AtClientImpl.atClientInstanceMap
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
 
@@ -192,8 +189,7 @@ void main() {
       ..downloadPath = keysDir
       ..appName = 'wavi'
       ..deviceName = 'legacy-cli';
-    expect(await AtOnboardingServiceImpl(legacyAtSign, activation).onboard(),
-        true);
+    await activateThroughCli(legacyAtSign, activation);
 
     final keys =
         await FileAtKeysIo(filePath: (_) => legacyKeysFile).read(legacyAtSign);

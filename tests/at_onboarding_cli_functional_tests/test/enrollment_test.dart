@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup.dart';
@@ -10,18 +9,17 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
+import 'utils/at_client_cache.dart';
 import 'utils/enrollment_operations.dart';
+import 'utils/lifecycle.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
 
-var pkamPublicKey;
-var pkamPrivateKey;
-var encryptionPublicKey;
-var encryptionPrivateKey;
-var selfEncryptionKey;
-
 final logger = AtSignLogger('OnboardingEnrollmentTest');
 
+/// Enrollment against a real atServer, the enrolling side through at_client's
+/// `Atsign.enroll` and the approving side either hand-built on the legacy
+/// wire or through `client.enrollments`.
 void main() {
   AtSignLogger.root_level = 'WARNING';
   String storageDir = 'test/storage';
@@ -32,12 +30,16 @@ void main() {
   String atSign4 = '@colin🛠';
   String atSign5 = '@purnima🛠';
   String atSign6 = '@srie';
-  // String atSign1 = '@cli_test_01';
-  // String atSign2 = '@cli_test_02';
-  // String atSign3 = '@cli_test_03';
-  // String atSign4 = '@cli_test_04';
-  // String atSign5 = '@cli_test_05';
-  // String atSign6 = '@cli_test_06';
+
+  /// A client on the master keyfile [preference] names, through the adapter a
+  /// program built on this package uses; the caller stops it.
+  Future<AtClient> masterClient(
+      String atSign, AtOnboardingPreference preference) async {
+    final service = AtOnboardingServiceImpl(atSign, preference);
+    expect(await service.authenticate(), true,
+        reason: 'the freshly activated keys must authenticate');
+    return service.atClient!;
+  }
 
   group('A group of tests to assert on authenticate functionality', () {
     test(
@@ -46,57 +48,47 @@ void main() {
       // if onboard is testing use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
 
-      //1. Onboard first client
+      //1. Activate the atSign
       AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign1);
-      AtOnboardingService? onboardingService_1 =
-          AtOnboardingServiceImpl(atSign1, preference_1);
+      logger.info('activating $atSign1');
+      await activateThroughCli(atSign1, preference_1);
+      logger.info('successfully activated $atSign1');
 
-      logger.info('onboarding $atSign1');
-      bool status = await onboardingService_1.onboard();
-      expect(status, true);
-      logger.info('successfully onboarded $atSign1');
-
-      preference_1.privateKey = pkamPrivateKey;
-      var keysFilePath = preference_1.atKeysFilePath;
-      var keysFile = File(keysFilePath!);
+      var keysFile = File(preference_1.atKeysFilePath!);
       expect(keysFile.existsSync(), true);
-      var keysFileContent = keysFile.readAsStringSync();
-      var keysFileJson = jsonDecode(keysFileContent);
+      var keysFileJson = jsonDecode(keysFile.readAsStringSync());
       expect(keysFileJson['enrollmentId'], isNotEmpty);
       expect(keysFileJson['apkamSymmetricKey'], isNotEmpty);
 
       //2. authenticate first client
       logger.info('authenticating $atSign1 using onboarding keys');
-      var authResult = await onboardingService_1.authenticate();
-      expect(authResult, true);
+      final master = await masterClient(atSign1, preference_1);
       logger.info('successfully authenticated $atSign1');
-      await _setLastReceivedNotificationDateTime(
-          onboardingService_1.atClient!, atSign1);
+      await _setLastReceivedNotificationDateTime(master, atSign1);
 
       Map<String, String> namespaces = {"buzz": "rw"};
-      //3.1 test invalid otp
-      String totp = 'a6b4df';
       AtOnboardingPreference enrollPreference_2 =
           getPreferenceForEnroll(atSign1);
-      AtOnboardingService? onboardingService_2 =
-          AtOnboardingServiceImpl(atSign1, enrollPreference_2);
 
+      //3.1 test invalid otp
       logger.info('trying enrollment with invalid OTP');
       await expectLater(
-          onboardingService_2.enroll('buzz', 'iphone', totp, namespaces),
+          Atsign(atSign1).enroll(
+              otp: 'a6b4df',
+              app: 'buzz',
+              device: 'iphone',
+              namespaces: namespaces,
+              keys: keyfileOf(enrollPreference_2),
+              preference: enrollPreference_2),
           throwsA(predicate((dynamic e) =>
               e is AtLookUpException &&
               e.errorCode == 'AT0022' &&
               e.errorMessage
                   .contains('invalid otp. Cannot process enroll request'))));
 
-      //3.2 run otp:get from first client
+      //3.2 a passcode from the first client
       logger.info('generating new OTP');
-      totp = (await onboardingService_1.atClient!
-          .getRemoteSecondary()!
-          .executeCommand('otp:get\n', auth: true))!;
-      totp = totp.replaceFirst(RegExp(r'^data:'), '');
-      totp = totp.trim();
+      final totp = (await master.enrollments.otp()).value;
       logger.info('Got new otp: $totp');
 
       //4.1 Start listening for notification from first client and invoke callback which approves the enrollment
@@ -104,15 +96,14 @@ void main() {
 
       logger
           .info('OnboardingEnrollmentTest: listening for enrollment requests');
-      onboardingService_1.atClient!.notificationService
+      master.notificationService
           .subscribe(regex: '.__manage')
           .listen((notification) async {
         if (completer.isCompleted) {
           return;
         }
         logger.info('OnboardingEnrollmentTest: approving request');
-        await _notificationCallback(
-            notification, onboardingService_1!.atClient!, 'approve');
+        await _notificationCallback(notification, master, 'approve');
         completer.complete();
       });
 
@@ -124,14 +115,16 @@ void main() {
       // RSA-decrypting the wrapped symmetric key out of the notification and
       // re-wrapping the encryption private and self keys under it. A pq
       // request carries no wrapped key, so that code has nothing to decrypt.
-      var enrollResponse = await onboardingService_2.sendEnrollRequest(
-          'buzz', 'iphone', totp, namespaces,
+      final pending = await Atsign(atSign1).enroll(
+          otp: totp,
+          app: 'buzz',
+          device: 'iphone',
+          namespaces: namespaces,
+          keys: keyfileOf(enrollPreference_2),
+          preference: enrollPreference_2,
           keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
-      logger.info('enroll response $enrollResponse');
-      // enrollment id from the response
-      var enrollmentId = enrollResponse.enrollmentId;
-      expect(enrollmentId, isNotEmpty);
-      expect(enrollResponse.enrollStatus, EnrollmentStatus.pending);
+      logger.info('enroll response ${pending.enrollmentId}');
+      expect(pending.enrollmentId, isNotEmpty);
 
       // 4.3 Wait for the approval to happen
       logger.info('Waiting for the approval to be given');
@@ -139,65 +132,49 @@ void main() {
 
       // 4.4 Wait for the enrolling client to successfully connect following approval
       logger.info('Waiting for the post-approval connection success');
-      await onboardingService_2
-          .awaitApproval(enrollResponse, retryInterval: Duration(seconds: 2))
+      await pending
+          .awaitApproval(retryInterval: Duration(seconds: 2))
           .timeout(Duration(seconds: 20));
 
-      // 4.5 Wait for the enrolling client to generate its keys file
-      logger.info('Creating atKeys file');
-      await onboardingService_2.createAtKeysFile(enrollResponse);
-
-      // 4.6 assert that the keys file is created for enrolled app
+      // 4.5 assert that the keys file is complete for the enrolled app
       logger.info('Verifying atKeys file');
       final enrolledClientKeysFile = File(enrollPreference_2.atKeysFilePath!);
-      while (!await enrolledClientKeysFile.exists()) {
-        await Future.delayed(Duration(milliseconds: 100));
-      }
       expect(await enrolledClientKeysFile.exists(), true);
-      var enrolledClientKeysFileContent =
-          enrolledClientKeysFile.readAsStringSync();
       var enrolledClientKeysFileJson =
-          jsonDecode(enrolledClientKeysFileContent);
+          jsonDecode(enrolledClientKeysFile.readAsStringSync());
       expect(enrolledClientKeysFileJson['enrollmentId'], isNotEmpty);
       expect(enrolledClientKeysFileJson['apkamSymmetricKey'], isNotEmpty);
 
-      // 4.7 Authenticate now with the approved enrollmentID
+      // 4.6 Authenticate now with the approved enrollment's keys
       logger.info('Authenticating with enrollment atKeys');
-      bool authResultWithEnrollment = await onboardingService_2.authenticate();
-      expect(authResultWithEnrollment, true);
+      await master.stop();
+      final enrolled = AtOnboardingServiceImpl(atSign1, enrollPreference_2);
+      expect(await enrolled.authenticate(), true);
+      expect(enrolled.atClient!.enrollmentId, pending.enrollmentId);
       enrolledClientKeysFile.deleteSync();
 
-      await onboardingService_1.close();
-      await onboardingService_2.close();
-      onboardingService_1 = onboardingService_2 = null;
+      await enrolled.atClient!.stop();
       logger.info('Enroll / approve / auth test completed');
     });
 
     test(
-        'A test to verify pkam authentication is successful when enableEnrollmentDuringOnboard flag is set to false',
+        'A test to verify pkam authentication is successful with the keys an activation writes',
         () async {
       // if onboard is testing use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
-      //1. Onboard first client
+      //1. Activate the atSign
       AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign3);
-      AtOnboardingService? onboardingService_1 =
-          AtOnboardingServiceImpl(atSign3, preference_1);
-      bool status = await onboardingService_1.onboard();
-      expect(status, true);
-      preference_1.privateKey = pkamPrivateKey;
+      await activateThroughCli(atSign3, preference_1);
 
       //2. authenticate first client
-      var authStatus = await onboardingService_1.authenticate();
-      expect(authStatus, true);
-
-      await onboardingService_1.close();
-      onboardingService_1 = null;
+      final client = await masterClient(atSign3, preference_1);
+      await client.stop();
     });
 
     test(
-        'A test to verify an onboarding exception is NOT thrown when enableEnrollmentDuringOnboard is set to true and deviceName and appName are not passed',
+        'A test to verify an activation succeeds when deviceName and appName are not passed',
         () async {
-      // when testing onboard() use distinct demo atsign per test,
+      // when testing activation use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
       // preference without appName and deviceName
       AtOnboardingPreference preference_1 = AtOnboardingPreference()
@@ -209,19 +186,14 @@ void main() {
         ..cramSecret = at_demos.cramKeyMap[atSign4] ?? atSign4.substring(1)
         ..namespace =
             'wavi' // unique identifier that can be used to identify data from your app
-        // Omitting this would put the keyfile onboard() generates in the home
-        // directory's real keys dir.
+        // Omitting this would put the keyfile the activation generates in the
+        // home directory's real keys dir.
         ..atKeysFilePath = testKeysFile(atSign4)
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = virtualenvRootPort;
 
-      AtOnboardingService? onboardingService_1 =
-          AtOnboardingServiceImpl(atSign4, preference_1);
-      bool onboardStatus = await onboardingService_1.onboard();
-      expect(onboardStatus, true);
-
-      await onboardingService_1.close();
-      onboardingService_1 = null;
+      await activateThroughCli(atSign4, preference_1);
+      expect(File(preference_1.atKeysFilePath!).existsSync(), true);
     });
 
     test(
@@ -229,25 +201,16 @@ void main() {
         () async {
       // if onboard is testing use distinct demo atsign per test,
       // since cram keys get deleted on server for already onboarded atsign
-      //1. Onboard first client
+      //1. Activate the atSign
       AtOnboardingPreference preference_1 = getPreferenceForAuth(atSign5);
-      AtOnboardingService? onboardingService_1 =
-          AtOnboardingServiceImpl(atSign5, preference_1);
-      bool status = await onboardingService_1.onboard();
-      expect(status, true);
-      preference_1.privateKey = pkamPrivateKey;
+      await activateThroughCli(atSign5, preference_1);
 
       //2. authenticate first client
-      await onboardingService_1.authenticate();
-      await _setLastReceivedNotificationDateTime(
-          onboardingService_1.atClient!, atSign5);
+      final master = await masterClient(atSign5, preference_1);
+      await _setLastReceivedNotificationDateTime(master, atSign5);
 
-      //3. run otp:get from first client
-      String? totp = await onboardingService_1.atClient!
-          .getRemoteSecondary()!
-          .executeCommand('otp:get\n', auth: true);
-      totp = totp!.replaceFirst(RegExp(r'^data:'), '');
-      totp = totp.trim();
+      //3. a passcode from the first client
+      final totp = (await master.enrollments.otp()).value;
       logger.finer('otp: $totp');
       Map<String, String> namespaces = {"buzz": "rw"};
       expect(totp.length, 6);
@@ -260,7 +223,7 @@ void main() {
 
       //4. Subscribe to enrollment notifications; we will deny it when it arrives
       String enrollmentId = '';
-      onboardingService_1.atClient!.notificationService
+      master.notificationService
           .subscribe(regex: '.__manage')
           .listen(expectAsync1((notification) async {
             logger.finer('got enroll notification');
@@ -274,37 +237,40 @@ void main() {
             expect(notificationValueJson['appName'], 'buzz');
             expect(notificationValueJson['deviceName'], 'iphone');
             expect(notificationValueJson['namespace']['buzz'], 'rw');
-            await _notificationCallback(
-                notification, onboardingService_1!.atClient!, 'deny');
+            await _notificationCallback(notification, master, 'deny');
             completer.complete();
           }, count: 1, max: -1));
 
-      //5. enroll second client
-      preference_1 = getPreferenceForEnroll(atSign5);
-      AtOnboardingServiceImpl? onboardingService_2 =
-          AtOnboardingServiceImpl(atSign5, preference_1);
-
-      expectLater(
-          onboardingService_2.enroll(
-            'buzz',
-            'iphone',
-            totp,
-            namespaces,
-            retryInterval: Duration(seconds: 5),
-            // Legacy named for the same reason as the approve test above: this
-            // one asserts the RSA-wrapped key is present in the notification
-            // and then hand-builds the deny wire, so it is about the legacy
-            // shape by construction.
-            keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
-          ),
+      //5. enroll second client, and wait for the decision
+      final enrollPreference = getPreferenceForEnroll(atSign5);
+      // Legacy named for the same reason as the approve test above: this
+      // one asserts the RSA-wrapped key is present in the notification
+      // and then hand-builds the deny wire, so it is about the legacy
+      // shape by construction.
+      final pending = await Atsign(atSign5).enroll(
+          otp: totp,
+          app: 'buzz',
+          device: 'iphone',
+          namespaces: namespaces,
+          keys: keyfileOf(enrollPreference),
+          preference: enrollPreference,
+          keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
+      final decided = expectLater(
+          pending.awaitApproval(retryInterval: Duration(seconds: 5)),
           throwsA(predicate((dynamic e) =>
               e is AtEnrollmentException &&
               e.message == 'The enrollment: $enrollmentId is denied')));
       await completer.future;
+      await decided;
 
-      await onboardingService_1.close();
-      await onboardingService_2.close();
-      onboardingService_1 = onboardingService_2 = null;
+      // The denial emptied the keyfile: nothing authenticates from it.
+      expect(
+          (await keyfileOf(enrollPreference).read(atSign5))
+              .holdsAuthenticationMaterial,
+          false,
+          reason: 'a denied enrollment leaves no credential behind');
+
+      await master.stop();
     });
 
     tearDown(() async => await tearDownFunc());
@@ -333,17 +299,13 @@ void main() {
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = virtualenvRootPort;
 
-      // Init an OnboardingService instance and onboard. Creates a master
-      // atKeys file at the location provided in variable 'masterKeysFilePath'
-      AtOnboardingService? onboardingService = AtOnboardingServiceImpl(
-        atSign6,
-        preference
-          ..cramSecret = at_demos.cramKeyMap[atSign6] ?? atSign6.substring(1)
-          ..atKeysFilePath = masterKeysFilePath,
-      );
-      await onboardingService.onboard();
-      await onboardingService.close();
-      onboardingService = null;
+      // Activate. Creates a master atKeys file at the location provided in
+      // variable 'masterKeysFilePath'
+      await activateThroughCli(
+          atSign6,
+          preference
+            ..cramSecret = at_demos.cramKeyMap[atSign6] ?? atSign6.substring(1)
+            ..atKeysFilePath = masterKeysFilePath);
       AtClientManager.getInstance().reset();
 
       // Fetch otp
@@ -351,64 +313,52 @@ void main() {
           EnrollmentOperations(atSign6);
       String? otp = await enrollmentOperations.getOtp(masterKeysFilePath);
 
-      // Create a new instance of OnboardingService that will be used to send an
-      // enrollment request. Once this request is approved, this creates a new
-      // atKeys file at the location provided in 'enrollmentAtKeysFilePath'
-      onboardingService = AtOnboardingServiceImpl(
-        atSign6,
-        preference..atKeysFilePath = enrollmentAtKeysFilePath,
-      );
-
-      // Await has NOT been added below to ensure that the onboardingService.enroll()
-      // method call does not starve the rest of the test; but still will be
-      // waiting for enrollment approval in the background
+      // Submit an enrollment request into a new keyfile at
+      // 'enrollmentAtKeysFilePath', and wait for its approval in the
+      // background so the wait does not starve the rest of the test.
       // NOTE: `legacy` is named because this test asserts what an approved
       // enrolment may read, not the key exchange. A pq enrolment adds a
       // post-approval round trip - the enrollee polls for the envelope holding
       // the symmetric key the approver encapsulated to its key package - which
       // on top of the 10s wait below overruns the 30s test timeout. The pq
       // enrolment path is covered by `pq_native_enroll_test.dart`.
-      Future<AtEnrollmentResponse> enrollRequestResponse =
-          onboardingService.enroll(
-        appName,
-        deviceName,
-        otp!,
-        namespaces,
-        keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
-      );
+      preference.atKeysFilePath = enrollmentAtKeysFilePath;
+      final pending = await Atsign(atSign6).enroll(
+          otp: otp!,
+          app: appName,
+          device: deviceName,
+          namespaces: namespaces,
+          keys: keyfileOf(preference),
+          preference: preference,
+          keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
+      final approved = pending.awaitApproval();
       logger.info('Sleeping for 10s');
       await Future.delayed(Duration(seconds: 10));
 
       // Approve the new enrollment request
-      AtEnrollmentResponse? enrollApproveResponse =
-          await enrollmentOperations.approve(
+      await enrollmentOperations.approve(
         atKeysFilePath: masterKeysFilePath,
         appName: appName,
         deviceName: deviceName,
       );
-      await enrollRequestResponse.whenComplete(() {
-        logger.info('OnboardingService.enroll() completed execution');
+      await approved.whenComplete(() {
+        logger.info('the enrollment wait completed');
         assert(File(enrollmentAtKeysFilePath).existsSync());
       });
       AtClientImpl.atClientInstanceMap.clear();
-      await onboardingService.close();
-      onboardingService = null;
       enrollmentOperations = null;
       AtClientManager.getInstance().reset();
 
-      // Create a new instance of OnboardingCli and authenticate using the newly
-      // created atKeys file that only has access to wavi namespace
-      onboardingService = AtOnboardingServiceImpl(
+      // Authenticate using the newly created atKeys file that only has
+      // access to wavi namespace
+      AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atSign6,
         preference..atKeysFilePath = enrollmentAtKeysFilePath,
       );
-      bool authStatus = await onboardingService.authenticate(
-        enrollmentId: enrollApproveResponse.enrollmentId,
-      );
+      bool authStatus = await onboardingService.authenticate();
       expect(authStatus, true);
 
-      // Fetch the atClient instance in OnboardingCli. Then update a key with
-      // buzz namespace
+      // Fetch the atClient. Then update a key with buzz namespace
       AtClient? client = onboardingService.atClient;
       AtKey buzzKey = AtKey.public(
         'dummy_key_27',
@@ -423,10 +373,9 @@ void main() {
       await expectLater(client?.put(buzzKey, 'value'), throwsA(predicate((e) {
         return e.toString() == expectedExceptionMessage;
       })));
-      onboardingService.atClient?.notificationService.stopAllSubscriptions();
-      onboardingService.atClient?.syncService.removeAllProgressListeners();
-      await onboardingService.close();
-      onboardingService = null;
+      client?.notificationService.stopAllSubscriptions();
+      client?.syncService.removeAllProgressListeners();
+      await client?.stop();
     });
 
     test('validate enrollment only has specified level of authorization',
@@ -451,80 +400,64 @@ void main() {
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = virtualenvRootPort;
 
-      // Init an OnboardingService instance and onboard. Creates a master
-      // atKeys file at the location provided in variable 'masterKeysFilePath'
-      AtOnboardingService? onboardingService = AtOnboardingServiceImpl(
-        atSign2,
-        preference
-          ..cramSecret = at_demos.cramKeyMap[atSign2] ?? atSign2.substring(1)
-          ..atKeysFilePath = masterKeysFilePath,
-      );
-      await onboardingService.onboard();
-      await onboardingService.close();
-      onboardingService = null;
+      // Activate. Creates a master atKeys file at the location provided in
+      // variable 'masterKeysFilePath'
+      await activateThroughCli(
+          atSign2,
+          preference
+            ..cramSecret = at_demos.cramKeyMap[atSign2] ?? atSign2.substring(1)
+            ..atKeysFilePath = masterKeysFilePath);
       AtClientManager.getInstance().reset();
 
       // Fetch otp
       EnrollmentOperations enrollmentOperations = EnrollmentOperations(atSign2);
       String? otp = await enrollmentOperations.getOtp(masterKeysFilePath);
 
-      // Create a new instance of OnboardingService that will be used to send an
-      // enrollment request. Once this request is approved, this creates a new
-      // atKeys file at the location provided in 'enrollmentAtKeysFilePath'
-      onboardingService = AtOnboardingServiceImpl(
-        atSign2,
-        preference..atKeysFilePath = enrollmentAtKeysFilePath,
-      );
-
-      // Await has NOT been added below to ensure that the onboardingService.enroll()
-      // method call does not starve the rest of the test; but still will be
-      // waiting for enrollment approval in the background
+      // Submit an enrollment request into a new keyfile at
+      // 'enrollmentAtKeysFilePath', and wait for its approval in the
+      // background so the wait does not starve the rest of the test.
       // NOTE: `legacy` is named because this test asserts what an approved
       // enrolment may read, not the key exchange. A pq enrolment adds a
       // post-approval round trip - the enrollee polls for the envelope holding
       // the symmetric key the approver encapsulated to its key package - which
       // on top of the 10s wait below overruns the 30s test timeout. The pq
       // enrolment path is covered by `pq_native_enroll_test.dart`.
-      Future<AtEnrollmentResponse> enrollRequestResponse =
-          onboardingService.enroll(
-        appName,
-        deviceName,
-        otp!,
-        namespaces,
-        keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
-      );
+      preference.atKeysFilePath = enrollmentAtKeysFilePath;
+      final pending = await Atsign(atSign2).enroll(
+          otp: otp!,
+          app: appName,
+          device: deviceName,
+          namespaces: namespaces,
+          keys: keyfileOf(preference),
+          preference: preference,
+          keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
+      final approved = pending.awaitApproval();
       logger.info('Sleeping for 10s');
       await Future.delayed(Duration(seconds: 10));
 
       // Approve the new enrollment request
-      AtEnrollmentResponse? enrollApproveResponse =
-          await enrollmentOperations.approve(
+      await enrollmentOperations.approve(
         atKeysFilePath: masterKeysFilePath,
         appName: appName,
         deviceName: deviceName,
       );
-      await enrollRequestResponse.whenComplete(() {
-        logger.info('OnboardingService.enroll() completed execution');
+      await approved.whenComplete(() {
+        logger.info('the enrollment wait completed');
         assert(File(enrollmentAtKeysFilePath).existsSync());
       });
       AtClientImpl.atClientInstanceMap.clear();
-      await onboardingService.close();
-      onboardingService = null;
       AtClientManager.getInstance().reset();
 
-      // Create a new instance of OnboardingCli and authenticate using the newly
-      // created atKeys file that only has access to wavi namespace
-      onboardingService = AtOnboardingServiceImpl(
+      // Authenticate using the newly created atKeys file that only has
+      // read access to the delta namespace
+      AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atSign2,
         preference..atKeysFilePath = enrollmentAtKeysFilePath,
       );
-      bool authStatus = await onboardingService.authenticate(
-        enrollmentId: enrollApproveResponse.enrollmentId,
-      );
+      bool authStatus = await onboardingService.authenticate();
       expect(authStatus, true);
 
-      // Fetch the atClient instance in OnboardingCli. Then update a key with
-      // buzz namespace
+      // Fetch the atClient. Then update a key with delta namespace
       AtClient? client = onboardingService.atClient;
       AtKey deltaKey = AtKey.public(
         'dummy_key_28',
@@ -540,7 +473,7 @@ void main() {
         return e.toString() == expectedExceptionMessage;
       })));
 
-      await onboardingService.close();
+      await client?.stop();
     });
 
     tearDown(() async {
@@ -642,6 +575,7 @@ AtOnboardingPreference getPreferenceForEnroll(String atSign) {
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..namespace =
         'buzz' // unique identifier that can be used to identify data from your app
+    ..hiveStoragePath = 'storage/hive/enrolled'
     ..atKeysFilePath = testKeysFile(atSign, suffix: 'buzzkey')
     ..appName = 'buzz'
     ..deviceName = 'iphone'
@@ -650,25 +584,8 @@ AtOnboardingPreference getPreferenceForEnroll(String atSign) {
   return atOnboardingPreference;
 }
 
-Future<void> getAtKeys(String atSign) async {
-  AtOnboardingPreference preference = getPreferenceForAuth(atSign);
-  String? filePath = preference.atKeysFilePath;
-  var fileContents = File(filePath!).readAsStringSync();
-  var keysJSON = json.decode(fileContents);
-  selfEncryptionKey = keysJSON['selfEncryptionKey'];
-
-  pkamPublicKey = EncryptionUtil.decryptValue(
-      keysJSON['aesPkamPublicKey'], selfEncryptionKey);
-  pkamPrivateKey = EncryptionUtil.decryptValue(
-      keysJSON['aesPkamPrivateKey'], selfEncryptionKey);
-  encryptionPublicKey = EncryptionUtil.decryptValue(
-      keysJSON['aesEncryptPublicKey'], selfEncryptionKey);
-  encryptionPrivateKey = EncryptionUtil.decryptValue(
-      keysJSON['aesEncryptPrivateKey'], selfEncryptionKey);
-}
-
 Future<void> tearDownFunc() async {
-  AtClientManager.getInstance().reset();
+  await evictCachedAtClients();
   bool isExists = await Directory('test/storage/').exists();
   if (isExists) {
     Directory('test/storage/').deleteSync(recursive: true);

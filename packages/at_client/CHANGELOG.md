@@ -37,7 +37,12 @@
   `enroll` files carries the atSign's encryption public key as typed
   material rather than in its flat field, which a file store self-encrypts
   under a key the device is only given at approval; the completion copies it
-  into the flat field for legacy readers.
+  into the flat field for legacy readers. An rsa2048 enrollment's keypair is
+  typed only while the request is pending: the completion moves it into the
+  flat APKAM fields and drops the typed copy, the shape a legacy enrollment
+  has always had and the one the self-retrofit reads as not yet upgraded. An
+  mldsa65 enrollment's keypair stays typed and never reaches the flat fields,
+  as a PQ-native activation's does.
 - feat: `Atsign('@alice').enroll(otp: ..., app: ..., device: ...,
   namespaces: ..., keys: ..., preference: ...)` submits an enrollment and
   files the keys it minted in the store the caller named, as `pending` under

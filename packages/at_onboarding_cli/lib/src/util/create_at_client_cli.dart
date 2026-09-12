@@ -90,17 +90,7 @@ Future<AtClient> createAtClient(
   }
   stderr.writeln(chalk.brightGreen('Connected'));
   AtClientManager.getInstance().use(client);
-  // NOTE: the post-quantum startup — seeding and publishing this atSign's
-  // namespace keys among it — runs unawaited after the client is built, so a
-  // short-lived command would exit before it finishes.
-  if (waitForPqStartup && client is AtClientImpl) {
-    // ignore: experimental_member_use
-    await client.pqBootstrap?.startupComplete.timeout(startupTailBound,
-        onTimeout: () => stderr.writeln(chalk.brightYellow(
-            'The client\'s startup did not finish within '
-            '${startupTailBound.inSeconds}s; continuing. What it left undone '
-            'is retried at the next start.')));
-  }
+  if (waitForPqStartup) await awaitStartupTail(client);
   return client;
 }
 

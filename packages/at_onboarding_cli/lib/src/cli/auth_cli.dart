@@ -556,7 +556,24 @@ Future<void> activate(String atSign, AtOnboardingPreference preference,
     stdout.writeln(
         '${chalk.blue('[Information]')} Encrypted atKeys file with the given pass phrase');
   }
+  await awaitStartupTail(client);
   await client.stop();
+}
+
+/// Waits for [client]'s post-quantum startup, bounded by [startupTailBound].
+///
+/// The startup — publishing this atSign's namespace keys among it — runs
+/// unawaited after the client is built, and a command's process ends with
+/// the command; stopped before it finishes, an atSign could send
+/// post-quantum and not receive.
+Future<void> awaitStartupTail(AtClient client) async {
+  if (client is! AtClientImpl) return;
+  // ignore: experimental_member_use
+  await client.pqBootstrap?.startupComplete.timeout(startupTailBound,
+      onTimeout: () => stderr.writeln(
+          chalk.brightYellow('The client\'s startup did not finish within '
+              '${startupTailBound.inSeconds}s; continuing. What it left undone '
+              'is retried at the next start.')));
 }
 
 /// The CRAM secret for [atSign] from the registrar: it emails a verification
@@ -616,8 +633,7 @@ Future<AtLookUp?> _proxyLookUp(String atSign, AtOnboardingPreference preference,
     authenticator: null,
   );
   try {
-    final response =
-        await lookUp.executeCommand('from:$atSign\n', auth: false);
+    final response = await lookUp.executeCommand('from:$atSign\n', auth: false);
     logger.info('$context: from: for $atSign answered $response');
   } catch (e) {
     logger.warning('$context: from: for $atSign failed: $e - continuing');
@@ -677,6 +693,7 @@ Future<bool> enroll(ArgResults argResults, {AtLookUp? atLookUp}) async {
     keyExchangeMode: AuthCliArgs.keyExchangeIn(argResults),
     atLookUp: atLookUp,
   );
+  await awaitStartupTail(client);
   await client.stop();
   return true;
 }
@@ -887,7 +904,8 @@ Future<List<Enrollment>> _list(
   final ar = arx == null ? null : RegExp(arx);
   final dr = drx == null ? null : RegExp(drx);
   final all = await atClient.enrollments.list(
-      statuses: status == null ? null : [EnrollmentStatus.values.byName(status)]);
+      statuses:
+          status == null ? null : [EnrollmentStatus.values.byName(status)]);
   final filtered = all
       .where((e) => ar == null || ar.hasMatch(e.appName ?? ''))
       .where((e) => dr == null || dr.hasMatch(e.deviceName ?? ''))
@@ -1239,9 +1257,10 @@ void printProgress(ProgressEvent pe) {
     _progressPad = pe.group.length;
   }
   _lastProgressGroup = pe.group;
-  String output = '${pe.type.chalkFn(pe.group.padLeft(_progressPad))} : ${pe.msg}'
-      .replaceAll('\n', '\\n')
-      .replaceAll('\t', ' ');
+  String output =
+      '${pe.type.chalkFn(pe.group.padLeft(_progressPad))} : ${pe.msg}'
+          .replaceAll('\n', '\\n')
+          .replaceAll('\t', ' ');
   int viewableLength = '${pe.group.padLeft(_progressPad)} : ${pe.msg}'
       .replaceAll('\n', '\\n')
       .replaceAll('\t', ' ')
