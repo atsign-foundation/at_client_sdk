@@ -89,6 +89,10 @@ nothing from at_auth.
   and `Atsign.enroll`.
 - build: requires `at_client` ^3.15.0-rc1, the first version carrying the
   lifecycle verbs.
+- fix: `KeychainAtKeysIo.read` throws `AtKeysSourceAbsentException` for an
+  atSign the keychain does not hold, as the file store does, so `Atsign.enroll`
+  and `resumeEnrollment` start on a fresh keychain rather than refusing it as
+  unreadable.
 
 ## 1.1.4
 

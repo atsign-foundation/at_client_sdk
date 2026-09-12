@@ -79,6 +79,30 @@ void main() {
     createdAt: DateTime.utc(2026, 1, 1),
   );
 
+  test(
+    'read of an atSign the keychain does not hold says the source is absent',
+    () async {
+      // The type is what an enrollment reads to tell "no keys yet" from "keys
+      // this process cannot read": it starts on the first and refuses on the
+      // second, so the keychain has to answer the way the file store does.
+      await expectLater(
+        () => io.read('@nobody'),
+        throwsA(isA<AtKeysSourceAbsentException>()),
+      );
+      await io.write('@alice', keysFor('@alice'));
+      await expectLater(
+        () => io.read('@nobody'),
+        throwsA(isA<AtKeysSourceAbsentException>()),
+        reason: 'an entry for another atSign does not make @nobody present',
+      );
+      expect(
+        (await io.read('@alice')).enrollmentId,
+        'e-@alice',
+        reason: 'the control: the atSign the keychain holds reads back',
+      );
+    },
+  );
+
   test('write refuses an atSign that already has an entry', () async {
     await io.write('@alice', keysFor('@alice'));
     expect(entryCount(), 1);
