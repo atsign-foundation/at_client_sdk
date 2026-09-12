@@ -330,24 +330,21 @@ the pass before this one. Step 6's at_onboarding_cli half is done and its four
 packs are green, and step 7's three at_client_flutter readings are resolved.
 [Step 8](#step-8-removal--at_auth-now-the-others-at-their-majors) is under
 way: gkc ruled that at_auth's surface is cleaned in this rc, and its families
-E, H, A and G are removed; B's callers have moved with its surface held; C
-and D are open on one design question.
+E, H, A and G are removed. **B, C and D left this plan on 2026-09-12.** The
+client-lifecycle design
+([`../client-lifecycle/design.md`](../client-lifecycle/design.md)) removes the
+request and response types they annotate together with `AtAuth.authenticate`'s
+DTOs, and takes at_client_flutter and at_onboarding_cli to a 2.0 to do it, so
+there is nothing here to hold and no caller to move field by field. B's
+surface stands deprecated in the tree until that work lands.
 
-**What is owed, in order.** Step 8's C and D — the *enrollment* request and
-response — which turn on the question
-[stated below](#what-c-and-d-turn-on); then the remaining test-tree work in
-steps 6 and 7; then `LocalSecondary`'s `AtChops` tier.
-
-⛔ **Start by settling whether C and D are held the way B was.** They very
-likely are: the published at_client_flutter example reads
-`AtEnrollmentResponse.atAuthKeys` at `onboarding.dart:77`, one line above its
-`AtAuthRequest(atAuthKeys:)` — so family **D is app-facing by measurement**,
-not by argument, and gkc's rule is that an application's packages do not
-break. If the hold applies, C and D become what B became: move every caller in
-this repository onto the session, leave the surface deprecated and standing. Two of those wait on gkc rather
-than on code, and both are stated where they arise: whether F's seven flat
-fields keep an annotation no caller can act on (step 8), and where an enrolled
-app's keys should land if `apkam_dialog.dart` supplies a session (step 7).
+**What is owed, in order.** The remaining test-tree work in steps 6 and 7;
+then `LocalSecondary`'s `AtChops` tier. One question waits on gkc rather than
+on code, stated where it arises: whether F's seven flat fields keep an
+annotation no caller can act on (step 8). The step 7 question, where an
+enrolled app's keys land when `apkam_dialog.dart` supplies a session, is
+answered by that design's ruling 5: the key destination is also the resume
+store.
 
 ⚠️ **Re-derive every figure here before quoting it.** The counts on
 2026-09-12, from the corrected recipe above — `lib` / `test`: at_auth **16 /
@@ -998,12 +995,12 @@ declaration and the analyzer enumerates them.
 | G | `AtKeys.toAtChops`, `.toAtChopsForEnrollment` | 0 | ✅ removed from the public API, by becoming library-private |
 | H | `KeyIOMixin` and its four serialization helpers | 0 | remove |
 | A | `AtAuth.atChops` and `approve`'s `approverChops` | 7 | ✅ removed |
-| B | `AtAuthRequest.atAuthKeys` + `AuthResponse.atAuthKeys` | 35 | ⛔ **kept** — callers moved, surface held |
+| B | `AtAuthRequest.atAuthKeys` + `AuthResponse.atAuthKeys` | 35 | held in the tree; removed with the auth DTOs by the [client-lifecycle design](../client-lifecycle/design.md) |
 | B | `AuthResponse.atLookUp`, `AuthResponse.atChops` | 10 | ″ |
-| C | `AtEnrollmentRequest.atSign` | 24 | ″ |
-| C | `AtEnrollmentRequest`'s `rootDomain`, `apkamPublicKey`, `encryptedAPKAMSymmetricKey` | 1 | free once C's `atSign` moves |
-| D | `AtEnrollmentResponse.atAuthKeys` | 55 | blocked — see below |
-| D | `AtEnrollmentResponse.atSign`, `.rootDomain` | 0 | free |
+| C | `AtEnrollmentRequest.atSign` | 24 | superseded: under that design the request is an internal shape of at_auth and the app passes parameters |
+| C | `AtEnrollmentRequest`'s `rootDomain`, `apkamPublicKey`, `encryptedAPKAMSymmetricKey` | 1 | ″ |
+| D | `AtEnrollmentResponse.atAuthKeys` | 55 | superseded: the completed keys reach the app through the store it named, and the response goes the way of the request |
+| D | `AtEnrollmentResponse.atSign`, `.rootDomain` | 0 | ″. The zero never meant removable: at_auth's own `waitForApproval` refuses without both, and at_onboarding_cli restores them under two `// ignore`s |
 | F | the seven flat `AtKeys` fields | 332 | ⛔ **not removable** — see below |
 
 ⛔ **Every figure in this plan excluded 32 packages, and one of them held a
@@ -1269,34 +1266,20 @@ because the names collide across families:
 | `AtEnrollmentResponse.atAuthKeys` | 55 | including at_auth's own handshake |
 | `AtEnrollmentResponse.atSign`, `.rootDomain` | 0 | — |
 
-**The design question, which is not the same as B's.** A session carries a key
-*destination*, and an enrollment request that only submits has none — the
-`AtEnrollmentRequest.pq` dartdoc says so itself: *"A request that only wants
-the key exchange — one that inspects what it advertised and never waits for
-approval — has nowhere to persist keys and needs no session."* Almost every
-one of C's 24 sites is that kind: a refusal test that submits an invalid or
-reused OTP and never waits. Requiring a session there means inventing an
-`InMemoryAtKeysIo` that nothing ever writes to — a fixture that says "keys go
-here" where no keys go, which is the deception this plan's helper rule exists
-to stop.
+**Answered on 2026-09-12, and not by choosing among the shapes this section
+used to offer** (hold as B was held; require a session at every submit-only
+site; undeprecate the loose `atSign` and `rootDomain`). gkc ruled that
+applications stop importing at_auth at all: at_client owns onboarding, login
+and enrollment, the app passes parameters and gets a client or a pending
+enrollment back, and the request and response types these families annotate
+become at_auth's internal shapes. The reasoning and the seven rulings are in
+[`../client-lifecycle/design.md`](../client-lifecycle/design.md). The
+measurements above still describe this tree and are why the families read as
+app-facing.
 
-So one of three shapes, and the choice belongs to gkc:
-
-1. **Hold, as B was held** — move the callers that genuinely have a
-   destination, leave the loose `atSign`/`rootDomain` deprecated and standing
-   for the submit-only case. Consistent with the app-facing rule, and family D
-   is app-facing by measurement.
-2. **Require a session** and accept the empty destination at every
-   submit-only site.
-3. **Undeprecate `atSign` and `rootDomain` on the request**, on the grounds
-   that every request needs an atSign and a session is not the only honest
-   carrier — and deprecate only what the session really supersedes. ⚠️ This
-   would drop C's count by 24 with nothing moved, which is the annotation
-   artefact this plan warns about, arriving as policy rather than accident.
-
-⚠️ Each family lands with the gates the rest of this plan uses, and B, C and D
-run all four live packs before they commit: they change what an authentication
-and an enrollment hand back, which every pack fixture reads.
+⚠️ Each family landed with the gates the rest of this plan uses, and B's removal
+ran all four live packs before it was held: it changed what an authentication
+hands back, which every pack fixture reads.
 
 ## 5. What each step clears
 
