@@ -1418,12 +1418,10 @@ void main() {
           ),
           0);
       expect(broadcast.requests, isEmpty,
-          reason: 'such a client CANNOT ask — enumerating holders goes through '
-              'enroll:listns, which the atServer refuses without APKAM '
-              'authentication — and has no reason to: it is the atSign, so its '
-              'route to a missing root is to mint one. Without this guard '
-              'every legacy PKAM client broadcasts, is refused, and logs a '
-              'warning on each start');
+          reason: 'such a client does not ask: it is the atSign, so its route '
+              'to a missing root is to mint one. Without this guard every '
+              'legacy PKAM client would broadcast a request for a root it '
+              'can mint itself, on each start');
     });
 
     test('the privilege check is not consulted before the cheaper one',

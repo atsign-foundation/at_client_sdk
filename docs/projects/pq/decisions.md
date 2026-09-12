@@ -87,7 +87,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [28]  | The PQ performance budget, measured                                                         | 2026-08-04 | LIVE                      |
 | [29]  | UC-A3.2 describes a mint trigger that was never built                                       | 2026-08-04 | LIVE                      |
 | [30]  | UC-B5.1's pull backstop has no initiator                                                    | 2026-08-04 | LIVE                      |
-| [31]  | The root-pull initiator, and what it did not settle                                         | 2026-08-04 | LIVE                      |
+| [31]  | The root-pull initiator, and what it did not settle                                         | 2026-08-04 | AMENDED 2026-09-12        |
 | [32]  | The two-enrollment fixture: what works and what does not                                    | 2026-08-04 | LIVE                      |
 | [33]  | Keying the client cache by (atSign, enrollmentId)                                           | 2026-08-04 | LIVE                      |
 | [34]  | PKAM is record-authoritative, and the no-RSA row reads narrower than it looks               | 2026-08-04 | LIVE                      |

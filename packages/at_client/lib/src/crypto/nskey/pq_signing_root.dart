@@ -599,9 +599,8 @@ class PqSigningRoot {
 
     if (await privateHalf(atSign) != null) return 0;
 
-    // NOTE: the atSign's own credential cannot ask — enumerating the holders
-    // goes through `enroll:listns`, which the atServer refuses without APKAM
-    // authentication — and its route to a missing root is to mint one.
+    // NOTE: the atSign's own credential does not ask: its route to a missing
+    // root is to mint one.
     if (isAtSignCredential(atClient.enrollmentId)) {
       return 0;
     }
