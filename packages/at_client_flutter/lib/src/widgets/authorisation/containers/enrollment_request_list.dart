@@ -1,42 +1,35 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart'
-    show EnrollmentRequestDecision, ServerEnrollmentRequest;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 
 /// {@template enrollment_request_list}
-/// A "Big Widget" that manages and displays a list of pending enrollment requests.
-/// It listens to real-time updates and provides approval/denial functionality.
+/// A "Big Widget" that manages and displays a list of pending enrollment
+/// requests. It listens to real-time updates and provides approval/denial
+/// functionality, through `client.enrollments` on the client it is given.
 /// {@endtemplate}
 class EnrollmentRequestList extends StatefulWidget {
   const EnrollmentRequestList({
     super.key,
     this.useShrinkWrap = false,
-    this.enrollmentService,
+    this.atClient,
   });
 
   final bool useShrinkWrap;
 
-  /// The service this widget works through, and with it the [AtClient] the
-  /// service holds. Pass one built with an app-owned client to use this
-  /// widget without [AtClientManager]; with none it uses the current-atSign
-  /// client, as it always has.
-  final FlutterEnrollmentService? enrollmentService;
+  /// The client this widget manages enrollments through. Pass an app-owned
+  /// client to use this widget without [AtClientManager]; with none it uses
+  /// the current-atSign client, as it always has.
+  final AtClient? atClient;
 
   @override
   State<EnrollmentRequestList> createState() => _EnrollmentRequestListState();
 }
 
 class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
-  late final FlutterEnrollmentService _service;
-
-  /// Whether this widget built [_service], and may therefore dispose it.
-  ///
-  /// Disposing an injected service drops a controller its owner still holds,
-  /// and every later use of that service throws.
-  late final bool _ownsService;
-  final List<ServerEnrollmentRequest> _requests = [];
+  AtClient get _client =>
+      widget.atClient ?? AtClientManager.getInstance().atClient;
+  final List<Enrollment> _requests = [];
   final List<Timer> _overlayTimers = [];
   StreamSubscription? _subscription;
   bool _isLoading = false;
@@ -45,8 +38,6 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   @override
   void initState() {
     super.initState();
-    _ownsService = widget.enrollmentService == null;
-    _service = widget.enrollmentService ?? FlutterEnrollmentService();
     _fetchAndSubscribe();
   }
 
@@ -58,35 +49,30 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     });
 
     try {
-      _subscription = _service
-          .getEnrollments(statusFilters: [EnrollmentStatus.pending])
-          .listen(
-            (request) {
-              if (mounted) {
-                setState(() {
-                  if (!_requests.any(
-                    (r) => r.enrollmentId == request.enrollmentId,
-                  )) {
-                    _requests.add(request);
-                  }
-                });
+      _subscription = _client.enrollments.requests.listen(
+        (request) {
+          if (mounted) {
+            setState(() {
+              if (!_requests.any(
+                (r) => r.enrollmentId == request.enrollmentId,
+              )) {
+                _requests.add(request);
               }
-            },
-            onError: (e) {
-              if (mounted) {
-                setState(() {
-                  _error = 'Connection lost: $e';
-                });
-              }
-              debugPrint('Error in enrollment stream: $e');
-            },
-          );
+            });
+          }
+        },
+        onError: (e) {
+          if (mounted) {
+            setState(() {
+              _error = 'Connection lost: $e';
+            });
+          }
+          debugPrint('Error in enrollment stream: $e');
+        },
+      );
 
       // Initial fetch of pending requests
-      final atLookUp = _service.atClient.getRemoteSecondary()!.atLookUp;
-      final initialRequests = await _service.list([
-        EnrollmentStatus.pending,
-      ], atLookUp);
+      final initialRequests = await _client.enrollments.pending();
 
       if (mounted) {
         setState(() {
@@ -108,22 +94,9 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     }
   }
 
-  Future<void> _handleApprove(ServerEnrollmentRequest request) async {
+  Future<void> _handleApprove(Enrollment request) async {
     try {
-      final atSign = _service.atClient.getCurrentAtSign()!;
-      final atLookUp = _service.atClient.getRemoteSecondary()!.atLookUp;
-      await _service.approve(
-        EnrollmentRequestDecision.approved(
-          enrollmentId: request.enrollmentId,
-          // NOTE: a pq-mode enrollee wraps no key, and the approve path takes
-          // the resulting empty value as its signal to mint one.
-          apkamSymmetricKey: AtBytes.fromString(
-            request.encryptedAPKAMSymmetricKey ?? '',
-          ),
-          atSign: atSign,
-        ),
-        atLookUp,
-      );
+      await _client.enrollments.approve(request.enrollmentId!);
       if (mounted) {
         setState(() {
           _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);
@@ -157,14 +130,9 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     }
   }
 
-  Future<void> _handleDeny(ServerEnrollmentRequest request) async {
+  Future<void> _handleDeny(Enrollment request) async {
     try {
-      final atSign = _service.atClient.getCurrentAtSign()!;
-      final atLookUp = _service.atClient.getRemoteSecondary()!.atLookUp;
-      await _service.deny(
-        EnrollmentRequestDecision.denied(request.enrollmentId, atSign),
-        atLookUp,
-      );
+      await _client.enrollments.deny(request.enrollmentId!);
       if (mounted) {
         setState(() {
           _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);
@@ -186,10 +154,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     }
   }
 
-  void _showFeedbackOverlay(
-    ServerEnrollmentRequest request,
-    EnrollmentStatus status,
-  ) {
+  void _showFeedbackOverlay(Enrollment request, EnrollmentStatus status) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       late final OverlayEntry overlayEntry;
@@ -225,9 +190,6 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   @override
   void dispose() {
     _subscription?.cancel();
-    if (_ownsService) {
-      _service.dispose();
-    }
     for (var timer in _overlayTimers) {
       timer.cancel();
     }

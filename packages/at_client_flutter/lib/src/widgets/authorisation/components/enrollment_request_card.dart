@@ -1,4 +1,4 @@
-import 'package:at_auth/at_auth.dart';
+import 'package:at_client/at_client.dart';
 import 'package:flutter/material.dart';
 
 import 'namespace_chip.dart';
@@ -12,7 +12,7 @@ class EnrollmentRequestCard extends StatefulWidget {
     super.key,
   });
 
-  final ServerEnrollmentRequest request;
+  final Enrollment request;
   final Future<void> Function()? onApprove;
   final Future<void> Function()? onReject;
   final Future<void> Function()? onRevoke;

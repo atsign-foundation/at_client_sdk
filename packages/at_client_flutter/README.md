@@ -7,8 +7,10 @@
 The **Flutter layer** on top of [`at_client`](../at_client). Adds
 pre-built onboarding / authentication dialogs, device-keychain storage
 for atKeys, and Flutter-specific extensions — so a new Flutter app can
-go from "user has an atSign" to "authenticated `AtClient` in hand" with
-a few widget calls.
+go from "user has an atSign" to "`AtClient` in hand" with a few widget
+calls. One import covers an app:
+`package:at_client_flutter/at_client_flutter.dart` re-exports
+`at_client`, and nothing here asks an app to import `at_auth`.
 
 Supports mobile, desktop, and IoT targets via Flutter. **Flutter
 web is not supported** — atSign onboarding and key handling rely
@@ -19,11 +21,12 @@ implementations today.
 
 | Capability                       | API                                                                                                    |
 |----------------------------------|--------------------------------------------------------------------------------------------------------|
-| Select atSign + root domain      | `AtSignSelectionDialog.show(context)`                                                                  |
-| Onboard a new atSign (CRAM)      | `RegistrarCramDialog.show(...)` then `CramDialog.show(...)`                                            |
-| Authenticate via `.atKeys` file  | `AtKeysFileDialog.show(...)` then `PkamDialog.show(...)`                                               |
-| Authenticate via device keychain | `KeychainStorage()` + `PkamDialog.show(...)`                                                           |
-| Enroll a new device via APKAM    | `ApkamActivationDialog.show(...)` (request side) / `ApkamDialog.show(...)` (approve side)              |
+| Select atSign + root domain      | `AtSignSelectionDialog.show(context)` → `AtsignSelection`                                              |
+| Onboard a new atSign (CRAM)      | `RegistrarCramDialog.show(...)` then `CramDialog.show(...)` → `AtClient`                               |
+| Authenticate via `.atKeys` file  | `AtKeysFileDialog.show(...)` then `PkamDialog.show(...)` → `AtClient`                                  |
+| Authenticate via device keychain | `PkamDialog.show(..., keys: KeychainAtKeysIo())` → `AtClient`                                          |
+| Enroll a new device via APKAM    | `ApkamActivationDialog.show(...)` → `AtClient` (request side) / `EnrollmentRequestList` (approve side) |
+| Manage enrollments               | `client.enrollments` — list, approve, deny, revoke, passcodes (from `at_client`)                       |
 | Keychain read / write / delete   | `KeychainStorage` ([`lib/src/keychain/keychain_storage.dart`](lib/src/keychain/keychain_storage.dart)) |
 | Flutter helpers on core types    | `import 'package:at_client_flutter/extensions.dart';`                                                  |
 
@@ -34,11 +37,12 @@ example app. Read these rather than copying snippets from here:
 
 - [`example/lib/walkthrough.dart`](example/lib/walkthrough.dart) — all
   four authentication / onboarding flows (CRAM onboarding, atKeys-file
-  login, keychain login, APKAM enrollment) with the post-auth
-  `AtClient` initialization. If you only read one file, read this one.
+  login, keychain login, APKAM enrollment), each ending with the
+  `AtClient` in hand. If you only read one file, read this one.
 - [`example/lib/apkam_example.dart`](example/lib/apkam_example.dart) —
   the approve/deny side of APKAM (e.g. a "manager" device approving a
-  new phone's enrollment request).
+  new phone's enrollment request), with a simulated requester built on
+  `client.enrollments.otp()` and `Atsign.enroll`.
 - [`example/lib/main.dart`](example/lib/main.dart) — minimal host app
   wiring the two flows above into navigation.
 
@@ -103,72 +107,64 @@ workflow for cross-window chart development are in
 
 Registering a brand-new atSign and having its atServer **provisioned** are two
 separate steps — provisioning can lag registration by anything from seconds to a
-few minutes. The SDK handles that wait for you: `AuthService.onboard` polls for
-the atServer to come up for **5 minutes** by default
-(`AtNetworkTimeouts.defaultOnboardingTimeout`), retrying every `retryDelay` with
-each individual network probe capped at 60s. Returning-user sign-in
-(`authenticate`) instead **fails fast** at 30s, because an existing atSign is
-already provisioned and a dead network there should surface quickly.
+few minutes. `CramDialog` (at_client's `Atsign.activate` underneath) handles
+that wait for you: it polls for the atServer to come up for **5 minutes** by
+default, every 2 seconds. Opening an atSign that already has keys (`PkamDialog`,
+`Atsign.open` underneath) instead makes **one bounded connect attempt**, seconds
+long, and hands back the client with its `connection` state — online, offline or
+refused — because an existing atSign is already provisioned and a dead network
+there should surface quickly.
 
 What a Flutter app should do:
 
-1. **Call `onboard()` with no `timeout`.** The 5-minute provisioning poll is
-   built in — don't wrap your own retry loop around it (that just re-stacks the
-   retries this design removed).
+1. **Let `CramDialog` wait.** The 5-minute provisioning poll is built in — don't
+   wrap your own retry loop around it (that just re-stacks the retries this
+   design removed).
 
-2. **Show progress from `AuthService.progressStream`, not a blind spinner.** A
-   multi-minute wait behind an indeterminate spinner reads as "hung." Subscribe
-   *before* calling `onboard` — it's a broadcast stream and won't replay events
-   you missed:
+2. **Show progress, not a blind spinner.** A multi-minute wait behind an
+   indeterminate spinner reads as "hung." `CramDialog` shows each step of the
+   activation as it happens; pass `progressBuilder` when the default rendering
+   does not fit your design, and it takes over entirely.
 
-   ```dart
-   final sub = authService.progressStream.listen((e) {
-     setState(() => _status = e.msg); // e.type: info / success / warning / error
-   });
-   try {
-     await authService.onboard(request, cramSecret); // no timeout → full 5-min poll
-   } on AtTimeoutException {
-     // provisioning still not ready after 5 minutes — offer Retry (step 3)
-   } finally {
-     await sub.cancel();
-   }
-   ```
+3. **When the dialog reports a failure, offer *Retry* rather than a longer
+   wait.** In the rare case provisioning runs past 5 minutes, a "Still setting
+   up your atSign — tap to keep waiting" button that shows `CramDialog` again
+   (a fresh 5-minute poll) beats baking in a 15-minute single timeout that
+   makes every genuine failure feel broken.
 
-3. **On `AtTimeoutException`, offer *Retry* rather than a longer timeout.** In the
-   rare case provisioning runs past 5 minutes, a "Still setting up your atSign —
-   tap to keep waiting" button that re-calls `onboard()` (a fresh 5-minute poll)
-   beats baking in a 15-minute single timeout that makes every genuine failure
-   feel broken.
+4. **Returning users go through `PkamDialog`**, which comes back in seconds
+   either way. An offline client still serves what it holds locally and reports
+   on `client.connection.changes` when the atServer is reached; a refused one
+   (revoked, an unapproved enrollment) is the state an app asks the user about.
 
-4. **Override `timeout` only to *widen* the window, and only when you know the
-   provisioner is slow** — e.g. a self-hosted atServer or custom atDirectory.
-   Never pass a *short* `timeout` to `onboard()` for a new atSign; it truncates
-   the very wait you need.
+> **Note:** the activation has no cancellation token, so the 5-minute poll runs
+> to completion or timeout even if the user navigates away — a "Cancel" button
+> can only change the UI, not abort the in-flight poll. True cancellation is
+> tracked in [#2075](https://github.com/atsign-foundation/at_client_sdk/issues/2075).
 
-5. **Returning users go through `authenticate()`** and keep the 30s fail-fast —
-   don't borrow onboarding's patience for routine sign-in.
+## The client the dialogs hand back
 
-> **Note:** `onboard()` has no cancellation token, so the 5-minute poll runs to
-> completion or timeout even if the user navigates away — a "Cancel" button can
-> only change the UI, not abort the in-flight poll. True cancellation is tracked
-> in [#2075](https://github.com/atsign-foundation/at_client_sdk/issues/2075).
+Every dialog hands back the `AtClient` it opened, and the app owns it: it is the
+app's to use and, when it is done, to `stop()`. An app whose screens read
+`AtClientManager.getInstance().atClient` makes it current with
+`AtClientManager.getInstance().use(client)`; an app that passes the client around
+needs no `AtClientManager` at all, and `EnrollmentRequestList` takes an
+`atClient` for that case. The details (the chosen storage directory, the
+namespace) are all in [`example/lib/walkthrough.dart`](example/lib/walkthrough.dart)
+in the `_storage(...)` and `_adopt(...)` functions.
 
-## Post-authentication initialization
-
-Every auth flow ends the same way: create an `AtClientPreference`, then
-call `AtClientManager.setCurrentAtSign(...)` with the `atChops` and
-`atLookUp` from the returned `AuthResponse`. The details (chosen
-storage directory, namespace, enrollment id) are all in
-[`example/lib/walkthrough.dart`](example/lib/walkthrough.dart) in the
-`_setupAtClient(...)` function.
+The dialogs take the `AtClientPreference` and, optionally, the `AtClientStorage`
+the client opens on; with no storage a Hive store opens under
+`preference.hiveStoragePath`.
 
 ## Keychain storage
 
 `KeychainStorage` wraps the device keychain (iOS / Android / macOS /
-Windows via `biometric_storage`) and stores atKeys and enrollment data.
-The PKAM / APKAM dialogs accept a `KeychainAtKeysIo` instance as a
-backup target so successful logins automatically populate the keychain
-for next time.
+Windows via `biometric_storage`) and stores atKeys. `CramDialog` and
+`ApkamActivationDialog` file the keys they mint in the keychain unless given
+another `keys` store, and `PkamDialog` takes `backupKeys`, stores the keys are
+copied into once the client is open — so a login from a `.atKeys` file
+populates the keychain for next time.
 
 `KeychainAtKeysIo` is a full `WrittenAtKeysIo`: as well as `read` and
 `write` it implements `flush`, and inherits `update`. That matters because
@@ -181,6 +177,10 @@ hand-rolled `read` → mutate → `flush`; see
 `write` is create-only, like every other `WrittenAtKeysIo`: it throws
 `AtKeysFileOverwriteException` if the atSign already has an entry. To
 persist a change to keys that are already stored, use `flush` or `update`.
+
+An enrollment awaiting approval lives in the keys store too, as pending key
+material: `ApkamActivationDialog` reads it back and resumes the wait rather
+than submitting a second request.
 
 Windows apps additionally need:
 
@@ -219,10 +219,10 @@ atKeysIo.write(atSign, atKeys);
 
 ## Where to go next
 
-- [`at_client`](../at_client) — the SDK whose `AtClient` you end up
-  with after authentication
-- [`at_auth`](../at_auth) — detailed writeup of the atSign
-  provisioning / onboarding / APKAM lifecycle, platform-neutral
+- [`at_client`](../at_client) — the SDK whose `AtClient` the dialogs hand
+  back, and whose `Atsign` verbs they run
+- [`at_auth`](../at_auth) — the `.atKeys` keyfile format and the registrar
+  client
 - [`at_commons`](../at_commons) — `AtKey`, `Metadata`, and friends
 
 ## Open source usage and contributions

@@ -16,11 +16,12 @@ reproduces it in [section 9](#9-re-deriving-the-figures).
 
 ## Status
 
-In progress: steps 1, 2 and 5 of [section 7](#7-what-is-owed-in-order)
+In progress: steps 1, 2, 4 and 5 of [section 7](#7-what-is-owed-in-order)
 are done, except the durable copy of the atServer address, and step 3 is
-being built. at_onboarding_cli's own consumers of at_auth's DTOs are gone
-with step 5, so the removal in step 3 no longer has that package in its
-way. `AtClientManager.setCurrentAtSign` and `fromAuthSession` are not yet
+next. at_onboarding_cli's and at_client_flutter's own consumers of at_auth's
+DTOs are gone with steps 4 and 5, so the removal in step 3 no longer has
+either package in its way; their CHANGELOGs, READMEs and example trees from
+step 6 went with them. `AtClientManager.setCurrentAtSign` and `fromAuthSession` are not yet
 deprecated: that waits until the live packs' fixtures are on `open`, so the
 annotation never lands ahead of the callers it would flag. The work is a
 **P0** row in the PQ table

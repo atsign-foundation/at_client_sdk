@@ -1,14 +1,14 @@
 library;
 
 export 'package:at_client/at_client.dart';
+export 'package:at_auth/at_auth.dart' show RegistrarService;
 
 export 'src/keychain/keychain_data.dart';
 export 'src/keychain/keychain_store.dart';
 export 'src/keychain/keychain_storage.dart';
 export 'src/keychain/keychain_io_impl.dart';
 
-export 'src/services/auth_service.dart';
-export 'src/services/enrollment_service.dart';
+export 'src/lifecycle/atsign_flows.dart' show AtsignSelection;
 
 export 'src/models/models.dart';
 

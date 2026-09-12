@@ -1,5 +1,4 @@
-import 'package:at_auth/at_auth.dart';
-import 'package:at_commons/at_commons.dart';
+import 'package:at_client/at_client.dart';
 import 'package:flutter/material.dart';
 
 class AuthorisationFeedbackOverlay extends StatelessWidget {
@@ -10,7 +9,7 @@ class AuthorisationFeedbackOverlay extends StatelessWidget {
     super.key,
   });
 
-  final ServerEnrollmentRequest request;
+  final Enrollment request;
   final EnrollmentStatus newStatus;
   final VoidCallback onTap;
 

@@ -1,176 +1,175 @@
-import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
-import 'package:at_client_flutter/src/services/auth_service.dart';
-import 'package:at_client_flutter/src/services/enrollment_service.dart';
+import 'package:at_client/at_client.dart';
+import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/apkam_dialog.dart';
 import 'package:at_client_flutter/src/widgets/cram_dialog.dart';
 import 'package:at_client_flutter/src/widgets/pkam_dialog.dart';
-import 'package:at_commons/at_commons.dart';
-import 'package:at_utils/at_progress.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-class MockAuthService extends Mock implements AuthService {}
+class MockAtsignFlows extends Mock implements AtsignFlows {}
 
-class MockFlutterEnrollmentService extends Mock
-    implements FlutterEnrollmentService {}
+class MockAtClient extends Mock implements AtClient {}
 
-class FakeAtAuthRequest extends Fake implements AtAuthRequest {}
+class MockPendingEnrollment extends Mock implements PendingEnrollment {}
 
-class FakeAtOnboardingRequest extends Fake implements AtOnboardingRequest {}
+class FakeAtClientPreference extends Fake implements AtClientPreference {}
 
-class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
-
+/// The three dialogs over the lifecycle verbs: a failure is shown and the
+/// dialog answers as it always has, and what reaches the verb is what the
+/// caller asked for. The verbs are async, so a failure reaches a dialog as a
+/// failed future, which is how the stubs fail.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() {
-    registerFallbackValue(FakeAtAuthRequest());
-    registerFallbackValue(FakeAtOnboardingRequest());
-    registerFallbackValue(FakeEnrollmentRequest());
+    registerFallbackValue(InMemoryAtKeysIo());
+    registerFallbackValue(FakeAtClientPreference());
   });
 
-  group('Dialog error handling', () {
-    testWidgets('PkamDialog dismisses and shows snackbar on auth error', (
-      tester,
-    ) async {
-      final mockAuthService = MockAuthService();
-      when(
-        () => mockAuthService.progressStream,
-      ).thenAnswer((_) => const Stream<ProgressEvent>.empty());
-      when(
-        () => mockAuthService.authenticate(
-          any(),
-          backupKeys: any(named: 'backupKeys'),
-        ),
-      ).thenAnswer((_) async {
-        throw Exception(
-          'Registrar authentication failed: invalid or missing API key.',
-        );
-      });
+  late MockAtsignFlows flows;
+  setUp(() => flows = MockAtsignFlows());
 
-      AtAuthResponse? result;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () async {
-                  result = await showDialog<AtAuthResponse>(
-                    context: context,
-                    builder: (context) => PkamDialog(
-                      request: AtAuthRequest(
-                        '@alice',
-                        atKeysIo: InMemoryAtKeysIo.holding('@alice', AtKeys()),
-                      ),
-                      authService: mockAuthService,
-                    ),
-                  );
-                },
-                child: const Text('open'),
-              ),
+  Future<void> pumpOpener(
+    WidgetTester tester,
+    Widget Function(BuildContext) dialog,
+    void Function(Object?) onResult,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                onResult(
+                  await showDialog<Object?>(context: context, builder: dialog),
+                );
+              },
+              child: const Text('open'),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  group('Dialog error handling', () {
+    testWidgets('PkamDialog dismisses and shows snackbar on an open failure', (
+      tester,
+    ) async {
+      when(
+        () => flows.open(
+          any(),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+        ),
+      ).thenAnswer(
+        (_) => Future.error(Exception('the atServer refused this device')),
       );
 
-      // PkamDialog kicks off authentication in initState, so opening the dialog
-      // is enough to drive the error path.
+      Object? result = 'unset';
+      await pumpOpener(
+        tester,
+        (context) => PkamDialog(
+          atSign: '@alice',
+          keys: InMemoryAtKeysIo(),
+          preference: AtClientPreference(),
+          flows: flows,
+        ),
+        (r) => result = r,
+      );
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
-      // The dialog pops with null and surfaces a fixed, non-timeout message.
-      expect(result, isNull);
+      expect(result, isNull, reason: 'the dialog popped with no client');
       expect(find.textContaining('Authentication failed'), findsOneWidget);
     });
 
-    testWidgets('CramDialog dismisses and shows snackbar on onboarding error', (
-      tester,
-    ) async {
-      final mockAuthService = MockAuthService();
+    testWidgets('CramDialog dismisses and shows snackbar on an activation '
+        'failure', (tester) async {
       when(
-        () => mockAuthService.progressStream,
-      ).thenAnswer((_) => const Stream<ProgressEvent>.empty());
-      when(() => mockAuthService.onboard(any(), any())).thenAnswer((_) async {
-        throw Exception('Onboarding failed due to network error.');
-      });
-
-      AtOnboardingResponse? result;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () async {
-                  result = await showDialog<AtOnboardingResponse>(
-                    context: context,
-                    builder: (context) => CramDialog(
-                      request: AtOnboardingRequest(
-                        '@alice',
-                        signingAlgoType: SigningAlgoType.rsa2048,
-                      ),
-                      cramKey: '@alice:activation_key:secret',
-                      authService: mockAuthService,
-                    ),
-                  );
-                },
-                child: const Text('open'),
-              ),
-            ),
-          ),
+        () => flows.activate(
+          any(),
+          cramSecret: any(named: 'cramSecret'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          onProgress: any(named: 'onProgress'),
         ),
+      ).thenAnswer(
+        (_) => Future.error(Exception('Registrar authentication failed')),
       );
 
-      // CramDialog kicks off onboarding in initState.
+      Object? result = 'unset';
+      await pumpOpener(
+        tester,
+        (context) => CramDialog(
+          atSign: '@alice',
+          cramKey: '@alice:activation_key:the-secret',
+          preference: AtClientPreference(),
+          keys: InMemoryAtKeysIo(),
+          flows: flows,
+        ),
+        (r) => result = r,
+      );
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
-      // The dialog pops with null and surfaces a fixed, non-timeout message.
       expect(result, isNull);
       expect(find.textContaining('Onboarding failed'), findsOneWidget);
+      // The registrar's spelling of the key is unwrapped to the bare secret.
+      verify(
+        () => flows.activate(
+          '@alice',
+          cramSecret: 'the-secret',
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).called(1);
     });
 
-    testWidgets('ApkamActivationDialog shows snackbar on enrollment error', (
-      tester,
-    ) async {
-      final mockEnrollmentService = MockFlutterEnrollmentService();
+    testWidgets('ApkamActivationDialog shows snackbar on an enrollment error '
+        'and stays open', (tester) async {
       when(
-        () => mockEnrollmentService.enroll(
+        () => flows.resumeEnrollment(
           any(),
-          waitForApproval: any(named: 'waitForApproval'),
+          app: any(named: 'app'),
+          device: any(named: 'device'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
         ),
-      ).thenAnswer((_) async {
-        throw Exception(
-          'Registrar authentication failed: invalid or missing API key.',
-        );
-      });
+      ).thenAnswer((_) async => null);
+      when(
+        () => flows.enroll(
+          any(),
+          otp: any(named: 'otp'),
+          app: any(named: 'app'),
+          device: any(named: 'device'),
+          namespaces: any(named: 'namespaces'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          signingAlgo: any(named: 'signingAlgo'),
+          keyExchangeMode: any(named: 'keyExchangeMode'),
+        ),
+      ).thenAnswer((_) => Future.error(Exception('invalid otp')));
 
-      AtEnrollmentResponse? result;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () async {
-                  result = await showDialog<AtEnrollmentResponse>(
-                    context: context,
-                    builder: (context) => ApkamActivationDialog(
-                      atSign: '@alice',
-                      rootDomain: AtRootDomain.atsignDomain,
-                      appName: 'app',
-                      deviceName: 'device',
-                      namespaces: const {'*': 'rw'},
-                      atKeysIo: InMemoryAtKeysIo(),
-                      themeData: Theme.of(context),
-                      enrollmentService: mockEnrollmentService,
-                    ),
-                  );
-                },
-                child: const Text('open'),
-              ),
-            ),
-          ),
+      Object? result = 'unset';
+      await pumpOpener(
+        tester,
+        (context) => ApkamActivationDialog(
+          atSign: '@alice',
+          rootDomain: AtRootDomain.atsignDomain,
+          appName: 'app',
+          deviceName: 'device',
+          namespaces: const {'*': 'rw'},
+          preference: AtClientPreference(),
+          keys: InMemoryAtKeysIo(),
+          themeData: ThemeData(),
+          flows: flows,
         ),
+        (r) => result = r,
       );
 
       // pumpAndSettle can't be used with this dialog: the autofocused Pinput
@@ -188,79 +187,145 @@ void main() {
       await tester.pump(const Duration(milliseconds: 750)); // SnackBar entrance
 
       // Unlike PKAM/CRAM, the APKAM dialog stays open on error so the user can
-      // retry, so `result` is still null only because showDialog hasn't
+      // retry, so `result` is still unset only because showDialog hasn't
       // returned — not because of a pop(null).
-      expect(result, isNull);
+      expect(result, 'unset');
       expect(find.textContaining('Activation failed'), findsOneWidget);
     });
 
-    testWidgets('ApkamActivationDialog enrolls towards the caller\'s keys', (
-      tester,
-    ) async {
-      final mockEnrollmentService = MockFlutterEnrollmentService();
-      EnrollmentRequest? submitted;
-      when(
-        () => mockEnrollmentService.enroll(
-          any(),
-          waitForApproval: any(named: 'waitForApproval'),
-        ),
-      ).thenAnswer((invocation) async {
-        submitted = invocation.positionalArguments[0] as EnrollmentRequest;
-        return AtEnrollmentResponse('enroll-1', EnrollmentStatus.approved);
-      });
-
-      // The destination for this enrollment's keys, which only the enrolled
-      // app ever holds.
+    testWidgets('ApkamActivationDialog enrols towards the caller\'s keys and '
+        'pops the client the approval opens', (tester) async {
       final destination = InMemoryAtKeysIo();
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () => showDialog<AtEnrollmentResponse>(
-                  context: context,
-                  builder: (context) => ApkamActivationDialog(
-                    atSign: '@alice',
-                    rootDomain: AtRootDomain.atsignDomain,
-                    appName: 'app',
-                    deviceName: 'device',
-                    namespaces: const {'*': 'rw'},
-                    atKeysIo: destination,
-                    themeData: Theme.of(context),
-                    enrollmentService: mockEnrollmentService,
-                  ),
-                ),
-                child: const Text('open'),
-              ),
-            ),
-          ),
+      final pending = MockPendingEnrollment();
+      final client = MockAtClient();
+      when(
+        () => flows.resumeEnrollment(
+          any(),
+          app: any(named: 'app'),
+          device: any(named: 'device'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
         ),
-      );
+      ).thenAnswer((_) async => null);
+      when(
+        () => flows.enroll(
+          any(),
+          otp: any(named: 'otp'),
+          app: any(named: 'app'),
+          device: any(named: 'device'),
+          namespaces: any(named: 'namespaces'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          signingAlgo: any(named: 'signingAlgo'),
+          keyExchangeMode: any(named: 'keyExchangeMode'),
+        ),
+      ).thenAnswer((_) async => pending);
+      when(() => pending.enrollmentId).thenReturn('enroll-1');
+      when(() => pending.progress).thenAnswer((_) => const Stream.empty());
+      when(
+        () => pending.client(any(), storage: any(named: 'storage')),
+      ).thenAnswer((_) async => client);
 
+      Object? result = 'unset';
+      await pumpOpener(
+        tester,
+        (context) => ApkamActivationDialog(
+          atSign: '@alice',
+          rootDomain: AtRootDomain.atsignDomain,
+          appName: 'app',
+          deviceName: 'device',
+          namespaces: const {'*': 'rw'},
+          preference: AtClientPreference(),
+          keys: destination,
+          themeData: ThemeData(),
+          flows: flows,
+        ),
+        (r) => result = r,
+      );
       await tester.tap(find.text('open'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await tester.enterText(find.byType(EditableText), '123456');
       await tester.pump();
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
-      final request = submitted as AtEnrollmentRequest;
+      expect(result, same(client));
+      final keys = verify(
+        () => flows.enroll(
+          '@alice',
+          otp: '123456',
+          app: 'app',
+          device: 'device',
+          namespaces: const {'*': 'rw'},
+          keys: captureAny(named: 'keys'),
+          preference: any(named: 'preference'),
+          signingAlgo: any(named: 'signingAlgo'),
+          keyExchangeMode: any(named: 'keyExchangeMode'),
+        ),
+      ).captured.single;
       expect(
-        request.session?.atKeysIo,
+        keys,
         same(destination),
         reason:
-            'the request has to carry the caller\'s own key destination, not '
-            'a copy and not one this widget chose: at_auth\'s handshake '
-            'flushes the completed keyset - the keys plus the encryption '
-            'private key and self-encryption key the approval releases - to '
-            'exactly this object, and hands back a session only when the '
-            'request supplied one',
+            'the request files its keys in the caller\'s own store, not '
+            'a copy and not one this widget chose: it is the resume record '
+            'and where the completed keys land',
       );
-      expect(
-        request.atSign,
-        '@alice',
-        reason: 'and the session is where the atSign comes from now',
+    });
+
+    testWidgets('ApkamActivationDialog resumes a request its store holds '
+        'without asking for a passcode', (tester) async {
+      final pending = MockPendingEnrollment();
+      final client = MockAtClient();
+      when(
+        () => flows.resumeEnrollment(
+          any(),
+          app: any(named: 'app'),
+          device: any(named: 'device'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+        ),
+      ).thenAnswer((_) async => pending);
+      when(() => pending.enrollmentId).thenReturn('enroll-1');
+      when(() => pending.progress).thenAnswer((_) => const Stream.empty());
+      when(
+        () => pending.client(any(), storage: any(named: 'storage')),
+      ).thenAnswer((_) async => client);
+
+      Object? result = 'unset';
+      await pumpOpener(
+        tester,
+        (context) => ApkamActivationDialog(
+          atSign: '@alice',
+          rootDomain: AtRootDomain.atsignDomain,
+          appName: 'app',
+          deviceName: 'device',
+          namespaces: const {'*': 'rw'},
+          preference: AtClientPreference(),
+          keys: InMemoryAtKeysIo(),
+          themeData: ThemeData(),
+          flows: flows,
+        ),
+        (r) => result = r,
+      );
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(result, same(client));
+      verifyNever(
+        () => flows.enroll(
+          any(),
+          otp: any(named: 'otp'),
+          app: any(named: 'app'),
+          device: any(named: 'device'),
+          namespaces: any(named: 'namespaces'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          signingAlgo: any(named: 'signingAlgo'),
+          keyExchangeMode: any(named: 'keyExchangeMode'),
+        ),
       );
     });
   });

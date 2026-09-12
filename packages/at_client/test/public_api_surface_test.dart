@@ -146,10 +146,14 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/manager/at_client_manager.dart',
   'package:at_client/src/preference/at_client_preference.dart',
   'package:at_client/src/preference/pq_posture.dart',
-  // show-narrowed to EnrollmentKeyExchangeMode: PqPosture.keyExchangeMode
-  // holds one, and its per-axis override must be nameable without importing
-  // at_auth directly.
+  // show-narrowed to the key stores an app names (AtKeys, AtKeysIo,
+  // WrittenAtKeysIo, InMemoryAtKeysIo), the grant type an enrollment's
+  // namespaces read as (NamespacePermission), and EnrollmentKeyExchangeMode:
+  // an app opens, activates and enrols through this package and must not
+  // have to import at_auth for what those verbs take and answer.
   'package:at_auth/at_auth.dart',
+  // show-narrowed to FileAtKeysIo, the keyfile store, for the same reason.
+  'package:at_auth/at_auth_io.dart',
   // show-narrowed to SigningAlgoType: AtClientPreference.dataSigningKeyAlgorithms
   // takes a set of them and AtClientImpl.signingAlgoType returns one.
   'package:at_chops/at_chops.dart',

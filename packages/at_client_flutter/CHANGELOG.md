@@ -1,96 +1,71 @@
 # CHANGELOG
 
-## 1.1.5-rc1
+## 2.0.0-rc1
 
-- `AuthService.authenticate` writes `backupKeys` from the keys the session's
-  own source holds, rather than from the response's own — which is what its
-  dartdoc said it would do once at_auth handed a source across. It also
-  *awaits* those writes, which it did not.
-- fix: the test that claimed authentication saves keys to the keychain passed
-  no `backupKeys` at all and asserted on a mock `read` stubbed to answer
-  whatever happened, so it was green with the backup path deleted. It asks
-  for the backup and asserts what the keychain double was handed.
-- `ApkamActivationDialog` takes an optional `atKeysIo`, the destination for
-  the keys its enrollment mints, defaulting to the platform keychain as
-  `AuthService.onboard` already does. The enrolled app holds the
-  only copy, and the approval completes the keyset with the atSign's
-  encryption private key and self-encryption key, so an app that wants them
-  elsewhere names a `FileAtKeysIo` or a secure-element store. The dialog puts
-  the destination on the request as a session, which is what makes at_auth
-  write the completed keyset there and answer with a session of its own —
-  before this, the completed keys lived only in memory on the response, and
-  the keychain held the pre-approval set that nothing reads back.
-- The three examples build their client from that session, like their other
-  flows, and the branch that adopted auth's live `AtChops`/`AtLookUp` is
-  gone — it was reachable only while an enrollment could hand back keys with
-  nowhere to put them.
-- fix: approving an enrollment no longer tries to file the enrollee's keys in
-  the keychain. An approval answers with the enrollment id and its status
-  and carries no key material — the enrollee files its own keys on its own
-  device — so the branch never ran, and `keychainAtKeysIo` existed only for
-  it. The test that stated the approver files nothing now asserts the
-  contract it rests on: an approval response carries no keys.
-- refactor: the three remaining reads of a deprecated member each carry the
-  reason they cannot move yet, in the code beside them. The keys backed up
-  by `authenticate` and filed by `enroll` come from the response, because a
-  `session` is populated only when the request supplied an `AtKeysIo` and
-  both callers accept a request that supplies keys directly or enrols
-  through the OTP door; the activation dialog keeps its loose `atSign` and
-  `rootDomain`, because the session the annotation asks for would be a key
-  destination and would decide where an enrolled app's keys land.
-- refactor: the APKAM activation dialog names `signingAlgo: rsa2048` on the
-  enrolment it submits, which `AtEnrollmentRequest` now requires. The dialog
-  has no rollout position to read one from — it knows the atSign, the app and
-  the namespaces — and rsa2048 is what this path minted before the parameter
-  existed, so behaviour is unchanged. An app that has a position builds the
-  request itself.
+The dialogs and the keychain build on at_client's lifecycle verbs
+(`Atsign.open`, `activate`, `enroll` and `resumeEnrollment`, and
+`client.enrollments` on the approving side) and hand back the `AtClient` they
+open. An app imports `package:at_client_flutter/at_client_flutter.dart` and
+nothing from at_auth.
 
-- refactor: follows at_auth's barrel split — `file_picker.dart` and
-  `file_util.dart` take `FileAtKeysIo` from `package:at_auth/at_auth_io.dart`,
-  which is now their only at_auth import: it was all they used it for. No API
-  change here.
-
-- refactor: the enrollment service builds its lookup with
-  `AtLookUp.withSecureSocket`, passing `authenticator: null` - submitting an
-  enrolment request needs no authentication, and there is no credential here
-  to authenticate with.
+- BREAKING: `AuthService` and `FlutterEnrollmentService` are gone; what they
+  orchestrated is at_client's. `authenticate`, `onboard` and `enroll` are
+  `PkamDialog`, `CramDialog` and `ApkamActivationDialog`, or `Atsign.open`,
+  `activate` and `enroll` for an app with its own UI; list, approve, deny and
+  revoke are `client.enrollments`, and the request stream is
+  `client.enrollments.requests`.
+- BREAKING: `PkamDialog.show`, `CramDialog.show` and
+  `ApkamActivationDialog.show` return the `AtClient` they open, null when the
+  dialog fails or is cancelled, and take the atSign, the keys store, the
+  `AtClientPreference` and an optional `AtClientStorage` in place of the
+  at_auth request objects. `onAuthenticationComplete` and
+  `onOnboardingComplete` are invoked with the client. The app owns the client:
+  `AtClientManager.getInstance().use(client)` makes it the current one for an
+  app whose screens read it from there.
+- BREAKING: `AtSignSelectionDialog.show` returns an `AtsignSelection`, the
+  atSign and its root domain, and `RegistrarCramDialog.show` takes the atSign.
+- BREAKING: `ApkamActivationDialog` opens the client itself once the approval
+  lands; there is no second `PkamDialog` to show. Its `atKeysIo` is now
+  `keys`, where the enrollment's keys are filed and read back from, the
+  keychain by default. A request submitted earlier for the same app and device
+  is resumed from that store rather than repeated, so the passcode is asked
+  for only when nothing is pending. `signingAlgo` and `keyExchangeMode` name
+  the enrollment's algorithm and key exchange, defaulting to the preference's.
+- BREAKING: `EnrollmentRequestList` takes an optional `atClient` and works
+  over `client.enrollments`; with none it uses `AtClientManager`'s current
+  client, as it always has. Its cards render at_client's `Enrollment`, whose
+  `namespacePermissions` and `enrollmentStatus` are what they read.
+- BREAKING: the keychain holds keys only. `EnrollmentData`, `Otp` and
+  `KeychainStorage`'s `readEnrollmentData`, `writeEnrollmentData`,
+  `deleteEnrollmentData`, `validateEnrollment` and `saveSpp` are gone: an
+  enrollment awaiting approval lives in the keys store as pending key
+  material, which is how it is resumed.
+- `RegistrarService` is re-exported, so an app driving `RegistrarCramDialog`
+  imports nothing from at_auth; `FileAtKeysIo`, `AtKeysIo`, `WrittenAtKeysIo`,
+  `InMemoryAtKeysIo`, `NamespacePermission` and `EnrollmentKeyExchangeMode`
+  come through at_client.
+- fix: the enrollment request list can approve a pq-mode request, whose
+  enrollee expects the approver to mint its key and so wraps none; the old
+  approve action null-banged the wrapped key and crashed before anything was
+  sent. A post-approval conveyance refusal clears the row and shows the
+  refusal's own message — approved, cannot decrypt, consider revoking —
+  instead of `Failed to approve`, which invited a retry of an approval that
+  had already gone through.
 - fix: an atSign names one keychain entry however the caller spells it.
-  Nothing normalizes on the way in — `AuthRequest.atSign` is a plain String,
-  and at_auth passes that string verbatim to `read`/`write` while passing
-  `toAtsign()` to `flush` — so once entries started recording the canonical
-  spelling, `write('@Alice', …)` succeeded and the very next `read('@Alice')`
-  reported the atSign as absent. Worse for `flush`: an entry stored under a
-  spelling that normalizes differently (`@colin.constable` →
-  `@colinconstable`) was not found, so the flush appended beside it and left
-  the newer keys unreachable behind the older ones. `KeychainStorage` now
-  compares normalized in `_indexOf` and `removeAtsignFromKeychain`, and still
-  returns the stored spelling; a value `toAtsign()` rejects is compared as it
-  stands, so a malformed entry stays readable and removable.
-- fix: the enrollment request list can approve a pq-mode request. The
-  approve action null-banged `encryptedAPKAMSymmetricKey`, which a
-  request that expects the approver to mint its key does not carry, so
-  every such approval crashed before the service was called; and a
-  post-approval conveyance refusal now clears the row and shows the
-  refusal's own message instead of `Failed to approve`. The list widget
-  resolves its `AtClient` through the injected service's seam.
-- fix: an approval whose secret conveyance was refused is no longer
-  re-reported as `Enrollment failed`. at_client's `approve()` now throws
-  `EnrollmentConveyanceException` after a server-side approval whose
-  enrollee advertised an unverifiable key package; `approve()` here finishes
-  the approval bookkeeping and rethrows it, so the caller sees the true
-  state — approved, cannot decrypt, consider revoking — instead of a
-  failure claim about an enrollment that is live.
+  `write('@Alice', …)` succeeded and the very next `read('@Alice')` reported
+  the atSign as absent, and a `flush` under a spelling that normalizes
+  differently (`@colin.constable` → `@colinconstable`) appended beside the
+  entry and left the newer keys unreachable behind the older ones.
+  `KeychainStorage` compares normalized in `_indexOf` and
+  `removeAtsignFromKeychain`, and still returns the stored spelling; a value
+  `toAtsign()` rejects is compared as it stands, so a malformed entry stays
+  readable and removable.
 - fix: a failed keychain read no longer wipes the store. The read's error
   path wrote an empty entry over the stored data before rethrowing, so a
   transient platform-channel error or a cancelled biometric prompt destroyed
   the only copy of the atSign's keys. Recovery from a genuinely corrupt store
   is now the caller's explicit decision, never a side effect of the read that
   discovered it.
-- fix: approving an enrollment no longer reports `Enrollment failed: Null
-  check operator used on a null value` after the server-side approval has
-  succeeded. `approve()` returns no key material — the enrollee files its own
-  keys on its own device — and the approver-side keychain write now runs only
-  when keys are actually present.
 - fix: the keychain is a usable key store for the post-quantum paths.
   `KeychainAtKeysIo` implemented only `read`/`write`, so `flush` fell through
   to the interface's throwing default — and on Flutter that is the *default*
@@ -108,44 +83,12 @@
   by the same predicate the reads use. `getAllAtsigns` threw a `TypeError` on
   one (a `String` used as a condition) and `removeAtsignFromKeychain` silently
   kept it.
-- feat: `AuthService.createClient` turns a completed authentication into a
-  client the app owns, taking `storage` to decide the backend and the location.
-  The app owns its lifetime, so it no longer has to go through
-  `AtClientManager`; one that wants the shared current-atSign client goes on
-  calling `AtClientManager.fromAuthSession`. ⚠️ The client is not invisible to
-  `AtClientManager` — a later `setCurrentAtSign` for the same atSign adopts it
-  and stops it on the next switch, so do not mix the two for one atSign in
-  one process. The bundle is borrowed unless built with `closedByClient:
-  true`, in which case the client closes it on stop.
-- feat: `FlutterEnrollmentService` takes an optional `atClient`, so it can work
-  against a client the app owns. With none it uses `AtClientManager`'s current
-  client, as it always has.
-- feat: `EnrollmentRequestList` takes an optional `enrollmentService`, and
-  every client read now goes through it. Give it one built with an app-owned
-  client and the enrollment UI works without `AtClientManager`; it previously
-  reached the current-atSign client at five sites and threw for such an app.
-  A service the widget did not build is no longer disposed with the widget:
-  `FlutterEnrollmentService.dispose()` closes the request stream and drops the
-  controller, so routing away from the widget left a caller's shared service
-  throwing on every later `getEnrollments()`.
-- build: require `at_client` ^3.15.0-rc1, the first version carrying
-  `buildAtClient`; the floor still said ^3.11.0.
-- feat: `CramDialog` and `PkamDialog` take an optional `authService`, and
-  `ApkamActivationDialog` an optional `enrollmentService`. Both default to the
-  real service, so existing call sites are unaffected; passing one lets the
-  dialogs' error and timeout paths be widget-tested without a live atServer
-  (#1909).
-- fix: `FlutterEnrollmentService.approve` waits for the pending enrollment
-  record to be dropped. The delete was started and never awaited, so it
-  outlived the call that began it and a keychain failure had no caller left to
-  catch it — it surfaced as an unhandled async error. It is now awaited under
-  its own guard: by the time it runs the atServer has already recorded the
-  decision, so a keychain failure logs a warning and costs a pending row that
-  lingers until it expires, never a successful approval reported as a failure.
-- fix: `approve`, `deny` and `revoke` close the `AtLookUp` they were given even
-  when the operation throws. Each closed only after its `try`, so every failure
-  path leaked the caller's connection — the same defect fixed in `enroll` in
-  1.1.4, in the three methods that still had it.
+- The examples (`example/`, `examples/todos`, `examples/dockerstats`) build
+  their flows on the dialogs and hand the client to `AtClientManager.use`;
+  the APKAM example's simulated requester runs on `client.enrollments.otp()`
+  and `Atsign.enroll`.
+- build: requires `at_client` ^3.15.0-rc1, the first version carrying the
+  lifecycle verbs.
 
 ## 1.1.4
 

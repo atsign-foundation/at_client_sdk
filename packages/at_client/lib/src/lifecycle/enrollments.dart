@@ -31,6 +31,7 @@ class Passcode {
 ///
 /// ```dart
 /// for (final request in await client.enrollments.pending()) { ... }
+/// client.enrollments.requests.listen((request) { ... });
 /// await client.enrollments.approve(request.enrollmentId!);
 /// final otp = await client.enrollments.otp();
 /// ```
@@ -62,6 +63,12 @@ class Enrollments {
   /// The requests awaiting a decision.
   Future<List<Enrollment>> pending() =>
       list(statuses: const [EnrollmentStatus.pending]);
+
+  /// Each new request as the atServer announces it, from the moment of
+  /// listening; the ones already waiting are [pending].
+  Stream<Enrollment> get requests => _client.notificationService
+      .subscribe(regex: r'.*\.new\.enrollments\.__manage', shouldDecrypt: false)
+      .map(Enrollment.fromNotification);
 
   /// Approves [enrollmentId], conveying this atSign's secrets to the device
   /// it names. Throws [AtEnrollmentException] when no such request is

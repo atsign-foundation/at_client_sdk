@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_commons/atsign.dart';
 import 'package:at_file_saver/at_file_saver.dart';

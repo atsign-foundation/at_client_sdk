@@ -262,6 +262,34 @@ void main() {
             contains('enroll:delete:{"enrollmentId":"e-1"}'))));
   });
 
+  test('requests are the new-request notifications, as records', () async {
+    final notifications = MockNotificationService();
+    when(() => client.notificationService).thenReturn(notifications);
+    // The subscription filter is a wire contract with every atServer
+    // implementation: it is the key a new request is announced under.
+    when(() => notifications.subscribe(
+            regex: r'.*\.new\.enrollments\.__manage', shouldDecrypt: false))
+        .thenAnswer((_) => Stream.value(AtNotification(
+            'n-1',
+            'e-7.new.enrollments.__manage$atSign',
+            atSign,
+            atSign,
+            0,
+            'key',
+            false)
+          ..value = jsonEncode({
+            'appName': 'wavi',
+            'deviceName': 'phone',
+            'namespace': {'wavi': 'rw'},
+          })));
+
+    final request = await client.enrollments.requests.first;
+
+    expect(request.enrollmentId, 'e-7');
+    expect(request.appName, 'wavi');
+    expect(request.enrollmentStatus, EnrollmentStatus.pending);
+  });
+
   test('a client with no enrollment service says so', () async {
     when(() => client.enrollmentService).thenReturn(null);
 

@@ -1,66 +1,85 @@
-import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth.dart'
+    show AtKeysFileOverwriteException, AtKeysIo, WrittenAtKeysIo;
+import 'package:at_client/at_client.dart';
+import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
-import 'package:at_client_flutter/src/services/auth_service.dart';
-import 'package:at_commons/at_commons.dart' show AtTimeoutException;
 import 'package:at_utils/at_logger.dart';
-import 'package:at_utils/at_progress.dart';
 import 'package:flutter/material.dart';
 
-/// A dialog widget that facilitates authentication using PKAM.
+/// A dialog that opens a client on keys the app already holds and hands it
+/// back; the app owns it.
 ///
-/// Use `PkamDialog.show` to display the dialog and handle the authentication process.
+/// Use `PkamDialog.show` to display the dialog and handle the login.
 ///
 /// Required Parameters:
-/// - [request]: An `AtAuthRequest` containing details for the authentication process.
+/// - [atSign]: the atSign to open.
+/// - [keys]: the store holding its keys.
+/// - [preference]: the client's preference; [rootDomain] is stamped on it
+///   when given.
 ///
 /// Optional Parameters:
+/// - [storage]: the client's local storage.
+/// - [backupKeys]: stores the keys are copied into once the client is open,
+///   each skipped when it already holds an entry for the atSign.
 /// - [title]: A title string for the dialog (default: "Authenticating via pkam").
-/// - [description]: A description shown while authentication is in progress, until
-///   the first progress event arrives; thereafter the live progress message is
-///   shown (default: "Validating your atKeys...").
-/// - [progressBuilder]: An optional builder function to customize the display of progress events.
-///   It takes a `ProgressEvent` and returns a `Widget`, allowing for tailored UI updates during the authentication process.
-///   When supplied it takes over rendering entirely.
-/// - [onAuthenticationComplete]: An optional callback function that is invoked when the authentication process completes successfully.
+/// - [description]: A description shown while the login is in progress
+///   (default: "Validating your atKeys...").
+/// - [onAuthenticationComplete]: invoked with the client once it is open.
+///
+/// The client comes back online, offline or refused, and its `connection`
+/// says which; only a refusal on a device that has never held the atSign
+/// online is a failure here.
 ///
 /// Returns:
-/// - An `AtAuthResponse` upon successful authentication, or null if the process fails or is cancelled.
+/// - The `AtClient`, or null if the process fails or is cancelled.
 class PkamDialog extends StatefulWidget {
   const PkamDialog({
     super.key,
-    required this.request,
-    this.progressBuilder,
+    required this.atSign,
+    required this.keys,
+    required this.preference,
+    this.rootDomain,
+    this.storage,
     this.onAuthenticationComplete,
     this.title,
     this.description,
     this.backupKeys,
-    this.authService,
+    this.flows = const AtsignFlows(),
   });
 
-  final AtAuthRequest request;
-  final Widget Function(ProgressEvent)? progressBuilder;
-  final void Function(AtAuthRequest)? onAuthenticationComplete;
+  final String atSign;
+  final AtKeysIo keys;
+  final AtClientPreference preference;
+  final AtRootDomain? rootDomain;
+  final AtClientStorage? storage;
+  final void Function(AtClient client)? onAuthenticationComplete;
   final String? title;
   final String? description;
   final List<WrittenAtKeysIo>? backupKeys;
 
-  /// Injection seam for tests; defaults to a real [AuthService].
-  final AuthService? authService;
+  /// Injection seam for tests; defaults to the real lifecycle verbs.
+  final AtsignFlows flows;
 
-  static Future<AtAuthResponse?> show(
+  static Future<AtClient?> show(
     BuildContext context, {
-    required AtAuthRequest request,
-    Widget Function(ProgressEvent)? progressBuilder,
-    dynamic Function(AtAuthRequest)? onAuthenticationComplete,
+    required String atSign,
+    required AtKeysIo keys,
+    required AtClientPreference preference,
+    AtRootDomain? rootDomain,
+    AtClientStorage? storage,
+    void Function(AtClient client)? onAuthenticationComplete,
     String? title,
     String? description,
     List<WrittenAtKeysIo>? backupKeys,
   }) async {
-    return showDialog<AtAuthResponse>(
+    return showDialog<AtClient>(
       context: context,
       builder: (context) => PkamDialog(
-        request: request,
-        progressBuilder: progressBuilder,
+        atSign: atSign,
+        keys: keys,
+        preference: preference,
+        rootDomain: rootDomain,
+        storage: storage,
         onAuthenticationComplete: onAuthenticationComplete,
         title: title,
         description: description,
@@ -74,32 +93,36 @@ class PkamDialog extends StatefulWidget {
 }
 
 class _PkamDialogState extends State<PkamDialog> {
-  late final AuthService _auth;
   final AtSignLogger _logger = AtSignLogger('PkamDialog');
 
   @override
   void initState() {
     super.initState();
-    _auth = widget.authService ?? AuthService();
-    // Kick off authentication exactly once. Starting it here rather than in
-    // build() means a widget rebuild can't spawn a second authenticate() call.
+    // Kick off the login exactly once. Starting it here rather than in
+    // build() means a widget rebuild can't spawn a second open() call.
     _authenticate();
   }
 
   Future<void> _authenticate() async {
     try {
-      final response = await _auth.authenticate(
-        widget.request,
-        backupKeys: widget.backupKeys,
+      final client = await widget.flows.open(
+        widget.atSign,
+        keys: widget.keys,
+        preference: under(widget.preference, widget.rootDomain),
+        storage: widget.storage,
       );
+      await _backUp();
       if (widget.onAuthenticationComplete != null) {
-        widget.onAuthenticationComplete!(widget.request);
+        widget.onAuthenticationComplete!(client);
       } else {
-        _logger.info(response.toString());
+        _logger.info(
+          '${widget.atSign} opened; connection is '
+          '${client.connection.current}',
+        );
       }
-      if (mounted) Navigator.of(context).pop(response);
+      if (mounted) Navigator.of(context).pop(client);
     } catch (e) {
-      // Authentication failed or timed out. Without an error path the dialog
+      // Login failed or timed out. Without an error path the dialog
       // would hang forever and PkamDialog.show() would never complete
       // (issue #1909).
       _logger.severe('Authentication via PKAM failed: $e');
@@ -116,30 +139,30 @@ class _PkamDialogState extends State<PkamDialog> {
     }
   }
 
+  /// Copies the keys the client opened on into each backup store that does
+  /// not already hold the atSign.
+  Future<void> _backUp() async {
+    final backups = widget.backupKeys;
+    if (backups == null || backups.isEmpty) return;
+    final keys = await widget.keys.read(widget.atSign);
+    for (final backup in backups) {
+      try {
+        await backup.write(widget.atSign, keys);
+      } on AtKeysFileOverwriteException {
+        _logger.finer('${backup.runtimeType} already holds ${widget.atSign}');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
       child: Container(
         padding: const EdgeInsets.all(16.0),
-        child: StreamBuilder<ProgressEvent>(
-          stream: _auth.progressStream,
-          builder: (context, snapshot) {
-            // A custom progressBuilder takes over rendering entirely.
-            if (snapshot.hasData && widget.progressBuilder != null) {
-              return widget.progressBuilder!(snapshot.data!);
-            }
-            // Otherwise show the loading indicator, surfacing the latest
-            // progress message so the wait shows live status rather than static
-            // text. (Returning an empty widget here caused a blank dialog box to
-            // flash on screen during login — issue #1956.)
-            return LoadingDialog(
-              title: widget.title ?? "Authenticating via pkam",
-              description: snapshot.hasData
-                  ? snapshot.data!.msg
-                  : (widget.description ?? "Validating your atKeys..."),
-              themeData: Theme.of(context),
-            );
-          },
+        child: LoadingDialog(
+          title: widget.title ?? "Authenticating via pkam",
+          description: widget.description ?? "Validating your atKeys...",
+          themeData: Theme.of(context),
         ),
       ),
     );

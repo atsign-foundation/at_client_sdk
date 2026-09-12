@@ -1,67 +1,93 @@
-import 'package:at_auth/at_auth.dart';
-import 'package:at_client_flutter/src/services/auth_service.dart';
+import 'dart:async';
+
+import 'package:at_client/at_client.dart';
+import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
+import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
-import 'package:at_commons/at_commons.dart' show AtTimeoutException;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:flutter/material.dart';
 
-/// A dialog widget that facilitates onboarding an Atsign using a CRAM key.
+/// A dialog that activates an atSign with its CRAM key and hands back the
+/// client the activation opened, which the app owns.
 ///
-/// Use `CramDialog.show` to display the dialog and handle the onboarding process.
+/// Use `CramDialog.show` to display the dialog and handle the activation.
 ///
 /// Required Parameters:
-/// - [request]: An `AtOnboardingRequest` containing details for the onboarding process.
-/// - [cramKey]: The CRAM key used for authentication during onboarding.
+/// - [atSign]: the atSign to activate.
+/// - [cramKey]: the CRAM key, bare or in the registrar's
+///   `<atSign>:activation_key:<secret>` form.
+/// - [preference]: the client's preference; [rootDomain] is stamped on it
+///   when given.
 ///
 /// Optional Parameters:
+/// - [keys]: where the activation writes the atSign's first keys (default:
+///   the platform keychain).
+/// - [storage]: the client's local storage.
 /// - [title]: A title string for the dialog (default: "Onboarding Atsign via cram").
-/// - [description]: A description shown while onboarding is in progress, until the
-///   first progress event arrives; thereafter the live progress message is shown
-///   (default: "Authenticating, please wait...").
-/// - [progressBuilder]: An optional builder function to customize the display of progress events.
-///   It takes a `ProgressEvent` and returns a `Widget`, allowing for tailored UI updates during the onboarding process.
-///   When supplied it takes over rendering entirely.
-/// - [onOnboardingComplete]: An optional callback function that is invoked when the onboarding process completes successfully.
+/// - [description]: A description shown while the activation is in progress,
+///   until the first progress event arrives; thereafter the live progress
+///   message is shown (default: "Authenticating, please wait...").
+/// - [progressBuilder]: An optional builder function to customize the display
+///   of progress events. When supplied it takes over rendering entirely.
+/// - [onOnboardingComplete]: invoked with the client once the activation
+///   completes.
 ///
 /// Returns:
-/// - An `AtOnboardingResponse` upon successful onboarding, or null if the process fails or is cancelled.
+/// - The `AtClient` the activation opened, or null if the process fails or is
+///   cancelled.
 class CramDialog extends StatefulWidget {
   const CramDialog({
     super.key,
-    required this.request,
+    required this.atSign,
     required this.cramKey,
+    required this.preference,
+    this.rootDomain,
+    this.keys,
+    this.storage,
     this.progressBuilder,
     this.onOnboardingComplete,
     this.title,
     this.description,
-    this.authService,
+    this.flows = const AtsignFlows(),
   });
 
-  final AtOnboardingRequest request;
+  final String atSign;
   final String cramKey;
+  final AtClientPreference preference;
+  final AtRootDomain? rootDomain;
+  final WrittenAtKeysIo? keys;
+  final AtClientStorage? storage;
   final Widget Function(ProgressEvent)? progressBuilder;
-  final void Function(AtOnboardingRequest)? onOnboardingComplete;
+  final void Function(AtClient client)? onOnboardingComplete;
   final String? title;
   final String? description;
 
-  /// Injection seam for tests; defaults to a real [AuthService].
-  final AuthService? authService;
+  /// Injection seam for tests; defaults to the real lifecycle verbs.
+  final AtsignFlows flows;
 
-  static Future<AtOnboardingResponse?> show(
+  static Future<AtClient?> show(
     BuildContext context, {
-    required AtOnboardingRequest request,
+    required String atSign,
     required String cramKey,
+    required AtClientPreference preference,
+    AtRootDomain? rootDomain,
+    WrittenAtKeysIo? keys,
+    AtClientStorage? storage,
     Widget Function(ProgressEvent)? progressBuilder,
-    void Function(AtOnboardingRequest)? onOnboardingComplete,
+    void Function(AtClient client)? onOnboardingComplete,
     String? title,
     String? description,
   }) async {
-    return await showDialog<AtOnboardingResponse>(
+    return await showDialog<AtClient>(
       context: context,
       builder: (context) => CramDialog(
-        request: request,
+        atSign: atSign,
         cramKey: cramKey,
+        preference: preference,
+        rootDomain: rootDomain,
+        keys: keys,
+        storage: storage,
         progressBuilder: progressBuilder,
         onOnboardingComplete: onOnboardingComplete,
         title: title,
@@ -75,36 +101,43 @@ class CramDialog extends StatefulWidget {
 }
 
 class _CramDialogState extends State<CramDialog> {
-  late final AuthService _authService;
   final AtSignLogger _logger = AtSignLogger('CramDialog');
+  final StreamController<ProgressEvent> _progress =
+      StreamController<ProgressEvent>.broadcast();
 
   @override
   void initState() {
     super.initState();
-    _authService = widget.authService ?? AuthService();
-    // Kick off onboarding exactly once. Starting it here rather than in build()
-    // means a widget rebuild — e.g. the parent repainting during the up-to-5-min
-    // provisioning wait — can't spawn a second onboard() call.
+    // Kick off the activation exactly once. Starting it here rather than in
+    // build() means a widget rebuild — e.g. the parent repainting during the
+    // up-to-5-min provisioning wait — can't spawn a second activation.
     _onboard();
   }
 
   Future<void> _onboard() async {
     final secret = _parseCramKey(widget.cramKey);
     try {
-      final response = await _authService.onboard(widget.request, secret);
+      final client = await widget.flows.activate(
+        widget.atSign,
+        cramSecret: secret,
+        keys: widget.keys ?? KeychainAtKeysIo(),
+        preference: under(widget.preference, widget.rootDomain),
+        storage: widget.storage,
+        onProgress: _progress.add,
+      );
       if (widget.onOnboardingComplete != null) {
-        widget.onOnboardingComplete!(widget.request);
+        widget.onOnboardingComplete!(client);
       } else {
-        _logger.info('Onboarding response: $response');
+        _logger.info('Activated ${widget.atSign} as ${client.enrollmentId}');
       }
-      if (mounted) Navigator.of(context).pop(response);
+      if (mounted) Navigator.of(context).pop(client);
     } catch (e) {
-      // Onboarding failed or timed out. Without an error path the dialog would
+      // Activation failed or timed out. Without an error path the dialog would
       // stay on screen forever and CramDialog.show() would never complete
       // (issue #1905 / #1909).
       _logger.severe('Onboarding via CRAM failed: $e');
       if (!mounted) return;
-      // A timeout during onboarding usually means the newly-registered atSign
+      // A timeout during activation usually means the newly-registered atSign
       // is still provisioning, not a hard failure — say so and invite a retry.
       final message = e is AtTimeoutException
           ? 'Onboarding is taking longer than expected — your atSign may still '
@@ -118,6 +151,12 @@ class _CramDialogState extends State<CramDialog> {
   }
 
   @override
+  void dispose() {
+    _progress.close();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text("Onboarding"),
@@ -125,7 +164,7 @@ class _CramDialogState extends State<CramDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           StreamBuilder<ProgressEvent>(
-            stream: _authService.progressStream,
+            stream: _progress.stream,
             builder: (context, snapshot) {
               // A custom progressBuilder takes over rendering entirely.
               if (snapshot.hasData && widget.progressBuilder != null) {
