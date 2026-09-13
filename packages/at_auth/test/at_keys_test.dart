@@ -909,6 +909,112 @@ void main() {
     });
   });
 
+  group('AtKeys pending enrollment', () {
+    /// An enrollment's APKAM keypair as an enrollment files it at submission:
+    /// both halves pending under one keyId.
+    List<CryptographicMaterial> pendingApkam(String enrollmentId) => [
+          for (final role in [
+            CryptographicMaterialRole.privateAuthentication,
+            CryptographicMaterialRole.publicAuthentication,
+          ])
+            CryptographicMaterial(
+              keyId: 'auth:rsa2048:1',
+              enrollmentId: enrollmentId,
+              role: role,
+              algorithm: CryptographicMaterialAlgorithm.rsa2048,
+              bytes: AtBytes.fromString('cGVuZGluZw=='),
+              createdAt: DateTime.utc(2026, 9, 12),
+              status: CryptographicMaterialStatus.pending,
+            ),
+        ];
+
+    test('pending material names the enrollment as pending, and as nothing '
+        'else', () {
+      final atKeys = AtKeys(keysList: pendingApkam('e1'));
+
+      expect(atKeys.pendingEnrollmentIds, ['e1']);
+      expect(atKeys.authenticatableEnrollmentIds, isEmpty,
+          reason: 'a keypair the atServer has not accepted authenticates as '
+              'nobody');
+      expect(atKeys.resolveAuthenticatingEnrollment(), isNull);
+      expect(atKeys.authenticationKeyPairFor('e1'), isNull,
+          reason: 'and there is no keypair to hand a signer: only active '
+              'material is one');
+    });
+
+    test('activatePending moves every half to active', () {
+      final atKeys = AtKeys(keysList: pendingApkam('e1'));
+
+      atKeys.activatePending('e1');
+
+      expect(atKeys.pendingEnrollmentIds, isEmpty);
+      expect(atKeys.authenticatableEnrollmentIds, ['e1']);
+      expect(atKeys.keysForEnrollment('e1').map((m) => m.status),
+          everyElement(CryptographicMaterialStatus.active));
+      expect(atKeys.authenticationKeyPairFor('e1')?.privateKey, 'cGVuZGluZw==',
+          reason: 'the bytes are the ones filed at submission');
+    });
+
+    test('activatePending refuses a second live enrollment', () {
+      final atKeys = AtKeys(keysList: [
+        ...pendingApkam('e1'),
+        ...pendingApkam('e2'),
+      ]);
+      atKeys.activatePending('e1');
+
+      expect(() => atKeys.activatePending('e2'), throwsA(isA<ArgumentError>()),
+          reason: 'an approval is the other way a keyfile gains a live '
+              'enrollment, and one live enrollment per keyfile is the policy');
+      expect(atKeys.pendingEnrollmentIds, ['e2'],
+          reason: 'the refused one is left as it was');
+    });
+
+    test('activatePending refuses an enrollment holding nothing pending', () {
+      final atKeys = AtKeys(keysList: pendingApkam('e1'));
+      atKeys.activatePending('e1');
+
+      expect(() => atKeys.activatePending('e1'), throwsA(isA<ArgumentError>()));
+      expect(() => atKeys.activatePending('nope'),
+          throwsA(isA<ArgumentError>()));
+    });
+
+    test('discardEnrollment removes a pending enrollment and its snapshot', () {
+      final atKeys = AtKeys(keysList: pendingApkam('e1'))
+        ..recordEnrollmentSnapshot('e1',
+            namespaces: {'wavi': 'rw'}, appName: 'wavi', deviceName: 'phone');
+
+      atKeys.discardEnrollment('e1');
+
+      expect(atKeys.pendingEnrollmentIds, isEmpty);
+      expect(atKeys.enrollmentIds, isEmpty);
+      expect(atKeys.enrollmentInfo('e1'), isNull);
+      expect(atKeys.keysForEnrollment('e1'), isEmpty);
+    });
+
+    test('discardEnrollment refuses an enrollment that went live', () {
+      final atKeys = AtKeys(keysList: pendingApkam('e1'));
+      atKeys.activatePending('e1');
+
+      expect(() => atKeys.discardEnrollment('e1'),
+          throwsA(isA<ArgumentError>()),
+          reason: 'material that may have protected something is retired, '
+              'never removed');
+      expect(atKeys.authenticatableEnrollmentIds, ['e1']);
+      expect(() => atKeys.discardEnrollment('nope'),
+          throwsA(isA<ArgumentError>()));
+    });
+
+    test('a pending enrollment round-trips through the document', () {
+      final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: pendingApkam('e1'));
+
+      final reread = AtKeys.fromJson(atKeys.toJson());
+
+      expect(reread.pendingEnrollmentIds, ['e1']);
+      expect(reread.keysForEnrollment('e1').map((m) => m.status),
+          everyElement(CryptographicMaterialStatus.pending));
+    });
+  });
+
   group('AtKeys fileApkamMaterial', () {
     test('files both halves under one auth:<algorithm>:<generation> keyId', () {
       final atKeys = AtKeys();

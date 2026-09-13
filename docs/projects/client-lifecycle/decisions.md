@@ -14,8 +14,8 @@ status says so; nothing is appended as history.
 | `SUPERSEDED`        | Replaced outright. Title struck.                                                   |
 | `REJECTED`          | Considered and not adopted. Title struck; the body stays so it isn't re-proposed.  |
 
-All 7 were made by gkc on 2026-09-12, in one conversation, each after the
-measurement it cites.
+Rulings 1 to 7 were made by gkc on 2026-09-12, in one conversation, each
+after the measurement it cites; ruling 8 on 2026-09-13.
 
 ## 1. at_client owns the client lifecycle; at_auth is the protocol layer under it
 
@@ -124,7 +124,9 @@ store, persisted per platform (the present situation, tidied); in-memory only
 ## 6. at_onboarding_cli keeps a three-member `AtOnboardingService`
 
 `LIVE`. `AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
-`getAtClient()`/`atClient` stay with their present meaning, implemented over
+`atClient` stay with their present meaning (gkc, 2026-09-13: the deprecated
+`getAtClient()` goes with the rest, its nine external callers moving to
+`atClient` at the dependency bump), implemented over
 at_client's `open` (a `FileAtKeysIo` from `atKeysFilePath` and `passPhrase`)
 and the manager's adopt; `authenticate()` answers true only for the online
 outcome. The other ten members and the live-object getters go. `CLIBase` in
@@ -142,21 +144,62 @@ size migrates 7 repositories by dependency bump; deleting the class would
 change 33 call sites including teaching material; keeping all fourteen
 members would preserve a second, unused vocabulary for enrollment.
 
-## 7. A new project, a P0 row, and a branch from trunk after the speed-up branch merges
+## 7. A new project, a P0 row, and a branch cut from the speed-up branch
 
-`LIVE`. The design lives in `docs/projects/client-lifecycle/`; the PQ table
-carries it as a **P0** row (it gates at_auth 4.0 final, at_client_flutter
-2.0, at_onboarding_cli 2.0 and the `npt_flutter` port, so it is on D1's
-critical path); the deprecation plan's families B, C and D are marked
-superseded by it and the rest of that plan continues as P1. The
-implementation starts on a branch from trunk after `gkc-test-pack-speedup`
-merges, since a stacked PR gets no real CI and that branch holds the session
-plumbing this builds on. Acceptance is `npt_flutter` compiling with no
-`package:at_auth` import and no `at_auth:` in its pubspec, the
-published-example rig reporting only the breaks the 2.0 CHANGELOGs name, and
-the four live packs green.
+`AMENDED` 2026-09-12, the same day. The design lives in
+`docs/projects/client-lifecycle/`; the PQ table carries it as a **P0** row
+(it gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0
+and the `npt_flutter` port, so it is on D1's critical path); the deprecation
+plan's families B, C and D are marked superseded by it and the rest of that
+plan continues as P1. The implementation is built on `gkc-client-lifecycle`,
+which gkc directed be cut from `gkc-test-pack-speedup` once that branch's
+work was committed and pushed, rather than from trunk after it merges; the
+branch holds the session plumbing this builds on either way. That branch
+merged to trunk as PR #2229 on 2026-09-12, and `gkc-client-lifecycle` was
+rebased onto trunk the same day. Acceptance is
+`npt_flutter` compiling with no `package:at_auth` import and no `at_auth:` in
+its pubspec, the published-example rig reporting only the breaks the 2.0
+CHANGELOGs name, and the four live packs green.
 
 Why: a client-lifecycle design filed inside the PQ design (1,000 lines of
 cryptography) or as step 9 of a clean-up plan would be read by nobody looking
-for the client's public API, and branching from the speed-up branch would
-carry 82 commits through every rebase.
+for the client's public API. The ruling as first made preferred a branch from
+trunk so as not to carry the speed-up branch's 82 commits through every
+rebase; gkc chose to start at once on top of them instead, accepting that
+this PR stacks on #2229 until that merges.
+
+## 8. The communications leg: an `AtLookUp` factory the entry points supply
+
+`LIVE`. The third leg of the platform bundle, after the keys store and the
+storage bundle. at_lookup gains `AtLookUpFactory`, a function type taking the
+atSign, the root domain, the authenticator, an optional address finder and the
+client config and returning an `AtLookupMuxable`, and `secureSocketLookUps`,
+the default that builds through `withSecureSocket` on the TLS transport. The
+verbs (`open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`),
+`buildAtClient` and `AtServiceFactory.atClient` take `lookUps:`; the client
+holds it, and the client's own connection, sync's, the monitor's, the
+file-stream path and the re-derive after a retrofit all ask it. The Flutter
+dialogs and `AtsignFlows`, `CLIBase` and the `at_activate` commands pass it
+through. at_auth keeps taking instances. The existing `atLookUp:` instance
+parameters stay for now. `AtClientPreference.decryptPackets`,
+`tlsKeysSavePath` and `pathToCerts` are deprecated in favour of the default
+factory's `SecureSocketConfig`, and are read by the default while deprecated.
+at_onboarding_cli's proxy convention (a `rootDomain` starting `proxy:`, with
+`from:` sent first) becomes a factory the preference supplies, the first
+non-default one. Built in the lifecycle PR, with two additions the build
+needed: `withSecureSocket(onConnect:)`, a hook run once on each new
+connection before anything else is sent, which is where the proxy factory
+sends `from:`; and `activateAtSign(awaitProvisioning:)`, so a lookup
+at_client built for the activation still gets the provisioning wait.
+
+Why: ten library sites in four packages each called `withSecureSocket`
+themselves, so an application could not substitute the transport, a proxy
+convention or a test double without reaching into each; and a test that
+injected a lookup through `atLookUp:` reached the client's own connection
+only, while sync's and the monitor's were built real from the preference. A
+function was chosen over a bundle object because the other two legs are
+objects for the state they carry, and a factory captures what it needs; the
+root domain stays a per-call argument from the preference or the verb, so
+where the atDirectory is does not move. The measurement and the shape are
+[section 10](design.md#10-the-communications-leg-of-the-platform-bundle) of
+the design.

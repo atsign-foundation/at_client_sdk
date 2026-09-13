@@ -15,6 +15,8 @@ import 'package:at_client/src/crypto/nskey/nskey_provider.dart'
     show NamespaceKeyUnavailableException;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
     show NskeyPrivateFiling;
+import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -33,7 +35,7 @@ import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_auth/at_auth.dart' show authenticatorForChops;
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
@@ -219,13 +221,24 @@ class NotificationServiceImpl extends NotificationService {
   }
 
   /// - [monitor] is providable for unit test purposes
+  /// - [connection] is the client's connection state, which the monitor this
+  ///   builds reports `online` into each time it reaches `listening`; the
+  ///   caller that built the client passes it, since this service holds the
+  ///   client as its interface and the interface's double has none.
+  /// - [lookUps] builds the monitor's connection; the caller passes the
+  ///   client's own factory for the same reason, and TLS on TCP is the
+  ///   default when none arrives.
   static Future<NotificationService> create(AtClient atClient,
       {Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder}) async {
+      SecondaryAddressFinder? secondaryAddressFinder,
+      AtConnection? connection,
+      AtLookUpFactory? lookUps}) async {
     return NotificationServiceImpl._(
         atClient: atClient,
         monitor: monitor,
-        secondaryAddressFinder: secondaryAddressFinder);
+        secondaryAddressFinder: secondaryAddressFinder,
+        connection: connection,
+        lookUps: lookUps);
   }
 
   final String myStatsNotifKey;
@@ -233,7 +246,9 @@ class NotificationServiceImpl extends NotificationService {
   NotificationServiceImpl._(
       {required this.atClient,
       Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder})
+      SecondaryAddressFinder? secondaryAddressFinder,
+      AtConnection? connection,
+      AtLookUpFactory? lookUps})
       : myStatsNotifKey = 'statsNotification.${atClient.atSign}' {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
@@ -244,6 +259,7 @@ class NotificationServiceImpl extends NotificationService {
 
     final preference = atClient.getPreferences()!;
     final chops = atClient.atChops;
+    lookUps ??= defaultLookUps(preference);
     this.monitor = monitor ??
         Monitor(
           atSign: atSign,
@@ -254,14 +270,10 @@ class NotificationServiceImpl extends NotificationService {
           // safe yet: no atServer implements `monitor:multiplexed`, so
           // nothing holds a notification back while a verb response is in
           // flight.
-          lookUp: AtLookUp.withSecureSocket(
+          lookUp: lookUps(
             atSign: atSign,
             rootDomain:
                 AtRootDomain(preference.rootDomain, preference.rootPort),
-            transport: secureSocketTransport(SecureSocketConfig()
-              ..decryptPackets = preference.decryptPackets
-              ..pathToCerts = preference.pathToCerts
-              ..tlsKeysSavePath = preference.tlsKeysSavePath),
             // Reproduces exactly what Monitor's own PKAM did: the same
             // AtChops, the same signing and hashing algorithms, the same
             // enrollment id. `null` when there is no signer, which fails the
@@ -287,6 +299,7 @@ class NotificationServiceImpl extends NotificationService {
                 preference.monitorHeartbeatResponseTimeout,
           handleNotification: handleNotificationReceipt,
           getLastNotificationTime: getLastNotificationTime,
+          connection: connection,
         );
 
     lastReceivedNotificationAtKey = AtKey.local(
@@ -540,8 +553,13 @@ class NotificationServiceImpl extends NotificationService {
                 lastReceivedNotificationAtKey, _watermarkValue(n),
                 putRequestOptions: _watermarkPutOptions);
           } catch (e) {
-            logSwallowed(
-                logger, e, 'Failed to save last received notification ID: $e');
+            if (isStopped) {
+              logger.finer('Not saving the last received notification ID: '
+                  'the service was stopped during the write ($e)');
+            } else {
+              logSwallowed(logger, e,
+                  'Failed to save last received notification ID: $e');
+            }
           }
         }
         // NOTE: a `for` loop, not `_streamListeners.forEach` — `Map.forEach`
@@ -781,13 +799,14 @@ class NotificationServiceImpl extends NotificationService {
       return notificationResult;
     } else {
       if (waitForFinalDeliveryStatus) {
-        await _waitForAndHandleFinalNotificationSendStatus(
-            notificationParams, notificationResult, onSuccess, onError);
+        await _pollFinalStatus(
+            notificationParams, notificationResult, onSuccess, onError,
+            awaited: true);
         return notificationResult;
       } else {
-        // no wait? no await
-        unawaited(_waitForAndHandleFinalNotificationSendStatus(
-            notificationParams, notificationResult, onSuccess, onError));
+        unawaited(_pollFinalStatus(
+            notificationParams, notificationResult, onSuccess, onError,
+            awaited: false));
         return notificationResult;
       }
     }
@@ -855,13 +874,65 @@ class NotificationServiceImpl extends NotificationService {
     }
   }
 
+  /// The poll for a notification's final status, in the two ways [notify]
+  /// runs it.
+  ///
+  /// A stop ending the poll is reported in the result and to [onError]
+  /// either way: the notification was sent, its final status is what the
+  /// caller will not learn, and a caller that stopped its own client is not
+  /// owed an exception for it. Any other failure is the caller's when
+  /// [awaited], and otherwise is handed to [onError] and logged, rather than
+  /// left to surface as an unhandled error in whatever zone sent the
+  /// notification.
+  Future<void> _pollFinalStatus(
+      NotificationParams notificationParams,
+      NotificationResult notificationResult,
+      Function? onSuccess,
+      Function? onError,
+      {required bool awaited}) async {
+    try {
+      await _waitForAndHandleFinalNotificationSendStatus(
+          notificationParams, notificationResult, onSuccess, onError);
+      return;
+    } catch (e) {
+      if (isStopped) {
+        logger.finer('Not learning the final status of notification '
+            '${notificationParams.id}: the service was stopped');
+        notificationResult.atClientException = AtClientException(
+            error_codes['AtClientException'],
+            'Stopped before notification ${notificationParams.id} reached '
+            'a final status');
+      } else if (awaited) {
+        rethrow;
+      } else {
+        logger.warning('Could not learn the final status of notification '
+            '${notificationParams.id}: $e');
+        notificationResult.atClientException = e is AtClientException
+            ? e
+            : AtClientException(error_codes['AtClientException'],
+                'Could not learn the final status of the notification: $e');
+      }
+    }
+    if (onError != null) {
+      onError(notificationResult);
+    }
+  }
+
   /// Queries the status of the notification
   /// Takes the notificationId as input as returns the status of the notification
+  ///
+  /// Throws once the service is stopped: the answer would never reach anyone.
   Future<String> _getFinalNotificationStatus(String notificationId) async {
     String status = '';
     bool firstCheck = true;
     // For every 2 seconds, queries the status of the notification
     while (status.isEmpty || status == 'data:queued') {
+      if (isStopped) {
+        throw AtClientException(
+            error_codes['AtClientException'],
+            'Stopped before notification $notificationId reached a final '
+            'status');
+      }
       if (firstCheck) {
         await Future.delayed(Duration(milliseconds: 500));
         firstCheck = false;

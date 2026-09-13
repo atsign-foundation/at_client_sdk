@@ -80,13 +80,13 @@ void main() {
             .length,
         1952);
 
-    final reauth = await AtAuth.create().authenticate(
-        AtAuthRequest(atSign, atKeysIo: keysIo)..rootDomain = rootDomain);
-    expect(reauth.isSuccessful, true,
+    expect(
+        await Atsign(atSign)
+            .authenticatesAs(keys: keysIo, rootDomain: rootDomain),
+        enrollmentId,
         reason: 'no RSA APKAM exists anywhere, so this can only have '
-            'succeeded by ML-DSA');
-    expect(reauth.session!.enrollmentId, enrollmentId,
-        reason: 'the keyfile alone names the enrollment: nothing passed an id');
+            'succeeded by ML-DSA; and the keyfile alone names the enrollment, '
+            'since nothing passed an id');
 
     final rootValue = await client
         .getRemoteSecondary()!

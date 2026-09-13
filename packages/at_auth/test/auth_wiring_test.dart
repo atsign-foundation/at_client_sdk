@@ -1,4 +1,5 @@
-/// Which wiring `AtAuthImpl` installs on its lookup to authenticate.
+/// Which wiring `AtAuthImpl` installs on its lookup to activate, and what
+/// the authenticator it installs signs with.
 ///
 /// A lookup that can take an authenticator gets one and nothing else; a
 /// lookup that cannot gets at_lookup's credential fields, because those are
@@ -16,8 +17,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/at_auth_io.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
+import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
@@ -75,8 +76,6 @@ class FakeSecondaryAddressFinder extends Fake
 void main() {
   const atSign = '@alice🛠';
 
-  /// The enrollment the committed legacy keyfile authenticates as.
-  const legacyEnrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
   const onboardedEnrollmentId = 'abc123';
   const cramSecret = 'not-checked-the-lookup-is-mocked';
 
@@ -126,17 +125,6 @@ void main() {
       ..probeSocket = (host, port) async {};
   }
 
-  /// Authenticates from the committed legacy keyfile, whose flat fields name
-  /// no algorithm — so at_lookup's default is the right one and nothing
-  /// should set it.
-  Future<void> authenticate(AtAuthImpl auth, {AtKeysIo? keysIo}) =>
-      auth.authenticate(AtAuthRequest(
-        atSign,
-        atKeysIo: keysIo ??
-            FileAtKeysIo(
-                filePath: (atsign) => 'test/data/${atsign}_key.atKeys'),
-      ));
-
   /// A legacy-shaped keyfile holding [owner]'s demo material, in memory.
   Future<InMemoryAtKeysIo> demoKeyfile(String owner) async {
     final io = InMemoryAtKeysIo();
@@ -180,12 +168,15 @@ void main() {
     return io;
   }
 
-  /// Runs the authenticator [lookUp] was handed against the pinned challenge
-  /// and returns the `pkam:` command it sent.
-  Future<String> pkamSentBy(MockMuxableLookUp lookUp) async {
-    final installed = verify(() => lookUp.authenticator = captureAny())
-        .captured
-        .single as AtAuthenticator;
+  /// Runs the authenticator `authenticatorFor` builds over [keysIo], with
+  /// [chops] injected when given, against the pinned challenge and returns
+  /// the `pkam:` command it sent. The enrollment is the keys' own answer, as
+  /// every caller resolves it.
+  Future<String> pkamFrom(AtKeysIo keysIo, {AtChops? chops}) async {
+    final installed = authenticatorFor(keysIo, atSign,
+        enrollmentId:
+            (await keysIo.read(atSign)).enrollmentToAuthenticateAs(),
+        chops: chops);
     final executor =
         _RecordingExecutor(['data:$pkamPinChallenge', 'data:success']);
     expect(await installed(executor), isTrue);
@@ -207,18 +198,6 @@ void main() {
   }
 
   group('a lookup that can take an authenticator', () {
-    test('authenticate installs one, and never touches the ladder', () async {
-      final lookUp = MockMuxableLookUp();
-
-      await authenticate(
-          rig(lookUp, enrollmentId: legacyEnrollmentId, activated: true));
-
-      // The setter call, not the stored value: a mock keeps nothing.
-      verify(() => lookUp.authenticator = any(that: isNotNull)).called(1);
-      verifyNever(() => lookUp.atChops = any());
-      verifyNever(() => lookUp.signingAlgoType = SigningAlgoType.rsa2048);
-      verifyNever(() => lookUp.signingAlgoType = SigningAlgoType.mldsa65);
-    });
 
     test('onboard installs one twice, and never touches the ladder',
         () async {
@@ -239,12 +218,8 @@ void main() {
 
   group('what the installed authenticator signs with', () {
     test('the keyfile\'s own keypair, to the byte', () async {
-      final lookUp = MockMuxableLookUp();
-
-      await authenticate(rig(lookUp, enrollmentId: null, activated: true),
-          keysIo: await demoKeyfile(pkamPinAtSign));
-
-      expect(await pkamSentBy(lookUp), endsWith(':$expectedPkamSignature\n'),
+      expect(await pkamFrom(await demoKeyfile(pkamPinAtSign)),
+          endsWith(':$expectedPkamSignature\n'),
           reason: 'the bytes openssl produces for this challenge under the '
               'keyfile\'s PKAM key: what signs may move, the signature may not');
     });
@@ -255,13 +230,9 @@ void main() {
       // one, or a client built from an AtChops with a stand-in key source
       // beside it. The keyfile here holds encryption material and no APKAM
       // keypair, so only the injected signer can answer.
-      final lookUp = MockMuxableLookUp();
-      final auth = rig(lookUp,
-          enrollmentId: null, activated: true, chops: pinChops());
-
-      await authenticate(auth, keysIo: await encryptionOnlyKeyfile());
-
-      expect(await pkamSentBy(lookUp), endsWith(':$expectedPkamSignature\n'),
+      expect(
+          await pkamFrom(await encryptionOnlyKeyfile(), chops: pinChops()),
+          endsWith(':$expectedPkamSignature\n'),
           reason: 'the injected signer\'s key: the keyfile has none');
     });
 
@@ -270,13 +241,7 @@ void main() {
       // One rule for a signer beside a keyfile: the keyfile's keypair signs.
       // The keyfile holds another atSign's demo keypair, so the signature is
       // that key's and not the pin's.
-      final lookUp = MockMuxableLookUp();
-      final auth = rig(lookUp,
-          enrollmentId: null, activated: true, chops: pinChops());
-
-      await authenticate(auth, keysIo: await demoKeyfile('@bob🛠'));
-
-      final pkam = await pkamSentBy(lookUp);
+      final pkam = await pkamFrom(await demoKeyfile('@bob🛠'), chops: pinChops());
       final signature =
           base64Decode(pkam.substring(pkam.lastIndexOf(':') + 1).trim());
       expect(
@@ -292,17 +257,6 @@ void main() {
   });
 
   group('a lookup that cannot', () {
-    test('authenticate sets the credential fields instead', () async {
-      final lookUp = MockPlainLookUp();
-
-      await authenticate(
-          rig(lookUp, enrollmentId: legacyEnrollmentId, activated: true));
-
-      verify(() => lookUp.atChops = any(that: isNotNull)).called(1);
-      // Legacy material names no algorithm, so the default stands.
-      verifyNever(() => lookUp.signingAlgoType = SigningAlgoType.rsa2048);
-      verifyNever(() => lookUp.signingAlgoType = SigningAlgoType.mldsa65);
-    });
 
     test('onboard sets the credential fields and names the algorithm',
         () async {

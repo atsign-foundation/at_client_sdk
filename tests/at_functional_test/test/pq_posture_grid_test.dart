@@ -193,33 +193,30 @@ void main() {
   /// `register()` takes no namespace and files into the client's own, and is
   /// idempotent, so one registration per atSign is what the cells need.
   ///
-  /// Built through `AtClientManager`'s PUBLIC constructor: the singleton's
-  /// `setCurrentAtSign` stops the outgoing client, so the singleton route
-  /// would stop each of these as the next one came up.
+  /// Opened directly rather than through the singleton manager, whose switch
+  /// stops the outgoing client and so would stop each of these as the next
+  /// one came up.
   final approvers = <String, AtClient>{};
   Future<AtClient> approverFor(String atSign, String namespace) async {
     final memoised = approvers[atSign];
     if (memoised != null) return memoised;
-    final keysIo = InMemoryAtKeysIo();
-    await keysIo.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
-    final manager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign,
-        namespace,
+    final approver = await Atsign(atSign).open(
+        keys: InMemoryAtKeysIo.holding(
+            atSign, loader.createAtKeysFromDemoKeys(atSign)),
         // ⚠️ legacy, and this is the grid's readiness axis. Seeding is the
         // only posture-gated step in the PQ bootstrap, so an approver at any
         // other posture publishes `public:__nskey.<ns>@<atSign>` before a
         // single cell runs, and every readback assertion then passes for the
         // wrong reason.
-        preferenceFor(slug(atSign), atSign,
+        preference: preferenceFor(slug(atSign), atSign,
             role: 'approver', posture: legacyPlusPqProviders),
-        atKeysIo: keysIo,
-        atChops: loader.createAtChopsFromDemoKeys(atSign),
+        namespace: namespace,
         storage: TestUtils.storageFor(atSign));
-    await loader.setEncryptionKeys(manager.atClient, atSign);
-    await AtClientSecretSharing.forClient(manager.atClient).register();
-    approvers[atSign] = manager.atClient;
-    return manager.atClient;
+    await loader.setEncryptionKeys(approver, atSign);
+    await AtClientSecretSharing.forClient(approver).register();
+    approvers[atSign] = approver;
+    return approver;
   }
 
   /// Whether `public:__nskey.<namespace>@<atSign>` exists, read over the wire.

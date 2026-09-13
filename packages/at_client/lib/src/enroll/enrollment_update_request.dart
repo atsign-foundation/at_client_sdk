@@ -1,4 +1,4 @@
-import 'package:at_auth/src/enroll/apsk_advertisement.dart';
+import 'package:at_auth/at_auth.dart' show ApskSigningKey;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_commons/at_commons.dart' show AtEnrollmentException;
 

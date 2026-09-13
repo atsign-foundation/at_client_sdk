@@ -525,8 +525,12 @@ Until 2026-08-26 the only production caller that submits an app enrolment,
 depth and says nothing about the axis being inert in production.** "Partial" is
 not a warning; it reads as "covered enough".
 
-✅ Closed by the fix in `at_onboarding_cli` and a citation to
-`enroll_key_exchange_mode_test.dart`, which is that middle.
+✅ Closed by the fix in `at_onboarding_cli` and a citation to its
+`enroll_key_exchange_mode_test.dart`, which was that middle while the CLI
+built the request itself. The CLI now submits through at_client's
+`Atsign.enroll`, so the middle is at_client's and the citation is the posture
+group of `packages/at_client/test/lifecycle/enroll_test.dart`, which pins the
+request shape on the wire.
 
 #### F7 — a scenario still described the pre-flip default — ✅ CLOSED
 

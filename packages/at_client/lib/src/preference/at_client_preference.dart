@@ -363,13 +363,26 @@ class AtClientPreference {
   /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 1 and 59]
   Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
-  ///[OptionalParameter] when set to true logs TLS Keys to file.
+  /// When true, the TLS keys of every connection are logged to
+  /// [tlsKeysSavePath].
+  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
+      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
+      '..decryptPackets = true) to the verb that opens the client. Read by '
+      'the default factory until removed in 4.0.')
   bool decryptPackets = false;
 
-  ///[OptionalParameter] location where the TLS keys will be saved when [decryptPackets] is set to true
+  /// Where the TLS keys are written when [decryptPackets] is set.
+  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
+      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
+      '..tlsKeysSavePath = ...) to the verb that opens the client. Read by '
+      'the default factory until removed in 4.0.')
   String? tlsKeysSavePath;
 
-  ///[OptionalParameter] path to trusted certificates. Required to create security context.
+  /// Path to the trusted certificates the TLS security context is built from.
+  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
+      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
+      '..pathToCerts = ...) to the verb that opens the client. Read by the '
+      'default factory until removed in 4.0.')
   String? pathToCerts;
 
   /// [AtClient.put] uses this parameter to decide whether to check for presence of a namespace in the

@@ -10011,11 +10011,16 @@ here.
 
 **The key-exchange axis now reaches the CLI's enrolment**, landed 2026-08-26,
 and it is recorded here because what it changed is a **default**, not because
-anything is owed. `sendEnrollRequest` chooses between `AtEnrollmentRequest` and
-`AtEnrollmentRequest.pq` from `preference.posture.keyExchangeMode`, and
-`enroll` gained `--key-exchange legacy|pq` to override it. Guarded by
-`packages/at_onboarding_cli/test/enroll_key_exchange_mode_test.dart` — 7 tests,
-three mutations, one of which is the reason the file has a seventh.
+anything is owed. The CLI's `sendEnrollRequest` chose between
+`AtEnrollmentRequest` and `AtEnrollmentRequest.pq` from
+`preference.posture.keyExchangeMode`, and `enroll` gained
+`--key-exchange legacy|pq` to override it; guarded then by the CLI's
+`enroll_key_exchange_mode_test.dart` — 7 tests, three mutations, one of which
+was the reason the file had a seventh. Since 2026-09-12 the CLI submits
+through at_client's `Atsign.enroll`, which makes the same choice from the same
+field, and the guard is the posture group of
+`packages/at_client/test/lifecycle/enroll_test.dart`, pinning the request on
+the wire.
 
 ⛔ **`PqPosture.pqReady.keyExchangeMode` is `pq` and pqReady is the SDK default,
 so this moved what an `at_activate enroll` naming no `--posture` does.** A pq

@@ -1,6 +1,10 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/durable_address_finder.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
@@ -40,6 +44,35 @@ void main() {
 
     await client.stop();
     await storage.close();
+  });
+
+  test(
+      'every connection of the client resolves its atServer through one '
+      'durable finder', () async {
+    final client = await buildAtClient(
+        atSign: '@factoryaddr', namespace: 'wavi', preference: pref());
+
+    final own = (client as AtClientImpl).secondaryAddressFinder;
+    expect(own, isA<DurableSecondaryAddressFinder>());
+    expect((own as DurableSecondaryAddressFinder).atSign, '@factoryaddr');
+    expect(
+        (client.getRemoteSecondary()!.atLookUp as AtLookupImpl)
+            .secondaryAddressFinder,
+        same(own),
+        reason: 'the client\'s own connection');
+    expect(
+        (client.notificationService as NotificationServiceImpl)
+            .secondaryAddressFinder,
+        same(own),
+        reason: 'the monitor\'s connection');
+    expect(
+        (SyncServiceImpl.remoteSecondaryFor(client).atLookUp as AtLookupImpl)
+            .secondaryAddressFinder,
+        same(own),
+        reason: 'sync\'s connection; a start that cannot reach the '
+            'atDirectory has to find the atServer on all three');
+
+    await client.stop();
   });
 
   test('the client is filed in the instance map, though not as the current one',
@@ -109,6 +142,90 @@ void main() {
             'client rather than the atSign having been used once');
 
     await second.stop();
+  });
+
+  test('another enrollment of the same atSign builds beside the first',
+      () async {
+    const atSign = '@factorytwo';
+    // Refused at once, so nothing here waits on a network.
+    final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final refusedPort = socket.port;
+    await socket.close();
+    // One store per principal, as two enrollments always have: a store is
+    // held by the principal that opened it.
+    AtClientPreference offline(String principal) => pref()
+      ..hiveStoragePath = '${dir.path}/$principal'
+      ..rootDomain = InternetAddress.loopbackIPv4.address
+      ..rootPort = refusedPort;
+    // A legacy keyfile enrolled as [enrollmentId]; the key material is any
+    // demo atSign's, since nothing here reaches an atServer.
+    AtKeys keysAs(String enrollmentId) => AtKeys()
+      // ignore: deprecated_member_use
+      ..apkamPublicKey = AtBytes.fromString(demo.pkamPublicKeyMap['@alice🛠']!)
+      // ignore: deprecated_member_use
+      ..apkamPrivateKey =
+          AtBytes.fromString(demo.pkamPrivateKeyMap['@alice🛠']!)
+      // ignore: deprecated_member_use
+      ..defaultEncryptionPublicKey =
+          AtBytes.fromString(demo.encryptionPublicKeyMap['@alice🛠']!)
+      // ignore: deprecated_member_use
+      ..defaultEncryptionPrivateKey =
+          AtBytes.fromString(demo.encryptionPrivateKeyMap['@alice🛠']!)
+      // ignore: deprecated_member_use
+      ..defaultSelfEncryptionKey =
+          AtBytes.fromString(demo.aesKeyMap['@alice🛠']!)
+      // ignore: deprecated_member_use
+      ..enrollmentId = enrollmentId;
+    Future<AtClient> build(String enrollmentId) => buildAtClient(
+        atSign: atSign,
+        namespace: 'wavi',
+        preference: offline(enrollmentId),
+        atKeysIo: InMemoryAtKeysIo.holding(atSign, keysAs(enrollmentId)));
+
+    final first = await build('e1');
+    final second = await build('e2');
+
+    expect(second, isNot(same(first)));
+    expect((first.enrollmentId, second.enrollmentId), ('e1', 'e2'),
+        reason: 'two enrollments of one atSign are two principals, each '
+            'with its own client');
+    await expectLater(
+        () => build('e1'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('as enrollment e1'))),
+        reason: 'the refusal is about the same principal being live, and '
+            'names it');
+
+    final own = await buildAtClient(
+        atSign: atSign, namespace: 'wavi', preference: offline('own'));
+    expect(own.enrollmentId, isNull,
+        reason: 'the atSign\'s own credential is a third principal: with '
+            'enrolled clients live, a caller naming no enrollment is not '
+            'handed one of them');
+
+    // The store, not the atSign, is what two clients must not share: a
+    // third enrollment on e1's directory is refused before anything opens,
+    // while another atSign under the same directory is another store.
+    await expectLater(
+        () => buildAtClient(
+            atSign: atSign,
+            namespace: 'wavi',
+            preference: offline('e1'),
+            atKeysIo: InMemoryAtKeysIo.holding(atSign, keysAs('e3'))),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            allOf(contains('storage at'), contains('as enrollment e1')))),
+        reason: 'one store holds one principal, and the refusal names the '
+            'holder');
+    final other = await buildAtClient(
+        atSign: '@factoryother', namespace: 'wavi', preference: offline('e1'));
+    expect(other.getCurrentAtSign(), '@factoryother',
+        reason: 'the control: the same directory is another store for '
+            'another atSign');
+
+    await other.stop();
+    await own.stop();
+    await second.stop();
+    await first.stop();
   });
 
   test('buildRemoteSecondary carries the client identity a preference cannot',

@@ -4,7 +4,8 @@
 **Purpose:** the tiered gate ladder **T0–T6** for the implementation-neutral
 `AtClient` work, the measured evidence behind each tier, and — for every tier — an
 explicit statement of what it does *not* establish.
-**Status refreshed:** 2026-08-27, against `trunk` at `9d9e5f7d7`. The measured
+**Status refreshed:** 2026-08-27, against `trunk` at `9d9e5f7d7`; T9 (the app-supplied
+transport) landed on `gkc-client-lifecycle` on 2026-09-13. The measured
 baseline in §1 is dated where it was taken and is not re-measured on a status pass.
 **Lane:** this doc owns *what must be true and how it is checked*. For the seams
 themselves see [`design.md`](design.md); for sequencing see

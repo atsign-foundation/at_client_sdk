@@ -65,10 +65,13 @@ than the unit suites here — every authentication path in at_client changed how
 its lookup is constructed, and a mocked `executeVerb` accepts whatever it is
 given, so a broken credential path would have stayed green everywhere else.
 
-Reading after step 8: **0 uses**, against a control finding **201**
-`AtLookUp` with its matched line printed — so the zero comes from an absence,
-not from a broken pattern. It was 47 when the gate was written, 38 after it was
-scoped, and 0 now.
+Reading after the client-lifecycle work: **0 uses**, against a control
+finding **174** `AtLookUp` with its matched line printed — so the zero comes
+from an absence, not from a broken pattern. It was 47 when the gate was
+written, 38 after it was scoped, 0 after step 8, and 0 now; in between, the
+"3.x" arm of a migration snippet in at_auth's README named the constructor
+for a day, the gate read 1, and the arm was respelled to hold an `AtLookUp`
+the app had opened however it did.
 
 A further 140 sit in at_lookup's own lib, tests, examples, docs and CHANGELOGs;
 those are reported by the script and deliberately **not** gated.
@@ -89,18 +92,25 @@ Two exclusions, each for its own reason:
   same major that deletes the credential ladder.
 
 What the gate still means, and it is the part that matters: **no code outside
-at_lookup names the concrete class.** Consumers reach an implementation only
-through `AtLookUp.withSecureSocket`, and hold `AtLookupMuxable`.
+at_lookup names the concrete class.** Consumers hold `AtLookUp` or
+`AtLookupMuxable`, and reach an implementation through an
+**`AtLookUpFactory`**, the function type at_lookup declares and
+`secureSocketLookUps()` supplies, which an application hands to at_client's
+entry points so that every connection a client opens travels the way the
+application chose. `AtLookUp.withSecureSocket` is where that default factory
+lands; at_auth still calls it directly when a caller hands it no lookup.
 
 ⚠️ **38 is not the plan's "64 construction sites" with a different name.** 64
 counts constructions; 38 counts every use in scope — constructions, type
 annotations, `is` checks and imports. Quoting one for the other is the mistake
 [section 7](#7-corrections) already records twice.
 
-**The end state the gate encodes** (confirmed by gkc, 2026-08-19): every caller
-goes through the static `AtLookUp.withSecureSocket(...)` of
-[section 4](#4-the-factory), which returns an `AtLookupMuxable`. The concrete
-class is not named anywhere in lib code — including inside at_lookup itself.
+**The end state the gate encodes** (confirmed by gkc, 2026-08-19, and
+reshaped by the client-lifecycle work): every caller either passes an
+`AtLookUpFactory` or takes the default one, and the factory goes through the
+static `AtLookUp.withSecureSocket(...)` of [section 4](#4-the-factory), which
+returns an `AtLookupMuxable`. The concrete class is not named anywhere in lib
+code — including inside at_lookup itself.
 
 ⚠️ **The six deprecation messages naming `AtLookupImpl.authenticator` are no
 longer WRONG, but they are no longer the best advice either.** This paragraph
@@ -119,12 +129,14 @@ notification path, `atclient_notify_test.dart` and
 matters for step 9 — Monitor's notification delivery cannot be proven by a
 mock, because a mocked socket delivers whatever the test hands it.
 
-`monitor.dart` went from **582 lines to 183**:
+`monitor.dart` went from **582 lines to 350**:
 the byte buffer, framing constants, overflow check, prompt stripping, PKAM
 authentication, `sendCommand`, the heartbeat and the
 `[1,2,3,5,8,13,21,34]`-second backoff are gone from it, and exist once in
 at_lookup. What is left is what was only ever Monitor's — the watermark, the
-notification callback and the two states.
+notification callback, the two states, the retry of a first connect that
+failed, and the check for a connection that is up and answering but
+delivering nothing.
 
 Its 16 tests became 11. Nothing was deleted before its subject had a home:
 framing and the heartbeat were already covered in at_lookup, the three
@@ -178,9 +190,12 @@ Contents:
 `monitor.dart:439-442` records `authenticatedAsEnrollmentId` and
 `authenticatedAt` on its own connection metadata, with a comment explaining that
 Monitor authenticates independently of `AtLookupImpl`. That is commit
-`4e2507012` — the at_lookup 3.7.0 change, the only at_lookup commit on this
-branch — **written a second time because Monitor has its own PKAM.** The
-duplication tax is being paid in current work, not historical work.
+`4e2507012` — the at_lookup 3.7.0 change that started this work — **written a
+second time because Monitor has its own PKAM.** The duplication tax is being
+paid in current work, not historical work. Three further at_lookup commits
+have landed since: the factory and its per-connection hook, the single-flight
+`createConnection`, and a locally requested close that no longer reports
+itself as a server error.
 
 The collapse from two connections to one is *not* part of this work. It becomes
 a wiring choice: hand Monitor a fresh `AtLookupMuxable` and the count is
@@ -212,16 +227,18 @@ Numbering is dependency order: each unblocked the next.
 
 **1 — Freeze `AtLookUp`; new surface goes on a sub-interface.** `AtLookUp` keeps
 exactly today's members; `AtLookupMuxable implements AtLookUp` carries the new
-ones. The break was never in the impl: **18 `Mock`/`Fake implements` sites**
-exist — at_auth 12, at_client_flutter 3, at_client 2, at_onboarding_cli 1 — and
-widening the interface would leave them satisfying the new members through
-`noSuchMethod`, returning null into non-nullable types **at runtime only**, with
-`dart analyze` clean.
+ones. The break was never in the impl: **24 `Mock`/`Fake implements` sites**
+exist by the recipe below (at_auth 16, at_client 7, at_onboarding_cli 1;
+at_client_flutter's three went with its lifecycle rewrite, which mocks no
+lookup at all), and widening the interface would leave them satisfying the
+new members through `noSuchMethod`, returning null into non-nullable types
+**at runtime only**, with `dart analyze` clean.
 
-⚠️ The freeze protects **5** of those 18 — the ones that mock `AtLookUp`. The
-other **13 mock `AtLookupImpl`**, the concrete class, which *does* gain the
-muxable members in step 6, so they are exposed exactly as before. Sweep them in
-that step; the compiler will not.
+⚠️ The freeze protects **6** of those 24 — the ones that mock `AtLookUp`; two
+more mock `AtLookupMuxable`, the sub-interface, and take its members
+knowingly. The other **16 mock `AtLookupImpl`**, the concrete class, which
+*did* gain the muxable members in step 6, so they are exposed exactly as
+before. They were swept in that step; the compiler would not have.
 
 ```bash
 git grep -nP 'class \w+ extends (Mock|Fake) implements AtLook\w*'
@@ -247,8 +264,8 @@ completer, the idle timer and an optional `onNotification` callback. No
 `MultiplexedOutboundMessageListener` class. Two listeners would recreate inside
 at_lookup exactly the duplication being deleted from Monitor. Safe in place: the
 file is **not in at_lookup's barrel**, and its one external consumer,
-`at_client_impl.dart:1772`, calls `.read(maxWaitMilliSeconds: …)` — a signature
-decision 3 preserves.
+`AtClientImpl`'s file-transfer path, calls `.read(maxWaitMilliSeconds: …)` —
+a signature decision 3 preserves.
 
 **5 — Deprecate the constructor; add a factory; keep the class.**
 `AtLookupImpl` leaves the public barrel at the next major. **The 64
@@ -340,7 +357,7 @@ then builds a fresh connection whose metadata allows the PKAM through.
 ## 4. The factory
 
 Named for its transport, so a differently-transported factory can join it later.
-Six parameters, none of them key material.
+Seven parameters, none of them key material.
 
 ```dart
 // packages/at_lookup/lib/src/at_lookup.dart — static, so additive
@@ -352,20 +369,27 @@ abstract interface class AtLookUp {
   static AtLookupMuxable withSecureSocket({
     required String             atSign,
     required AtRootDomain       rootDomain,
-    required SecureSocketConfig secureSocketConfig,
     required AtAuthenticator?   authenticator,
+    required AtLookupTransport  transport,    // carries the SecureSocketConfig
     Map<String, dynamic>        clientConfig = const {},
     SecondaryAddressFinder?     secondaryAddressFinder,
-    AtLookupTransport           transport
-        = AtLookupTransport.secureSocket,     // ruled 2026-08-19, see below
+    Future<void> Function(AtCommandExecutor connection)? onConnect,
   });
 }
 ```
 
-**Shipped, with two departures from the sketch above.** `rootDomain` and
-`secureSocketConfig` are required as designed; `transport` is non-nullable with
-a const default, so a caller that says nothing gets TLS over TCP and a caller
-that says something has stated it.
+**Shipped, with three departures from the sketch as first drawn.** There is
+no `secureSocketConfig` parameter: the TLS configuration lives inside
+`AtLookupTransport`, built by `secureSocketTransport(SecureSocketConfig())`,
+and `transport` is **required** rather than defaulted — a constant default
+would let a site silently inherit settings its neighbour set deliberately, so
+every caller states its transport. And a seventh parameter, `onConnect`, runs
+on each connection once it is up and before anything else is sent on it; a
+proxy that needs `from:<atSign>` first, to learn which atServer a connection
+is for, is the case it exists for. Above the static sits `AtLookUpFactory`,
+the function type an application hands at_client so that every connection a
+client opens is built the same way, with `secureSocketLookUps({config,
+onConnect})` in `at_lookup_io.dart` as the default that calls this static.
 
 ⚠️ **`AtLookupTransport` BUNDLES the three factories `AtLookupImpl` already
 took; it does not abstract them.** That is a deliberate concession to
@@ -437,7 +461,8 @@ Gone, and with them `at_chops` from at_lookup's pubspec: `atChops`,
 | ------------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `atSign`                 | required            | No possible default. It is what `validatedFromChallenge` checks the server's challenge against.                                                                                                                                                             |
 | `rootDomain`             | required            | Replaces the `String, int` pair with at_commons' `AtRootDomain`, which validates the port and knows `isProxyAddress`. Three sites unpack one into the pair today; a fourth reassembles it immediately after.                                                  |
-| `secureSocketConfig`     | required            | The parameter the factory is named for, so non-nullable: a caller wanting defaults writes `SecureSocketConfig()` and thereby states it. A production site omits what its neighbour sets — `enrollment_service.dart:65` passes none where `RemoteSecondary` builds one from three preference fields. |
+| `transport`              | required            | Bundles the socket, listener and connection factories with the `SecureSocketConfig` the static is named for. Required rather than defaulted, so a caller states its transport instead of inheriting one a neighbour configured; a caller wanting the TLS defaults writes `secureSocketTransport(SecureSocketConfig())` and thereby states it. |
+| `onConnect`              | optional            | Run once per new connection, before anything else is sent on it. A proxy fronting many atServers learns which one a connection is for from a `from:` sent first; at_onboarding_cli's `proxyLookUps()` is the site.                                                                              |
 | `authenticator`          | required, nullable  | The whole of auth in one value. `null` means this connection never authenticates — a real mode: `at_status_impl.dart:99` holds no key material at all, and an OTP enroll request routes through `auth: false`.                                              |
 | `clientConfig`           | optional            | at_lookup cannot build one — `AtClientConfig` lives above it. One producer exists, so every hand-built lookup sends a bare `from:@atsign` and the atServer records no client particulars.                                                                    |
 | `secondaryAddressFinder` | optional            | Nominally duplicative with `rootDomain`, but it is the only carrier of the shared atDirectory cache.                                                                                                                                                        |
@@ -505,7 +530,7 @@ then the old path is deleted — so no package is uncompilable between commits.
 | 2   | **DONE.** **Lands as two commits.** First `FakeAtServerSocket` over a real `StreamController` alone, proven against current behaviour so it is not judging code written beside it. Then the completer, the deadline recomputed from `_lastReceivedTime` on every wake, timeouts from `AtNetworkTimeouts`, the `onNotification` seam, and the `_stripPrompt` `-1` guard. **`read`'s two params become nullable** - source-compatible for every caller, but not literally unchanged as this row first said, and breaking for an implementer that overrides `read` with `int` params. There are none in tree; the mocks go through `noSuchMethod`. | at_lookup      |
 | 3   | **DONE.** Declare `AtAuthenticator` and `AtCommandExecutor`; accept and prefer an injected authenticator **alongside** the existing ladder. Nothing breaks yet.                                                                                | at_lookup      |
 | 4   | **DONE.** Supply the authenticators **from at_auth**, built over `AtKeysIo` — at_lookup still names none of it, and gains no dependency. at_auth, at_client and at_onboarding_cli switch to passing one. **at_tools' `at_cli` is the external case** — it sets `preference.privateKey` with no AtChops at all. | at_auth        |
-| 5   | **DONE, and reshaped by a ruling: annotate, do not delete** (gkc, 2026-08-19). The six credential members carry `@Deprecated` on both the interface and the impl override; the ladder still reads them, so nothing breaks. Everything below this sentence describes **the later major that does the deletion**, and is kept here because it is what that major must do. ⛔ Do not read the rest of this row as owed at step 5. — Delete both copies of the `atChops → privateKey → cramSecret` ladder, the credential fields, `signingAlgoType` at `:744`, and **`at_chops` from the pubspec**. ⚠️ **Widen `AtAuthenticator`'s return in this same step** (ruled 2026-08-19). It returns `bool` today and that works only because `_authenticateWith` reads at_lookup's own `enrollmentId` field to record `AtConnectionMetaData.authenticatedAsEnrollmentId`. Deleting the field leaves nothing able to supply it - the authenticator is the side that knows the enrollment, and `bool` cannot carry it - so a caller could no longer tell which enrollment a live socket holds. Return a small result carrying success and the enrollment id, and let at_lookup record it. Widening the executor with `recordAuthentication` was the rejected alternative: it makes the id a side effect rather than data, and keeps `AtCommandExecutor` wider than it needs to be. ⚠️ **`atChops` is not only an auth credential, and deleting it breaks a non-auth reader.** `enrollment_approver.dart` reads `atLookUp.atChops` six times to do enrollment crypto - it takes the encryption private key out of it at `:41`, decrypts the wrapped payload at `:52` and `:63`, and at `:47` **mutates** it (`atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = …`). The lookup is being used as a shared mutable crypto context between at_auth components, which is why the field is on `AtLookUp` at all. The approver is at_auth code and has the keys, so it should be handed its own crypto rather than reaching through a network object for it - but that is a change to the approver, and it has to land before or with the deletion. | at_lookup      |
+| 5   | **DONE, and reshaped by a ruling: annotate, do not delete** (gkc, 2026-08-19). The six credential members carry `@Deprecated` on both the interface and the impl override; the ladder still reads them, so nothing breaks. Everything below this sentence describes **the later major that does the deletion**, and is kept here because it is what that major must do. ⛔ Do not read the rest of this row as owed at step 5. — Delete both copies of the `atChops → privateKey → cramSecret` ladder, the credential fields, `signingAlgoType` on the impl, and **`at_chops` from the pubspec**. ⚠️ **Widen `AtAuthenticator`'s return in this same step** (ruled 2026-08-19). It returns `bool` today and that works only because `_authenticateWith` reads at_lookup's own `enrollmentId` field to record `AtConnectionMetaData.authenticatedAsEnrollmentId`. Deleting the field leaves nothing able to supply it - the authenticator is the side that knows the enrollment, and `bool` cannot carry it - so a caller could no longer tell which enrollment a live socket holds. Return a small result carrying success and the enrollment id, and let at_lookup record it. Widening the executor with `recordAuthentication` was the rejected alternative: it makes the id a side effect rather than data, and keeps `AtCommandExecutor` wider than it needs to be. ⚠️ **`atChops` is not only an auth credential, and deleting it breaks a non-auth reader.** `enrollment_approver.dart` reads `atLookUp.atChops` six times to do enrollment crypto - it takes the encryption private key out of it at `:41`, decrypts the wrapped payload at `:52` and `:63`, and at `:47` **mutates** it (`atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = …`). The lookup is being used as a shared mutable crypto context between at_auth components, which is why the field is on `AtLookUp` at all. The approver is at_auth code and has the keys, so it should be handed its own crypto rather than reaching through a network object for it - but that is a change to the approver, and it has to land before or with the deletion. | at_lookup      |
 | 6   | **DONE.** Add `AtLookupMuxable`, `AtLookupImpl implements AtLookupMuxable`, the single-subscription notification controller with pause wired to the socket, and reconnect / reauth / heartbeat ownership. ⚠️ **Do not port `MultiplexedOutboundMessageListener` as written** - it truncates multi-line values (see [section 7](#7-corrections)). The framing that works is two passes: the notification check byte by byte, the `\n@` check only from the last newline on, as landed in step 2. | at_lookup      |
 | 7   | **DONE.** `withSecureSocket` in, constructor deprecated. Deprecate `MonitorClient` in the same commit — exported, zero consumers tree-wide, and its `_createNewConnection` bypasses `SecureSocketUtil` so it never got the connect timeouts.    | at_lookup      |
 | 8   | **DONE — the gate reads 0.** Migrate the sites, compiler-enumerated. **Run `dart analyze` in `tests/at_functional_test` and `tests/at_end2end_test` separately** — 29 of the 64 live there, invisible to at_lookup's own analyze.                               | 9 packages     |
@@ -522,7 +547,10 @@ bumped by `4e2507012` and has never been published, so it is the in-progress
 heading and the whole consolidation folds into it. Checked against pub.dev's
 API and `git log -L3,3:packages/at_lookup/pubspec.yaml`, not against in-tree
 precedent — which is the trap this repo has already hit once, at `66ec12a38`
-("fold 3.7.0 entries back into unpublished 3.6.0").
+("fold 3.7.0 entries back into unpublished 3.6.0"). The in-tree heading is
+now cut as prereleases, `3.7.0-rc1` (published) and `3.7.0-rc2` (in tree, the
+factory's), so "folds into 3.7.0" means folds into the rc series that
+publishes as it.
 
 ## 6. Filed, not scheduled
 
@@ -600,11 +628,14 @@ AtAuthenticator authenticatorForPrivateKey(String atSign, String privateKey,
     {Map<String, dynamic> clientConfig = const {}});
 ```
 
-With that, step 5 deletes the ladder without making a keystore mandatory and
-without a major: at_client hands keystore-less callers this authenticator
-instead. The credential decision still leaves at_lookup, which is the point -
-it just lands in at_client rather than in a keyfile. Worth building **before**
-step 5, so the deletion has somewhere for those callers to go.
+**Built, and wired.** `authenticatorForPrivateKey` is in at_auth, at_lookup's
+deprecation on the credential members names it as the replacement for a
+caller that holds nothing but a private key, and at_client's
+`RemoteSecondary` installs it for a caller that supplied only
+`preference.privateKey`. So the major can delete the ladder without making a
+keystore mandatory and without a break. The credential decision still leaves
+at_lookup, which is the point - it lands in at_client rather than in a
+keyfile.
 
 ### BLOCKS THE MAJOR (partly) — at_onboarding_cli had no local functional harness
 
@@ -631,11 +662,13 @@ lines apart will hand out whichever half a reader reaches first.
 What remains true: `tests/at_functional_test` does not exercise the CLI.
 
 The consequence for this project: the CLI's authenticator install is
-**unit-green only** (54 tests), and its six remaining construction sites
-(`at_onboarding_service_impl` `:215 :445 :460 :488 :721`, `auth_cli.dart:413`)
-should be migrated with that in mind - they are not uniform, either. Some
-authenticate, `:721` only checks `isOnboarded`, and two send a bare `from:`
-through a proxy. Installing an authenticator on all of them is harmless where
+**unit-green only** (54 tests), and its six construction sites of the time
+(five in `at_onboarding_service_impl`, one in `auth_cli.dart`; the CLI now
+builds every connection from `AtOnboardingPreference.lookUps`, so the sites
+are one direct call and five pass-throughs) had to be migrated with that in
+mind - they were not uniform, either. Some authenticated, one only checked
+`isOnboarded`, and two sent a bare `from:` through a proxy. Installing an
+authenticator on all of them is harmless where
 unused, because it only runs when authentication is required, but the absence
 of a live check means the change wants a runner first. Writing one - a
 `runLocal.sh` matching at_functional_test's, defaulting to
@@ -665,35 +698,31 @@ UNDER-counts, returning 9 where the member has 51 uses, because it misses every
 alias. Only the analyzer separates them by receiver *type*, which is why the
 figure above came from `deprecated_member_use` and not from a search.
 
-In at_client `lib/`, **eight readers**, not seven:
+In at_client `lib/`, **eight readers**, not seven, when this was measured:
+`crypto/nskey/nskey_rotation.dart`, `crypto/nskey/nskey_seeding.dart`,
+`crypto/nskey/pq_signing_root.dart`, `mixins/apkam_signing.dart`,
+`service/enrollment_privilege_resolver.dart`,
+`service/envelope_enrollment_conveyance.dart`,
+`signing/signing_key_minting.dart` (twice) and
+`secret_sharing/key_package_minting.dart` — the last **missed by the original
+seven** because it read `atLookUp?.enrollmentId` into a local spelled
+**`enrolment`**, single *l*, and every downstream use named that local. A
+grep anchored on the usage sites never connects them back to the member,
+which is exactly why the analyzer, not a grep, is the instrument for this
+list.
 
-| file | line | in the original 7? |
-| ---- | ---- | ------------------ |
-| `crypto/nskey/nskey_rotation.dart` | 254 | yes |
-| `crypto/nskey/nskey_seeding.dart` | 67 | yes |
-| `crypto/nskey/pq_signing_root.dart` | 904 | yes |
-| `mixins/apkam_signing.dart` | 67 | yes |
-| `service/enrollment_privilege_resolver.dart` | 36 | yes |
-| `service/envelope_enrollment_conveyance.dart` | 253 | yes |
-| `signing/signing_key_minting.dart` | 296, 314 | `:314` only |
-| `secret_sharing/key_package_minting.dart` | 124 | **no — missed** |
+**The at_client half of this is discharged.** All eight ask the client now,
+`atClient.enrollmentId`, which is what this section asked for: "which
+enrollment am I operating as" is a fact about the client, and it is read off
+the client. `key_package_minting.dart` still spells its local `enrolment`,
+but sources it from the client. What is left in at_client `lib/` is
+`remote_secondary.dart`, the write site and the authenticator-precedence
+branches that read the field to *build* its replacement. at_onboarding_cli's
+four readers went with the rebuild of `at_onboarding_service_impl.dart` onto
+at_client's lifecycle, which reads no lookup's enrollment id.
 
-`key_package_minting.dart:124` reads `atLookUp?.enrollmentId` into a local
-spelled **`enrolment`**, single *l*, and every downstream use names that local.
-So a grep anchored on the usage sites never connects them back to the member —
-which is exactly why the analyzer, not a grep, is the instrument for this list.
-
-Plus `remote_secondary.dart` at `:78`, `:95`, `:108` and `:148` — the write
-site and the authenticator-precedence branches that read the field to *build*
-its replacement.
-
-And **at_onboarding_cli has four more** the at_client-scoped count never
-covered: `at_onboarding_service_impl.dart` at `:146`, `:166`, `:185`, `:515`.
-
-All of them are asking "which enrollment am I operating as" — a fact about the
-client, read off a network object because that is where somebody parked it.
-They need the answer from the client instead, and the field goes with the
-ladder once they have it.
+The member's remaining consumers are the ones that *set* it, and it goes with
+the ladder once `remote_secondary.dart` no longer needs it.
 
 Two things to be careful of when moving them. `AtLookUp.enrollmentId` is what
 the *next* authentication will use, which is deliberately not
@@ -833,8 +862,8 @@ atServer-side implementation, or the flag's removal from at_commons.
   the rule as written admits neither. Re-derive the list with the grep above
   rather than trusting this one.
 - **`AtLookupImpl.authenticate()` carries a deprecation somebody backed out
-  of, and the reason they gave no longer holds.** `at_lookup_impl.dart:560` is
-  a commented-out annotation: `/// @Deprecated('Use method pkamAuthenticate')
+  of, and the reason they gave no longer holds.** `at_lookup_impl.dart` carries
+  it as a commented-out annotation on `authenticate()`: `/// @Deprecated('Use method pkamAuthenticate')
   Commenting deprecation since it causes issue in dart analyze in the caller`.
   It is the legacy PKAM leg, impl-only (not on `AtLookUp`), and it is what the
   ladder calls with the now-deprecated `privateKey`. The annotation pass
@@ -842,19 +871,22 @@ atServer-side implementation, or the flag's removal from at_commons.
   `--fatal-warnings` does not promote, with all 16 workspace packages exiting
   0. So the stated blocker is gone. **Not annotated here** — it is a seventh
   member beyond the six ruled on, and widening a deprecation set is gkc's call.
-- **at_onboarding_cli builds six lookups with `authenticator: null`** — five
-  through one `_newLookUp()` helper in `at_onboarding_service_impl` and one in
-  `auth_cli.dart`. ⚠️ This entry used to say they were built *without an
-  authenticator*, which now reads as an omission: they go through
-  `AtLookUp.withSecureSocket` and `_installAuthenticator` supplies one
-  afterwards where the site needs it. What remains worth checking is the same
-  thing it always was - they are not uniform. Originally recorded as —
-  `at_onboarding_service_impl` `:215 :445 :460 :488 :721` and
-  `auth_cli.dart:413`. They are not uniform: some authenticate, `:721` only
-  checks `isOnboarded`, and two send a bare `from:` through a proxy. Installing
-  one everywhere is harmless where unused, since it runs only when
-  authentication is required. Verify with
-  `tests/at_onboarding_cli_functional_tests/runLocal.sh`, which now exists.
+- **at_onboarding_cli builds its connections from a factory on its
+  preference.** `AtOnboardingPreference.lookUps` is the one place the CLI's
+  transport is chosen: `proxyLookUps()` when the root domain names a proxy —
+  every connection sends `from:<atSign>` first through the factory's
+  `onConnect`, which is what a proxy fronting many atServers needs to route
+  it — and `secureSocketLookUps()` otherwise, with a program supplying its
+  own overriding both. `at_onboarding_service_impl` builds no lookup at all
+  now; `auth_cli.dart`'s `status` is the one direct call, with
+  `authenticator: null`, and the other commands pass `preference.lookUps`
+  down to the verbs. This entry used to count six sites, five through one
+  `_newLookUp()` helper, and to say they were built *without an
+  authenticator*; they went through `AtLookUp.withSecureSocket` and
+  `_installAuthenticator` supplied one afterwards where the site needed it,
+  and they were not uniform. Verify with
+  `tests/at_onboarding_cli_functional_tests/runLocal.sh` and the proxy pack
+  beside it.
 - **`at_onboarding_service_impl.onboard` builds its `FileAtKeysIo` without the
   passphrase**, where the read path requires one. That asymmetry is deliberate
   as of this work — onboarding *writes* — but nobody has established whether a
@@ -866,12 +898,14 @@ atServer-side implementation, or the flag's removal from at_commons.
   pkamLoad creates — so in a suite that deliberately runs without pkamLoad it
   can never pass, and hangs for its five-minute timeout. CI does not call it.
   Either delete it or give it a check that suits this suite.
-- **REJECTED, do not "fix":** `at_client_flutter/enrollment_service.dart:65`
-  builds a lookup with no authenticator, and that is correct. It submits an
-  OTP-based enrollment, which routes through `auth: false` and never
-  authenticates — the case the factory's nullable `authenticator` exists for.
-  `at_server_status/at_status_impl.dart:100` is the same shape and holds no key
-  material at all.
+- **REJECTED, do not "fix":** at_client's `Atsign.enroll` builds the
+  submission's lookup with `authenticator: null`, and that is correct. It
+  submits an OTP-based enrollment, which routes through `auth: false` and
+  never authenticates — the case the factory's nullable `authenticator`
+  exists for. `at_server_status`'s `AtStatusImpl` is the same shape and holds
+  no key material at all; both now build through an `AtLookUpFactory`. (This
+  entry named at_client_flutter's `enrollment_service.dart`, which its 2.0
+  deleted; the submission moved to at_client.)
 - ⚠️ **The "seven ladder authentications" figure is NOT current.** It was
   measured at step 4, before `tests/at_functional_test/lib/src/enrolled_client.dart`
   and its e2e twin moved to the factory - a change that can only have reduced

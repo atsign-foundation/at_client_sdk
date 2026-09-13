@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
@@ -199,7 +200,10 @@ class SyncServiceImpl implements SyncService {
           atChops: atClient.atChops,
           enrollmentId: atClient.enrollmentId,
           signingAlgoType: signingAlgoOf(atClient),
-          atKeysIo: atClient.atKeysIo);
+          atKeysIo: atClient.atKeysIo,
+          secondaryAddressFinder:
+              atClient is AtClientImpl ? atClient.secondaryAddressFinder : null,
+          lookUps: atClient is AtClientImpl ? atClient.lookUps : null);
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
     _logger = AtSignLogger('SyncService'
@@ -307,8 +311,13 @@ class SyncServiceImpl implements SyncService {
     // _syncInProgress because _isInSync short-circuits on the latter.
     _processInProgress = true;
     final syncRequest = _getSyncRequest();
+    // NOTE: the round answers every queued request, so it reads the server
+    // fresh if any of them is an app's; the one dequeued may be a system
+    // request that was queued ahead of the app's.
+    final anAppIsWaiting = syncRequest.requestSource == SyncRequestSource.app ||
+        syncRequests.any((r) => r.requestSource == SyncRequestSource.app);
     try {
-      final inSync = await _isInSync(syncRequest);
+      final inSync = await _isInSync(syncRequest, forceFresh: anAppIsWaiting);
       if (isStopped) {
         // NOTE: stop() landed while _isInSync was parked on its network read.
         // Anything this run did from here would be sync activity after stop()
@@ -539,6 +548,17 @@ class SyncServiceImpl implements SyncService {
       return;
     }
     hasHadNoSyncRequests = false;
+    if (syncRequests.length == queueSize &&
+        syncRequest.requestSource == SyncRequestSource.system &&
+        syncRequests.any((r) => r.requestSource == SyncRequestSource.app)) {
+      // NOTE: a system request carries nothing the queue does not already
+      // know - its commit id has promoted the cache above - while an app
+      // request is a caller's demand for a fresh answer. Evicting the
+      // caller's request for it would answer that caller from the cache.
+      _logger.finer('_addSyncRequestToQueue: queue at capacity ($queueSize) '
+          'holding an app request; the system request is dropped');
+      return;
+    }
     if (syncRequests.length == queueSize) {
       // Drop-oldest sliding window: evict the head, not the tail. The
       // newest request is always retained (it represents the most
@@ -769,6 +789,8 @@ class SyncServiceImpl implements SyncService {
       try {
         batchResponse = await sendBatch(batchRequests);
         _bailIfStopped();
+      } on _SyncAbandoned {
+        rethrow;
       } on Exception catch (e) {
         // Network or auth failure for the whole batch. Leave queue
         // entries in place — next round retries.
@@ -1107,6 +1129,11 @@ class SyncServiceImpl implements SyncService {
         'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
       });
     } catch (e) {
+      if (isStopped) {
+        _logger.finer('Not syncing ${serverCommitEntry['atKey']} to local: '
+            'the service was stopped ($e)');
+        throw const _SyncAbandoned();
+      }
       _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e": e});
       _logger.severe(
           'Exception: $e while syncing entry to local ${jsonEncode(serverCommitEntry)}');
@@ -1288,16 +1315,16 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  Future<bool> _isInSync(SyncRequest syncRequest) async {
+  /// [forceFresh] says an app is waiting on this answer, see
+  /// [_getServerCommitId]: a system request is a stats notification whose
+  /// commit id has already promoted the cache, so it is read from there.
+  Future<bool> _isInSync(SyncRequest syncRequest,
+      {required bool forceFresh}) async {
     if (_syncInProgress) {
       _logger.finest('*** isInSync..sync in progress');
       return true;
     }
-    // A system request is a stats notification whose commit id has already
-    // promoted the cache, so it is read from there; an app request has no
-    // such value in hand and fetches one, see [_getServerCommitId].
-    var serverCommitId = await _getServerCommitId(
-        forceFresh: syncRequest.requestSource == SyncRequestSource.app);
+    var serverCommitId = await _getServerCommitId(forceFresh: forceFresh);
     // NOTE: stop() may have landed during that network read and closed the
     // store the next line reads.
     _bailIfStopped();
@@ -1557,8 +1584,12 @@ class SyncServiceImpl implements SyncService {
             cameFromServer: true,
           );
     } on UnAuthorizedException catch (e) {
-      _logger.finer(
-          'Failed to sync ${(builder as UpdateVerbBuilder).atKey.toString()} caused by ${e.toString()}');
+      final atKey = switch (builder) {
+        UpdateVerbBuilder(:final atKey) => atKey,
+        DeleteVerbBuilder(:final atKey) => atKey,
+        _ => builder.runtimeType,
+      };
+      _logger.finer('Failed to sync $atKey caused by ${e.toString()}');
     }
   }
 
@@ -1573,7 +1604,7 @@ class SyncServiceImpl implements SyncService {
   /// no-op.
   /// Stops without draining. A round in flight ends at its next step; what it
   /// had not pushed stays queued for the next sync. Callers wanting the queue
-  /// empty first await `waitUntilCaughtUp`.
+  /// empty first wait until [isInSync] answers true.
   Future<void> stop() async {
     if (isStopped) {
       _logger.finer('stop() called, but service is already stopped. Ignoring.');

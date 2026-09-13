@@ -9,12 +9,13 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
+import 'package:at_client/src/service/envelope_enrollment_conveyance.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
+    show SignedEnvelope, apskUri;
 
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/mocks.dart';
@@ -92,6 +93,69 @@ void main() {
               enrollmentId: enrolleeId,
               apkamSymmetricKey: AtBytes.fromString(''),
               atSign: atSign));
+
+  /// The atServer writes the enrollee's `_apsk` at approval, so the check of
+  /// the advertised package can miss it once and find it a moment later.
+  group('a key package whose _apsk fetch fails transiently', () {
+    /// Fails the approver's fetch of the enrollee's `_apsk` for the first
+    /// [failures] attempts, then serves what the atServer holds.
+    int Function() failApskFetches(MockAtClient approver,
+        {required int failures}) {
+      var fetches = 0;
+      final apsk = apskUri(atSign, enrolleeId);
+      when(() => approver.get(
+          any(that: predicate<AtKey>((k) => k.toString() == apsk)),
+          getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
+        fetches++;
+        if (fetches <= failures) {
+          throw AtConnectException(
+              'The connection was closed by this client before a response '
+              'arrived');
+        }
+        return Future.value(AtValue()..value = remoteData[apsk]);
+      });
+      when(() => approver.isStopped).thenReturn(false);
+      return () => fetches;
+    }
+
+    setUp(() => EnvelopeEnrollmentConveyance.verifyRetryPause = Duration.zero);
+    tearDown(() => EnvelopeEnrollmentConveyance.verifyRetryPause =
+        const Duration(seconds: 1));
+
+    test('is checked again, and conveyed to once the fetch answers', () async {
+      final approver = buildMockClient('approver-5');
+      await AtClientSecretSharing.forClient(approver).register();
+      stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson());
+      final fetches = failApskFetches(approver, failures: 2);
+
+      await expectLater(approveWith(approver), completes,
+          reason: 'two fetches failed and the third answered, all within '
+              'the attempts the check is given');
+      expect(fetches(), greaterThanOrEqualTo(3),
+          reason: 'two failed, the third answered; the conveyance that '
+              'follows reads the record again on its own account');
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isNotEmpty,
+          reason: 'the secrets were conveyed once the package verified');
+    });
+
+    test('is reported unverified once the attempts are spent (control)',
+        () async {
+      final approver = buildMockClient('approver-6');
+      await AtClientSecretSharing.forClient(approver).register();
+      stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson());
+      final fetches = failApskFetches(approver, failures: 1000);
+
+      await expectLater(
+          approveWith(approver),
+          throwsA(isA<EnrollmentConveyanceException>().having(
+              (e) => e.keyPackageStatus,
+              'keyPackageStatus',
+              KeyPackageStatus.unverified)));
+      expect(fetches(), EnvelopeEnrollmentConveyance.verifyAttempts,
+          reason: 'every attempt was spent before the check was given up');
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty);
+    });
+  });
 
   /// Approval seals the approver's own encryption private key and
   /// self-encryption key for the enrollee, so a client that cannot read both

@@ -8,7 +8,8 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 
-/// Interface for onboarding and authentication to a secondary server of an atsign
+/// The activation engine `activateAtSign` drives: CRAM authentication, key
+/// minting and the first enrollment. Logging in is at_client's `Atsign.open`.
 abstract interface class AtAuth {
   AtLookUp? atLookUp;
   Stream<ProgressEvent> get progressStream;
@@ -26,14 +27,6 @@ abstract interface class AtAuth {
         pkamAuthenticator: pkamAuthenticator,
         atEnrollment: atEnrollmentBase);
   }
-
-  /// Authenticate method is invoked when an atsign wants to authenticate to secondary server with an .atKeys file
-  ///
-  /// Step 1. Read the keys from AtKeysIo implementation
-  /// - Can also be brought via AtAuthRequest.atAuthKeys
-  ///
-  /// Step 2  Perform pkam authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest);
 
   /// Onboard method is invoked when an atsign is activated for the first time from a client app.
   /// - Connect, and perform cram auth
@@ -58,7 +51,6 @@ abstract interface class AtAuth {
 
   /// Validate atsign's secondary server status
   /// - Check if atsign's secondary server is reachable in atDirectory
-  /// - AtOnboardingRequest: validates server for onboarding and looks for teapot
-  /// - AtAuthRequest: validates server for authentication
+  /// - validates the server for onboarding and looks for teapot
   Future<void> validateAtServer(AuthRequest authRequest);
 }

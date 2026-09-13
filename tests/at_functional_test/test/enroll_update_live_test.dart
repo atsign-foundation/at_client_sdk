@@ -19,6 +19,8 @@ import 'package:at_chops/at_chops.dart'
         HashingAlgoType,
         SigningAlgoType;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart'
+    show EnrollmentUpdateRequest, EnrollmentUpdater;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart'
     show AtLookUp, AtLookupImpl, AtLookUpException;
@@ -158,7 +160,7 @@ void main() {
     final apskBefore = await readApsk(client);
     final fresh = freshApkamPair();
 
-    final response = await AtEnrollment.create().update(
+    final response = await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
           enrollmentId: client.enrollmentId,
           apkamPublicKey: fresh.publicKey,
@@ -260,7 +262,7 @@ void main() {
         reason: 'and the key both refusals tried to install must not work — a '
             'refusal that had already written is worse than no guard');
 
-    final ok = await AtEnrollment.create().update(
+    final ok = await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
           enrollmentId: client.enrollmentId,
           apkamPublicKey: fresh.publicKey,
@@ -318,7 +320,7 @@ void main() {
 
     final fresh = freshApkamPair();
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
               enrollmentId: other.enrollmentId,
               apkamPublicKey: fresh.publicKey,
@@ -340,7 +342,7 @@ void main() {
     // A legacy PKAM connection carries the housekeeping enrollment `primary`,
     // so it is refused as a named enrollment rather than as an anonymous owner.
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
               enrollmentId: mine.enrollmentId,
               apkamPublicKey: fresh.publicKey,
@@ -359,7 +361,7 @@ void main() {
             'read — and it pins that a legacy connection now HAS one, which '
             'is the thing that changed');
 
-    final ok = await AtEnrollment.create().update(
+    final ok = await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
           enrollmentId: mine.enrollmentId,
           apkamPublicKey: fresh.publicKey,

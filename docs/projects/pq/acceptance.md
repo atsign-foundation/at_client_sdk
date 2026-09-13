@@ -932,8 +932,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   encryption error. Bob's signing root is not a KEM target and cannot stand in.
   - A **pre-flight capability query** answers the same question before the user
     composes anything, so an app need not discover this at write time.
-  - With the legacy fallback opted in (final 3.x only), the share proceeds under
-    `legacy`. That is the invitation path, and it ends at 4.x.
+  - With the legacy fallback opted in (any posture below `pqActive`), the share
+    proceeds under `legacy`. That is the invitation path, and it ends at 5.x,
+    where `disallowLegacyEncryption` refuses it.
   - Once bob uses or authorises the namespace, his nskey is published and alice's next
     `ensureCurrent` picks it up by `plookup`; from then on the share is PQ.
 
@@ -1502,10 +1503,11 @@ authenticated self-retrofit flow + settlement and the `enroll:request` metadata 
 
 ### 8.4 UC-B1.4 — A retrofitted scoped enrollment runs an authenticated verb
 
-⛔ **"PQ auth works" is not "the enrollment can run a verb".** Authentication is
-the one thing a mis-stamped connection does not break: at_auth authenticates on
-its own connection, before the client exists, and every verb afterwards runs
-over a different one.
+⛔ **"PQ auth works" is not "the enrollment can run a verb".** Authentication
+runs on the client's own connection: `AtClientImpl._attemptConnection` PKAMs
+`_remoteSecondary.atLookUp` and reports the outcome into `client.connection`,
+so a mis-stamped connection is the same connection the verbs use, and a green
+PKAM says nothing about what the enrollment is authorised to run.
 
 ⚠️ **The property is per-ROUTE.** Two pieces of code retrofit a client, and a
 row that does not name which one can be proven for one and false for the other:
@@ -1648,8 +1650,9 @@ map and be refused rather than obeyed.
 
 ### 10.2 UC-B3.2 — The app's active release flips self data to the nskey path
 
-- **Given:** the app ships its **active** build (4.x default, or an explicit
-  `AtClientPreference.crypto`); every install has run the capability build first
+- **Given:** the app ships its **active** build (5.x default,
+  `PqPosture.pqActive`, or an explicit `AtClientPreference.crypto`); every
+  install has run the capability build first
   (the developer's release-ordering discipline).
 - **When:** `alice1` writes/notifies self data.
 - **Then:** self data goes via the **nskey data path** — `at/nskey` conveys the CK
@@ -2098,7 +2101,7 @@ one over every file a `provenIn` citation names.
 | `packages/at_client/test/key_package_minting_test.dart` | the key package's mint under a configured KEM, its `enroll:update` amendment, and the sender following the recipient (UC-A2.4, UC-A2.5, UC-A4.5). |
 | `packages/at_client/test/nskey_private_filing_test.dart` | how an nskey private is filed and read back, under UC-A3.5. |
 | `packages/at_client/test/at_client_impl_test.dart` | the era axis — a postured client writing PQ by default (UC-C1.1). |
-| `packages/at_auth/test/at_auth_test.dart` | the keyfile derivation being offered rather than applied (UC-G1.1). ⚠️ In **at_auth**. |
+| `packages/at_client/test/lifecycle/authenticates_as_test.dart` | which enrollment each keyfile shape authenticates as — the flat stored id, a retrofit's successor, or `primary` for a keyfile naming none — after one PKAM as it and nothing built (UC-G1.1). |
 | `packages/at_auth/test/at_self_enrollment_test.dart` | a retrofit leaving one active auth key and touching nothing legacy (UC-G1.2). |
 | `tests/at_functional_test/test/pkam_record_authoritative_test.dart` | the cross-cutting invariant that ML-DSA APKAM auth is record-authoritative. |
 | `packages/at_client/test/pq_client_bootstrap_test.dart` | the PQ startup itself, and cited by nothing: the step order, what a `stop()` between steps halts, that an abandoned startup says so at WARNING naming what it skipped, that a gated-off step is skipped rather than waited on, and the enrollment snapshot's grant handling. |
@@ -2719,8 +2722,9 @@ right" pass rather than numbered projects.
 
 ## 15. C1 · The rollout posture
 
-From the PQ project's view, at_client 4.0 is final-3.x code with different flag
-defaults, so every stage of the rollout must be reachable from this codebase by
+From the PQ project's view, the at_client majors after 3.x are final-3.x code
+with different flag defaults, so every stage of the rollout must be reachable
+from this codebase by
 flag manipulation: each axis flipped in isolation, and all of them at once as
 the grouped `PqPosture`. These rows assert the mechanism itself — the
 posture reaching each flag's natural home, and every axis remaining
@@ -2922,8 +2926,10 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   `enrollmentId` passed beside it that disagrees is logged at shout level and
   ignored.
 
-  ⚠️ **The keys decide, and `AtAuthRequest.enrollmentId` does not exist.**
-  `primary` is a name the client carries, not one a caller passes.
+  ⚠️ **The keys decide, and no caller names the enrollment to authenticate
+  as.** `primary` is a name the client carries, not one a caller passes; an
+  `enrollmentId` handed to `open` or `buildAtClient` that disagrees with the
+  keys is logged at shout and ignored.
 
 #### UC-G1.2 — a retrofit leaves exactly one active authentication key, and touches nothing legacy
   *Given* a legacy keyfile that then retrofits.
@@ -3886,8 +3892,8 @@ which is the same mechanism stated once.
 
 #### UC-G3.1 — every door that creates an enrollment files the private half, not just the public one
   *Given* a client creating an enrollment through any of the three doors that
-  mint one — an app's enrolment (`AtOnboardingService.enroll`), the
-  self-retrofit, and a PQ-native activation.
+  mint one — an app's enrolment (`Atsign.enroll`), the self-retrofit, and a
+  PQ-native activation (`Atsign.activate`'s first enrollment).
   *When* the atServer answers with an enrollment id.
   *Then* the freshly minted signing keypair's **private** half is written to
   the keyfile as typed `sign:` material under that id, so

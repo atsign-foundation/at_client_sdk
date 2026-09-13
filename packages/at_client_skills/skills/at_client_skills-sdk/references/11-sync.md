@@ -29,10 +29,11 @@ propagate, and any real-time features appear broken.
 ```dart
 final acp = AtClientPreference()
   ..namespace = 'my_namespace'
-  ..syncRegex = 'my_namespace'   // scope sync to THIS app's keys
-  ..commitLogPath = dir.path
-  ..hiveStoragePath = dir.path;
+  ..syncRegex = 'my_namespace';   // scope sync to THIS app's keys
 ```
+
+(Where the store lives is the `storage:` the client is opened on — see
+[15-client-lifecycle.md](15-client-lifecycle.md).)
 
 The atServer always syncs a small set regardless of the regex: `shared_key`
 reserved keys, the encryption public key, and namespace-less `public:` keys.
@@ -73,7 +74,7 @@ class _SyncedListener implements SyncProgressListener {
   }
 }
 
-final sync = AtClientManager.getInstance().syncService;
+final sync = client.syncService;   // the client's own; the manager's getter is deprecated
 final listener = _SyncedListener(() => print('synced'));
 sync.addProgressListener(listener);
 // ... later:

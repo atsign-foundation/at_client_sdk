@@ -85,8 +85,9 @@ void main() {
       //       report an encryption error. Bob's signing root is not a KEM
       //       target and cannot stand in. A pre-flight capability query answers
       //       the same question before the user composes anything. With the
-      //       legacy fallback opted in (final 3.x only) the share proceeds
-      //       with the legacy provider — the invitation path, which ends at 4.x. Once bob
+      //       legacy fallback opted in (any posture below pqActive) the share
+      //       proceeds with the legacy provider — the invitation path, which
+      //       ends at 5.x, where disallowLegacyEncryption refuses it. Once bob
       //       uses or authorises the namespace his nskey is published and
       //       alice's next ensureCurrent picks it up by plookup.
       provenIn(
@@ -111,8 +112,8 @@ void main() {
             'refuses, which is the sibling arm and what stops this reading as '
             'the default',
         clauses: [
-          'With the legacy fallback opted in (final 3.x only), the '
-              'share proceeds under'
+          'With the legacy fallback opted in (any posture below `pqActive`), '
+              'the share proceeds under'
         ],
       );
       provenIn(

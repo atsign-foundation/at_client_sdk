@@ -234,11 +234,14 @@ read-capability; the risk is writing too *new*, never reading too *old*.
 **The versioning contract**, conceptually, is one construction-time flag —
 `disallowLegacyEncryption` on `AtClientPreference`:
 
-- **default `false` in 3.x** = "PQ when the app says so, legacy otherwise" — a
-  3.x client is PQ-*capable* but stays legacy-*compatible*; which scheme it
-  writes is its app's release decision, and the cold-start refusal (plus the
-  explicit fallback) is the only per-destination gate;
-- **default `true` in 4.0** = "PQ — refuse rather than write with the legacy provider";
+- **default `false` through 3.x and 4.x** = "PQ when the app's posture says
+  so, legacy otherwise" — a `pqReady` client is PQ-*capable* but stays
+  legacy-*compatible*; which scheme it writes is its app's release decision,
+  and the cold-start refusal (plus the explicit fallback) is the only
+  per-destination gate;
+- **default `true` in 5.0** = "PQ — refuse rather than write with the legacy
+  provider", and it is the posture that sets it: there is no constructor
+  argument and no setter;
 - **final at construction** (no mid-run flipping), and the SDK **SHOUTs at
   startup when it is `false`** so a client permitting legacy writes is never
   silent about it;
@@ -247,14 +250,15 @@ read-capability; the risk is writing too *new*, never reading too *old*.
 
 (The full flag semantics — strict-mode, the SHOUT, immutability, the
 `shouldEncrypt=false` carve-out — are in [`design.md`](design.md); only the
-high-level 3.x-off / 4.x-on trajectory belongs here.)
+high-level 3.x-off / 4.x-reads / 5.x-writes trajectory belongs here.)
 
 **The rollout trajectory at a glance** (one line per step; the two-release
 model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d), the sequencing in
 [`implementation-plan.md`](implementation-plan.md)):
 
 0. **Baseline** — all legacy.
-1. **The app's capability release (final 3.x — the soak).** Rebuild only: adds
+1. **The app's capability release (4.x, or `PqPosture.pqReady` named today —
+   the soak).** A rebuild plus the posture: adds
    the PQ providers + provider routing on *read*, upgrades the app's enrollment,
    mints the namespace `nskey` (publishing its public half immediately at
    `public:__nskey.<ns>@alice`, the private conveyed per-APKAM over the
@@ -262,7 +266,7 @@ model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migr
    legacy. A zero-risk, install-by-install deploy, and the one discipline of the
    whole migration: **this build reaches every install before the next one
    ships**.
-2. **The app's active release (4.x, or an explicit config).** The app now writes
+2. **The app's active release (5.x, or an explicit config).** The app now writes
    the `nskey` data path. The SDK never makes this decision — the app's build
    does. Cross-atSign, a write toward a peer whose install has not reached
    capability fails **cold start by name** (or takes the explicit legacy
@@ -271,26 +275,27 @@ model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migr
 3. **Both ends capable ⇒ end-to-end D1** — the pair runs the `nskey` data path
    both directions; a mixed pair stays on the legacy provider *in that direction only*, by the
    app's own choice of fallback.
-4. **Retire legacy, then the v4 default flip** — lazy re-encrypt on touch, then
-   `at_client 4.0` flips its default posture from `PqPosture.pqReady`
-   to `PqPosture.pqActive`: one edit moving the remaining rollout axes at
-   once (era config, `disallowLegacyEncryption`, the in-use signing set,
-   enrolment key exchange, retrofit signing algorithm), which is why the flag
-   and the era default can no longer be flipped apart
+4. **Retire legacy, then the two default flips** — lazy re-encrypt on touch,
+   then `at_client 4.0` flips its default posture from `PqPosture.legacy` to
+   `PqPosture.pqReady` and `at_client 5.0` from `pqReady` to `pqActive`: two
+   edits moving the rollout axes in two steps (era config,
+   `disallowLegacyEncryption`, the in-use signing set, enrolment key
+   exchange, retrofit signing algorithm), which is why the flag and the era
+   default can no longer be flipped apart
    ([`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)).
-   ⚠️ This read "from `PqPosture.legacy`" until 2026-08-26, when the 3.x
-   release candidate moved the default to `pqReady`. The 4.0 flip is therefore
-   the second half of the move, not the whole of it: authentication, the
-   signing set, seeding and enrolment key exchange have already gone, and what
-   4.0 still turns on is writing post-quantum by default and refusing legacy
-   encryption.
+   ⚠️ This read as one 4.0 flip until
+   [`decisions.md` 138](detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08) moved the ladder
+   back a stage on 2026-09-08: reading post-quantum data goes out at 4.0, and
+   what 5.0 turns on is writing post-quantum by default and refusing legacy
+   encryption. The 3.x default stayed `legacy`; an app names `pqReady` or
+   `pqActive` itself to move earlier.
    Legacy *reads* and the legacy provider remain. Minting/conveying legacy key
    material stops only in a later, **ecosystem-gated** release
    ([`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
 
-In short: **3.x defaults to "PQ when it can, legacy when it must"; 4.x defaults
-to "PQ — refuse rather than write with the legacy provider" — overridable either way, but never
-silently.**
+In short: **3.x defaults to legacy; 4.x defaults to "reads PQ, writes legacy";
+5.x defaults to "PQ — refuse rather than write with the legacy provider" —
+nameable earlier at any time, but never silently.**
 
 ## Usability & crypto-agility constraints
 
@@ -386,12 +391,13 @@ wrong from the next publish onward.
 the signing chain is **root-anchored** (chain links provisional, the sweep
 upgrades them; a root-holder conveys root links, not chain links); retrofit has
 **three modes** with a per-retrofit signing-algorithm selector; and — the frame
-for the whole cutover — **from the PQ project's view, 4.0 is final-3.x code with
-only flag *defaults* changed.** Every rollout stage (the crypto era default,
-`disallowLegacyEncryption`, the signed-envelope version, `EnrollmentKeyExchangeMode`,
-the retrofit signing algorithm) is an independent flag with a 3.x and a 4.0
-default, plus a convenience posture that sets them as a group; all the code ships
-in 3.x, and the acceptance suite drives the entire rollout by flag manipulation.
+for the whole cutover — **from the PQ project's view, the majors after 3.x are
+final-3.x code with only flag *defaults* changed.** Every rollout stage (the
+crypto era default, `disallowLegacyEncryption`, the signed-envelope version,
+`EnrollmentKeyExchangeMode`, the retrofit signing algorithm) is an independent
+flag whose default moves at 4.0 or at 5.0, plus a convenience posture that
+sets them as a group; all the code ships in 3.x, and the acceptance suite
+drives the entire rollout by flag manipulation.
 
 **Where the build has got to is not recorded here.** What is owed and what is
 parked are in [`implementation-plan.md`](implementation-plan.md)'s

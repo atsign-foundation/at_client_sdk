@@ -289,49 +289,6 @@ void main() {
           '4be2d358-074d-4e3b-99f3-64c4da01532f');
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.approved);
     });
-
-    test('A test to verify the deny enrollment', () async {
-      String atSign = '@alice🛠';
-
-      String? apkamPrivateKey = pkamPrivateKeyMap[atSign]!;
-      String? apkamPublicKey = pkamPublicKeyMap[atSign]!;
-      String? encryptionPublicKey = encryptionPublicKeyMap[atSign]!;
-      String? encryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
-      String? selfEncryptionKey = aesKeyMap[atSign]!;
-      String? apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
-
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(
-          AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey),
-          AtPkamKeyPair.create(apkamPublicKey, apkamPrivateKey));
-      atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
-      atChopsKeys.selfEncryptionKey = AESKey(selfEncryptionKey);
-
-      AtChopsImpl atChopsImpl = AtChopsImpl(atChopsKeys);
-
-      AtLookUp mockAtLookUp = MockAtLookUp();
-
-      AtEnrollment atEnrollmentBase = AtEnrollmentImpl();
-
-      when(() => mockAtLookUp.atChops).thenReturn(atChopsImpl);
-
-      when(() => mockAtLookUp
-              .executeCommand(any(that: startsWith('enroll:deny')), auth: true))
-          .thenAnswer((_) => Future.value('data:${jsonEncode({
-                    'status': 'denied',
-                    'enrollmentId': '4be2d358-074d-4e3b-99f3-64c4da01532f'
-                  })}'));
-
-      EnrollmentRequestDecision enrollmentRequestDecision =
-          EnrollmentRequestDecision.denied(
-              '4be2d358-074d-4e3b-99f3-64c4da01532f', atSign);
-
-      AtEnrollmentResponse atEnrollmentResponse =
-          await atEnrollmentBase.deny(enrollmentRequestDecision, mockAtLookUp);
-
-      expect(atEnrollmentResponse.enrollmentId,
-          '4be2d358-074d-4e3b-99f3-64c4da01532f');
-      expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.denied);
-    });
   });
 
   group('AtEnrollmentResponse toJson / fromJson', () {
