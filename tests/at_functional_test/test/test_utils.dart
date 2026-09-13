@@ -177,8 +177,6 @@ class TestUtils {
         sealsToKeyAlgorithms: sealsToKeyAlgorithms);
     preference.rootDomain = 'vip.ve.atsign.zone';
     preference.rootPort = rootServerPort;
-    preference.decryptPackets = false;
-    preference.tlsKeysSavePath = 'test/tlsKeysFile';
     preference.fetchOfflineNotifications = true;
     return preference;
   }
