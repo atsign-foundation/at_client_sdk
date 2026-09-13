@@ -102,9 +102,10 @@ knowing before turning it on:
 
 - The APKAM is filed as **typed material** under the enrollment id, and the
   `.atKeys` flat `apkamPublicKey`/`apkamPrivateKey` fields are left **empty**.
-  That is deliberate: `AtKeys.toAtChops()` reads only the flat fields, so a
-  tool that has not been taught about PQ enrollments fails outright instead of
-  signing an ML-DSA key with the RSA routine. The authenticator at_auth
+  That is deliberate: a reader of the flat fields alone —
+  `AtKeys.authenticationKeyPairFor(null)`, or a tool that predates typed
+  material — finds no APKAM and fails outright instead of signing an ML-DSA
+  key with the RSA routine. The authenticator at_auth
   builds resolves such an enrollment on its own:
   `AtKeys.enrollmentToAuthenticateAs()` names it and
   `signingAlgorithmForEnrollment` picks the routine.
@@ -287,6 +288,7 @@ directly.
 | `AtKeys.toAtChops()` / `.toAtChopsForEnrollment(id)`                                             | `AtKeys.authenticationFor(id)` for the `AtChops` and its algorithm; `authenticationKeyPairFor(id)`, `encryptionKeyPair` and `selfEncryptionKey` for the material alone                          |
 | `KeyIOMixin`'s `decryptAtKeysWithSelfEncKey`, `encryptAtKeysWithSelfEncKey`, `generateKeyPairs`, `decodeAtKeys` | `FileAtKeysIo.read` / `.write`, which apply the passphrase envelope and the self-encryption themselves                                                                            |
 | `AtKeys.copyWith(...)`                                                                           | `AtKeys.addKey(...)`                                                                                                                                                                            |
+| `AtKeys.apkamPublicKey`, `.apkamPrivateKey`, `.apkamSymmetricKey`, `.defaultEncryptionPublicKey`, `.defaultEncryptionPrivateKey`, `.defaultSelfEncryptionKey`, `.enrollmentId` | still present, deprecated: write a legacy document with `AtKeys.legacy(...)` or `fileLegacyMaterial(...)`, and read it through `authenticationKeyPairFor`, `encryptionKeyPair`, `selfEncryptionKey`, `enrollmentSymmetricKey` and `storedEnrollmentId` |
 | `import 'package:at_auth/at_auth.dart'` for `FileAtKeysIo`                                       | `import 'package:at_auth/at_auth_io.dart'`, the `dart:io` barrel; at_client re-exports it                                                                                                       |
 | `ActivateApiEndpoint`, `RegistrarApiEndpoint.login` / `.validate`                                | `RegistrarApiEndpoint.requestOtp` / `.validateOtp`                                                                                                                                              |
 | `AtEnrollmentRequest(atSign: ..., rootDomain: ..., apkamPublicKey: ..., encryptedAPKAMSymmetricKey: ...)` | still accepted, deprecated: pass `session: AtAuthSession(...)`, which names the atSign, the root domain and the key destination                                                       |
