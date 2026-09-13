@@ -43,9 +43,12 @@ class AtsignFlows {
     required AtClientPreference preference,
     AtClientStorage? storage,
     AtLookUpFactory? lookUps,
-  }) => Atsign(
-    atSign,
-  ).open(keys: keys, preference: preference, storage: storage, lookUps: lookUps);
+  }) => Atsign(atSign).open(
+    keys: keys,
+    preference: preference,
+    storage: storage,
+    lookUps: lookUps,
+  );
 
   Future<PendingEnrollment?> resumeEnrollment(
     String atSign, {
