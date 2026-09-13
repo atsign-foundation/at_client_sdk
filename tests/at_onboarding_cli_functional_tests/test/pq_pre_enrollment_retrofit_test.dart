@@ -76,9 +76,7 @@ void main() {
       AtOnboardingPreference(posture: posture)
         ..rootDomain = rootDomain
         ..rootPort = virtualenvRootPort
-        ..isLocalStoreRequired = true
-        ..hiveStoragePath = 'storage/hive/$atSign'
-        ..commitLogPath = 'storage/hive/$atSign/commit'
+        ..storagePath = 'storage/hive/$atSign'
         ..atKeysFilePath = testKeysFile(atSign)
         ..downloadPath = testKeysDir
         ..appName = 'wavi'
@@ -90,13 +88,13 @@ void main() {
   Future<void> writeLegacyKeyfile(String atSign) async {
     final aes = at_demos.aesKeyMap[atSign]!;
     final map = <String, String?>{
-      AuthKeyType.pkamPublicKey:
+      AuthKeyType.aesEncryptedPkamPublicKey:
           EncryptionUtil.encryptValue(at_demos.pkamPublicKeyMap[atSign]!, aes),
-      AuthKeyType.pkamPrivateKey:
+      AuthKeyType.aesEncryptedPkamPrivateKey:
           EncryptionUtil.encryptValue(at_demos.pkamPrivateKeyMap[atSign]!, aes),
-      AuthKeyType.encryptionPublicKey: EncryptionUtil.encryptValue(
+      AuthKeyType.aesEncryptedEncryptionPublicKey: EncryptionUtil.encryptValue(
           at_demos.encryptionPublicKeyMap[atSign]!, aes),
-      AuthKeyType.encryptionPrivateKey: EncryptionUtil.encryptValue(
+      AuthKeyType.aesEncryptedEncryptionPrivateKey: EncryptionUtil.encryptValue(
           at_demos.encryptionPrivateKeyMap[atSign]!, aes),
       AuthKeyType.selfEncryptionKey: aes,
       atSign: aes,

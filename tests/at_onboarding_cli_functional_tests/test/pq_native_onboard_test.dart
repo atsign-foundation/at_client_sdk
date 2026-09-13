@@ -34,8 +34,7 @@ void main() {
       AtOnboardingPreference(posture: PqPosture.pqReady)
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = virtualenvRootPort
-        ..hiveStoragePath = 'test/storage/hive/$atSign'
-        ..commitLogPath = 'test/storage/hive/$atSign/commit'
+        ..storagePath = 'test/storage/hive/$atSign'
         ..namespace = 'wavi'
         ..cramSecret = at_demos.cramKeyMap[atSign]
         ..atKeysFilePath = keysFilePath
@@ -93,8 +92,7 @@ void main() {
         AtOnboardingPreference(posture: PqPosture.legacy)
           ..rootDomain = 'vip.ve.atsign.zone'
           ..rootPort = virtualenvRootPort
-          ..hiveStoragePath = 'test/storage/hive/$atSign-reader'
-          ..commitLogPath = 'test/storage/hive/$atSign-reader/commit'
+          ..storagePath = 'test/storage/hive/$atSign-reader'
           ..namespace = 'wavi'
           ..atKeysFilePath = keysFilePath);
     expect(await reader.authenticate(), true);
@@ -181,8 +179,7 @@ void main() {
     final activation = AtOnboardingPreference(posture: PqPosture.legacy)
       ..rootDomain = 'vip.ve.atsign.zone'
       ..rootPort = virtualenvRootPort
-      ..hiveStoragePath = 'test/storage/hive/$legacyAtSign'
-      ..commitLogPath = 'test/storage/hive/$legacyAtSign/commit'
+      ..storagePath = 'test/storage/hive/$legacyAtSign'
       ..namespace = 'wavi'
       ..cramSecret = at_demos.cramKeyMap[legacyAtSign]
       ..atKeysFilePath = legacyKeysFile
@@ -207,8 +204,7 @@ void main() {
         AtOnboardingPreference(posture: PqPosture.legacy)
           ..rootDomain = 'vip.ve.atsign.zone'
           ..rootPort = virtualenvRootPort
-          ..hiveStoragePath = 'test/storage/hive/$legacyAtSign-reader'
-          ..commitLogPath = 'test/storage/hive/$legacyAtSign-reader/commit'
+          ..storagePath = 'test/storage/hive/$legacyAtSign-reader'
           ..namespace = 'wavi'
           ..atKeysFilePath = legacyKeysFile);
     expect(await reader.authenticate(), true);
