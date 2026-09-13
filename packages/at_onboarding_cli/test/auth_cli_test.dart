@@ -54,9 +54,7 @@ void main() {
       testAtSign = '@alice_decrypt_test';
       passPhrase = 'test_passphrase_123';
 
-      // Generate test AtKeys
-      AtChopsKeys atChopsKeys = getRandomAtChopsKeys();
-      testAtKeys = _getAtAuthKeysFromAtChopsKeys(atChopsKeys);
+      testAtKeys = randomLegacyKeys();
 
       encryptedAtKeysFile =
           File('${tempDir.path}/${testAtSign}_encrypted.atKeys');
@@ -103,18 +101,18 @@ void main() {
       AtKeys decryptedKeys = await decryptedFileIo.read(testAtSign);
 
       // Verify all keys match
-      expect(decryptedKeys.apkamPublicKey.toString(),
-          equals(testAtKeys.apkamPublicKey.toString()));
-      expect(decryptedKeys.apkamPrivateKey.toString(),
-          equals(testAtKeys.apkamPrivateKey.toString()));
-      expect(decryptedKeys.defaultEncryptionPublicKey.toString(),
-          equals(testAtKeys.defaultEncryptionPublicKey.toString()));
-      expect(decryptedKeys.defaultEncryptionPrivateKey.toString(),
-          equals(testAtKeys.defaultEncryptionPrivateKey.toString()));
-      expect(decryptedKeys.defaultSelfEncryptionKey.toString(),
-          equals(testAtKeys.defaultSelfEncryptionKey.toString()));
-      expect(decryptedKeys.apkamSymmetricKey.toString(),
-          equals(testAtKeys.apkamSymmetricKey.toString()));
+      final decryptedApkam = decryptedKeys.authenticationKeyPairFor(null)!;
+      final testApkam = testAtKeys.authenticationKeyPairFor(null)!;
+      expect(decryptedApkam.publicKey, equals(testApkam.publicKey));
+      expect(decryptedApkam.privateKey, equals(testApkam.privateKey));
+      expect(decryptedKeys.encryptionKeyPair!.atPublicKey.publicKey,
+          equals(testAtKeys.encryptionKeyPair!.atPublicKey.publicKey));
+      expect(decryptedKeys.encryptionKeyPair!.atPrivateKey.privateKey,
+          equals(testAtKeys.encryptionKeyPair!.atPrivateKey.privateKey));
+      expect(decryptedKeys.selfEncryptionKey!.key,
+          equals(testAtKeys.selfEncryptionKey!.key));
+      expect(decryptedKeys.enrollmentSymmetricKey!.key,
+          equals(testAtKeys.enrollmentSymmetricKey!.key));
     });
 
     test('Decrypt command appends .atKeys extension if not present', () async {
@@ -219,38 +217,6 @@ void main() {
       Directory(absPath).deleteSync(recursive: true);
     }
   });
-}
-
-// Helper function to create AtKeys from AtChopsKeys
-AtKeys _getAtAuthKeysFromAtChopsKeys(AtChopsKeys atChopsKeys) {
-  AtKeys atAuthKeys = AtKeys();
-
-  if (atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey != null) {
-    atAuthKeys.apkamPublicKey =
-        AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey);
-  }
-  if (atChopsKeys.atPkamKeyPair?.atPrivateKey.privateKey != null) {
-    atAuthKeys.apkamPrivateKey =
-        AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey);
-  }
-  if (atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey != null) {
-    atAuthKeys.defaultEncryptionPublicKey = AtBytes.fromString(
-        atChopsKeys.atEncryptionKeyPair!.atPublicKey.publicKey);
-  }
-  if (atChopsKeys.atEncryptionKeyPair?.atPrivateKey.privateKey != null) {
-    atAuthKeys.defaultEncryptionPrivateKey = AtBytes.fromString(
-        atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
-  }
-  if (atChopsKeys.selfEncryptionKey?.key != null) {
-    atAuthKeys.defaultSelfEncryptionKey =
-        AtBytes.fromString(atChopsKeys.selfEncryptionKey!.key);
-  }
-  if (atChopsKeys.apkamSymmetricKey?.key != null) {
-    atAuthKeys.apkamSymmetricKey =
-        AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key);
-  }
-
-  return atAuthKeys;
 }
 
 /// Tests that `--posture` is honoured on every command, not on activation
