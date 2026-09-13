@@ -1,3 +1,6 @@
+@Tags(['pq'])
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -18,23 +21,23 @@ import 'sync_multiple_client_test.dart';
 import 'test_utils.dart';
 
 void main() {
+  TestUtils.isolateStorage('enrollment_test');
   late AtClientManager atClientManager;
   late String atSign;
   String namespace = 'wavi';
   late String aliceApkamSymmetricKey;
   late String aliceDefaultEncryptionPrivateKey;
   late String aliceSelfEncryptionKey;
-  late String alicePkamPublicKey;
   String encryptedAPKAMSymmetricKey = '';
 
   /// A brand-new RSA-2048 keypair, for a request that must carry a key no
   /// enrollment on this atSign already holds.
   ///
   /// Every enrollment needs a keypair of its own: the atServer refuses a
-  /// request installing key material that any stored enrollment already
-  /// carries, in any status. Two requests sharing one key therefore make the
-  /// second fail, and the failure is durable server state that outlives the
-  /// run that created it.
+  /// request installing key material that any stored record already carries,
+  /// in any status. A shared demo key therefore makes the SECOND request
+  /// carrying it fail, and the failure is durable server state that outlives
+  /// the run that created it.
   ({String publicKey, String privateKey}) freshApkamPair() {
     final pair = RsaKeyPair.generate();
     return (
@@ -45,87 +48,84 @@ void main() {
 
   setUp(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
     aliceApkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
     aliceDefaultEncryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
     aliceSelfEncryptionKey = aesKeyMap[atSign]!;
-    alicePkamPublicKey = pkamPublicKeyMap[atSign]!;
     encryptedAPKAMSymmetricKey = EncryptionUtil.encryptKey(
         aliceApkamSymmetricKey, encryptionPublicKeyMap[atSign]!);
   });
 
-  tearDown(() {
+  tearDown(() async {
+    for (final c
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await c.stop();
+    }
+    for (final c
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await c.stop();
+    }
     AtClientManager.getInstance().reset();
     AtClientImpl.atClientInstanceMap.clear();
+    // Every client is stopped, and what comes next authenticates as a
+    // different enrollment of the same atSign on the same store.
+    await TestUtils.storage.allowPrincipalChange();
   });
 
   group('A group of tests for APKAM scenarios using at_auth', () {
     test('A test to verify onboarding and initial enrollment using at_auth',
         () async {
       var apkamAtSign = ConfigUtil.getYaml()['atSign']['apkamFirstAtSign'];
-      var atAuth = AtAuth.create();
-      final onBoardingRequest = AtOnboardingRequest(apkamAtSign)
-        ..appName = 'wavi'
-        ..deviceName = 'pixel1'
-        ..rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)
-        ..atKeysIo =
-            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys');
-      // onboard with enable enrollment set
-      var atOnboardingResponse =
-          await atAuth.onboard(onBoardingRequest, cramKeyMap[apkamAtSign]!);
-      expect(atOnboardingResponse.isSuccessful, true);
-      expect(atOnboardingResponse.atAuthKeys, isNotNull);
-      expect(atOnboardingResponse.atAuthKeys!.apkamSymmetricKey, isNotNull);
-      expect(atOnboardingResponse.enrollmentId, isNotEmpty);
+      final keysIo =
+          FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys');
+      // The activation is the first enrollment, and the client it hands back
+      // opens on the keyfile it wrote, so the enrollment id travels with the
+      // key source. This atSign was onboarded through enroll:request and so
+      // has no legacy credential at all: the atServer refuses a bare `pkam:`
+      // naming no enrollment.
+      final atClient = await Atsign(apkamAtSign).activate(
+          cramSecret: cramKeyMap[apkamAtSign]!,
+          keys: keysIo,
+          preference: AtClientPreference(posture: PqPosture.legacy)
+            ..rootDomain = 'vip.ve.atsign.zone'
+            ..rootPort = TestUtils.rootServerPort,
+          namespace: namespace,
+          app: 'wavi',
+          device: 'pixel1',
+          signingAlgo: SigningAlgoType.rsa2048,
+          storage: TestUtils.storageFor(apkamAtSign));
+      final onboardedKeys = await keysIo.read(apkamAtSign);
+      expect(onboardedKeys.apkamSymmetricKey, isNotNull);
+      final enrollmentId = atClient.enrollmentId;
+      expect(enrollmentId, isNotEmpty);
+      expect(atClient.connection.current.isOnline, isTrue,
+          reason: 'the keyfile the activation wrote authenticates');
 
-      // auth using generated keysFile
-      var atAuthResponse = await atAuth.authenticate(AtAuthRequest(
-        apkamAtSign,
-        atKeysIo:
-            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
-      )..rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort));
-      expect(atAuthResponse.isSuccessful, true);
-      expect(atAuthResponse.atAuthKeys, isNotNull);
-
-      // create atclient instance
-      var atClientPreference = AtClientPreference()
-        ..commitLogPath = 'test/hive/commit/'
-        ..hiveStoragePath = 'test/hive/client'
-        ..rootDomain = 'vip.ve.atsign.zone'
-        ..rootPort = TestUtils.rootServerPort;
-
-      // The enrollment id travels with the signer, or this client
-      // authenticates over LEGACY pkam — a bare `pkam:` naming no enrollment.
-      // This atSign was onboarded through enroll:request and so has no legacy
-      // credential at all, which the atServer refuses by name. Passing the id
-      // is what `AtOnboardingServiceImpl._initAtClient` does on both of its
-      // paths; this site is hand-built and has to be told.
-      final atClientManager = await AtClientManager(apkamAtSign)
-          .setCurrentAtSign(apkamAtSign, namespace, atClientPreference,
-              atChops: atAuth.atChops,
-              enrollmentId: atOnboardingResponse.enrollmentId);
-      //var scanResult = await atClientManager.atClient.getKeys();
-      var scanResult = await atClientManager.atClient
+      var scanResult = await atClient
           .getRemoteSecondary()
           ?.executeCommand('scan\n', auth: true);
-      final atClient = atClientManager.atClient;
+
       // The enrollment record is NOT in scan, and enroll:list is where it
       // lives. `scan` filters by the connection's enrollment id, so a client
-      // carrying one never sees enrollment keys however broad its grants —
+      // carrying one never sees enrollment keys however broad its grants -
       // this enrollment holds `*:rw` and `__manage:rw` and still does not.
       // Only a connection with no enrollment id at all reaches the unfiltered
       // owner view, which today means CRAM.
-      //
-      // This assertion used to read `true`, and passed because the client was
-      // built without its enrollment id and so authenticated as the owner by
-      // accident. Threading that id is what exposed it.
-      expect(
-          scanResult?.contains(
-              '${atOnboardingResponse.enrollmentId}.new.enrollments.__manage$apkamAtSign'),
-          false,
+      final enrollmentKey =
+          '$enrollmentId.new.enrollments.__manage$apkamAtSign';
+      expect(scanResult?.contains(enrollmentKey), false,
           reason: 'an enrollment-scoped scan excludes enrollment keys. A true '
               'here means the connection reached the unfiltered owner view, '
               'which is what an unthreaded enrollment id used to cause');
+
+      final ownView =
+          await atClient.enrollmentService!.fetchEnrollmentRequests();
+      expect(ownView.map((e) => e.enrollmentId), contains(enrollmentId),
+          reason: 'enroll:list is the management path for enrollment records, '
+              'and this enrollment holds __manage:rw. Asserting it here keeps '
+              'the original intent - the record was created and this client '
+              'can see it - rather than dropping the check with the scan');
       // Check whether at client can create keys in different namespaces
       AtKey atKey =
           AtKey.self('phone', namespace: 'wavi', sharedBy: apkamAtSign).build();
@@ -164,10 +164,6 @@ void main() {
           aliceDefaultEncryptionPrivateKey, aliceApkamSymmetricKey);
       var encryptedSelfEncKey = EncryptionUtil.encryptValue(
           aliceSelfEncryptionKey, aliceApkamSymmetricKey);
-      // A key of its own, NOT this atSign's flat PKAM key. An enrollment
-      // carrying the value at `privatekey:at_pkam_publickey` makes the app
-      // credential and the owner credential one keypair, which an atServer
-      // enforcing one-keypair-per-enrollment refuses outright.
       final cramEnrolmentKey = freshApkamPair();
       var enrollRequest =
           'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${cramEnrolmentKey.publicKey}"}\n';
@@ -181,18 +177,13 @@ void main() {
       expect(enrollResponseJson['enrollmentId'], isNotEmpty);
       expect(enrollResponseJson['status'], 'approved');
 
-      // 2a. Put this atSign's own PKAM credential back, on the same CRAM
-      // connection. An atServer whose CRAM auto-approve copies the enrolling
-      // key over `privatekey:at_pkam_publickey` has just replaced the owner
-      // credential with the key minted above, and every later legacy login in
-      // this file — including other tests sharing this atSign — would fail. On
-      // an atServer that keeps the credential in an enrollment of its own the
-      // same write is a no-op: it already holds this value.
+      // NOTE: a CRAM auto-approve that copies the enrolling key over
+      // privatekey:at_pkam_publickey has just replaced the owner credential.
       expect(
           await atClientManager.atClient
               .getRemoteSecondary()!
-              .executeCommand(
-                  'update:privatekey:at_pkam_publickey $alicePkamPublicKey\n'),
+              .executeCommand('update:privatekey:at_pkam_publickey '
+                  '${pkamPublicKeyMap[atSign]}\n'),
           'data:-1',
           reason: 'the owner credential must be the demo keypair again before '
               'anything else authenticates as this atSign');
@@ -202,12 +193,8 @@ void main() {
           enrollResponseJson['enrollmentId'];
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.enrollmentId =
           enrollResponseJson['enrollmentId'];
-      // 3a. And the keypair that enrollment actually holds. The id alone is
-      // not enough: the connection now authenticates as this enrollment, and
-      // it signs with whatever keypair the lookup carries. That used to be
-      // this atSign's own, which worked only because the request enrolled the
-      // atSign's own key — the very thing an atServer enforcing
-      // one-keypair-per-enrollment refuses.
+      // NOTE: the connection signs as this enrollment, so it needs that
+      // enrollment's keypair, not the atSign's.
       atClientManager.atClient.getRemoteSecondary()?.atLookUp.atChops =
           AtChopsImpl(AtChopsKeys.create(
               null,
@@ -216,14 +203,23 @@ void main() {
       // 4. Assert that SPP is set successfully.
       var otp = (await atClientManager.atClient.getOTP()).response;
 
-      // 4.a Close open connection to start an unauthenticated connection.
-      atClientManager.atClient.getRemoteSecondary()?.atLookUp.close();
-      // 5. Send enrollment request
+      // 5. Send the enrollment request on a connection of the test's own.
+      // NOTE: the client's connection authenticates as the enrollment set in
+      // step 3 as soon as its background work needs the atServer (the first
+      // local write fetches that enrollment's record over it), and an
+      // enroll:request arriving on an enrolled connection is judged a
+      // self-enrollment rather than a new one.
       enrollRequest =
           'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${freshApkamPair().publicKey}", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
-      String? serverResponse = await atClientManager.atClient
-          .getRemoteSecondary()
-          ?.executeCommand(enrollRequest, auth: false);
+      final requestLookup =
+          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      String? serverResponse;
+      try {
+        serverResponse =
+            await requestLookup.executeCommand(enrollRequest, auth: false);
+      } finally {
+        await requestLookup.close();
+      }
       serverResponse = serverResponse?.replaceAll('data:', '');
       Map decodedServerResponse = jsonDecode(serverResponse!);
       expect(decodedServerResponse['status'], 'pending');
@@ -252,7 +248,8 @@ void main() {
           otp: 'a1b2c3',
           signingAlgo: SigningAlgoType.rsa2048); //random invalid OTP
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      var newAtLookup =
+          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       expect(
           () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
           throwsA(predicate((dynamic e) =>
@@ -275,7 +272,8 @@ void main() {
           otp: otp,
           signingAlgo: SigningAlgoType.rsa2048);
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      var newAtLookup =
+          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       var enrollmentResponse =
           await atEnrollment.submit(enrollmentRequest, newAtLookup);
       expect(enrollmentResponse.enrollmentId, isNotEmpty);
@@ -294,7 +292,8 @@ void main() {
   test(
       'validate client functionality to fetch pending enrollments on legacy pkam authenticated client',
       () async {
-    atClientManager = await TestUtils.initAtClient(atSign, 'new_app');
+    atClientManager = await TestUtils.initAtClient(atSign, 'new_app',
+        posture: PqPosture.legacy);
     AtClient? client = atClientManager.atClient;
     // fetch first otp
     String? otp =
@@ -303,14 +302,12 @@ void main() {
     // create first enrollment request
     RemoteSecondary? secondRemoteSecondary =
         RemoteSecondary(atSign, getClient2Preferences());
-    // Fresh per request, and the two below must differ from each other: the
-    // atServer refuses a request whose key any stored enrollment already
-    // holds, so two requests sharing one key make the second fail.
-    final firstRequestKey = freshApkamPair();
-    final secondRequestKey = freshApkamPair();
+    // Fresh per request, and the two below must differ: the atServer refuses a
+    // request whose key any stored enrollment already holds, so two requests
+    // sharing one key make the second fail.
     String random = Uuid().v4().hashCode.toString();
     var newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel-6-$random","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"${firstRequestKey.publicKey}","enrollmentStatusFilter":["pending"],"encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel-6-$random","namespaces":{"new_app":"rw"},"otp":"$otp","apkamPublicKey":"${freshApkamPair().publicKey}","enrollmentStatusFilter":["pending"],"encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
     var enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
@@ -324,7 +321,7 @@ void main() {
     expect(otp, isNotNull);
     // create second enrollment request
     newEnrollRequest = TestUtils.formatCommand(
-        'enroll:request:{"appName":"new_app","deviceName":"pixel-7-$random","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"${secondRequestKey.publicKey}","encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
+        'enroll:request:{"appName":"new_app","deviceName":"pixel-7-$random","namespaces":{"new_app":"rw", "wavi":"r"},"otp":"$otp","apkamPublicKey":"${freshApkamPair().publicKey}","encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}');
     enrollResponse = await TestUtils.executeCommandAndParse(
         null, newEnrollRequest,
         remoteSecondary: secondRemoteSecondary);
@@ -360,7 +357,8 @@ void main() {
       'A group of tests to validate approve and deny operations of an enrollment',
       () {
     setUp(() async {
-      atClientManager = await TestUtils.initAtClient(atSign, namespace);
+      atClientManager = await TestUtils.initAtClient(atSign, namespace,
+          posture: PqPosture.legacy);
       // Load encryption public key into remote secondary
       await atClientManager.atClient.getRemoteSecondary()!.executeCommand(
           'update:public:publickey$atSign ${encryptionPublicKeyMap[atSign]}\n',
@@ -415,43 +413,31 @@ void main() {
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
 
       // Set AtClient to null and authenticate with the new auth keys generated for enrollment
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
-      // Get AtChops from the AtAuthKeys
-      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
-          encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
-      AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
-          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
-      AtChopsKeys atChopsKeys =
-          AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-      atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
-      AtChops atChops = AtChopsImpl(atChopsKeys);
-
-      // Authenticate the atSign
-      AtAuth atAuth = AtAuth.create(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(
-        atSign,
-        atKeysIo:
-            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
-      );
-      atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
-      atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
-      atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
-
-      AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
-      expect(atAuthResponse.isSuccessful, true);
-
-      // After authentication is successful, create an instance of atClient with enrollment Id
-      // to perform put operation.
-      await AtClientManager.getInstance().setCurrentAtSign(
-          atSign, namespace, TestUtils.getPreference(atSign),
-          atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
+      // The enrollee's own keys, completed with the two atSign-wide secrets
+      // an approval releases, are what its client opens on.
+      final enrolledKeys = atEnrollmentResponse.atAuthKeys!
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionPrivateKeyMap[atSign]!)
+        ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!);
+      final enrolledClient = await Atsign(atSign).open(
+          keys: InMemoryAtKeysIo.holding(atSign, enrolledKeys),
+          preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+          namespace: namespace,
+          storage: TestUtils.storageForPrincipal(
+              atSign, atEnrollmentResponse.enrollmentId));
+      expect(enrolledClient.connection.current.isOnline, isTrue,
+          reason: 'the approved enrollment authenticates');
+      AtClientManager.getInstance().use(enrolledClient);
 
       // Insert key which has access to namespace authorized by enrollment.
       AtKey atKey =
@@ -514,40 +500,31 @@ void main() {
       expect(approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.denied);
 
       // Set AtClient to null and authenticate with the new auth keys generated for enrollment
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
       // Get AtChops from the AtAuthKeys
-      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
-          encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
-      AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
-          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
-      AtChopsKeys atChopsKeys =
-          AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-      AtChops atChops = AtChopsImpl(atChopsKeys);
-
-      // Authenticate the atSign
-      AtAuth atAuth = AtAuth.create(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(
-        atSign,
-        atKeysIo:
-            FileAtKeysIo(filePath: (atsign) => 'test/testData/$atsign.atKeys'),
-      );
-      atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
-      atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
-      atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
-
-      expect(
-          () async => await atAuth.authenticate(atAuthRequest),
-          throwsA(predicate((dynamic e) =>
-              e is AtAuthenticationException &&
-              e.message.contains(
-                  'AT0025:enrollment_id: ${atAuthRequest.enrollmentId} is denied'))));
+      // The enrollee's keys are complete, and still refused: the atServer
+      // names the denied enrollment.
+      final enrolledKeys = atEnrollmentResponse.atAuthKeys!
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionPrivateKeyMap[atSign]!)
+        ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!);
+      await expectLater(
+          () => Atsign(atSign).authenticatesAs(
+              keys: InMemoryAtKeysIo.holding(atSign, enrolledKeys),
+              rootDomain:
+                  AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)),
+          throwsA(predicate((e) =>
+              '$e'.contains('AT0025') &&
+              '$e'.contains('${atEnrollmentResponse.enrollmentId} is denied'))));
     });
 
     test(
@@ -598,56 +575,52 @@ void main() {
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
       // Insert a key with wavi and buzz namespace for atClient.get to fetch the data
       // Run AtClient.get before authenticating with enrollment because enrollment has only
-      // read access.
+      // read access. Written to the atServer, since the enrolled client below
+      // has a store of its own and reads them from there.
+      final remoteWrite = PutRequestOptions()..useRemoteAtServer = true;
       AtKey atKey =
           AtKey.self('phone', namespace: 'wavi', sharedBy: atSign).build();
       String value = '12345';
-      AtResponse putWaviKeyResponse =
-          await AtClientManager.getInstance().atClient.putText(atKey, value);
+      AtResponse putWaviKeyResponse = await AtClientManager.getInstance()
+          .atClient
+          .putText(atKey, value, putRequestOptions: remoteWrite);
       expect(putWaviKeyResponse.response, isNotEmpty);
 
       // Put key with buzz namespace
       atKey = AtKey.self('mobile', namespace: 'buzz', sharedBy: atSign).build();
       value = '99899';
-      AtResponse putBuzzKeyResponse =
-          await AtClientManager.getInstance().atClient.putText(atKey, value);
+      AtResponse putBuzzKeyResponse = await AtClientManager.getInstance()
+          .atClient
+          .putText(atKey, value, putRequestOptions: remoteWrite);
       expect(putBuzzKeyResponse.response, isNotEmpty);
 
       // Set AtClient to null and authenticate with the new auth keys generated for enrollment
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
-      // Get AtChops from the AtAuthKeys
-      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
-          encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
-      AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
-          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
-      AtChopsKeys atChopsKeys =
-          AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-      // atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
-      AtChops atChops = AtChopsImpl(atChopsKeys);
-
-      // Authenticate the atSign
-      AtAuth atAuth = AtAuth.create(atChops: atChops);
-      AtAuthRequest atAuthRequest =
-          AtAuthRequest(atSign, atKeysIo: FileAtKeysIo());
-      atAuthRequest.enrollmentId = atEnrollmentResponse.enrollmentId;
-      atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
-      atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          AtBytes.fromString(aesKeyMap[atSign]!);
-      atAuthRequest.rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
-
-      AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
-      expect(atAuthResponse.isSuccessful, true);
-
-      // After authentication is successful, create an instance of atClient with enrollment Id
-      // to perform put operation.
-      await AtClientManager.getInstance().setCurrentAtSign(
-          atSign, namespace, TestUtils.getPreference(atSign),
-          atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
+      // The enrollee's own keys, completed with the two atSign-wide secrets
+      // an approval releases, are what its client opens on; the enrolled
+      // client has a store of its own, so the self key has to come with them.
+      final enrolledKeys = atEnrollmentResponse.atAuthKeys!
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionPrivateKeyMap[atSign]!)
+        ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!);
+      final enrolledClient = await Atsign(atSign).open(
+          keys: InMemoryAtKeysIo.holding(atSign, enrolledKeys),
+          preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+          namespace: namespace,
+          storage: TestUtils.storageForPrincipal(
+              atSign, atEnrollmentResponse.enrollmentId));
+      expect(enrolledClient.connection.current.isOnline, isTrue,
+          reason: 'the approved enrollment authenticates');
+      AtClientManager.getInstance().use(enrolledClient);
 
       // Insert key which has access to namespace authorized by enrollment.
       // Since the enrollment has only read access, should throw an exception.
@@ -675,12 +648,15 @@ void main() {
               e.message.contains(
                   'Cannot perform llookup on mobile.buzz$atSign due to insufficient privilege'))));
 
-      // Get the key which has access to namespace
+      // Get the key which has access to namespace. The owner's client wrote
+      // it, and this client's own store has not synced it, so read it from
+      // the atServer.
       AtKey getWaviKey = atKey =
           AtKey.self('phone', namespace: 'wavi', sharedBy: atSign).build();
 
-      AtValue atValue =
-          await AtClientManager.getInstance().atClient.get(getWaviKey);
+      AtValue atValue = await AtClientManager.getInstance().atClient.get(
+          getWaviKey,
+          getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
       expect(atValue.value, '12345');
     });
   });
@@ -692,10 +668,12 @@ void main() {
         () async {
       String random = Uuid().v4().hashCode.toString();
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
-      AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      AtLookUp atLookUp =
+          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
 
-      AtClientManager atClientManager =
-          await TestUtils.initAtClient(atSign, namespace);
+      AtClientManager atClientManager = await TestUtils.initAtClient(
+          atSign, namespace,
+          posture: PqPosture.legacy);
 
       // let's initialize the notification service before we do anything else
       // to ensure that the monitor is started etc
@@ -728,7 +706,7 @@ void main() {
             deviceName: 'device-$random',
             otp: (await atClientManager.atClient.getOTP()).response,
             namespaces: {'wavi': 'rw'},
-          signingAlgo: SigningAlgoType.rsa2048),
+            signingAlgo: SigningAlgoType.rsa2048),
         atLookUp,
       );
 
@@ -756,8 +734,6 @@ void main() {
       final cramAtSign = ConfigUtil.getYaml()['atSign']['apkamSecondAtSign'];
       final cramSecret = cramKeyMap[cramAtSign]!;
       String keysFilePath(String a) => 'test/testData/$a.atKeys';
-      final rootDomain =
-          AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       // Onboarding refuses to run if a keys file already exists, so clear any
       // left over from a prior run — this test mints @sachin's keys fresh
@@ -769,39 +745,30 @@ void main() {
 
       // (a) Initial onboarding with the CRAM secret. Mints the first
       // (manage-capable) enrollment plus the atSign's key set, writes the
-      // .atKeys file; authenticate to load those keys into AtChops.
-      final ownerAuth = AtAuth.create();
-      final onboardResponse = await ownerAuth.onboard(
-        AtOnboardingRequest(cramAtSign)
-          ..appName = 'wavi'
-          ..deviceName = 'pixel-onboard'
-          ..rootDomain = rootDomain
-          ..atKeysIo = FileAtKeysIo(filePath: keysFilePath),
-        cramSecret,
-      );
-      expect(onboardResponse.isSuccessful, true);
-      expect(onboardResponse.enrollmentId, isNotEmpty);
-
-      final ownerAuthResponse = await ownerAuth.authenticate(
-        AtAuthRequest(cramAtSign,
-            atKeysIo: FileAtKeysIo(filePath: keysFilePath))
-          ..rootDomain = rootDomain,
-      );
-      expect(ownerAuthResponse.isSuccessful, true);
-
-      final ownerManager = await AtClientManager.getInstance().setCurrentAtSign(
-          cramAtSign, namespace, TestUtils.getPreference(cramAtSign),
-          atChops: ownerAuth.atChops,
-          enrollmentId: onboardResponse.enrollmentId);
-      final ownerClient = ownerManager.atClient;
+      // .atKeys file, and opens the owner client on it.
+      final ownerKeysIo = FileAtKeysIo(filePath: keysFilePath);
+      final ownerClient = await Atsign(cramAtSign).activate(
+          cramSecret: cramSecret,
+          keys: ownerKeysIo,
+          preference:
+              TestUtils.getPreference(cramAtSign, posture: PqPosture.legacy),
+          namespace: namespace,
+          app: 'wavi',
+          device: 'pixel-onboard',
+          signingAlgo: SigningAlgoType.rsa2048,
+          storage: TestUtils.storageForPrincipal(cramAtSign, 'owner'));
+      expect(ownerClient.enrollmentId, isNotEmpty);
+      expect(ownerClient.connection.current.isOnline, isTrue,
+          reason: 'the keyfile the activation wrote authenticates');
+      AtClientManager.getInstance().use(ownerClient);
 
       // The atSign's default encryption keypair and self-encryption key are
-      // atSign-wide (shared across enrollments). Read them from the owner's
-      // AtChops to hand to the enrollee for authentication later.
-      final encryptionKeyPair =
-          ownerAuth.atChops!.atChopsKeys.atEncryptionKeyPair!;
-      final selfEncryptionKey =
-          ownerAuth.atChops!.atChopsKeys.selfEncryptionKey!.key;
+      // atSign-wide (shared across enrollments). Read them from the keyfile
+      // the activation wrote, to hand to the enrollee for authentication
+      // later.
+      final ownerKeys = await ownerKeysIo.read(cramAtSign);
+      final encryptionKeyPair = ownerKeys.encryptionKeyPair!;
+      final selfEncryptionKey = ownerKeys.selfEncryptionKey!.key;
 
       // The enrollee fetches publickey<atSign> to wrap its apkamSymmetricKey,
       // so ensure it is published.
@@ -817,8 +784,8 @@ void main() {
       // generates a fresh APKAM keypair and wraps its apkamSymmetricKey with
       // the atSign's default encryption public key.
       final random = Uuid().v4().hashCode;
-      final enrolleeLookup =
-          AtLookupImpl(cramAtSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      final enrolleeLookup = AtLookupImpl(
+          cramAtSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       final enrollResponse = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
           atSign: cramAtSign,
@@ -852,36 +819,30 @@ void main() {
       // (e) Verify outcomes: the enrollee authenticates with its own APKAM
       // keypair plus the atSign's default encryption/self keys, then can act in
       // its granted namespace (buzz) but not in an ungranted one (wavi).
+      for (final c
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await c.stop();
+      }
       AtClientManager.getInstance().reset();
       AtClientImpl.atClientInstanceMap.clear();
+      // Every client is stopped, and what comes next authenticates as a
+      // different enrollment of the same atSign on the same store.
+      await TestUtils.storage.allowPrincipalChange();
 
-      final enrolleeChopsKeys = AtChopsKeys.create(
-          AtEncryptionKeyPair.create(encryptionKeyPair.atPublicKey.publicKey,
-              encryptionKeyPair.atPrivateKey.privateKey),
-          AtPkamKeyPair.create(
-              enrollResponse.atAuthKeys!.apkamPublicKey!.toString(),
-              enrollResponse.atAuthKeys!.apkamPrivateKey!.toString()))
-        ..selfEncryptionKey = AESKey(selfEncryptionKey);
-      final enrolleeChops = AtChopsImpl(enrolleeChopsKeys);
-
-      final enrolleeAuth = AtAuth.create(atChops: enrolleeChops);
-      final enrolleeAuthRequest = AtAuthRequest(cramAtSign,
-          atKeysIo: FileAtKeysIo(filePath: keysFilePath))
-        ..enrollmentId = enrollResponse.enrollmentId
-        ..atAuthKeys = enrollResponse.atAuthKeys
-        ..rootDomain = rootDomain;
-      enrolleeAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionKeyPair.atPrivateKey.privateKey);
-      enrolleeAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          AtBytes.fromString(selfEncryptionKey);
-      final enrolleeAuthResponse =
-          await enrolleeAuth.authenticate(enrolleeAuthRequest);
-      expect(enrolleeAuthResponse.isSuccessful, true);
-
-      await AtClientManager.getInstance().setCurrentAtSign(
-          cramAtSign, 'buzz', TestUtils.getPreference(cramAtSign),
-          atChops: enrolleeChops, enrollmentId: enrollResponse.enrollmentId);
-      final enrolleeClient = AtClientManager.getInstance().atClient;
+      final enrolleeKeys = enrollResponse.atAuthKeys!
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionKeyPair.atPrivateKey.privateKey)
+        ..defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionKey);
+      final enrolleeClient = await Atsign(cramAtSign).open(
+          keys: InMemoryAtKeysIo.holding(cramAtSign, enrolleeKeys),
+          preference:
+              TestUtils.getPreference(cramAtSign, posture: PqPosture.legacy),
+          namespace: 'buzz',
+          storage: TestUtils.storageForPrincipal(
+              cramAtSign, enrollResponse.enrollmentId));
+      expect(enrolleeClient.connection.current.isOnline, isTrue,
+          reason: 'the approved enrollment authenticates');
+      AtClientManager.getInstance().use(enrolleeClient);
 
       // Granted namespace (buzz): write then read back.
       final buzzKey =
@@ -903,10 +864,10 @@ void main() {
   });
 }
 
+/// Only ever handed to a [RemoteSecondary], which opens no local store, so
+/// this carries no storage path.
 AtClientPreference getClient2Preferences() {
-  return AtClientPreference()
-    ..commitLogPath = 'test/hive/client_2/commit'
-    ..hiveStoragePath = 'test/hive/client_2'
+  return AtClientPreference(posture: PqPosture.legacy)
     ..rootDomain = 'vip.ve.atsign.zone'
     ..rootPort = TestUtils.rootServerPort;
 }

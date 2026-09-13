@@ -10,6 +10,7 @@ import 'dart:io';
 
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:hive/hive.dart';
+import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -21,8 +22,10 @@ void main() {
   });
 
   tearDown(() async {
-    // Close every open Hive box; Hive doesn't expose a "close all"
-    // outside `Hive.close()` itself, which is what we want.
+    // NOTE: `Hive.close()` does not reach the instance owning `tmp.path`, so
+    // without this its box stays open over the directory deleted below and the
+    // next test reads this one's entries back.
+    await HiveInstances.closeAll();
     await Hive.close();
     if (tmp.existsSync()) {
       tmp.deleteSync(recursive: true);
@@ -31,7 +34,7 @@ void main() {
 
   group('AtSyncQueue.open', () {
     test('idempotent — second call is a no-op', () async {
-      final q = AtSyncQueue(atSign: '@alice');
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q.open();
       await q.open(); // must not throw, must not reopen the box
       expect(q.size, 0);
@@ -42,7 +45,7 @@ void main() {
         () async {
       // Round 1: write three entries with explicit ts values out of
       // insertion order, then close.
-      final q1 = AtSyncQueue(atSign: '@alice');
+      final q1 = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q1.open();
       await q1.enqueue('phone.demo@alice', SyncQueueOp.update, ts: 200);
       await q1.enqueue('email.demo@alice', SyncQueueOp.delete, ts: 100);
@@ -50,7 +53,7 @@ void main() {
       await q1.close();
 
       // Round 2: reopen — replay should ts-sort.
-      final q2 = AtSyncQueue(atSign: '@alice');
+      final q2 = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q2.open();
       expect(q2.peek(), [
         'email.demo@alice', // ts 100 first
@@ -68,7 +71,7 @@ void main() {
       await box.put('broken.demo@alice', 'not json');
       await box.close();
 
-      final q = AtSyncQueue(atSign: '@alice');
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q.open();
       // Only the well-formed entry survives.
       expect(q.peek(), ['ok.demo@alice']);
@@ -78,7 +81,7 @@ void main() {
 
   group('AtSyncQueue.enqueue', () {
     test('persists op + ts and adds atKey to the in-memory FIFO', () async {
-      final q = AtSyncQueue(atSign: '@alice');
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q.open();
 
       final tsBefore = DateTime.now().millisecondsSinceEpoch;
@@ -98,7 +101,7 @@ void main() {
     test(
         'second enqueue for same key overwrites op+ts but preserves '
         'in-memory FIFO position', () async {
-      final q = AtSyncQueue(atSign: '@alice');
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q.open();
 
       await q.enqueue('phone.demo@alice', SyncQueueOp.update, ts: 100);
@@ -119,7 +122,7 @@ void main() {
 
     test('UPDATE then DELETE for same key collapses to DELETE on persist',
         () async {
-      final q = AtSyncQueue(atSign: '@alice');
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q.open();
 
       await q.enqueue('phone.demo@alice', SyncQueueOp.updateAll, ts: 100);
@@ -133,7 +136,7 @@ void main() {
 
   group('AtSyncQueue.peek + size', () {
     test('peek limit caps the result', () async {
-      final q = AtSyncQueue(atSign: '@alice');
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q.open();
       for (var i = 0; i < 10; i++) {
         await q.enqueue('k$i.demo@alice', SyncQueueOp.update, ts: i);
@@ -148,7 +151,7 @@ void main() {
     });
 
     test('isEmpty / isNotEmpty track size', () async {
-      final q = AtSyncQueue(atSign: '@alice');
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q.open();
       expect(q.isEmpty, isTrue);
       expect(q.isNotEmpty, isFalse);
@@ -162,7 +165,7 @@ void main() {
 
   group('AtSyncQueue.remove', () {
     test('removes from both in-memory and persisted', () async {
-      final q = AtSyncQueue(atSign: '@alice');
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q.open();
 
       await q.enqueue('phone.demo@alice', SyncQueueOp.update, ts: 100);
@@ -176,14 +179,14 @@ void main() {
       expect(q.readEntry('phone.demo@alice'), isNull);
       // Survives reopen.
       await q.close();
-      final q2 = AtSyncQueue(atSign: '@alice');
+      final q2 = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q2.open();
       expect(q2.peek(), ['email.demo@alice']);
       await q2.close();
     });
 
     test('remove of non-existent key is a no-op', () async {
-      final q = AtSyncQueue(atSign: '@alice');
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q.open();
       await q.remove('never.existed@alice'); // must not throw
       expect(q.size, 0);
@@ -208,7 +211,7 @@ void main() {
 
   group('AtSyncQueue lifecycle', () {
     test('use before open throws StateError', () async {
-      final q = AtSyncQueue(atSign: '@alice');
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       expect(() => q.size, throwsStateError);
       expect(() => q.peek(), throwsStateError);
       expect(() => q.readEntry('foo'), throwsStateError);
@@ -217,11 +220,70 @@ void main() {
     });
 
     test('use after close throws StateError', () async {
-      final q = AtSyncQueue(atSign: '@alice');
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
       await q.open();
       await q.enqueue('phone.demo@alice', SyncQueueOp.update);
       await q.close();
       expect(() => q.size, throwsStateError);
+    });
+  });
+
+  group('removeIfUnchanged — the drain\'s success-path removal', () {
+    test('removes exactly the version it was given, and reports which',
+        () async {
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
+      await q.open();
+      await q.enqueue('k1', SyncQueueOp.updateAll);
+      final pushed = q.readEntry('k1')!;
+
+      expect(await q.removeIfUnchanged('k1', pushed.seq), isTrue);
+      expect(q.readEntry('k1'), isNull);
+      expect(q.size, 0);
+
+      expect(await q.removeIfUnchanged('k1', pushed.seq), isFalse);
+      await q.close();
+    });
+
+    test(
+        'a delete replacing an in-flight update survives the update\'s '
+        'removal', () async {
+      final q = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
+      await q.open();
+
+      await q.enqueue('k1', SyncQueueOp.updateAll);
+      final pushed = q.readEntry('k1')!;
+      expect(pushed.op, SyncQueueOp.updateAll);
+
+      await q.enqueue('k1', SyncQueueOp.delete);
+
+      expect(await q.removeIfUnchanged('k1', pushed.seq), isFalse,
+          reason: 'the entry the drain pushed is not the entry that is '
+              'queued now, so the removal must decline');
+      final survivor = q.readEntry('k1');
+      expect(survivor, isNotNull,
+          reason: 'the superseding delete must stay queued for the next '
+              'round');
+      expect(survivor!.op, SyncQueueOp.delete);
+
+      expect(await q.removeIfUnchanged('k1', survivor.seq), isTrue);
+      expect(q.size, 0);
+      await q.close();
+    });
+
+    test('seq survives a restart and is never reissued', () async {
+      final q1 = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
+      await q1.open();
+      await q1.enqueue('k1', SyncQueueOp.updateAll);
+      final before = q1.readEntry('k1')!.seq;
+      await q1.close();
+
+      // NOTE: a reissued seq would let removeIfUnchanged remove an entry the
+      // drain never pushed.
+      final q2 = AtSyncQueue(atSign: '@alice', storagePath: tmp.path);
+      await q2.open();
+      await q2.enqueue('k2', SyncQueueOp.updateAll);
+      expect(q2.readEntry('k2')!.seq, greaterThan(before));
+      await q2.close();
     });
   });
 }

@@ -95,6 +95,19 @@ bool libCryptoSupportsAesGcm(DynamicLibrary lib) {
   return _libCryptoSupportsCipher(lib, 'AES-256-GCM');
 }
 
+/// Returns `true` when [lib] can fetch a usable AES-256-CTR cipher.
+///
+/// Uses `EVP_CIPHER_fetch` — the OpenSSL 3 provider-aware fetch-by-name, the
+/// symmetric-cipher analogue of the `EVP_PKEY_CTX_new_from_name` probe used for
+/// ML-DSA/ML-KEM. On a FIPS-/policy-restricted libcrypto where the legacy
+/// `EVP_aes_256_ctr` symbol still resolves but the cipher is disabled by the
+/// active provider, the fetch returns null, so [AtPqc.aesCtr] falls back to
+/// pure-Dart instead of selecting [AesCtrFfiAlgo] and then throwing a bare
+/// [StateError] at encrypt/decrypt.
+bool libCryptoSupportsAesCtr(DynamicLibrary lib) {
+  return _libCryptoSupportsCipher(lib, 'AES-256-CTR');
+}
+
 bool _libCryptoSupportsAlgorithm(DynamicLibrary lib, String algorithmName) {
   try {
     final ctxNewFromName = lib.lookupFunction<

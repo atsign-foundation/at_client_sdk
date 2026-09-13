@@ -39,8 +39,9 @@ class AtAuthImpl implements AtAuth {
     _progressController.add(progressEvent);
   }
 
-  @override
-  AtChops? atChops;
+  /// The signer a caller injected through [AtAuth.create], else the one
+  /// [authenticate] and [onboard] build from the keys they resolved.
+  AtChops? _chops;
 
   CramAuthenticator? cramAuthenticator;
 
@@ -72,12 +73,13 @@ class AtAuthImpl implements AtAuth {
 
   AtAuthImpl(
       {this.atLookUp,
-      this.atChops,
+      AtChops? atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
       this.atServerStatus,
       AtEnrollment? atEnrollment})
-      : atEnrollment = atEnrollment ?? AtEnrollment.create();
+      : _chops = atChops,
+        atEnrollment = atEnrollment ?? AtEnrollment.create();
 
   /// The keystore the authenticator should read, matching the precedence
   /// [authenticate] itself uses.
@@ -100,141 +102,28 @@ class AtAuthImpl implements AtAuth {
     return memory;
   }
 
-  /// Hands [lookUp] the authenticator, when it is the implementation that has
-  /// somewhere to put it.
+  /// Hands [lookUp] the authenticator when it is the implementation that has
+  /// somewhere to put it, and sets at_lookup's credential fields otherwise,
+  /// because those are the only route such a lookup has.
   ///
-  /// `AtLookUp` does not declare it - that interface is frozen because mocks
-  /// implement it - so any other implementation keeps the existing behaviour.
-  void _installAuthenticator(AtLookUp? lookUp, AtAuthenticator authenticator) {
+  /// `AtLookUp` does not declare the seam - that interface is frozen because
+  /// mocks implement it - so any other implementation authenticates from the
+  /// fields as it always did. [signingAlgo] reaches only that route; the
+  /// authenticator carries its own.
+  void _installAuthenticator(AtLookUp lookUp, AtAuthenticator authenticator,
+      {SigningAlgoType? signingAlgo}) {
     if (lookUp is AtLookupMuxable) {
       lookUp.authenticator = authenticator;
-    } else {
-      _logger.finer('${lookUp.runtimeType} has no authenticator seam; '
-          'leaving authentication on the credential fields');
+      return;
     }
-  }
-
-  @override
-
-  /// Authenticate using PKAM
-  /// The AtAuthRequest must contain either:
-  /// - 1. atAuthRequest.atKeysIo - An implementation of AtKeysIo to read the keys
-  /// - 2. atAuthRequest.atAuthKeys - An instance of AtKeys containing the keys
-  ///
-  /// If both are provided, atAuthRequest.atAuthKeys will be used.
-  ///
-  /// The AtAuthRequest may optionally contain:
-  /// - atAuthRequest.enrollmentId - The enrollmentId to use for authentication.
-  ///   If not provided, the enrollmentId in the AtAuthKeys will be used.
-  ///
-  /// returns an `AtAuthResponse` indicating success or failure of authentication
-  Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
-    AtKeys? atAuthKeys = atAuthRequest.atAuthKeys;
-    await validateAtServer(atAuthRequest);
-    try {
-      atAuthKeys ??= await atAuthRequest.atKeysIo!.read(atAuthRequest.atSign);
-    } on AtKeyException catch (e) {
-      _addProgress(
-        "authentication",
-        "Unable to read keys for atSign: ${atAuthRequest.atSign}",
-        ProgressEventType.error,
-      );
-      throw AtAuthenticationException(
-        'Unable to read keys for atSign: ${atAuthRequest.atSign} | Cause: ${e.message}',
-      );
+    _logger.finer('${lookUp.runtimeType} has no authenticator seam; '
+        'authenticating from the credential fields');
+    // ignore: deprecated_member_use
+    lookUp.atChops = _chops;
+    if (signingAlgo != null) {
+      // ignore: deprecated_member_use
+      lookUp.signingAlgoType = signingAlgo;
     }
-
-    atAuthRequest.enrollmentId ??= atAuthKeys.enrollmentId;
-    atLookUp ??= AtLookUp.withSecureSocket(
-      atSign: atAuthRequest.atSign,
-      rootDomain: atAuthRequest.rootDomain,
-      transport: secureSocketTransport(SecureSocketConfig()),
-      // Installed a few lines below, once the algorithm has been resolved
-      // from the keyfile.
-      authenticator: null,
-    );
-    // A typed-material enrollment (a self-retrofit's) authenticates with its
-    // own signing keypair and algorithm, resolved from the keyfile rather
-    // than caller-supplied; the flat fields keep carrying the original
-    // enrollment's RSA credentials. AtKeys owns that resolution — it is the
-    // only reader of either source. ??= to support mocking.
-    final algorithm =
-        atAuthKeys.authenticationAlgorithmFor(atAuthRequest.enrollmentId);
-    if (algorithm != null) {
-      atLookUp!.signingAlgoType = algorithm;
-    }
-    atChops ??= atAuthKeys.authenticationFor(atAuthRequest.enrollmentId).chops;
-    atLookUp!.atChops = atChops;
-    // Installed alongside atChops, not instead of it. at_lookup prefers the
-    // authenticator, so this is the route that runs - but the field is still
-    // read for work that is not authentication at all (enrollment_approver
-    // takes the encryption private key out of it), so it cannot go yet.
-    _installAuthenticator(
-        atLookUp,
-        authenticatorFor(
-          await _keysSourceFor(atAuthRequest.atSign, atAuthKeys,
-              // Only when the request supplied a source and no keys of its
-              // own. An explicit AtKeys wins here exactly as it wins above,
-              // so the authenticator reads what this method read.
-              reReadable: atAuthRequest.atAuthKeys == null
-                  ? atAuthRequest.atKeysIo
-                  : null),
-          atAuthRequest.atSign,
-          enrollmentId: atAuthRequest.enrollmentId,
-          chops: atChops,
-        ));
-
-    _logger.finer('Authenticating using PKAM');
-    pkamAuthenticator ??= PkamAuthenticator();
-    var pkamResponse = AtAuthResponse(atAuthRequest.atSign);
-    try {
-      pkamResponse
-        ..isSuccessful = (await pkamAuthenticator!.authenticate(
-            atAuthRequest.atSign, atLookUp!,
-            enrollmentId: atAuthRequest.enrollmentId))
-        ..atAuthKeys = atAuthKeys
-        ..atLookUp = atLookUp
-        ..atChops = atChops;
-
-      // Build the explicit hand-off session from the request's confirmed
-      // subset — only when the request supplied an AtKeysIo source. The legacy
-      // atAuthKeys-only path has no source to hand across, so it gets no
-      // session.
-      if (pkamResponse.isSuccessful && atAuthRequest.atKeysIo != null) {
-        pkamResponse.session = AtAuthSession(
-          atSign: atAuthRequest.atSign,
-          rootDomain: atAuthRequest.rootDomain,
-          namespace: atAuthRequest.namespace,
-          atKeysIo: atAuthRequest.atKeysIo!,
-          enrollmentId: atAuthRequest.enrollmentId,
-          atLookUp: atLookUp,
-        );
-      }
-
-      if (!pkamResponse.isSuccessful) {
-        _addProgress(
-          "authentication",
-          "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.error,
-        );
-      } else {
-        _addProgress(
-          "authentication",
-          "PKAM authentication successful for atSign: ${atAuthRequest.atSign}",
-          ProgressEventType.success,
-        );
-      }
-    } catch (e, s) {
-      _addProgress(
-        "authentication",
-        "PKAM authentication failed for atSign: ${atAuthRequest.atSign}",
-        ProgressEventType.error,
-      );
-      throw AtAuthenticationException(
-          'Unable to authenticate | Cause: $e \n $s');
-    }
-
-    return pkamResponse;
   }
 
   /// Keep some state so callers can call [completeActivation] later
@@ -324,35 +213,35 @@ class AtAuthImpl implements AtAuth {
     _atAuthKeys = mint.keys;
 
     // A PQ-native activation authenticates with the keypair just minted, which
-    // is not in the flat fields toAtChops() reads — and the enrollment it will
-    // be filed under does not exist yet, so toAtChopsForEnrollment() has
-    // nothing to resolve either. Build the chops from the minted halves
+    // is not in the flat fields `authenticationFor` reads for an enrollment
+    // naming no algorithm — and the enrollment it will be filed under does
+    // not exist yet, so there is nothing to resolve. Build the chops from the
+    // minted halves
     // directly, and name the algorithm: at_lookup defaults to rsa2048 and
     // would otherwise sign an ML-DSA key with the RSA routine.
     if (atOnboardingRequest.signingAlgoType != SigningAlgoType.rsa2048) {
-      atChops ??= AtChopsImpl(AtChopsKeys.create(
+      _chops ??= AtChopsImpl(AtChopsKeys.create(
           null, AtPkamKeyPair.create(mint.apkamPublicKey, mint.apkamPrivateKey))
         ..selfEncryptionKey = _atAuthKeys.defaultSelfEncryptionKey == null
             ? null
             : AESKey(_atAuthKeys.defaultSelfEncryptionKey!.toString()));
-      atLookUp!.signingAlgoType = atOnboardingRequest.signingAlgoType;
     } else {
-      atChops ??= _atAuthKeys.toAtChops();
+      _chops ??= _atAuthKeys.authenticationFor(null).chops;
     }
-    atLookUp!.atChops = atChops;
     // The algorithm is named rather than derived here. A PQ-native activation
     // signs with the keypair minted a few lines above, which is in no keyfile,
     // under an enrollment the atServer has not created yet - so there is
     // nothing for the keystore to resolve, and the rsa2048 default would sign
     // an ML-DSA key with the RSA routine.
     _installAuthenticator(
-        atLookUp,
+        atLookUp!,
         authenticatorFor(
           await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
           atOnboardingRequest.atSign,
-          chops: atChops,
+          chops: _chops,
           signingAlgo: atOnboardingRequest.signingAlgoType,
-        ));
+        ),
+        signingAlgo: atOnboardingRequest.signingAlgoType);
 
     //3. send onboarding enrollment
     String? enrollmentIdFromServer;
@@ -377,14 +266,15 @@ class AtAuthImpl implements AtAuth {
     // about who is on the connection, and the enrollment-record-authoritative
     // signing-algorithm check never runs.
     _installAuthenticator(
-        atLookUp,
+        atLookUp!,
         authenticatorFor(
           await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
           atOnboardingRequest.atSign,
           enrollmentId: enrollmentIdFromServer,
-          chops: atChops,
+          chops: _chops,
           signingAlgo: atOnboardingRequest.signingAlgoType,
-        ));
+        ),
+        signingAlgo: atOnboardingRequest.signingAlgoType);
 
     //4. Close connection to server
     try {
@@ -453,16 +343,10 @@ class AtAuthImpl implements AtAuth {
       await completeActivation();
     }
 
-    atOnboardingResponse
-      ..isSuccessful = true
-      ..atAuthKeys = _atAuthKeys
-      ..atLookUp = atLookUp
-      ..atChops = atChops;
+    atOnboardingResponse.isSuccessful = true;
 
-    // Hand back the same explicit session as authenticate(), so a
-    // freshly-onboarded atSign flows straight into the client. atKeysIo is
-    // guaranteed non-null here - onboarding refuses without one above; the
-    // guard mirrors authenticate() for parity.
+    // The session a freshly activated atSign's client opens from. atKeysIo
+    // is non-null here: onboarding refuses without one above.
     if (atOnboardingRequest.atKeysIo != null) {
       atOnboardingResponse.session = AtAuthSession(
         atSign: atOnboardingRequest.atSign,
@@ -470,7 +354,6 @@ class AtAuthImpl implements AtAuth {
         namespace: atOnboardingRequest.namespace,
         atKeysIo: atOnboardingRequest.atKeysIo!,
         enrollmentId: enrollmentIdFromServer,
-        atLookUp: atLookUp,
       );
     }
 
@@ -591,7 +474,7 @@ class AtAuthImpl implements AtAuth {
   ///
   /// A PQ-native activation's APKAM goes in as typed material — the flat
   /// fields stay empty, so `AtAuthImpl.authenticate` resolves this enrollment
-  /// through `signingAlgorithmForEnrollment` / `toAtChopsForEnrollment` and
+  /// through `signingAlgorithmForEnrollment` / `authenticationFor` and
   /// signs ML-DSA with no caller-supplied algorithm anywhere. An `rsa2048`
   /// activation already wrote its APKAM to the flat fields and adds nothing
   /// here, which is what keeps a legacy keyfile byte-identical.
@@ -690,28 +573,6 @@ class AtAuthImpl implements AtAuth {
           }
         }
 
-        // 3 Checks for authentication:
-        //   1. Root server should be found
-        //   2. Secondary server should be running
-        //   3. atSign should be activated already
-        else if (atRequest is AtAuthRequest) {
-          if (atStatus.rootStatus == RootStatus.notFound ||
-              atStatus.rootStatus == RootStatus.error) {
-            throw AtException(
-                'Could not find root server: ${atRequest.rootDomain.rootDomain}');
-          }
-          if (atStatus.serverStatus == ServerStatus.stopped ||
-              atStatus.serverStatus == ServerStatus.error ||
-              atStatus.serverStatus == ServerStatus.unavailable) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform Authentication.');
-          }
-          if (atStatus.atSignStatus == AtSignStatus.teapot ||
-              atStatus.serverStatus == ServerStatus.teapot) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} has not been onboarded. Cannot perform Authentication.');
-          }
-        }
 
         // AtServer availability probing
         _addProgress(

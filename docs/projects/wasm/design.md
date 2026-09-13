@@ -9,7 +9,9 @@ that replaces them, and who implements it on each platform.
 [`implementation-plan.md`](implementation-plan.md); for the gates see
 [`acceptance.md`](acceptance.md); for the rulings see [`decisions.md`](decisions.md);
 for the non-Dart consumer story see [`js-api.md`](js-api.md).
-**Verified against:** `trunk` at `20f7f4da5`, 2026-08-13.
+**Verified against:** `trunk` at `20f7f4da5`, 2026-08-13; §2.1, §3 and §4 re-read
+against `gkc-client-lifecycle` on 2026-09-13, where the transport became the third
+leg of the platform bundle (line numbers in those sections are not re-derived).
 
 ## Table of contents
 
@@ -28,7 +30,7 @@ for the non-Dart consumer story see [`js-api.md`](js-api.md).
   - [2.10 Crypto](#210-crypto)
   - [2.11 Explicitly out of scope — clock, timers, random](#211-explicitly-out-of-scope--clock-timers-random)
 - [3. Dead-end seams — the cheapest first move](#3-dead-end-seams--the-cheapest-first-move)
-- [4. `AtClientPreference` is a bag of strings, not a bag of capabilities](#4-atclientpreference-is-a-bag-of-strings-not-a-bag-of-capabilities)
+- [4. The platform bundle: capabilities are parameters on the doors](#4-the-platform-bundle-capabilities-are-parameters-on-the-doors)
 - [5. Storage backend — SQLite-wasm vs raw IndexedDB](#5-storage-backend--sqlite-wasm-vs-raw-indexeddb)
 
 ---
@@ -86,7 +88,7 @@ covered by [`acceptance.md`](acceptance.md) T3.1 and X1.
 `at_chops.dart` exports only pure-Dart algorithms, including the PQ ones
 (`ml_kem_768_pure_dart.dart`, `ml_dsa_65_pure_dart.dart`, `x_wing_pure_dart.dart`,
 `x25519_pure_dart_algo.dart`). `at_chops_ffi.dart`, documented "not web/wasm
-compatible", re-exports it plus the eight OpenSSL-backed FFI files. **No package's
+compatible", re-exports it plus the ten OpenSSL-backed FFI files. **No package's
 `lib/` imports the FFI barrel** — only at_chops's own tests and examples.
 
 The island is correctly quarantined; it is held by convention, which is what T0
@@ -152,12 +154,11 @@ default.
 
 | Site                                                                        | What it does                                                                                                                                                                                                       |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `at_lookup/lib/src/util/secure_socket_util.dart:12,23,25,29,35,43,49,54,55` | `SecurityContext.defaultContext`, cert `File`, `setTrustedCertificates`, `SecureSocket.connect` ×2, `setOption(tcpNoDelay)` ×2, TLS-keylog `File` + append-write. **Every connection in every package ends here.** |
+| `at_lookup/lib/src/util/secure_socket_util.dart:12,23,25,29,35,43,49,54,55` | `SecurityContext.defaultContext`, cert `File`, `setTrustedCertificates`, `SecureSocket.connect` ×2, `setOption(tcpNoDelay)` ×2, TLS-keylog `File` + append-write. **Every connection built by the default `secureSocketLookUps` factory ends here**; an application-supplied `AtLookUpFactory` ends wherever it chooses. |
 | `at_lookup/lib/src/monitor_client.dart:63`                                  | `SecureSocket.connect(host, int.parse(port))` — raw, bypasses even `SecureSocketUtil`.                                                                                                                             |
 | `at_client/lib/src/stream/stream_notification_handler.dart:27`              | `SecureSocket.connect(host, port)` — raw.                                                                                                                                                                          |
-| `at_client/lib/src/manager/monitor.dart:539`                                | `SecureSocketUtil.createSecureSocket(...)` inside the default `MonitorOutboundConnectionFactory`.                                                                                                                  |
 | `at_lookup/lib/src/cache/cacheable_secondary_address_finder.dart:209,222`   | raw TLS socket to `root.atsign.org:64` for directory lookup.                                                                                                                                                       |
-| `at_auth/lib/src/at_auth_impl.dart:396`                                     | `_defaultProbeSocket` → `SecureSocket.connect`. **Owned by the PQ program's S-5**, not here.                                                                                                                       |
+| `at_auth/lib/src/auth/socket_probe_io.dart`                                 | the provisioning probe → `SecureSocket.connect`, behind the `at_auth_io.dart` barrel since S-5. **Owned by the PQ program's S-5**, not here.                                                                       |
 
 **The ABI leak** is the interface, not the implementation:
 
@@ -173,7 +174,10 @@ default.
 `Socket getSocket()` from `AtConnection` and replace it with a transport handle. Retype
 `AtLookupSecureSocketFactory`, `AtLookupSecureSocketListenerFactory` and
 `AtLookupOutboundConnectionFactory` onto it — they are *already injectable*, so the
-return type is the entire blocker.
+return type is the entire blocker for `AtLookupImpl`. At the application level the
+blocker is already gone: `AtLookUpFactory` returns an `AtLookupMuxable`, so a web
+implementation can be handed in entire; retyping the three is what makes
+`AtLookupImpl` itself reusable on web rather than replaced.
 
 **Implementers.** `at_lookup_io.dart` wraps `SecureSocket` and absorbs
 `secure_socket_util.dart` whole (certs and TLS keylog are native-only concerns).
@@ -181,9 +185,17 @@ return type is the entire blocker.
 `wss://<host>:<port>/ws`. Framing is unchanged, so the response parser is reused as-is.
 
 **Breaking-change blast radius.** `Socket getSocket()` is on a public interface;
-external `implements AtConnection` users are unknown. In-repo callers are
-`at_client/lib/src/client/remote_secondary.dart` and
-`at_client/lib/src/manager/monitor.dart`. Enumerate before changing.
+external `implements AtConnection` users are unknown. The one in-repo caller is
+`at_client/lib/src/client/remote_secondary.dart`; `monitor.dart` stopped being one
+when Monitor gave up its socket. Enumerate before changing.
+
+⚠️ **The line numbers in this section predate two changes** and have not been
+re-derived. `at_client` reaches the atServer only through the `AtLookUpFactory` the
+application supplied — `defaultLookUps(preference)` when it supplied none — and calls
+`AtLookUp.withSecureSocket` nowhere; the only in-`lib` callers left are
+`at_lookup_io.dart` itself and at_auth's activation and enrollment-handshake defaults.
+So the inventory above understates how much is already injectable, and overstates how
+much of it at_client owns. Re-derive it before scoping the transport work.
 
 **Directory lookup.** `root.atsign.org:64` is a raw TLS socket with no browser
 equivalent. Two escape hatches already exist — `SecondaryAddressFinder` is an abstract
@@ -269,10 +281,12 @@ abstract class AtClientStorage {
   present the same owner and an idempotent re-attach rule would wave the second through —
   the silent sharing this exists to refuse. Identity tells two instances apart; the refusal
   message still describes the holder by atSign and enrollment for a human.
-- **Owned storage is closed on release; injected storage is only detached.** The client
-  knows which it has — it either built the bundle or was handed it — so the flag lives on
-  the client and this interface stays neutral. An in-memory fixture therefore survives
-  `stop()` and can be inspected afterwards; an app can hand one bundle to a later client.
+- **A bundle says whether the client closes it: `closedByClient`.** False by default, so a
+  bundle handed to a client is only detached on `stop()` and the caller closes it; the
+  store a client builds for itself from a path is built with it true. An in-memory fixture
+  therefore survives `stop()` and can be inspected afterwards; an app can hand one bundle
+  to a later client. A principal change hands the outgoing client's bundle to the incoming
+  one open whatever the flag says, and the incoming client closes it.
 - **After detach, only the same principal may re-attach.** The bundle remembers the
   `(atSign, enrollmentId)` that last held it and refuses a different one until `clear()`
   has run. A new instance of the same principal — a restart within the process, a client
@@ -282,21 +296,37 @@ abstract class AtClientStorage {
   from the functional pack, and this makes it unrepresentable rather than a fixture's job
   to avoid.
 - **`forgetPrincipal()` is the deliberate hand-over.** It drops the guard and keeps the
-  data, so a caller that *means* to give one principal's storage to another — the same
-  atSign moving from a legacy client to an enrolled one — says so in one call, rather than
-  reaching for `clear()` and losing the records to get past the refusal. It throws while
+  data, so a caller that *means* to give one principal's storage to another says so in one
+  call, rather than reaching for `clear()` and losing the records to get past the refusal.
+  ⚠️ **The common case is enrolled to enrolled, not legacy to enrolled** — a self-retrofit
+  fires on `retrofitIsDue`, which compares the *authentication key algorithm* the posture
+  wants against the one the enrollment holds, so the usual shape is an rsa2048-auth
+  enrollment succeeded by an mldsa65-auth one. Both sides are enrollments; only the id and
+  the key algorithm differ. Legacy-to-enrolled is the same mechanism at the far end of the
+  same ladder, not a separate case.
+  **Succession is not coexistence, and only succession shares a store.**
+  [D-13](decisions.md#d-13--local-storage-is-isolated-per-atsign-enrollmentid-not-per-atsign-2026-09-05)
+  keeps two *live* enrollments of one atSign apart, because each holds key material the
+  other cannot read. A retrofit is not two live enrollments: the atServer caps the old one,
+  the new one inherits its data, and one store follows the succession. It throws while
   a client is attached: hand-over happens between holders, never under one.
 - **`clear()` empties keystore and queue together**, and forgets the last principal.
   `detach()` stamps the departing holder as the last principal, so a holder that clears
   and then keeps writing is still guarded; the fixture sequence is detach, clear, next.
-- **The Hive backend cannot yet refuse a second *instance* for one atSign.** Every box is
-  on the global Hive instance and named by atSign, so two `HiveAtClientStorage` objects for
-  one atSign share boxes whatever their paths — and nothing releases storage until X4, so a
-  per-atSign guard would refuse every test that rebuilds a client for the same atSign
-  (`local_secondary_test.dart` does it fifteen times). X2 ships the per-object claim; the
-  per-atSign guard lands with X4, once `stop()` releases. The upstream bundle already offers it
-  for the keystore; the queue is the half that matters, because a queue carrying another
-  test's entries is exactly what poisoned the functional pack. A half-cleared store —
+- **Isolation is per *location*, and two clients of one atSign at distinct storage paths
+  are already separated.** The keystore opens on `HiveInstances.forPath(storagePath)` and the queue does
+  the same (`at_sync_queue.dart`), so two `HiveAtClientStorage` objects for one
+  atSign at **different** paths get separate stores today; only the **same** path shares.
+  The guard is therefore per-location, not per-atSign: each impl reports a canonical
+  `location` and `AtClientStorageBase` refuses a second open at one already open — allowing
+  N distinct-location clients of one atSign (the multi-enrollment fixture) while catching an
+  accidental shared *location*. ⚠️ Not a shared *path*: two atSigns under one directory are
+  two boxes that share nothing, and the e2e fixtures rely on that, so a directory-only key
+  would refuse them. This sentence said "shared path" until 2026-09-06, which the ruling it
+  cites contradicts. X4's per-atSign guard was the wrong shape. The full design —
+  test-supplied locations, `storage:` injected on `create` and the manager, and the
+  injected-vs-owned close lifecycle — is
+  [D-14](decisions.md#d-14--the-storage-isolation-design-2026-09-05). A half-cleared store —
   data without its pending writes, or writes without their data — is not representable.
 
 ### 2.3 The sync queue
@@ -343,6 +373,7 @@ plumbed `open({Box<String>? injectedBox})` (`at_sync_queue.dart`, documented as 
 seam) through to `AtClientImpl.create` as an intermediate step. The seam stays useful for
 tests; it stops being the route to backend selection. Drop the direct `hive` dependency
 once this and §2.2 land.
+
 
 ### 2.4 Key material — the exemplar
 
@@ -472,66 +503,27 @@ these are the algorithms it must use:
 | `pqcrypto`            | `ml_kem_768_pure_dart.dart`, `ml_dsa_65_pure_dart.dart`                                                                              |
 | `better_cryptography` | `aes.dart`, `aes_ctr_factory.dart`, `ed25519.dart`, `at_chops_util.dart`                                                             |
 
-> **Corrected 2026-08-30.** The two claims previously in this block — that `cryptography`
-> reaches Web Crypto "via `dart:html`", and that `better_cryptography` has "unknown web
-> status" — were both wrong. They are replaced below. The `dart:html` claim was inherited
-> verbatim from the predecessor `plan.md`; it is right about a package, but **the wrong
-> package**.
-
-`pqcrypto` is fragile in its own way: `ml_kem_768_pure_dart.dart` reaches into
+`cryptography` 2.x's browser path uses Web Crypto via `dart:html`. `pqcrypto` is
+additionally fragile: `ml_kem_768_pure_dart.dart` reaches into
 `package:pqcrypto/src/…` for `KyberLevel`, a private-path import that can break on any
-upstream release. That risk is unchanged.
+upstream release. `better_cryptography` is a `cryptography` fork with unknown web status.
 
-**The two crypto packages resolve their browser backends by different mechanisms and fail
-differently. They must be tracked as separate rows, never merged.**
+**The compile target changes what this question even asks.** Under dart2wasm,
+`dart:html` is rejected, so `cryptography` *must* fall back to pure Dart — and pure-Dart
+Argon2id is the reason `.atKeys` decryption was expected to be slow enough to need
+deferred UX work ([`acceptance.md`](acceptance.md) T4.6). Under **dart2js**, which
+[`decisions.md`](decisions.md) D-7 selects, `dart:html` compiles — so the Web Crypto path
+is reachable and may activate automatically.
 
-| | `cryptography` 2.9.0 | `better_cryptography` 1.0.0+1 |
-| --- | --- | --- |
-| Selection mechanism | **runtime probe** — `isWebCryptoAvailable = crypto.subtle.isDefinedAndNotNull && window.isSecureContext` | **compile-time** — `if (dart.library.html)` in `lib/browser.dart:24` |
-| Web interop | `dart:js_interop` — **no `dart:html` anywhere in `lib/`** | **`dart:html` + `package:js`** (`src/browser/javascript_bindings.dart:19,24`; `src/browser/aes_ctr.dart:18`) |
-| Secure-context gate | yes — the `window.isSecureContext` probe above | **none.** `BrowserCryptography extends DartCryptography` performs no availability check |
-| Behaviour outside a secure context | falls back to pure Dart | **expected to throw on every operation** — `BrowserAesMixin` calls `crypto.subtle` unconditionally, with no try/catch and no `Dart*` delegate |
-| In a dedicated Worker | ⚠️ the gate is a literal `window` dereference, so it fails | 🔴 `dart:html` is unusable in a Worker at all |
+So C1 is no longer "will it compile?" but:
 
-**`better_cryptography` is on the default AES path — the hot path.** `AESEncryptionAlgo` →
-`aes.dart` → `aes_ctr_factory.dart` → `package:better_cryptography`. `BrowserCryptography`
-returns a pure-Dart `AesCtr` only for 24-byte keys; 16- and 32-byte keys get
-`BrowserAesCtr`. So every data encrypt/decrypt in a dart2js browser build goes through
-`dart:html`.
+1. Which implementation does `cryptography` select under dart2js?
+2. If it is Web Crypto, how much faster are Argon2id and AES?
+3. Does that remove the deferred Argon2id work outright?
 
-**What the compile target actually decides:**
-
-| Compiler | `dart.library.html` | AES-CTR resolves to | Consequence |
-| --- | --- | --- | --- |
-| **dart2js** (D-7's shipping artifact) | true | `BrowserAesCtr` → `crypto.subtle` | accelerated, **main thread only** |
-| **dart2wasm** | false | `DartAesCtr`, pure Dart | **never accelerated**, any context |
-
-### C1 is re-specified
-
-Two of its three questions are now answerable **from source, with no browser**:
-
-1. *Which implementation does `cryptography` select under dart2js?* — `browser_cryptography.dart`,
-   always. Selection is by `dart.library.js_interop`, true under **both** web targets. Which
-   *primitive* backs it is then a **runtime** decision, so Node, Chrome-on-localhost and
-   plain-http Chrome take **three different paths** — and neither T0 nor T1 can see the
-   difference.
-2. *How much faster are Argon2id and AES?* — still needs measurement, for AES.
-3. *Does that remove the deferred Argon2id work?* — **No, and this is now settled.**
-   `cryptography` 2.9.0's `browser_cryptography.dart` has **no Argon2id override**, so
-   `argon2id.dart` always resolves to `DartArgon2id`. Argon2id is not in the WebCrypto spec
-   at all, so no browser can supply one. Re-check only on a `cryptography` major bump — and
-   state the version when doing so.
-
-**The task this block previously specified was mis-aimed:** "confirm `cryptography`
-resolves to its pure-Dart implementation" cannot be confirmed, because the branch selected
-is the browser branch either way. The real question is which primitives that branch
-accelerates at runtime, which is a T3 measurement, not a T0/T1 graph property.
-
-A dependency silently relying on the deprecated `dart:html` remains a risk to track, not a
-licence for our own code to use it (T0.1 keeps it on the forbidden list for package-owned
-sources). `better_cryptography` is additionally a **`1.0.0+1` fork on the hot path** — a
-maintenance cliff, and the strongest argument for replacing it with a WebCrypto AES-CTR
-implementation we own.
+**Measure before assuming either way** — and note that a dependency silently relying on
+the deprecated `dart:html` is a risk to track, not a licence for our own code to use it
+(T0.1 keeps it on the forbidden list for package-owned sources).
 
 All three packages are verifiable **by execution** rather than by compile — the at_chops
 suite runs under [`acceptance.md`](acceptance.md) T2.3. That is a strictly better answer
@@ -557,18 +549,23 @@ an oversight.
 
 ## 3. Dead-end seams — the cheapest first move
 
-Four injection points already exist and are simply never passed through. Plumbing them
-changes no interface, breaks nothing, and shrinks every later diff.
+**Status: mostly history.** The first row is superseded by the `AtLookUpFactory`
+every at_client connection is built from, the third was plumbed, and
+`AtSyncQueue.open({injectedBox})` was overtaken by the storage bundle (D-12, the X
+series). The table stays as the record of what the seams were.
+
+Four injection points already existed and were simply never passed through. Plumbing
+them changes no interface, breaks nothing, and shrinks every later diff.
 
 | Seam                                                                                                      | Defined at                                                                            | Never passed by                                                                                                                      |
 | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `AtLookupSecureSocketFactory`, `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory` | `at_lookup/lib/src/at_lookup_impl.dart:740,749,756`, constructor params at `:108-131` | `RemoteSecondary` — `at_client/lib/src/client/remote_secondary.dart:44-56` builds `AtLookupImpl` without any of them                 |
-| `MonitorOutboundConnectionFactory`                                                                        | `at_client/lib/src/manager/monitor.dart:531`, constructor param at `:93`              | `NotificationServiceImpl._` — `notification_service_impl.dart:76-84`; `create` exposes only `monitor:` and `secondaryAddressFinder:` |
+| `AtLookupSecureSocketFactory`, `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory` | the three classes at the foot of `at_lookup/lib/src/at_lookup_impl.dart`, and its constructor params | Superseded: `RemoteSecondary` builds through the `AtLookUpFactory` its client holds, so the three factories are reached only by callers constructing `AtLookupImpl` directly, and by `CacheableSecondaryAddressFinder` |
 | `AtSyncQueue.open({injectedBox})`                                                                         | `at_client/lib/src/sync/at_sync_queue.dart:116`                                       | Not reachable from `AtClientImpl.create`                                                                                             |
 | `http.Client`                                                                                             | `at_auth/lib/src/registrar/registrar_service.dart:26`                                 | Plumbed — listed for completeness; the default is the only native part                                                               |
 
-The second `RemoteSecondary` construction at `at_client_impl.dart:1225` (the
-stream/file-transfer path) is not injectable at all and needs the same treatment.
+The stream/file-transfer path's `RemoteSecondary` now comes from
+`buildRemoteSecondary()`, which threads the client's own `lookUps`, so it is
+injectable on the same seam as the client's own connection.
 
 **The catch:** these factories are typed in terms of `dart:io SecureSocket`/`Socket`,
 so plumbing them does not by itself enable a web implementation. It is preparation —
@@ -577,8 +574,9 @@ change *plus* a plumbing change.
 
 ---
 
-## 4. `AtClientPreference` is a bag of strings, not a bag of capabilities
+## 4. The platform bundle: capabilities are parameters on the doors
 
+`AtClientPreference` is a bag of strings, not a bag of capabilities.
 `at_client/lib/src/preference/at_client_preference.dart` has **no `dart:io` import**.
 It carries platform-specific configuration as `String?`:
 
@@ -587,30 +585,45 @@ It carries platform-specific configuration as `String?`:
 | `hiveStoragePath` | 10   | `Hive.init`                                         |
 | `commitLogPath`   | 13   | vestigial — client bundles are commit-log-free      |
 | `downloadPath`    | 66   | file transfer                                       |
-| `tlsKeysSavePath` | 112  | `File(...).writeAsStringSync` in `SecureSocketUtil` |
-| `pathToCerts`     | 115  | `SecurityContext.setTrustedCertificates`            |
-| `decryptPackets`  | 109  | gates the TLS keylog write                          |
+| `tlsKeysSavePath` | —    | **@Deprecated.** Copied onto `SecureSocketConfig` by `defaultLookUps` (`at_client/lib/src/lifecycle/lookups.dart`), then `File(...).writeAsStringSync` in `SecureSocketUtil`; goes in 4.0 |
+| `pathToCerts`     | —    | **@Deprecated.** The same route, then `SecurityContext.setTrustedCertificates`; goes in 4.0 |
+| `decryptPackets`  | —    | **@Deprecated.** The same route, where it gates the TLS keylog write; goes in 4.0. The replacement for all three is `secureSocketLookUps(config: SecureSocketConfig(...))` as `lookUps:` |
 | `keyStoreSecret`  | 37   | passed to `StorageManager.init` and ignored         |
 
 **This is the mechanism by which native-only configuration compiles on web and fails at
 runtime.** A path is a string everywhere; it only stops meaning anything when something
 tries to open it. The type system never objects.
 
-**Design.** `AtClientPreference` should carry *capabilities* alongside its tuning
-knobs, and the filesystem paths should become an opaque storage location whose
-interpretation belongs to the backend — a directory on native, a database name on web.
+**Design, as landed.** The preference stays what it is — serialisable tuning — and the
+platform capabilities travel beside it as named parameters on every entry point
+(`Atsign.open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`,
+`buildAtClient`, `AtServiceFactory.atClient`), held on the client and handed to
+everything under it. Three legs, the **platform bundle**:
 
-Two precedents in the same class and its neighbour show the shape:
+| Leg        | Parameter  | Type                          | Ruled                                                                 | The core's one default seam                                                 |
+| ---------- | ---------- | ----------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| keys       | `keys:`    | `AtKeysIo` (at_auth)          | the PQ program's S-5, at_auth 4.0                                     | none: the parameter is required, `FileAtKeysIo` lives in `at_auth_io.dart`   |
+| storage    | `storage:` | `AtClientStorage` (at_client) | [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05) | `HiveAtClientStorage` built in `client/at_client_factory.dart` from the deprecated `hiveStoragePath` |
+| transport  | `lookUps:` | `AtLookUpFactory` (at_lookup) | [D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13) | `defaultLookUps` in `lifecycle/lookups.dart`, TLS from the three deprecated fields above |
 
-- `at_client_preference.dart:158` — `CryptoConfig crypto`, a configured provider seam
-  resolved at runtime by `CryptoRuntime`.
-- `at_client_manager.dart:265` — `AtServiceFactory`, the existing service-level DI hook,
-  with `DefaultAtServiceFactory` at `:291` and a real override already shipping in both
-  CLI packages (`ServiceFactoryWithNoOpSyncService`).
+Three properties follow, and the ratchet holds each. Nothing below the doors names a
+platform type: a service takes the legs through its constructor, the way
+`NotificationServiceImpl.create` takes `connection` and `lookUps`, and at_auth is
+handed instances. Each leg has exactly one default seam in the core, named in the
+table, which is what a platform package replaces and what the `_io` split of at_client
+will move out. And a platform implementer is three objects handed to the doors, no
+fork of at_client: `at_client_web` is a WebSocket `AtLookupMuxable` behind a factory, a
+SQLite-wasm `AtClientStorage` and an IndexedDB `WrittenAtKeysIo`. The two candidates
+this section once weighed — `CryptoConfig` on the preference, and `AtServiceFactory`
+as the DI hook — were not chosen: `AtServiceFactory.atClient` takes the bundle rather
+than owning it, so its one shipping override keeps working, and the preference carries
+no live object. [OQ-3](decisions.md#5-open-questions) records the question and D-12 and
+D-15 its answers for the two legs that have shipped.
 
-Whether platform capabilities hang off `AtClientPreference` or off `AtServiceFactory` is
-an open question in [`decisions.md`](decisions.md). `AtServiceFactory` is the closer
-analogue; `AtClientPreference` is what callers already touch.
+The filesystem paths in the table above are what the legs replace, each deprecated when
+its leg landed and gone in 4.0. `downloadPath` (file transfer,
+[§2.8](#28-filesystem-and-file-transfer)) and `keyStoreSecret` (ignored) are the two not
+yet claimed by a leg.
 
 ---
 

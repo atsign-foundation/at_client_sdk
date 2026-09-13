@@ -31,7 +31,7 @@ class AtEncryptionKeysLoader {
         atClient
             .atChops!.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
     if (result) {
-      _logger.info('encryption private key was set successfully');
+      _logger.finer('encryption private key was set successfully');
     } else {
       _logger.severe('failed to set encryption private key');
     }
@@ -42,11 +42,12 @@ class AtEncryptionKeysLoader {
     result = await atClient.getLocalSecondary()!.putValue(
         encryptionPublicKeyAtKey,
         AtCredentials
-            .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY].toString());
+            .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]
+            .toString());
     if (result) {
-      _logger.info('encryption public key was set successfully.');
+      _logger.finer('encryption public key was set successfully.');
     } else {
-      _logger.info('failed to set encryption public key');
+      _logger.severe('failed to set encryption public key');
     }
 
     // set self encryption key
@@ -54,9 +55,24 @@ class AtEncryptionKeysLoader {
         AtConstants.atEncryptionSelfKey,
         atClient.atChops!.atChopsKeys.selfEncryptionKey!.key);
     if (result) {
-      _logger.info('self encryption key was set successfully');
+      _logger.finer('self encryption key was set successfully');
     } else {
       _logger.severe('failed to set self encryption key');
+    }
+
+    // set the PKAM pair. A client built without an AtChops of its own rebuilds
+    // one from the keystore, and cannot sign without these.
+    final pkam = atClient.atChops!.atChopsKeys.atPkamKeyPair!;
+    result = await atClient
+        .getLocalSecondary()!
+        .putValue(AtConstants.atPkamPublicKey, pkam.atPublicKey.publicKey);
+    result = result &&
+        await atClient.getLocalSecondary()!.putValue(
+            AtConstants.atPkamPrivateKey, pkam.atPrivateKey.privateKey);
+    if (result) {
+      _logger.finer('pkam key pair was set successfully');
+    } else {
+      _logger.severe('failed to set the pkam key pair');
     }
   }
 }

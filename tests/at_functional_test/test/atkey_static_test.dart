@@ -6,6 +6,7 @@ import 'test_utils.dart';
 /// The tests verify the put and get functionality where key is created using AtKey
 /// static factory methods
 void main() {
+  TestUtils.isolateStorage('atkey_static_test');
   late String atSign;
   late String sharedWithAtSign;
   String namespace = 'wavi';
@@ -14,7 +15,8 @@ void main() {
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
   });
 
   group('A group of tests to verify positive scenarios of put and get', () {

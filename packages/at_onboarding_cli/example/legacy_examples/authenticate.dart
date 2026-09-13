@@ -4,6 +4,10 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 
 import '../util/custom_arg_parser.dart';
 
+/// The adapter a program written against earlier versions of this package
+/// keeps: `authenticate()` opens the client from the keyfile and makes it the
+/// manager's current client. A new program calls `Atsign.open` directly, as
+/// `apkam_examples/apkam_authenticate.dart` does.
 Future<void> main(List<String> args) async {
   final argResults = CustomArgParser(getArgParser()).parse(args);
 
@@ -14,21 +18,17 @@ Future<void> main(List<String> args) async {
     // defaults to '/home/user/.atsign/keys/@atsign_key.atKeys'
     // if your atKeys file is not present at that location, specify the location of the file
     ..rootDomain = 'vip.ve.atsign.zone'
-    // users can choose to specify the hiveStoragePath
-    //if not specified defaults to /home/user/.atsign/at_onboarding_cli/storage/@atsign/hive
-    ..hiveStoragePath = 'home/user/atsign/${argResults['atsign']}/storage/hive'
-    // users can choose to specify the commitLogPath
-    //if not specified defaults to /home/user/.atsign/at_onboarding_cli/storage/@atsign/commitLog
-    ..commitLogPath =
-        'home/user/atsign/${argResults['atsign']}/storage/commitLog';
+    // users can choose to specify the storagePath
+    // if not specified defaults to /home/user/.atsign/at_onboarding_cli/storage/@atsign/hive
+    ..storagePath = 'home/user/atsign/${argResults['atsign']}/storage/hive';
 
-  AtOnboardingService? onboardingService =
+  AtOnboardingService onboardingService =
       AtOnboardingServiceImpl(argResults['atsign'], atOnboardingPreference);
-  await onboardingService.authenticate(); // when authenticating
+  final online = await onboardingService.authenticate();
   AtClient? client = onboardingService.atClient;
+  print('online: $online; connection: ${client?.connection.current}');
   print(await client?.getKeys());
-  // print(await atLookup?.scan(regex: 'publickey'));
-  await onboardingService.close();
+  await client?.stop();
 }
 
 ArgParser getArgParser() {

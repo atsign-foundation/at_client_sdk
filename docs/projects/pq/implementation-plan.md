@@ -1,1003 +1,892 @@
-# Implementation Plan — Unified project sequence & dependency graph for D1 (PQ-safe nskey data path)
+# implementation-plan.md — what is still owed
 
-**Status:** working execution plan (prescriptive). The single, plan-level backlog for all of **D1**
-— making Atsign Protocol messaging post-quantum-safe via the single-tier `nskey` data path.
-**Scope:** all of **D1** per [decisions.md](decisions.md) — single-tier `nskey`. `at/pqmls` cross-atSign
-groups are **D2**, referenced here only as the carve (D2-1), never detailed. Covers the D1 packages
-**D1-S / D1-A / D1-B / D1-C / D1-D / D1-F** (D1-E is D2 prep).
-**Format:** dependency graph + numbered projects. Each project is ~1–3 PRs and lists Goal / Builds-on /
-Deliverables-pointer / Acceptance-pointer / Effort / Watch-outs / `coversD1`, and **depends only on
-strictly-earlier projects** (no forward dependencies).
-**Lane:** this doc carries **sequencing, the dependency graph, waves/parallelism, effort, publish
-gates, the critical path, the coverage map, and the open-decisions pointer — only**. For *how* each
-project works see [design.md](design.md); for the given/when/then acceptance tests see
-[acceptance.md](acceptance.md); for the *why*/decision rulings see [decisions.md](decisions.md); for
-the high-level trajectory see [roadmap.md](roadmap.md). No design detail, no key shapes, no
-given/when/then here.
+⛔ **This document records only what is still owed** (gkc, 2026-08-23). What has
+been done is in the codebase and in `git log`; a rejected proposal or a
+measurement that closed a question lives in [`decisions.md`](decisions.md),
+because no commit can contain a thing that was never built.
 
-## Table of contents
+**There is ONE PQ list, and it is [`## TODO`](#todo) below.** Every open item has
+a priority and appears exactly once, as one or two sentences: the task, and the
+reason where it is not obvious. Detail for an open item is a `###` section under
+the list or a ruling in `detail/decisions.md`; everything discharged, and every
+row as it stood before the 2026-09-11 reconciliation, is in
+[`detail/implementation-plan.md`](detail/implementation-plan.md).
 
-- [0. Purpose, scope & how to read this plan](#0-purpose-scope--how-to-read-this-plan)
-- [1. Wave 0 — already landed baseline (do not re-plan)](#1-wave-0--already-landed-baseline-do-not-re-plan)
-- [2. Dependency graph (ASCII) — critical path to D1 GA + parallel tracks](#2-dependency-graph-ascii--critical-path-to-d1-ga--parallel-tracks)
-- [3. Phase A — PQ primitives & enrollment key (P-1, P-2, P-3)](#3-phase-a--pq-primitives--enrollment-key-p-1-p-2-p-3)
-- [4. Phase S — Structural enablers / key management (S-1, S-2, S-3, S-5, S-6, KF-1)](#4-phase-s--structural-enablers--key-management-s-1-s-2-s-3-s-5-s-6-kf-1)
-- [5. Phase SS — Secret-sharing substrate (SS-1a, SS-1b, SS-1c, SS-2, SS-3, SS-4)](#5-phase-ss--secret-sharing-substrate-ss-1a-ss-1b-ss-1c-ss-2-ss-3-ss-4)
-- [6. Phase B — the nskey data path (B-1, the D1 centrepiece)](#6-phase-b--the-nskey-data-path-b-1-the-d1-centrepiece)
-- [7. Phase RF — existing-client retrofit (RF-1, RF-SRV, RF-2b, RF-2c)](#7-phase-rf--existing-client-retrofit-rf-1-rf-srv-rf-2b-rf-2c)
-- [8. Phase R/B — rollout, rotation, retirement & versioning (R-1, B-2, B-3, ON-1, R-2)](#8-phase-rb--rollout-rotation-retirement--versioning-r-1-b-2-b-3-on-1-r-2)
-- [9. Phase D2 — referenced only (D2-1, out of D1 GA)](#9-phase-d2--referenced-only-d2-1-out-of-d1-ga)
-- [10. Cross-cutting: publish gates, critical path, waves/parallelism, testing](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing)
-- [11. Coverage map (D1 package / UC → project)](#11-coverage-map-d1-package--uc--project)
-- [12. Open decisions pointer & verification provenance](#12-open-decisions-pointer--verification-provenance)
-- [13. Phase IS — inter-server PQ authentication (IS-1)](#13-phase-is--inter-server-pq-authentication-is-1)
+**Item ids are permanent.** An item keeps its `14.x` id wherever it sits, because
+the ids are cited from the ledger and the sibling docs; nothing here is ever
+renumbered.
+
+**The priorities** (gkc, 2026-08-26):
+
+| | |
+| --- | --- |
+| **P0** | on D1's critical path — including work blocked elsewhere; the `Blocked on` column carries startability |
+| **P1** | must do before D1 closes |
+| **P2** | should be done if there is time |
+| **P3** | nice to have; explicitly after D1, or in another repo |
+
+⚠️ **Re-derive before acting on any row.** Every figure in this project has been
+wrong at least once by being carried forward; the commands are in
+[Re-deriving the state](#re-deriving-the-state).
 
 ---
 
-## 0. Purpose, scope & how to read this plan
+**D1 ends when every acceptance test passes and every rail is green, the posture
+matrix included** (gkc, 2026-08-23): the acceptance set is complete, implemented
+and verified, and nothing outside it moves the boundary. "In D1" means owed
+before D1 closes, not defining when it closes — the release train, the carves and
+R-2 follow it.
 
-This is the unified, plan-level backlog for D1. The project ids used throughout — `P-1/P-2/P-3`,
-`S-1`/`S-2`/`S-3`/`S-5`/`S-6`, `SS-1a/b/c`/`SS-2`/`SS-3`/`SS-4`, `B-1`, `RF-1`/`RF-SRV`/`RF-2b`/`RF-2c`,
-`R-1`/`R-2`, `B-2`/`B-3`, `ON-1`, `D2-1` — name the work as it lands in dependency order. Each project
-entry is plan-altitude: a one-line Goal, what it **builds on**, a pointer to its deliverables in
-[design.md](design.md), a pointer to its acceptance tests in [acceptance.md](acceptance.md), an effort
-size, watch-outs, and a `coversD1` line tying it back to the D1 workstreams.
+"All acceptance tests pass" is true today and is not yet that. The rail checks
+structure — a scenario exists, ids resolve, counts match, and where a citation
+pins THEN clauses each pin resolves to exactly one — while whether a cited test
+really *establishes* its clause is the citation's own `proves:` judgement. The
+clause meter is the measure; re-derive it, never quote it.
 
-**Operating principles:**
+⛔ **A standing premise: no production `.atKeys` file or keychain entry holds any
+PQ key material** (gkc, 2026-08-23). Any argument of the form "X already exists in
+the world, so we must tolerate it" is therefore void here until somebody names the
+holder. It is a statement about today: the moment a released build writes PQ
+material, every question it closed is re-asked rather than re-cited.
 
-- **Partition by package.** Four package-domain tracks keep concurrent PRs off each other's files:
-  - **Track A — crypto primitives + providers:** `at_chops` (stateless core + HPKE) → the nskey data
-    path providers (`at/nskey` + `at/symmetric/AES/GCM`), `secret_sharing/`, `crypto/group/`.
-  - **Track B — key management:** `at_auth` (extend `AtKeys` in place, `AtKeysIo` runtime persistence, the
-    WASM barrel split) → the PQ enrollment-conveyance key.
-  - **Track C — at_client crypto seam + migration:** `crypto.dart` / `crypto_runtime.dart` / `legacy/`,
-    `AtClientPreference`; the publish ladder.
-  - **Track D — storage + platform + consumers:** `LocalKeystoreAtKeysIo`, the updatable `.atKeys`
-    file path, `at_onboarding_cli` / `at_client_flutter` / `at_cli_commons`.
-  Within `at_client/crypto/`, the file partition keeps A and C apart: **C** owns `crypto.dart`,
-  `crypto_runtime.dart`, `legacy/`; **A** owns `crypto/group/`, `crypto/nskey/` (new), `secret_sharing/`.
-  The nskey providers are mostly new files — low collision by construction.
-- **Land contracts first.** Merge the tiny interface PRs (the `pqSeal` signature, the extended
-  `AtKeys`/`AtKeysIo` API, the `CryptoContext.keys` field) first, stubs OK, so every track compiles against
-  stable shapes and never blocks on another.
-- **Keep merges additive / flag-gated** so trunk stays releasable at every commit boundary.
-- **Every project needs a named owner.** Each project id (`P-1`, `SS-1a`, `B-1`, …) is assigned a single
-  accountable owner before its first PR; owner names are **TBD** until assigned. The owner shepherds the
-  project's PRs, publish/floor steps, and conformance to the current [decisions.md](decisions.md) rulings.
-
-**Enrollment model.** This plan uses the **1:1:1 / fresh-enrollment-retrofit** model: a single APKAM
-keypair per enrollment, and an `EnrollParams.metadata`-borne key package on `enroll:request` (no separate
-`enroll:metadata` verb). The rationale is in [decisions.md](decisions.md).
+**Other live projects keep their own lists** and are not in the table below:
+[`docs/projects/wasm/`](../wasm/implementation-plan.md) (with the client storage
+X series), [`docs/projects/bdd/`](../bdd/roadmap.md),
+[`docs/projects/deprecations/`](../deprecations/plan.md), section 6 of
+[`docs/projects/at-lookup-consolidation/plan.md`](../at-lookup-consolidation/plan.md),
+and the knowledge base ([`docs/knowledge/README.md`](../../knowledge/README.md)).
+Where one of them gates D1, a pointer row here names it.
 
 ---
 
-## 1. Wave 0 — already landed baseline (do not re-plan)
+## TODO
 
-These are **merged to trunk** (verified) and gate everything downstream. Stated once:
+⛔ **The single list. One row per open item, bucketed by priority; a row says
+what is owed in one or two sentences and links to a `###` section or a ruling
+where more is needed.** The rows as they stood before the 2026-09-11
+reconciliation, with every measurement they carried, are in
+[the detail file](detail/implementation-plan.md#the-todo-table-as-it-stood-on-2026-09-11-before-the-reconciliation).
 
-- **#1930 — the M0 pluggable-crypto seam** (`at_client`, merged 2026-06-22): stateless
-  `CryptoProvider{id, encrypt, decrypt}`; `CryptoRuntime` routing put/get/notify/sync by
-  `appMetadata.providerId`; built-in `LegacyCryptoProvider` fallback; `shouldEncrypt=false` no-crypto
-  path; the Mode-B cached-client reconcile fix (a same-atSign re-set adopts the new `preference.crypto`).
-  `CryptoContext` is `{atClient}`; there is no `CryptoRegistry`, `CryptoPolicy`, or `CryptoStorage`. **This
-  is the migration machinery the whole rollout rides.**
-- **#1993 — `pqSeal`/`pqOpen` HPKE primitive** (`at_chops`, merged 2026-06-22): X-Wing KEM + HKDF-SHA256
-  + AES-256-GCM, stateless, on `at_chops` **3.3.0**, **published to pub.dev 2026-06-23**. The stateless
-  functional surface + `@Deprecated AtChopsImpl` shim are largely present too.
-- **PR #2035 (design fixes)** — merged.
-- Baseline pins: `at_commons` **5.11.0** (`appMetadata` wire field); `at_chops` **3.3.0 (published)** (X-Wing /
-  AES-256-GCM / HKDF / HMAC); `at_persistence` **5.x** commit-log-free keystore; **Phase-6
-  at_chops-sole-crypto routing** in at_lookup / at_auth / at_onboarding_cli (#1995–1998, merged).
+**The next move is: pick a P0; if none, a P1, and so on** (gkc, 2026-08-26). A
+row whose `Blocked on` column says anything but Nothing is not pickable. Nothing
+ranks within a bucket, there is no `[RECOMMENDED]` marker and no "next move"
+section, and when more than one row in the highest non-empty bucket is
+pickable, **ask gkc which** (his ruling, 2026-08-27).
 
-**Design:** single-tier `nskey`; group/`at/pqmls` is D2 — see [decisions.md](decisions.md).
+**A row leaves this table when it is done — it does not gain a ✅.** What was
+done is in `git log`; a row that is finished and still here is a defect, and a
+rail enforces the direction (`docs_structure_test.dart`, *no TODO row names a
+section whose body declares itself done*). `## PARKED` runs the opposite
+convention on purpose: a parked row keeps its ✅, because what it must say is why
+it stopped being parked.
 
-The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics live in
-[design.md](design.md).
+### P0 — on D1's critical path
 
----
+| Item | What is owed | Blocked on |
+| ---- | ------------ | ---------- |
+| **the acceptance catalogue's default-flip passes** | When each default flip lands — `legacy` to `pqReady` at 4.0, `pqReady` to `pqActive` at 5.0 — the same commit edits every `acceptance.md` clause that names a posture, so the catalogue describes the tree it ships with — never before, and found from the flip's own diff rather than from a list here. | the 4.0 default flip: `AtClientPreference` still defaults `posture` to `PqPosture.legacy` |
+| **the clause burn-down, objective 2: live proof** | Every clause proven only in-process gains a proof against a real atServer where feasible; `liveProofOwed` in `packages/at_client/test/acceptance/manifest.dart` names what owes one and why, and the suite prints both counts (`BURN-DOWN clauses proven: N of T server-proven: M of T`). Start with citations that name a live pack test but carry no `clauses:` list, reading each `proves:` first — some are unpinned on purpose. | Nothing |
+| [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | Publish in dependency order — at_utils, at_commons, at_lookup, at_auth, at_client, at_client_flutter, at_onboarding_cli — and at_client cannot go before at_commons 5.18.0 and at_auth 4.0.0-rc2, which it pins. Re-derive tree-against-pub.dev with the loop in [Re-deriving the state](#re-deriving-the-state); merged is not published. | gkc — publishing is his act |
+| **`primary`'s signing-root route after the migration** | One question for gkc, now that an enrollment created by legacy-PKAM onboarding is fully privileged server-side and `enroll:listns` answers a legacy connection as `primary` (measured 2026-09-12 against the `dev_env` image, recorded in the amendment to [ruling 31](detail/decisions.md#31-the-root-pull-initiator-and-what-it-did-not-settle-2026-08-04)): whether `primary`'s signing-root request and its `_apsk` route stay on the pre-post-quantum route, or `primary` asks a holder rather than minting, now that the atServer would answer. | gkc |
+| **`ApkamSigning`: NoPorts migrates before at_client 4.0** ✅ the break is fixed | Fixed 2026-09-11: `publicSigningKey` and `privateSigningKey` are back as the synchronous accessors at_client 3.14.0 published, deprecated, and the asynchronous `publicSigningKey` that had taken the name is gone (no caller outside at_client's tests). The published consumer compiles — measured, 2 errors to 0, with the same probe file. They refuse on a non-RSA authentication algorithm, because the slot then holds base64 post-quantum bytes, and shout under a posture that configures post-quantum providers. **What is left is NoPorts' own move to `signingKeys`**, which `AtClient.atChops`' removal in at_client 4.0 forces: while the enrollment holds signing keys of its own, `_apsk` does not advertise the authentication key, so anything signed with it verifies against nothing. Tell NoPorts before that major, not after. | Nothing — at_client 4.0 is the deadline |
+| **at_client owns the client lifecycle; apps stop importing at_auth** | Ruled 2026-09-12: at_client gains onboarding, login and enrollment (owned clients, an offline-capable `open` reporting online, offline or refused, and the key destination as the resume store); at_auth shrinks to the protocol layer under it; at_client_flutter and at_onboarding_cli take a 2.0 and stop handing back at_auth's types. Acceptance is NoPorts' `npt_flutter` compiling with no `package:at_auth` import. The design, the seven rulings and what is owed in order are [`docs/projects/client-lifecycle/design.md`](../client-lifecycle/design.md); it supersedes the deprecation plan's families B, C and D. In progress on `gkc-client-lifecycle`, cut from `gkc-test-pack-speedup` on gkc's instruction of 2026-09-12; the design's status section says how far it has got. | Nothing |
 
-## 2. Dependency graph (ASCII) — critical path to D1 GA + parallel tracks
+### P1 — must do before D1 closes
 
+| Item | What is owed | Blocked on |
+| ---- | ------------ | ---------- |
+| **deprecation debt: `deprecated_member_use` across the workspace** | gkc ruled 2026-09-11 that these packages do not publish carrying their deprecation warnings, and that at_auth's own surface is cleaned in the current rc — **bounded the same day by the rule that a package an application depends on directly does not break**, the baseline being the PUBLISHED version on pub.dev. The plan is [`docs/projects/deprecations/plan.md`](../deprecations/plan.md), which holds every figure, ruling and what is owed: steps 0 to 7 done bar their test-tree remainder, and step 8's families E, H, A and G removed while B's surface was held after its callers moved. **C and D are superseded** by the client-lifecycle design (the P0 row above), which removes the types they annotate together with the auth DTOs. What this row still owes is the test-tree remainder of steps 6 and 7, then `LocalSecondary`'s `AtChops` tier, and gkc's call on family F's annotation. | Nothing |
+| **the PQ e2e job fails on a keyfile lock nothing released** | `pqe2e_tests` went red once in eleven runs (2026-09-08) on `@bob🛠.nskey.atKeys.lock` held past its 10s acquire timeout (since 2026-09-12 that keyfile is the login keyfile itself, `@bob🛠_key.atKeys`, so the same abandonment now blocks a reopen rather than a side file) but inside its 30s staleness window, so no waiter could break it; a client stopped mid-write is the suspected holder. Levers: a heartbeat a live holder refreshes, or find and close the abandonment — not the constants, since pairing them let a re-entrant acquire break its own caller's lock (tried and reverted). | Nothing |
+| **a restored pre-retrofit `.atKeys` mints another uncapped enrollment** | at_auth decides "already retrofitted" from the keyfile alone, so a keyfile restored from a pre-retrofit backup retrofits again and leaves a further fully privileged, never-expiring enrollment. Probe it (retrofit, restore, start, `enroll:list`), then decide whether that is the intended sibling-clone case or the client should recognise its enrollment from the atServer. | Nothing |
+| **advertisement fetch volume, `ttr` and client caching** | A wire capture showed 110 `_apsk` lookups in one short client run; and `EnvelopeSigning`'s `_apsk` cache resets its five-minute expiry on every read and never invalidates on a failed verification, so a busy verifier holds a superseded advertisement indefinitely and refuses everything the rotated signer writes. Measure the fetch volume after the negative-cache and `enroll:infons` changes, then rule on `ttr` and client caching together — a client cache with no `ttr` is a rotation that never takes effect. | Nothing. A measurement, then a ruling |
+| **the PQ upgrade guide does not exist** | The retrofit clean-up instructions [ruling 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27) names, routed to a guide by [ruling 40](detail/decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05) item 7; `docs/projects/pq/` has no such file. | gkc, on where it lives |
+| **there is no best-practices guide for application owners** | The only mitigation for the repopulation window after an nskey rotation: a guide carrying gkc's two-rollout recipe (rollout 1 mints old and new and seals to old; rollout 2 mints and seals to new), the two levers `keyEstablishmentAlgorithms` and `sealsToKeyAlgorithms` moving in different releases, and the English-to-French analogy. Whether it is one document with the upgrade guide is unsettled. | gkc, on whether it joins the upgrade guide |
+| **step 3 of a signing migration has no lever** | A verifier cannot decline an algorithm it implements — `verifyEnvelope` takes `strongestOf(shared)` with no accepted set — so a retired signing key is a standing forgery surface ([ruling 120](detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28)). Build the verifier-side set mirroring `sealsToKeyAlgorithms`; it falsifies UC-G2.9 c3, which `unprovableClauses` enumerates for that reason. | Nothing |
+| **the double-signing writer is dead code** | [Ruling 120](detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28) retired the two-signature overlap, so the plural-envelope writer can go, keeping the multi-signature reader (`SignedEnvelope.fromJson`'s differing-`kid` and differing-`typ` refusals stop an entry being appended in flight) and re-pointing the four tests that emit two signatures. | Nothing |
+| **an orphaned enrolment may never expire** | A self-enrollment inherits its parent's `apkamKeysExpiryDuration`, and zero means never, so a subtree under a never-expiring parent is bounded by nothing. Decide whether a self-enrollment may inherit an unbounded expiry. | gkc's ruling |
+| **the three crypto-agility matrices, live** | Specified in [`acceptance.md` section 17](acceptance.md#17-g2--crypto-agility--add-never-replace); the harness half is unbuilt. `_apsk` sign and verify (UC-G2.3, UC-G2.7, UC-G2.8), the pairwise substrate (UC-G2.1, UC-G2.4) and the nskey advertisement (UC-G2.2, UC-G2.10, UC-G2.11), each self-to-self and self-to-other against an advertiser offering one algorithm, both, or the other — one namespace per variation on the atSigns the packs already have. A one-entry `rsa2048` `_apsk` serialises as a bare string, so one-entry and two-entry are different wire shapes. | Nothing |
+| **doc-set rails: anchors and table cells** | `docs_structure_test.dart` never opens a link's target, so a heading renamed in one file breaks links from another silently, and its "row says owed, body says done" guard cannot see a row that names no `###` section. Add a resolver over the doc set and widen the guard. | Nothing |
+| [the four missing self-to-self mirrors](#the-four-missing-self-to-self-mirrors) | gkc's rule (2026-08-27): a put/notify or get/receipt row is about self-to-self or self-to-other, never both, and where one direction has a row so should the other. Four self-to-other rows have no mirror; rule which become catalogue rows, then write them and their scenarios — the denominator rises, correctly. | gkc's ruling |
+| [the at_client carve stack](#the-at_client-carve-stack) | The nine-layer stacked-PR plan for the at_client release candidate lives only in gitignored `untracked/at-client-stacked-prs.md`; get it into git and make the five decisions the section names — a file in no layer never lands. | whoever cuts the stack |
+| [arm 1 vs arm 3 bucketing](#arm-1-vs-arm-3-bucketing) | A ruling on which rows arm 1 owes; the measuring is done and arm 3 cannot be scoped until it is settled. | gkc's ruling |
+| [a wildcard enrolment seeds nothing](#a-wildcard-enrolment-seeds-nothing) | An atSign reachable only through a wildcard (`*`) enrolment publishes no namespace keys, so nobody can seal to it; rule whether that is intended. | gkc's ruling |
+| [content keys per scope](#content-keys-per-scope) | Rule whether one content key per writing enrollment per scope is the intent; if not, `CurrentCkPointer` needs a remote-first write through an atomic verb and rotation must supersede every content key in scope. | gkc's ruling, then the fix |
+| [the late-arriving nskey private](#the-late-arriving-nskey-private) | Ruled 2026-09-07: a standing conveyance subscriber — a handler on the envelope listener `PqClientBootstrap` already runs, not a second listener — files nskey privates and content keys when they land, and only for a generation this client asked for (the reverted attempt filed any arrival). The analysis is the X6 row of [the wasm plan](../wasm/implementation-plan.md). | Nothing |
+| **two clients of one atSign sharing a store** | Ruled 2026-09-07: sweep the e2e pack and the unit tree for two clients of one atSign sharing a local keystore (the functional pack is already isolated per file) — candidates are files with two or more `Atsign.open`, `buildAtClient`, or the deprecated `setCurrentAtSign`/`fromAuthSession` calls for one atSign; a second client gets its own bundle (`forPrincipal`) or a hand-over. `open` and `buildAtClient` now refuse a second live client on one storage location and for one principal, so the sweep is looking for the cases that refusal turns into a failure rather than a silent share. | Nothing |
+| [14.18](#1418-the-remaining-d1-initial-development-sequence) **step 20's rotation arm** | Build the matrix's rotation arm — an enrollment followed by an `enroll:update` APKAM rotation mid-run — against a dedicated CRAM atSign; [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 11 (a rotation that lands and is not persisted locks the enrollment out) is what it waits on. | the at_auth publish, and a dedicated CRAM atSign |
+| **`AtRpc` request ids collide, and the responder drops the second request without a NACK** | `AtRpcReq.create` mints `reqId` from `microsecondsSinceEpoch`, so back-to-back ids repeat (926 of 1,000 measured): under `enableRequestMutex` the responder drops the second request silently, `AtRpcClient.call` overwrites the first caller's completer, and `call` has no timeout. NoPorts uses it. gkc prefers UUIDs — a 4.0 String-on-the-wire change, responders deployed first; a random 53-bit int is the non-breaking 3.x alternative — and either way `call` refuses a duplicate id and takes a timeout. | gkc's ruling |
+| **the client half of ruling 128** | Drop `namespaces` from `selfRetrofit` and `retrofitIdentity` — exported through `at_client_mixins.dart`, so breaking — because a successor holds its predecessor's grants and may not choose them ([ruling 128](detail/decisions.md#128-a-retrofits-successor-holds-its-predecessors-grants-and-may-not-choose-them-2026-08-31)); the atServer half refuses, so this is cleanup. Challenge the eleven call sites' EQUAL verdicts before relying on the zero. | Nothing |
+| **`retiredAt` on the `_apsk` advertisement** | Ruled 2026-08-31: `ApskSigningKey` gains a retirement timestamp, stamped when an entry moves to `retired`, so a verifier can date a key. A wire and at-rest change to `_apsk`, so the doc sweep and the JAMS unit tree land in the same commit; a record's `createdAt` is a caller assertion, not a clock to design against. | Nothing |
+| **statements the revocation cascade falsified** | at_server #2781 shipped the cascade ([ruling 129](detail/decisions.md#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)), so reword what was written for the world before it: `published_nskey_key_ring.dart`'s "the conveyance excludes nobody" dartdoc, `pairwise_secret_sharing_test.dart`'s "rotation buys nothing" `reason:`, UC-A5.2's `provenIn` filing roster-membership as proof of a hazard, and this table's orphaned-enrolment row; and [ruling 40](detail/decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05) item 2 must carry 129's guard that an un-revoke behind an unapproved predecessor is refused. | Nothing |
+| **a v(N-1) `.atKeys` migration test** ([#2154](https://github.com/atsign-foundation/at_client_sdk/issues/2154)) | Nothing reads a keyfile written by the previously published at_auth (3.3.0, which `tests/pq_matrix/published/` resolves) or proves that build reads a version 1 document — the direction auth_cli's `pqReady` approver default ([ruling 137](detail/decisions.md#137-auth_cli-has-two-roles-and-they-take-opposite-postures-2026-09-08)) now exercises on every operator's keyfile. Check in a captured fixture with its version recorded, round-trip every field, and add a mutation that reddens when a reader drops a legacy field. | Nothing |
+
+### P2 — should be done if there is time
+
+| Item | What is owed | Blocked on |
+| ---- | ------------ | ---------- |
+| **the test-pack speed-up branch: what it still owes before its PR** | Branch `gkc-test-pack-speedup`, pushed 2026-09-11. Owed: the four live packs re-run at head (last at `e616e4cbc`); the functional pack at 0.707s a test against a 0.5s target, the gap in `seeding_tail_abandoned` (15.5s), `key_package_amendment UC-A2.5` (8.2s) and `pq_released_peer` (6.4s); and 21 fixtures across 11 files still minting an RSA keypair per test (`test_keypairs.dart` is the cache, keyed by (atSign, enrollmentId)). Rejected: suite-wide `Mock.throwOnMissingStub()`, and moving unit tests to `InMemoryAtClientStorage` — storage costs 3.25ms either way and an RSA keypair 142ms. | Nothing |
+| **a client running as the atSign's own credential gets no revocation backstop** | `NskeySeeding.rotateIfRevoked` skips a client with no enrollment id or `primary`, as UC-G2.5 and [ruling 130](detail/decisions.md#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31) point 8 accepted on a reason that no longer holds (the check makes its own `enroll:infons` call, and a legacy-PKAM connection authenticates as `primary`). Decide whether the atSign's own credential gets the backstop; if yes, one predicate, and the clause moves with it. | gkc's ruling |
+| **switch `_enrollmentById` to `enroll:fetch`** | at_server 3.16.5 returns `metadata` on `enroll:fetch`, so approval no longer needs to filter the whole roster client-side. Decide first how the client treats an older atServer whose response has no `metadata` key — fall back to `enroll:list`, or require the newer server; never read absent as empty — then switch. | Nothing |
+| **three client-startup paths read the whole roster to find their own record** | `NskeyRotation`, `NskeySeeding.authorisedNamespaces` and `selfRetrofit`'s signing-root step each fetch every enrollment to read one field of their own; redirect them to the memoised `LocalSecondary.getEnrollmentDetails()` (an `enroll:fetch` of the client's own enrollment), checking whether `selfRetrofit`'s freshly switched client can share the memo. On a grown roster each costs what the approval used to — 46.6s measured. | Nothing |
+| **`subscribe()` returns before the monitor attaches** | A notification sent in that window is accepted by the atServer (`delivered` means server-to-server) and never handed to the live monitor; the record survives for `monitor:<epoch>` replay. The harness now polls `NotificationService.listening`; the product question is open — await attachment in `subscribe()`, redeliver, or expose the readiness check where an app would look for it. | Nothing |
+| **tidy up the revoked enrollment backlog on `@ce2e1`–`@ce2e4`** | About 2,400 revoked enrollments per atSign from runs before `enrollment_setup.dart` gave each request a three-hour expiry. Deleting a revoked record releases its keypair for re-enrollment, which is why at_server will not reap them automatically and why this is a deliberate act. | gkc — he is taking it |
+| **the functional pack's CI time stepped up about 20%** | Every run carrying `9c84011df` (the 2026-09-07 trunk merge-back) measures 8m23s–11m35s on stable against 5m30s–9m52s before it; the posture flip is not the cause, since every functional client names its posture. Decide whether two minutes a run is worth chasing; if so, bisect within the merge-back. | Nothing |
+| **`useRemoteAtServer` on a key another atSign shared fails** | A receiver's `get` with `useRemoteAtServer = true` on a key another atSign shared issues an `llookup` of the uncached name against its own atServer and fails `key not found` (115 failures in one run) instead of a `lookup:` at the publisher. Decide whether the option resolves through `lookup:` or refuses the combination, and say so in its dartdoc. | Nothing |
+| **`apsk_server_side_test.dart` poisons the shared atSign for the rest of the run** | It leaves two records on `@alice🛠` — a non-base64 literal over the attacker enrollment's `_apsk`, and a healed enrollment whose key package stays signed by a key its `_apsk` dropped — so every later `listForNamespace` logs SEVERE (314 lines in one CI run). Give the file its own atSign, or restore what it overwrites and restart the healed client. | Nothing |
+| **`CkManager`'s missing-cut-time guard cannot fire** | `CkManager.ensureCurrent` returns early when the cached content key has no `cutAt`, but `putAsCurrent` always records one and the cache is in-memory, so the branch is unreachable and its comment describes a persistence that does not exist. Delete the guard and the comment (making the cache durable is a feature, not this). | Nothing |
+| **where `mintAdvertisedSigningKey` lives was never put to gkc** | It sits in `packages/at_client/lib/src/enroll/signing_key_mint.dart` and at_onboarding_cli imports it across the package boundary; decide whether it belongs in at_auth beside the enrollment machinery that uses it. | gkc |
+| **`runCliCommand` streams the CLI child's log unprefixed** | `tests/at_onboarding_cli_functional_tests/test/utils/at_client_cache.dart` writes the child's stdout verbatim into its own, so two processes' lines cannot be told apart. Prefix or pid-tag them and say so in the dartdoc, noting that `auth_cli` sets `root_level = 'shout'`, so an un-`-v`'d child reads like a stalled one. | Nothing |
+| **test-helper cleanup: a required `signingAlgo`, and one `EnrolledClient`** | Make `enrolAndAuthenticate`'s `signingAlgo` required — its `rsa2048` default hands a PQ-posture caller a legacy enrollment that retrofits into a different id — and let the compiler enumerate the call sites; then port the e2e `EnrolledClient` copy (an ancestor 205 diff lines behind, lacking `signingAlgo`, `atKeysIo`, `keyExchangeMode`, `reuse` and the `kpid` getter), run the e2e pack, and move what is shared into a never-published `tests/packages/test_helpers`. | Nothing |
+| **there is no supported way to wait for the PQ startup tail** | Nothing on the `AtClient` interface says when the unawaited PQ startup has finished writing the keyfile; the CLI pack reaches through `@experimental` `pqBootstrap.startupComplete`. Decide whether the interface carries it — an in-repo test can reach through, an application cannot. | gkc |
+| **a rotating atSign could tell its senders** | A sender learns of a rotation only by re-resolving the advertisement, up to 30 minutes of ttl plus grace later, and keeps sealing to the superseded generation meanwhile. Every `.__ck.` conveyance record is addressed to a sender, which suggests a rotating atSign can enumerate exactly who must re-cut; probe that scan before designing on it. | Nothing. A probe first |
+| **`notificationStatusEnum` is not an outcome, and its name says it is** | A dartdoc fix: with `checkForFinalDeliveryStatus: false`, or when a send fails before reaching the atServer, the field reads `undelivered` whatever happened and only `atClientException` distinguishes; the `on AtException` handler's comment says it sets `errored`, a value the enum lacks. Fix the comment first, then qualify the field and `NotificationResult`. | Nothing |
+| **a pq enrolment costs a post-approval round trip** | A PQ enrollee must collect the key its approver encapsulated to its key package (polling `enrollmentApkamSymmetricKeyResolver`, 30s budget) where a legacy enrollee is done at approval. Measure it and decide whether the enrolment APIs say so. | Nothing |
+| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Item 11 — an APKAM rotation that lands and is not persisted locks the enrollment out — is the owed work and step 20's arm waits on it; item 35 lands in `atGettingStarted`; the rest of the open items are examined-and-left or not PQ. Re-derive the open list with the section's command. | Nothing |
+| **a retrofit leaves the enrolment record memo stale** | `LocalSecondary.getEnrollmentDetails()` memoises the record, `_settleEnrollmentIdentity` fills it with the predecessor's, and `_rederiveFromEnrollment` never clears it, so the client runs as the successor while the record describing what it may do is the predecessor's — benign only because a retrofit copies grants verbatim. Clear the memo on re-derivation. | Nothing |
+| **at_lookup `OutboundMessageListener.read` leaves a stale reply queued** | `AT0014 "Unexpected response found"` pops one entry and clears the buffer without draining `_queue` or closing the connection, unlike the timeout paths beside it, so a stale queued response is handed to the next command. Drain or close. | Nothing |
+| [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | Scope the e2e teardown to the run that created the enrollments — a marker derived from `GITHUB_RUN_ID` that setup, suite and teardown can all read — so two overlapping CI runs stop tearing each other down ([#2197](https://github.com/atsign-foundation/at_client_sdk/issues/2197), five observations and one clean-room control). | Nothing |
+| [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | A unit-tree isolation flake in `local_secondary_sync_queue_test.dart`: green alone and in the full suite, red in one hand-constructed order nothing runs. Reproduce at rate before touching it. | a reproduction at rate |
+| **at_client README does not carry the send/receive asymmetry** | `packages/at_client/README.md`'s post-quantum section carries the goals, the rollout ladder, the posture tables and what each posture switches on, but not `ensureReachable` or the asymmetry an app meets first (you can send the moment you are up; you cannot receive until your key is published). Decide how much of that belongs in a README, then write it. | Nothing |
+| [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) **orphan growth** | Only ③'s orphan-growth half is owed — a decision before it is code; SS-4 resume was ruled NO RESUME. | the decision |
+| **`docs/projects/` has no index of its live projects** | pq, wasm, bdd, deprecations, the at-lookup consolidation and the knowledge base each keep their own list, and this file's header names them; a ruling on where an index lives. | gkc |
+| **key packages and envelopes are APKAM-signed with `rsa2048` by default** | The signature that authenticates a key package and an envelope defaults to `SigningAlgoType.rsa2048` — the one place RSA still touches the post-quantum path, an integrity rather than a confidentiality exposure. Rule on it rather than leaving it implicit. | gkc's ruling |
+| **no non-test caller enrols at a PQ posture by default** | The CLI enroller defaults to `legacy` and only the approver commands to `pqReady` ([ruling 137](detail/decisions.md#137-auth_cli-has-two-roles-and-they-take-opposite-postures-2026-09-08)), so the creation-time signing-key mint runs outside tests only when a user passes `--posture`, and the retrofit path is what every default caller exercises. Decide whether that is acceptable for 3.x. | gkc's ruling |
+| **the conveyance catch still swallows too much** | The conveyance read's broad `catch` swallows more than its dartdoc specifies (a record that is nowhere is not an error; everything else is). Probe what an absent record throws on the local and the remote leg, then swallow only that. | Nothing |
+| **a signing key can be advertised before it is filed** | `apkam_signing.dart` documents the window where a mint has published but not filed, so an envelope signed in it verifies against nothing; reversing the order opens the mirror-image window. Fix by not signing during the transition, or by keeping the authentication key advertised until both writes land. | Nothing |
+| **four refusals for two user errors, one of them uncatchable** | A sender that omits an algorithm and one that cannot implement it reach four refusals across three exception branches with contradictory advice, and `AtSigningVerificationException extends AtException`, so an app catching `AtClientException` misses one. Consolidate them; the supertype change is at_commons. | Nothing |
+| **UC-A2.6 c2 is pinned by a citation that admits an unproven arm** | Its `proves:` says the revoked-while-connected arm is not proven, yet the clause counts as proven. at_server trunk closes every open connection carrying a revoked enrollment, so pin it live: hold E4's connection open, revoke over a second one, assert the first is closed rather than refused at reconnect. | Nothing |
+| **an `at_lookup` unit test resolves a production FQDN** | `secondary_address_cache_test.dart` calls `root.atsign.wtf` from the unit pack (its own group name says move it) and its 30s finder deadline equals the test timeout, so the retry path it was written around never runs; it reddened an unrelated PR on 2026-09-06. Move it to a functional pack with a longer timeout. | Nothing |
+| **the local e2e fixture cannot reproduce an APKAM enrollment-id defect** | `local_setup.dart` mints every local keyfile from `at_demo_data` with `enrollmentId: null` while declaring `authType: 'apkam'`, so a local run passes where CI's `end2end_test_14` catches an enrollment-id defect. Enrol for real, or say in its dartdoc that it cannot. | Nothing |
+| **a store write in flight when `stop()` lands still reaches the closed store** | The stopped-flag guards cannot reach a write that already passed them, so a `closeAll()` after `stop()` still logs `Box not found` for the pull cursor and the notification watermark (four lines a run in two of three). Make `stop()` drain in-flight writes before it returns — a lifecycle change, so all three live packs. | Nothing |
+
+### P3 — nice to have, explicitly after D1, or in another repo
+
+| Item | What is owed | Blocked on |
+| ---- | ------------ | ---------- |
+| **a pull cut by `stop()` keeps none of its batches' progress** | `_syncFromServer` persists the pull cursor once after the last batch and the stop-path guard skips it, so a client stopped mid-pull re-pulls from its previous cursor (twenty clients in one CI job each pulled 711 commits from `-1`). Persist after each batch. | Nothing |
+| **third-party dependency floors** | at_client declares seven floors below what it resolves (`path`, `crypto`, `uuid`, `archive`, `http`, `async`, `meta`), none checked against first use. Two questions: are they too low, and does at_client compile against the bottom of each range it admits. | Nothing |
+| **the enroll roster carries no expiry** | `enroll:list`'s roster projection has no `expiresAt` (`enroll:fetch` carries one since at_server 3.16.5); an at_server change ruled by [decisions 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27). | Nothing. An at_server PR, after D1 |
+| [the registrar certificate test](#the-registrar-certificate-test) | Three arms against a self-signed cert — the one S-5 behaviour change with a security consequence and no test. Post-D1 clean-up (gkc, 2026-08-23). | Nothing. It lands wherever at_auth is next touched |
+| [14.44](#1444-residuals-from-the-at_chops-pr-review) | Post-D1 (gkc, 2026-08-23): at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence, amended into that section in place; and `XWingCore.combine` sizes its buffer from its inputs while writing at literal offsets, so an over-long component is silently truncated — reject wrong-length inputs up front. | Nothing. Both ride the next at_chops touch |
+| **a sequential, abort-on-failure `batch`** | A protocol enhancement (gkc, 2026-08-27): `batch` already runs its commands in order but carries on past a failure; an abort-on-failure form would close the mint locks' take-to-write windows structurally. Multi-repo — at_commons, at_client and at_server in one sweep — and two silent drops in the handler (a command no handler accepts, and a null error code) are prerequisites. | Nothing. A design and a cross-repo sweep, after D1 |
+| **at_server: a String `apsk` on any enroll verb returns an internal error** | `EnrollParams.fromJson` casts `apsk` before validation and before the OTP check, on a verb an unauthenticated connection may send, so `"apsk":"x"` answers a Dart type-cast message instead of an `IllegalArgumentException`. Low severity; `apskLegacy` has the same shape. | Nothing, except that it lands in `at_server` |
+| **at_lookup major: deleting the ladder makes a keystore mandatory** | Gates the later at_lookup major, not D1: the remaining ladder traffic is callers who supply no `AtKeysIo`, so deleting the ladder breaks every consumer that builds a client from a preference alone (at_tools' `at_cli` is one). A bridge is [measured in the consolidation plan](../at-lookup-consolidation/plan.md#blocks-the-major--deletion-does-not-remove-the-ladder-it-makes-a-keystore-mandatory). | Nothing. A decision about the bridge before it is code |
+| **at_lookup major: `atLookUp.enrollmentId` has 51 uses, not 7** | Gates the later at_lookup major: [51 uses across 34 files](../at-lookup-consolidation/plan.md#blocks-the-major--atlookupenrollmentid-has-51-uses-not-the-7-first-recorded) from the analyzer — a grep on the member name over-counts and `atLookUp.enrollmentId` under-counts, because it is reached through at least eight receivers. | Nothing |
+| **at_lookup major: the CLI's authenticator install is unit-green only** | The CLI's authenticator install has 54 unit tests and no live check, and its six construction sites are not uniform ([section 6 of the consolidation plan](../at-lookup-consolidation/plan.md)); the migration wants a runner exercising the CLI first. Re-derive the sites rather than quoting them. | Nothing |
+| [the `monitor:` verb has no acknowledgement](#the-monitor-verb-has-no-acknowledgement) | A protocol seam across three repositories; the caller-side mitigation is built and live-proven. Not D1. | gkc scheduling it, after the release train |
+| [atServer outbound connection pooling](#atserver-outbound-connection-pooling) | In `at_server`, and asked for as a discussion rather than a change. | gkc scheduling it |
+| **doc-set reduction, phases 3–5** | Ruled by gkc 2026-08-23 for after D1: the end state is five files — `roadmap.md` (needs a pass), `design.md`, `acceptance.md`, `decisions.md` and this plan. Phases 1 and 2 landed 2026-08-23. | D1 closing |
+| [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | Removal at 4.0: delete the inert `sync` parameter from all six declarations and let the compiler enumerate the remaining same-package sites; phase 1 (`@Deprecated`) shipped 2026-08-20, and the deprecation plan's F5 family holds it. | the 4.0 majors |
+| [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | Not D1: it gates the post-R-2 stop-release, and until it closes `mintLegacyMaterial: false` is not to be recommended to anyone. Both moves it needs are B-3 phase 1, which is parked. | two unscheduled moves its body names |
+| [14.29](#1429-the-residuals-1425-surfaced) | S-3's two small items — a keychain round-trip on a real device (needs an `integration_test` harness in at_client_flutter first) and `LocalKeystoreAtKeysIo`, whose owed-or-out-of-scope status the section flags; SS-2's `__ssenv` auto-notify is deferred, not owed. None blocks D1. | Nothing blocks D1 |
+| [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race) residue | Not D1 and not PQ (gkc, 2026-08-23): at_client's general sync ordering, which no use case asserts; the test-side fix landed in `ccf4987a4`. | Nothing |
+| [14.45](detail/implementation-plan.md#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) residue | In `at_persistence_secondary_server`: its keystore `get()` does not filter expired records. | Separately owned |
+| [14.39](detail/implementation-plan.md#1439-pqposture-and-the-rollout-it-drives) **public-data signature verification** | Post-D1 and deliberately outside the catalogue (gkc, 2026-08-23): `pqActive` signs public data and nothing anywhere verifies it — not at_client, not any atServer — so a signature nobody checks is emitted knowingly. Undesigned. | a design |
+| **at_server's `at_server_spec` hosted fallback** | at_server's `unit_tests` job runs `dart pub get` per package with no melos step, so a PR changing `at_server_spec` and `at_secondary_server` together tests the new server against the old published spec and stays green. gkc has left it for a considered decision. | gkc |
+| **a functional client built on an empty keys store** | `crypto_era_default_test.dart` builds its client on an `InMemoryAtKeysIo` holding nothing, so the construction-time read logs "Could not read the keys" at warning on every functional run and the client runs as a null id. Write the demo keys into that store or stop passing one. | Nothing |
+
+### The four missing self-to-self mirrors
+
+**A ruling gkc asked for, drafted 2026-08-27 and deliberately not landed.**
+Nothing in `acceptance.md` changes until it is settled, because adding a row
+raises the burn-down's denominator and every new row owes a scenario.
+
+**The rule this comes from** (gkc, 2026-08-27): a use case for `put` or `notify`
+— or for the receiving side, `get` or notification receipt — is about **self to
+self** *or* **self to other**, never both at once. And where one direction has a
+row, so should the other.
+
+Auditing every put/notify/read row against that, five pairs already hold:
+UC-A3.1↔UC-A4.1, UC-A3.3↔UC-A4.2 (with UC-B4.1 carrying the fallback),
+UC-A3.4↔UC-A4.4, UC-B3.1↔UC-B4.3 and UC-B3.2↔UC-B4.4. Nothing in the self
+cluster lacks an other-side mirror — UC-A3.2 is seeding and UC-A3.5 is the
+advertisement's shape, neither being a write row. **Four self→other rows have no
+self→self mirror**, and they are not equally worth having:
+
+| Would mirror | What the self row would assert | Can the tree tell it apart? |
+| ------------ | ------------------------------ | --------------------------- |
+| **UC-A4.5** — a sender follows the recipient's advertised algorithm, not its own preference | A self write seals under the algorithm **this atSign's own published nskey advertises**, even when `keyEstablishmentAlgorithms` names a different one. Fixture: a published X-Wing nskey and a preference configured for `ml-kem-1024` | **Yes, and this is the sharpest of the four.** `NskeyResolver.resolve` reads the published advertisement and then filters by `sealsToKeyAlgorithms`; a build that consulted the *minting* preference instead would be wrong. ⚠️ For a self write both values belong to the same atSign, so **a client reading the wrong one is invisible** — which is exactly the shape a bug hides in, and there is no row for it |
+| **UC-A4.7** — no mutually supported construction is a refusal, not a guess | A client whose `sealsToKeyAlgorithms` has been narrowed past what its **own** advertisement offers is refused, and the refusal says so rather than reporting a cold start | **Yes, and the production code already names this exact case.** `NskeyResolver` throws `AtEncryptionException` rather than walking on, and its comment says why: *"a deployment that narrowed the list reads its own configuration as the recipient having published nothing."* The path exists, is commented for the self case, and nothing exercises it |
+| **UC-A4.6** — the construction is negotiated from `suites` | A self write against this atSign's own advertisement listing only a retired construction is refused, and one listing the current construction gets the matching version byte | **Yes, but narrower.** `NskeyProvider._sealVersionFor` intersects what the build can open with the advertisement's `suites`, and for self that advertisement is one this atSign wrote — so a mismatch means an advertisement older than the build. A real upgrade scenario rather than a hypothetical, but less likely to be got wrong than the two above |
+| **UC-A4.3** — multi-enrollment both ends | Every authorised enrollment of this atSign reads this atSign's own self data | **Weakest.** Largely covered already: UC-A3.1's Given has `alice1, alice2` both holding the private, approval-time conveyance is UC-A2.3, and an enrollment that missed the mint healing from a holder is UC-B5.11. A row would restate rather than add |
+
+⛔ **The denominator moves and that is the honest direction.** Landing any of
+these raises the total with the new clauses unproven, so the burn-down
+percentage falls. That is what it should do: the clauses were always owed and
+their absence was flattering the figure.
+
+### The at_client carve stack
+
+⚠️ **The design exists but is INVISIBLE to git.** gkc asked on 2026-08-25 for a
+plan of stacked pull requests for the at_client release candidate — each layer
+reviewable on its own, each with a description saying why and what rather than
+how, the tests it adds, and where a reviewer should spend attention. It was built
+and checked against the real diff, and it lives at
+**`untracked/at-client-stacked-prs.md`**, which `/untracked/` in `.gitignore`
+hides — so `git grep` cannot find it, nobody else has it, and a fresh session
+searching the repo will conclude no such plan exists. **Nine layers**, cut on the
+line that most of the branch is inert until one late layer switches it on: read
+2, 3 and 7 properly, skim the rest.
+
+**Five decisions it cannot make, and the stack cannot be cut until they are
+made:**
+
+1. Two files are claimed by two layers (`pq_signing_root.dart` and
+   `pq_signing_chain.dart`, in both 4 and 6) — sized into 4, which would make 6
+   about 2,300 lines smaller than its row says.
+2. The unit suite is deliberately red in the middle of the stack, because two
+   tests cover code that arrives later — while four layers say to verify with a
+   whole-package run.
+3. One new test file appears in two layers and lands in only one.
+4. One layer says its wiring "lands elsewhere in the stack" without naming the
+   layer, and is reviewed before that layer exists.
+5. Four areas of the diff fell outside every layer — **a file in no layer never
+   lands**.
+
+⚠️ **One of those four is a trap worth keeping even after the stack is cut.** Two
+already-published packages look like a formatter run and mostly are — 21 of 22
+changed files in one and 7 of 8 in the other are byte-identical once all
+whitespace is removed. But two are not, and one of them is a hand-written format
+pin, which is the single kind of file that must never be skipped on the strength
+of its neighbours. Test it by comparing each file with whitespace stripped, never
+by reading line counts.
+
+### Arm 1 vs arm 3 bucketing
+
+⛔ **A RULING IS OWED FROM gkc, and it is not a research task** — the measuring is
+done. [`acceptance.md`'s "Which rows arm 1
+owes"](acceptance.md#which-rows-arm-1-owes) has both readings and the evidence;
+nothing here repeats them.
+
+In short: section 14's kind table says **3** transition rows, its arm-3 paragraph
+names **12**, and four rows — UC-B1.1, UC-B1.2, UC-B4.4, UC-A5.3 — are assigned
+to arm 1 and arm 3 at once, so the published "21 axis and consequence rows"
+double-counts. The two readings differ in what arm 1 *is*: under the count an
+arm-1 cell must drive a retrofit, so the arm stops being three static clients;
+under the prose a retrofit is an edge and belongs to arm 3.
+
+**Arm 1 as built sidesteps it** by covering only the 14 rows both derivations
+agree on, so nothing is blocked — but arm 3 cannot be scoped until this is
+settled, and the count table stays wrong until then.
+
+### Content keys per scope
+
+⚠️ **A defect found while diagnosing the atServer's pairwise-lookup bug, and
+separate from it.** One content key per writing enrollment per scope, cut at that
+enrollment's first write, with no re-minting — three sender enrollments produced
+three CKs under `(bob, ns)` and three under `(alice, ns)`.
+
+`CurrentCkPointer` is the only thing meant to converge them and cannot as
+written: it is put **`localOnly`** into each enrollment's own store and reaches
+siblings only by sync, so cold enrollments writing together each read no pointer
+and each mint. `CkManager._resumeCurrent`'s "cutting a fresh one" fired **zero**
+times across the run. Sync dropped four of those pointer writes, logging
+`sync queue race: __ckcur.… missing persisted record; removing`.
+
+**Why it matters beyond waste**: `rotateContentKey` supersedes only the CK in
+hand, so a rotation asking for forward secrecy leaves the other enrollments' keys
+live and their data readable — **read from the source, not run**.
+
+**What a fix needs, if the ruling goes that way**: the pointer written
+remote-first through an atomic verb or behind an interlock, and rotation
+superseding every CK in scope rather than the one in hand.
+
+### A wildcard enrolment seeds nothing
+
+⚠️ **Found 2026-08-26 while answering a question about a demo, and the doc
+comment that hid it has been corrected in the same commit.**
+`NskeySeeding.authorisedNamespaces()` skips `*` and `__manage`, and its dartdoc
+said a wildcard enrollment "mints on demand when it writes into a specific one
+instead". **There is no such path.**
+
+**Measured, not reasoned:**
+
+- `PublishedNskeyKeyRing.mintAndPublish` has exactly **one** production caller
+  in at_client — `NskeySeeding.seed()`. The ring's `_mintUnlessPublished` is
+  reachable only from `mintAndPublish` itself.
+- Writing does not mint. `NskeyProvider._nskeyOwnerOf` is
+  `atKey.sharedWith ?? recordOwner`, so an outbound share resolves the
+  **recipient's** nskey; a sender consults its own only for self data, and
+  consulting is not minting.
+- So a client whose enrolment authorises only `*` mints nothing at startup and
+  nothing later. It publishes no advertisement, and every peer trying to seal
+  to it gets `NamespaceKeyUnavailableException`.
+
+✅ **SETTLED 2026-08-26, measured against a live atServer** in a local
+ephemeral environment by the at_talk demo session, which is where this was
+costing real time. A first (CRAM) enrolment IS wildcard-only:
+
+| Enrollment ID | Status | AppName | DeviceName | Namespaces |
+| --- | --- | --- | --- | --- |
+| `d118c77f-…` | approved | firstApp | firstDevice | `{__manage: rw, *: rw}` |
+
+`_isSeedable` skips both, so `authorisedNamespaces()` returns empty and `seed()`
+mints nothing, ever.
+
+⚠️ **Confirmed behaviourally as well as by reading, and the positive control is
+what makes it evidence**: an atSign onboarded `pqReady` and run at `pqReady`
+with `namespace: 'ai6bh'` had **no** `public:__nskey.ai6bh@…` — while
+`public:pq_signing_root@…` WAS present in the same scan. So the PQ bootstrap
+ran and what is missing is specifically the namespace-key step, rather than the
+whole path being cold.
+
+**The consequence, and it is the reason this is P1 rather than a curiosity:**
+every freshly onboarded atSign is unreachable as a recipient — a pqActive
+sender gets `NamespaceKeyUnavailableException` from it in every namespace —
+until some app enrols with a real namespace. Which makes the app-enrolment path
+the only route out of that state.
+
+**Why it matters if it is reachable:** the atSign is invisible as a recipient
+for every namespace, permanently, with no error on its own side — the failure
+lands on whoever tries to reach it.
+
+⚠️ **The same shape already bit the e2e suite for a different reason.** The
+⚠️ block at the top of `tests/at_end2end_test/test/pq/nskey_recipient_not_ready_test.dart`
+records a control that only passed when another file had happened to mint
+`@bob`'s key first, because being sent to mints nothing. Read it before
+designing any fix.
+
+### The late-arriving nskey private
+
+**The receiver-side half of the pqActive notification drop, and the only part
+still owed.** File a late-arriving nskey private **only for a generation this
+client actually asked for**. The reverted attempt filed any arrival, which is
+what breached the seeding guarantee.
+
+⚠️ **Two things the earlier framing got wrong**, kept because both are easy to
+re-derive incorrectly. Addressing was never the problem. And
+`PublishedNskeyKeyRing._mint` was said to "never reach `_convey`, so a generation
+minted during rotation still leaves that client's store unprimed" — half right:
+`NskeyRotation.rotateNamespaceKey` *does* push the successor to the roster, but
+it never primed **its own** secret store, so the one enrollment certain to hold
+the successor was the only one that could not serve a pull for it. That half is
+**closed**: it now calls `putIfNewer` before the fan-out, exactly as the mint-time
+convey does.
+
+⚠️ **One consequence is stated in that method's dartdoc and was verified against
+the answer path before it shipped**: `excludeEnrollmentIds` filters the rotation
+PUSH and not a later PULL, so an excluded enrollment still on the namespace
+roster can ask for the successor and be answered — rotation-to-exclude is not a
+revocation on its own.
+
+**Re-derive the rate**, never quote it — five runs of `runLocal.sh` with a named
+`VIRTUALENV_IMAGE`, then per run `grep -c "Dropping parked notification"` and
+check whether the pqActive receiver logged `Filed the nskey private`, against the
+`##GRID## up:` lines that map each cell to its `runningAs` id.
+
+### The registrar certificate test
+
+⛔ **POST-D1 CLEAN-UP, not a D1 gate** (gkc, 2026-08-23). **The registrar's switch
+to validating TLS certificates is untested, here and in CI.** `RegistrarService`'s
+default client used to accept ANY certificate — `badCertificateCallback` returning
+true unconditionally, on calls carrying the registrar API key. It is now a plain
+`package:http` client that validates, with the bypass behind
+`RegistrarIoClient.allowBadCertificates`, off by default and shouted when used.
+
+**Neither arm has a test**, and CI cannot catch a regression: `RegistrarIoClient`
+appears in **zero** CI job logs (control: `RegistrarService` appears), and
+`RegistrarIoClient.create()` has **no in-tree caller at all** — it is a public
+opt-in for consumers, which is deliberate, so do not delete it as dead code.
+
+⚠️ **Attempted and parked 2026-08-22, so the next reader does not start cold.**
+The shape works: mint a cert at test time with
+`openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=localhost` (**do not commit a
+PEM** — push protection blocks private keys), serve it with
+`HttpServer.bindSecure`, and point `RegistrarService` at `localhost:<port>`, which
+`Uri.https` accepts as an authority. **Three arms, and the third is the positive
+control that proves the server is up**: the default client refuses,
+`RegistrarIoClient.create()` with the flag off refuses, and with the flag on
+succeeds. ⚠️ A probe got one import short: it needs
+`import 'package:at_auth/at_auth.dart';`, which is what exports
+`RegistrarApiEndpoint`.
+
+### The `monitor:` verb has no acknowledgement
+
+⚠️ **NOT D1, and it is a protocol seam across three repositories.** A client
+writes `monitor:` and there is nothing to read back — at_server's
+`MonitorResponseHandler` returns the empty string on success — so it cannot tell
+acceptance from refusal, and reports a connection as up the moment the command is
+*written*.
+
+Specified upstream as
+[at_protocol#367](https://github.com/atsign-foundation/at_protocol/issues/367)
+with three open sub-issues: at_commons
+[#2175](https://github.com/atsign-foundation/at_client_sdk/issues/2175) (a
+`prompts` parameter on the verb, opt-in and additive, and it ships first),
+at_server [#2764](https://github.com/atsign-foundation/at_server/issues/2764)
+(answer the command, and terminate every notification with a prompt), and
+at_lookup
+[#2176](https://github.com/atsign-foundation/at_client_sdk/issues/2176) (send it,
+wait for the answer, frame on the prompt).
+
+⛔ **A correction to that specification, to settle BEFORE anyone builds it.** #367
+says the acknowledgement lets "a refused `monitor:` be reported as a failure".
+Today `monitor:` is **not** refused: `MonitorVerbHandler.processVerb` checks only
+that the connection is authenticated, subscribes it, and the refusal then happens
+per notification inside `_sendNotification` via `isAuthorized`, dropping each one
+with a server-side warning the app never sees. A replay does not rescue it either
+— replayed notifications go through the same check. So the acknowledgement ALONE
+does not fix the case #367 leads with; at_server must also decide the refusal **at
+`monitor:` time**. #2764 gestures at this ("A refusal must be answerable too") as
+an aside rather than as the work. ✅ Verified independently against at_server by
+the session working there, 2026-08-25.
+
+**The caller-side mitigation is already built and live-proven** — `AtRpc.ready()`
+and `AtRpc.listenerReadyTimeout`, with `sendRequest` awaiting readiness when
+`isClient`. That closes the exposure for at_client's own callers; it does not
+close the protocol gap.
+
+### atServer outbound connection pooling
+
+⚠️ **IN ANOTHER REPO (`at_server`), and gkc asked for it as a discussion rather
+than a change** — 2026-08-24, when he took pool keying out of the concurrency
+fix: *"I'd rather serialize on a single connection for now, and have a longer
+discussion on how to handle outbound connection pooling and concurrency at a
+later date"*. Recorded so the deferral does not read as a decision.
+
+**What that discussion has to weigh**, all established while diagnosing the
+pairwise-lookup defect:
+
+- Every relayed lookup to a remote atSign now serialises behind every other one,
+  and a request queued on the mutex is waiting *before* its 5 s read budget even
+  starts, because the timeout begins after acquisition.
+- `InboundConnectionImpl.equals` matches on remote **address and port** rather
+  than object identity, so keying on "the real inbound connection" is not the
+  identity keying it sounds like.
+- `NotifyConnectionsPool.getOutboundClient` has the same non-atomic
+  get/connect/add shape that the fix repaired in `getClient`.
+- `PolVerbHandler` holds a third `DummyInboundConnection`, so pol's
+  `lookUp`/`plookUp` share a pooled client with relayed lookups at
+  `handshakeRequired: false`.
+
+**Four residual findings belong to this discussion**, all pre-existing and none
+claimed by the fix: `poolSize` is not enforced across different pool keys, so
+concurrent misses for different atSigns can take the pool past its declared
+maximum; an evicted client is dropped without `close()`, leaking its socket;
+`OutboundMessageListener` can queue a bare `@atSign@` prompt as its own entry when
+the response and the prompt arrive in separate socket reads, and `read()` accepts
+a bare prompt as valid — a mis-pairing channel a mutex does not touch, since
+making an exchange's two steps adjacent never validates or drains the queue; and
+there is no bound on a slow-but-alive peer.
+
+⛔ **Changing `DummyInboundConnection.equals` was never in scope and must not be
+folded in** — `NotifyConnectionPool.getOutboundClient` builds a fresh dummy per
+call and relies on that match to reuse a connection at all, so identity equality
+there would open a connection per notification.
+
+### 14.29 The residuals 14.25 surfaced
+
+**S-3 — a keychain round-trip on a real device.** Nothing exercises `.atKeys`
+through a real device keychain: this repo has no `integration_test` harness
+(verified 2026-08-23 — no such directory and no pubspec dependency anywhere in
+the tree) and at_client_flutter's keychain tests mock the platform channel
+(`packages/at_client_flutter/test/keychain_io_impl_test.dart`,
+`test/keychain_storage_test.dart`). Unblocking it means standing up an
+`integration_test` harness in at_client_flutter first. Does not block D1.
+
+**SS-2 / DEP4 — `__ssenv` auto-notify: deferred, do not build.** The
+2026-08-03 ruling took DEP4 off SS-2 once the correctness argument behind it
+was withdrawn, so what remains is a pure optimisation — an atServer that emits
+the wake-up itself on a put to an `__ssenv` key, after which senders can set
+`sendWakeUpNotification = false`
+(`packages/at_client/lib/src/secret_sharing/pairwise_secret_sharing.dart:140`,
+whose dartdoc already states the coupling). It needs parity across every
+atServer implementation in one sweep, and the starting state is clean:
+`__ssenv` matches nothing in any of them. Re-derive rather than quoting that —
+`git -C ~/dev/atsign/repos/<repo> grep -c "__ssenv" <ref>` per implementation,
+each run beside a control that matches, and name the ref because these
+checkouts sit on feature branches.
+
+⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** S-3's SECOND
+remaining item is dropped. The section says plainly "S-3 — two, both small"
+and then names both; the triage's owed list carries only the first (the
+keychain round-trip). `LocalKeystoreAtKeysIo` is the other. I am unsure
+whether it is owed or a standing out-of-scope ruling —
+detail/implementation-plan.md:476 says "`LocalKeystoreAtKeysIo` over the 5.x
+keystore is **out of scope** (2026-07-17 ruling)" — so per the brief I am
+classifying it OWED and flagging the uncertainty. Either way it must not
+vanish: if it is owed it is invisible work, and if it is a not-building ruling
+it is a guard, and both survive.
+
+
+
+### 14.18 The remaining D1 initial-development sequence
+
+The live state is the release-train row in [`## TODO`](#todo), and step 20's
+rotation arm is its own P1 row. This section keeps the carve recipe, because
+links cite it.
+
+**Carving a package PR from the spike.** One worktree per package, off
+`origin/trunk`, so the PR carries that package alone; the branch name uses
+hyphens where the package uses underscores (`at_lookup` → `gkc-pq-d1-at-lookup`).
+
+```bash
+git worktree add /tmp/carve-<pkg> -b gkc-pq-d1-<pkg-hyphenated> origin/trunk
+git -C /tmp/carve-<pkg> checkout gkc-pq-d1-spike -- packages/<pkg>
+git -C /tmp/carve-<pkg> diff gkc-pq-d1-spike --stat -- packages/<pkg>   # a list to justify line by line
 ```
-                 ┌──────────────────────── PQ primitives ───────────────────────┐
-  [#1993 done]→  P-1 at_chops 3.3.0 (published)    P-2 mldsa65 verify (SATISFIED on trunk; publish 3.4.x)
-                     │                                   │
-  [#1930 done]→  S-2 CryptoContext.keys (additive)       │
-                 S-1 at_auth AtKeys/AtKeysIo extend-in-place ─→ S-3 LocalKeystore/.atKeys updatable
-                                                  │
-   Substrate (SS-*)                                │
-   SS-0 land WP-SS substrate baseline (PR #2037, reworked to 1:1:1 / flat listns / no-write-path) ─┐
-   SS-1a commons grammar(publish) → SS-1b server verbs+live → SS-1c client wired ◀─────────────────┘
-                                          │
-                                    SS-2 wired-into-AtClient + wake-up
-                                          │
-                                    SS-3 hardening + single-key + signingAlgo verify ◀── P-2
-                                          │
-                P-3 pqpublickey key ──→ SS-4 nskey mint + pqpublickey lifecycle
-                                          │
-   ═══ CRITICAL PATH TO D1 GA ═══         ▼
-                            B-1 the nskey DATA PATH (providers + marker + cold-start)
-                                          │
-                            R-1 migration machinery + disallowLegacyEncryption flag (default false)
-                                          │
-                            B-2 nskey rotation + revocation (B5/B6)  ◀── RF-1 + SS-3 (fan-out only)
-                                          ▼
-                         ▶ at_client 3.14.x = D1 GA (rebuild = reader, one flag = PQ writer)
 
-   Off the GA critical path (parallel):
-     RF-SRV server self-retrofit enroll → RF-2b PQ-APKAM mint + self-retrofit → RF-2c upgrade + e2e   (RF-1 confirm)
-     B-3 selfEncryptionKey retirement (phases 1-3, needs at_server)     ON-1 PQ-native onboarding + legacy-interop flag
-     S-5 at_auth 4.0 WASM split → S-6 consumer bumps          D2-1 at/pqmls carve + D1-E (D2)
-     KF-1 .atKeys-at-rest protection + backup/restore (builds on S-3)
-     IS-1 inter-server PQ auth (FROM/POL: swap challenge signature RSA→ML-DSA-65, PR #2683) — no KEM, no cert; builds on published at_chops 3.4.x (ungated)
-     R-2 at_client 4.0 (flip flag default true) — final, gated on the ecosystem floor
+⚠️ **A major version is not package-only**: a pub workspace refuses to resolve if
+any member's constraint excludes the new version, and every job then dies at
+`dart pub get` with a failure that looks nothing like a version problem. Widen
+every member's constraint in the same commit (`git grep -n -P '^\s+at_<pkg>:' --
+'*pubspec.yaml'`). Analyze and test the package **and its consumers**, dispatch
+CI first (nothing fires on push on the spike, and CI's bare `dart analyze` reads
+`benchmark/`, which `dart analyze lib test` never opens), and raise with the org
+template. Order, from the pubspecs: at_commons → at_chops → at_lookup →
+at_server_status → at_auth → at_client (stacked PRs) → at_client_flutter →
+at_onboarding_cli. Each carve merges to trunk on its own; ⛔ **the spike branch
+itself never merges**.
+
+### 14.19 Small items, raised 2026-08-12 and not yet acted on
+
+The items live in
+[`detail/implementation-plan.md`](detail/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on);
+struck ones are done. Re-derive the open ones — never read a count from a
+heading, this one has been stale in six homes:
+
+```bash
+awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \
+  | perl -ne 'print "$1\n" if /^(\d+)\. (?!~~)/'
 ```
 
-**Hosted-publish ordering (stated once).** `at_chops` (`P-1`, `P-2`) and `at_commons` (`SS-1a`) are
-**hosted** → publish before `at_server`/consumers bump pins. `at_commons`, `at_chops`, and `at_auth` all
-live in this monorepo as workspace packages (`packages/at_commons`, `packages/at_chops`, `packages/at_auth`);
-only `at_server` / `java_at_server` are separate repos. ⚠️ **Caution:** workspace resolution wires these as
-path deps locally and in CI, so a hosted dependency-floor violation (a consumer pinning an unpublished
-`at_chops`/`at_auth`/`at_commons` version) is **masked** — it resolves fine against the workspace source but
-would fail a real `pub get` off pub.dev. Publish/floor checks must validate the floors explicitly, not lean
-on a green workspace build.
+Of the open ones, item 11 — an APKAM rotation that lands and is not persisted
+locks the enrollment out permanently — is the owed work, and step 20's rotation
+arm waits on it; 35 lands in `atGettingStarted`; 14 is not PQ; 10 is an
+unexplained functional run with two disproven theories; 20, 21 and 26 were
+examined and deliberately left.
 
-The graph uses **`RF-SRV`** and the **single-key `SS-3`** — the 1:1:1 shape. The rationale for the
-substrate node structure is recorded in [decisions.md](decisions.md).
+### 14.12 A `mintLegacyMaterial:false` atSign cannot write a public record
 
----
 
-## 3. Phase A — PQ primitives & enrollment key (P-1, P-2, P-3)
+⛔ **NOT D1 (gkc, 2026-08-23) — it gates the post-R-2 stop-release.** Until it
+closes, `mintLegacyMaterial: false` must not be recommended to anyone. The
+flag is honoured at activation — no RSA keypair is minted and no
+`public:publickey` is published — but the resulting atSign then cannot publish
+anything, because **every public write is signed with the legacy encryption
+private key**: `put_request_transformer.dart` `_signPublicData` throws
+`AtPrivateKeyNotFoundException('Failed to sign the public data')` when it is
+absent. The post-quantum path itself needs two public writes — the
+enrollment's `_apsk` anchor to the signing root, and the nskey advertisement —
+and both fail. Sync fails alongside them ("Self encryption key is not set for
+current atSign"), there being no `selfEncryptionKey` either.
 
-### P-1 — at_chops 3.3.0: stateless core + HPKE — **SATISFIED (published 2026-06-23)** · at_chops · S
-**Goal:** ship the publishable `at_chops` minor everything pins. **Done:** `at_chops` **3.3.0 was published
-to pub.dev on 2026-06-23** (`pqSeal`/`pqOpen` HPKE + the stateless surface + `@Deprecated AtChopsImpl` shim).
-The substrate is **no longer gated on a P-1 publish**.
-**Builds on:** #1993 (landed).
-**Deliverables → [design.md](design.md)** (at_chops primitives): residual only — confirm the stateless
-functional surface and the deprecated shim both pass every X-Wing/GCM/HKDF/HMAC vector byte-exact, and that
-`pqSeal`/`pqOpen` reuse `AesGcm256EncryptionAlgo`/`HkdfSha256` (no `package:cryptography` re-import). No
-further publish required for P-1; the 3.3.0 slot is live.
-**Acceptance → [acceptance.md](acceptance.md):** all vectors green via both surfaces; `pqSeal` round-trip /
-tamper→`authFailure` / info-aad-mismatch green; downstream construction sites compile unchanged.
-**Effort:** S (residual confirmation).
-**Watch-outs:** the `pqSeal` signature is frozen and shipped — downstream tracks compile against the
-published 3.3.0 surface. Don't break the deprecated sync verify path.
-**coversD1:** D1-S S1 + D1-A.
+**Owed, and neither move is scheduled here:** public-record signing moves onto
+the ML-DSA signing root rather than the RSA encryption keypair — the same swap
+IS-1 made for inter-server auth — and self data moves off `selfEncryptionKey`
+onto the nskey path (B-3 phase 1, [PARKED](#parked)). The stop-release cannot
+ship before both, and [decisions
+42](detail/decisions.md#42-the-to-define-list-ruled-2026-08-05) item 10 has
+the release default resolving null→false in the major after R-2.
 
-### P-2 — at_chops: wire `mldsa65` into the verification branch; publish with the 3.4.x slot · at_chops · M — **SATISFIED (published 2026-07-17)**
-**Goal:** the one missing ML-DSA verification branch (the enum member + algo classes already ship in 3.3.0).
-**Done:** the `_getVerificationAlgorithm` `mldsa65` branch **merged to trunk 2026-07-06** (issue #2050 /
-PR #2056), folded into the 3.4.0 slot per the 2026-07-06 decision; #2039 (AES-GCM FFI) merged into the same
-slot on 2026-07-09. **`at_chops` 3.4.0 was published to pub.dev on 2026-07-17**, closing the publish
-residual — `at_server` can bump its pin in SS-3, and the at_chops publish no longer gates IS-1.
-**Builds on:** — (independent root; parallel to P-1).
-**Deliverables → [design.md](design.md)** (at_chops primitives, ML-DSA): add an `mldsa65` branch in
-`_getVerificationAlgorithm` returning `MlDsa65PureDartAlgo()` (no `DynamicLibrary` in `AtChopsImpl` — do
-**not** claim FFI-when-available); no new `SigningAlgoType` member, no new algo class; publish in the new
-minor. **The 3.4.0 slot assembled on trunk and published 2026-07-17:** #2030 (the `at_chops_ffi` barrel +
-`AtPqc` auto-resolver + `AtSignatureAlgorithm` classes) **merged to trunk 2026-07-03** (+ #2046
-review-fixes) and bumped `at_chops` to 3.4.0 under the one-time semver exemption; P-2's
-`_getVerificationAlgorithm` `mldsa65` branch (#2056) and #2039 (AES-GCM FFI, merged 2026-07-09) folded into
-that same 3.4.0, which then shipped. Those FFI PRs realise the **FFI-auto-resolve-default** policy
-(FFI when available, pure-Dart fallback, WASM forces pure-Dart — ruling in [decisions.md](decisions.md)); they
-are **in D1 scope**, on the at_chops track. **Scope note (2026-07-03 ruling):** auto-resolve applies to the
-`AtPqc` accessors (`AtPqc.xWing`/`AtPqc.mlDsa65`, including their keygen); key generation through the
-web-safe barrel's key pair classes (`XWingKeyPair.generate`, `MlDsa65KeyPair.generate`,
-`AtChopsUtil.generate*KeyPair`) is pure-Dart by construction — those exports must stay out of the
-`dart:ffi` import graph or `dart compile js`/wasm breaks for web consumers. Both backends are
-wire-compatible, so pure-Dart-generated keys work with the FFI backends and vice versa.
-**Acceptance → [acceptance.md](acceptance.md):** **algorithm-level** sign/verify (true) + tamper (false);
-rsa/ecc/pkam unchanged. Do **not** assert end-to-end `AtChops.verify(mldsa65)` — the deprecated sync path
-doesn't await the async ML-DSA verify.
-**Effort:** M.
-**Watch-outs:** historical — the `mldsa65` verify branch went into the then-unpublished 3.4.0 (opened on
-trunk via #2030) rather than a fresh minor; that slot has since published. **ML-DSA APKAM auth is
-retained** — the
-1:1:1 simplification does not drop ML-DSA: the at_chops `mldsa65` verify branch (this project), the
-at_commons pkam `signingAlgo` literal (folded into SS-1a's publish), and the server `_getSigningAlgoType`
-branch reading the **record** `signingAlgo` together make it work.
-**coversD1:** D1-F DEP3-prep.
+Pinned live: the opt-out arm of
+`tests/at_functional_test/test/pq_legacy_interop_live_test.dart` expects the
+public write to fail with that exact reason, so whoever fixes this gets a red
+test naming the row that was waiting for it.
 
-### P-3 — PQ enrollment-conveyance key `public:pqpublickey` + X-Wing-preferred enrollment wrap · at_client, **at_auth**, at_chops · M
-**Goal:** close the harvest-now-decrypt-later hole in enrollment conveyance; publish the root PQ key.
-**Builds on:** P-1 (`pqSeal`). **No atServer change** (the server stores `encryptedAPKAMSymmetricKey`
-opaquely).
-**Deliverables → [design.md](design.md)** (pqpublickey root key lifecycle): publish
-`public:pqpublickey@<atSign>` (root, **never** `publickey.pq`); new enrollees prefer X-Wing-wrapping
-`apkamSymmetricKey` to it; approvers accept RSA **or** X-Wing. ⚠️ the RSA-wrap lives in **at_auth** — add
-at_auth to scope and bump its `at_chops` pin to `^3.3.0`. Freeze the `pqpublickey` **name + create-once
-contract** as an interface-first artifact shared with SS-4 (which owns the create/seed/serve/pull lifecycle).
-**Acceptance → [acceptance.md](acceptance.md):** enroll/approve conveys `apkamSymmetricKey` X-Wing-sealed
-(nothing RSA in the path) with RSA fallback; functional enrollment test green; the published `pqpublickey`
-is fetchable. Do **not** attach full UC-A2.1 here (its "convey the nskey private per-APKAM via `__ssenv`" half
-is SS-2/SS-4), and do **not** claim cold-start CK *usage* (that's B-1).
-**Effort:** M.
-**Watch-outs:** see **Open decision #A** (P-3 publishes/prefers `pqpublickey` before SS-4 owns its
-lifecycle); P-3's acceptance can only prove "published + fetchable," not cold-start serve/pull.
-**coversD1:** D1-A enrollment-conveyance key; cold-start target for B4.
+⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** Two things beyond the
+two code moves the triage lists. (a) A standing do-not-recommend guard on the
+flag, stated twice in the section — it is a live constraint on anyone writing
+docs or advising a user, and it is not recoverable from any commit. (b) The
+pointer to the live test that ASSERTS the current broken behaviour. Without
+(b) the builder who does the owed work gets a red functional test and has to
+work out from scratch whether they broke something; the section wrote that
+pointer down precisely so they would not.
 
----
 
-## 4. Phase S — Structural enablers / key management (S-1, S-2, S-3, S-5, S-6, KF-1)
 
-**Structural facts (stated once).** (1) `CryptoContext` is `{atClient}`, so the additive `keys` field has
-**nothing to deprecate**; (2) at_auth's `AtKeys` is **extended in place** — additive PQ-safe methods with the
-legacy key fields/methods deprecated (no new holder class) — and `AtKeysIo` gains runtime persistence
-(ratified 2026-07-06, #2045 — see [decisions.md](decisions.md)); (3)
-`CryptoRuntime` resolves against the live `AtClientPreference.crypto`, and cached-client reuse adopts the
-new config (there is no `CryptoRegistry`).
+### 14.11 `deprecated_member_use` findings across the workspace
 
-**Parallelism fact (stated once)** — `S-1`/`S-2`/`S-3` do **not** gate Wave-2 substrate work; the substrate's
-`P-1`/`pqSeal` publish gate is **already satisfied** (at_chops 3.3.0, published 2026-06-23), leaving the SS-0
-baseline (PR #2037) as its prerequisite (see [section 10](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing)).
+gkc ruled on 2026-09-11 that the whole debt gates publication; the list is
+[`docs/projects/deprecations/plan.md`](../deprecations/plan.md), and this heading
+stays because links cite it. Two facts it keeps: **use the analyzer, never a
+grep** — `enrollmentId` is a legitimate identifier in hundreds of places and only
+the analyzer knows which uses are of the deprecated member — and the credential
+ladder's replacement is the `AtAuthenticator` seam in at_auth, whose constructors
+take the algorithms as required arguments so a migrated call site cannot inherit
+an algorithm it did not choose.
 
-### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.3.0 · at_auth · M — **SATISFIED on trunk (2026-07-17); residual = the stable 3.3.0 publish**
-**Goal:** extend the existing `AtKeys` in place so it holds every key (per-enrollment AND per-APKAM) via
-additive PQ-safe accessors while the legacy key fields deprecate; interface-first.
-**Builds on:** at_auth `AtKeys`. Additive only; gates nothing in Wave 2.
-**Deliverables → [design.md](design.md)** (structural design: extend `AtKeys`/`AtKeysIo` in place): keep the
-`AtKeys` class hierarchy as-is and extend it **additively** with PQ-safe methods (`addKey`/`retireKey` over
-typed `AtKeysMaterial`; **retire, never remove** — forward-only status, 2026-07-17 ruling), **deprecating**
-the legacy key fields/methods (they stay for back-compat so call sites migrate over time); extend `AtKeysIo`
-with **runtime persistence** — the single whole-state **`flush()`** (supersedes the `append()`/`save()`
-working names, 2026-07-17 ruling), safety-checked via `AtKeysAssurance.validateMapUpdate`, atomic
-(temp + rename, `.bak` kept), with a throwing default impl so existing implementers compile unchanged — so
-it stays the single contact point keeping runtime `AtKeys` objects and the persisted keyfile in-line.
-Concrete impls (`InMemoryAtKeysIo`, the keychain/file `AtKeysIo`) remain `AtKeysIo` implementations.
-(Supersedes the earlier `WritableAtKeys` holder, #2045 — ratified 2026-07-06, see
-[decisions.md](decisions.md).)
-**Acceptance → [acceptance.md](acceptance.md):** existing onboard/auth suites green; the extended `AtKeys`
-PQ add→read→retire (material never removed; legacy fields still readable via the deprecated accessors);
-`InMemoryAtKeysIo` round-trip (persistent round-trip proven once **S-3** wires the stores); unknown
-`keyPartType`/`keyAlgorithmType` tokens round-trip unmodified.
-**Effort:** M.
-**Watch-outs:** ⚠️ **version** — resolved 2026-07-17: at_auth 3.1.1 published, then **3.2.0 was consumed by
-the validateAtServer network-timeout release**; S-1 ships as **3.3.0** (Open decision #D closed). The
-at_chops 3.4.x prerequisite (hashing-algo barrel exports) is satisfied — 3.4.0 published 2026-07-17.
-**Publish state:** S-1 landed via PR #2047 (+ #2080 tweaks) and is published as **`at_auth 3.3.0-rc1`**.
-The **rc1 → stable 3.3.0 promotion is an open gate**: S-6 (consumer bumps) and SS-2's at_auth work both
-need a stable at_auth 3.3.0 to pin against, and consumers cannot depend on a prerelease without an explicit
-prerelease constraint. Timing is unresolved — see [section 10](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing).
-**S-2 carries a sibling residual** (its `CryptoContext.keys` merged after `at_client 3.14.0` published), so
-both structural enablers are merged-but-unpublished and clear together on the next release round.
-**coversD1:** D1-S S2.
+### 14.50 The e2e teardown revokes enrollments belonging to other runs
 
-### S-2 — at_client: `CryptoContext.keys` additive field (interface-first only) · at_client · S (≈1 PR) — **SATISFIED on trunk (2026-07-17); residual = the at_client publish**
-**Goal:** the tiny field the data path compiles against.
-**Done:** the seam landed with #1930; PR **#2076** threaded the `AtKeysIo` through `CryptoContext` on
-2026-07-17, completing the additive field.
-⚠️ **Merged but not yet published.** #2076 merged at 18:20Z on 2026-07-17, *after* `at_client 3.14.0`
-published at 16:02Z the same day, and the 3.14.0 changelog does not mention it. The `CryptoContext.keys`
-field therefore sits on trunk **unreleased** — a consumer pinning a hosted `at_client` cannot compile
-against it yet. Downstream projects that need the field from a published package (rather than through
-workspace path resolution, which masks the gap locally and in CI) must sequence after the next `at_client`
-release.
-**Builds on:** #1930 + S-1's extended `AtKeys` / injected `AtKeysIo`.
-**Deliverables → [design.md](design.md)** (CryptoProvider seam): add an `AtKeysIo keys` field to
-`CryptoContext` (additive) — the provider seam is injected the `AtKeysIo` (the key source) and yields the
-extended `AtKeys`; `CryptoRuntime` threads it into provider calls (ratified 2026-07-06, #2045 — see
-[decisions.md](decisions.md)).
-**Acceptance → [acceptance.md](acceptance.md):** existing crypto/legacy round-trips green; behaviour-neutral
-(no wire/stored-value change); Mode-B regression retained.
-**Effort:** S.
-**Watch-outs:** ⚠️ **Scope cut** — keep ONLY the additive field; **defer** migrating `LegacyCryptoProvider`
-to read from `context.keys` (legacy pulls remote `plookup`s + `atChops` cipher ops the 6 static fields
-can't supply). This plan keeps `LegacyCryptoProvider` reading its own sources (additive-field-only) — see
-Open decision #E in [decisions.md](decisions.md).
-Resolve where `context.keys` is sourced at construction (overlaps S-3).
-**coversD1:** D1-S S5.
+**The e2e teardown revokes enrollments belonging to other runs.**
+`tests/at_end2end_test/test/enrollment_teardown.dart` fetches *every*
+`EnrollmentStatus.approved` enrollment on the shared `@ce2e1`–`@ce2e4` atSigns
+and revokes each with `force: true`, and fetches every
+`EnrollmentStatus.pending` one and denies it — neither loop filters to what
+its own run created, so two overlapping CI runs tear each other down. A
+run-unique marker already exists: `enrollment_setup.dart:110` submits with
+`appName: 'wavi-$random'` (`random = Uuid().v4().hashCode`, line 101) and
+`Enrollment` exposes `appName`
+(`packages/at_client/lib/src/response/enrollment.dart`). What is missing is
+agreement between the two steps — setup, suite and teardown are **three**
+separate `dart test` invocations
+(`.github/workflows/at_client_sdk.yaml:324`, `:331` and `:340`) sharing no
+in-process state — so derive the marker from something both can read (`GITHUB_RUN_ID` is
+the obvious candidate) and filter both loops on it. ⚠️ Green CI runs are not
+evidence this is fixed: every green window since the diagnosis had no other
+run in flight, so the mechanism had no opportunity to fire — it is a rate, not
+a kind. ✅ **That sentence was CORROBORATED rather than falsified on
+2026-08-31**, when the concurrency was counted for the first time: the two red
+windows carried 4 and 3 concurrent `at_client_sdk` runs, both green windows
+carried the same single long-running one and nothing else, and a run dispatched
+with **zero** in flight went 11 of 11 green. The constant present in every
+window cannot be the discriminator, which is what makes it a differential
+rather than a tally.
 
-### S-3 — at_client/at_auth: updatable `.atKeys`/keychain via the injected `AtKeysIo` · at_client, at_auth, at_client_flutter · L
-**Goal:** durable, updatable key-storage homes (bootstrap→file/keychain, distributed/rotating→keystore,
-ephemeral→memory). Stores are **dumb** — convergence stays in the substrate.
-**Builds on:** S-1's extended `AtKeysIo` runtime-persistence API.
-**Deliverables → [design.md](design.md)** (key stores): make `FileAtKeysIo` updatable (re-wrap the
-self-encryption key on rewrite, atomic write + backup); compose the extended `AtKeys` (via its injected
-`AtKeysIo`) at AtClient construction; cover the keychain store, which `flush()` alone does not reach.
-`LocalKeystoreAtKeysIo` over the 5.x keystore is **out of scope** (2026-07-17 ruling).
-**Acceptance → [acceptance.md](acceptance.md):** post-onboarding key add persists + survives close/reopen;
-ephemeral stays in-memory; **migration test** on a v(N-1) `.atKeys`/store fixture (backend is **Hive**
-today, not SQLite — keep the test backend-agnostic; name any legacy box/table explicitly); a **keychain
-updatable round-trip on mobile/desktop**; functional onboard+add+read-next-run green.
-**Effort:** L.
-**Watch-outs:** file rewrite must re-wrap the self-enc key or it's unreadable next run — and note
-`flush`'s `validateMapUpdate` compares the legacy fields as ciphertext, so a self-enc-key re-wrap fails
-assurance as-built; S-3 needs an explicit re-wrap path. `LocalKeystoreAtKeysIo` is **not needed at this
-time** (2026-07-17 ruling, [decisions.md](decisions.md)) — decide its existence/routing here, and any store
-holding CK-class material must support eviction (B5a), not inherit `flush`'s never-lose contract. Run the
-integration suite at every commit boundary (resource lifecycle). Does **not** gate the substrate.
-**coversD1:** D1-S S2/S3.
+⛔ **The mechanism, the evidence and the proposed fix now live in
+[at_client_sdk#2197](https://github.com/atsign-foundation/at_client_sdk/issues/2197).**
+What stays here is the WORK, which is still owed; the captured instances and
+their timestamps belong in the issue. Do not let the two drift.
 
-### S-5 — at_auth 4.0.0: WASM barrel split · at_auth · L  *(parallel, off the GA critical path)*
-**Goal:** make the at_auth core WASM-safe (the one breaking major in the program).
-**Builds on:** S-3 (so the extended `AtKeys`/`AtKeysIo` + updatable stores bake on 3.3.0 before the breaking cut).
-**Deliverables → [design.md](design.md)** (WASM barrel): move `FileAtKeysIo` + the `dart:io` socket probe
-to a new `at_auth_io.dart` barrel; drop the `atKeysIo ??= FileAtKeysIo()` default (require injection);
-registrar on `package:http`; publish 4.0.0.
-**Acceptance → [acceptance.md](acceptance.md):** ⚠️ **narrowed** — assert the *at_auth-owned* sources
-reachable from `at_auth.dart` no longer import `dart:io` and the default is gone. Do **not** gate on a true
-`dart compile wasm` of the core (it still transitively reaches `dart:io`/`dart:ffi` via `at_lookup`/`at_chops`
-— those WASM splits are a **separate effort out of the D1 crypto program**, the `wasm-port`). CLI/flutter
-importing `at_auth_io.dart` compile + auth functional green (post-**S-6**).
-**Effort:** L.
-**Watch-outs:** `FileAtKeysIo` never leaves at_auth. **at_auth 4.0 (structural/WASM) is a different major at
-a different time from at_client 4.0 (R-2, the flag flip).**
-**coversD1:** D1-S S4.
+⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** A "looks like a
+second defect and is not" ruling. If it goes, the next reader who sees
+`PathNotFoundException` in an `end2end_test_14` log opens a second
+investigation into a symptom that has already been attributed.
 
-### S-6 — Consumer constraint bumps onto at_auth `^4.0.0` · at_client, at_onboarding_cli, at_client_flutter, **tests/at_functional_test, tests/at_end2end_test** · M
-**Goal:** consumers adopt the breaking at_auth major.
-**Builds on:** S-5. Publish in dep order (at_chops → at_auth → at_client/onboarding/flutter → at_cli_commons).
-**Deliverables → [design.md](design.md)** (WASM barrel consumer adoption): consumers adopt `at_auth ^4.0.0`,
-importing `FileAtKeysIo` from `at_auth_io.dart` with explicit injection. ⚠️ the two **test packages pin
-at_auth directly** — include them; `at_cli_commons` is a **transitive-only** bump (no direct at_auth dep,
-no FileAtKeysIo use).
-**Acceptance → [acceptance.md](acceptance.md):** each consumer + both test packages compile and pass against
-`^4.0.0` with explicit injection; onboarding functional green.
-**Effort:** M.
-**Watch-outs:** sweep every inline `FileAtKeysIo()` site; `example/pubspec.yaml` `dependency_overrides`
-needs at_auth added; use `melos bootstrap`.
-**coversD1:** D1-S S6.
 
-### KF-1 — `.atKeys`-at-rest protection + backup/restore · at_client, at_auth, at_client_flutter · L  *(new D1 scope, off the GA critical path — parallel)*
-**Goal:** protect the PQ private material in the keyfile at rest and define a backup/restore story (including
-the stale-backup case). Off the GA critical path — runs in parallel.
-**Builds on:** S-3 (updatable `.atKeys`). Additive; gates nothing on the GA critical path.
-**Deliverables → [design.md](design.md)** (keyfile at-rest protection + backup/restore): encrypt the PQ
-private material at rest in the keyfile — the **X-Wing key-package private** and the **ML-DSA APKAM private**
-— alongside the existing key material; define the keyfile **backup/restore** flow, including the
-**stale-backup** case: a restored backup whose enrollment was **capped/expired by a retrofit** (RF-SRV) must
-be detected and handled rather than silently authenticating with a dead enrollment.
-**Acceptance → [acceptance.md](acceptance.md):** PQ privates unreadable at rest without the wrapping key;
-backup→restore round-trip on a live enrollment; a restored **stale** backup (enrollment capped/expired) is
-detected (re-retrofit or clear error), not a silent auth against the aged-out enrollment.
-**Effort:** L.
-**Watch-outs:** the stale-backup case couples to RF-SRV's expiry cap — a backup taken before a retrofit
-carries an enrollmentId the server has since capped; restore must reconcile against the live enrollment state.
-Restoring an older backup over a newer keyfile is **rejected by `flush`'s `validateMapUpdate`** (materials
-missing / statuses moving backward) — the right default, so KF-1's restore flow needs an explicit override
-path, and stale-backup detection is mandatory, not optional.
-**coversD1:** D1-S keyfile-at-rest + backup/restore (new scope).
 
-**NoPorts uptake (pointer).** NoPorts is the roadmap's finish line, yet this plan carries no NoPorts work
-package. NoPorts adoption of the PQ-safe data path is **tracked in the NoPorts repo, out of this plan's
-lane** — sequenced after B-1 (a PQ-capable `at_client` reader/writer) is available. If a NoPorts-side WP is
-later pulled into this lane, slot it after B-1.
+### 14.47 The at_client unit tree has a cross-file isolation flake
 
----
+⛔ **Not a D1 gate (gkc, 2026-08-23) — hygiene.**
+`packages/at_client/test/local_secondary_sync_queue_test.dart` is green alone
+and green in the alphabetical full suite; it reddens only in one
+hand-constructed order nothing actually runs, so no rail as invoked is at
+risk. **Reproduce** (~10 runs; it failed 1 in 4, with 3 green re-runs of the
+identical invocation): `cd packages/at_client && dart test --concurrency=1
+test/pq_signing_root_test.dart test/nskey_minting_test.dart
+test/nskey_rotation_test.dart test/local_secondary_sync_queue_test.dart`. The
+failure: `'public key write enqueues with op=updateAll'` read
+`['@bob:phone.wavi@alice', 'public:email@alice']` where only the second entry
+was expected. ⚠️ **That entry cannot have leaked from an earlier test** — the
+failing assertion is the **first** `test()` in the file (`:55`) and
+`@bob:phone.wavi@alice` is built by the **second** (`'shared key write
+enqueues with op=updateAll'`, `:77`), so it is state surviving from a
+*previous run*. Start at `tearDownLocalSecondary` (`:38`): its `Hive.close()`
++ `Directory('test/hive').deleteSync(recursive: true)` sits inside a `catch`
+that only `print`s `teardown error: …`, `setUp` is empty (`:52`) and
+`setUpLocalSecondary` never clears the store — so one swallowed teardown
+leaves the next run's first test attached to the old queue. Grep any run's
+output for `teardown error:`. 20 at_client test files share the `test/hive`
+path (`git grep -lc "test/hive" -- packages/at_client/test | wc -l`). Distinct
+from
+[14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race),
+which is the functional pack against a live atServer.
 
-## 5. Phase SS — Secret-sharing substrate (SS-1a, SS-1b, SS-1c, SS-2, SS-3, SS-4)
+⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** The section names its
+reproduction recipe as the thing worth keeping, and the triage's owed line
+("reproduce the four-file ordering failure at rate") does not carry the recipe
+itself. The specific four-file order is the whole finding — the section says
+the alphabetical full suite never produces it — so it is not derivable by
+anyone re-running the suite. Low risk given only ~6 of 29 lines are called
+archaeology, but the command and the file order must land inside the owed
+line, not beside it.
 
-The `SS-*` projects define the secret-sharing substrate work; the substrate design lives in
-[design.md](design.md) §2. **SS-0 landed the substrate baseline** (PR #2037, merged 2026-07-17) — SS-1c /
-SS-2 / RF-1 all presuppose that code, and it is now on trunk.
+⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** Two closed questions,
+neither in any commit: (a) the 14.46 edits were tested as a cause and the test
+settled nothing, stated with the numbers rather than as a conclusion; (b) a
+deliberate refusal to pool this with 14.43, with the reason. Losing (a)
+invites the next reader to blame 14.46; losing (b) invites merging two
+investigations the doc set has twice decided to keep apart.
 
-**Shared substrate fact (stated once).** **pull** (`requestSecret`) and **push**
-(`pushSecretToNamespaceMembers`) are **dual facets of one substrate**: the same `__ssenv` envelope sealed
-to a key package via `pqSeal`, the same gated `enroll:listns` discovery, the same `SecretStore`
-and `putIfNewer` ordering. The mechanics (kpid addressing, the `__ssenv` envelope shape, sign/verify,
-`SecretStore`, push/pull primitives, the `enroll:listns` verb + `EnrollParams.metadata`, the
-atServer enrollment record + the authenticated self-retrofit flow + expiry copy/cap) live in
-[design.md](design.md). The given/when/then (UC-A2.x / A3.2 / B5.x) lives in [acceptance.md](acceptance.md).
 
-**Parallelism fact (stated once).** The substrate's publish gate — **P-1/`pqSeal`** on `at_chops` 3.3.0 — is
-**already satisfied** (published 2026-06-23); its remaining prerequisite is the **SS-0 baseline** (PR #2037)
-on trunk. It does **not** gate on S-1/S-2/S-3.
 
-**Substrate design facts (stated once; rationale in [decisions.md](decisions.md)):**
+### 14.46 `executeVerb`'s `sync` parameter is inert, on both secondaries
 
-1. **There is no `enroll:metadata` verb** — the key package rides an opaque `Map<String,dynamic>
-   EnrollParams.metadata` on `enroll:request` (JSON tail; **no grammar change**); the server stores/returns
-   it; **no post-enrollment metadata write, ever**.
-2. **`enroll:listns` returns the flat shape** `[{enrollmentId, access, apkamPubKey, metadata}]`
-   — **no nested `apkam[]` array**.
-3. **The enrollment record stores a SINGLE `apkamPublicKey` + a `signingAlgo`** (`rsa2048|mldsa65`);
-   **never >1 keypair**. PKAM verify selects RSA vs ML-DSA from the **record** `signingAlgo`
-   (**record-authoritative**, not the client-supplied wire value); legacy null → `rsa2048`.
-4. **One nskey keypair per `(atSign, namespace)`** — the recipient key for both directions (Alice
-   encapsulates her own CKs to it; external senders encapsulate CKs to it when sharing with her). Its
-   public half is **published lazily**: on first use it is the owner-only self at-key `nskey.<ns>@alice`
-   (synced to Alice's `<ns>`-authorised clients, **not** a `public:` key); on the namespace's first
-   cross-atSign share the **same** public half is promoted to the world-readable `public:nskey.<ns>@alice`
-   (immutable create-if-absent). Its private — a KEM private that **decapsulates** CKs, never decrypts
-   application data — is conveyed per-APKAM as a Secret over the substrate.
-5. **appMetadata carries NO `ns` field** (see B-1 in [section 6](#6-phase-b--the-nskey-data-path-b-1-the-d1-centrepiece)).
+**14.46 Remove `executeVerb`'s inert `sync` parameter — at_client/at_lookup
+4.0, not D1.** The parameter is read by no implementation; what decides
+whether a local write is enqueued for client→server sync is `cameFromServer`
+(and `localOnly`) in `LocalSecondary._update`/`_delete`. Phase 1 has shipped —
+all six declarations carry `@Deprecated(… 'Removed in 4.0.')`: at_client's
+`Secondary` (`lib/src/client/secondary.dart:14`), `LocalSecondary`
+(`lib/src/client/local_secondary.dart:310`), `RemoteSecondary.executeVerb` and
+`executeAndParse` (`lib/src/client/remote_secondary.dart:211`, `:236`), and
+at_lookup's `AtLookUp` (`lib/src/at_lookup.dart:119`) and `AtLookupImpl`
+(`lib/src/at_lookup_impl.dart:383`). Phase 2 deletes the parameter and lets
+the compiler enumerate the remaining in-package call sites, which are silent
+today because `deprecated_member_use` does not fire inside the declaring
+package.
 
-### SS-0 — land the WP-SS substrate baseline · at_client · M — **SATISFIED (merged to trunk 2026-07-17)**
-**Goal:** get the WP-SS secret-sharing substrate code onto trunk — the foundation SS-1c / SS-2 / RF-1
-presuppose.
-**Builds on:** #1930 + P-1 (`pqSeal`, published 3.3.0).
-**Done:** **PR #2037 merged to trunk on 2026-07-17**, in the 1:1:1 / flat `listns` / no-write-path shape
-(reworked via #2043 — single `apkamPublicKey` + `signingAlgo`; flat discovery roster; no
-`registerKeyPackage` / `enroll:metadata` write path). It shipped in `at_client 3.14.0` (published
-2026-07-17) as an experimental surface. This is the `__ssenv` envelope, `SecretStore`, `putIfNewer`
-ordering, `kpid` addressing, and the push/pull primitives the later SS projects wire up.
-**Acceptance → [acceptance.md](acceptance.md):** substrate unit suite green; the baseline compiles in the
-1:1:1 shape with no write-path residue.
-**Effort:** M.
-**Watch-outs:** SS-1c / SS-2 / RF-1 cite PR #2037 as "already landed" — that prerequisite is now met.
-**coversD1:** D1-F substrate baseline.
+**at_server's mldsa65 dispatch comment is stale — lands in at_server, not
+here.** On `origin/trunk`, both
+`packages/at_secondary_server/lib/src/utils/apkam_signature_verifier.dart:89-90`
+and
+`packages/at_secondary_server/test/apkam_signature_verifier_test.dart:182-183`
+say `AtChopsImpl` for mldsa65 "selects `MlDsa65PureDartAlgo`, then calls the
+deprecated `verify()`". Since at_chops 3.6.0 it dispatches to
+`PkamMlDsa65SigningAlgo` (`packages/at_chops/lib/src/at_chops_impl.dart:271`,
+`:298`), whose verify is synchronous. Two sites, not one.
 
-### SS-1a — at_commons enroll grammar: `EnrollParams.metadata` + flattened `listns`; publish 5.12.0 — **SATISFIED (at_commons 5.12.0 published 2026-07-04; grammar on trunk via #2040)** · at_commons · M
-**Status:** SATISFIED — landed on trunk via #2040 (2026-07-04, with #2044 stacked in); at_commons 5.12.0 published to pub.dev.
-**Goal:** publish the grammar the new enroll verbs need before any server can parse them.
-**Builds on:** — (root). The key package rides `EnrollParams.metadata` (no grammar change); there is no
-`enroll:metadata` op.
-**Deliverables → [design.md](design.md)** (enroll verb grammar / `EnrollParams.metadata`): add the
-`listns` op (inner alternative inside the single `(?<operation>)` group, leftmost-first before
-`list`) + its `listNamespace` segment. Add `metadata` (opaque map) and `signingAlgo` (`rsa2048|mldsa65`)
-fields to `EnrollParams` + the `EnrollVerbBuilder` cascade + `.g.dart` regen. Document the **flattened**
-`listns` shape `[{enrollmentId, access, apkamPubKey, metadata}]`. Also widen the **pkam-verb**
-`signingAlgo` literal (`ecc_secp256r1|rsa2048` → add `mldsa65`, consumed by the server at auth time — folded
-into this publish, #D). Bump 5.11.0 → **5.12.0** + publish.
-**Acceptance → [acceptance.md](acceptance.md):** `listns` parses (no `metadata` op); `EnrollParams`
-round-trips `metadata`+`signingAlgo`; empty `metadata` dropped; pkam regex accepts the ML-DSA literal.
-**Effort:** M.
-**Watch-outs:** re-confirm the at_commons pub.dev floor at execution (#D). `EnrollParams.signingAlgo` only
-**records** the enrolled key's algo — it does not satisfy the pkam-verb literal (that's the same publish,
-folded into this publish).
-**coversD1:** D1-F DEP1 (flatten, commons) + DEP2 (`EnrollParams.metadata` replaces `enroll:metadata`) +
-DEP3 (record `signingAlgo`).
+⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** The standing
+HANDS-OFF guard on `docs/projects/pq/post-quantum-cryptography.md` is not in
+the triage's owed list for 14.46 (which lists only the 4.0 parameter deletion
+and the at_server comment). It is a do-not-do instruction of exactly the class
+the triage kept as OWED for 14.29's SS-2, and it explicitly replaced an
+instruction that pointed the other way. Deleting it means the next reader sees
+an untracked, un-railed .md sitting in the project's own docs tree and
+re-derives the sentence this bullet was written to kill — 'either finish and
+track it or delete it' — against gkc's private notes, which have no undo.
 
-### SS-1b — server: store/return `EnrollParams.metadata` + flattened `listns` + first live round-trip · at_secondary_server, at_server_spec · L — **SATISFIED (merged 2026-07-07)**
-**Goal:** persist the opaque blob and serve the gated discovery roster.
-**Builds on:** SS-1a (publish first).
-**Done:** landed in `at_server` across **#2685** (the `enroll:listns` verb, verbatim enrollment `metadata`,
-`_apsk` APKAM pubkey publication, merged 2026-07-07), **#2687** (alignment to the ratified WP-SS shape),
-**#2696** (typed `EnrollParams` metadata/signingAlgo), **#2698** (functional tests for the `listns` roster
-and enrollment metadata) and **#2710** (per-enrollment move scoping). The client obligation (SS-1c, #2084)
-is now unblocked.
-**Deliverables → [design.md](design.md)** (atServer enrollment record): on `enroll:request`, persist
-`enrollParams.metadata` + `signingAlgo` onto the enrollment record (`EnrollDataStoreValue` gains
-`metadata` + `signingAlgo`; store a **single** `apkamPublicKey`). Add the gated `enroll:listns`
-discovery (a new `_isAtLeastReadOnNamespace` gate) emitting the **flat**
-`data:[{enrollmentId, access, apkamPubKey, metadata}]`; at_server_spec dartdoc; first live functional round-trip.
-Also **keep `_apsk` present**: the atServer populates `public:_apsk.<eid>.<perEnrollmentApproved>@<atSign>`
-from the record's `apkamPublicKey` (on approval / first authenticated use) rather than relying on the
-client-side `publishPublicSigningKey`, and keeps its write-restriction — the presence + write-restriction
-cross-tier property (design.md §2.4) that both envelope and advertised-key verification depend on.
-**Acceptance → [acceptance.md](acceptance.md):** metadata stored verbatim + returned by `listns`;
-**schema-migration test** (pre-`metadata`/`signingAlgo` record opens null, write round-trips); flat records,
-≥r gate, approved-only, `*` wildcard; UC-A2.3 server discovery gate; an approved enrollment's `_apsk` is
-fetchable without a client publish, and a cross-enrollment `_apsk` overwrite is refused; `runLocal.sh`
-(compose-down, ≤180s) + **both** suites green.
-**Effort:** L.
-**Watch-outs:** ⚠️ the at_commons fields (SS-1a) must publish first; **the atServer-schema change must land in
-the same release as the client**; check the enroll-record value-size limit accommodates a ~1KB key-package
-blob; downstream client obligation = SS-1c.
-**coversD1:** D1-F DEP1 (server) + DEP2.
 
-### SS-1c — wire at_client to the live verbs + flattened parser · at_client, tests · M — [#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084)
-**Goal:** drive the live verbs and parse the flat shape.
-**Builds on:** SS-0 (substrate baseline on trunk) + SS-1b.
-**Deliverables → [design.md](design.md)** (`enroll:listns` client parser): rewrite
-`VerbEnrollmentDirectory.listForNamespace` for the **flat** `[{enrollmentId, access, apkamPubKey, metadata}]`
-shape (one `NamespaceMember` per enrollment, **singular nullable `metadata.keyPackage`** — no format-keyed
-map, `KeyPackage.apkamId` from `apkamPubKey`). The key package rides `enroll:request` (SS-2); there is no
-`registerKeyPackage` / `enroll:metadata` write path, interface decl, `register()` call site, or
-`FakeEnrollmentDirectory.registerKeyPackage`. The `listForNamespace` dartdocs state the **1:1:1 single-key**
-model. **Verify the advertised key package's APKAM signature** against the enrolling atSign's `_apsk`
-(design.md §2.1 *Advertised-key authenticity*) before trusting it — the same verify path same-atSign and
-cross-atSign; reject an unsigned / wrong-signer package.
-**Acceptance → [acceptance.md](acceptance.md):** flat parse → `NamespaceMember` + decoded `KeyPackage`; a
-signed key package verifies against `_apsk`, a tampered / wrong-signer one is rejected; **no
-code path issues `enroll:metadata`**; the test-consumer sweep migrates all three suites off the `registered`
-seam to a 1:1:1 seeding seam; a client-driven functional round-trip.
-**Effort:** M.
-**Watch-outs:** the `listForNamespace` parse unit test already exists (landed with the SS-0 baseline, PR
-#2037) — don't duplicate it. Clear the test's own `.atKeys` and gitignore it.
-**coversD1:** D1-F DEP1 (client parser) + DEP2 (write path removed).
 
-### SS-2 — substrate wired into AtClient + server wake-up; key-package-in-request (new-device conveyance only) · at_secondary_server, at_client, at_auth, at_commons · L — [#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085)
-**Goal:** the first production call sites + the server-side wake-up + the new-device conveyance path.
-**Builds on:** SS-1c.
-**Deliverables → [design.md](design.md)** (substrate production wiring + server wake-up): DEP4 `__ssenv`
-update-put auto-notify (drop the rethrow; update-path only) + flip client self-wake-up off. **Production
-wiring:** re-key the facade Expando to `(AtClient, enrollmentId)` (+ `enrollmentId`
-on `forClient`); the X-Wing key package — **APKAM-signed via `wrapAndSign`** (design.md §2.1
-*Advertised-key authenticity*) and placed at the singular `metadata.keyPackage` — rides into `enroll:request`
-as the opaque `EnrollParams.metadata` (built by an at_client orchestrator *above* at_auth; at_auth ferries,
-never interprets). **Conveyance is the
-NEW-DEVICE approver path only:** an at_client approve-wrapper fires `shareAllSecretsWithEnrollment` after
-at_auth's `approve` (seals an `__ssenv` envelope to the new device's key package). The **auto-approved
-self-retrofit** (RF-2b/RF-SRV) needs **no conveyance** — the retrofitting client already holds its own
-secrets locally. **ML-DSA APKAM auth:** the at_chops
-verify branch (P-2) + the at_commons pkam `mldsa65` literal (in SS-1a's publish) + the server
-`_getSigningAlgoType` ML-DSA branch reading the record's `signingAlgo`.
-**Acceptance → [acceptance.md](acceptance.md):** one value-less `__ssenv` self-notify on update (none on
-delete; survives an enqueue throw); `forClient` distinct per `(AtClient, enrollmentId)`; a new-device
-`enroll:request` carries the opaque key package, the approver reads it and `approve` seals an `__ssenv`
-envelope + fires `shareAllSecretsWithEnrollment`; **no `enroll:metadata` command ever issued**; both suites.
-**Effort:** L.
-**Watch-outs:** ⚠️ the atServer-schema change (separate `at_server`/`java_at_server`) must land in the same
-release; ~1KB blob size limit; listener-before-trigger for the wake-up subscription.
-**coversD1:** D1-F DEP4 + production wiring (new-device conveyance).
+### 14.44 Residuals from the at_chops PR review
 
-### SS-3 — substrate hardening (durable store + jitter) + single `apkamPublicKey` + `signingAlgo` verify · at_secondary_server, at_client · L — [#2086](https://github.com/atsign-foundation/at_client_sdk/issues/2086)
-**Goal:** durable secret storage + smoothed anti-storm + the single-key record-authoritative verify.
-**Builds on:** SS-2 ◀ P-2 (satisfied — at_chops 3.4.0 published 2026-07-17).
-**Deliverables → [design.md](design.md)** (SecretStore durability + single-key verify): the enrollment record keeps a **single** `apkamPublicKey`; PKAM verify selects RSA vs
-ML-DSA from the record's **`signingAlgo`** (**record-authoritative** — `_validateSignature` reads the
-*stored* algo, **not** the client-supplied `verbParams[atPkamSigningAlgo]`; legacy null → `rsa2048`). Plus
-the genuine hardening: wire `SecretStorePersistence` to an on-disk per-enrollment backend (preserve monotonic
-`putIfNewer` ordering) + jitter/backoff on the anti-storm rate cap.
-**Acceptance → [acceptance.md](acceptance.md):** store survives close/reopen with version ordering; an
-rsa2048-stamped key verifies via RSA, an mldsa65-stamped key via ML-DSA only (no fallthrough), legacy null →
-rsa2048; both functional + e2e.
-**Effort:** L.
-**Watch-outs:** the `signingAlgo` field on `EnrollDataStoreValue` is owned by SS-1b; the pkam grammar literal
-by SS-1a.
-**coversD1:** D1-F DEP3 (single-key + signingAlgo).
+**at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence.** ⛔ **POST-D1
+(gkc, 2026-08-23)** — it rides the next at_chops touch, amending the 3.6.0
+section in place. The consumer-facing consequence to state, one sentence
+beside the `0x01` removal: two installs of released at_client 3.14.0, resolved
+either side of at_chops 3.6.0 reaching pub.dev, cannot read each other's
+pairwise `__ssenv` envelopes in either direction for the envelopes' 7-day ttl
+— at_chops 3.5.0 and older hardcode seal version `0x01`, and 3.6.0's open set
+is `{0x02, 0x03}`. The durable record already exists: [ruling 110's
+addendum](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18).
+Verified absent 2026-08-23 — `packages/at_chops/CHANGELOG.md` has no match for
+skew, pairwise, 7-day or 3.14.0.
 
-### SS-4 — nskey minting + pqpublickey lifecycle + correspondence check · at_client · L–XL — [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087)
-**Goal:** mint the per-namespace key material and the atSign-level root PQ key — the first convergence
-feeder into the data path.
-**Builds on:** SS-3 + **P-3** (pqpublickey name/cold-start target) + **S-3** (updatable local key
-storage for nskey privates).
-**Deliverables → [design.md](design.md)** (nskey minting + pqpublickey lifecycle): mint **one** nskey
-keypair per `(atSign, namespace)` and store its public half as the owner-only self at-key
-`nskey.<ns>@alice` (this alone suffices for self data — Alice's own clients hold it); publish the
-world-readable `public:nskey.<ns>@alice` **lazily**, on the namespace's first cross-atSign share
-(immutable create-if-absent, promoting the same public half). Both the `nskey` public half and
-`public:pqpublickey@alice` are **advertised as APKAM-signed envelopes** (design.md §2.1 *Advertised-key
-authenticity*), so a fetching client verifies them against the publishing enrollment's `_apsk` — same path
-same-atSign and cross-atSign. `pqpublickey` create/seed/serve/pull under
-`pqid:<kid>` + root no-namespace serve exception; public/private correspondence check in `_consume` (the
-signature is primary; correspondence is the secondary check). The
-nskey private is conveyed per-APKAM as a Secret over the substrate.
-**Acceptance → [acceptance.md](acceptance.md):** UC-A3.2 (2nd APKAM obtains the nskey private, decapsulates
-a test secret sealed to it; app_2 refused to an app_1-only client); a fetched `nskey` / `pqpublickey`
-advertisement verifies against the publisher's `_apsk` and a tampered one is rejected; UC-B5.1/B5.3 (offline
-pull; create-once race); pqpublickey create→seed→serve→pull + correspondence-mismatch rejection.
-**Effort:** L–XL.
-**Watch-outs:** delivers **key material only** — the value-level providers are B-1. The **first convergence
-feeder** into the data path.
-**coversD1:** nskey/pqpublickey material slice of D1-B B1 + D1-F F2.
+**`XWingCore.combine` writes at hardcoded offsets.** ⛔ **POST-D1 (gkc,
+2026-08-23).** In
+`packages/at_chops/lib/src/algorithm/encryption/x_wing_core.dart`, `combine`
+sizes its buffer from the four inputs' actual lengths and then writes at
+literal 0/32/64/96/128, so the two disagree for any component that is not 32
+bytes. Correct for X-Wing today — every caller passes components whose lengths
+the underlying primitives fix at 32. Measured rather than reasoned: a
+**short** input throws `StateError: Too few elements` from `setRange`, so only
+an **over-long** one is silently wrong — it truncates to 32 and leaves the
+buffer's tail zeroed, yielding a shared secret neither party can detect is
+wrong. Not introduced by this branch: `origin/trunk` carries the same shape in
+`x_wing_pure_dart.dart` and `x_wing_ffi.dart`; extracting them widened the
+reach (the trunk copies were library-private, the shared one is
+package-visible) rather than creating the risk. Fix by rejecting wrong-length
+inputs up front against `sharedSecretLength` — not by tracking offsets with a
+cursor — so the guard states the contract instead of silently accommodating a
+violation of it.
+
+⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** The owed item is
+"write a specific sentence into a published package's CHANGELOG", and the
+sentence's CONTENT is in the ~45 lines the triage calls archaeology. What the
+skew actually is — which two builds, in which direction, for how long —
+appears in no commit (the reply that promised it is a PR comment, and the
+durable record is ruling 110's addendum in detail/decisions.md). Keep the
+statement of the consequence alongside the owed line, plus the constraint that
+it amends the existing 3.6.0 section in place rather than opening a new
+heading.
+
+⚠️ **Also owed, and nearly lost in the 2026-08-23 cut:** A rejected proposal
+with its reason: persisting `hashLength` in the passphrase envelope was the
+obvious fix and was deliberately not taken. A reader seeing an envelope that
+persists salt/memory/iterations/parallelism but not hashLength will re-derive
+"obvious gap, persist it". The reasoning does survive in a source comment —
+but only on `origin/gkc-pq-d1-at-auth`, not on this branch and not on trunk,
+so on the spike the reason exists in this section alone.
+
+## PARKED
+
+Set aside deliberately. A row here exists to stop someone building it, so
+the reason is the point of the row.
+
+| Item  | What it is                                           | Why it is parked |
+|-------|------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| [14.14](detail/implementation-plan.md#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is fully privileged, and signs as `primary` | ✅ **CLOSED 2026-08-23 — both halves were already ruled, and nobody had closed the row.** Privilege: the resolver's own dartdoc says a client with no enrollment id authenticates with the atSign's own keys, *"which is full privilege by construction rather than by grant"*. Identity: [14.18](#1418-the-remaining-d1-initial-development-sequence) step 13 ruled that such a client publishes its `_apsk` under `primary` deliberately, as the only writer for an `_apsk` no `enroll:request` can carry. Kept so the question is not re-derived |
+| [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | ⛔ **NOT D1 (gkc, 2026-08-23).** Its own text says a migration here does **not** break NoPorts — it signs with the encryption keypair and fetches `getRemotePK`, not `_apsk`. The obligation to name it as a second migration is conditional and **has not fired**: it needs RFC 7515 to become a **consumer-facing** claim, and measured 2026-08-22 the string appears in `design.md` and `detail/decisions.md` and in no file under `packages/` |
+| S-5 residual | **Two String vocabularies stay untyped** | ⛔ **Considered and left, not a task.** The keyId slot prefix (`auth`/`sign`/`root`, taken by `AtKeys.keyIdPrefix` and `isRoleKeyId`) is **not** a `CryptographicMaterialRole`: typing it as one was tried on 2026-08-22 and reverted when the compiler rejected every call site. `keyAlgo`, the secret-sharing protocol id, is a third vocabulary again. Recorded so the next reader does not re-derive that these are the same thing |
+| 14.26 | A false comment in at_server's `at_metadata_builder` | ⛔ **NOT PART OF D1** (gkc, 2026-08-16). It lands in at_server, off `trunk`, and nothing in D1 waits on it. Detail: [14.26](detail/implementation-plan.md#1426-a-comment-in-at_server-is-now-false) |
+| 14.1  | The signing root's `keys[]` shape                    | SUPERSEDED by decisions 101 and 14.22. Kept for the reasoning; two of its conclusions are now false |
+| 14.13 | A passive-by-default flag                            | FOLDED AWAY 2026-08-11 into the rollout axis (14.18 step 19). Kept for its survey |
+| 14.21 | The signing root cannot be rotated                   | RULED the same day by decisions 101. Kept so 14.22 is legible against it |
+| 14.23 | Per-generation nskey records                         | ⛔ REJECTED — do NOT build. 14.24 shipped instead; the body is kept so it is not re-derived |
+| KE-2  | The `enroll:update` **writer**                       | **Writer built and live-proven 2026-08-19.** `KeyPackageMinting` is a startup step reconciling the advertised key package against `AtClientPreference.keyEstablishmentAlgorithms` (which replaced the singular `keyEstablishmentAlgo` in the same pass); it mints, files, retires and republishes, unit-tested and isolated by mutation. Verb merged to at_server `trunk`; the client receiver answers at every held kpid. ⚠️ This cell said "nothing mints a second KEM key and re-advertises, so a package cannot gain one" — false since that landed. UC-A2.5 and UC-A2.6 are `PROVEN`, cited to `tests/at_functional_test/test/key_package_amendment_live_test.dart` — the acceptance burn-down is back to **0 skipped**, and the `ke2` blocker constant is deleted. ⚠️ **Three clauses of those rows are NOT proven and deliberately not claimed** (a superseded kpid's envelope still opening, peer negotiation, and the revoked-enrollment gate) — plan 14.19 item 36. Issue #2133 |
+| B-3   | Stop **conveying** the legacy `selfEncryptionKey`    | Narrower than it reads: the key's *use* is retired by the release cadence (R-2 flips `disallowLegacyEncryption`), so this is only relaxing `enroll:approve` to accept an approval that omits `encryptedDefaultSelfEncryptionKey` — every atServer implementation, one sweep — then ceasing to mint and convey it. Ecosystem-gated by decisions 37. Issue #2128 |
+| KF-1  | `.atKeys`-at-rest protection + backup/restore        | Off the GA critical path. Issue #2129 |
+| S-5   | at_auth 4.0.0 WASM barrel split                      | **DONE 2026-08-22** — awaits publish |
+| S-6   | Consumer constraint bumps onto at_auth ^4.0.0        | **DONE 2026-08-22** — at the `-rc2` floor since the at_auth surface removal |
+| R-2   | at_client 4.0.0 and 5.0.0 posture defaults           | After D1, in two stages across two majors ([ruling 138](detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08)): **the default `PqPosture` becomes `pqReady` at 4.0.0 and `pqActive` at 5.0.0** ([ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18) names the axes). Still pure default flips carrying no code of their own. Issue #2016.<br><br>⚠️ **This row read as one 4.0.0 flip to `pqActive` until ruling 138.** [ruling 138](detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08) moved the ladder back on 2026-09-08: at_client 3.x defaults to `legacy`, 4.x to `pqReady`, 5.x to `pqActive`. So R-2 is `legacy` → `pqReady` at 4.0.0 and a further `pqReady` → `pqActive` at 5.0.0. ⚠️ **This paragraph used to read** *"R-2 is now a ONE-STAGE step, not two. The shipped default moved `legacy` → **`pqReady`** on 2026-08-26, so R-2 is `pqReady` → `pqActive`"* — that default is reverted, unpublished and spike-only, so nothing in the field moves with it — the two axes ruling 113 names as the only difference between them (the data signing key becomes ML-DSA, and post-quantum writes become the default). This row said "and now after 14.39" while 14.39's posture work was owed; it landed |
+| D2-1  | Carve `at/pqmls` + D1-E shape fixes                  | D2, out of D1 |
 
 ---
 
-## 6. Phase B — the nskey data path (B-1, the D1 centrepiece)
+## Re-deriving the state
 
-### B-1 — at/nskey + at/symmetric/AES/GCM providers, capability marker, negotiation, cold-start · at_client · XL
-**Goal:** the value-level data path — the **D1 GA convergence point**.
-**Builds on:** #1930 (seam) + P-1 (`pqSeal`) + S-2 (`CryptoContext.keys`) + **SS-4** (nskey key material +
-pqpublickey cold-start target) + P-3. *The substrate delivers the privates; this delivers the providers.*
-⚠️ **The SS-4 prerequisite holds for `B-1c` onward** — `B-1a` needs no nskey material at all, and `B-1b`
-proceeds against a test fixture that supplies the nskey private directly (see the chunk table below). B-1
-**as a whole still requires SS-4**; the dependency is not dropped, only deferred past the first two chunks.
-**Deliverables (plan-altitude headings; full mechanics → [design.md](design.md), D1 nskey data path):**
-- **Layer 3 — `at/symmetric/AES/GCM`:** AES-256-GCM under a symmetric CK cited by `ckKid` only;
-  `appMetadata{providerId, ckKid, iv}` (**no `ns` field**); binary-safe; CK cache keyed
-  `(owner, namespace, ckKid)`.
-- **Layer 2 — `at/nskey`:** `pqSeal` the CK to the recipient's nskey public half, written once as
-  `<ckKid>.__ck.<ns>@<owner>`; `appMetadata{providerId, recipientKind, ckKid}` (**no `ns` field**). Self
-  data seals to the owner's own nskey (its self at-key); sharing seals to the recipient's nskey (fetched
-  via `plookup` once published to `public:`) — one keypair, same provider, uniform self/cross flow.
-- **Get/put routing:** out-of-order sync (decapsulate `<ckKid>.__ck` on demand with the one nskey
-  private — no self-vs-inbound branch — else deferred `Stream.error`); discover a recipient's published
-  `public:nskey` via `plookup`, re-fetch on decapsulation-failure/rotation.
-- **B3 capability marker:** per-`(atSign,namespace)`, initially not-ready; per-destination scheme
-  selection; `providerId` on stored values **and** notification frames.
-- **B4 cold-start:** when the recipient's namespace has no published `public:nskey`, seal **only the CK**
-  to `public:pqpublickey@<recipient>` (`recipientKind: root-pqpublickey`; data stays AES-GCM under the CK,
-  never encapsulated to root); the recipient's first cross-atSign share lazily promotes its nskey public
-  half to `public:` (via SS-4), and a later send upgrades to `recipientKind: nskey`. (Seal-and-hold is a
-  per-namespace policy toggle delivered in **R-1**.)
+Run these rather than trusting a row. No figure lives here: the command is the
+value, and a number written beside one has rotted every time.
 
-**PR chunks (ordered).** B-1 is the plan's only flat-XL project, so it lands as up to five sequential PRs,
-`B-1a`…`B-1e`. `B-1a` is an enabler that closes no scenario of its own and may land in the same PR as
-`B-1b`; every other chunk merges only with its own green acceptance scenario. `B-1` stays the project id —
-the chunk ids are its PR breakdown, not new projects.
+```bash
+# The clause meter — proven and server-proven — prints on every run of the suite.
+cd packages/at_client && dart test test/acceptance --concurrency=1 | grep BURN-DOWN
+# Which rows owe live proof, which are exempt, which clauses cannot be proven, and why.
+grep -n "^  'UC-" packages/at_client/test/acceptance/manifest.dart
 
-| Chunk  | Scope                                                                                                                                                     | Closes                    |
-|--------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------|
-| `B-1a` | **Layer 3** — the `at/symmetric/AES/GCM` provider + the CK cache keyed `(owner, namespace, ckKid)`                                                        | — (enabler)               |
-| `B-1b` | **Layer 2** — the `at/nskey` CK-conveyance provider, **self-data direction only**; the nskey private is supplied by a **test fixture**, not the substrate | UC-A3.1                   |
-| `B-1c` | **Cold-start** — seal the CK to `public:pqpublickey@<recipient>` with `recipientKind: root-pqpublickey`                                                   | UC-A3.3                   |
-| `B-1d` | **Cross-atSign** — `plookup` discovery of the recipient's published nskey; re-fetch on decapsulation failure                                              | UC-A4.1, UC-A4.2, UC-A4.3 |
-| `B-1e` | **`providerId` on notification frames**                                                                                                                   | UC-A3.4, UC-A4.4          |
+# The release train: the tree's version beside the newest on pub.dev.
+# The versions LIST, never `latest` — `latest` hides prereleases.
+for pkg in at_commons at_utils at_chops at_lookup at_server_status at_auth at_client at_client_flutter at_onboarding_cli; do
+  printf '%-20s tree %-12s pub.dev %s\n' "$pkg" \
+    "$(grep -m1 '^version:' packages/$pkg/pubspec.yaml | cut -d' ' -f2)" \
+    "$(curl -s https://pub.dev/api/packages/$pkg | jq -r '.versions[-1].version')"
+done
 
-**Why `B-1b` uses a fixture.** The fixture-supplied nskey private is what lets `B-1b` land **before SS-4**.
-It inverts the dependency order **for demonstration only**: the production path is unchanged — SS-4 delivers
-the nskey private over the substrate, and the fixture is deleted the moment SS-4 lands. This is the point of
-the split: it produces the program's **first green acceptance scenario** (UC-A3.1) without waiting for the
-substrate. Nothing downstream of `B-1b` may depend on the fixture.
+# CI. Nothing fires on push on the spike, so the newest run is only as new as the
+# last dispatch; dispatch at each new head and read it. CI's at_client job runs a
+# bare `dart analyze` that reads benchmark/, which `dart analyze lib test` skips.
+gh run list --branch gkc-pq-d1-spike --limit 4 --json headSha,conclusion,workflowName \
+  --jq '.[] | [.headSha[0:9], .workflowName, .conclusion] | @tsv'
+gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike
+# One job's rate over recent runs (functional_tests, pqe2e_tests, end2end_test_14).
+for r in $(gh run list --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml --limit 20 --json databaseId --jq '.[].databaseId'); do
+  gh run view "$r" --json jobs --jq '.jobs[] | select(.name|startswith("functional_tests")) | [.name,.conclusion] | @tsv'
+done | sort | uniq -c | sort -rn
 
-**Where the B3 capability marker lands.** `providerId` on stored values comes with `B-1a`/`B-1b`;
-per-destination scheme selection with `B-1d` (the first chunk with a non-self destination); `providerId` on
-the notification frame with `B-1e`. The marker's own publish/not-ready/flip lifecycle is **R-1** (C1), not a
-B-1 chunk.
+# 14.19: the open small items (struck ones are done). Against detail/, where they live.
+awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \
+  | perl -ne 'print "$1\n" if /^(\d+)\. (?!~~)/'
 
-**Acceptance → [acceptance.md](acceptance.md):** self + shared round-trips byte-exact for text and binary;
-UC-A3.1, UC-A3.3 (self cold-start self-heals), UC-A4.1/A4.2/A4.3; B3 mixed-fleet (nskey only when readers'
-marker ready, else legacy); UC-A3.4 / UC-A4.4 (providerId travels on the notification frame). Each chunk
-carries the scenarios listed against it in the chunk table.
-**Effort:** XL — the one project above the ~1–3 PR norm, hence the five-chunk breakdown (~M each).
-**Watch-outs:** `recipientKind` is `nskey` (self + inbound, one key both ways) or `root-pqpublickey`
-(cold-start) — there is no self-vs-inbound `recipientKind`; `root-pqpublickey` is still an `at/nskey`
-conveyance, **not** a 3rd providerId; no bare `nskey` providerId. The nskey public half starts as the
-owner-only self at-key and is promoted to `public:` only on first cross-atSign share. Sweep
-`expectAsync`/listener counts for the new notification-frame shape. The CK-conveyed-once rationale
-(decision (a)) and the recipientKind enumeration are in [design.md](design.md).
-**coversD1:** D1-B B1–B4.
+# The citation denominator. ⛔ rm first — provenIn APPENDS, and a stale file reads as twice the corpus.
+cd packages/at_client && rm -f /tmp/cit.jsonl && \
+  ACCEPTANCE_LEDGER=/tmp/cit.jsonl dart test test/acceptance --concurrency=1 >/dev/null
+python3 -c "import json;r=[json.loads(l) for l in open('/tmp/cit.jsonl')];print(len(r),'citations,',sum(1 for x in r if not x.get('clauses')),'unpinned')"
+git grep -c 'provenIn(' -- packages/at_client/test/acceptance | awk -F: '{s+=$2} END {print s}'   # the second derivation, +2 in proven_elsewhere.dart
 
----
+# Acceptance: what is skipped, and on which blocker. Anchor on "}, skip:" — a bare "skip:" matches prose about skips.
+grep -rn "}, skip:" packages/at_client/test/acceptance/*_test.dart
+grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
 
-## 7. Phase RF — existing-client retrofit (RF-1, RF-SRV, RF-2b, RF-2c)
+# The `legacy` vocabulary completion test, control first: the control line must print. Every
+# `legacy` in Dart prose names its axis: the provider, the posture, `-encrypted` records, the
+# keyfile document, or an enum value such as `EnrollmentKeyExchangeMode.legacy`. Zero sites
+# on 2026-09-12, from 93.
+printf 'the client writes legacy and stops\n' | perl -ne 'print "CONTROL OK\n" if /\b(writes?|written|stays?|stayed|remains?|remained|is|are|was|were|be|being|goes\s+out|went\s+out|keeps?\s+writes|falls?\s+back\s+to|fell\s+back\s+to|fallback\s+is|default\s+is|mode\s+is|refusing|under|proceeds)\s+legacy\b(?![-_\w])(?!\s*(provider|posture|-encrypted|material|peer|keys?|flat|fields?|mode|server|atServer|enrollments?|PKAM|pkam|credential|clients?|apps?|build|data|wrapper|ladder|route|path|encryption|era|stage|format|document|keyfile|verb|form|RSA|AES|crypto|behaviour|readers?|records?|value|pair|keypair|link|apsk|names?|alias|signing|auth|authentication|API|surface|onboard|secondary|stores?|shape|reads|writes?|by\b))/'
+find packages tests -name '*.dart' -not -path '*/.dart_tool/*' -print0 \
+  | xargs -0 perl -ne 'print "$ARGV:$.: $_" if /\b(writes?|written|stays?|stayed|remains?|remained|is|are|was|were|be|being|goes\s+out|went\s+out|keeps?\s+writes|falls?\s+back\s+to|fell\s+back\s+to|fallback\s+is|default\s+is|mode\s+is|refusing|under|proceeds)\s+legacy\b(?![-_\w])(?!\s*(provider|posture|-encrypted|material|peer|keys?|flat|fields?|mode|server|atServer|enrollments?|PKAM|pkam|credential|clients?|apps?|build|data|wrapper|ladder|route|path|encryption|era|stage|format|document|keyfile|verb|form|RSA|AES|crypto|behaviour|readers?|records?|value|pair|keypair|link|apsk|names?|alias|signing|auth|authentication|API|surface|onboard|secondary|stores?|shape|reads|writes?|by\b))/; close ARGV if eof'
 
-Off the D1-GA critical path; required for retrofitting existing clients. The substrate facts (pull/push
-are dual facets) are stated once in [section 5](#5-phase-ss--secret-sharing-substrate-ss-1a-ss-1b-ss-1c-ss-2-ss-3-ss-4)
-— not re-explained here.
+# The rails. The exit code is the verdict, never the count.
+cd packages/at_client && dart analyze lib test && dart format . -o none --set-exit-if-changed && dart test --concurrency=1
+for p in at_auth at_lookup at_commons at_chops at_onboarding_cli at_policy; do (cd packages/$p && dart test --concurrency=1); done
+cd packages/at_client_flutter && flutter analyze       # `dart analyze` skips a Flutter package silently
+for t in at_functional_test at_end2end_test at_onboarding_cli_functional_tests at_onboarding_cli_functional_tests_proxy; do (cd tests/$t && dart analyze test); done
 
-**Retrofit design facts (stated once; rationale in [decisions.md](decisions.md)):**
+# The four live packs, each through its own runner (the atsign-live-testing skill has the fixture rules).
+# Pin the image by building it from a ref you name: no label on at_virtual_env:local says which atServer it holds.
+VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_functional_test/runLocal.sh
+VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_end2end_test/runLocal.sh 26000 test -x pq
+VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_end2end_test/runLocal.sh 26000 test/pq -x legacy-server
+VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip-p3.15.0 bash tests/at_end2end_test/runLocal.sh 26000 test/pq -t legacy-server
+bash tests/at_onboarding_cli_functional_tests/runLocal.sh 47000
+bash tests/at_onboarding_cli_functional_tests_proxy/runLocal.sh 48000
+```
 
-1. **No per-APKAM-key delete.** A 1:1:1 record holds exactly one key. Legacy retirement = the RF-SRV
-   enrollment-expiry cap + the existing `enroll:revoke`.
-2. **Retrofit = a FRESH, self-spawned, AUTO-APPROVED enrollment (not a mutation).** An authenticated pre-PQ
-   client submits `enroll:request` with a **new enrollmentId** on its authenticated connection (**no OTP**);
-   the server validates the requested namespaces are a **subset** of the authenticating enrollment,
-   auto-approves, **copies** the old enrollment's expiry (or null) to the new one, and **caps** the old
-   enrollment to `min(now + server-config grace, its existing expiry)` **without removing it**; each cloned
-   pre-PQ keyfile retrofits to its **own distinct enrollmentId**.
-3. **The old enrollment ages out** — no in-place key delete, no delete-after-verify ordering.
-4. **ML-DSA APKAM auth is used** (RF-2b mints ML-DSA, authenticates under the new id).
+⛔ **There is no command for "which atServer build is in `at_virtual_env:local`".**
+The image's `org.opencontainers.image.revision` label describes the published
+base image, not the binaries compiled into it. Build from a ref you name:
+`git -C <at_server> worktree add --detach <dir> <ref>`, compile
+`at_secondary_server` and `at_root_server` with `docker run --rm -v "<dir>:/app"
+-w /app/packages/<pkg> dart:3.11.2 sh -c 'dart pub get && dart compile exe
+bin/main.dart -o <name>'` (a detached worktree, because the in-container `dart pub
+get` rewrites `.dart_tool` with `/app` paths), copy both into
+`tools/build_virtual_environment/ve/contents/atsign/{root,secondary}/`, and
+`docker build` there.
 
-### RF-1 — `requestSecret(name)` confirm against the hardened substrate · at_client · S
-**Goal:** confirm the generic by-name pull primitive against the hardened store.
-**Builds on:** SS-3. ⚠️ the primitive already shipped in the SS-0 baseline (PR #2037) — RF-1 is a thin
-**tests-only confirmation** scoped to **generic** named secrets (nskey/pqpublickey-payload + UC-B5.1 defer to
-SS-4/B-1). **May simply merge into SS-3.**
-**Deliverables → [design.md](design.md)** (requestSecret pull primitive): confirm generic by-name request →
-serve flow + revocation-serve via the `answerSecretRequests` policy / server gate (not an
-`excludeEnrollmentIds` param on the serve path — it has none).
-**Acceptance → [acceptance.md](acceptance.md):** generic by-name round-trip + revocation-serve.
-**Effort:** S.
-**Watch-outs:** the selfEncryptionKey-wrap shortcut is rejected (not PQ-safe); CK rotation does not use this.
-
-### RF-SRV — atServer: authenticated self-retrofit enroll (auto-approve + namespace-subset + expiry copy/cap) · at_secondary_server, at_server_spec · L
-**Goal:** the server half the retrofit depends on.
-**Builds on:** the existing authenticated-request + CRAM auto-approve templates.
-**Deliverables → [design.md](design.md)** (authenticated self-retrofit flow): on an `enroll:request`
-arriving on an **APKAM-authenticated** connection (`authType==apkam`, resolvable approved enrollmentId; not
-CRAM, not legacy PKAM) with a new enrollmentId and **no OTP**, the server (1) validates the requested
-namespaces are a **subset** of the authenticating enrollment's (reject escalation); (2) **auto-approves**
-(model on the CRAM branch's state=approved / skipCommit-pubkey / set-enrollmentId mechanics **without** its
-`__manage`+`*`:rw grant); (3) **copies** the authenticating enrollment's expiry (or null=never) to the new
-enrollment; (4) **caps** the old enrollment's expiry to `min(now + serverConfig grace, old's existing
-expiry)` **without removing it**; (5) stores/returns `EnrollParams.metadata` (per SS-1a/b). New
-`at_secondary_config` grace-duration knob (alongside `enrollmentExpiryInHours`).
-**Acceptance → [acceptance.md](acceptance.md):** authed `enroll:request` (new id, no OTP) → auto-approved (no
-pending notification), key package stored; escalating namespaces → `UnAuthorized`; the new enrollment
-inherits the old's expiry; the old enrollment's ttl is capped (record still present, still authenticates
-until the cap elapses); both suites.
-**Effort:** L.
-**Watch-outs:** net-new is the `apkam`-authType auto-approve branch (NOT the CRAM `*`:rw grant), the
-requester-keyed subset check at request time, the expiry copy + old-enrollment ttl cap, and the config knob.
-**coversD1:** D1-F retrofit (server); legacy retirement via expiry + revoke.
-
-### RF-2b — at_client: mint PQ (ML-DSA) APKAM + key package, then authenticated auto-approved self-retrofit `enroll:request` · at_client, tests · L
-**Goal:** the client half — mint a PQ APKAM and retrofit via a fresh auto-approved enrollment.
-**Builds on:** RF-SRV, SS-3, SS-4, P-2.
-**Deliverables → [design.md](design.md)** (PQ-APKAM mint + self-retrofit): the client (authenticated with
-its pre-PQ keypair) mints — once per keyfile under a host-local lock — an ML-DSA signing keypair + X-Wing
-enc keypair, builds the key package, and submits `enroll:request` with a **new enrollmentId** on the
-authenticated connection carrying the package as `EnrollParams.metadata` + `signingAlgo=mldsa65` (no OTP).
-On the auto-approved response it writes `.atKeys` under the new enrollmentId. Each cloned pre-PQ keyfile
-retrofits independently to its **own distinct enrollmentId** (one key package per enrollment, 1:1:1).
-**Acceptance → [acceptance.md](acceptance.md):** mint at most once per keyfile (lock under concurrency); a
-self-retrofit auto-approves (no human, no OTP, no conveyance) and the client immediately PKAM-auths with the
-ML-DSA key under the new id; two clones of one pre-PQ keyfile reach **distinct** enrollmentIds; requested
-namespaces ⊆ the authenticating enrollment's.
-**Effort:** L.
-**coversD1:** D1-F (PQ-APKAM via fresh auto-approved enrollment).
-
-### RF-2c — at_client: retrofit orchestration (old enrollment ages out) + readiness flip + full e2e · at_client, tests · L
-**Goal:** the orchestration + readiness flip + end-to-end retrofit, with the old enrollment ageing out.
-**Builds on:** RF-2b, RF-SRV, SS-4, SS-2.
-**Deliverables → [design.md](design.md)** (retrofit orchestration): authenticate with the pre-PQ keypair →
-RF-2b self-retrofit → switch the client to the new enrollmentId's `.atKeys`. The old enrollment **ages out**
-via the RF-SRV expiry cap (or an explicit `enroll:revoke`); keep the legacy **encryption** key for reads.
-PQ-readiness flip after the new enrollment authenticates. One key package per enrollment (1:1:1).
-**Acceptance → [acceptance.md](acceptance.md):** (e2e `@ce2e*`) readiness flips only after the new ML-DSA
-enrollment authenticates; previously shared secrets stay openable; the old enrollment stops authenticating
-once its capped expiry elapses (or after `enroll:revoke`) — **not** via an in-place key delete;
-seal-once-reaches-every-host; revoke/expire-one-host; sync-less wake-up.
-**Effort:** L.
-**coversD1:** D1-F end-to-end (retrofit via fresh enrollment).
-
----
-
-## 8. Phase R/B — rollout, rotation, retirement & versioning (R-1, B-2, B-3, ON-1, R-2)
-
-**Stated once:** at_auth 4.0 (S-5) is a **different major at a different time** from at_client 4.0 (R-2).
-The forward-secrecy/rotation levers and the `disallowLegacyEncryption` flag semantics live in
-[design.md](design.md); the high-level 3.x-off / 4.x-on trajectory is in [roadmap.md](roadmap.md); the
-rotation-policy ruling is in [decisions.md](decisions.md).
-
-### R-1 — migration machinery + `disallowLegacyEncryption` flag (default false) + strict-mode · at_client · L
-**Goal:** the readiness lifecycle, scheme-negotiation default, and the PQ-write flag.
-**Builds on:** B-1.
-**Deliverables → [design.md](design.md)** (migration machinery + flag semantics): **C1** readiness-marker
-lifecycle (publish not-ready on upgrade; flip ready when the fleet is upgraded — **operator-declared
-primary**; auto-detect optional); **C2** behaviour-neutral default (rebuild reads all, keeps writing legacy
-until the flag flips); **C3** strict-mode toggles incl. cold-start seal-and-hold; **D1-D** the
-`disallowLegacyEncryption` flag on `AtClientPreference` — final at construction (immutable), **default
-false**, SHOUT at creation when false, governs only legacy-provider *encryption* (legacy read +
-`shouldEncrypt=false` unaffected); cold-start PQ fallback (`at/nskey` to root) must **not** trip the refusal.
-Additive within 3.x.
-**Acceptance → [acceptance.md](acceptance.md):** negotiation matrix (write only what every reader supports,
-else legacy, else refuse when flag true); flag=true → every write `providerId ∈ {at/nskey,
-at/symmetric/AES/GCM}`, legacy-only recipient → refused, legacy read still works, flag immutable;
-UC-B3.x/B4.x/B5.2 at the scheme-selection layer with a seeded marker/nskey state (full e2e of B3.x/B4.x
-defers to RF-2c).
-**Effort:** L.
-**Watch-outs:** the readiness flip is the only operator judgement call (warn on a recent legacy check-in).
-Operator-declared readiness is the primary signal; auto-detect is optional. Don't bump the version pre-publish
-(fold under the in-progress at_client heading).
-**coversD1:** D1-C + D1-D D1/D2 / WP7.
-
-### B-2 — nskey rotation + revocation (CK rotation = coarse FS, nskey-keypair rotation = PCS) · at_client · L
-**Goal:** the two rotation levers + revocation composition — the **D1 GA** rotation slice.
-**Builds on:** B-1 + R-1 + **(RF-1 + SS-3)** for the per-enrollment substrate fan-out (1:1:1). ⚠️ **depends
-on RF-1+SS-3, NOT the full RF-2** (Open decision #C) — so **D1 GA does not wait on the auth retrofit**.
-**Deliverables → [design.md](design.md)** (rotation/revocation levers): **B5a** CK rotation (O(1), on
-ordinary sync, delete old `__ck` + evict; default RETAIN, FS-mode is the delete+evict knob); **B5b**
-nskey-keypair rotation (O(n) PCS / per-APKAM revocation: mint a new nskey keypair, re-publish its public
-half — re-promoting to `public:` if it was published — and convey the new private per-APKAM via the
-substrate, excluding revoked; old privates retained = history-on, not per-message FS); **B6** revocation
-composition
-(auth-revoke + rotate-exclude + optional history re-encrypt [D2]); inbound cross-atSign FS is **bilateral**
-(documented trade-off).
-**Acceptance → [acceptance.md](acceptance.md):** UC-A5.1 (both levers); UC-A5.2/A5.3 + B6 (revoked/excluded
-enrollment can't read post-rotation; bilateral inbound FS); functional nskey self+shared / rotation /
-mixed-scheme / cold-start / revoke+rotate-exclude; e2e at_talk chat scenario. **▶ at_client 3.14.x = D1 GA.**
-**Effort:** L.
-**Watch-outs:** don't conflate the levers (CK rotation does NOT ride the per-APKAM substrate).
-**coversD1:** D1-B B5/B6.
-
-### B-3 — selfEncryptionKey + shared_key.* retirement, phases 1-3 · at_client, **at_secondary_server**, at_auth · L
-**Goal:** retire the legacy self-encryption key (a distinct project from B-2's rotation work).
-**Builds on:** B-2.
-**Deliverables → [design.md](design.md)** (selfEncryptionKey retirement): **Phase 1** stop using
-selfEncryptionKey for new writes (default → nskey path); **phase 2** lazy re-encrypt on touch (+ optional
-background sweep, per-atSign progress observable); **phase 3** stop conveying it — ⚠️ needs an **at_server
-change**: `enroll:approve` currently *mandates* `encryptedDefaultSelfEncryptionKey`; relax to optional,
-sequenced **after** phase 2. (Phase 4 stop-existing is **R-2**.)
-**Acceptance → [acceptance.md](acceptance.md):** a touched legacy value lazily re-encrypts (providerId
-legacy → at/symmetric/AES/GCM); migration progress query; a post-migration `enroll:approve` omits the self
-key and the enrollee onboards without it.
-**Effort:** L.
-**coversD1:** D1-B B7 phases 1-3.
-
-### ON-1 — PQ-native greenfield onboarding + legacy-interop flag · at_client, at_client_flutter · M  *(critic gap — UC-A1.1)*
-**Goal:** a brand-new atSign onboards PQ-native (the root of Part-A coverage).
-**Builds on:** RF-2b (PQ-APKAM mint) + SS-4 (pqpublickey) + R-1 (readiness).
-**Deliverables → [design.md](design.md)** (PQ-native onboarding): at CRAM onboarding mint a **PQ (ML-DSA)
-APKAM** keypair (no RSA APKAM required for auth); immutable-create `public:pqpublickey@<atSign>`; no
-`selfEncryptionKey` minted (self data uses the nskey path); readiness can be **ready** (no legacy APKAM
-exists); a **legacy-interop config flag** (default off → PQ-only, no RSA `public:publickey`) that, when
-enabled, publishes the RSA pubkey for legacy-peer inbound.
-**Acceptance → [acceptance.md](acceptance.md):** UC-A1.1 (PQ-native onboard: APKAM=pq, pqpublickey
-immutable, readiness ready, KP registered); UC-B4.2 (legacy peer ↔ PQ atSign resolves only via the flag);
-default PQ-only onboarding has no RSA pubkey.
-**Effort:** M.
-**coversD1:** Catalogue Part-A root + Decision #1 / UC-B4.2.
-
-### R-2 — at_client 4.0.0: flip `disallowLegacyEncryption` default to true + selfEncryptionKey stop-existing · at_client · M
-**Goal:** PQ-safe on every write path by default (the final cutover).
-**Builds on:** R-1 + B-2 + RF-2c + S-6. **Gated on the ecosystem floor** (last published downstream versions).
-**Deliverables → [design.md](design.md)** (the v4 flip + B7 phase 4): flip the default to **true** (SHOUT if
-re-enabled false); **B7 phase 4** — onboarding no longer generates `selfEncryptionKey`, drop it from the
-AtKeys model; general dead-code removal (deprecated methods; the `package:encrypt` files deleted-not-migrated).
-The legacy provider itself **stays** (reads forever).
-**Acceptance → [acceptance.md](acceptance.md):** flag-true → every write PQ, legacy-only recipient refused,
-legacy read still works (UC-B5.2); new atSign has no selfEncryptionKey; full unit/functional/e2e green.
-**▶ at_client 4.0.0.**
-**Effort:** M.
-**Watch-outs:** different major / different time from at_auth 4.0 (S-5). Don't remove the legacy provider.
-**coversD1:** D1-D D3 + D1-B B7 phase 4.
-
----
-
-## 9. Phase D2 — referenced only (D2-1, out of D1 GA)
-
-### D2-1 — carve `at/pqmls` provider + D1-E shape fixes · at_client · L
-**Goal:** carve the v1 `at/pqmls` group provider and apply the D1-E shape fixes.
-**Builds on:** **#1930** (the M0 seam — *not* B-1; the provider uses only seam types) + **SS-2** (the
-per-APKAM substrate the group reuses). Off the D1 critical path; **must not gate D1 GA.**
-**Deliverables → [design.md](design.md)** (at/pqmls structural shape carried forward): carve the v1
-`at/pqmls` group provider keyed onto the per-APKAM substrate (via `EnrollmentDirectory.listForNamespace` +
-`KeyPackage`); apply D1-E fixes — lift membership into `SecureGroup`, binary-safe, rename
-`PairwiseGroup`→`SelfGroup` (scope the grep to `PairwiseGroup`, not `Pairwise`); pin the provider wire id
-to `at/pqmls`.
-**Acceptance → [acceptance.md](acceptance.md):** round-trips via the seam (text + binary byte-exact);
-per-APKAM re-key (rotate distributes epoch keys to each enrollment's KeyPackages); rename sweep clean.
-**Effort:** L.
-**coversD1:** **D1-E only** (the provider itself is D2).
-**Watch-outs:** D2 work; the v1 epoch engine is thrown away at the MLS swap — invest only in the
-carried-forward interface shape. **D2 proper (pq-mls engine, Group Delivery Service, identity hardening) is
-out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
-
----
-
-## 10. Cross-cutting: publish gates, critical path, waves/parallelism, testing
-
-### (a) Publish gates
-- `at_chops` (P-1, P-2) and `at_commons` (SS-1a) publish **before** `at_server`/consumers bump pins.
-- `at_auth` is split **additive-3.3.0** (S-1; 3.2.0 was consumed by the network-timeout release) then **breaking-4.0.0** (S-5) so the `AtKeys`/`AtKeysIo`
-  extend-in-place bakes before the barrel cut.
-- `at_client` stays **minor 3.14.x** through D1 GA; the v4 flip (R-2) is the final gated cutover.
-
-**Package versions & release sequencing** (single reference — publish in dependency order; two majors —
-`at_auth` 4.0 (S-5, WASM split) and `at_client` 4.0 (R-2, the flag flip) — at different times):
-
-| #  | Package             | Bump                          | Project(s) | Why |
-|----|---------------------|-------------------------------|------------|-----|
-| 1  | `at_chops`          | minor `3.2.1 → 3.3.0` **(published 2026-06-23, done)** | P-1    | stateless functional core + HPKE `pqSeal`/`pqOpen`; `@Deprecated AtChopsImpl` shim |
-| 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(published 2026-07-17, done)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046); P-2's `mldsa65` verify branch (#2056, 07-06) and #2039 (AES-GCM FFI, 07-09) folded into the same slot, which then published. Minor under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03) |
-| 3  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal. *(at_commons has since published 5.13.0, 2026-07-17, outside this program.)* |
-| 4  | `at_auth`           | minor `3.2.0 → 3.3.0` **(3.3.0-rc1 published 2026-07-17; stable pending)** | S-1 | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo`. ⚠️ **the rc1 → stable promotion is an open gate** — S-6 and SS-2's at_auth work need a stable 3.3.0 to pin against; timing unresolved |
-| 5  | `at_auth`           | **major `3.3.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
-| 6  | `at_client`         | minor `3.14.x → 3.15.x`       | S-2…B-2    | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation. **= D1 GA**. ⚠️ **3.13.0 and 3.14.0 both published 2026-07-17** (3.14.0 carries the SS-0 substrate as an experimental surface), so the GA slot has moved off 3.14.x — re-derive the target minor at execution against pub.dev. ⚠️ **S-2's `CryptoContext.keys` (#2076) is on trunk but unreleased** — it merged after 3.14.0 published, so the next at_client release is the first that carries it |
-| 7  | `at_client`         | **major `3.15.x → 4.0.0`**    | R-2        | flip `disallowLegacyEncryption` default → true; selfEncryptionKey stop-existing; dead-code removal |
-| 8  | `at_onboarding_cli` | minor `1.16.0 → 1.17.0`       | S-6        | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; explicit injection. 1.16.0 published 2026-07-17, so 1.17.0 is a clean next slot |
-| 9  | `at_client_flutter` | minor `1.1.4 → 1.2.0`         | S-6        | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
-| 10 | `at_cli_commons`    | minor (constraint bump)       | S-6        | consumes the new `at_onboarding_cli` / `at_client` (transitive at_auth) |
-
-**Dependency-floor bumps (at_client's own pins).** at_client's constraints on trunk are `at_chops ^3.0.0`
-and `at_commons ^5.9.0`; both floors rise during D1:
-
-| at_client pin | Floor bump          | Lands at | Why |
-|---------------|---------------------|----------|-----|
-| `at_chops`    | `^3.0.0 → ^3.3.0`   | SS-0     | the substrate baseline needs the published `pqSeal`/`pqOpen` (3.3.0) — landed with #2037 |
-| `at_commons`  | `^5.9.0 → ^5.12.0`  | SS-1c    | the flat `listns` grammar + `EnrollParams.metadata` (5.12.0) |
-
-⚠️ Workspace resolution wires `at_chops`/`at_commons` as path deps, so a too-low floor still resolves green
-locally **and** in CI — these floor bumps must be made **explicitly**, not inferred from a passing workspace
-build.
-
-### (b) Critical path to D1 GA
-`#1930(done) → P-1 + S-2 → SS-1a → SS-1b → SS-1c → SS-2 → SS-3 → SS-4 (+ P-3) → B-1 → R-1 → B-2`
-(D1 GA: rebuild = universal reader, one flag = PQ writer, opt-in rotation).
-**Everything up to and including SS-1b is satisfied as of 2026-07-17** — `SS-1c` ([#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084)) is the next actionable project on the path.
-**Off-path (parallel):** `RF-SRV → RF-2b → RF-2c` (RF-1 confirm), `B-3`, `ON-1`, `S-5 → S-6`, `D2-1`, `KF-1`
-(builds on S-3), and the final `R-2`.
-
-### (c) Waves / parallelism
-The wave-1 → wave-2 boundary is **soft** — the "waves" are parallelism groupings, not barriers; the actual
-gating is the per-project dependency list. **The substrate has no remaining publish gate** — its only publish
-dependency, `P-1`/`pqSeal` on `at_chops` 3.3.0, **shipped to pub.dev 2026-06-23**; `S-1`/`S-2`/`S-3`
-(WP2/WP3/WP4) do **not** block Wave 2 either. The substrate's last prerequisite was the **SS-0 baseline**
-(PR #2037) landing on trunk rather than a hosted publish — **met on 2026-07-17**.
-
-| Gate item                        | Blocks the substrate? |
-|----------------------------------|-----------------------|
-| P-1 (at_chops 3.3.0 / `pqSeal`)  | No — already published (2026-06-23); substrate ungated |
-| S-1 (`AtKeys`/`AtKeysIo` extend-in-place) | No |
-| S-2 (`CryptoContext.keys`)       | No — sibling of the substrate on the critical path, not a prerequisite |
-| S-3 (`LocalKeystoreAtKeysIo`)    | No |
-
-**Merge discipline.** Per-package PRs to **trunk** in dependency order (no mega-PRs); rebase on trunk daily;
-keep PRs small + additive / flag-gated so trunk stays releasable; prove cross-package combinations with an
-**ephemeral** integration branch (or CI), not a standing one. **Interface-first** — freeze the `pqSeal`
-signature (P-1), the extended `AtKeys`/`AtKeysIo` API (S-1), and the `CryptoContext.keys` field (S-2) first (stubs OK).
-Integration is **continuous**, not a final step: each project merges to trunk when complete and publishes as
-needed.
-
-### (d) Testing harness pointer
-`runLocal.sh` with `docker compose down` first, capped 180s; a test that mints `.atKeys` clears its own at
-start and gitignores it; run **both** `tests/at_functional_test` and `tests/at_end2end_test` for any server
-type/shape change (separate packages, invisible to at_client's own `dart test`/`analyze`). The detailed
-per-UC harness and given/when/then live in [acceptance.md](acceptance.md).
-
-### (e) Conformance
-Every PQ-touching PR — in **at_client_sdk** OR **at_server** / **java_at_server** — must cite a **project id**
-from this plan (`P-1`, `P-2`, `P-3`, `S-*`, `SS-*`, `KF-1`, `B-*`, `R-*`, `RF-*`, `ON-1`, `D2-1`) **or** a
-documented out-of-program status (e.g. "tracked in the NoPorts repo, out of this plan's lane"). Each PR must
-also conform to the **current** [decisions.md](decisions.md) rulings: reviewers **reject** a PR that
-implements a superseded ruling (e.g. the pre-decision-#F multi-key record, an `enroll:metadata` write path,
-or the nested `apkam[]` roster). A PR whose design contradicts a live ruling is not merged until it is
-re-scoped to the current shape or the ruling is formally changed in [decisions.md](decisions.md).
-
----
-
-## 11. Coverage map (D1 package / UC → project)
-
-Single authoritative map of D1 items, workstreams, and use cases to projects.
-
-| D1 item / workstream / UC | Project(s) |
-|---|---|
-| D1-S S1 (at_chops stateless) | P-1 |
-| D1-S S2/S3 (AtKeys/AtKeysIo extend-in-place, stores) | S-1, S-3 |
-| D1-S S4 (WASM split) | S-5 |
-| D1-S S5 (CryptoContext.keys) | S-2 |
-| D1-S S6 (consumer bumps) | S-6 |
-| D1-S keyfile-at-rest + backup/restore (new scope) | KF-1 |
-| D1-A (PQ primitives, enrollment key) | P-1, P-2, P-3 |
-| D1-B B1-B4 (data path) | B-1, chunks B-1a…B-1e (+ key material SS-4) |
-| D1-B B5/B6 (rotation/revocation) | B-2 |
-| D1-B B7 (selfEncryptionKey retirement) | B-3 (phases 1-3), R-2 (phase 4) |
-| D1-C / D1-D (migration, flag, versioning) | R-1, R-2 |
-| D1-F substrate baseline | SS-0 (PR #2037) |
-| D1-F DEP1-DEP4 | SS-1b, SS-2, SS-3 |
-| D1-F retrofit | RF-SRV, RF-2b, RF-2c (RF-1 confirm) — retirement via expiry + revoke (1:1:1; no per-key-delete project) |
-| D1-E (at/pqmls shape) | D2-1 (D2) |
-| UC-A1.1 PQ-native onboard + Decision #1 / UC-B4.2 | ON-1 |
-| UC-A2.x / A3.x / A4.x / A5.x | SS-4, B-1, B-2, RF-2b |
-| UC-B0.x..B5.x | RF-2c (retrofit) + R-1 (scheme negotiation) |
-
-See [acceptance.md](acceptance.md) for the full UC catalogue; [decisions.md](decisions.md) records the D1-F
-sub-item coverage rulings.
-
----
-
-## 12. Open decisions pointer & verification provenance
-
-The decision **rulings** are owned by [decisions.md](decisions.md). This is a pointer only, so the reader
-knows where the sequencing assumptions come from:
-
-- **#A** — `pqpublickey` interface freeze (P-3 vs SS-4): freeze the name + create-once contract before P-3
-  starts; SS-4 owns the lifecycle.
-- **#B** — `register()` call-site: **RESOLVED 2026-06-30** — the key package rides `enroll:request`
-  as an opaque `EnrollParams.metadata`; no `enroll:metadata` verb. (Drives SS-1a/b/c + SS-2.)
-- **#C** — keep D1 GA off the auth retrofit: B-2 depends on **RF-1 + SS-3**, not full RF-2.
-- **#D** — publish-sequencing decisions: fold the pkam ML-DSA literal into SS-1a's publish; ML-DSA verify
-  algo-level (P-2); re-confirm the at_commons floor at SS-1a; at_auth 3.1.1-vs-fold at S-1.
-- **#E** — S-2 scope / the §3-S5-vs-§7-WP3 SoT conflict: this plan takes additive-field-only.
-- **#F** — enrollment cardinality + retrofit shape: **RESOLVED 2026-06-30** — **1:1:1** + fresh-enrollment
-  retrofit. (Drives SS-3 single-key, RF-SRV, and RF-2b/c.)
-
-**Verification.** This plan is verified against the live trees: the `at_client_sdk` monorepo — which
-**contains** `at_chops`, `at_auth`, and `at_commons` as workspace packages (`packages/at_chops`,
-`packages/at_auth`, `packages/at_commons`) — plus the separate `at_server` / `java_at_server` repos.
-
----
-
-## 13. Phase IS — inter-server PQ authentication (IS-1)
-
-*Off the D1 GA critical path (server-to-server, `at_server`), but in D1 scope (ruled 2026-07-06). This is
-the atServer↔atServer handshake, orthogonal to the client-side `nskey` data path (§6) — a compromised
-inter-server channel and a compromised client channel are different threats, so this track ships on its own
-schedule and does **not** gate D1 GA.*
-
-### IS-1 — atServer FROM/POL handshake: swap the challenge signature RSA → ML-DSA-65, RSA fallback · at_secondary_server · M
-
-**Goal:** make the server-to-server FROM/POL handshake quantum-safe by swapping only the challenge
-*signature* from RSA-2048 to ML-DSA-65, keeping the existing per-session UUID challenge (which already
-provides freshness / anti-replay) and the TLS session (which already provides confidentiality). Automatic
-fallback to legacy UUID/RSA for a peer that publishes no PQ signing key (zero flag day, mixed-fleet safe).
-FROM/POL is authentication, not key agreement — so there is **no KEM**.
-
-**Builds on:** the **published** at_chops 3.4.x only — `AtPqc.mlDsa65.signBytes`/`verifyBytes` (the P-2
-ML-DSA-65 sign/verify branch) and `generateMlDsa65KeyPair`, both already shipped. **No unpublished at_chops
-surface, no cross-package publish gate** — the earlier `XWingCert` / `resolveXWing` / `resolveMlDsa65`
-requirement is dropped with the KEM.
-
-**Deliverables:** (1) at boot, generate an ML-DSA-65 keypair (the signing keypair already needed) and
-publish the public half as a protected `pq_signing_publickey@<atSign>` record — a **JSON object** for
-crypto agility, initially `{ "ml-dsa-65": "<b64 pubkey>" }`, so a future algorithm is another field, not a
-wire change. The ML-DSA secret key joins the protected-key set. (2) In A's outbound handshake, sign the
-UUID challenge with ML-DSA instead of RSA — a one-line algorithm swap in the existing branch. (3) In B's
-POL check, `lookup:pq_signing_publickey@<peer>` (live, never cached) → `AtPqc.mlDsa65.verifyBytes(...)`
-instead of `RSAPublicKey.verifySHA256Signature(...)` — a one-line swap. Env `AT_DISABLE_PQ_AUTH=true` forces
-UUID/RSA; self-auth always UUID; a peer publishing no PQ signing key falls back to UUID/RSA. **Explicitly
-NOT built:** no certificate, no X-Wing encaps/decaps, no HKDF confirmation tag, no key expiry / rotation /
-grace window, no `PqKeyManager` lifecycle class — a signing key needs no lifecycle state here (a change is a
-re-publish, read live on the next handshake).
-
-**Acceptance:** FROM/POL PQ path (ML-DSA sign → verify → `isPolAuthenticated`) + the RSA-fallback path;
-`pq_signing_publickey` published as the agility JSON and looked up live; pure-Dart fallback (unset
-`AT_CHOPS_LIBCRYPTO_PATH`, ML-DSA resolves to pure-Dart without throwing); mixed-fleet (a peer with no PQ
-signing key → UUID challenge, POL via the RSA signing key). Existing delete/update verb tests still pass
-(protected-key count updated for the ML-DSA secret key).
-
-**Tracking:** PR **#2683** (`at_server`, `pq/st/pq-interserver-comms`) — **over-built against this scope;
-to be pared back to the signature swap** (see [decisions.md](decisions.md), 2026-07-21). Off the D1 GA
-critical path. Sub-issue [#2049](https://github.com/atsign-foundation/at_client_sdk/issues/2049) under
-#1889. Design detail in [design.md](design.md) (§8 inter-server PQ authentication).
-
-**Watch-outs:** `pq_signing_publickey` is looked up live every handshake and never cached — keep it that
-way, so a re-published key takes effect on the next handshake with no rotation machinery. Do not
-re-introduce a KEM, cert, or tag: the UUID challenge the swapped signature covers is the entire freshness
-mechanism, and the TLS session already secures the channel.
-
+**After D1** comes the release programme, ending with R-2, which
+[ruling 138](detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08) makes two flips across
+two majors: at_client 4.0.0 to `pqReady` and 5.0.0 to `pqActive`
+([ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18) names the axes):
+pure default flips carrying no code of their own, so anything the posture needs
+lands in D1 before it. The ordered publish list is
+[detail — what still has to be published, in order](detail/implementation-plan.md#what-still-has-to-be-published-in-order);
+re-derive it with the loop above before acting on it.

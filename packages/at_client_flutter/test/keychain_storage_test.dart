@@ -84,6 +84,28 @@ void main() {
       expect(result.runtimeType, AtKeysData);
     });
 
+    test('a failing read leaves the stored key material intact', () async {
+      when(
+        () => mockBiometricStorage.getStorage(
+          any(),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((_) async => mockBiometricStorageFile);
+      // NOTE: this store may hold the only copies of the atSign's keys, so a
+      // read path that writes on failure turns a transient error into
+      // permanent key loss.
+      when(
+        () => mockBiometricStorageFile.read(),
+      ).thenThrow(Exception('platform channel unavailable'));
+      when(
+        () => mockBiometricStorageFile.write(any()),
+      ).thenAnswer((_) async {});
+
+      await expectLater(keyChainStorage.readAtKeysData(), throwsException);
+
+      verifyNever(() => mockBiometricStorageFile.write(any()));
+    });
+
     test('readAtKeys returns null if no data exists', () async {
       when(
         () => mockBiometricStorage.getStorage(
@@ -213,62 +235,10 @@ void main() {
     });
   });
 
-  group('EnrollmentData Tests', () {
-    late KeychainStorage keyChainStorage;
-    late MockBiometricStorage mockBiometricStorage;
-    late MockBiometricStorageFile mockBiometricStorageFile;
-    String alice = '@alice';
-
-    setUp(() {
-      mockBiometricStorage = MockBiometricStorage();
-      mockBiometricStorageFile = MockBiometricStorageFile();
-      keyChainStorage = KeychainStorage(biometricStorage: mockBiometricStorage);
-    });
-
-    test('readEnrollmentData returns EnrollmentData if data exists', () async {
-      when(
-        () => mockBiometricStorage.getStorage(
-          any(),
-          options: any(named: 'options'),
-        ),
-      ).thenAnswer((_) async => mockBiometricStorageFile);
-      when(
-        () => mockBiometricStorageFile.read(),
-      ).thenAnswer((_) async => dummyEnrollmentData);
-
-      final result = await keyChainStorage.readEnrollmentData(alice);
-
-      expect(result, isNotNull);
-      expect(result.runtimeType, EnrollmentData);
-      expect(result?.enrollmentId, 'enrollId1');
-    });
-
-    test('readEnrollmentData returns null if no data exists', () async {
-      when(
-        () => mockBiometricStorage.getStorage(
-          any(),
-          options: any(named: 'options'),
-        ),
-      ).thenAnswer((_) async => mockBiometricStorageFile);
-      when(() => mockBiometricStorageFile.read()).thenAnswer((_) async => null);
-
-      final result = await keyChainStorage.readEnrollmentData(alice);
-
-      expect(result, isNull);
-    });
-
-    tearDown(() {
-      reset(mockBiometricStorage);
-      reset(mockBiometricStorageFile);
-    });
-  });
-
   group("Legacy Keychain Support", () {
     late KeychainStorage keyChainStorage;
     late MockBiometricStorage mockBiometricStorage;
     late MockBiometricStorageFile mockBiometricStorageFile;
-
-    // Enrollment Schema hasn't changed, so no tests needed for that.
 
     setUp(() {
       resetMocktailState();
@@ -359,21 +329,6 @@ void main() {
         ),
       ).thenAnswer((_) async => mockBiometricStorageFile);
       final result = await keyChainStorage.readAtKeysData();
-      expect(result, isNotNull);
-      expect(checkSchemaEquality(result!), isTrue);
-    });
-
-    test('EnrollmentData schema equivalence check', () async {
-      when(
-        () => mockBiometricStorageFile.read(),
-      ).thenAnswer((_) async => dummyEnrollmentData);
-      when(
-        () => mockBiometricStorage.getStorage(
-          any(),
-          options: any(named: 'options'),
-        ),
-      ).thenAnswer((_) async => mockBiometricStorageFile);
-      final result = await keyChainStorage.readEnrollmentData('@alice');
       expect(result, isNotNull);
       expect(checkSchemaEquality(result!), isTrue);
     });

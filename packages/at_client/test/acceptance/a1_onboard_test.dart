@@ -5,7 +5,7 @@ library;
 
 import 'package:test/test.dart';
 
-import 'blockers.dart';
+import 'proven_elsewhere.dart';
 
 void main() {
   group('A1 · PQ-native onboard', () {
@@ -13,14 +13,86 @@ void main() {
       // GIVEN @alice unactivated; aliceS = pq; CRAM activation secret in hand;
       //       no keys exist.
       // WHEN  alice1 runs CRAM onboarding.
-      // THEN  alice1.APKAM = pq and authenticates via PQ APKAM (no RSA APKAM);
-      //       public:pqpublickey@alice exists and is immutable (a second create
-      //       is rejected) and alice1 holds its private; alice1.KP registered in
-      //       E1's record but not published (discoverable only via
-      //       enroll:listns); NO selfEncryptionKey is minted; readiness may be
-      //       ready;
-      //       legacy public:publickey@alice is absent by default.
-      fail('not implemented');
-    }, skip: on1);
+      // THEN  alice1.APKAM = pq and authenticates via PQ APKAM (no RSA APKAM
+      //       needed for auth); public:pq_signing_root@alice exists, is
+      //       MUTABLE (what is create-once is _rootlock@alice, the mint lock)
+      //       and alice1 holds its private; alice1.KP registered in E1's
+      //       record but not published (discoverable only via
+      //       enroll:listns). Legacy material is cut and published BY
+      //       DEFAULT: the RSA encryption keypair + selfEncryptionKey are
+      //       minted (the PQ data path never touches them) and
+      //       public:publickey@alice is present unless the opt-OUT flag is
+      //       set.
+      provenIn('tests/at_functional_test/test/pq_native_onboard_live_test.dart',
+          'UC-A1.1 · a CRAM activation is PQ-native, and still legacy-reachable',
+          proves: 'pqNativeOnboard activates a fresh atSign against a live '
+              'atServer and the ML-DSA-65 APKAM then authenticates on a NEW '
+              'connection from the keyfile alone — no RSA APKAM exists '
+              'anywhere, so the atServer can only have verified an ML-DSA PKAM '
+              'signature against the enrollment activation created. The APKAM '
+              'is filed as typed material with the flat fields left empty, the '
+              'signing root is created and the record the atServer stored for '
+              'it does not carry immutable, metadata.keyPackage is on the '
+              'enrollment record via '
+              'enroll:listns, and the legacy encryption keypair, '
+              'selfEncryptionKey and public:publickey are all present by '
+              'default.',
+          clauses: [
+            'and it authenticates via PQ APKAM',
+            'registered in E1\'s record (not published',
+          ]);
+      provenIn(
+        'packages/at_client/test/pq_signing_root_test.dart',
+        'nothing can encapsulate to the root — its algorithm has no KEM',
+        proves: 'the reader-side half of an ABSENCE clause, which the wire pin '
+            'beside it cannot reach: that pin asserts the record SAYS '
+            'use=sign, and a sender is free to ignore what a record says. '
+            'This takes the published root, parses it as the same key-entry '
+            'vocabulary a sealable advertisement uses, and shows a sender '
+            'cannot act on it — kemFor answers null for its algorithm '
+            '(against a non-null control), the algorithm is not offered for '
+            'key establishment, and the selector every sealing path uses '
+            'returns nothing even when asked for the root\'s own algorithm, '
+            'which isolates use=enc as the reason. Mutation-proven twice: '
+            'giving kemFor an answer for mldsa65 reddens the first, and '
+            'emitting use=enc reddens the second, each quoting its own reason',
+        clauses: ['Nothing encapsulates to it, at onboarding or ever'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/pq_signing_root_mint_lock_test.dart',
+        'a second signing-root mint lock create is refused',
+        proves: 'the half of this clause that is a refusal by the other side: '
+            'the second create of the lock record throws, and the assertion '
+            'names the atServer\'s own message rather than accepting any '
+            'throw, so a write that failed for an unrelated reason does not '
+            'satisfy it. The lock is then released and re-taken as the '
+            'control. Nothing in-process can establish this — a mocked '
+            'executeVerb accepts the second take, which makes the interlock\'s '
+            'presence and its absence identical',
+        clauses: ['whose second create the atServer rejects'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_data_path_live_test.dart',
+        'a self value round-trips through the nskey data path',
+        proves: 'that the self-data path does not reach for the atSign-level '
+            'self key: the stored value carries providerId '
+            'at/symmetric/AES/GCM with a ckKid and an iv and NO sealedKey, '
+            'and the content key arrives in a separate conveyance routed to '
+            'the nskey provider. A value encrypted under selfEncryptionKey '
+            'would carry neither',
+        clauses: ['the PQ data path never touches it'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/pq_legacy_interop_live_test.dart',
+        'UC-B4.2 opt-out · an atSign that refused legacy material is not ',
+        proves: 'the opt-out arm, by value and against a control: an atSign '
+            'activated with the flag holds no defaultEncryptionPublicKey and '
+            'plookup of its publickey returns nothing, while a sibling '
+            'activated without the flag has both. The control is what makes '
+            'the absence mean something here, since the virtualenv '
+            'pre-provisions a publickey for every demo atSign',
+        clauses: ['with the opt-out flag set it is absent'],
+      );
+    });
   });
 }

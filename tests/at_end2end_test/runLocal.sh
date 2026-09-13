@@ -5,14 +5,52 @@ set -euo pipefail
 # port. Pick a base port that does NOT overlap the functional suite's ports so
 # both can run at once (functional defaults to the fixed 64/25000-25999 range).
 #
-#   ./runLocal.sh [BASE_PORT]      # default 26000  -> root 26000, secondaries 26001-26080
+#   ./runLocal.sh [BASE_PORT] [TEST_PATHS...]
+#
+#   ./runLocal.sh                      # both sets: test/ and test/pq/
+#   ./runLocal.sh 26000 test/pq        # post-quantum only
+#   ./runLocal.sh 26000 test -x pq     # everything except post-quantum
+#
+# The default EXCLUDES the `legacy-server` tag: that row (UC-B0.1) wants a
+# PINNED PRE-PQ atServer, and against the newest local build it does not fail
+# usefully — it stops testing anything. Run it deliberately, with the pin:
+#
+#   VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip-p3.15.0 \
+#     ./runLocal.sh 26000 test/pq -t legacy-server
+#
+# The default path `test` recurses into test/pq/, so a bare run covers both
+# sets. CI does not: `dart_test.yaml` allowlists what a bare `dart test` may
+# run and leaves the post-quantum files off it, because the CI e2e jobs point
+# at the long-lived @ce2e atSigns. Anything passed here overrides that
+# allowlist.
 #
 # Generates atKeys + config/config.yaml (test/local_setup.dart) from at_demo_data
 # for the PKAM demo atSigns, then runs the tests. Both are gitignored.
 
 BASE_PORT="${1:-26000}"
+shift || true
+# `A && B` as a bare statement under `set -e` exits the script whenever A is
+# false, so the default goes in an if.
+if [[ $# -eq 0 ]]; then
+  TEST_PATHS=("test" "-x" "legacy-server")
+else
+  TEST_PATHS=("$@")
+fi
+
 export VIRTUALENV_BASE_PORT="$BASE_PORT"
 export VE_TOP_PORT=$((BASE_PORT + 99))
+
+# The virtualenv image. docker-compose.yaml defaults to the published
+# `atsigncompany/virtualenv:vip` so CI needs no environment; a local run wants
+# a build the registry does not have yet, so default the opposite way here and
+# let the caller override:
+#
+#   VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip ./runLocal.sh
+#
+# An atServer that cannot verify an ML-DSA PKAM signature fails server-side
+# with `AT0010-Exception: RangeError (length): Invalid value: Not in inclusive
+# range 0..47: 48` out of pkamAuthenticate.
+export VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"
 
 cd "$(dirname "$0")"
 
@@ -20,14 +58,42 @@ echo "*** Getting dependencies" && dart pub get
 
 cd test
 echo "*** docker compose down" && docker compose down
-# Use the published image; comment out and `docker tag` a local build to
-# at_virtual_env:local + edit docker-compose.yaml to use a local atServer.
-echo "*** docker compose pull" && docker compose pull
+# A locally built image is on no registry, so pulling it fails the run. Only
+# pull what could actually have come from one.
+if [[ "$VIRTUALENV_IMAGE" == *"/"* ]]; then
+  echo "*** docker compose pull (${VIRTUALENV_IMAGE})" && docker compose pull
+else
+  echo "*** docker compose pull SKIPPED (local image ${VIRTUALENV_IMAGE})"
+fi
 echo "*** docker compose up (base port ${BASE_PORT}, range ${BASE_PORT}-${VE_TOP_PORT})"
 docker compose up -d
 cd ..
 
-echo "*** Starting pkamLoad (waiting for supervisor)"
+# `supervisorctl status` exits non-zero whenever ANY program is not RUNNING,
+# and pkamLoad is deliberately STOPPED until it is started below, so its exit
+# code says nothing about readiness. Wait for the atDirectory instead, which is
+# what everything after this needs.
+echo "*** Waiting for supervisor"
+# NOTE: captured to a variable and grepped separately, NOT piped. Under
+# `set -o pipefail` a `supervisorctl status | grep -q` takes supervisorctl's
+# exit code and throws the match away, so it reads as a grep and behaves as an
+# exit-code check.
+ready=
+for i in $(seq 1 30); do
+  status=$(docker exec e2e_virtualenv supervisorctl status 2>/dev/null || true)
+  if printf '%s\n' "$status" | grep -qE '_root +RUNNING'; then
+    ready=1
+    break
+  fi
+  sleep 2
+done
+if [[ -z "$ready" ]]; then
+  docker exec e2e_virtualenv supervisorctl status || true
+  echo "*** atDirectory did not reach RUNNING within 60s - aborting"
+  exit 1
+fi
+
+echo "*** Starting pkamLoad"
 for i in $(seq 1 30); do
   if docker exec e2e_virtualenv supervisorctl start pkamLoad >/dev/null 2>&1; then
     echo "    pkamLoad started"
@@ -42,11 +108,19 @@ echo "*** Generating atKeys + config" && dart run test/local_setup.dart
 
 echo "*** Clearing client test storage" && rm -rf test/hive
 
-echo "*** Running e2e tests"
+echo "*** Running e2e tests (${TEST_PATHS[*]})"
 # Let the test run fail through to cleanup (so a flake doesn't leave the
 # container up), then propagate its exit code.
 set +e
-dart test --concurrency=1 -r expanded
+# Opt-in machine-readable report: with ACCEPTANCE_REPORT set, the runner also
+# writes a JSON stream that `packages/at_client/tool/acceptance_ledger.dart`
+# joins against the catalogue's citations to say which rows a run exercised.
+REPORT_ARG=""
+if [[ -n "${ACCEPTANCE_REPORT:-}" ]]; then
+  REPORT_ARG="--file-reporter json:${ACCEPTANCE_REPORT}"
+  echo "*** Writing acceptance report to ${ACCEPTANCE_REPORT}"
+fi
+dart test --concurrency=1 -r expanded ${REPORT_ARG} "${TEST_PATHS[@]}"
 TEST_EXIT=$?
 set -e
 

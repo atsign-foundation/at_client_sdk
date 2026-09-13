@@ -1,9 +1,19 @@
 import 'dart:async';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'dart:io';
+
+import 'package:at_auth/at_auth.dart'
+    show
+        AtKeysIo,
+        authenticatorFor,
+        authenticatorForChops,
+        authenticatorForCramSecret,
+        authenticatorForPrivateKey;
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/client/secondary_address_finder_source.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -23,6 +33,10 @@ class RemoteSecondary implements Secondary {
 
   late AtLookUp atLookUp;
 
+  /// The atDirectory lookup this connection resolves its atServer with, or
+  /// null to read the process-wide one per lookup.
+  SecondaryAddressFinder? _secondaryAddressFinder;
+
   AtChops? _atChops;
 
   AtChops? get atChops => _atChops;
@@ -30,36 +44,163 @@ class RemoteSecondary implements Secondary {
   set atChops(AtChops? value) {
     _atChops = value;
     atLookUp.atChops = value;
+    _installAuthenticator();
   }
 
+  /// The keystore an authenticator reads, when this client was given one.
+  AtKeysIo? _atKeysIo;
+
+  /// The legacy credential, for a client that was given no keystore.
+  String? _privateKey;
+  String? _cramSecret;
+
+  /// The algorithm the constructor resolved, so an authenticator built from a
+  /// bare signer names the same one the lookup was told to use.
+  late final SigningAlgoType _signingAlgoType;
+
+  /// Where this connection's outcomes are reported, when the client gave it
+  /// one: every verb that comes back says online, every one that cannot get
+  /// out or is refused says which.
+  AtConnection? _connection;
+
+  void _reportSuccess() => _connection?.report(AtConnectionState.online());
+
+  void _reportFailure(Object error) {
+    final state = classifyConnectionFailure(error);
+    if (state != null) _connection?.report(state);
+  }
+
+  /// Hands the lookup an authenticator, so authentication is decided from the
+  /// keystore rather than from credentials parked on at_lookup.
+  ///
+  /// Called from the constructor as well as the [atChops] setter, because the
+  /// constructor sets `atLookUp.atChops` directly - hooking only the setter
+  /// installs nothing on the path that matters.
+  ///
+  /// The credential fields stay written on the lookup beside it: they are
+  /// at_lookup's ladder, which a lookup from before the seam still
+  /// authenticates from, and they go with that ladder in the at_lookup major.
+  void _installAuthenticator() {
+    final lookUp = atLookUp;
+    // `AtLookUp` does not declare the seam - that interface is frozen because
+    // mocks implement it - so any other implementation keeps its behaviour.
+    if (lookUp is! AtLookupMuxable) {
+      return;
+    }
+
+    // The keyfile's keypair signs when it holds one for this enrollment; the
+    // AtChops beside it is the door for a keyfile that holds none - a client
+    // built from an AtChops with a stand-in key source, which the live packs
+    // build. The rule is at_auth's, in the authenticator.
+    final io = _atKeysIo;
+    if (io != null) {
+      lookUp.authenticator = authenticatorFor(
+        io,
+        _atSign,
+        enrollmentId: lookUp.enrollmentId,
+        chops: _atChops,
+      );
+      return;
+    }
+
+    // No keystore. The order from here is the ladder's own - atChops, then
+    // privateKey - so a client holding both authenticates with the same
+    // credential the ladder chose. That precedence is stated rather than
+    // fallen into.
+    final chops = _atChops;
+    if (chops != null) {
+      lookUp.authenticator = authenticatorForChops(
+        _atSign,
+        chops,
+        enrollmentId: lookUp.enrollmentId,
+        signingAlgo: _signingAlgoType,
+        // The same preference field the constructor stamps on the lookup, so
+        // the authenticator and the ladder it replaces read it alike.
+        hashingAlgo: _preference.hashingAlgoType,
+      );
+      return;
+    }
+
+    // The legacy credential, and precisely the caller the ladder existed for.
+    // Without this, deleting the ladder would make a keystore mandatory.
+    final privateKey = _privateKey;
+    if (privateKey != null) {
+      lookUp.authenticator = authenticatorForPrivateKey(
+        _atSign,
+        privateKey,
+        enrollmentId: lookUp.enrollmentId,
+      );
+      return;
+    }
+
+    // Last in the ladder's own order. Nothing in this tree sets
+    // `preference.cramSecret` - every in-tree CRAM goes through onboarding,
+    // which builds its own lookup - but the field is public API, so a consumer
+    // that sets it must keep working through the seam.
+    final cramSecret = _cramSecret;
+    if (cramSecret != null) {
+      lookUp.authenticator = authenticatorForCramSecret(_atSign, cramSecret);
+      return;
+    }
+
+    // None of the four: nothing to authenticate with, so nothing is
+    // installed. That is a real mode - at_status_impl holds no key material at
+    // all, and an OTP enrollment submit routes through auth: false.
+  }
+
+  /// [signingAlgoType] overrides the preference's PKAM signing algorithm: the
+  /// algorithm is a property of the enrollment record, and one preference can
+  /// serve clients on two enrollments of one atSign with different algorithms.
+  ///
+  /// [connection] is the client's connection state, which every verb here
+  /// then reports into; a secondary built without one reports nowhere.
+  ///
+  /// [secondaryAddressFinder] resolves the atServer address; with none, the
+  /// process-wide finder is read per lookup.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
       AtChops? atChops,
       AtLookUp? atLookUp,
-      String? enrollmentId}) {
+      String? enrollmentId,
+      SigningAlgoType? signingAlgoType,
+      AtKeysIo? atKeysIo,
+      AtConnection? connection,
+      SecondaryAddressFinder? secondaryAddressFinder,
+      AtLookUpFactory? lookUps}) {
     _atSign = AtUtils.fixAtSign(atSign);
+    _secondaryAddressFinder = secondaryAddressFinder;
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
+    _connection = connection;
     privateKey ??= preference.privateKey;
-    SecureSocketConfig secureSocketConfig = SecureSocketConfig()
-      ..decryptPackets = preference.decryptPackets
-      ..pathToCerts = preference.pathToCerts
-      ..tlsKeysSavePath = preference.tlsKeysSavePath;
     _atChops = atChops;
+    _atKeysIo = atKeysIo;
+    _privateKey = privateKey;
+    _cramSecret = preference.cramSecret;
+    // privateKey and cramSecret are no longer set ON the lookup: both are
+    // credentials, and credentials now travel as an authenticator, which
+    // _installAuthenticator supplies below from whichever of the four shapes
+    // this client actually holds.
     this.atLookUp = atLookUp ??
-        AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
-            privateKey: privateKey,
-            cramSecret: preference.cramSecret,
-            secondaryAddressFinder:
-                AtClientManager.getInstance().secondaryAddressFinder,
-            secureSocketConfig: secureSocketConfig,
-            clientConfig: _getClientConfig());
+        (lookUps ?? defaultLookUps(preference))(
+          atSign: atSign,
+          rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
+          authenticator: null,
+          secondaryAddressFinder:
+              secondaryAddressFinder ?? processSecondaryAddressFinder(),
+          clientConfig: _getClientConfig(),
+        );
     this.atLookUp.enrollmentId = enrollmentId;
+    final resolvedSigningAlgo =
+        // ignore: deprecated_member_use_from_same_package
+        signingAlgoType ?? preference.signingAlgoType;
     logger.finer(
-        'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
-    this.atLookUp.signingAlgoType = preference.signingAlgoType;
+        'signingAlgoType: $resolvedSigningAlgo hashingAlgoType: ${preference.hashingAlgoType}');
+    _signingAlgoType = resolvedSigningAlgo;
+    this.atLookUp.signingAlgoType = resolvedSigningAlgo;
     this.atLookUp.hashingAlgoType = preference.hashingAlgoType;
     this.atLookUp.atChops = atChops;
+    _installAuthenticator();
   }
 
   Map<String, String> _getClientConfig() {
@@ -85,24 +226,31 @@ class RemoteSecondary implements Secondary {
 
   /// Executes the command returned by [VerbBuilder] on a remote
   /// secondary server. Authentication is handled by the injected
-  /// `AtLookUp`. [sync] is accepted for [Secondary] interface
-  /// compatibility but is ignored. [cameFromServer] is also accepted
-  /// for interface compatibility and ignored — remote secondaries
-  /// don't have a client→server sync queue to skip enqueuing into.
+  /// `AtLookUp`. [cameFromServer] is accepted for [Secondary] interface
+  /// compatibility and ignored — remote secondaries don't have a
+  /// client→server sync queue to skip enqueuing into.
   @override
   Future<String> executeVerb(VerbBuilder builder,
-      {sync = false, bool cameFromServer = false}) async {
+      {@Deprecated('Inert: nothing reads it, so passing it suppresses '
+          'nothing. Whether a local write is enqueued for '
+          'client→server sync is decided by cameFromServer. '
+          'Removed in 4.0.')
+      sync = false,
+      bool cameFromServer = false}) async {
     try {
       String verbResult;
       logger.finer('Command sent to server: ${builder.buildCommand()}');
       verbResult = (await atLookUp.executeVerb(builder))!;
       logger.finer('Response from server: $verbResult');
+      _reportSuccess();
       return verbResult;
     } on AtException catch (e) {
+      _reportFailure(e);
       throw e
         ..stack(AtChainedException(_getIntent(builder),
             ExceptionScenario.remoteVerbExecutionFailed, e.message));
     } on AtLookUpException catch (e) {
+      _reportFailure(e);
       var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
         ..stack(AtChainedException(_getIntent(builder),
@@ -110,7 +258,12 @@ class RemoteSecondary implements Secondary {
     }
   }
 
-  Future<String> executeAndParse(VerbBuilder builder, {sync = false}) async {
+  Future<String> executeAndParse(VerbBuilder builder,
+      {@Deprecated('Inert: nothing reads it, so passing it suppresses '
+          'nothing. Whether a local write is enqueued for '
+          'client→server sync is decided by cameFromServer. '
+          'Removed in 4.0.')
+      sync = false}) async {
     // ignore: prefer_typing_uninitialized_variables
     var verbResult;
     try {
@@ -132,12 +285,18 @@ class RemoteSecondary implements Secondary {
     try {
       String? verbResult;
       verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
+      // NOTE: only an authenticated command proves the credentials; an
+      // unauthenticated one that comes back says the atServer is reachable,
+      // which is not the same thing, and is reported by the next one.
+      if (auth) _reportSuccess();
       return verbResult;
     } on AtException catch (e) {
+      _reportFailure(e);
       e.stack(AtChainedException(Intent.fetchData,
           ExceptionScenario.remoteVerbExecutionFailed, e.message));
       rethrow;
     } on AtLookUpException catch (e) {
+      _reportFailure(e);
       var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
         ..stack(AtChainedException(Intent.fetchData,
@@ -167,13 +326,20 @@ class RemoteSecondary implements Secondary {
       ..limit = _preference.syncPageLimit;
 
     var atCommand = syncVerbBuilder.buildCommand();
-    return await atLookUp.executeCommand(atCommand, auth: true);
+    try {
+      final result = await atLookUp.executeCommand(atCommand, auth: true);
+      _reportSuccess();
+      return result;
+    } catch (e) {
+      _reportFailure(e);
+      rethrow;
+    }
   }
 
   Future<String?> findSecondaryUrl() async {
-    var secondaryAddress = await AtClientManager.getInstance()
-        .secondaryAddressFinder!
-        .findSecondary(_atSign);
+    var secondaryAddress =
+        await (_secondaryAddressFinder ?? processSecondaryAddressFinder()!)
+            .findSecondary(_atSign);
     return secondaryAddress.toString();
   }
 

@@ -1,8 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:at_auth/at_auth.dart' show AtKeys;
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/response/enrollment.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
@@ -10,6 +18,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
+import 'package:at_client/src/util/swallowed_error.dart';
 
 /// Contains methods to execute verb on local secondary storage using [executeVerb]
 /// Set [AtClientPreference.isLocalStoreRequired] to true and other preferences that your app needs.
@@ -25,8 +34,8 @@ class LocalSecondary implements Secondary {
   /// not the commit log.
   AtKeyValueStore<String, AtData, AtMetaData?>? keyStore;
 
-  /// Sink for keystore-mutation events. Wired by [AtClientImpl] at
-  /// construction to its [AtClientImpl.emitDataEvent]; left null by
+  /// Sink for keystore-mutation events. Wired by `AtClientImpl` at
+  /// construction to its `emitDataEvent`; left null by
   /// callers that don't need event propagation (most unit-test
   /// fixtures). Emits are silently dropped when null.
   final void Function(DataEvent)? _onEvent;
@@ -111,12 +120,12 @@ class LocalSecondary implements Secondary {
   /// the open; concurrent callers await the same in-flight future so
   /// we never call `Hive.openBox` twice for the same atSign.
   ///
-  /// Must run AFTER the at_persistence_secondary_server's
-  /// `HiveAtPersistenceFactory.initialize(...)` has called
-  /// `Hive.init(...)`, which is guaranteed by the
-  /// [StorageManager] init ordering during AtClient init. We
-  /// intentionally do not call `Hive.init` here — rerunning it with a
-  /// different path would silently misroute the box.
+  /// The queue opens on the instance owning the client's
+  /// `hiveStoragePath` — the same one the keystore uses — so a client's two
+  /// halves cannot land in different places. A client configuring no path
+  /// falls back to the package-global instance, which is why this must still
+  /// run after the keystore's initialisation has called `Hive.init(...)`; we
+  /// never call it here ourselves.
   Future<AtSyncQueue> _ensureSyncQueueOpen() {
     final existing = _syncQueue;
     if (existing != null) return Future.value(existing);
@@ -128,7 +137,12 @@ class LocalSecondary implements Secondary {
           'set; AtClientManager.setCurrentAtSign must run first',
         );
       }
-      final q = AtSyncQueue(atSign: atSign);
+      // NOTE: a null storagePath is legal — a LocalSecondary built around an
+      // injected keystore has no hiveStoragePath, and AtSyncQueue then uses
+      // the global Hive instance.
+      final q = AtSyncQueue(
+          atSign: atSign,
+          storagePath: _atClient.getPreferences()?.hiveStoragePath);
       await q.open();
       _syncQueue = q;
       return q;
@@ -173,6 +187,15 @@ class LocalSecondary implements Secondary {
   Future<SyncQueueEntry?> readSyncQueueEntry(String atKey) async {
     final q = await _ensureSyncQueueOpen();
     return q.readEntry(atKey);
+  }
+
+  /// Removes [atKey]'s queue entry only while it is still the version
+  /// stamped [seq]; returns whether it removed. The drain's success-path
+  /// removal — see [AtSyncQueue.removeIfUnchanged] for why unconditional
+  /// removal there loses whichever write replaced the entry mid-flight.
+  Future<bool> removeFromSyncQueueIfUnchanged(String atKey, int seq) async {
+    final q = await _ensureSyncQueueOpen();
+    return q.removeIfUnchanged(atKey, seq);
   }
 
   /// Removes [atKey] from both the in-memory queue and the persisted
@@ -263,20 +286,34 @@ class LocalSecondary implements Secondary {
   }) async {
     if (cameFromServer) return;
     if (!shouldEnqueueForSync(atKey, op)) return;
+    // NOTE: two operations, so two try blocks. Queueing the write is the
+    // durable half; asking the sync service to drain is a best-effort nudge on
+    // top of it. One catch across both reported every trigger failure as a
+    // failure to enqueue, which names the wrong half: the write was already
+    // safely queued.
     try {
       final q = await _ensureSyncQueueOpen();
       await q.enqueue(atKey, op);
+    } catch (e, st) {
+      // The write is not queued, so nothing will push it until the box
+      // becomes accessible again and the periodic safety-net timer finds it.
+      _logger.shout('failed to enqueue $atKey for sync: $e\n$st');
+      return;
+    }
+
+    try {
       // Trigger SyncServiceImpl to drain. Today this enqueues a
       // sync request via the existing request-coalescing layer
       // (`_addSyncRequestToQueue` → microtask → `processSyncRequests`).
       // The sync service then peeks our queue and pushes batches.
       _atClient.syncService.sync();
     } catch (e, st) {
-      // Failing to enqueue is a serious correctness problem (the
-      // write WILL eventually be picked up by the periodic 30s
-      // safety-net timer if the queue's box becomes accessible
-      // again, but the immediate sync trigger is gone). Log loudly.
-      _logger.shout('failed to enqueue $atKey for sync: $e\n$st');
+      logSwallowed(
+          _logger,
+          e,
+          '$atKey is queued for sync, but the sync service could '
+          'not be asked to drain, so it waits for the next trigger or for the '
+          'periodic safety net: $e\n$st');
     }
   }
 
@@ -292,14 +329,20 @@ class LocalSecondary implements Secondary {
   /// the key is sync-eligible and [cameFromServer] is false.
   ///
   /// When [cameFromServer] is true the caller is replaying a
-  /// server-originated change into local storage (today only
-  /// `SyncServiceImpl._pullToLocal` does this). The flag tells
+  /// server-originated change into local storage, or filing a value
+  /// it has just fetched from the atServer. The flag tells
   /// `_update` / `_delete` to skip the sync-queue enqueue — the
-  /// server already has the entry; bouncing it back would be a
-  /// loop.
+  /// server already has the entry; bouncing it back would be a loop,
+  /// and a queued entry carries only the key's name, so a later drain
+  /// would send whatever local storage held by then.
   @override
   Future<String?> executeVerb(VerbBuilder builder,
-      {bool? sync, bool cameFromServer = false}) async {
+      {@Deprecated('Inert: nothing reads it, so passing it suppresses '
+          'nothing. Whether a local write is enqueued for '
+          'client→server sync is decided by cameFromServer. '
+          'Removed in 4.0.')
+      bool? sync,
+      bool cameFromServer = false}) async {
     String? verbResult;
 
     try {
@@ -490,10 +533,20 @@ class LocalSecondary implements Secondary {
     }
   }
 
+  /// [isExpiry] marks a deletion the TTL sweep is performing rather than one
+  /// an enrollment asked for, and skips the enrollment authorization check.
+  ///
+  /// Safe because an expiry deletion is `localOnly`: it is never enqueued for
+  /// sync and cannot reach anyone else's copy. Without it a client whose
+  /// enrollment does not cover a record's namespace could never reclaim that
+  /// record.
   Future<String> _delete(DeleteVerbBuilder builder,
-      {bool cameFromServer = false, bool localOnly = false}) async {
+      {bool cameFromServer = false,
+      bool localOnly = false,
+      bool isExpiry = false}) async {
     var deleteKey = builder.buildKey();
-    if (!await isEnrollmentAuthorizedForOperation(deleteKey, builder)) {
+    if (!isExpiry &&
+        !await isEnrollmentAuthorizedForOperation(deleteKey, builder)) {
       throw UnAuthorizedException(
           'Cannot perform delete on $deleteKey due to insufficient privilege');
     }
@@ -556,7 +609,7 @@ class LocalSecondary implements Secondary {
   /// Callers arming a timer via [AtClient.dataEvents] should suppress
   /// re-arms while a sweep is in flight (the events fired during this
   /// method would otherwise cause N redundant re-arms).
-  /// [AtClientImpl._onExpiryFire] does this via a `_sweepInFlight`
+  /// `AtClientImpl._onExpiryFire` does this via a `_sweepInFlight`
   /// flag.
   ///
   /// Returns 0 (no-op) when there is no local keystore.
@@ -580,7 +633,7 @@ class LocalSecondary implements Secondary {
         // the publisher's atServer has already dropped (or will drop)
         // its own copy at the same TTL, and is responsible for the
         // recipients' `cached:` evictions.
-        await _delete(builder, localOnly: true);
+        await _delete(builder, localOnly: true, isExpiry: true);
         deleted++;
       } on Exception catch (e) {
         _logger.warning('expiry sweep failed for $keyString: $e');
@@ -699,7 +752,7 @@ class LocalSecondary implements Secondary {
 
   /// Keys whose `availableAt` is at-or-before [cutoff] and that
   /// haven't already been fired for the same crossing
-  /// ([_firedAvailableAt]). Drives [AtClientImpl._onAvailableFire]'s
+  /// ([_firedAvailableAt]). Drives `AtClientImpl._onAvailableFire`'s
   /// visibility-onset sweep.
   ///
   /// Sources the born-key set from [AtKeyValueStore.peekNewlyAvailable]
@@ -737,7 +790,7 @@ class LocalSecondary implements Secondary {
 
   /// Pre-marks every key whose `availableAt` is at or before [now] as
   /// "already fired" in the in-memory [_firedAvailableAt] map. The
-  /// availability sweep ([AtClientImpl._onAvailableFire]) checks this
+  /// availability sweep (`AtClientImpl._onAvailableFire`) checks this
   /// map and skips matching entries, so this prevents the sweep from
   /// replaying historical `availableAt` crossings on every process
   /// start.
@@ -791,16 +844,52 @@ class LocalSecondary implements Secondary {
 
   AtChopsKeys? get atChopsKeys => _atClient.atChops?.atChopsKeys;
 
+  bool _keySourceRead = false;
+  AtKeys? _keySourceKeys;
+
+  /// The keys this client's [AtClient.atKeysIo] holds, or null when it has no
+  /// key source or the source holds nothing readable for this atSign.
+  ///
+  /// Read once and kept: a file-backed source decrypts on every read and each
+  /// key getter below consults it, while the source a client was built with
+  /// does not change over that client's life.
+  ///
+  /// A source that throws is not an error here. The getters have a keystore
+  /// behind them, and a client can legitimately be built before its keyfile
+  /// exists.
+  Future<AtKeys?> _keysFromSource() async {
+    if (_keySourceRead) return _keySourceKeys;
+    _keySourceRead = true;
+    final io = _atClient.atKeysIo;
+    final atSign = _atClient.getCurrentAtSign();
+    if (io == null || atSign == null) return null;
+    try {
+      _keySourceKeys = await io.read(atSign);
+    } on Exception catch (e) {
+      _logger.finer('the key source holds nothing readable for $atSign: $e');
+    }
+    return _keySourceKeys;
+  }
+
   /// get it from atChops if we have it, otherwise try the keystore
+  ///
+  /// NOTE: the key source is deliberately not a tier here, unlike the
+  /// encryption getters below. `AtKeys.authenticationKeyPairFor` refuses an
+  /// enrollment whose typed material names an algorithm this build cannot
+  /// sign with, and falling through that refusal to the keystore is the exact
+  /// thing it exists to prevent — the keystore holds whichever credential was
+  /// written there, which on a retrofitted keyfile is another enrollment's.
+  /// A caller wanting the APKAM keypair asks `AtKeys` for it directly.
   Future<String?> getPkamPrivateKey() async {
     String? v = atChopsKeys?.atPkamKeyPair?.atPrivateKey.privateKey;
     v ??= (await keyStore!.get(AtConstants.atPkamPrivateKey))?.data;
     return v;
   }
 
-  /// get it from atChops if we have it, otherwise try the keystore
+  /// get it from atChops if we have it, then the key source, then the keystore
   Future<String?> getEncryptionPrivateKey() async {
     String? v = atChopsKeys?.atEncryptionKeyPair?.atPrivateKey.privateKey;
+    v ??= (await _keysFromSource())?.encryptionKeyPair?.atPrivateKey.privateKey;
     v ??= (await keyStore!.get(AtConstants.atEncryptionPrivateKey))?.data;
     return v;
   }
@@ -808,26 +897,29 @@ class LocalSecondary implements Secondary {
   @Deprecated("Use getPkamPublicKey")
   Future<String?> getPublicKey() => getPkamPublicKey();
 
-  /// get it from atChops if we have it, otherwise try the keystore
+  /// get it from atChops if we have it, otherwise try the keystore. The key
+  /// source is not a tier, for the reason [getPkamPrivateKey] gives.
   Future<String?> getPkamPublicKey() async {
     String? v = atChopsKeys?.atPkamKeyPair?.atPublicKey.publicKey;
     v ??= (await keyStore!.get(AtConstants.atPkamPublicKey))?.data;
     return v;
   }
 
-  /// get it from atChops if we have it, otherwise try the keystore
+  /// get it from atChops if we have it, then the key source, then the keystore
   Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.fixAtSign(atSign);
     String? v = atChopsKeys?.atEncryptionKeyPair?.atPublicKey.publicKey;
+    v ??= (await _keysFromSource())?.encryptionKeyPair?.atPublicKey.publicKey;
     v ??= (await keyStore!.get('${AtConstants.atEncryptionPublicKey}$atSign'))
         ?.data;
 
     return v;
   }
 
-  /// get it from atChops if we have it, otherwise try the keystore
+  /// get it from atChops if we have it, then the key source, then the keystore
   Future<String?> getEncryptionSelfKey() async {
     String? v = atChopsKeys?.selfEncryptionKey?.key;
+    v ??= (await _keysFromSource())?.selfEncryptionKey?.key;
     v ??= (await keyStore!.get(AtConstants.atEncryptionSelfKey))?.data;
     return v;
   }
@@ -849,8 +941,8 @@ class LocalSecondary implements Secondary {
       return true;
     }
     // if there is no enrollment, return true
-    enrollment ??= await _getEnrollmentDetails();
-    if (_atClient.enrollmentId == null ||
+    await getEnrollmentDetails();
+    if (isAtSignCredential(_atClient.enrollmentId) ||
         enrollment == null ||
         _shouldSkipKeyFromEnrollmentAuthorization(key)) {
       _logger.finest('Skipping enrollment authorization check for key: $key');
@@ -887,66 +979,113 @@ class LocalSecondary implements Secondary {
         _isWriteAllowed(verbBuilder, access);
   }
 
+  /// The enrollment record for the enrollment this client authenticates as,
+  /// memoised for the life of this object once the atServer has answered.
+  /// Null when the client holds no enrollment id — it is authenticating with
+  /// the atSign's own keys and has no id to fetch a record by.
+  ///
+  /// Shared rather than re-fetched: two readers of one record are two chances
+  /// to describe it differently, so a second caller reuses this memo instead
+  /// of issuing its own `enroll:fetch`. A record read from the keyfile while
+  /// the atServer was unreachable is not the memo: the next caller asks the
+  /// atServer again, so a grant that changed while offline is noticed as soon
+  /// as the network is back.
+  Future<Enrollment?> getEnrollmentDetails() async {
+    if (enrollment != null && !_enrollmentIsFromKeyfile) return enrollment;
+    return enrollment = await _getEnrollmentDetails();
+  }
+
+  /// Whether [enrollment] was read from the keyfile's snapshot rather than
+  /// fetched, so that [getEnrollmentDetails] retries the fetch.
+  bool _enrollmentIsFromKeyfile = false;
+
+  /// Goes to the atServer, so that a grant changed since the last start is
+  /// noticed, and only when no atServer can be reached falls back to the
+  /// grants the keyfile last recorded — the snapshot the client's startup
+  /// refreshes on every authenticated start. A refusal is not a fallback
+  /// case: an atServer that answered and said no has decided, and the
+  /// keyfile's copy does not outrank it.
   Future<Enrollment?> _getEnrollmentDetails() async {
-    if (_atClient.enrollmentId == null) {
+    if (isAtSignCredential(_atClient.enrollmentId)) {
       return null;
     }
 
-    // Fetch enrollment information from local secondary
-    AtData? enrollmentInfoFromLocalSecondary;
-    try {
-      enrollmentInfoFromLocalSecondary = await keyStore?.get(
-          'local:${_atClient.enrollmentId}${_atClient.getCurrentAtSign()}');
-    } on Exception {
-      _logger.finer(
-          'Enrollment information for id: ${_atClient.enrollmentId} not found in local secondary. Fetching from server');
-    }
-
-    // If enrollmentInfo is not found in local secondary, fetch the info from the remote secondary server and cache it in local
-    // secondary.
     String? enrollmentInfoFromServer;
-    if (enrollmentInfoFromLocalSecondary == null) {
-      try {
-        enrollmentInfoFromServer = await _atClient
-            .getRemoteSecondary()
-            ?.executeCommand(
-                'enroll:fetch:{"enrollmentId":"${_atClient.enrollmentId}"}\n',
-                auth: true);
-      } on AtException catch (e) {
-        _logger.finer(
-            'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
-      } on AtLookUpException catch (e) {
-        _logger.finer(
-            'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
-      }
-      enrollmentInfoFromServer =
-          enrollmentInfoFromServer?.replaceFirst(RegExp('^data:'), '');
-      Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer!);
-      _logger.info('Enrollment Details Map : $enrollmentDetailsMap');
-      enrollment = Enrollment()
-        ..appName = enrollmentDetailsMap['appName']
-        ..deviceName = enrollmentDetailsMap['deviceName']
-        ..namespace = enrollmentDetailsMap['namespace']
-        ..encryptedAPKAMSymmetricKey =
-            enrollmentDetailsMap['encryptedAPKAMSymmetricKey'];
-
-      AtData atData = AtData()..data = jsonEncode(enrollment);
-      // The enrollment data is fetch from server, Set skipCommit to true to prevent
-      // the key sync back to server
-      await keyStore?.put(
-          '${_atClient.enrollmentId}.new.enrollments.__manage${_atClient.getCurrentAtSign()}',
-          atData,
-          skipCommit: true);
-    } else {
-      enrollment = Enrollment.fromJSON(
-          jsonDecode(enrollmentInfoFromLocalSecondary.data!));
+    Object? fetchFailure;
+    try {
+      enrollmentInfoFromServer = await _atClient
+          .getRemoteSecondary()
+          ?.executeCommand(
+              'enroll:fetch:{"enrollmentId":"${_atClient.enrollmentId}"}\n',
+              auth: true);
+    } on AtException catch (e) {
+      fetchFailure = e;
+    } on AtLookUpException catch (e) {
+      fetchFailure = e;
     }
+
+    if (enrollmentInfoFromServer == null) {
+      final fromKeyfile = fetchFailure == null ||
+              classifyConnectionFailure(fetchFailure)?.isOffline != true
+          ? null
+          : await _enrollmentFromKeyfile();
+      if (fromKeyfile != null) {
+        _logger.warning('Could not fetch the enrollment record for '
+            '${_atClient.enrollmentId} ($fetchFailure); authorising from the '
+            'grants the keyfile last recorded, ${fromKeyfile.namespace}, until '
+            'the atServer can be reached');
+        _enrollmentIsFromKeyfile = true;
+        return fromKeyfile;
+      }
+      throw AtKeyNotFoundException('Failed to fetch the enrollment record for '
+          '${_atClient.enrollmentId} from the atServer'
+          '${fetchFailure == null ? '' : ': $fetchFailure'}');
+    }
+    _enrollmentIsFromKeyfile = false;
+
+    enrollmentInfoFromServer =
+        enrollmentInfoFromServer.replaceFirst(RegExp('^data:'), '');
+    Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer);
+    _logger.info('Enrollment Details Map : $enrollmentDetailsMap');
+    enrollment = Enrollment()
+      ..appName = enrollmentDetailsMap['appName']
+      ..deviceName = enrollmentDetailsMap['deviceName']
+      ..namespace = enrollmentDetailsMap['namespace']
+      ..encryptedAPKAMSymmetricKey =
+          enrollmentDetailsMap['encryptedAPKAMSymmetricKey']
+      ..status = enrollmentDetailsMap['status'];
 
     if (enrollment == null) {
       throw AtKeyNotFoundException(
           'Enrollment key for enrollmentId: ${_atClient.enrollmentId} not found in server');
     }
     return enrollment!;
+  }
+
+  /// The grants the keyfile recorded for this enrollment, as an [Enrollment]
+  /// with no status, or null when the keyfile holds no snapshot for it: a
+  /// keyfile written before snapshots existed, on a client that has not yet
+  /// had an authenticated start to record one.
+  Future<Enrollment?> _enrollmentFromKeyfile() async {
+    final keysIo = _atClient.atKeysIo;
+    final enrollmentId = _atClient.enrollmentId;
+    if (keysIo == null || enrollmentId == null) return null;
+    final AtKeys keys;
+    try {
+      keys = await keysIo.read(_atClient.getCurrentAtSign()!);
+    } on Exception catch (e) {
+      _logger.warning('Could not read the keyfile for its enrollment '
+          'snapshot: $e');
+      return null;
+    }
+    final snapshot = keys.enrollmentInfo(enrollmentId);
+    final grants = snapshot?.namespaces;
+    if (grants == null) return null;
+    return Enrollment()
+      ..enrollmentId = enrollmentId
+      ..appName = snapshot!.appName
+      ..deviceName = snapshot.deviceName
+      ..namespace = Map<String, dynamic>.from(grants);
   }
 
   bool _isReadAllowed(VerbBuilder verbBuilder, String access) {

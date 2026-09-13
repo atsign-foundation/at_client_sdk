@@ -1,11 +1,109 @@
 # CHANGELOG
 
-## 1.1.5
-- feat: `CramDialog` and `PkamDialog` take an optional `authService`, and
-  `ApkamActivationDialog` an optional `enrollmentService`. Both default to the
-  real service, so existing call sites are unaffected; passing one lets the
-  dialogs' error and timeout paths be widget-tested without a live atServer
-  (#1909).
+## 2.0.0-rc1
+
+- feat: `PkamDialog`, `CramDialog` and `ApkamActivationDialog` take
+  `lookUps:`, at_client's `AtLookUpFactory`, and hand it to the verb they
+  run, so every connection the client they hand back opens travels the way
+  the app chose; `AtsignFlows` carries it. The third leg of the platform
+  bundle, after `keys:` and `storage:`.
+
+The dialogs and the keychain build on at_client's lifecycle verbs
+(`Atsign.open`, `activate`, `enroll` and `resumeEnrollment`, and
+`client.enrollments` on the approving side) and hand back the `AtClient` they
+open. An app imports `package:at_client_flutter/at_client_flutter.dart` and
+nothing from at_auth.
+
+- BREAKING: `AuthService` and `FlutterEnrollmentService` are gone; what they
+  orchestrated is at_client's. `authenticate`, `onboard` and `enroll` are
+  `PkamDialog`, `CramDialog` and `ApkamActivationDialog`, or `Atsign.open`,
+  `activate` and `enroll` for an app with its own UI; list, approve, deny and
+  revoke are `client.enrollments`, and the request stream is
+  `client.enrollments.requests`.
+- BREAKING: `PkamDialog.show`, `CramDialog.show` and
+  `ApkamActivationDialog.show` return the `AtClient` they open, null when the
+  dialog fails or is cancelled, and take the atSign, the keys store, the
+  `AtClientPreference` and an optional `AtClientStorage` in place of the
+  at_auth request objects. `onAuthenticationComplete` and
+  `onOnboardingComplete` are invoked with the client. The app owns the client:
+  `AtClientManager.getInstance().use(client)` makes it the current one for an
+  app whose screens read it from there.
+- BREAKING: `AtSignSelectionDialog.show` returns an `AtsignSelection`, the
+  atSign and its root domain, and `RegistrarCramDialog.show` takes the atSign.
+- BREAKING: `ApkamActivationDialog` opens the client itself once the approval
+  lands; there is no second `PkamDialog` to show. Its `atKeysIo` is now
+  `keys`, where the enrollment's keys are filed and read back from, the
+  keychain by default. A request submitted earlier for the same app and device
+  is resumed from that store rather than repeated, so the passcode is asked
+  for only when nothing is pending. `signingAlgo` and `keyExchangeMode` name
+  the enrollment's algorithm and key exchange, defaulting to the preference's.
+- BREAKING: `EnrollmentRequestList` takes an optional `atClient` and works
+  over `client.enrollments`; with none it uses `AtClientManager`'s current
+  client, as it always has. Its cards render at_client's `Enrollment`, whose
+  `namespacePermissions` and `enrollmentStatus` are what they read.
+- BREAKING: the keychain holds keys and passcodes only. `EnrollmentData`,
+  `Otp` and `KeychainStorage`'s `readEnrollmentData`, `writeEnrollmentData`,
+  `deleteEnrollmentData` and `validateEnrollment` are gone: an enrollment
+  awaiting approval lives in the keys store as pending key material, which
+  is how it is resumed. `saveSpp` takes the `Passcode` `client.enrollments.spp`
+  answers.
+- BREAKING: at_auth is no longer re-exported. `AtAuthRequest`, `AuthResponse`
+  and the other request and response types an app reached through this
+  barrel are gone, along with `AtEnrollmentRequest` and `AtEnrollmentResponse`;
+  the dialogs take the atSign, the keys store and the preference and hand back
+  a client. `RegistrarService` is re-exported, so an app driving
+  `RegistrarCramDialog` imports nothing from at_auth; `FileAtKeysIo`,
+  `AtKeysIo`, `WrittenAtKeysIo`, `InMemoryAtKeysIo`, `NamespacePermission` and
+  `EnrollmentKeyExchangeMode` come through at_client.
+- fix: the enrollment request list can approve a pq-mode request, whose
+  enrollee expects the approver to mint its key and so wraps none; the old
+  approve action null-banged the wrapped key and crashed before anything was
+  sent. A post-approval conveyance refusal clears the row and shows the
+  refusal's own message — approved, cannot decrypt, consider revoking —
+  instead of `Failed to approve`, which invited a retry of an approval that
+  had already gone through.
+- fix: an atSign names one keychain entry however the caller spells it.
+  `write('@Alice', …)` succeeded and the very next `read('@Alice')` reported
+  the atSign as absent, and a `flush` under a spelling that normalizes
+  differently (`@colin.constable` → `@colinconstable`) appended beside the
+  entry and left the newer keys unreachable behind the older ones.
+  `KeychainStorage` compares normalized in `_indexOf` and
+  `removeAtsignFromKeychain`, and still returns the stored spelling; a value
+  `toAtsign()` rejects is compared as it stands, so a malformed entry stays
+  readable and removable.
+- fix: a failed keychain read no longer wipes the store. The read's error
+  path wrote an empty entry over the stored data before rethrowing, so a
+  transient platform-channel error or a cancelled biometric prompt destroyed
+  the only copy of the atSign's keys. Recovery from a genuinely corrupt store
+  is now the caller's explicit decision, never a side effect of the read that
+  discovered it.
+- fix: the keychain is a usable key store for the post-quantum paths.
+  `KeychainAtKeysIo` implemented only `read`/`write`, so `flush` fell through
+  to the interface's throwing default — and on Flutter that is the *default*
+  store, so filing an nskey private or a signing-root private threw
+  `UnimplementedError` on the platform where those paths matter most. It now
+  replaces the atSign's entry, with the same never-lose assurance the `.atKeys`
+  file gets, and implements `update` through it.
+- fix: `KeychainAtKeysIo.write` refuses an atSign that already has an entry,
+  like every other `WrittenAtKeysIo`. It used to append unconditionally to a
+  list `read` scans front-to-back, so a second write left the newer keys
+  permanently unreachable behind the older ones — a silent loss that looked
+  like a successful write. Use `flush` to persist a change to existing keys.
+- fix: an entry written by an older release, which carries its atSign under the
+  `name` metadata key rather than `atsign`, is now found, replaced and removed
+  by the same predicate the reads use. `getAllAtsigns` threw a `TypeError` on
+  one (a `String` used as a condition) and `removeAtsignFromKeychain` silently
+  kept it.
+- The examples (`example/`, `examples/todos`, `examples/dockerstats`) build
+  their flows on the dialogs and hand the client to `AtClientManager.use`;
+  the APKAM example's simulated requester runs on `client.enrollments.otp()`
+  and `Atsign.enroll`.
+- build: requires `at_client` ^3.15.0-rc1, the first version carrying the
+  lifecycle verbs.
+- fix: `KeychainAtKeysIo.read` throws `AtKeysSourceAbsentException` for an
+  atSign the keychain does not hold, as the file store does, so `Atsign.enroll`
+  and `resumeEnrollment` start on a fresh keychain rather than refusing it as
+  unreadable.
 
 ## 1.1.4
 

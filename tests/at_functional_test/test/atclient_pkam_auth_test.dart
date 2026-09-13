@@ -13,12 +13,14 @@ import 'test_utils.dart';
 late String atSign;
 
 void main() {
+  TestUtils.isolateStorage('atclient_pkam_auth_test');
   String namespace = 'wavi';
   late AtClientManager atClientManager;
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
   });
 
   test('Verify pkam auth', () async {

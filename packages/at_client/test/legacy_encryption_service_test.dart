@@ -9,10 +9,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
-class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
-
-class FakeAtSigningInput extends Fake implements AtSigningInput {}
-
 void main() {
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
 

@@ -2,8 +2,14 @@ import 'package:at_commons/at_commons.dart';
 
 /// A fully qualified atSign (e.g. @alice)
 ///
-/// Call String.toAtsign() to create this type
+/// Create one with [Atsign.new] or [AtsignString.toAtsign]; they are the same
+/// route.
 extension type Atsign._(String str) implements String {
+  /// [atSign] normalised and validated exactly as [AtsignString.toAtsign]
+  /// does: lower-cased, given its leading `@`, its dots removed, and refused
+  /// with [InvalidAtSignException] when it is not an atSign.
+  Atsign(String atSign) : this._(_fixAtSign(atSign));
+
   /// Format and validate string to an atSign without the "@" prefix
   /// throws [InvalidAtSignException] on failed validation
   AtsignWithoutAt withoutAt() {

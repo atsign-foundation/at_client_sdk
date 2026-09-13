@@ -28,7 +28,7 @@ void main() {
     // Decrypt encryptedAESKey with EncryptionUtil using RSA private key
     var encryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
     var encryptionPrivateKey = encryptionKeyPair.atPrivateKey.privateKey;
-    var aesKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    var aesKey = AESKey.generate(32).key;
 
     AtChopsKeys atChopsKeys = AtChopsKeys.create(encryptionKeyPair, null);
     var atChops = AtChopsImpl(atChopsKeys);
@@ -55,7 +55,7 @@ void main() {
     var decryptedData = (await atChops.decryptString(
             encryptedData, EncryptionKeyType.aes256,
             encryptionAlgorithm: encryptionAlgo,
-            iv: AtChopsUtil.generateIVLegacy()))
+            iv: InitialisationVector.legacy()))
         .result;
     expect(decryptedData, dataToEncrypt);
   });
@@ -65,7 +65,7 @@ void main() {
       () async {
     // Generate AES key. Encrypt data with AtChops using AES key
     // Decrypt the encrypted value with EncryptionUtil
-    var aesKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    var aesKey = AESKey.generate(32);
     var dataToEncrypt = 'alice@atsign.com';
     var encryptionAlgo = AESEncryptionAlgo(AESKey(aesKey.key));
     AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
@@ -73,7 +73,7 @@ void main() {
     var encryptedData = (await atChops.encryptString(
             dataToEncrypt, EncryptionKeyType.aes256,
             encryptionAlgorithm: encryptionAlgo,
-            iv: AtChopsUtil.generateIVLegacy()))
+            iv: InitialisationVector.legacy()))
         .result;
     var decryptedData = EncryptionUtil.decryptValue(encryptedData, aesKey.key);
     expect(decryptedData, dataToEncrypt);
@@ -93,7 +93,7 @@ void main() {
     var decryptedData = (await atChops.decryptString(
             encryptedData, EncryptionKeyType.aes256,
             encryptionAlgorithm: encryptionAlgo,
-            iv: AtChopsUtil.generateIVLegacy()))
+            iv: InitialisationVector.legacy()))
         .result;
     expect(decryptedData, dataToEncrypt);
   });
@@ -103,7 +103,7 @@ void main() {
       () async {
     // Generate AES key. Encrypt data with AtChops using AES key
     // Decrypt the encrypted value with EncryptionUtil
-    var aesKey = AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    var aesKey = AESKey.generate(32);
     var dataToEncrypt = 'alice@🦄🛠';
     var encryptionAlgo = AESEncryptionAlgo(AESKey(aesKey.key));
     AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
@@ -111,7 +111,7 @@ void main() {
     var encryptedData = (await atChops.encryptString(
             dataToEncrypt, EncryptionKeyType.aes256,
             encryptionAlgorithm: encryptionAlgo,
-            iv: AtChopsUtil.generateIVLegacy()))
+            iv: InitialisationVector.legacy()))
         .result;
     var decryptedData = EncryptionUtil.decryptValue(encryptedData, aesKey.key);
     expect(decryptedData, dataToEncrypt);

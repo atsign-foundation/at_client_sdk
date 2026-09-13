@@ -6,7 +6,7 @@ import 'package:mocktail/mocktail.dart';
 import 'test_utils/mocks.dart';
 
 void main() {
-  AtLookupImpl mockAtLookUp = MockAtLookUpImpl();
+  AtLookupImpl mockAtLookUp = MockAtLookupImpl();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
   SecondaryAddress fakeSecondaryAddress =
@@ -22,6 +22,30 @@ void main() {
           .thenAnswer((_) async => fakeSecondaryAddress);
       AtClientManager.getInstance().secondaryAddressFinder =
           mockSecondaryAddressFinder;
+    });
+
+    test(
+        'the lookup it builds is a muxable carrying an authenticator, not a '
+        'lookup with credentials parked on it', () async {
+      final preference = AtClientPreference()..privateKey = 'dummy_private_key';
+      final remoteSecondary = RemoteSecondary(atsign, preference);
+
+      expect(remoteSecondary.atLookUp, isA<AtLookupMuxable>(),
+          reason: 'withSecureSocket returns the muxable, which is the only '
+              'shape that carries an authenticator at all');
+      expect((remoteSecondary.atLookUp as AtLookupMuxable).authenticator,
+          isNotNull,
+          reason: 'credentials travel as an authenticator now; leaving this '
+              'null puts authentication back on the deprecated ladder, which '
+              'still works and so hides the regression from every live pack');
+    });
+
+    test('an injected lookup is used as given', () async {
+      final remoteSecondary =
+          RemoteSecondary(atsign, atClientPreference, atLookUp: mockAtLookUp);
+
+      expect(remoteSecondary.atLookUp, same(mockAtLookUp),
+          reason: 'the caller supplied it, so it is used as given');
     });
 
     test('test findSecondaryUrl', () async {

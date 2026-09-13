@@ -7,13 +7,9 @@ import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'test_utils/mocks.dart';
 
-class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
-
-class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
-
 void main() {
   AtClient mockAtClient = MockAtClientImpl();
-  AtLookUp mockAtLookUp = MockAtLookUpImpl();
+  AtLookUp mockAtLookUp = MockAtLookupImpl();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
   setUp(() {
@@ -26,17 +22,14 @@ void main() {
   });
   group('A group of local key decryption tests', () {
     test('test to verify decryption of local key', () async {
-      var rsaKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+      var rsaKeyPair = RsaKeyPair.generate();
       var sharedSymmetricKey = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
       var encryptedSharedSymmetricKey = EncryptionUtil.encryptKey(
           sharedSymmetricKey, rsaKeyPair.atPublicKey.publicKey);
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(rsaKeyPair, null);
-      var atChopsImpl = AtChopsImpl(atChopsKeys);
       when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
-      when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
-      print('encryptedSharedSymmetricKey:$encryptedSharedSymmetricKey');
       when(() => mockAtClient.getLocalSecondary())
           .thenReturn(mockLocalSecondary);
+      stubEncryptionKeyPair(mockLocalSecondary, '@alice', rsaKeyPair);
       when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
           .thenAnswer((_) => Future.value('data:$encryptedSharedSymmetricKey'));
       var localKey = AtKey()

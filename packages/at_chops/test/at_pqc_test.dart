@@ -10,6 +10,7 @@ void main() {
   final bool xWingFfi = lib != null && libCryptoSupportsMlKem768(lib);
   final bool mlDsaFfi = lib != null && libCryptoSupportsMlDsa65(lib);
   final bool aesGcmFfi = lib != null && libCryptoSupportsAesGcm(lib);
+  final bool aesCtrFfi = lib != null && libCryptoSupportsAesCtr(lib);
 
   group('AtPqc — host-agnostic', () {
     test('AtPqc.xWing is FFI when supported, else pure', () {
@@ -35,6 +36,51 @@ void main() {
       } else {
         expect(AtPqc.aesGcm256(key), isA<AesGcm256EncryptionAlgo>());
       }
+    });
+
+    test('AtPqc.aesCtr is FFI when supported, else pure', () {
+      final AESKey key = AESKey.generate(32);
+      if (aesCtrFfi) {
+        expect(AtPqc.aesCtr(key), isA<AesCtrFfiAlgo>());
+      } else {
+        expect(AtPqc.aesCtr(key), isA<AESEncryptionAlgo>());
+      }
+    });
+
+    test('AtPqc.aesCtrStreamCipher is non-null exactly when FFI is available',
+        () {
+      final AesCtrFfiCipher? cipher = AtPqc.aesCtrStreamCipher(
+          AESKey.generate(32), InitialisationVector.random(16));
+      try {
+        expect(cipher == null, !aesCtrFfi);
+      } finally {
+        cipher?.dispose();
+      }
+    });
+
+    test('aesCtr encrypt/decrypt round-trips at every accepted key length',
+        () async {
+      for (final int len in <int>[16, 24, 32]) {
+        final AESKey key = AESKey.generate(len);
+        final InitialisationVector iv = InitialisationVector.random(16);
+        final Uint8List plain = Uint8List.fromList(utf8.encode('hello ctr'));
+
+        final Uint8List encrypted =
+            await AtPqc.aesCtr(key).encrypt(plain, iv: iv);
+        expect(await AtPqc.aesCtr(key).decrypt(encrypted, iv: iv), plain,
+            reason: '${len * 8}-bit key failed to round-trip');
+      }
+    });
+
+    test('aesCtr agrees byte-for-byte with the pure-Dart path', () async {
+      final AESKey key = AESKey.generate(32);
+      final InitialisationVector iv = InitialisationVector.random(16);
+      final Uint8List plain = Uint8List.fromList(utf8.encode('wire parity'));
+
+      expect(await AtPqc.aesCtr(key).encrypt(plain, iv: iv),
+          await AESEncryptionAlgo(key).encrypt(plain, iv: iv),
+          reason: 'whichever backend this host resolves, its output is what '
+              'the other end of a connection has to be able to read');
     });
 
     test('aesGcm256 encrypt/decrypt round-trip', () async {
