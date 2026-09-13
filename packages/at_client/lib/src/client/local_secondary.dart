@@ -1,3 +1,4 @@
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'dart:async';
 import 'dart:convert';
 
@@ -868,16 +869,22 @@ class LocalSecondary implements Secondary {
     return _keySourceKeys;
   }
 
-  /// The keystore's PKAM private key.
+  /// The APKAM keypair the key source holds for this client's enrollment,
+  /// or null when it holds none.
   ///
-  /// NOTE: the key source is deliberately not a tier here, unlike the
-  /// encryption getters below. `AtKeys.authenticationKeyPairFor` refuses an
-  /// enrollment whose typed material names an algorithm this build cannot
-  /// sign with, and falling through that refusal to the keystore is the exact
-  /// thing it exists to prevent — the keystore holds whichever credential was
-  /// written there, which on a retrofitted keyfile is another enrollment's.
-  /// A caller wanting the APKAM keypair asks `AtKeys` for it directly.
+  /// NOTE: through `authenticationKeyPairFor`, which REFUSES a keypair filed
+  /// under an algorithm this build cannot sign with, and that refusal is
+  /// not fallen through to the keystore: the keystore holds whichever
+  /// credential was written there, which on a retrofitted keyfile is another
+  /// enrollment's.
+  Future<({SigningAlgoType algorithm, String publicKey, String privateKey})?>
+      _keySourceApkam() async => (await _keysFromSource())
+          ?.authenticationKeyPairFor(_atClient.enrollmentId);
+
+  /// The PKAM private key: the key source's for this enrollment, else the
+  /// keystore's.
   Future<String?> getPkamPrivateKey() async =>
+      (await _keySourceApkam())?.privateKey ??
       (await keyStore!.get(AtConstants.atPkamPrivateKey))?.data;
 
   /// The atSign's encryption private key: the key source's, else the
@@ -892,9 +899,10 @@ class LocalSecondary implements Secondary {
   @Deprecated("Use getPkamPublicKey")
   Future<String?> getPublicKey() => getPkamPublicKey();
 
-  /// The keystore's PKAM public key. The key source is not a tier, for the
-  /// reason [getPkamPrivateKey] gives.
+  /// The PKAM public key: the key source's for this enrollment, else the
+  /// keystore's.
   Future<String?> getPkamPublicKey() async =>
+      (await _keySourceApkam())?.publicKey ??
       (await keyStore!.get(AtConstants.atPkamPublicKey))?.data;
 
   /// [atSign]'s encryption public key: the key source's, else the

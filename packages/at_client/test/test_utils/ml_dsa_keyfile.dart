@@ -131,7 +131,7 @@ Future<InMemoryAtKeysIo> keyfileHolding(
         publicKey: apkamKeyPair.atPublicKey.publicKey,
         privateKey: apkamKeyPair.atPrivateKey.privateKey);
   }
-  await target.write(atSign, keys);
+  await target.flush(atSign.toAtsign(), keys);
   return target;
 }
 

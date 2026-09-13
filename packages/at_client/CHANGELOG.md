@@ -37,8 +37,14 @@
 - `LocalSecondary`'s key getters read the client's key source and its
   keystore, and no longer the client's `AtChops`: a client built from an
   `AtChops` alone reads the keys its store holds, which is what onboarding
-  writes there. Keyfile material is read and written through at_auth's
+  writes there. The PKAM getters ask the key source for the client's
+  enrollment through `authenticationKeyPairFor`, so a keypair filed under
+  an algorithm this build cannot sign with is refused rather than read from
+  the keystore. Keyfile material is read and written through at_auth's
   accessors and `fileLegacyMaterial`.
+- fix: a public `put` on a client holding no encryption private key is
+  refused as "Failed to sign the public data", not with the keystore's
+  record name.
 - fix: a key named like the app's namespace gets the namespace appended.
 - fix: `stop()` closes the connection state before it closes the services
   and the remote, so a request the stop itself fails is not recorded as the
