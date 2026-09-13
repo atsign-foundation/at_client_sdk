@@ -55,11 +55,11 @@ void main() {
     await activateThroughCli(atSign, preference());
 
     final keys = await FileAtKeysIo(filePath: (_) => keysFilePath).read(atSign);
-    final enrollmentId = keys.enrollmentId;
+    final enrollmentId = keys.storedEnrollmentId;
     expect(enrollmentId, isNotEmpty);
 
     // --- 1. the APKAM is ML-DSA, and it is what authenticates --------------
-    expect(keys.apkamPublicKey, isNull,
+    expect(keys.authenticationKeyPairFor(null), isNull,
         reason: 'a PQ-native keyfile keeps its APKAM in the typed section, so '
             'a reader that cannot handle that fails loudly rather than '
             'signing an ML-DSA key with the RSA routine');
@@ -146,7 +146,7 @@ void main() {
     expect((entries.first as Map)['alg'], 'mldsa65');
 
     // --- and legacy material is still cut and published, BY DEFAULT --------
-    expect(keys.defaultEncryptionPublicKey, isNotNull);
+    expect(keys.encryptionKeyPair, isNotNull);
     final publicKey = await client
         .getRemoteSecondary()!
         .executeCommand('plookup:publickey$atSign\n', auth: true);
@@ -154,7 +154,7 @@ void main() {
     // public:publickey already installed, so a presence check would pass on
     // provisioning state even if the activation had published nothing.
     expect(publicKey?.replaceFirst('data:', '').trim(),
-        keys.defaultEncryptionPublicKey.toString(),
+        keys.encryptionKeyPair!.atPublicKey.publicKey,
         reason: 'a legacy peer must still be able to reach this atSign, and '
             'the key it finds has to be the one this atSign holds the private '
             'half of');
@@ -190,7 +190,7 @@ void main() {
 
     final keys =
         await FileAtKeysIo(filePath: (_) => legacyKeysFile).read(legacyAtSign);
-    expect(keys.apkamPublicKey, isNotNull,
+    expect(keys.authenticationKeyPairFor(null), isNotNull,
         reason: 'a legacy activation keeps its APKAM in the flat fields, '
             'which is what makes it the rsa2048 arm');
 

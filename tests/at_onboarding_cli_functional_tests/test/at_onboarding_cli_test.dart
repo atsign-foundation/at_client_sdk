@@ -30,9 +30,12 @@ void main() {
     if (keysCreatedMap.containsKey(atSign)) {
       return;
     }
-    var atLookup =
-        AtLookupImpl(atSign, 'vip.ve.atsign.zone', virtualenvRootPort);
-    await atLookup.cramAuthenticate(at_demos.cramKeyMap[atSign]!);
+    // CRAM is the authenticator; the first command that needs it runs it.
+    final atLookup = secureSocketLookUps()(
+        atSign: atSign,
+        rootDomain: AtRootDomain('vip.ve.atsign.zone', virtualenvRootPort),
+        authenticator:
+            authenticatorForCramSecret(atSign, at_demos.cramKeyMap[atSign]!));
     var command =
         'update:privatekey:at_pkam_publickey ${at_demos.pkamPublicKeyMap[atSign]}\n';
     var response = await atLookup.executeCommand(command, auth: true);
