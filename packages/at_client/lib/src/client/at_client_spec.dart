@@ -144,17 +144,13 @@ abstract class AtClient {
 
   AtClientPreference? getPreferences();
 
-  /// Whether this client has been stopped via `AtClientManager`.
+  /// Whether [stop] has run.
   ///
   /// Once true, this instance's background services — the keystore-event
-  /// timers, the data-event stream, and the sync and notification services —
-  /// have been torn down, so it does no work of its own until it is resumed.
-  ///
-  /// ⚠️ **A stopped instance is NOT removed from the internal cache.** A later
-  /// `AtClientManager.setCurrentAtSign` for the same atSign hands back THIS
-  /// instance, clears the flag, and wires fresh services onto it against the
-  /// still-open local keystore, rather than building a new one with the
-  /// preference it was passed.
+  /// timers, the data-event stream, the sync and notification services and
+  /// the connection — are torn down, it holds no storage, and it cannot be
+  /// restarted: the atSign is opened again with `Atsign.open`, which builds
+  /// a new client.
   bool get isStopped;
 
   /// Whether this client has reached its atServer: online, offline or
@@ -162,18 +158,22 @@ abstract class AtClient {
   /// again now.
   AtConnection get connection;
 
-  /// Stops all background services for this atSign: cancels the
-  /// keystore-event timers, closes the data-event stream, and stops the sync
-  /// and notification services and the remote secondary connection.
+  /// Stops everything this client runs: the keystore-event timers, the
+  /// data-event stream, the sync and notification services and the
+  /// connection, whose state ends as `offline(stopped)`. The client's claim
+  /// on its storage is released; storage built with `closedByClient: true`,
+  /// and the Hive store opened from `preference.hiveStoragePath`, is closed,
+  /// while storage the caller supplied otherwise stays open for the caller
+  /// to close.
   ///
-  /// Does not drain: a sync round in flight is abandoned at its next step and
-  /// its work retries on the next sync. An app that wants its pending writes
-  /// on the atServer first awaits `SyncService.waitUntilCaughtUp`.
+  /// Does not drain: a sync round in flight is abandoned at its next step,
+  /// and what it had not pushed stays queued for the next client on this
+  /// store. An app that wants its writes on the atServer first waits until
+  /// `syncService.isInSync()` answers true.
   ///
-  /// Local storage is NOT closed. The instance remains in the internal cache
-  /// and reuses its still-open local keystore when resumed by calling
-  /// `AtClientManager.setCurrentAtSign` for the same atSign, which wires up
-  /// fresh services against the same store.
+  /// A stopped client cannot be restarted, and the atSign can be opened
+  /// again at once: the refusal of a second live client for the same
+  /// principal or storage ends with this call.
   Future<void> stop();
 
   /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key

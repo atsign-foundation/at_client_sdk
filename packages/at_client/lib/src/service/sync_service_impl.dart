@@ -1604,7 +1604,7 @@ class SyncServiceImpl implements SyncService {
   /// no-op.
   /// Stops without draining. A round in flight ends at its next step; what it
   /// had not pushed stays queued for the next sync. Callers wanting the queue
-  /// empty first await `waitUntilCaughtUp`.
+  /// empty first wait until [isInSync] answers true.
   Future<void> stop() async {
     if (isStopped) {
       _logger.finer('stop() called, but service is already stopped. Ignoring.');

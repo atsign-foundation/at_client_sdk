@@ -1,5 +1,15 @@
 # at_auth
 
+> **Important: applications are not meant to use `at_auth` directly.**
+> Everything an app needs — onboarding, login, enrollment, the connection
+> state — is on [`at_client`](../at_client)'s `Atsign` verbs (`open`,
+> `activate`, `enroll`), behind [`at_client_flutter`](../at_client_flutter)'s
+> dialogs for Flutter apps and [`at_onboarding_cli`](../at_onboarding_cli)'s
+> commands for CLI and server apps. `at_auth` is the protocol layer those
+> build on: its API changes with the protocol and carries no compatibility
+> promise to applications, and a 4.0 removed every type an app once held.
+> Add `at_client` or `at_client_flutter` to your `pubspec.yaml`, not this.
+
 Platform-neutral core of **activation**, **authentication** and **APKAM
 enrollment** for the Atsign Protocol: the key material, the `.atKeys` store
 and the handshakes. Applications reach it through
