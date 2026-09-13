@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/no_op_services.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 bool wrappedDecryptSucceeds(
     {required String cipherText,
@@ -47,10 +48,6 @@ void main() {
     RSAKeypair bobsRSAKeyPair = RSAKeypair.fromRandom();
     RSAKeypair victorsRSAKeyPair = RSAKeypair.fromRandom();
 
-    AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        alicesRSAKeyPair.publicKey.toString(),
-        alicesRSAKeyPair.privateKey.toString());
-
     var selfEncryptionKey = EncryptionUtil.generateAESKey();
 
     var bobSharedKey = EncryptionUtil.generateAESKey();
@@ -86,13 +83,16 @@ void main() {
           mockSecondaryAddressFinder;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((invocation) async => SecondaryAddress('testing', 12));
-      AtChopsKeys atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, null);
-      atChopsKeys.selfEncryptionKey = AESKey(selfEncryptionKey);
-      AtChops atChops = AtChopsImpl(atChopsKeys);
-
+      // NOTE: a signer object the client insists on holding; nothing here
+      // signs, and the key source carries the material that is read.
       atClient = (await AtClientImpl.create('@alice', 'gary', fullStackPrefs,
           remoteSecondary: mockRemoteSecondary,
-          atChops: atChops)) as AtClientImpl;
+          atChops: AtChopsImpl(AtChopsKeys.create(null, null)),
+          atKeysIo: await keyfileHolding('@alice',
+              encryptionKeyPair: RsaKeyPair.create(
+                  alicesRSAKeyPair.publicKey.toString(),
+                  alicesRSAKeyPair.privateKey.toString()),
+              selfEncryptionKey: selfEncryptionKey))) as AtClientImpl;
       localStore = atClient.getLocalSecondary()!.keyStore!;
       localSecondary = atClient.getLocalSecondary()!;
       atClient.syncService = NoOpSyncService();

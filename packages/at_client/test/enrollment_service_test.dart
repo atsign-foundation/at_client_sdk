@@ -11,8 +11,8 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-import 'test_utils/test_utils.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 /// Records the decision at_client hands down to at_auth, which is where the
 /// choice between minting a symmetric key and passing the enrollee's own one
@@ -34,11 +34,14 @@ void main() {
   String currentAtSign = '@alice';
   String sharedWithAtSign = '@bob';
   late AtClient atClient;
+  late RsaKeyPair encryptionKeyPair;
+  late String selfEncryptionKey;
   MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
   String enrollmentId = 'abc123';
 
   setUpAll(() async {
-    AtChops atChops = await TestUtils.getAtChops();
+    encryptionKeyPair = RsaKeyPair.generate();
+    selfEncryptionKey = AESKey.generate(32).key;
     atClient = await AtClientImpl.create(
         currentAtSign,
         'wavi',
@@ -46,7 +49,11 @@ void main() {
           ..hiveStoragePath = 'test/hive'
           ..commitLogPath = 'test/hive/commit',
         enrollmentId: enrollmentId,
-        atChops: atChops,
+        atKeysIo: await keyfileHolding(currentAtSign,
+            encryptionKeyPair: encryptionKeyPair,
+            selfEncryptionKey: selfEncryptionKey,
+            enrollmentId: enrollmentId,
+            apkamKeyPair: RsaKeyPair.generate()),
         remoteSecondary: mockRemoteSecondary);
     atClient.syncService = MockSyncService();
 
@@ -58,37 +65,29 @@ void main() {
               'namespace': {'wavi': 'rw'},
             })}');
 
-    AtEncryptionResult? atEncryptionResult = await atClient.atChops
-        ?.encryptString(atChops.atChopsKeys.selfEncryptionKey!.key,
-            EncryptionKeyType.rsa2048);
+    final encryptedSelfKey = EncryptionUtil.encryptKey(
+        selfEncryptionKey, encryptionKeyPair.atPublicKey.publicKey);
 
     // Store "currentAtSign" encrypted symmetric key : shared_key.bob@alice
     await atClient.getLocalSecondary()?.keyStore?.put(
-        'shared_key.bob$currentAtSign',
-        AtData()..data = atEncryptionResult?.result);
+        'shared_key.bob$currentAtSign', AtData()..data = encryptedSelfKey);
 
     // Store the "sharedWith" atsign's encrypted shared key: @bob:shared_key@alice
     await atClient.getLocalSecondary()?.keyStore?.put(
         '$sharedWithAtSign:shared_key$currentAtSign',
-        AtData()..data = atEncryptionResult?.result);
+        AtData()..data = encryptedSelfKey);
     // Store the "sharedWith" atSign's encryption public key cached in current atSign
     await atClient.getLocalSecondary()?.keyStore?.put(
         'cached:public:publickey$sharedWithAtSign',
-        AtData()
-          ..data =
-              atChops.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey);
+        AtData()..data = encryptionKeyPair.atPublicKey.publicKey);
 
     // Store cached shared_key
     await atClient.getLocalSecondary()?.keyStore?.put(
-        'cached:@alice:shared_key@bob',
-        AtData()..data = atEncryptionResult?.result);
+        'cached:@alice:shared_key@bob', AtData()..data = encryptedSelfKey);
 
     // Store cached shared_key
-    await atClient.getLocalSecondary()?.keyStore?.put(
-        'public:publickey@alice',
-        AtData()
-          ..data =
-              atChops.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey);
+    await atClient.getLocalSecondary()?.keyStore?.put('public:publickey@alice',
+        AtData()..data = encryptionKeyPair.atPublicKey.publicKey);
   });
 
   group('A group of tests related to apkam/enrollments', () {
@@ -434,14 +433,13 @@ void main() {
     test(
         'A test to verify get operation is successful for the authorized namespace',
         () async {
-      AtEncryptionResult? encryptedValue = await atClient.atChops
-          ?.encryptString('1234', EncryptionKeyType.aes256,
-              iv: InitialisationVector.legacy());
+      final encryptedValue =
+          EncryptionUtil.encryptValue('1234', selfEncryptionKey);
       FakeLookupVerbBuilder fakeLookupVerbBuilder = FakeLookupVerbBuilder();
       registerFallbackValue(fakeLookupVerbBuilder);
       when(() => mockRemoteSecondary.executeVerb(any(that: LookupKeyMatcher())))
           .thenAnswer((_) => Future.value('data:${jsonEncode({
-                    'data': encryptedValue?.result,
+                    'data': encryptedValue,
                     'key': '$currentAtSign:phone.wavi$sharedWithAtSign'
                   })}'));
       AtKey atKey = AtKey()

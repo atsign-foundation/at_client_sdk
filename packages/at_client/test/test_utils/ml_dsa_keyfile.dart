@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show RsaKeyPair;
 import 'package:at_commons/at_commons.dart';
 
 /// The self-encryption key [typedKeyfile] files unless told otherwise.
@@ -73,6 +74,65 @@ Future<InMemoryAtKeysIo> typedKeyfile(
   final io = InMemoryAtKeysIo();
   await io.write(atSign, keys);
   return io;
+}
+
+/// Files REAL material for [atSign] as typed keys — its RSA
+/// [encryptionKeyPair], its [selfEncryptionKey], and an rsa2048 APKAM
+/// [apkamKeyPair] for [enrollmentId] when both are given — into [io], or a
+/// fresh in-memory source, and returns it.
+///
+/// The typed form of what a test used to hand a client as an `AtChops`: a
+/// client built on the result encrypts, decrypts and signs with these keys,
+/// and nothing here names a deprecated member. Material already in [io] is
+/// kept.
+Future<InMemoryAtKeysIo> keyfileHolding(
+  String atSign, {
+  RsaKeyPair? encryptionKeyPair,
+  String? selfEncryptionKey,
+  String? enrollmentId,
+  RsaKeyPair? apkamKeyPair,
+  InMemoryAtKeysIo? io,
+}) async {
+  final target = io ?? InMemoryAtKeysIo();
+  AtKeys keys;
+  try {
+    keys = await target.read(atSign);
+  } on Object {
+    keys = AtKeys();
+  }
+  final now = DateTime.now().toUtc();
+  if (encryptionKeyPair != null) {
+    keys
+      ..addKey(CryptographicMaterial(
+          keyId: 'enc:rsa2048:1',
+          role: CryptographicMaterialRole.publicEncryption,
+          algorithm: CryptographicMaterialAlgorithm.rsa2048,
+          bytes: AtBytes.fromString(encryptionKeyPair.atPublicKey.publicKey),
+          createdAt: now))
+      ..addKey(CryptographicMaterial(
+          keyId: 'enc:rsa2048:1',
+          role: CryptographicMaterialRole.privateDecryption,
+          algorithm: CryptographicMaterialAlgorithm.rsa2048,
+          bytes: AtBytes.fromString(encryptionKeyPair.atPrivateKey.privateKey),
+          createdAt: now));
+  }
+  if (selfEncryptionKey != null) {
+    keys.addKey(CryptographicMaterial(
+        keyId: 'self:aes256:1',
+        role: CryptographicMaterialRole.symmetricEncryption,
+        algorithm: CryptographicMaterialAlgorithm.aes256,
+        bytes: AtBytes.fromString(selfEncryptionKey),
+        createdAt: now));
+  }
+  if (enrollmentId != null && apkamKeyPair != null) {
+    keys.fileApkamMaterial(
+        enrollmentId: enrollmentId,
+        algorithm: CryptographicMaterialAlgorithm.rsa2048,
+        publicKey: apkamKeyPair.atPublicKey.publicKey,
+        privateKey: apkamKeyPair.atPrivateKey.privateKey);
+  }
+  await target.write(atSign, keys);
+  return target;
 }
 
 /// A keyfile whose [enrollmentId] has active typed ML-DSA **authentication**

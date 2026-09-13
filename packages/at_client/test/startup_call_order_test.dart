@@ -42,6 +42,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/recording_remote.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -151,8 +152,9 @@ void main() {
       'anchors before the privileged sweep', () async {
     // NOTE: the held root private's public half IS the published root, which
     // is what gives every step work.
-    final inner = InMemoryAtKeysIo();
-    await inner.write(atSign, AtKeys());
+    final inner = await keyfileHolding(atSign,
+        encryptionKeyPair: RsaKeyPair.generate(),
+        selfEncryptionKey: AESKey.generate(32).key);
     final pair = await MlDsa65PureDartAlgo().generateKeyPair();
     await PqSigningRoot(MockAtClient(), keysIo: inner)
         .store(atSign, pair.secretKey);
@@ -206,8 +208,9 @@ void main() {
   test(
       'reconciliation gates the offer: an orphaned private is retired, '
       'never offered or anchored', () async {
-    final inner = InMemoryAtKeysIo();
-    await inner.write(atSign, AtKeys());
+    final inner = await keyfileHolding(atSign,
+        encryptionKeyPair: RsaKeyPair.generate(),
+        selfEncryptionKey: AESKey.generate(32).key);
     final held = await MlDsa65PureDartAlgo().generateKeyPair();
     final published = await MlDsa65PureDartAlgo().generateKeyPair();
     await PqSigningRoot(MockAtClient(), keysIo: inner)

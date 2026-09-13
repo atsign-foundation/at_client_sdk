@@ -24,6 +24,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/recording_remote.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -57,8 +58,9 @@ void main() {
 
   test('the seeded private is in the keyfile by the time peers can seal to it',
       () async {
-    final inner = InMemoryAtKeysIo();
-    await inner.write(atSign, AtKeys());
+    final inner = await keyfileHolding(atSign,
+        encryptionKeyPair: RsaKeyPair.generate(),
+        selfEncryptionKey: AESKey.generate(32).key);
 
     await AtClientImpl.create(
       atSign,
