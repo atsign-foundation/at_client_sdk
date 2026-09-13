@@ -430,6 +430,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       } else if (builder is EnrollVerbBuilder) {
         verbResult = await _enroll(builder);
       }
+    } on ConnectionInvalidException catch (e) {
+      // Already logged by the listener that failed the read; a connection
+      // closed underneath a request is not an error in the verb.
+      throw AtLookUpException(
+          AtLookUpExceptionUtil.getErrorCode(e), e.toString());
     } on Exception catch (e) {
       logger.severe('Error in remote verb execution ${e.toString()}');
       var errorCode = AtLookUpExceptionUtil.getErrorCode(e);
@@ -827,6 +832,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         await _sendCommand(command);
         var result = await messageListener.read();
         return result;
+      } on ConnectionInvalidException {
+        // Already logged by the listener that failed the read.
+        rethrow;
       } on Exception catch (e) {
         logger.severe('Exception in sending to server, ${e.toString()}');
         rethrow;
@@ -902,7 +910,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // `messageListener` is `late` and assigned in [createConnection] - which is
     // also where `_connection` is assigned, so a non-null connection means
     // there is a listener to tell.
-    messageListener.abortPendingRequests();
+    messageListener.abortPendingRequests(closedLocally: true);
     await connection.close();
   }
 

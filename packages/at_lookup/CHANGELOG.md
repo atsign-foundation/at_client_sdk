@@ -1,5 +1,11 @@
 ## 3.7.0-rc2
 
+- fix: a request in flight when this client closes the connection fails with
+  `ConnectionInvalidException('The connection was closed by this client
+  before a response arrived')`, where a connection the far end dropped still
+  reads `The connection went away before a response arrived`. Either is
+  logged once, at `info`, by the listener that failed the read; at_lookup no
+  longer logs it twice more at `severe` as an error in sending to the server.
 - fix: `createConnection` is single-flight. Two callers racing through it —
   a `pkamAuthenticate` beside a verb's own authentication — each opened a
   socket, the second replacing the first while the handshake ran on the
