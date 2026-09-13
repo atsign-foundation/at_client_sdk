@@ -1,5 +1,27 @@
 # Changelog — at_client_skills
 
+## 1.4.0 — 2026-09-13
+
+- The auth flows follow at_client_flutter 2.0: every dialog hands back the
+  `AtClient` it opened, the app owns it, and nothing imports `at_auth`.
+  `AtAuthRequest`, `AuthResponse`, `_setupAtClient` and
+  `AtClientManager.setCurrentAtSign` are gone from the skill (rewritten
+  `references/05-flutter-auth.md`; `SKILL.md` §10).
+- New: AtClient lifecycle — the `Atsign` verbs (`open`, `activate`, `enroll`,
+  `resumeEnrollment`), the platform bundle a client is built from (`keys:`,
+  `storage:` and `lookUps:`, the `AtLookUpFactory` that builds every
+  connection the client opens), the connection state (`client.connection`:
+  online / offline / refused, the causes, `awaitOnline`), the sync and
+  notification services' start and stop, `AtClientManager.use`, and what
+  `stop()` does and does not do (new `references/15-client-lifecycle.md`;
+  `SKILL.md` §11; later sections renumbered).
+- The package map, the headless-agent and sync references and the
+  deprecation guide drop `at_auth` and `setCurrentAtSign`, and name
+  `hiveStoragePath` / `commitLogPath` as deprecated in favour of a storage
+  object.
+- Evals: the two auth evals follow the new flows; two new evals cover
+  logout / switching and the connection state.
+
 ## 1.3.0 — 2026-07-31
 
 - Document RPC between atsigns — `AtRpc` / `AtRpcClient` request/response

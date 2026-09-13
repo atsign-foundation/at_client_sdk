@@ -107,6 +107,84 @@ summary is:
    compromised scoped key can only damage data in its granted
    namespaces.
 
+### In code: one import, four verbs
+
+`at_client` owns the whole of that lifecycle. An app holds an `AtKeysIo`
+(a `.atKeys` file, the platform keychain, or memory) and asks the atSign
+for a client; every verb hands back an `AtClient` the app owns and stops.
+
+```dart
+import 'package:at_client/at_client.dart';
+
+// Log in: a client on keys the app already holds. It comes back online,
+// offline or refused, and says which; offline it serves its local store.
+final client = await Atsign('@alice').open(
+    keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
+    preference: AtClientPreference()..namespace = 'todos');
+client.connection.current;                  // online | offline | refused
+client.connection.changes.listen((state) => print(state));
+await client.connection.awaitOnline();      // wait, with a budget
+
+// Onboard: activate a newly registered atSign with its CRAM secret. The
+// keys it mints land in `keys`, and the client opens on them.
+final owner = await Atsign('@alice').activate(
+    cramSecret: secret, keys: keys, preference: preference);
+
+// Enroll: ask the atSign's owner to approve this app. The request is filed
+// in `keys` as pending, so a restart resumes it rather than repeating it.
+final pending = await Atsign('@alice').enroll(otp: otp, app: 'todos',
+    device: 'phone', namespaces: {'todos': 'rw'}, keys: keys,
+    preference: preference);
+final enrolled = await pending.client(preference);      // waits for approval
+final resumed = await Atsign('@alice').resumeEnrollment(app: 'todos',
+    device: 'phone', keys: keys, preference: preference);
+
+// Approve, from an enrolled client: the atSign's roster and passcodes.
+final requests = await owner.enrollments.pending();
+await owner.enrollments.approve(requests.first.enrollmentId!);
+owner.enrollments.requests.listen((request) => print(request.appName));
+final passcode = await owner.enrollments.otp();
+
+// An app that keeps one current client for its screens makes it so.
+AtClientManager.getInstance().use(client);
+```
+
+Three things are the platform's to supply, and every verb takes them the
+same way: **`keys:`**, where the atSign's keys live (`FileAtKeysIo`, the
+Flutter keychain, memory); **`storage:`**, the client's local store
+(`HiveAtClientStorage`, or a bundle of your own); and **`lookUps:`**, how
+the client reaches its atServer. The last is an `AtLookUpFactory`, a function
+that builds every connection the client opens - its own, its sync's, its
+monitor's - so a transport or a proxy convention is chosen once:
+
+```dart
+final client = await Atsign('@alice').open(
+    keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
+    storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
+    preference: AtClientPreference()..namespace = 'todos',
+    lookUps: secureSocketLookUps(
+        config: SecureSocketConfig()..pathToCerts = '/certs',
+        onConnect: (connection) => connection.sendSync('from:@alice\n')));
+```
+
+With no `lookUps`, connections are TLS on TCP with the defaults;
+`secureSocketLookUps` is that default, taking a `SecureSocketConfig` and an
+`onConnect` run on each new connection before anything else (a proxy that
+routes on `from:` is what that is for). A factory of your own can hand back
+any `AtLookUp`. The preference's `decryptPackets`, `pathToCerts` and
+`tlsKeysSavePath` are deprecated in favour of the factory's config.
+
+`Atsign.authenticatesAs(keys: ..., rootDomain: ...)` answers which
+enrollment a keys store authenticates as without building a client.
+Flutter apps get the same verbs behind dialogs in
+[`at_client_flutter`](../at_client_flutter); CLI apps get them behind
+[`at_onboarding_cli`](../at_onboarding_cli)'s commands and
+[`at_cli_commons`](../at_cli_commons)' `CLIBase`.
+
+`AtClientManager.setCurrentAtSign` and `fromAuthSession`, which built the
+current client for the caller, are deprecated and go in 4.0: build the
+client with a verb above and make it current with `use`.
+
 ## Collections
 
 For the common "CRUD on typed, shareable records" use case,
@@ -371,9 +449,120 @@ For compact examples of provider registration and per-write overrides, see
 [`test/put_request_test.dart`](test/put_request_test.dart). For notification
 provider selection, see
 [`test/notification_service_test.dart`](test/notification_service_test.dart).
-For storage and lazy-provider recovery behavior, see
-[`test/crypto_storage_test.dart`](test/crypto_storage_test.dart)
-and [`test/crypto_runtime_test.dart`](test/crypto_runtime_test.dart).
+For lazy-provider recovery behavior, see
+[`test/crypto_runtime_test.dart`](test/crypto_runtime_test.dart).
+
+## Post-quantum cryptography
+
+`at_client` can run every path an adversary could record today — data
+shared between atSigns, an atSign's own data, and the secrets an enrollment
+approval hands a new device — under post-quantum key establishment, and
+authenticate with a post-quantum signature. It is opt-in per client, through
+the preference's **posture**, which is fixed at construction:
+
+```dart
+final preference = AtClientPreference(posture: PqPosture.pqReady)
+  ..namespace = 'todos';
+```
+
+### The goals
+
+- **Close the harvest-now, decrypt-later hole.** Anything recorded off the
+  wire or off an atServer today — shared records, an atSign's own records,
+  and the secrets handed to a newly approved device — is established under
+  post-quantum key exchange, so a quantum computer later cannot open it.
+  Authentication moves to a post-quantum signature for the same reason.
+- **Lose nothing.** Every capability the SDK has — encrypt for another
+  atSign, encrypt for another client of your own atSign, enroll a device,
+  revoke one — works the same way under post-quantum keys.
+- **Every app upgrades on its own schedule.** No flag day. Each record
+  carries the id of the scheme that wrote it, a client keeps every older
+  scheme it ever read, and a writer only ever uses a scheme every reader of
+  that record supports. Upgrading adds read capability and takes nothing
+  away.
+- **Crypto-agility.** Algorithms are named, not assumed: the X-Wing hybrid
+  today, pure ML-KEM-1024 beside it, and whatever comes next drops in as
+  another provider without a migration of stored data.
+
+### The rollout ladder, and why it is a ladder
+
+The default posture moves one stage per major version of `at_client`. An
+app that names no posture rides the default; an app can name a later stage
+at any time, or name `legacy` to stay put.
+
+| `at_client` | Default posture      | A client that names no posture                                                                                  |
+| ----------- | -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 3.x         | `PqPosture.legacy`   | Byte-for-byte the pre-posture SDK: RSA authentication, legacy encryption, no post-quantum startup, reads no post-quantum data |
+| 4.x         | `PqPosture.pqReady`  | ML-DSA-65 authentication, publishes its key package and namespace keys, **reads** post-quantum data, still **writes** legacy so every peer can read it |
+| 5.x         | `PqPosture.pqActive` | Writes post-quantum by default and refuses a legacy write                                                       |
+
+The order follows from the one invariant above: a record may only be
+written in a scheme every reader of it supports. So the whole population of
+clients has to be *able to read* post-quantum data (`pqReady`) before any
+client *writes* it by default (`pqActive`), and the stage that adds the
+reading has to be rolled out before the stage that changes the writing. Two
+majors give every app one release to become a reader and another to become
+a writer, with the SDK's default carrying apps that never think about it.
+Legacy key material is still minted at every stage, because when an atSign
+can stop holding it is a question about every client of that atSign, not
+about one build.
+
+**You do not have to wait for 4.x or 5.x.** The stages are postures, and a
+posture is a construction-time choice, so a 3.x app names the stage it wants:
+
+```dart
+// Reads post-quantum data, authenticates with ML-DSA-65, writes legacy
+// until every reader of your namespaces has done the same.
+final ready = AtClientPreference(posture: PqPosture.pqReady)..namespace = 'todos';
+
+// Writes post-quantum by default and refuses legacy writes: for a
+// deployment whose every client already runs pqReady or later.
+final active = AtClientPreference(posture: PqPosture.pqActive)..namespace = 'todos';
+```
+
+That is the two-release model for an app that wants to lead: ship `pqReady`
+to all of its clients first, then ship `pqActive`. A posture is a floor for
+what a client drives, never a downgrade of what its atSign already holds.
+
+| Posture                      | Authentication                                                       | Data written                                    | Reads post-quantum data                                   |
+| ---------------------------- | -------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------- |
+| `PqPosture.legacy` (default) | RSA-2048 APKAM                                                       | legacy encryption                               | no: a record sealed to a namespace key is refused         |
+| `PqPosture.pqReady`          | ML-DSA-65 APKAM; publishes a key package and the atSign's namespace keys | legacy encryption, so pre-quantum peers read it | yes                                                       |
+| `PqPosture.pqActive`         | ML-DSA-65 APKAM and an ML-DSA-65 data signing key                    | post-quantum by default; legacy writes refused  | yes                                                       |
+
+What each posture switches on:
+
+- **The `nskey` data path.** Each namespace an atSign owns gets a
+  key-establishment keypair, published as an APKAM-signed advertisement
+  (`public:__nskey.<namespace>@<atSign>`). A writer establishes a content key
+  to the recipient's namespace key and encrypts the record with AES-256-GCM;
+  a reader that holds the namespace key's private half opens it. A sender
+  follows whatever the recipient advertised, ordered by
+  `AtClientPreference.sealsToKeyAlgorithms`. The X-Wing hybrid (ML-KEM-768 +
+  X25519) is the default; pure ML-KEM-1024 is selected with
+  `keyEstablishmentAlgorithms`, and every build opens both.
+- **Post-quantum enrollment.** Under `pqReady` or `pqActive`,
+  `Atsign.enroll` submits a request that advertises a key package, and the
+  approving client (`client.enrollments.approve`) seals the atSign's secrets
+  to it instead of wrapping them with RSA; `enroll(keyExchangeMode: ...)`
+  overrides that per request. A `legacy` client cannot approve such a
+  request and refuses before anything reaches the atServer.
+- **ML-DSA-65 authentication.** The enrollment's APKAM keypair is ML-DSA-65,
+  filed as typed material in the keys store while the flat legacy fields are
+  left as they were. A client whose posture asks for a stronger
+  authentication key than its enrollment holds re-enrolls itself at its
+  first start and comes up on the new enrollment. This needs an atServer
+  that verifies ML-DSA signatures; a `legacy` client makes no such demand.
+- **Signed advertisements and key packages.** Everything a peer relies on
+  is carried in a signed envelope and verified before use; the signing keys
+  chain to a per-atSign signing root that only fully privileged
+  enrollments hold.
+
+`pqActive` is for a deployment that controls every client of its
+namespaces and has seeded them: a destination with no published namespace
+key is refused rather than written with the legacy provider. The design,
+the acceptance catalogue and the decision log are under
+[`docs/projects/pq/`](../../docs/projects/pq/roadmap.md).
 
 ## Further reading
 

@@ -1,7 +1,7 @@
 # decisions.md — Rulings, measured findings & open questions
 
 **Status:** decision record (binding).
-**Scope:** the rulings D-1..D-9 that govern the implementation-neutral `AtClient`
+**Scope:** the rulings D-1..D-16 that govern the implementation-neutral `AtClient`
 work, the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
@@ -242,6 +242,285 @@ surface is read-compatible with typed Dart peers but not write-compatible.** See
 outright: it would force every JS app into a Dart build step, destroying the
 `npm install` story this entire project exists to deliver.
 
+### D-12 — Client storage is one injected bundle, and it owns the sync queue (2026-09-05)
+
+`at_client` gains a storage abstraction of its own: a single object owning **both** the
+local keystore and the sync queue. This supersedes [§2.3](design.md#23-the-sync-queue)'s
+design of a separate spec interface for the queue, and S3 with it. Three implementations
+are in scope — the Hive-backed default, a SQLite-backed one, and an in-memory one that
+touches no disk at all.
+
+The abstraction is `at_client`'s, not an extension of `at_persistence_secondary_server`'s
+`AtPersistenceBundle`. That package is owned by `at_server` and reaches this tree through
+a `dependency_overrides` git ref, so extending it would mean a coordinated cross-repo
+change and a publish before `at_client` could depend on the result.
+
+**Why one bundle rather than two interfaces.** The keystore and the queue choose their
+storage independently today, under two different keys, and neither key is the principal.
+The keystore goes through `StorageManager` to `_factory.initialize(atSign, path)`; the
+queue reads `preference.hiveStoragePath` and, when it is null, opens on the **global**
+Hive instance under a box named from the atSign alone. The null case is exactly the
+injected-keystore case, so a caller that injects a store today gets an isolated keystore
+and a silently *shared* queue — and an "in-memory" store that still writes a Hive box to
+disk. One owner makes both unrepresentable rather than guarded against.
+
+**Ownership and lifetime.** The bundle refuses a second opener: ownership is enforced
+inside the bundle rather than by a registry `at_client` keeps, so a backend cannot forget
+the check and bundles `at_client` never sees are covered too. The claim is released when
+the client closes, and `stop()` is what releases it.
+
+**What this resolves.** [OQ-3](#5-open-questions), for storage: the capability hangs off a
+factory rather than `AtClientPreference`. `AtClientPreference.hiveStoragePath` is
+deprecated in this major, its successor being a bundle injected through a new static
+factory on `AtClient` — which builds *and* wires, closing by construction the hole where a
+client came back with its service getters throwing. Deprecating `AtClientManager` is the
+direction of travel; where its `AtSignChangeListener` capability goes is deferred, because
+that capability exists only to announce that a global current atSign changed.
+
+**Surface (ruled 2026-09-05).** The owner of a claim is the client object, compared by
+identity — not the instance key, which for a legacy client is the bare atSign and so cannot
+tell two legacy clients of one atSign apart. Whether a release closes the storage is the
+bundle's own `closedByClient` — false by default, true for the store a client builds for
+itself (X6 put the flag on the bundle on 2026-09-06; the fix-forward of 2026-09-07 made the
+client-built store such a bundle too, and this read "owned storage is closed on release;
+injected storage is only detached, the client knowing which it has" until then). After
+detach, only the same
+principal may re-attach until `clear()` runs — the bundle remembers who held it last, so a
+different enrollment cannot inherit records it cannot decrypt and pushes it cannot make.
+A deliberate hand-over is `forgetPrincipal()`, which lifts the last-holder guard while keeping
+every record;
+`clear()` empties keystore and queue together and forgets the principal too, so a
+half-cleared store is unrepresentable and getting past the guard never costs the records. The surface is in
+[`design.md`](design.md#22-storage-bootstrap) §2.2.
+
+**Cost, stated honestly.** `stop()` is the atSign-switch-away path, so releasing storage
+there means switching back reopens a cold store and pulls again. That is accepted. It is
+not free: a cold store is precisely the condition under which a local-first write followed
+by a read routed to the atServer loses the race, which is how this was found. `start()`
+does not rebuild what `stop()` nulls, so a stopped client must never be handed back. The
+manager's same-atSign short-circuit already refuses one, and nothing else in production
+reaches a cached client; X1 pins that guard before X4 changes `stop()`, since the guard is
+what a released client's safety then rests on. (Amended 2026-09-05: first written as "two
+paths hand back a stopped client" — one was already guarded, the other has no caller.)
+
+### D-13 — Local storage is isolated per (atSign, enrollmentId), not per atSign (2026-09-05)
+
+A client's local keystore and sync queue are keyed by the **enrollment**, not by the
+atSign alone. Two enrollments of one atSign on one device get **separate** stores.
+
+**Why.** An enrollment holds key material only for its granted namespaces; a scoped
+enrollment and a differently-scoped one on the same atSign hold different secrets and see
+different records. Sharing a store between them would hand one enrollment records and
+pending writes belonging to another's scope — the very boundary
+[D-12](#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)'s
+claim exists to keep. Storage granularity must match the enrolled principal — the
+`(atSign, enrollmentId)` pair the instance cache keys on — not the atSign. (This is a
+different sense of "principal" from D-12's, which names the *claim holder* as the client
+OBJECT by identity; here it is the *storage-identity* granularity. Two senses, one word —
+qualify at each use.)
+
+**The defect this names.** Today storage is keyed by the atSign alone, a survival of the
+one-client-per-atSign era: the keystore box is `sha256(atSign)`, the sync-queue box is
+`syncqueue_<sha256(atSign)>`, and `AtClientImpl` takes `preference.hiveStoragePath`
+verbatim — nothing derives a per-enrollment storage path. Two enrollments handed the same
+path therefore share one box; on the global Hive instance they are literally one store.
+`HiveInstances.forPath(path)` isolates by *path*, but nothing makes two enrollments *use*
+different paths, and the per-atSign "refuse the second client" guard built during X4
+merely hid the collision rather than isolating the data.
+
+**Resolved — the isolation key.** See
+[D-14](#d-14--the-storage-isolation-design-2026-09-05). Neither route below was taken: both
+changed production's on-disk layout for a case that does not occur in production (one
+enrollment per atSign per process). Production keeps one storage path per atSign, and the
+per-enrollment discriminator is *test-supplied* where a single process stands in for several
+enrollments, with a per-location guard catching accidental sharing. The declined routes were a per-enrollment subdirectory
+(`<hiveStoragePath>/<enrollmentId>`) and the enrollment in the box name
+(`sha(atSign|enrollmentId)`, cross-repo).
+
+**Consequences for X4.** The release semantics (`stop()` releases storage) are sound and
+become *safe* once storage is per-enrollment: no sibling shares a client's box, so closing
+on release cannot pull the store out from under another enrollment or an in-flight sync
+round. The per-atSign guard comes out — it is the wrong shape, replaced by
+[D-14](#d-14--the-storage-isolation-design-2026-09-05)'s per-location guard. PR #2208 (the
+release half) was paused behind this ruling; its release code was kept, its guard reworked.
+
+### D-14 — The storage-isolation design (2026-09-05)
+
+Resolves [D-13](#d-13--local-storage-is-isolated-per-atsign-enrollmentid-not-per-atsign-2026-09-05)'s
+open isolation key. Two facts ground it: `HiveInstances.forPath` (pinned upstream, #2776)
+opens the keystore on a distinct instance per canonical path, and the spike's `AtSyncQueue`
+opens the queue on `forPath` too — so two clients of one atSign at **different storage
+paths** already get separate stores today. What D-13 named as the defect is only that
+nothing makes two enrollments *use* different paths, and nothing catches it when they don't.
+
+⚠️ **Two words, kept distinct throughout, because they are not the same thing.** A
+**storage path** is where an impl's files sit — the value it is constructed with. A
+**location** is the identity of the store those files hold: the path *plus* everything else
+that decides which records resolve there, defined by the per-location guard below. One
+path can hold two locations, which is why a directory-only key was wrong.
+
+**1 — Production unchanged; the discriminator is test-supplied.** `at_client` never derives
+a per-enrollment path. A production client hands one storage path per atSign, exactly as
+today — no migration, no cross-repo change, no reliance on `enrollmentId` (which is null when
+storage opens: `_init` builds the store before the id settles). Isolation per **enrolled
+principal** (D-13's sense) holds in production because two enrollments of one atSign are two
+OS processes with two storage directories, and
+[D-12](#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)'s
+claim already refuses a different **claim holder** (D-12's sense) inheriting a store.
+`enrollmentId` is a *test-fixture* discriminator only — one test process standing in for
+several. This is a third route, chosen over D-13's declined two (per-enrollment
+subdirectory; enrollment in the box name), both of which changed production layout for a
+case that does not occur in production.
+
+**2 — Each impl decides its own location.** What an `AtClientStorage` is constructed with is
+a storage path — `HiveAtClientStorage(storagePath)`, `SqliteAtClientStorage(dbPath)`,
+`InMemoryAtClientStorage` (`:memory:`) — and the impl derives its location from that path
+together with whatever else decides which records it resolves to (the per-location guard
+below). Not derived from
+`enrollmentId`, and not a neutral path *string* on `AtClient` — D-12 rejected that, since it
+leaves `at_client` constructing the backend. To isolate, construct impls with distinct paths.
+
+**3 — A per-location guard, enforced by the base.** Each impl reports a canonical `location`
+identity; `AtClientStorageBase` keeps a static registry and refuses to open a second storage
+at a location already open. The identity is the *store*, not merely where its files sit: the
+Hive canonical dir **plus the atSign**, the SQLite db-file plus the atSign, and a
+unique-per-instance token for in-memory (so two in-memory stores never falsely collide). Both
+halves are needed — a box name derives from the atSign, so two atSigns under one directory are
+two boxes that share nothing, and a directory-only key would refuse them. The e2e fixtures do
+exactly that, sharing `test/hive/client` across atSigns. (First written here as "the Hive
+canonical dir"; building it showed that key is too coarse, and the test *two atSigns sharing
+one directory both open* now pins it.) This
+is the correctly-shaped replacement for X4's per-**atSign** guard, which blocked legitimate
+distinct-location multi-enrollment and did not generalise to SQLite. N clients of one atSign
+at N distinct locations pass; two at one location throw, the error naming the location and
+the last **claim holder** — which `principalOf` renders as `atSign|enrollmentId`, so it
+carries the enrolled principal too.
+
+**4 — `storage:` is injected on both doors.** An optional `storage:` parameter on the direct
+factory (`buildAtClient`, as later ruled), threaded through `AtClientManager.setCurrentAtSign`
+(since deprecated in favour of `Atsign.open` plus `AtClientManager.use`); omitting it builds the
+default Hive impl from the preference's storage path (`preference.hiveStoragePath`,
+deprecated per D-12).
+Production omits it. The manager's `refuseChangedStoragePath` short-circuit check comes out —
+the per-location guard subsumes it.
+
+**5 — Multi-enrollment fixtures use direct `create`.** The manager is single-current —
+`setCurrentAtSign` stops the previous client on any real switch — correct for production (one
+enrollment per atSign) but unable to hold two live enrollments of one atSign. A fixture
+simulating several builds each via direct `create` with its own injected located storage,
+mirroring the reality that they are separate processes with separate managers.
+`AtClientManager.use(client)` has since added the other half: it makes a caller-owned client
+current without stopping the one it replaces.
+
+**6 — Lifecycle.** A location is registered when its backend opens and released only when it
+closes — never on detach, since a detached-but-open backend still occupies the location.
+Storage closes on `stop()` when its bundle says so — `closedByClient`, true for the store a
+client builds itself and false by default for one handed in (X4 ruled this by origin, owned
+against injected; X6 moved it onto the bundle; the fix-forward of 2026-09-07 finished the
+move). A borrowed bundle is only detached, so the *caller* owns the close (D-12) and can hand
+one store to successive clients; a principal change hands a bundle over open whichever it
+is, the incoming client closing it. A shared
+**test helper** owns the whole per-enrollment lifecycle — it builds the located storage and
+the client, tracks both, and in `tearDown` stops every client and closes every storage — so a
+forgotten cleanup cannot leave a location registered and trip the next test's guard.
+
+**Consequences.** X4a is **at_client-only, not cross-repo**: the isolating mechanism
+(`forPath`) is merged upstream and already wired on the spike for both keystore and queue.
+⚠️ It is **not** on trunk — trunk carries no `dependency_overrides` at all and resolves a
+published `at_persistence_secondary_server` that predates it, so X4a must port the pin and the
+queue's `forPath` there before a per-location guard means anything. Beyond that port X4a adds the
+per-location guard, the `storage:` injection, the impl `location` report, and the fixture
+rewrite behind the helper — and corrects the stale `hive_at_client_storage.dart` NOTE
+(distinct paths *do* isolate; only same-location collides). X4a lands on #2208's branch, so
+X4 and X4a ship as one PR: #2208 keeps its release code, e2e keystore initializer and fixture
+fixes, and its per-atSign guard is replaced in place by the per-location one.
+
+### D-15 — The transport is the third leg of the platform bundle, injected at the doors (2026-09-13)
+
+How a client reaches its atServer is the application's to supply, the way its keys
+store and its storage bundle already are. at_lookup declares `AtLookUpFactory`, a
+function from what a connection is *for* (the atSign, the root domain, the
+authenticator or null, an optional `SecondaryAddressFinder`, the client config) to an
+`AtLookupMuxable`; `secureSocketLookUps({config, onConnect})` in `at_lookup_io.dart` is
+the default over TLS on TCP and the one file in at_lookup's io barrel that names the
+transport. Every entry point into at_client — `Atsign.open`, `activate`, `enroll`,
+`resumeEnrollment`, `authenticatesAs`, `buildAtClient`, `AtServiceFactory.atClient` —
+takes `lookUps:` beside `keys:` and `storage:`; the client holds it, and its own
+connection, sync's, the monitor's, the activation and enrollment handshakes and the
+connection a retrofit re-derives on all come from it. The eight decisions behind the
+shape (a function rather than a bundle object; the doors rather than the preference;
+the existing `atLookUp:` instance parameters kept; the preference's TLS fields
+deprecated; at_auth takes instances; the type and default live in at_lookup; the CLI's
+proxy convention becomes the first non-default factory; built in the lifecycle PR) are
+ruling 8 of [the client-lifecycle ledger](../client-lifecycle/decisions.md). It is
+recorded here because it is T9, and because it closes [OQ-3](#5-open-questions) for the
+transport.
+
+**Why a function, and why at the doors.** The other two legs are objects because they
+carry state; a transport carries none the factory cannot capture, so a function is the
+whole of it, and the root domain stays a per-call argument from the preference or the
+verb, so where the atDirectory is does not move. `AtClientPreference` was the wrong
+home for the same reason it was the wrong home for storage: it is serialisable tuning,
+and a transport is a live object. `AtServiceFactory` was the other candidate and takes
+the factory rather than owning it, so the one override anyone ships keeps working.
+
+**The seam rule.** Exactly one place in at_client names the TLS transport:
+`defaultLookUps` in `lib/src/lifecycle/lookups.dart`, which builds the default from the
+three deprecated preference fields and answers with the TLS defaults when no
+preference is in reach. Every other file takes the factory it is handed; a service
+that holds the client as its interface takes the factory through its `create()`, the
+way it takes `connection`, rather than reading it off the impl; at_client's public
+barrel re-exports `AtLookUpFactory` and `AtCommandExecutor` from at_lookup's main
+barrel and only `secureSocketLookUps` from `_io`; and at_auth is handed instances,
+never the type. The Hive default in `at_client_factory.dart` is the storage leg's
+equivalent seam. A change that imports `at_lookup_io.dart` for the type alone is a
+regression against the ratchet, and was one for a day: the leg first landed with seven
+at_client files importing the io barrel, measured against the two the plan recorded,
+and was brought back to one plus the barrel the same day.
+
+**What it means for `at_client_web`.** A platform implementer is three objects handed
+to the doors and no fork of at_client: a WebSocket-backed `AtLookupMuxable` behind an
+`AtLookUpFactory`, a SQLite-wasm `AtClientStorage`, an IndexedDB-backed
+`WrittenAtKeysIo`. Until T4 gives it an io-free `AtLookupImpl` to construct, the web
+factory implements `AtLookupMuxable` itself; the factory returns the interface, so
+nothing about the shape waits on T4.
+
+**What is still breaking, and what is additive.** The factory's parameter list is the
+one new public shape a later widening would break, since every factory an application
+wrote stops matching the typedef; it stays a bare function because what a web transport
+needs is captured in the closure and nothing in this doc set asks for more per call.
+Additive when wanted, and not owed now: an address-finder parameter at the doors (T7's
+web finder; `buildAtClient` already takes one) and a platform-default registration so
+the core stops building the Hive and TLS defaults itself. at_lookup's own major stays
+where it was: T3 (`Socket getSocket()` on `AtConnection`), T4 (the three io-typed
+factories `AtLookupTransport` bundles), T5 (`at_lookup_io.dart` absorbs the socket
+util) and T8 (publish 4.0.0) — which is also why the factory type still reaches
+`dart:io` transitively today, through the main barrel's export of
+`secure_socket_util.dart`.
+
+**Deprecated by this ruling.** `AtClientPreference.decryptPackets`, `tlsKeysSavePath`
+and `pathToCerts`, read by the default factory until they go in 4.0; the replacement is
+`secureSocketLookUps(config: SecureSocketConfig(...))` as `lookUps:`.
+
+---
+
+### D-16 — The browser lane keeps enterprise identity possible (2026-09-13)
+
+An enterprise that manages atSigns from its own identity provider (Microsoft Entra, Okta)
+wants its directory to be the system of record: directory events provision, enroll,
+disable and re-enable an atSign with no human in the loop.
+[`enterprise-identity.md`](enterprise-identity.md) maps that lifecycle onto what `at_auth`
+and the atServer expose, and names what is missing — an atSign-level disable on the
+atServer, and unattended provisioning on the registrar. Its
+[section 5](enterprise-identity.md#5-constraints-the-browser-lane-must-not-violate) lists
+the constraints E1–E7 the browser lane must not violate while that work is outstanding,
+among them redirect-based OIDC only and no new process-global state.
+
+**Why.** Enterprise identity is an adoption blocker, not a program blocker: nothing in it
+stops the browser lane shipping, but a browser lane that closed one of those doors would
+stop an enterprise adopting it. None of the constraints requires the IdP integration to be
+built.
+
 ---
 
 ## 2. Measured findings
@@ -341,7 +620,7 @@ confirmed correct and is the only one recorded below.
 `final` event subclasses, pre-allocated enum slack); there is no `@experimental`. Against
 that: the API is roughly four months old (born `df1272374`, 2026-04-27), took a breaking
 change 2 days after introduction (`fb4c96587`, mandatory `typeTag`), reworked
-`EventSource` semantics since, ships 7 correctness fixes in the current 3.14.1, and has
+`EventSource` semantics since, ships 7 correctness fixes in the current 3.15.0-rc1, and has
 **zero functional/e2e coverage** — all 209 tests in `packages/at_client/test/` are
 mocktail unit tests against `MockAtClient`; nothing in `tests/at_functional_test/` or
 `tests/at_end2end_test/` references it. `js-api.md` §10 marks the JS-side collections
@@ -464,7 +743,10 @@ is one release instead of two. Decide per package at execution time.
 `AtServiceFactory`?** `AtServiceFactory` (`at_client_manager.dart:265`) is the closer
 analogue and already has real overrides; `AtClientPreference` is what callers already
 touch and already carries `CryptoConfig` as precedent. See
-[`design.md`](design.md) §4.
+[`design.md`](design.md) §4. **Resolved for storage by D-12, and for the transport on
+2026-09-13** — a bundle and an `AtLookUpFactory`, both injected as named parameters on
+`buildAtClient` and the `Atsign` verbs (not a static on `AtClient`, and not a preference
+field). Open for the remaining capabilities.
 
 **OQ-4 — File transfer: change the API, or extract the component?** Either
 `uploadFile`/`downloadFile`/`reuploadFiles` move to `(bytes, name)` or a stream
@@ -528,6 +810,9 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-13 | Measured the JS/TS language boundary (§2.5) and the dart2js library matrix (§2.4); confirmed no Dart web compiler gates `dart:io`.                                                                  |
 | 2026-08-13 | **D-7..D-9 ruled.** dart2js is the JS/TS compile target; the facade lives in `at_client_web` with D-4 unamended; keys cross as strings and events as callbacks. `js-api.md` added as the sixth doc. |
 | 2026-08-18 | Added JS-6 (throw vs. return-tuple, supabase-js precedent) to `js-api.md` §11. |
+| 2026-09-05 | **D-12 ruled.** Client storage becomes one injected bundle owning the keystore and the sync queue; S3 and §2.3's separate queue interface are superseded. `hiveStoragePath` deprecated; `stop()` releases storage. OQ-3 resolved for storage. |
+| 2026-09-05 | **D-13 ruled.** Local storage is isolated per (atSign, enrollmentId), not per atSign — a scoped enrollment's data must not share a store with another scope. Names the atSign-only box-key defect; the isolation key (per-enrollment path vs box name) resolved in D-14. PR #2208 paused. |
+| 2026-09-05 | **D-14 ruled.** The storage-isolation design resolves D-13's key: production stays atSign-keyed, the location is test-supplied and lives on the storage impls, a base-enforced per-location guard replaces X4's per-atSign one, `storage:` injects on `create` and the manager, and multi-enrollment fixtures use direct `create` with a lifecycle-owning test helper. X4a is at_client-only, not cross-repo. |
 | 2026-08-18 | `plans/wasm/api-designing.md` written: the three-layer Dart facade split (Layer A/B/C) and the Axis A/B/C reference-SDK survey. `plans/wasm/key-storage.md` written, depending on the split. |
 | 2026-08-18 | Measured the collections API's write/read asymmetry (§2.6, F1–F12) against `packages/at_client/lib/src/collections/collections.dart`. |
 | 2026-08-18 | **D-9 amended, D-10 and D-11 ruled.** Collections (`AtCollection<T>`) become the sole JS/TS data plane; the flat key/value plane from the original §5.2 is removed, not deprecated in place. The Dart gear is typed via a declared `typeTag`; app types are never compiled into `at_client_web`. Write-compatibility with typed Dart peers is left open pending an upstream `writeTypeTag` or a bounded carrier-class shim (JS-7). `js-api.md` §5–§11 rewritten to match; `plans/wasm/api-designing.md` §2.3/§2.4/§2.6 rewritten for the collections-shaped Layer B. JS-2 resolved; JS-8 (the `AtClientManager` singleton blocking multi-instance clients) recorded. |
@@ -535,3 +820,5 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-25 | at_auth 4.0.0-rc1 ([#2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179)), the PQ program's S-5: the `at_auth_io.dart` barrel split, `FileAtKeysIo` default dropped, registrar onto `package:http`. Ships one conditional export (`probe_default.dart`). |
 | 2026-08-27 | **Phase 0 matured** ([#2183](https://github.com/atsign-foundation/at_client_sdk/pull/2183)). Gate config extracted to `.github/wasm_gates.yaml`; `controls` made mandatory; `at_auth` gated. **T0.2's two-way ratchet withdrawn** for one-way baselines, **T0.3's no-conditionals ban withdrawn** and restated as a both-branches-walked requirement (D-1 amended, OQ-1 resolved), **R5 withdrawn** — T2 cannot run on a hosted runner (§2.7). T0.4 remains unimplemented. |
 | 2026-08-27 | Phase 1 in review as a three-PR stack: [#2162](https://github.com/atsign-foundation/at_client_sdk/pull/2162) (S4–S6) ready, [#2163](https://github.com/atsign-foundation/at_client_sdk/pull/2163) (S1, S2) and [#2164](https://github.com/atsign-foundation/at_client_sdk/pull/2164) (S3) draft. `plan.md` deleted, as §3 had asserted since 2026-08-13. |
+| 2026-09-13 | **The transport becomes the third leg of the platform bundle** (T9 done; OQ-3 resolved for the transport). at_lookup gains `AtLookUpFactory` and `secureSocketLookUps` (`at_lookup_io.dart`), plus an `onConnect` hook run once per new connection; at_client's entry points take `lookUps:` and carry it to the client's, sync's and monitor's connections; `AtClientPreference.decryptPackets`, `tlsKeysSavePath` and `pathToCerts` deprecated, read only by `defaultLookUps` until 4.0. Built on `gkc-client-lifecycle`. |
+| 2026-09-13 | **D-16 ruled.** The browser lane must not foreclose enterprise identity. `enterprise-identity.md` added: the IdP lifecycle mapping, the atServer and registrar gaps, and the constraints E1–E7. |

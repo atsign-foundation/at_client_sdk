@@ -110,6 +110,20 @@ await collection.delete(item);
 | `at_sync_ui_flutter`    | ⛔ DEPRECATED   | Avoid; being removed                                      |
 | `at_theme_flutter`      | ⛔ DEPRECATED   | Avoid; being removed                                      |
 
+## Retired auth API (at_client_flutter 2.0, at_auth 4.0)
+
+| Was                                                                     | Now                                                                                           |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `AuthService().authenticate(AtAuthRequest(...))` → `AuthResponse`       | `PkamDialog.show(context, atSign:, keys:, preference:)` → `AtClient`, or `Atsign(a).open(...)` |
+| `AuthService().onboard(AtOnboardingRequest(...), cramKey)`              | `CramDialog.show(...)` → `AtClient`, or `Atsign(a).activate(...)`                             |
+| `FlutterEnrollmentService().enroll(...)` then a `PkamDialog`            | `ApkamActivationDialog.show(...)` → `AtClient`, or `Atsign(a).enroll(...)` then `pending.client(...)` |
+| `AtClientManager.getInstance().setCurrentAtSign(...)` after auth        | `AtClientManager.getInstance().use(client)`                                                   |
+| `AtClientPreference.hiveStoragePath` / `.commitLogPath`                 | `HiveAtClientStorage(atSign:, storagePath:)` passed as `storage`                              |
+| `import 'package:at_auth/at_auth.dart'` in an app                       | Nothing; `RegistrarService` comes through `at_client_flutter`                                 |
+
+See [05-flutter-auth.md](05-flutter-auth.md) and
+[15-client-lifecycle.md](15-client-lifecycle.md).
+
 ### at_common_flutter
 
 The `at_common_flutter` package's own README states: _"Deprecated in favour of

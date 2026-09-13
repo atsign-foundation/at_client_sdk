@@ -53,8 +53,8 @@ void main() {
         () {
       // Pins the long-standing default of OutboundMessageListener.read's
       // maxWaitMilliSeconds, so adopting it there changes no behaviour.
-      expect(AtNetworkTimeouts.defaultResponseBudget,
-          const Duration(seconds: 90));
+      expect(
+          AtNetworkTimeouts.defaultResponseBudget, const Duration(seconds: 90));
       // It bounds a whole response rather than one operation, so it is exempt
       // from the cap - and its own default already sits above the ceiling.
       expect(AtNetworkTimeouts.defaultResponseBudget,

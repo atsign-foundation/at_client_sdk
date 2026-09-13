@@ -14,7 +14,7 @@
     {
       "id": 3,
       "prompt": "My Flutter app needs to let users sign in with their atsign. What's the flow for an existing user who has a .atKeys file?",
-      "expected_output": "Shows Flow 2: AtKeysFileDialog.show() then PkamDialog.show() with request and backupKeys. Includes _setupAtClient(AtRootDomain, AuthResponse) which calls AtClientManager.getInstance().setCurrentAtSign()."
+      "expected_output": "Shows Flow 2: AtKeysFileDialog.show(context) giving a FileAtKeysIo, then PkamDialog.show(context, atSign:, keys: atKeysIo, preference:, storage: a HiveAtClientStorage, backupKeys: [KeychainAtKeysIo()]) which hands back the AtClient (null means cancelled or failed). Makes it current with AtClientManager.getInstance().use(client) if the app reads the manager. Does NOT use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does NOT import at_auth."
     },
     {
       "id": 4,
@@ -49,7 +49,7 @@
     {
       "id": 10,
       "prompt": "How do I set up APKAM enrollment so a user can add a new device to their existing atsign?",
-      "expected_output": "Shows Flow 4: AtSignSelectionDialog.show() then ApkamActivationDialog.show() with atSign, rootDomain, appName, deviceName, namespaces. Then PkamDialog.show(). Includes _setupAtClient() post-auth."
+      "expected_output": "Shows Flow 4: AtSignSelectionDialog.show(context) giving an AtsignSelection, then ApkamActivationDialog.show(context, atSign:, rootDomain:, appName:, deviceName:, namespaces:, preference:, keys: KeychainAtKeysIo(), storage:) which waits for the manager's approval and hands back the enrolled AtClient. No second PkamDialog and no _setupAtClient. Mentions that a request already pending in the keys store is resumed on restart, and that the manager approves via client.enrollments.approve(id) or the EnrollmentRequestList widget."
     },
     {
       "id": 11,
@@ -109,7 +109,7 @@
     {
       "id": 22,
       "prompt": "I run three instances of the same agent under one atsign for redundancy, and every task gets processed three times. How do I make exactly one instance handle each task?",
-      "expected_output": "Shows the immutable-mutex race: an AtKey with Metadata()..immutable = true and a ttl, written with PutRequestOptions()..useRemoteAtServer = true. States that the LOSING put() THROWS (it does not return false) with no typed exception — detect contention by checking the error text for 'immutable', as AtRpc._tryAcquireSessionMutex does. Mentions TTL auto-release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_cli_commons, NOT at_client), and that each instance needs its own hiveStoragePath/commitLogPath."
+      "expected_output": "Shows the immutable-mutex race: an AtKey with Metadata()..immutable = true and a ttl, written with PutRequestOptions()..useRemoteAtServer = true. States that the LOSING put() THROWS (it does not return false) with no typed exception — detect contention by checking the error text for 'immutable', as AtRpc._tryAcquireSessionMutex does. Mentions TTL auto-release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_cli_commons, NOT at_client), and that each instance needs its own storage (a HiveAtClientStorage per process; hiveStoragePath/commitLogPath are deprecated) and stops its client when done."
     },
     {
       "id": 23,
@@ -120,6 +120,16 @@
       "id": 24,
       "prompt": "I'm adding atsign sign-in to my Flutter app and found at_onboarding_flutter on pub.dev. Is that the package I should be using for the onboarding screens?",
       "expected_output": "Says no — at_onboarding_flutter is discontinued and at_client_flutter is its named replacement. Directs the developer to the at_client_flutter auth dialogs instead (AtSignSelectionDialog, AtKeysFileDialog, ApkamActivationDialog, PkamDialog), and notes at_client_flutter is the single dependency needed since it re-exports at_client. Does NOT present at_onboarding_flutter as usable, and does NOT hedge by suggesting either package would work."
+    },
+    {
+      "id": 25,
+      "prompt": "My Flutter app lets the user log out and sign in as a different atsign. How do I tear down the current AtClient and switch?",
+      "expected_output": "Says the app owns the client: await client.stop() stops the sync service, the notification service and its monitor, and the connection (which ends as offline with cause stopped), and closes storage built with closedByClient: true. Then run the sign-in flow for the next atsign and AtClientManager.getInstance().use(newClient). Notes that opening the same atsign and enrollment (or the same storage) while a client is live throws a StateError, so stop first; that use() does not stop the previous client; and that AtClientManager.reset() is a test hook, not a logout. Does NOT suggest setCurrentAtSign."
+    },
+    {
+      "id": 26,
+      "prompt": "How do I know whether my AtClient is online, and what happens if the device has no network when the app starts?",
+      "expected_output": "Explains that Atsign.open (and PkamDialog) makes one bounded connect attempt and hands the client back either way: client.connection.current is online, offline or refused with a cause, client.connection.changes streams every change, awaitOnline(budget:) waits and attempt() retries now. Offline, the client serves its local store and writes sync when the atServer is reached; refused (revoked, unauthenticated, invalidEnrollment, enrollmentNotApproved) means the atServer rejected the keys and the app decides. Mentions the one throw: the first open of these keys on a device that is refused throws AtOpenRefusedException because nothing is held locally. Does NOT describe an offline open as a failed login."
     }
   ]
 }

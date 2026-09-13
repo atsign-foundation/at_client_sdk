@@ -1,13 +1,12 @@
-import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/at_client.dart';
 // ignore: depend_on_referenced_packages
-import 'package:at_commons/at_commons.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
 void main() {
+  TestUtils.isolateStorage('at_exception_test');
   late AtClientManager atClientManager;
   late AtClient atClient;
   late String atSign;
@@ -17,7 +16,8 @@ void main() {
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
     atClientManager.atClient.syncService.sync();
     atClient = atClientManager.atClient;
   });

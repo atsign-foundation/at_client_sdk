@@ -6,7 +6,8 @@ seam designs, the build sequence, the acceptance gates, and the decision log.
 implementations, so that a browser WasmGC build runs without runtime failures. The
 `at_client_web` platform package is the first consumer of the result.
 **Written against:** `trunk` at `20f7f4da5`, 2026-08-13. Status refreshed against
-`9d9e5f7d7`, 2026-08-27. Supersedes the single-file `plan.md` (deleted; recoverable at
+`9d9e5f7d7`, 2026-08-27, and against `gkc-client-lifecycle` on 2026-09-13 for the
+transport leg. Supersedes the single-file `plan.md` (deleted; recoverable at
 `d3e7dcdd5`, the commit that added it).
 
 > This doc is the **high-level WHY + WHAT** only: the neutrality thesis, the tier
@@ -36,8 +37,9 @@ canonical home rather than duplicating it.
 | [`design.md`](design.md)                           | The per-capability seam designs — transport, storage bootstrap, sync queue, keys, HTTP, connectivity, logging, filesystem, process/env. Current call sites with `file:line`, the proposed interface, and who implements it on each platform. Plus the dead-end seams and the `AtClientPreference` reframe. |
 | [`implementation-plan.md`](implementation-plan.md) | The build sequence — phases, the task backlog (P/T/I/C/G/D groups), dependency order, and the publish ladder.                                                                                                                                                                                              |
 | [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T6, with the measured evidence for each and an explicit statement of what each tier does *not* prove.                                                                                                                                                                                 |
-| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-11), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
+| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-16), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
 | [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, and npm packaging.                                                                                                               |
+| [`enterprise-identity.md`](enterprise-identity.md) | atSigns behind a customer's identity provider (Entra/Okta) — the SCIM lifecycle mapping, the atSign-level disable gap, the registrar asks, and the constraints the browser lane must not violate. An *adoption* blocker, not a program blocker.                                                            |
 
 ---
 
@@ -134,18 +136,27 @@ neutral barrel's import graph. Consumers add one import.
 
 ### Tier 3 — platform implementers
 
-- **`at_client_web`** — new, built by this project. WebSocket transport, SQLite-wasm
-  storage, IndexedDB-backed key store, `navigator.onLine` connectivity, console
-  logging.
+A platform implementer supplies the three legs of the platform bundle
+([`design.md` §4](design.md#4-the-platform-bundle-capabilities-are-parameters-on-the-doors),
+[`decisions.md` D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)) — a `WrittenAtKeysIo`, an
+`AtClientStorage` and an `AtLookUpFactory` — and hands them to at_client's entry points.
+at_client is not forked, and nothing below its doors names a platform type.
+
+- **`at_client_web`** — new, built by this project. A WebSocket-backed `AtLookupMuxable`
+  behind an `AtLookUpFactory`, SQLite-wasm `AtClientStorage`, IndexedDB-backed
+  `WrittenAtKeysIo`, `navigator.onLine` connectivity, console logging.
 - **`at_client_flutter`** — exists, but is **not** a platform implementer today. It
   implements exactly one abstraction (`KeychainAtKeysIo extends WrittenAtKeysIo`,
-  `packages/at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10`); all path
-  and preference wiring lives in *app* code under `example/`. In this project it is a
-  breaking-change **consumer**. Promoting it to a true implementer is deferred.
+  `packages/at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10`), though
+  since 2.0.0-rc1 its `lib/` does thread the platform bundle: `AtsignFlows` and the
+  three lifecycle dialogs take `keys:`, `storage:` and `lookUps:` and hand them to the
+  verb they run. In this project it is a breaking-change **consumer**. Promoting it to
+  a true implementer is deferred.
 - **`at_client_cli`** — does not exist. `at_onboarding_cli` and `at_cli_commons`
   perform the role informally (`home_directory_util.dart`, the duplicated
-  `ServiceFactoryWithNoOpSyncService`). Extracting a real package is deferred; until
-  then they consume the Tier-2 `_io` barrels.
+  `ServiceFactoryWithNoOpSyncService`). A design for the package is in
+  [`../client-cli/design.md`](../client-cli/design.md); extracting it is deferred, and
+  until then they consume the Tier-2 `_io` barrels.
 
 ### Tier 4 — non-Dart consumers
 
@@ -221,9 +232,12 @@ changes and are accepted as such — [`decisions.md`](decisions.md) D-3.
 `at_auth`'s WASM split is **owned by the PQ program**, not by this project:
 projects **S-5** (at_auth 4.0.0 — the `at_auth_io.dart` barrel, dropping the
 `FileAtKeysIo` default, registrar onto `package:http`) and **S-6** (consumer bumps),
-at [`../pq/implementation-plan.md`](../pq/implementation-plan.md) lines 312–339. That
-plan explicitly names *this* effort as the separate "wasm-port" that owns
-`at_lookup` and `at_chops`.
+at [`../pq/implementation-plan.md`](../pq/implementation-plan.md) — ⚠️ this cited
+**lines 312–339**, and a line number is not an address: that plan was restructured
+on 2026-08-26 and the range now lands on unrelated prose. Find S-5 and S-6 by name
+in [section 4 of `../pq/detail/implementation-plan.md`](../pq/detail/implementation-plan.md#4-phase-s--structural-enablers--key-management-s-1-s-2-s-3-s-5-s-6-kf-1),
+which holds the discharged gate bodies. That plan explicitly names *this* effort as the
+separate "wasm-port" that owns `at_lookup` and `at_chops`.
 
 This project therefore owns: `at_lookup`, `at_client`, `at_utils`,
 `at_server_status`, the at_chops dependency verification, the persistence work in

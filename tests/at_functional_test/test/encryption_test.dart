@@ -5,6 +5,7 @@ import 'test_utils.dart';
 import 'package:test/test.dart';
 
 void main() {
+  TestUtils.isolateStorage('encryption_test');
   late String atSign_1;
   final namespace = 'functional_encryption_test';
 
@@ -15,18 +16,18 @@ void main() {
   setUpAll(() async {
     AtSignLogger.root_level = 'SHOUT';
     atSign_1 = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    await TestUtils.initAtClient(atSign_1, namespace);
+    await TestUtils.initAtClient(atSign_1, namespace,
+        posture: PqPosture.legacy);
   });
 
   tearDownAll(() {
     AtSignLogger.root_level = logLevelToRestore;
   });
 
-  Future<AtClient> getAtClient(String atSign) async {
-    return (await AtClientManager.getInstance().setCurrentAtSign(
-            atSign, namespace, TestUtils.getPreference(atSign_1)))
-        .atClient;
-  }
+  Future<AtClient> getAtClient(String atSign) async =>
+      (await TestUtils.initAtClient(atSign, namespace,
+              posture: PqPosture.legacy))
+          .atClient;
 
   int ttl = 60000;
   group('Test encryption for self', () {

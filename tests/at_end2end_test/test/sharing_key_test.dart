@@ -4,7 +4,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
-import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
@@ -22,18 +21,18 @@ void main() async {
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace, authType);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        currentAtSign, namespace, authType,
+        posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        sharedWithAtSign, namespace, authType,
+        posture: PqPosture.legacy);
 
     // Defensive: ensure auto-notify is on for the publisher atServer
-    // before any TTR-using test runs. A prior CI run's
-    // bypasscache_test may have left `autoNotify=false` persisted on
-    // the server (its `finally`-based reset is unreliable on test
-    // timeouts).
-    await acm.setCurrentAtSign(currentAtSign, namespace,
-        TestPreferences.getInstance().getPreference(currentAtSign));
+    // before any TTR-using test runs. The cicd atSigns are long-lived, so a
+    // persisted `autoNotify=false` outlives the run that wrote it.
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(currentAtSign, namespace, posture: PqPosture.legacy);
     await acm.atClient
         .getRemoteSecondary()!
         .executeCommand('config:set:autoNotify=true\n', auth: true);
@@ -46,8 +45,8 @@ void main() async {
   test('Share a key to sharedWith atSign and lookup from sharedWith atSign',
       () async {
     // Setting currentAtSign atClient instance to context.
-    await acm.setCurrentAtSign(currentAtSign, namespace,
-        TestPreferences.getInstance().getPreference(currentAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(currentAtSign, namespace, posture: PqPosture.legacy);
     // Generate  uuid
     var uniqueId = uuid.v4().hashCode;
     var phoneNumberKey = AtKey()
@@ -64,8 +63,8 @@ void main() async {
     await E2ESyncService.getInstance().syncData(acm.atClient.syncService);
 
     // Setting sharedWithAtSign atClient instance to context.
-    await acm.setCurrentAtSign(sharedWithAtSign, namespace,
-        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(sharedWithAtSign, namespace, posture: PqPosture.legacy);
     var getResult = await acm.atClient.get(AtKey()
       ..key = 'phoneNumber-$uniqueId'
       ..sharedBy = currentAtSign);
@@ -84,8 +83,8 @@ void main() async {
       'Create a key to sharedWith atSign with ttr and verify sharedWith atSign has a cached_key',
       () async {
     // Setting currentAtSign atClient instance to context.
-    await acm.setCurrentAtSign(currentAtSign, namespace,
-        TestPreferences.getInstance().getPreference(currentAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(currentAtSign, namespace, posture: PqPosture.legacy);
     var uniqueId = uuid.v4().hashCode;
     // TTL set to 5 minutes so the publisher's atServer doesn't
     // expire the key before our 60s cache-propagation polling
@@ -105,8 +104,8 @@ void main() async {
     await E2ESyncService.getInstance().syncData(acm.atClient.syncService);
 
     // Setting sharedWithAtSign atClient instance to context.
-    await acm.setCurrentAtSign(sharedWithAtSign, namespace,
-        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(sharedWithAtSign, namespace, posture: PqPosture.legacy);
     var cachedVerificationKey = AtKey()
       ..key = 'verificationnumber-$uniqueId'
       ..sharedWith = sharedWithAtSign
@@ -145,8 +144,8 @@ void main() async {
     var uniqueId = uuid.v4().hashCode;
     final value = 'New Jersey';
 
-    await acm.setCurrentAtSign(currentAtSign, namespace,
-        TestPreferences.getInstance().getPreference(currentAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(currentAtSign, namespace, posture: PqPosture.legacy);
     await acm.atClient.put(
         AtKey()
           ..key = 'location-$uniqueId'
@@ -156,8 +155,8 @@ void main() async {
         value,
         putRequestOptions: PutRequestOptions()..useRemoteAtServer = true);
 
-    await acm.setCurrentAtSign(sharedWithAtSign, namespace,
-        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+    await TestSuiteInitializer.getInstance()
+        .switchToAtSign(sharedWithAtSign, namespace, posture: PqPosture.legacy);
     var getResult = await acm.atClient.get(AtKey()
       ..key = 'location-$uniqueId'
       ..sharedBy = currentAtSign);

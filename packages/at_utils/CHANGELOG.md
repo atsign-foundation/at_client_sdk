@@ -1,3 +1,5 @@
+## 3.4.1
+- fix: ConsoleLoggingHandler no longer prints an empty line after every record
 ## 3.4.0
 - feat: Introduce CLILoggingHandler for command-line applications
 - fix: made AtSignLogger.level setter case-insensitive

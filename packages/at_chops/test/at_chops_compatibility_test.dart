@@ -239,6 +239,25 @@ void main() {
               e.toString().contains(
                   'Initialization vector required for decryption using SymmetricKey'))));
     });
+
+    test('validate encryption/decryption throws AtEncryptionException on unsupported keyName', () async {
+      final atChopsKeys = AtChopsKeys();
+      final atChops = AtChopsImpl(atChopsKeys);
+      
+      expect(
+          () async => await atChops.encryptString(
+              'data', EncryptionKeyType.rsa2048, keyName: 'invalidKeyName'),
+          throwsA(predicate((e) =>
+              e is AtEncryptionException &&
+              e.toString().contains('Encryption keypair not found for keyName: invalidKeyName'))));
+
+      expect(
+          () async => await atChops.encryptString(
+              'data', EncryptionKeyType.aes256, keyName: 'invalidAesKey', iv: AtChopsUtil.generateRandomIV(16)),
+          throwsA(predicate((e) =>
+              e is AtEncryptionException &&
+              e.toString().contains('Symmetric key not found for keyName: invalidAesKey'))));
+    });
   });
 
   group('A group of tests for data signing and verification', () {

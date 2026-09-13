@@ -76,7 +76,7 @@ void main() {
         final files = tempDir.listSync().whereType<File>().toList();
         expect(
           files.map((file) => file.path).toSet(),
-          {path, '$path.bak'},
+          {path, '$path.bak', '$path${FileAtKeysIo.legacyShapeBackupSuffix}'},
         );
 
         final readKeys = await fileAtKeysIo.read('@alice');

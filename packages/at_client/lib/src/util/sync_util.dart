@@ -1,4 +1,5 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/response/json_utils.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_commons/at_builders.dart';

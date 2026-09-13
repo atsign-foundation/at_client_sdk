@@ -569,7 +569,7 @@ Notes:
   unit tests against `MockAtClient`; nothing in `tests/at_functional_test/` or
   `tests/at_end2end_test/` references it. The API also took a breaking change 2 days
   after introduction (`fb4c96587`, mandatory `typeTag`), reworked `EventSource`
-  semantics since, and ships 7 correctness fixes in the current 3.14.1. **Ruling: the
+  semantics since, and ships 7 correctness fixes in the current 3.15.0-rc1. **Ruling: the
   JS-side collections surface ships marked unstable/0.x in the npm package** until this
   project's own T6/T4 gates exercise it against a live atServer — the marker reflects a
   gap in *our* boundary validation, not upstream's contract.
@@ -637,8 +637,12 @@ achievable unilaterally in the facade. **Resolve on upstream's answer to the add
 change; document the gap and ship read-compatibility in the meantime.**
 
 **JS-8 — `AtClientManager`'s singleton blocks multi-instance JS clients.**
-`packages/at_client/lib/src/manager/at_client_manager.dart:48` holds a
-`static final AtClientManager _singleton` driven by `setCurrentAtSign(...)`. A JS
+`packages/at_client/lib/src/manager/at_client_manager.dart` holds a
+`static final AtClientManager _singleton`, historically driven by `setCurrentAtSign(...)`
+(now deprecated). A caller can build clients that register nowhere — `buildAtClient`
+and `Atsign.open` hand back a client the caller owns — so multi-instance is expressible
+in Dart today; what remains single is the *current* atSign the manager and its
+`AtSignChangeListener`s track. A JS
 consumer calling `AtClient.create({atSign: '@alice'})` then `AtClient.create({atSign:
 '@bob'})` expects two independent clients — every reference SDK in Axis C
 (`plans/wasm/api-designing.md` §1) is multi-instance by construction — but today the

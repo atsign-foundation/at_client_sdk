@@ -3,7 +3,8 @@ import 'dart:collection';
 
 import 'package:meta/meta.dart';
 
-import '../../at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_commons/at_commons.dart';
 
 /// Telemetry Service for an AtProtocol client (i.e. emitter of atProtocol verb commands)
 ///

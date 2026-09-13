@@ -2,6 +2,10 @@ import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
+import 'package:at_chops/src/algorithm/at_iv.dart';
+import 'package:at_chops/src/algorithm/encryption/aes.dart';
+import 'package:at_chops/src/algorithm/encryption/aes_ctr_ffi_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/aes_ctr_ffi_cipher.dart';
 import 'package:at_chops/src/algorithm/encryption/aes_gcm.dart';
 import 'package:at_chops/src/algorithm/encryption/aes_gcm_ffi_algo.dart';
 import 'package:at_chops/src/algorithm/encryption/x_wing_ffi.dart';
@@ -48,4 +52,43 @@ abstract final class AtPqc {
       _aesGcmSupported
           ? AesGcm256FfiAlgo.fromLib(_lib!, key)
           : AesGcm256EncryptionAlgo(key);
+
+  static final bool _aesCtrSupported =
+      _lib != null && libCryptoSupportsAesCtr(_lib!);
+
+  /// AES-CTR — FFI when available, else pure-Dart. **Confidentiality only:
+  /// CTR is unauthenticated.**
+  ///
+  /// Both backends PKCS7-pad the plaintext prior to encryption, so they are
+  /// wire-interchangeable — an invariant a future edit must not break, since
+  /// the two ends of a connection may resolve to different backends.
+  ///
+  /// That interchangeability holds only for a 16-byte IV. Any other IV makes
+  /// the choice of backend observable, and in both directions: the pure-Dart
+  /// path substitutes 16 zero bytes for a missing IV and right-pads a shorter
+  /// one into the counter block, while the FFI path rejects both — with
+  /// [AtEncryptionException] on encrypt, [AtDecryptionException] on decrypt;
+  /// the two are siblings, so catching one does not catch the other. Callers
+  /// that reach this method with an IV they did not choose — one parsed from
+  /// a record, or from an older writer — get a failure that depends on
+  /// whether the host has libcrypto. Pass exactly 16 bytes.
+  static SymmetricEncryptionAlgorithm<Uint8List, Uint8List> aesCtr(
+          AESKey key) =>
+      _aesCtrSupported
+          ? AesCtrFfiAlgo.fromLib(_lib!, key)
+          : AESEncryptionAlgo(key);
+
+  /// An incremental AES-CTR cipher over [key] and [iv], or `null` when this
+  /// host has no usable libcrypto.
+  ///
+  /// Unlike [aesCtr] there is no pure-Dart counterpart to fall back to — the
+  /// pure-Dart path has no long-lived-context shape — so the caller keeps its
+  /// own fallback and this returns `null` rather than choosing one. Callers
+  /// own the returned cipher and **must** `dispose()` it; see
+  /// [AesCtrFfiCipher] for the contract.
+  ///
+  /// Raw keystream, no padding: this is *not* wire-compatible with [aesCtr].
+  static AesCtrFfiCipher? aesCtrStreamCipher(
+          AESKey key, InitialisationVector iv) =>
+      _aesCtrSupported ? AesCtrFfiCipher.fromLib(_lib!, key, iv) : null;
 }

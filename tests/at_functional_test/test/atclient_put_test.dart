@@ -10,24 +10,23 @@ import 'test_utils.dart';
 /// The tests verify the put and get functionality where key is created using AtKey concrete
 /// class
 void main() {
+  TestUtils.isolateStorage('atclient_put_test');
   late AtClientManager atClientManager;
   late String atSign;
   final namespace = 'wavi';
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    final preference = TestUtils.getPreference(atSign)
-      ..crypto = CryptoConfig(
-        defaultProviderId: 'legacy',
-        providers: [
-          TestProvider('test'),
-        ],
-      );
-    atClientManager = await TestUtils.initAtClient(
-      atSign,
-      namespace,
-      preference: preference,
-    );
+    final preference =
+        TestUtils.getPreference(atSign, posture: PqPosture.legacy)
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'legacy',
+            providers: [
+              TestProvider('test'),
+            ],
+          );
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        preference: preference, posture: PqPosture.legacy);
     atClientManager.atClient.syncService.sync();
   });
 

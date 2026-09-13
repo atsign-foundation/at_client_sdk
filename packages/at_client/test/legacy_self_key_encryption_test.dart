@@ -1,18 +1,15 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
-import 'package:at_commons/at_builders.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'test_utils/mocks.dart';
 
-class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
-
 void main() {
   AtClient mockAtClient = MockAtClientImpl();
-  AtLookUp mockAtLookUp = MockAtLookUpImpl();
+  AtLookUp mockAtLookUp = MockAtLookupImpl();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
   setUp(() {
@@ -32,13 +29,7 @@ void main() {
     var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
     var selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     // generate new AES key for the test
-    var aliceSelfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
-    // set atChops
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    atChopsKeys.selfEncryptionKey = AESKey(aliceSelfEncryptionKey);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
+    var aliceSelfEncryptionKey = AESKey.generate(32).key;
     when(() => mockLocalSecondary.getEncryptionSelfKey())
         .thenAnswer((_) => Future.value(aliceSelfEncryptionKey));
     var selfKey = AtKey()

@@ -1,5 +1,5 @@
-/// Smoke entry point: bypasses interactive onboarding and authenticates
-/// directly from a pre-existing `.atKeys` file at
+/// Smoke entry point: bypasses interactive onboarding and opens a client
+/// directly on a pre-existing `.atKeys` file at
 /// `${HOME}/.atsign/keys/<atSign>_key.atKeys`.
 ///
 /// Used by the round-trip end-to-end smoke test:
@@ -15,7 +15,6 @@ library;
 
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:flutter/material.dart';
@@ -84,36 +83,40 @@ class _SmokeBootstrapState extends State<_SmokeBootstrap> {
         );
         return;
       }
-      _setStatus('Authenticating $atSign...');
+      _setStatus('Opening $atSign...');
       final home = Platform.environment['HOME'] ?? '/Users/gary';
       final keysPath = '$home/.atsign/keys/${atSign}_key.atKeys';
       if (!File(keysPath).existsSync()) {
         _setStatus('No atKeys file at $keysPath');
         return;
       }
-      final atKeysIo = FileAtKeysIo(filePath: (_) => keysPath);
-      final request = AtAuthRequest(
-        atSign,
-        atKeysIo: atKeysIo,
-        rootDomain: AtRootDomain.atsignDomain,
+      final dir = await getApplicationSupportDirectory();
+      final acp = AtClientPreference()..namespace = applicationNamespace;
+      // closedByClient: this app picks the location and the client still closes
+      // the store when it stops, so there is nothing to tear down.
+      final storage = HiveAtClientStorage(
+        atSign: atSign,
+        storagePath: dir.path,
+        closedByClient: true,
       );
-      final response = await AtAuth.create().authenticate(request);
-      if (!response.isSuccessful) {
-        _setStatus('Auth failed for $atSign');
+      final client = await Atsign(atSign).open(
+        keys: FileAtKeysIo(filePath: (_) => keysPath),
+        preference: acp,
+        storage: storage,
+      );
+      // The smoke test reads live data, so an offline client is no use to it.
+      final connection = await client.connection.awaitOnline(
+        budget: const Duration(seconds: 30),
+      );
+      if (!connection.isOnline) {
+        _setStatus(
+          'Could not get $atSign online: ${connection.outcome.name} '
+          '(${connection.cause?.name})',
+        );
+        await client.stop();
         return;
       }
-      _setStatus('Setting up AtClient...');
-      final dir = await getApplicationSupportDirectory();
-      final acp = AtClientPreference()
-        ..namespace = applicationNamespace
-        ..commitLogPath = dir.path
-        ..hiveStoragePath = dir.path;
-      // Hand the client the session; it rebuilds its own authenticated
-      // connection from the session's key source rather than adopting auth's.
-      await AtClientManager.getInstance().fromAuthSession(
-        response.session!,
-        acp,
-      );
+      AtClientManager.getInstance().use(client);
       _setStatus('AtClient ready, navigating to dashboard');
       if (!mounted) return;
       Navigator.of(context).pushReplacement(

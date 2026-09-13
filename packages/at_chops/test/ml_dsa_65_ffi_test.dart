@@ -6,7 +6,6 @@ import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
-import 'package:at_chops/src/algorithm/spec/ml_dsa_65_spec.dart';
 import 'package:test/test.dart';
 
 void main() {

@@ -233,7 +233,8 @@ void main() {
       final seen = <String>[];
       rig.listener.onNotification = seen.add;
 
-      await rig.socket.serverSends('data:the_key_is\n@bob:phone@alice\n@alice@');
+      await rig.socket
+          .serverSends('data:the_key_is\n@bob:phone@alice\n@alice@');
 
       // Asserted before the read, so a listener that routes this away fails
       // here with the reason - not thirty seconds later on a starved read.
@@ -291,7 +292,8 @@ void main() {
           () => rig.listener
               .read(maxWaitMilliSeconds: 500, transientWaitTimeMillis: 500),
           throwsA(predicate((dynamic e) =>
-              e is AtLookUpException && e.errorMessage == 'Unexpected response found')),
+              e is AtLookUpException &&
+              e.errorMessage == 'Unexpected response found')),
           reason: 'the unrouted notification is still in the buffer and is '
               'returned joined to the response that followed it');
     });
@@ -330,7 +332,7 @@ void main() {
     /// Each arm measures the WAIT, not the throw: the throw happens either way,
     /// and only its timing distinguishes "noticed the connection died" from
     /// "sat out the budget".
-    Future<int> millisUntilReadFails(
+    Future<({int millis, Object? thrown})> millisUntilReadFails(
       FakeAtServerRig rig,
       Future<void> Function() killIt,
     ) async {
@@ -355,14 +357,15 @@ void main() {
               'only that something was thrown leaves that swap unpinned - the '
               'timing bound below catches the mechanism being absent, not the '
               'wrong exception coming out of it');
-      return sw.elapsedMilliseconds;
+      return (millis: sw.elapsedMilliseconds, thrown: thrown);
     }
 
     test('a locally closed connection fails the pending read at once',
         () async {
       final rig = FakeAtServerRig();
 
-      final waited = await millisUntilReadFails(rig, rig.connection.close);
+      final waited =
+          (await millisUntilReadFails(rig, rig.connection.close)).millis;
 
       expect(waited, lessThan(1000),
           reason: 'closing the connection from this side - what '
@@ -375,7 +378,15 @@ void main() {
     test('a far end that hangs up fails the pending read at once', () async {
       final rig = FakeAtServerRig();
 
-      final waited = await millisUntilReadFails(rig, rig.socket.serverCloses);
+      final result = await millisUntilReadFails(rig, rig.socket.serverCloses);
+      final waited = result.millis;
+
+      expect(
+          result.thrown,
+          isA<ConnectionInvalidException>().having((e) => e.message, 'message',
+              'The connection went away before a response arrived'),
+          reason: 'the far end hung up; only a close this client asked for '
+              'says so');
 
       expect(waited, lessThan(1000),
           reason: 'onDone already closes the connection; the read waiting on '
@@ -385,8 +396,9 @@ void main() {
     test('a far end that faults fails the pending read at once', () async {
       final rig = FakeAtServerRig();
 
-      final waited = await millisUntilReadFails(
-          rig, () => rig.socket.serverErrors(const SocketException('reset')));
+      final waited = (await millisUntilReadFails(rig,
+              () => rig.socket.serverErrors(const SocketException('reset'))))
+          .millis;
 
       expect(waited, lessThan(1000),
           reason: 'onError already closes the connection; the read waiting on '

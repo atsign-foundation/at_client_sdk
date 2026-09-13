@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
@@ -32,6 +35,7 @@ class PutRequestTransformer
 
     UpdateVerbBuilder updateVerbBuilder = UpdateVerbBuilder();
     updateVerbBuilder.atKey = tuple.one;
+    updateVerbBuilder.noCommit = options.noCommit;
     // Append '@' to the atSign if missed.
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedWith);
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedBy);
@@ -39,11 +43,13 @@ class PutRequestTransformer
     updateVerbBuilder.value = tuple.two;
     final atKey = updateVerbBuilder.atKey;
     final metadata = atKey.metadata;
-    // Check if the data needs to be encrypted for non-public keys
-    if (!_isPublicKey(metadata) && options.shouldEncrypt) {
+    // Check if the data needs to be encrypted for non-public keys.
+    // NOTE: a `local:` key is excluded — it never leaves the device, so there
+    // is nothing for a peer to decrypt, and the keystore encrypts it at rest.
+    if (!_isPublicKey(metadata) && !atKey.isLocal && options.shouldEncrypt) {
       // Add metadata for the crypto provider used to route future decrypts.
       updateVerbBuilder.atKey.metadata.appMetadata =
-          AppMetadata(providerId: _cryptoProviderIdFor(options));
+          AppMetadata(providerId: _cryptoProviderIdFor(options, atKey));
       await _encryptData(updateVerbBuilder);
     } else {
       // Sign the data for public keys
@@ -64,21 +70,32 @@ class PutRequestTransformer
         .encryptForPut(updateVerbBuilder.atKey, updateVerbBuilder.value);
   }
 
-  String _cryptoProviderIdFor(PutRequestOptions options) {
-    return options.cryptoProviderId ??
-        _atClient.getPreferences()?.crypto.defaultProviderId ??
-        CryptoRuntime.legacyProviderId;
-  }
+  String _cryptoProviderIdFor(PutRequestOptions options, AtKey atKey) =>
+      CryptoRuntime.providerIdFor(_atClient, options.cryptoProviderId,
+          atKey: atKey);
 
+  /// Signs a public value with the atSign's encryption private key, which is
+  /// what a reader verifies the signature against.
+  ///
+  /// The bytes are frozen: `put_request_test.dart` pins the signature for a
+  /// fixed key and value.
   void _signPublicData(
       UpdateVerbBuilder updateVerbBuilder, String? encryptionPrivateKey) {
     if (encryptionPrivateKey.isNull) {
       throw AtPrivateKeyNotFoundException('Failed to sign the public data');
     }
-    final atSigningInput = AtSigningInput(updateVerbBuilder.value)
-      ..signingMode = AtSigningMode.data;
-    final signingResult = _atClient.atChops!.sign(atSigningInput);
-    updateVerbBuilder.atKey.metadata.dataSignature = signingResult.result;
+    final value = updateVerbBuilder.value;
+    final Uint8List dataBytes;
+    if (value is String) {
+      dataBytes = Uint8List.fromList(utf8.encode(value));
+    } else if (value is Uint8List) {
+      dataBytes = value;
+    } else {
+      throw InvalidDataException('Unrecognized type of data: $value');
+    }
+    updateVerbBuilder.atKey.metadata.dataSignature = base64Encode(
+        RsaSignatureAlgo.rsa2048().signBytesSync(dataBytes,
+            secretKey: base64Decode(encryptionPrivateKey!)));
   }
 
   void _encodeIfValueContainsNewLine(UpdateVerbBuilder updateVerbBuilder) {
