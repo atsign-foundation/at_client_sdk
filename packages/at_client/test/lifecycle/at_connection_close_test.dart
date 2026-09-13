@@ -28,10 +28,12 @@ void main() {
       await connection.close();
       await connection.report(offline());
 
-      expect(connection.current.sameAs(before), isTrue,
-          reason: 'the last state reported while open is what a reader '
-              'finds; a stop-induced failure is not a transition');
-      expect(emitted.map((s) => s.outcome), [AtConnectionOutcome.online]);
+      expect(before.isOnline, isTrue);
+      expect(connection.current.cause, AtConnectionCause.stopped,
+          reason: 'a reader still holding the client finds why nothing is '
+              'connected; a stop-induced failure is not a transition');
+      expect(emitted.map((s) => s.cause), [null, AtConnectionCause.stopped],
+          reason: 'the stop is the last change emitted');
     });
 
     test('the same report before close is recorded (control)', () async {
@@ -87,7 +89,8 @@ void main() {
       await client.stop();
 
       verify(() => lookUp.close()).called(greaterThan(0));
-      expect(client.connection.current.sameAs(before), isTrue,
+      expect(before.cause, isNot(AtConnectionCause.stopped));
+      expect(client.connection.current.cause, AtConnectionCause.stopped,
           reason: 'the connection state is closed before the services and '
               'the remote are, so a failure the stop caused is not filed '
               'as the atServer being unreachable');

@@ -311,8 +311,13 @@ class SyncServiceImpl implements SyncService {
     // _syncInProgress because _isInSync short-circuits on the latter.
     _processInProgress = true;
     final syncRequest = _getSyncRequest();
+    // NOTE: the round answers every queued request, so it reads the server
+    // fresh if any of them is an app's; the one dequeued may be a system
+    // request that was queued ahead of the app's.
+    final anAppIsWaiting = syncRequest.requestSource == SyncRequestSource.app ||
+        syncRequests.any((r) => r.requestSource == SyncRequestSource.app);
     try {
-      final inSync = await _isInSync(syncRequest);
+      final inSync = await _isInSync(syncRequest, forceFresh: anAppIsWaiting);
       if (isStopped) {
         // NOTE: stop() landed while _isInSync was parked on its network read.
         // Anything this run did from here would be sync activity after stop()
@@ -543,6 +548,17 @@ class SyncServiceImpl implements SyncService {
       return;
     }
     hasHadNoSyncRequests = false;
+    if (syncRequests.length == queueSize &&
+        syncRequest.requestSource == SyncRequestSource.system &&
+        syncRequests.any((r) => r.requestSource == SyncRequestSource.app)) {
+      // NOTE: a system request carries nothing the queue does not already
+      // know - its commit id has promoted the cache above - while an app
+      // request is a caller's demand for a fresh answer. Evicting the
+      // caller's request for it would answer that caller from the cache.
+      _logger.finer('_addSyncRequestToQueue: queue at capacity ($queueSize) '
+          'holding an app request; the system request is dropped');
+      return;
+    }
     if (syncRequests.length == queueSize) {
       // Drop-oldest sliding window: evict the head, not the tail. The
       // newest request is always retained (it represents the most
@@ -1299,16 +1315,16 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  Future<bool> _isInSync(SyncRequest syncRequest) async {
+  /// [forceFresh] says an app is waiting on this answer, see
+  /// [_getServerCommitId]: a system request is a stats notification whose
+  /// commit id has already promoted the cache, so it is read from there.
+  Future<bool> _isInSync(SyncRequest syncRequest,
+      {required bool forceFresh}) async {
     if (_syncInProgress) {
       _logger.finest('*** isInSync..sync in progress');
       return true;
     }
-    // A system request is a stats notification whose commit id has already
-    // promoted the cache, so it is read from there; an app request has no
-    // such value in hand and fetches one, see [_getServerCommitId].
-    var serverCommitId = await _getServerCommitId(
-        forceFresh: syncRequest.requestSource == SyncRequestSource.app);
+    var serverCommitId = await _getServerCommitId(forceFresh: forceFresh);
     // NOTE: stop() may have landed during that network read and closed the
     // store the next line reads.
     _bailIfStopped();

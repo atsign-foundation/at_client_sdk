@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:meta/meta.dart';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
@@ -38,6 +39,15 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
   /// This client's own privilege, not that of the enrollment it is approving.
   final EnrollmentPrivilegeResolver _privilege;
 
+  /// How many times the advertised key package is checked before a check
+  /// that could not be completed is reported, and the pause between checks.
+  /// The atServer writes the enrollment's `_apsk` at approval, so the first
+  /// fetch can land before it is readable.
+  @visibleForTesting
+  static int verifyAttempts = 3;
+  @visibleForTesting
+  static Duration verifyRetryPause = const Duration(seconds: 1);
+
   /// Seals every secret [enrollment]'s namespaces authorise to the key package
   /// it advertised on its `enroll:request`, so the newly approved device can
   /// read what it has just been authorised for.
@@ -52,14 +62,28 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     if (advertised == null) return KeyPackageStatus.absent;
 
     final atSign = _atClient.getCurrentAtSign()!;
-    final (keyPackage, status) = await verifyAdvertisedKeyPackage(
+    var (keyPackage, status) = await verifyAdvertisedKeyPackage(
       advertised,
       signer: AtClientEnvelopeSigner(_atClient),
       signerAtSign: atSign,
       enrollmentId: enrollment.enrollmentId!,
     );
+    for (var attempt = 1;
+        status == KeyPackageStatus.unverified &&
+            attempt < verifyAttempts &&
+            !_atClient.isStopped;
+        attempt++) {
+      await Future<void>.delayed(verifyRetryPause);
+      (keyPackage, status) = await verifyAdvertisedKeyPackage(
+        advertised,
+        signer: AtClientEnvelopeSigner(_atClient),
+        signerAtSign: atSign,
+        enrollmentId: enrollment.enrollmentId!,
+      );
+    }
 
     if (keyPackage == null) return status;
+    final KeyPackage package = keyPackage;
 
     final sharing = AtClientSecretSharing.forClient(_atClient);
 
@@ -81,7 +105,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     // and it is blocked in waitForApproval polling for exactly this envelope.
     if (mintedApkamSymmetricKey != null) {
       await sharing.shareSecretWith(
-          keyPackage,
+          package,
           Secret(
             namespace: _conveyanceNamespaceFor(enrollment),
             name: enrollmentApkamSymmetricKeySecretName,
@@ -108,7 +132,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
           .signLinkFor(sharing, enrollment.enrollmentId!);
       if (link != null) {
         await sharing.shareSecretWith(
-            keyPackage,
+            package,
             Secret(
               namespace: _conveyanceNamespaceFor(enrollment),
               name: PqSigningChain.linkSecretName,
@@ -126,7 +150,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
             rootKid: rootSigner!.kid);
         if (link != null) {
           await sharing.shareSecretWith(
-              keyPackage,
+              package,
               Secret(
                 namespace: _conveyanceNamespaceFor(enrollment),
                 name: PqSigningChain.rootLinkSecretName,
@@ -154,7 +178,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
       final private = rootPrivate;
       if (private != null) {
         await sharing.shareSecretWith(
-            keyPackage,
+            package,
             Secret(
               namespace: _conveyanceNamespaceFor(enrollment),
               name: PqSigningRoot.secretName,
@@ -177,8 +201,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
           ring: PublishedNskeyKeyRing(_atClient, privateFiling: filing),
           sharing: sharing,
           privateFiling: filing,
-        ).conveyHeldPrivatesTo(
-            keyPackage, enrollment.namespace?.keys ?? const []);
+        ).conveyHeldPrivatesTo(package, enrollment.namespace?.keys ?? const []);
         if (sent > 0) {
           _logger.info('Conveyed $sent held nskey private(s) to enrollment '
               '${enrollment.enrollmentId}');
@@ -190,7 +213,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
       }
     }
 
-    await sharing.shareAllSecretsWith(keyPackage,
+    await sharing.shareAllSecretsWith(package,
         approvedNamespaces: enrollment.namespace);
 
     return status;

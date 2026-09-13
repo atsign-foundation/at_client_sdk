@@ -24,8 +24,15 @@
 - fix: a key named like the app's namespace gets the namespace appended.
 - fix: `stop()` closes the connection state before it closes the services
   and the remote, so a request the stop itself fails is not recorded as the
-  atServer being unreachable; `AtConnection.report` after `close()` records
-  nothing.
+  atServer being unreachable. A stopped client's `connection.current` is
+  offline with the new `AtConnectionCause.stopped`, emitted as the last
+  change; a report after that records nothing.
+- fix: a sync round reads the server's commit id fresh whenever an app's
+  `sync()` is waiting on it, whichever request it dequeues, and a stats
+  notification no longer pushes an app's request out of a full queue. A
+  system request queued ahead of an app's used to be answered from the
+  cache, so a caller who had just seen the server ahead got a round that
+  pulled nothing and reported success.
 - fix: the status poll `notify(waitForFinalDeliveryStatus: false)` leaves
   running hands a failure to `onError` and logs it at `warning`, instead of
   raising an unhandled error in the zone that sent the notification. Either
@@ -42,9 +49,11 @@
 - fix: a key package whose `_apsk` could not be fetched is reported as
   `KeyPackageStatus.unverified` (new) and logged at `warning` as a check
   that could not be completed, where it was reported as `rejected` and
-  logged at `severe` as a package that does not verify. An approval that
-  meets it throws `EnrollmentConveyanceException` naming the check, with no
-  advice to revoke.
+  logged at `severe` as a package that does not verify. An approval checks
+  the package up to three times a second apart before reporting that, since
+  the atServer writes the `_apsk` at approval; if every attempt fails it
+  throws `EnrollmentConveyanceException` naming the check, with no advice to
+  revoke.
   `AtClientUtil.getKeyWithNameSpace` read the name's last dot-segment as the
   namespace, so a `probe` key under the `probe` namespace was stored as
   `probe.probe` and read back as `probe`.

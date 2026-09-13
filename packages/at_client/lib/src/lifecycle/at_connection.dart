@@ -46,6 +46,10 @@ enum AtConnectionCause {
 
   /// A refusal the atServer gave no code this build knows for.
   otherRefusal,
+
+  /// The client stopped itself: nothing is connected because nothing is
+  /// running. Reported once, as the last change, when the client is stopped.
+  stopped,
 }
 
 /// What a client's connection to its atServer is, and why.
@@ -190,11 +194,13 @@ class AtConnection {
   }
 
   /// Ends the reporting: the client is stopping, so what its connections
-  /// fail with from here says nothing about the atServer. [current] keeps
-  /// the last state reported, and [changes] is done.
-  Future<void> close() {
+  /// fail with from here says nothing about the atServer. [current] becomes
+  /// offline with [AtConnectionCause.stopped], emitted as the last change,
+  /// and [changes] is done.
+  Future<void> close() async {
+    await report(AtConnectionState.offline(AtConnectionCause.stopped));
     _closed = true;
-    return _changes.close();
+    await _changes.close();
   }
 }
 
