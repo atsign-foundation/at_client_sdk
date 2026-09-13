@@ -1,3 +1,7 @@
+// What the handshake installs on a lookup that cannot take an authenticator
+// is the credential ladder, so this file names the ladder on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 import 'dart:typed_data';
 

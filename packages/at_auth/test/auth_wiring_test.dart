@@ -13,6 +13,10 @@
 /// equivalent test found was covered by nothing.
 library;
 
+// Whether the credential ladder is written is the assertion, so this file
+// names the ladder on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -96,7 +100,6 @@ void main() {
   AtAuthImpl rig(AtLookUp lookUp,
       {required String? enrollmentId,
       required bool activated,
-      // ignore: deprecated_member_use
       AtChops? chops}) {
     final pkam = MockPkamAuthenticator();
     when(() => pkam.authenticate(any(), any(),
@@ -145,10 +148,8 @@ void main() {
 
   /// An `AtChops` holding [pkamPinAtSign]'s demo PKAM keypair: the injected
   /// signer, which is the door for a keyfile holding no keypair.
-  // ignore: deprecated_member_use
   AtChops pinChops() => AtChopsImpl(AtChopsKeys.create(
       null,
-      // ignore: deprecated_member_use
       AtPkamKeyPair.create(demo.pkamPublicKeyMap[pkamPinAtSign]!,
           demo.pkamPrivateKeyMap[pkamPinAtSign]!)));
 
