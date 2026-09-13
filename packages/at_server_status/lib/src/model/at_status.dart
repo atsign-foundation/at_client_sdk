@@ -1,4 +1,14 @@
-import 'dart:io';
+/// The HTTP status codes [AtStatus.httpStatus] reports, as plain ints.
+///
+/// Deliberately not `dart:io`'s `HttpStatus`: naming that type put `dart:io`
+/// into at_server_status's import graph for the sake of five integer
+/// constants, which is the one thing that kept this package off a web build
+/// graph. The values are identical.
+const _httpOk = 200;
+const _httpFound = 302;
+const _httpNotFound = 404;
+const _httpInternalServerError = 500;
+const _httpServiceUnavailable = 503;
 
 /// The AtStatus model includes five parameters
 ///   String atSign;
@@ -119,15 +129,15 @@ class AtStatus {
   int _rootHttpStatus() {
     int status;
     if (rootStatus == RootStatus.found) {
-      status = HttpStatus.found;
+      status = _httpFound;
     } else if (rootStatus == RootStatus.notFound) {
-      status = HttpStatus.notFound;
+      status = _httpNotFound;
     } else if (rootStatus == RootStatus.stopped) {
-      status = HttpStatus.serviceUnavailable;
+      status = _httpServiceUnavailable;
     } else if (rootStatus == RootStatus.unavailable) {
-      status = HttpStatus.serviceUnavailable;
+      status = _httpServiceUnavailable;
     } else {
-      status = HttpStatus.internalServerError;
+      status = _httpInternalServerError;
     }
     return status;
   }
@@ -138,13 +148,13 @@ class AtStatus {
       status = 418;
     } else if (serverStatus == ServerStatus.stopped ||
         serverStatus == ServerStatus.unavailable) {
-      status = HttpStatus.serviceUnavailable;
+      status = _httpServiceUnavailable;
     } else if (serverStatus == ServerStatus.ready) {
-      status = HttpStatus.serviceUnavailable;
+      status = _httpServiceUnavailable;
     } else if (serverStatus == ServerStatus.activated) {
-      status = HttpStatus.ok;
+      status = _httpOk;
     } else {
-      status = HttpStatus.internalServerError;
+      status = _httpInternalServerError;
     }
     return status;
   }

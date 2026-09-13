@@ -17,6 +17,10 @@
   C `int` its OpenSSL binding passes, rather than letting the length wrap. The
   AES-CTR backends already carried this guard.
 - fix: prevent `TypeError` when a non-existent `keyName` is passed to `encryptString`, `decryptString`, `encryptBytes`, or `decryptBytes` by throwing an `AtEncryptionException`.
+- chore: move `dart_periphery` from `dependencies` to `dev_dependencies`. It is
+  imported only by `example/zariot/`, and as a direct dependency it put an
+  FFI-based package on the resolved graph of every at_chops consumer. No
+  library code, public API, or behaviour changes.
 
 ## 3.6.1
 
