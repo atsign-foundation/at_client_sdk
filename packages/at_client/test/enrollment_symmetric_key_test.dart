@@ -209,7 +209,7 @@ void main() {
 
   test('the package tagged for THIS enrollment wins over an untagged one',
       () async {
-    final keys = AtKeys()..enrollmentId = 'mine';
+    final keys = AtKeys.legacy(enrollmentId: 'mine');
     fileKeyPackage(keys, keyId: 'untagged-kpid', seed: 70);
     fileKeyPackage(keys, keyId: 'mine-kpid', enrollmentId: 'mine');
 
@@ -231,7 +231,7 @@ void main() {
     // NOTE: a keyfile can carry this enrollment's package untagged, so
     // scoping strictly to the enrollment id would stop it opening anything
     // sealed to it.
-    final keys = AtKeys()..enrollmentId = 'mine';
+    final keys = AtKeys.legacy(enrollmentId: 'mine');
     fileKeyPackage(keys, keyId: kpid);
 
     final resolve = enrollmentApkamSymmetricKeyResolver(atSign,

@@ -190,10 +190,9 @@ void main() {
         completed.encryptionKeyPair?.atPublicKey.publicKey, encryptionPublicKey,
         reason: 'the public key the submission fetched survives to the '
             'completed keyfile, beside the private key the approver sealed');
-    // ignore: deprecated_member_use
-    expect(
-        completed.defaultEncryptionPublicKey?.toString(), encryptionPublicKey,
-        reason: 'in the flat field a legacy reader looks for');
+    expect(completed.toJson()['aesEncryptPublicKey'], encryptionPublicKey,
+        reason: 'in the flat field a legacy reader looks for, under the '
+            'name the keyfile format gives it');
     await client.stop();
   });
 

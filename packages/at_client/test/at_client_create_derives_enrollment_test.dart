@@ -36,20 +36,19 @@ void main() {
     ..hiveStoragePath = dir.path
     ..commitLogPath = '${dir.path}/commit';
 
-  AtBytes b64(String s) => AtBytes.fromString(base64Encode(utf8.encode(s)));
+  String b64(String s) => base64Encode(utf8.encode(s));
 
   Future<InMemoryAtKeysIo> keyfile({String? flatEnrollmentId}) async {
     final io = InMemoryAtKeysIo();
     await io.write(
         atSign,
-        AtKeys()
-          ..apkamPublicKey = b64('apkam-public')
-          ..apkamPrivateKey = b64('apkam-private')
-          ..defaultEncryptionPublicKey = b64('enc-public')
-          ..defaultEncryptionPrivateKey = b64('enc-private')
-          ..defaultSelfEncryptionKey = b64('self-key')
-          // ignore: deprecated_member_use
-          ..enrollmentId = flatEnrollmentId);
+        AtKeys.legacy(
+            apkamPublicKey: b64('apkam-public'),
+            apkamPrivateKey: b64('apkam-private'),
+            encryptionPublicKey: b64('enc-public'),
+            encryptionPrivateKey: b64('enc-private'),
+            selfEncryptionKey: b64('self-key'),
+            enrollmentId: flatEnrollmentId));
     return io;
   }
 

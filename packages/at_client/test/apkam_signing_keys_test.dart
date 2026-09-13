@@ -10,8 +10,7 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show recordResolvedSigningAlgo;
 import 'package:at_commons/at_commons.dart'
-    show AtBytes, AtKey, AtKeyNotFoundException, AtValue;
-import 'package:at_commons/atsign.dart' show AtsignString;
+    show AtKey, AtKeyNotFoundException, AtValue;
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -123,10 +122,10 @@ void main() {
         () async {
       // The mainstream client: built from a keyfile, never handed an AtChops.
       when(() => atClient.atChops).thenReturn(null);
-      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
-        ..apkamPublicKey = AtBytes.fromString(rsaPair.atPublicKey.publicKey)
-        ..apkamPrivateKey =
-            AtBytes.fromString(rsaPair.atPrivateKey.privateKey)));
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
+          keys.fileLegacyMaterial(
+              apkamPublicKey: rsaPair.atPublicKey.publicKey,
+              apkamPrivateKey: rsaPair.atPrivateKey.privateKey)));
 
       final keys = await signer.signingKeys;
 
@@ -157,9 +156,10 @@ void main() {
       // The rig's AtChops holds one RSA keypair; the keyfile holds another.
       // Which public key comes back says which source answered.
       final other = AtChopsUtil.generateAtPkamKeyPair();
-      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
-        ..apkamPublicKey = AtBytes.fromString(other.atPublicKey.publicKey)
-        ..apkamPrivateKey = AtBytes.fromString(other.atPrivateKey.privateKey)));
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
+          keys.fileLegacyMaterial(
+              apkamPublicKey: other.atPublicKey.publicKey,
+              apkamPrivateKey: other.atPrivateKey.privateKey)));
 
       expect((await signer.signingKeys).single.publicKey,
           other.atPublicKey.publicKey,

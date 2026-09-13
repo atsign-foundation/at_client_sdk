@@ -102,14 +102,12 @@ void main() {
     // material. Without them toAtChops() throws and the arms differ by an
     // exception rather than by which key was chosen.
     final stored = await io.read(atSign);
-    stored
-      ..apkamPublicKey = AtBytes.fromString(_flatApkamPublicKey)
-      ..apkamPrivateKey = AtBytes.fromString(_flatApkamPrivateKey)
-      ..defaultEncryptionPublicKey = AtBytes.fromString('ZmxhdC1lbmMtcHVibGlj')
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString('ZmxhdC1lbmMtcHJpdmF0ZQ==')
-      ..defaultSelfEncryptionKey =
-          AtBytes.fromString('REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=');
+    stored.fileLegacyMaterial(
+        apkamPublicKey: _flatApkamPublicKey,
+        apkamPrivateKey: _flatApkamPrivateKey,
+        encryptionPublicKey: 'ZmxhdC1lbmMtcHVibGlj',
+        encryptionPrivateKey: 'ZmxhdC1lbmMtcHJpdmF0ZQ==',
+        selfEncryptionKey: 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=');
 
     final preferences = AtClientPreference()
       ..hiveStoragePath = 'test/hive'
