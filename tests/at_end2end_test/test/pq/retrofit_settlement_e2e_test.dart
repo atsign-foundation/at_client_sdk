@@ -20,7 +20,6 @@ import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 /// UC-B1.1's settlement, read off the atServer's own records.
@@ -58,7 +57,8 @@ void main() {
             otp: otp,
             apkamKeysExpiryDuration: expiry,
             signingAlgo: SigningAlgoType.rsa2048),
-        AtLookupImpl(atSign, rootDomain().rootDomain, rootDomain().rootPort));
+        secureSocketLookUps()(
+            atSign: atSign, rootDomain: rootDomain(), authenticator: null));
     final record = (await owner.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
     await owner.enrollmentService!.approve(EnrollmentRequestDecision.approved(

@@ -72,10 +72,11 @@ void main() {
       // Submit an enrollment request with at_auth package
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
-      AtLookUp atLookUp = AtLookupImpl(
-          currentAtSign,
-          atClient.getPreferences()!.rootDomain,
-          atClient.getPreferences()!.rootPort);
+      AtLookUp atLookUp = secureSocketLookUps()(
+          atSign: currentAtSign,
+          rootDomain: AtRootDomain(atClient.getPreferences()!.rootDomain,
+              atClient.getPreferences()!.rootPort),
+          authenticator: null);
 
       // Do an enrollment with access to the __config namespace
       AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(

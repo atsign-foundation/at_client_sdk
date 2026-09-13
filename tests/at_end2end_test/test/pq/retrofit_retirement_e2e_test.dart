@@ -18,7 +18,6 @@ import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 /// UC-B2.1 / UC-B2.2 — the superseded legacy enrollment, locked out at once.
@@ -60,7 +59,8 @@ void main() {
             namespaces: {namespace: 'rw'},
             otp: otp,
             signingAlgo: SigningAlgoType.rsa2048),
-        AtLookupImpl(atSign, rootDomain().rootDomain, rootDomain().rootPort));
+        secureSocketLookUps()(
+            atSign: atSign, rootDomain: rootDomain(), authenticator: null));
     final record = (await owner.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
     await owner.enrollmentService!.approve(EnrollmentRequestDecision.approved(

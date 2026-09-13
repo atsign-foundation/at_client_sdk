@@ -23,7 +23,6 @@ import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 /// UC-B1.1 / B1.2 / B1.3 — the retrofit scenarios, end to end, with the
@@ -94,8 +93,12 @@ void main() {
             namespaces: namespaces,
             otp: otp,
             signingAlgo: SigningAlgoType.rsa2048),
-        AtLookupImpl(atSign, ConfigUtil.getYaml()['root_server']['url'],
-            ConfigUtil.getYaml()['root_server']['port'] ?? 64));
+        secureSocketLookUps()(
+            atSign: atSign,
+            rootDomain: AtRootDomain(
+                ConfigUtil.getYaml()['root_server']['url'],
+                ConfigUtil.getYaml()['root_server']['port'] ?? 64),
+            authenticator: null));
     final record = (await owner.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
     await owner.enrollmentService!.approve(EnrollmentRequestDecision.approved(
