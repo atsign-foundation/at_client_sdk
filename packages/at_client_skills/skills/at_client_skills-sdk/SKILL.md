@@ -4,7 +4,10 @@ description: >
   Use this skill when a developer is building a Dart or Flutter app that
   depends on at_client or at_client_flutter from pub.dev, stores or shares
   data via the Atsign Protocol, needs onboarding (CRAM new-atsign, atKeys
-  file, keychain, APKAM) or APKAM enrollment, or asks about AtCollection<T>,
+  file, keychain, APKAM) or APKAM enrollment, asks how to open, own, stop or
+  switch an AtClient or read its connection state (online / offline /
+  refused), how its sync and notification services start and stop, or asks
+  about AtCollection<T>,
   CItem<T>, Query<T>, sub-collections, event streams, read receipts, wherePath
   typed predicates, or watchWithTree deep hierarchies. Also use when the
   developer asks how to send or receive notifications via NotificationService,
@@ -19,8 +22,8 @@ license: BSD-3-Clause
 compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
-  version: "1.3.0"
-  last_modified: "Tue, 28 Jul 2026 00:00:00 GMT"
+  version: "1.4.0"
+  last_modified: "Sun, 13 Sep 2026 00:00:00 GMT"
 ---
 
 # atsign-dart-sdk Skill
@@ -65,13 +68,17 @@ for the full migration table from old to new API.
 
 Install with `dart pub add` — it resolves the latest compatible version:
 
-| Use case                     | packages to add                                            |
-| ---------------------------- | ---------------------------------------------------------- |
-| Dart CLI / server / IoT      | `at_client`                                                |
-| Flutter app                  | `at_client_flutter` (re-exports `at_client` — one dep)     |
-| CLI / headless Dart          | `at_client`, `at_cli_commons`                              |
-| APKAM / custom auth flows    | `at_client` or `at_client_flutter`, plus `at_auth`         |
-| Raw cryptographic operations | `at_client` or `at_client_flutter`, plus `at_chops`        |
+| Use case                       | packages to add                                                  |
+| ------------------------------ | ---------------------------------------------------------------- |
+| Dart CLI / server / IoT        | `at_client`                                                      |
+| Flutter app                    | `at_client_flutter` (re-exports `at_client` — one dep)           |
+| CLI / headless Dart            | `at_client`, `at_cli_commons`                                    |
+| Onboarding, login, APKAM       | `at_client` (the `Atsign` verbs) or `at_client_flutter` (dialogs) |
+| Raw cryptographic operations   | `at_client` or `at_client_flutter`, plus `at_chops`              |
+
+An app never imports `at_auth`: `at_client` owns onboarding, login and
+enrollment (see §11), and `at_client_flutter` re-exports the one at_auth type
+an app may want, `RegistrarService`.
 
 **Never add:** `at_common_flutter`, `at_onboarding_flutter` (discontinued — use
 the `at_client_flutter` auth dialogs), `at_backupkey_flutter`,
@@ -294,58 +301,67 @@ collection.readReceipts.listen((r) => print('${r.from} read ${r.id} at ${r.readA
 
 ## 10. Flutter Auth (`at_client_flutter`)
 
-Four auth flows — all end with the same `_setupAtClient()` call.
+Four flows, four dialogs. Every dialog hands back the **`AtClient` it opened**
+(`null` means the user cancelled or the dialog failed) and the app owns it: it
+uses it, makes it current if its screens read the manager, and `stop()`s it
+when done. Nothing here needs `at_auth`.
 
 **Flow 2 (existing `.atKeys` file) — most common for returning developers:**
 
 ```dart
-final atKeysIo    = await AtKeysFileDialog.show(context);
-final authRequest = AtAuthRequest(atKeysIo!.getAtsign(),
-  atKeysIo: atKeysIo, rootDomain: AtRootDomain.atsignDomain);
-final response    = await PkamDialog.show(context,
-  request: authRequest, backupKeys: [KeychainAtKeysIo()]);
-if (response?.isSuccessful == true) await _setupAtClient(authRequest.rootDomain, response!);
+final atKeysIo = await AtKeysFileDialog.show(context);          // FileAtKeysIo?
+if (atKeysIo == null) return;
+final atSign = atKeysIo.getAtsign();                            // extensions.dart
+final client = await PkamDialog.show(context,
+  atSign: atSign,
+  keys: atKeysIo,
+  preference: AtClientPreference()..namespace = 'my_namespace',
+  storage: await _storage(atSign),
+  backupKeys: [KeychainAtKeysIo()],   // copies the keys into the keychain for next time
+);
+if (client == null) return;
+_adopt(client);
 ```
 
 **Flow 3 (device keychain — returning user on same device):**
 
 ```dart
-final atSigns     = await KeychainStorage().getAllAtsigns();
-final request     = await AtSignSelectionDialog.show(context, existingAtSigns: atSigns);
-final authRequest = AtAuthRequest(request!.atSign,
-  atKeysIo: KeychainAtKeysIo(), rootDomain: request.rootDomain);
-final response    = await PkamDialog.show(context,
-  request: authRequest, backupKeys: [KeychainAtKeysIo()]);
-if (response?.isSuccessful == true) await _setupAtClient(authRequest.rootDomain, response!);
+final atSigns   = await KeychainStorage().getAllAtsigns();
+final selection = await AtSignSelectionDialog.show(context, existingAtSigns: atSigns);
+if (selection == null) return;                                 // AtsignSelection: atSign, rootDomain
+final client = await PkamDialog.show(context,
+  atSign: selection.atSign,
+  rootDomain: selection.rootDomain,
+  keys: KeychainAtKeysIo(),
+  preference: AtClientPreference()..namespace = 'my_namespace',
+  storage: await _storage(selection.atSign),
+);
+if (client == null) return;
+_adopt(client);
 ```
 
-**Post-auth setup (all flows — takes just the root domain, so it works for
-all 4 flows):**
+**Storage and adoption (all flows):**
 
 ```dart
-Future<void> _setupAtClient(AtRootDomain atRootDomain, AuthResponse response) async {
+// Where this app keeps the atSign's local store. closedByClient: the client
+// closes it when it stops, so there is nothing to tear down.
+Future<HiveAtClientStorage> _storage(String atSign) async {
   final dir = await getApplicationSupportDirectory();
-  final acp = AtClientPreference()
-    ..rootDomain      = atRootDomain.rootDomain
-    ..rootPort        = atRootDomain.rootPort
-    ..namespace       = 'my_namespace'
-    ..commitLogPath   = dir.path
-    ..hiveStoragePath = dir.path;
-
-  await AtClientManager.getInstance().setCurrentAtSign(
-    response.atSign, 'my_namespace', acp,
-    enrollmentId: response.enrollmentId,
-    atChops: response.atChops,
-    atLookUp: response.atLookUp,
-  );
+  return HiveAtClientStorage(atSign: atSign, storagePath: dir.path, closedByClient: true);
 }
 
-AtClientManager.getInstance().reset();  // logout
+// An app whose screens read AtClientManager.getInstance().atClient makes the
+// client current; an app that passes the client around needs no manager.
+void _adopt(AtClient client) => AtClientManager.getInstance().use(client);
+
+// Logout: stop the client. Opening the same atSign again while it is live is
+// refused, so every sign-in stops the previous client first.
+await client.stop();
 ```
 
 Read [references/05-flutter-auth.md](references/05-flutter-auth.md) for all 4
 flows (including Flow 1: CRAM new-atsign and Flow 4: APKAM enrollment) with
-complete code.
+complete code, and what a `PkamDialog` that comes back **offline** means.
 
 > **Sync setup:** set `AtClientPreference.syncRegex = '<your namespace>'` —
 > without it, sync covers the atsign's whole keystore and can wedge, so shares
@@ -354,7 +370,79 @@ complete code.
 
 ---
 
-## 11. Domain-Object Checklist
+## 11. AtClient Lifecycle: Open, Own, Stop
+
+`at_client` owns the atSign lifecycle. An app holds an `AtKeysIo` (a `.atKeys`
+file, the keychain, or memory) and asks the atSign for a client; every verb
+hands back an `AtClient` the app **owns and stops**. The Flutter dialogs (§10)
+and `CLIBase` (§16) are these verbs behind UI and argument parsing.
+
+```dart
+final client = await Atsign('@alice').open(
+  keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
+  preference: AtClientPreference()..namespace = 'my_namespace'..syncRegex = 'my_namespace',
+  storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
+);
+// Also: Atsign(a).activate(cramSecret:, keys:, preference:)  — onboard a new atSign
+//       Atsign(a).enroll(otp:, app:, device:, namespaces:, keys:, preference:) → PendingEnrollment
+//       Atsign(a).resumeEnrollment(app:, device:, keys:, preference:)         — after a restart
+```
+
+**Connection state — the client comes back whatever the network did:**
+
+```dart
+client.connection.current;        // AtConnectionState: online | offline | refused, plus cause
+client.connection.changes.listen((s) => ...);       // every change, in order
+await client.connection.awaitOnline(budget: const Duration(seconds: 30));
+await client.connection.attempt();                  // try again now
+```
+
+- **offline** (`unreachable`, `noAtServer`): the client serves its local store;
+  writes queue and sync when the atServer is reached.
+- **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
+  `enrollmentNotApproved`): the atServer rejected the keys — the app decides.
+  The one refusal that **throws** (`AtOpenRefusedException`) is the first open
+  of these keys on a device: nothing is held locally, so there is nothing to
+  serve. Keys holding only a pending enrollment throw
+  `AtEnrollmentPendingException` — call `resumeEnrollment`.
+- **`stopped`**: what `current` reads after `stop()`; `changes` is done.
+
+**Services — both belong to the client, start with it and stop with it:**
+
+- `client.syncService` runs on its own: on every stats notification from the
+  atServer and every `syncIntervalMins`. `sync()` expedites a round,
+  `isInSync()` asks the atServer fresh, `addProgressListener` observes. The
+  `AtClientManager` getters for these services are deprecated.
+- `client.notificationService.subscribe(regex:, shouldDecrypt:)` — the monitor
+  starts on the first `subscribe` (or 30 s after creation) when
+  `monitorAutoStart` is true. **`subscribe()` returns before the monitor is
+  connected**: wait for `listening` (or `currentListenerStateStream`) before a
+  notify you expect to receive, or the send reports `delivered` and nothing
+  arrives.
+
+**Own it, then stop it:**
+
+- **One live client per (atSign, enrollment) and per storage location** in a
+  process: opening again while one is live throws `StateError` — `stop()` the
+  previous client first. Another enrollment of the same atSign opens beside it
+  on its own store.
+- `await client.stop()` stops sync, notifications and the connection, and
+  closes storage built with `closedByClient: true`. It does **not** drain: a
+  sync round in flight is abandoned and its work stays queued for the next
+  client on that store. Wait for `isInSync()` first if the writes must land.
+- A stopped client is not restarted — open the atSign again.
+- `AtClientManager.getInstance().use(client)` makes a client current for code
+  that reads `AtClientManager.getInstance().atClient`; `use` does **not** stop
+  the previous current client. `setCurrentAtSign` / `fromAuthSession` are
+  deprecated. `reset()` is a test hook, not a logout.
+
+Read [references/15-client-lifecycle.md](references/15-client-lifecycle.md)
+for the full verb list, the storage object, every `AtConnectionCause`, the
+service lifecycles and the shutdown checklist.
+
+---
+
+## 12. Domain-Object Checklist
 
 ```dart
 class Todo {
@@ -382,7 +470,7 @@ for polymorphic types, schema evolution, and the full re-registration rules.
 
 ---
 
-## 12. Architecture Decision: AtCollection vs Notifications+SQLite
+## 13. Architecture Decision: AtCollection vs Notifications+SQLite
 
 |                 | `AtCollection<T>`               | Notifications + SQLite            |
 | --------------- | ------------------------------- | --------------------------------- |
@@ -417,7 +505,7 @@ send/subscribe walkthrough.
 
 ---
 
-## 13. Testing Without a Live atServer
+## 14. Testing Without a Live atServer
 
 ```dart
 import 'package:at_client/at_client.dart'; // test hooks are re-exported here
@@ -443,7 +531,7 @@ and MockAtClient stubs.
 
 ---
 
-## 14. RPC — Request/Response Between Atsigns
+## 15. RPC — Request/Response Between Atsigns
 
 For "call another atsign and get an answer back" (actions and queries — not
 data), use `AtRpc`/`AtRpcClient` from `at_client`:
@@ -471,7 +559,7 @@ multi-instance mutex.
 
 ---
 
-## 15. Headless Agents & Multi-Instance Coordination
+## 16. Headless Agents & Multi-Instance Coordination
 
 Authenticate a UI-less process (agent, daemon, CLI) in one line with
 `CLIBase` from `at_cli_commons`:
@@ -481,14 +569,17 @@ final AtClient atClient =
     (await CLIBase.fromCommandLineArgs(args, namespace: 'my_app')).atClient;
 ```
 
-- **Every process needs its own `hiveStoragePath`/`commitLogPath`** — shared
-  hive paths collide and throw. Use
-  `Directory.systemTemp.createTempSync('agent_')` per instance.
+- **Every process needs its own storage** (`HiveAtClientStorage(atSign:,
+  storagePath:)`, or the deprecated `hiveStoragePath`) — one store is held by
+  one live client and a second open on it is refused. Use
+  `Directory.systemTemp.createTempSync('agent_')` per instance, and
+  `client.stop()` when the process is done.
 - **Multiple instances of one agent** coordinate via an immutable-mutex race
   (`Metadata()..immutable = true` + remote put; the **losing `put()` throws** —
   there is no typed exception, inspect the message for `'immutable'`), or run
-  stateless with `ServiceFactoryWithNoOpSyncService` (from `at_cli_commons`,
-  NOT `at_client`) + remote operations.
+  stateless with `Atsign(a).open(..., serviceFactory:
+  ServiceFactoryWithNoOpSyncService())` (from `at_cli_commons`, NOT
+  `at_client`) + remote operations.
 
 Read [references/14-multi-agent.md](references/14-multi-agent.md) when
 building headless agents, daemons, or anything that runs more than one
@@ -496,7 +587,7 @@ instance.
 
 ---
 
-## 16. Remote vs Local atServer Operations
+## 17. Remote vs Local atServer Operations
 
 By default (`AtClientPreference.remoteLocalPref = RemoteLocalPref.localOnly`)
 `put`/`get`/`delete` hit the **local** secondary and sync in the background —
@@ -525,7 +616,7 @@ an operation must see or produce server-side truth immediately.
 
 ---
 
-## 17. Deprecated — Do Not Use
+## 18. Deprecated — Do Not Use
 
 | Avoid                                                                                                                                                        | Use instead                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
@@ -535,6 +626,9 @@ an operation must see or produce server-side truth immediately.
 | `at_invitation_flutter`                                                                                                                                      | Copy `at_client_flutter` invitation snippet      |
 | `at_sync_ui_flutter`, `at_theme_flutter`                                                                                                                     | Deprecated — do not use                          |
 | `at_chat_flutter`, `at_contacts_flutter`, `at_contacts_group_flutter`, `at_events_flutter`, `at_follows_flutter`, `at_location_flutter`, `at_notify_flutter` | In migration — copy example code instead         |
+| `AtClientManager.setCurrentAtSign(...)`, `fromAuthSession(...)`                                                                                              | `Atsign(a).open(...)` then `AtClientManager.getInstance().use(client)` |
+| `AtAuthRequest`, `AuthResponse`, `AuthService`, `FlutterEnrollmentService` (at_client_flutter 1.x); importing `at_auth` in an app                              | The dialogs hand back the `AtClient` (§10); the `Atsign` verbs (§11) |
+| `AtClientPreference.hiveStoragePath`, `.commitLogPath`                                                                                                       | `HiveAtClientStorage(atSign:, storagePath:)` passed as `storage` |
 
 Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md)
 for the full migration table from old `AtCollectionModel` patterns to
@@ -542,7 +636,7 @@ for the full migration table from old `AtCollectionModel` patterns to
 
 ---
 
-## 18. Canonical Examples & Future Scope
+## 19. Canonical Examples & Future Scope
 
 - `packages/at_client/example/bin/collections_domain_objects.dart`
 - `packages/at_client/example/bin/collections_subcollections.dart`
