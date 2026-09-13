@@ -66,7 +66,7 @@ explicit `at_utils_io.dart` import, if it also uses `FileLoggingHandler` /
 `StdErrLoggingHandler` / `CLILoggingHandler` — audit call sites before assuming
 `at_logger.dart` alone is enough).
 
-Separately, `at_utils: ^4.0.0` needed bumping in 22 workspace pubspecs, not the ~11
+Separately, `at_utils: ^4.0.0-rc1` needed bumping in 22 workspace pubspecs, not the ~11
 originally estimated — **done**, in the same commit as the version bump. `resolution:
 workspace` means the constraint mismatch isn't latent for local dev the way this section
 originally assumed: pub workspaces still validate every declared constraint against the
@@ -116,7 +116,7 @@ not just at publish time.
   `at_client_flutter/examples/todos`, `at_chat_flutter/example`, and
   `at_policy/example`. Each already overrode its other local packages (`at_client`,
   `at_onboarding_cli`, etc.) to path but not `at_utils` itself — so once those
-  overridden packages started declaring `at_utils: ^4.0.0`, pub.dev had nothing to
+  overridden packages started declaring `at_utils: ^4.0.0-rc1`, pub.dev had nothing to
   offer and resolution failed. Added the same `at_utils: path: ...` override to all
   six, consistent with their siblings. (The dockerstats file also has a pre-existing,
   unrelated `FileAtKeysIo` undefined-method error, confirmed present before this

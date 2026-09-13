@@ -36,7 +36,7 @@ dependencies:
     path: ../
   at_client_flutter: ^0.1.0
   at_auth: ^3.0.0
-  at_utils: ^4.0.0
+  at_utils: ^4.0.0-rc1
   path_provider: ^2.1.1
   flutter_keychain: ^2.4.0
 
