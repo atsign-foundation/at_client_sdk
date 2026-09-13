@@ -211,8 +211,7 @@ void main() {
       // self-enrollment rather than a new one.
       enrollRequest =
           'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${freshApkamPair().publicKey}", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
-      final requestLookup =
-          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      final requestLookup = TestUtils.unauthenticatedLookUp(atSign);
       String? serverResponse;
       try {
         serverResponse =
@@ -248,8 +247,7 @@ void main() {
           otp: 'a1b2c3',
           signingAlgo: SigningAlgoType.rsa2048); //random invalid OTP
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup =
-          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      var newAtLookup = TestUtils.unauthenticatedLookUp(atSign);
       expect(
           () async => atEnrollment.submit(enrollmentRequest, newAtLookup),
           throwsA(predicate((dynamic e) =>
@@ -272,8 +270,7 @@ void main() {
           otp: otp,
           signingAlgo: SigningAlgoType.rsa2048);
       var atEnrollment = AtEnrollment.create();
-      var newAtLookup =
-          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      var newAtLookup = TestUtils.unauthenticatedLookUp(atSign);
       var enrollmentResponse =
           await atEnrollment.submit(enrollmentRequest, newAtLookup);
       expect(enrollmentResponse.enrollmentId, isNotEmpty);
@@ -371,10 +368,7 @@ void main() {
       // Submit an enrollment request with at_auth package
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
-      AtLookUp atLookUp = AtLookupImpl(
-          atSign,
-          atClientManager.atClient.getPreferences()!.rootDomain,
-          atClientManager.atClient.getPreferences()!.rootPort);
+      AtLookUp atLookUp = TestUtils.unauthenticatedLookUp(atSign);
 
       AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
           atSign: atSign,
@@ -465,10 +459,7 @@ void main() {
       // Submit an enrollment request with at_auth package
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
-      AtLookUp atLookUp = AtLookupImpl(
-          atSign,
-          atClientManager.atClient.getPreferences()!.rootDomain,
-          atClientManager.atClient.getPreferences()!.rootPort);
+      AtLookUp atLookUp = TestUtils.unauthenticatedLookUp(atSign);
 
       AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
           atSign: atSign,
@@ -533,10 +524,7 @@ void main() {
       // Submit an enrollment request with at_auth package
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
-      AtLookUp atLookUp = AtLookupImpl(
-          atSign,
-          atClientManager.atClient.getPreferences()!.rootDomain,
-          atClientManager.atClient.getPreferences()!.rootPort);
+      AtLookUp atLookUp = TestUtils.unauthenticatedLookUp(atSign);
 
       AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
           atSign: atSign,
@@ -668,8 +656,7 @@ void main() {
         () async {
       String random = Uuid().v4().hashCode.toString();
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
-      AtLookUp atLookUp =
-          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      AtLookUp atLookUp = TestUtils.unauthenticatedLookUp(atSign);
 
       AtClientManager atClientManager = await TestUtils.initAtClient(
           atSign, namespace,
@@ -784,8 +771,7 @@ void main() {
       // generates a fresh APKAM keypair and wraps its apkamSymmetricKey with
       // the atSign's default encryption public key.
       final random = Uuid().v4().hashCode;
-      final enrolleeLookup = AtLookupImpl(
-          cramAtSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+      final enrolleeLookup = TestUtils.unauthenticatedLookUp(cramAtSign);
       final enrollResponse = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
           atSign: cramAtSign,

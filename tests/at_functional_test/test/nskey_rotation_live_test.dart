@@ -8,7 +8,6 @@ library;
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
@@ -18,7 +17,6 @@ import 'package:at_client/src/crypto/nskey/nskey_rotation.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -374,14 +372,8 @@ void main() {
     /// mechanism as readily as for its presence.
     Future<String> authOutcome(EnrolledClient enrolled) async {
       final lookup =
-          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
-            ..enrollmentId = enrolled.enrollmentId
-            ..atChops = AtChopsImpl(AtChopsKeys.create(
-              AtEncryptionKeyPair.create(
-                  enrolled.keys.defaultEncryptionPublicKey!.toString(), ''),
-              AtPkamKeyPair.create(enrolled.keys.apkamPublicKey!.toString(),
-                  enrolled.keys.apkamPrivateKey!.toString()),
-            ));
+          TestUtils.lookUpAs(atSign, enrolled.keys,
+        enrollmentId: enrolled.enrollmentId);
       try {
         final accepted =
             await lookup.pkamAuthenticate(enrollmentId: enrolled.enrollmentId);

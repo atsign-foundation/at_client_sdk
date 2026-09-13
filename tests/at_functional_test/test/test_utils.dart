@@ -11,7 +11,8 @@ import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
-import 'package:at_auth/at_auth.dart' show AtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtKeysIo, authenticatorFor;
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
@@ -100,6 +101,28 @@ class TestUtils {
   /// Root server port for the virtualenv under test. Defaults to 64; a
   /// base-port virtualenv (set VIRTUALENV_BASE_PORT, e.g. via runLocal.sh)
   /// puts the root server at the base port itself.
+  /// Where this pack's atServers are found.
+  static AtRootDomain get rootDomain =>
+      AtRootDomain('vip.ve.atsign.zone', rootServerPort);
+
+  /// A connection to [atSign]'s atServer that authenticates as nothing;
+  /// the caller closes it.
+  static AtLookUp unauthenticatedLookUp(String atSign) =>
+      secureSocketLookUps()(
+          atSign: atSign, rootDomain: rootDomain, authenticator: null);
+
+  /// A connection to [atSign]'s atServer that authenticates as
+  /// [enrollmentId] with the keypair [keys] holds for it, or as the
+  /// enrollment the keys name when none is given; the caller closes it.
+  static AtLookUp lookUpAs(String atSign, AtKeys keys,
+          {String? enrollmentId}) =>
+      secureSocketLookUps()(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          authenticator: authenticatorFor(
+              InMemoryAtKeysIo.holding(atSign, keys), atSign,
+              enrollmentId: enrollmentId));
+
   static int get rootServerPort =>
       int.tryParse(Platform.environment['VIRTUALENV_BASE_PORT'] ?? '') ?? 64;
 

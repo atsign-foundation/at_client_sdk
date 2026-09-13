@@ -60,7 +60,7 @@ void main() {
             namespaces: {namespace: 'rw'},
             otp: otp,
             signingAlgo: SigningAlgoType.rsa2048),
-        AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort));
+        TestUtils.unauthenticatedLookUp(atSign));
     final record = (await atClient.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
     await atClient.enrollmentService!.approve(

@@ -79,10 +79,8 @@ void main() {
     final original = published!.replaceFirst('data:', '').trim();
     expect(original, isNotEmpty);
 
-    final attackerLookup =
-        AtLookupImpl(atSign, rootDomain, TestUtils.rootServerPort)
-          ..enrollmentId = attacker.enrollmentId
-          ..atChops = attacker.client.atChops;
+    final attackerLookup = TestUtils.lookUpAs(atSign, attacker.keys,
+        enrollmentId: attacker.enrollmentId);
 
     try {
       expect(

@@ -10,7 +10,6 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/config_util.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -177,7 +176,7 @@ void main() {
         // RSA-2048 APKAM keypair.
         signingAlgo: SigningAlgoType.rsa2048,
       ),
-      AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
+      TestUtils.unauthenticatedLookUp(atSign),
     );
 
     await atClient.enrollmentService!
@@ -238,7 +237,7 @@ void main() {
 
     final response = await AtEnrollment.create().submit(
       request,
-      AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
+      TestUtils.unauthenticatedLookUp(atSign),
     );
     final payload =
         SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;

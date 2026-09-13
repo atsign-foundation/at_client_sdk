@@ -5,15 +5,12 @@
 library;
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart'
-    show AtChopsImpl, AtChopsKeys, AtEncryptionKeyPair, AtPkamKeyPair;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show SignedEnvelope;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/secret_sharing/key_package_persistence.dart';
 import 'package:at_functional_test/src/config_util.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -67,7 +64,7 @@ void main() {
         // RSA-2048 APKAM keypair.
         signingAlgo: SigningAlgoType.rsa2048,
       ),
-      AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
+      TestUtils.unauthenticatedLookUp(atSign),
     );
 
     await atClient.enrollmentService!
@@ -118,14 +115,8 @@ void main() {
     // On the wire rather than by comparing strings: the copy authenticates as
     // that same enrollment against the live atServer.
     final copyLookup =
-        AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
-          ..enrollmentId = response.enrollmentId
-          ..atChops = AtChopsImpl(AtChopsKeys.create(
-            AtEncryptionKeyPair.create(
-                copiedKeys.defaultEncryptionPublicKey!.toString(), ''),
-            AtPkamKeyPair.create(copiedKeys.apkamPublicKey!.toString(),
-                copiedKeys.apkamPrivateKey!.toString()),
-          ));
+        TestUtils.lookUpAs(atSign, copiedKeys,
+        enrollmentId: response.enrollmentId);
 
     try {
       expect(
@@ -151,14 +142,8 @@ void main() {
     expect(revoked.enrollStatus, EnrollmentStatus.revoked);
 
     final afterRevoke =
-        AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
-          ..enrollmentId = response.enrollmentId
-          ..atChops = AtChopsImpl(AtChopsKeys.create(
-            AtEncryptionKeyPair.create(
-                copiedKeys.defaultEncryptionPublicKey!.toString(), ''),
-            AtPkamKeyPair.create(copiedKeys.apkamPublicKey!.toString(),
-                copiedKeys.apkamPrivateKey!.toString()),
-          ));
+        TestUtils.lookUpAs(atSign, copiedKeys,
+        enrollmentId: response.enrollmentId);
     try {
       // NOTE: named rather than `throwsA(anything)` — on a live connection a
       // reset, a timeout or a malformed command throws too, so only the
