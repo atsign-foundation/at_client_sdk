@@ -342,7 +342,7 @@ become *safe* once storage is per-enrollment: no sibling shares a client's box, 
 on release cannot pull the store out from under another enrollment or an in-flight sync
 round. The per-atSign guard comes out — it is the wrong shape, replaced by
 [D-14](#d-14--the-storage-isolation-design-2026-09-05)'s per-location guard. PR #2208 (the
-release half) is paused behind this ruling; its release code is kept, its guard reworked.
+release half) was paused behind this ruling; its release code was kept, its guard reworked.
 
 ### D-14 — The storage-isolation design (2026-09-05)
 
@@ -397,7 +397,8 @@ the last **claim holder** — which `principalOf` renders as `atSign|enrollmentI
 carries the enrolled principal too.
 
 **4 — `storage:` is injected on both doors.** An optional `storage:` parameter on the direct
-`create` factory, threaded through `AtClientManager.setCurrentAtSign`; omitting it builds the
+factory (`buildAtClient`, as later ruled), threaded through `AtClientManager.setCurrentAtSign`
+(since deprecated in favour of `Atsign.open` plus `AtClientManager.use`); omitting it builds the
 default Hive impl from the preference's storage path (`preference.hiveStoragePath`,
 deprecated per D-12).
 Production omits it. The manager's `refuseChangedStoragePath` short-circuit check comes out —
@@ -408,6 +409,8 @@ the per-location guard subsumes it.
 enrollment per atSign) but unable to hold two live enrollments of one atSign. A fixture
 simulating several builds each via direct `create` with its own injected located storage,
 mirroring the reality that they are separate processes with separate managers.
+`AtClientManager.use(client)` has since added the other half: it makes a caller-owned client
+current without stopping the one it replaces.
 
 **6 — Lifecycle.** A location is registered when its backend opens and released only when it
 closes — never on detach, since a detached-but-open backend still occupies the location.
@@ -654,9 +657,10 @@ is one release instead of two. Decide per package at execution time.
 `AtServiceFactory`?** `AtServiceFactory` (`at_client_manager.dart:265`) is the closer
 analogue and already has real overrides; `AtClientPreference` is what callers already
 touch and already carries `CryptoConfig` as precedent. See
-[`design.md`](design.md) §4. **Resolved for storage by D-12** — a bundle injected through
-a static factory on `AtClient`, not a preference field. Open for the remaining
-capabilities.
+[`design.md`](design.md) §4. **Resolved for storage by D-12, and for the transport on
+2026-09-13** — a bundle and an `AtLookUpFactory`, both injected as named parameters on
+`buildAtClient` and the `Atsign` verbs (not a static on `AtClient`, and not a preference
+field). Open for the remaining capabilities.
 
 **OQ-4 — File transfer: change the API, or extract the component?** Either
 `uploadFile`/`downloadFile`/`reuploadFiles` move to `(bytes, name)` or a stream
@@ -730,3 +734,4 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-25 | at_auth 4.0.0-rc1 ([#2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179)), the PQ program's S-5: the `at_auth_io.dart` barrel split, `FileAtKeysIo` default dropped, registrar onto `package:http`. Ships one conditional export (`probe_default.dart`). |
 | 2026-08-27 | **Phase 0 matured** ([#2183](https://github.com/atsign-foundation/at_client_sdk/pull/2183)). Gate config extracted to `.github/wasm_gates.yaml`; `controls` made mandatory; `at_auth` gated. **T0.2's two-way ratchet withdrawn** for one-way baselines, **T0.3's no-conditionals ban withdrawn** and restated as a both-branches-walked requirement (D-1 amended, OQ-1 resolved), **R5 withdrawn** — T2 cannot run on a hosted runner (§2.7). T0.4 remains unimplemented. |
 | 2026-08-27 | Phase 1 in review as a three-PR stack: [#2162](https://github.com/atsign-foundation/at_client_sdk/pull/2162) (S4–S6) ready, [#2163](https://github.com/atsign-foundation/at_client_sdk/pull/2163) (S1, S2) and [#2164](https://github.com/atsign-foundation/at_client_sdk/pull/2164) (S3) draft. `plan.md` deleted, as §3 had asserted since 2026-08-13. |
+| 2026-09-13 | **The transport becomes the third leg of the platform bundle** (T9 done; OQ-3 resolved for the transport). at_lookup gains `AtLookUpFactory` and `secureSocketLookUps` (`at_lookup_io.dart`), plus an `onConnect` hook run once per new connection; at_client's entry points take `lookUps:` and carry it to the client's, sync's and monitor's connections; `AtClientPreference.decryptPackets`, `tlsKeysSavePath` and `pathToCerts` deprecated, read only by `defaultLookUps` until 4.0. Built on `gkc-client-lifecycle`. |

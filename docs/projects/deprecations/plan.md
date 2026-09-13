@@ -101,8 +101,8 @@ copy, so it is the one that has to end up showing the right thing.
 | ----------------------------------- | --------------- | --: | ---: |
 | at_auth                             | 4.0.0-rc2       |  56 |   86 |
 | at_client                           | 3.15.0-rc1      |  46 |  359 |
-| at_onboarding_cli                   | 1.17.0-rc1      |  31 |  239 |
-| at_client_flutter                   | 1.1.5-rc1       |   7 |   41 |
+| at_onboarding_cli                   | 2.0.0-rc1       |   — |    — |
+| at_client_flutter                   | 2.0.0-rc1       |   — |    — |
 | tests/at_functional_test            | (unpublished)   |   6 |  272 |
 | tests/at_end2end_test               | (unpublished)   |  45 |   80 |
 | tests/at_onboarding_cli_functional_tests | (unpublished) | 0 | 47 |
@@ -250,6 +250,20 @@ own test files set `hiveStoragePath`; those are found by
 location together, with `closedByClient: true` where the client is meant to
 close it.
 
+### F6, the `AtClientPreference` transport fields (declared in at_client)
+
+`decryptPackets`, `tlsKeysSavePath` and `pathToCerts`, all *"The transport is
+the AtLookUpFactory's to configure"*, all removed in 4.0. They arrived
+deprecated with the third leg of the platform bundle: `Atsign.open`,
+`activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`, `buildAtClient`
+and `AtServiceFactory.atClient` take `lookUps:`, an at_lookup
+`AtLookUpFactory`, and the replacement is
+`secureSocketLookUps(config: SecureSocketConfig(...))`. The default factory
+reads the three fields until they go, so a 3.x app sees no change, and every
+count in this plan predates them. The lifecycle work deprecated two more
+members the counts predate: `AtClientManager.setCurrentAtSign` and
+`fromAuthSession`, replaced by `Atsign.open` and `AtClientManager.use`.
+
 ## 3. Decisions this plan needs, and the ones it makes
 
 Made here: the carrier replacement is typed getters on `AtKeys`, not a new
@@ -272,8 +286,9 @@ that have a `lib` directory (330 Dart files) names `atChops`, while
 files in this checkout at all; and at_tools, working tree on `trunk`, names
 neither `atChops` nor `AtChops` in any of its 40 Dart files. The 4 live packs
 are the largest in-tree consumer of the surface (`enrollment_setup.dart` in
-the e2e pack sets `atLookUp.atChops`, builds an `AtChopsImpl` and calls
-`AtAuth.create(atChops:)`), and they are workspace members, so they move in
+the e2e pack still builds an `AtChopsImpl` and sets `atLookUp.atChops`; the
+`AtAuth.create(atChops:)` beside it went when at_auth removed `AtAuth`), and
+they are workspace members, so they move in
 step 6 rather than counting as blast radius. The consumer that removal does
 break is whoever builds a client from a preference alone with an injected
 `AtChops`, which is the bridge the consolidation plan already holds open.
@@ -290,7 +305,8 @@ Ruled by gkc on 2026-09-11: F3 clears in this pass, and the annotations with
 no replacement behind them come off first. 45 of the family's 477 uses could
 not be cleared by a consumer at all. 31 name `AuthResponse`,
 `AtOnboardingResponse` or `AtAuthResponse`, which `AtAuth.authenticate` and
-`AtAuth.onboard` return while carrying no deprecation themselves, so a caller
+`AtAuth.onboard` returned while carrying no deprecation themselves (all gone
+with at_auth 4.0.0-rc2), so a caller
 that names the return type in its own signature — as at_client_flutter's
 service class does — had nothing to move to. The other 14 name
 `AtKeys.metadata`, whose annotation promises new methods that do not exist.
@@ -326,8 +342,16 @@ apart from `LocalSecondary`'s `AtChops` tier, which waits for the live packs;
 `AtClient.atChops` is `@Deprecated`. Step 5 is done: the readers of the
 enrollment id ask the client. All four live packs have run green on everything landed;
 their first runs found two defects, recorded under step 4, one of them from
-the pass before this one. Step 6's at_onboarding_cli half is done and its four
-packs are green, and step 7's three at_client_flutter readings are resolved.
+the pass before this one. Step 6's at_onboarding_cli half is done, and the package has
+since gone to a 2.0 whose surface is `authenticate()` and `atClient` over
+`Atsign.open`; step 7's at_client_flutter half was overtaken the same way,
+its 2.0 deleting the two services that held the three readings. B went with
+the auth DTOs in at_auth `4.0.0-rc2`; C and D are still annotated on
+`AtEnrollmentRequest` and `AtEnrollmentResponse`. New since these counts were
+taken: three transport fields on `AtClientPreference`, deprecated by the
+`lookUps:` factory and enumerated in F6, and the two `AtClientManager`
+members named there. The two 2.0 rows in the debt table are unmeasured since
+their majors; re-derive them with the recipe above before quoting either.
 [Step 8](#step-8-removal--at_auth-now-the-others-at-their-majors) is under
 way: gkc ruled that at_auth's surface is cleaned in this rc, and its families
 E, H, A and G are removed. **B, C and D left this plan on 2026-09-12.** The
@@ -336,7 +360,9 @@ client-lifecycle design
 request and response types they annotate together with `AtAuth.authenticate`'s
 DTOs, and takes at_client_flutter and at_onboarding_cli to a 2.0 to do it, so
 there is nothing here to hold and no caller to move field by field. B's
-surface stands deprecated in the tree until that work lands.
+surface went with the DTOs in at_auth `4.0.0-rc2`; C's and D's annotations
+are still in the tree on `AtEnrollmentRequest` and `AtEnrollmentResponse`,
+which at_auth still exports.
 
 **What is owed, in order.** The remaining test-tree work in steps 6 and 7;
 then `LocalSecondary`'s `AtChops` tier. One question waits on gkc rather than
@@ -831,11 +857,14 @@ keyfile first and builds the client from it, where it used to build the
 client and write the keyfile afterwards; `authenticate` hands over the source
 at_auth just read.
 
-`AtOnboardingService.atChops` is NOT deprecated, and that is a correction to
-this step as written: it is the door for a signer that is not a keyfile — a
-secure element's — which is the same shape at_auth's `_pkam` keeps for
-exactly that reason, and step 0's ruling says this tree does not deprecate
-what it has no replacement for. `_initAtClient` passes it through.
+`AtOnboardingService.atChops` was kept here, undeprecated, as the door for a
+signer that is not a keyfile — a secure element's — the same shape at_auth's
+`_pkam` keeps for exactly that reason, since step 0's ruling says this tree
+does not deprecate what it has no replacement for. at_onboarding_cli 2.0
+closed that door: the service is `AtOnboardingServiceImpl(atSign,
+preference)`, `authenticate()` and `atClient`, over at_client's
+`Atsign.open`, and a signer that is not a keyfile comes through at_client's
+own key source. Nothing in the CLI names `AtChops`.
 
 One test changed contract rather than fixture:
 `authenticated_client_keeps_its_algorithm_test.dart`'s second arm asserted
@@ -867,12 +896,14 @@ test files do the same, since the analyzer will never list them.
 
 The CLI's onboarding paths (`_generateAtKeysFile`,
 `_persistKeysLocalSecondary`, `authenticate` and
-`enrollment_checkpoint.dart`) and at_client_flutter's `auth_service.dart`,
-`enrollment_service.dart`, `keychain_storage.dart` and the two dialogs read
+`enrollment_checkpoint.dart`) read
 [step 3](#step-3-at_auth-builds-the-carrier-inside-400-rc2)'s accessors, and
 take the atSign and root domain from `session`, instead of the flat fields and
-the response models. Both packages' tests follow, and so do the live packs' F3
-uses.
+the response models. at_client_flutter's half of this step went a different
+way: its 2.0 deleted `auth_service.dart` and `enrollment_service.dart`
+outright and put the dialogs and the keychain on at_client's lifecycle verbs,
+so the three readings below record what the services did rather than work
+still owed. Both packages' tests follow, and so do the live packs' F3 uses.
 
 ⚠️ **at_client_flutter's 7 `lib` uses are not the mechanical moves this step
 assumes.** Read on 2026-09-11, each carries a question of its own, and none of
@@ -952,17 +983,14 @@ can, both:
   enrolled keys into that source, replacing the write the flutter service does
   after submit.
 
-So the four ignores rest on a gap and a design choice, not on an unreachable
-replacement, and both are fixable. The annotations stand.
+So the four ignores rested on a gap and a design choice, not on an
+unreachable replacement, and both were fixable; the 2.0 deleted the code that
+carried them instead.
 
-**The count, decomposed.** at_client_flutter's `lib` reports 0 deprecated uses,
-from 7, and that figure is mostly annotation: one use was deleted with the dead
-branch, two pairs of reads became two single reads hoisted into locals (a real
-reduction, since each pair read the same field twice), and the resulting 4 uses
-carry `// ignore: deprecated_member_use` with the reasons above. ⛔ Read as
-"decided and stated", never as "cleared": the analyzer cannot see any of them
-now, so this list is the only record that they exist. Its test tree still holds
-41, which is step 7's mechanical remainder. Its 40 unit tests pass, and
+**The count, decomposed.** at_client_flutter's `lib` reports 0 deprecated
+uses, from 7. Four of those were ignores with the reasons above; the 2.0
+deleted the two services that held them, so the reasons are recorded here and
+nowhere in the code. Its test tree is step 7's mechanical remainder, and
 `flutter analyze --no-pub --no-fatal-infos` is clean.
 
 ### Step 8: removal — at_auth now, the others at their majors
@@ -1024,13 +1052,16 @@ and `apkam_example.dart` has omitted a required `signingAlgo` since
 `4.0.0-rc1`, both predating this pass.
 
 ⛔ **THE RULE THIS STEP MISSED, and gkc had to state twice.** A package an
-application depends on directly **does not break** — at_client_flutter,
-at_onboarding_cli, at_cli_commons and at_client — because *"our ideal
-objective is that most applications will be able to migrate to PQ without
-needing to modify any line of code"* (gkc, 2026-09-11, on the two-rollout
-sequence `pqReady` then `pqActive`). at_auth is the exception only in that
-almost nothing uses it directly; the moment one of its members is reachable
-through at_client_flutter's own API, removing it breaks an app just the same.
+application depends on directly **does not break inside its major** —
+at_client_flutter, at_onboarding_cli, at_cli_commons and at_client — because
+*"our ideal objective is that most applications will be able to migrate to PQ
+without needing to modify any line of code"* (gkc, 2026-09-11, on the
+two-rollout sequence `pqReady` then `pqActive`). Where an app must move, it
+moves at a major with a migration table: at_client_flutter and
+at_onboarding_cli each took a 2.0 to put their surface on at_client's
+lifecycle. at_auth is the exception only in that almost nothing uses it
+directly; the moment one of its members is reachable through
+at_client_flutter's own API, removing it breaks an app just the same.
 
 ⛔ **And the baseline for "does this break" is the PUBLISHED version on
 pub.dev, not this branch's starting commit** (gkc, 2026-09-11). This step
@@ -1093,11 +1124,13 @@ lived only in memory on the response, while the keychain held the
 *pre-approval* set that nothing ever reads back: `EnrollmentData`'s only reader
 is `validateEnrollment`, a presence-and-expiry check.
 
-The removal was built, gated and run past all four live packs — and then held,
-because it breaks an application. `AtAuthRequest.atAuthKeys` and
-`AuthResponse.atAuthKeys`/`.atLookUp`/`.atChops` **stay**, deprecated exactly
-as they were; `atKeysIo` stays optional with its runtime refusal. What the
-work kept is everything non-breaking:
+The removal was built, gated and run past all four live packs, then held
+once because it breaks an application, and then landed in at_auth `4.0.0-rc2`
+under the client-lifecycle design, which removes the DTOs whole rather than
+the fields inside them: `AtAuthRequest`, `AtAuthResponse`, `AuthRequest`,
+`AuthResponse` and the onboarding pair are gone from at_auth's public
+surface, and an application builds a client through `Atsign.open` and never
+names them. What the deprecation pass kept is everything that outlived them:
 
 - **every caller in this repository reads the session** — `session.atKeysIo`
   for the keys, `enrollmentId` for the enrollment — which is what a
@@ -1107,12 +1140,12 @@ work kept is everything non-breaking:
   needs a source. at_auth wraps a fixed key set this way internally, so it is
   the same object the authentication would have built;
 - **`AuthResponse.enrollmentId` answers from the session as well as the keys**
-  — same signature, and it now works for a keyfile-sourced authentication,
-  which previously reported no enrollment at all because it read the keys
-  alone. ⚠️ That getter is **derived from a deprecated field and is not itself
-  deprecated**, so a later removal of the field leaves it live and broken
-  unless it is re-pointed first — the shape the rules call *deleting the mover
-  leaves Y live but unexercised*.
+  — the fix that made a keyfile-sourced authentication report its enrollment
+  at all, where it had read the keys alone. The type went internal with the
+  rest of the DTOs, so the caution that a getter derived from a deprecated
+  field outlives the field (the shape the rules call *deleting the mover
+  leaves Y live but unexercised*) applies to at_auth's own code now and to no
+  consumer.
 
 ⚠️ **What the removal measured before it was held**, so a later pass need not
 re-derive it: 35 uses of `atAuthKeys` across at_auth, at_onboarding_cli's lib,
@@ -1123,7 +1156,8 @@ to example apps; all four live packs green on the removed shape (functional
 Two things found while moving the callers, neither of them family B:
 
 - **at_client_flutter's `AuthService.authenticate` never awaited its backup
-  writes**, and the test that claimed authentication saves keys to the
+  writes** (the class has since gone with the 2.0), and the test that claimed
+  authentication saves keys to the
   keychain passed **no `backupKeys` at all** and asserted on a mock `read`
   stubbed to answer the same keys whatever happened — green with the backup
   path deleted. It asks for the backup and asserts what the double was handed;

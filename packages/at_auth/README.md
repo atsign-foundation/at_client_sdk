@@ -349,8 +349,8 @@ final client = await Atsign(atSign).activate(
 **Request an enrollment and wait for its approval**
 
 ```dart
-// 3.x
-final lookUp = AtLookupImpl(atSign, 'root.atsign.org', 64);
+// 3.x: the app opened a connection itself and handed it in
+final AtLookUp lookUp = openConnection(atSign);   // however the app built one
 final enrollment = AtEnrollment.create();
 final submitted = await enrollment.submit(
     AtEnrollmentRequest(
