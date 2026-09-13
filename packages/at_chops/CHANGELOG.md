@@ -16,6 +16,7 @@
 - fix: `AesGcm256FfiAlgo` rejects a plaintext, ciphertext or AAD longer than the
   C `int` its OpenSSL binding passes, rather than letting the length wrap. The
   AES-CTR backends already carried this guard.
+- fix: prevent `TypeError` when a non-existent `keyName` is passed to `encryptString`, `decryptString`, `encryptBytes`, or `decryptBytes` by throwing an `AtEncryptionException`.
 
 ## 3.6.1
 

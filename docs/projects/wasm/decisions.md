@@ -1,7 +1,7 @@
 # decisions.md — Rulings, measured findings & open questions
 
 **Status:** decision record (binding).
-**Scope:** the rulings D-1..D-9 that govern the implementation-neutral `AtClient`
+**Scope:** the rulings D-1..D-16 that govern the implementation-neutral `AtClient`
 work, the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
@@ -504,6 +504,25 @@ and `pathToCerts`, read by the default factory until they go in 4.0; the replace
 
 ---
 
+### D-16 — The browser lane keeps enterprise identity possible (2026-09-13)
+
+An enterprise that manages atSigns from its own identity provider (Microsoft Entra, Okta)
+wants its directory to be the system of record: directory events provision, enroll,
+disable and re-enable an atSign with no human in the loop.
+[`enterprise-identity.md`](enterprise-identity.md) maps that lifecycle onto what `at_auth`
+and the atServer expose, and names what is missing — an atSign-level disable on the
+atServer, and unattended provisioning on the registrar. Its
+[section 5](enterprise-identity.md#5-constraints-the-browser-lane-must-not-violate) lists
+the constraints E1–E7 the browser lane must not violate while that work is outstanding,
+among them redirect-based OIDC only and no new process-global state.
+
+**Why.** Enterprise identity is an adoption blocker, not a program blocker: nothing in it
+stops the browser lane shipping, but a browser lane that closed one of those doors would
+stop an enterprise adopting it. None of the constraints requires the IdP integration to be
+built.
+
+---
+
 ## 2. Measured findings
 
 All measured on **Dart SDK 3.12.0 (stable)**, Linux x64, 2026-08-13. These are
@@ -802,3 +821,4 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-27 | **Phase 0 matured** ([#2183](https://github.com/atsign-foundation/at_client_sdk/pull/2183)). Gate config extracted to `.github/wasm_gates.yaml`; `controls` made mandatory; `at_auth` gated. **T0.2's two-way ratchet withdrawn** for one-way baselines, **T0.3's no-conditionals ban withdrawn** and restated as a both-branches-walked requirement (D-1 amended, OQ-1 resolved), **R5 withdrawn** — T2 cannot run on a hosted runner (§2.7). T0.4 remains unimplemented. |
 | 2026-08-27 | Phase 1 in review as a three-PR stack: [#2162](https://github.com/atsign-foundation/at_client_sdk/pull/2162) (S4–S6) ready, [#2163](https://github.com/atsign-foundation/at_client_sdk/pull/2163) (S1, S2) and [#2164](https://github.com/atsign-foundation/at_client_sdk/pull/2164) (S3) draft. `plan.md` deleted, as §3 had asserted since 2026-08-13. |
 | 2026-09-13 | **The transport becomes the third leg of the platform bundle** (T9 done; OQ-3 resolved for the transport). at_lookup gains `AtLookUpFactory` and `secureSocketLookUps` (`at_lookup_io.dart`), plus an `onConnect` hook run once per new connection; at_client's entry points take `lookUps:` and carry it to the client's, sync's and monitor's connections; `AtClientPreference.decryptPackets`, `tlsKeysSavePath` and `pathToCerts` deprecated, read only by `defaultLookUps` until 4.0. Built on `gkc-client-lifecycle`. |
+| 2026-09-13 | **D-16 ruled.** The browser lane must not foreclose enterprise identity. `enterprise-identity.md` added: the IdP lifecycle mapping, the atServer and registrar gaps, and the constraints E1–E7. |
