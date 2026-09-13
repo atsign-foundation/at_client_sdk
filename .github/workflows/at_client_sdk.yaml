@@ -234,6 +234,20 @@ jobs:
           AT_FUNCTIONAL_STORAGE: ${{ matrix.storage }}
         run: dart test --concurrency=1
 
+      # The atServer's own log is the only record of why it refused or never
+      # answered a request, and the container does not outlive the job.
+      - name: Capture atServer logs
+        if: ${{ failure() }}
+        run: docker cp test-virtualenv-1:/apps/logs ve-logs
+
+      - name: Upload atServer logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ve-atserver-logs-${{ matrix.storage }}
+          path: ve-logs
+          if-no-files-found: warn
+
       - name: stop docker containers
         working-directory: tests/at_functional_test/test
         run: docker compose down
