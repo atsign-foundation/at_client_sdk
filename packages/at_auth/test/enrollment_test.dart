@@ -38,7 +38,7 @@ void main() {
           .thenAnswer((_) async =>
               'data:{"enrollmentId":"$enrollmentId","status":"pending"}');
       // The atSign's encryption public key, which this path RSA-encrypts to.
-      when(() => mock.executeVerb(any(), sync: any(named: 'sync')))
+      when(() => mock.executeVerb(any()))
           .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]}');
       return mock;
     }
@@ -105,7 +105,7 @@ void main() {
               auth: any(named: 'auth')))
           .thenAnswer((_) async =>
               'data:{"enrollmentId":"$enrollmentId","status":"pending"}');
-      when(() => mock.executeVerb(any(), sync: any(named: 'sync')))
+      when(() => mock.executeVerb(any()))
           .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]}');
       return mock;
     }
