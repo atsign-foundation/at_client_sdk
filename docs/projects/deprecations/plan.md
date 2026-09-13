@@ -114,11 +114,10 @@ the last pass began that morning; every one of the 41 is in `lib` and is
 decided (the status paragraph of [section 4](#4-order-of-work) lists them).
 The right-hand column is everything outside `lib` that the member's own
 `dart analyze` sees — `test`, `example`, `tool` — the figure a CI analyze
-step would report. Outside the workspace, the recipe finds 21 more spread
-over eight legacy `*_flutter` packages this plan does not clear, and 4 in
-`tests/pq_matrix/published`, the rollout matrix's control arm, whose
-analysis fails to resolve its sibling package before it reads anything
-and has since before this plan.
+step would report. Outside the workspace, the recipe finds 26 more, all in legacy
+`*_flutter` packages this plan does not clear: 21 across nine of them and
+5 in `at_chat_flutter/example`. The rollout matrix's two arms under
+`tests/pq_matrix` report none.
 
 The test figures are downstream of the lib figures almost entirely:
 a test names `AtChops` because the client it builds takes one, and it stubs
@@ -407,10 +406,9 @@ annotations go when at_auth internalises `AtEnrollmentRequest` and
 than on `atAuthKeys` — the client-lifecycle design's work, not this plan's.
 
 ⚠️ **Re-derive every figure here before quoting it.** The recipe at the top,
-over every pubspec, on 2026-09-13 evening: at_auth 16, at_client 25, every
-other workspace member 0; the eight legacy `*_flutter` packages 21 between
-them, and `tests/pq_matrix/published` 4 behind a resolution failure that
-predates this plan. The figures this section used to carry — 1206, 1403,
+over every pubspec, on 2026-09-13 evening: 67 across 49 pubspecs — at_auth
+16, at_client 25, every other workspace member 0, and 26 in the legacy
+`*_flutter` packages and one of their examples. The figures this section used to carry — 1206, 1403,
 the per-package `lib`/`test` splits of 2026-09-12 and the three kinds of
 movement that were not progress — are history now, and the text that
 explained them stays under the steps that record it.
