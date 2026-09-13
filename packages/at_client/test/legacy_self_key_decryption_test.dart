@@ -55,11 +55,6 @@ void main() {
     SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     SymmetricKey selfEncryptionKey = AESKey.generate(32);
 
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-
-    AtChops atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
 
     var location = 'san francisco';
     var encryptedLocation =
@@ -80,12 +75,6 @@ void main() {
     SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     SymmetricKey selfEncryptionKey = AESKey.generate(32);
 
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-
-    AtChops atChopsImpl = AtChopsImpl(atChopsKeys);
-
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
 
     var location = 'new york';
     var ivBase64String = 'YmFzZTY0IGVuY29kaW5n';

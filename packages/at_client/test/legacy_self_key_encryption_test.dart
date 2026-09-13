@@ -30,11 +30,6 @@ void main() {
     var selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     // generate new AES key for the test
     var aliceSelfEncryptionKey = AESKey.generate(32).key;
-    // set atChops
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    atChopsKeys.selfEncryptionKey = AESKey(aliceSelfEncryptionKey);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
     when(() => mockLocalSecondary.getEncryptionSelfKey())
         .thenAnswer((_) => Future.value(aliceSelfEncryptionKey));
     var selfKey = AtKey()
