@@ -14,8 +14,6 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_commons/at_commons.dart' show AtBytes;
-import 'package:at_demo_data/at_demo_data.dart'
-    show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
@@ -48,9 +46,21 @@ void main() {
   /// lifetime is [expiry] — or the atServer's own default when null.
   Future<String> mintLegacy(String label, Duration? expiry) async {
     final otp = (await owner.getOTP()).response;
+    final file = File(pathFor(label));
+    if (file.existsSync()) file.deleteSync();
+    final snapshot = File(preRetrofitPathFor(label));
+    if (snapshot.existsSync()) snapshot.deleteSync();
+    file.parent.createSync(recursive: true);
+    // The session names the keyfile, so the approval completes the keys
+    // straight into it. FileAtKeysIo.write refuses to overwrite, so a keyfile
+    // a previous run left is removed first.
+    final session = AtAuthSession(
+        atSign: atSign,
+        rootDomain: rootDomain(),
+        atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)));
     final response = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
-            atSign: atSign,
+            session: session,
             appName: 'cap-$label',
             deviceName: 'cap-$label-$runId',
             namespaces: {namespace: 'rw'},
@@ -66,16 +76,9 @@ void main() {
         enrollmentId: response.enrollmentId,
         apkamSymmetricKey:
             AtBytes.fromString(record.encryptedAPKAMSymmetricKey!)));
-    final keys = response.atAuthKeys!
-      ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!)
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-    final file = File(pathFor(label));
-    if (file.existsSync()) file.deleteSync();
-    final snapshot = File(preRetrofitPathFor(label));
-    if (snapshot.existsSync()) snapshot.deleteSync();
-    file.parent.createSync(recursive: true);
-    await FileAtKeysIo(filePath: (_) => pathFor(label)).write(atSign, keys);
+    // Awaiting the approval collects the two atSign-wide secrets it released
+    // and writes the completed keys into the keyfile.
+    await AtEnrollment.create().waitForApproval(response);
     return response.enrollmentId;
   }
 

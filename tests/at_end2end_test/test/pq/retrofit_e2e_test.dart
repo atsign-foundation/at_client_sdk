@@ -17,8 +17,6 @@ import 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
-import 'package:at_demo_data/at_demo_data.dart'
-    show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
@@ -85,9 +83,21 @@ void main() {
     required Map<String, String> namespaces,
   }) async {
     final otp = (await owner.getOTP()).response;
+    final file = File(pathFor(label));
+    if (file.existsSync()) file.deleteSync();
+    file.parent.createSync(recursive: true);
+    // The session names the keyfile, so the approval completes the keys
+    // straight into it. FileAtKeysIo.write refuses to overwrite, so a keyfile
+    // a previous run left is removed first.
+    final session = AtAuthSession(
+        atSign: atSign,
+        rootDomain: AtRootDomain(
+            ConfigUtil.getYaml()['root_server']['url'],
+            ConfigUtil.getYaml()['root_server']['port'] ?? 64),
+        atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)));
     final response = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
-            atSign: atSign,
+            session: session,
             appName: 'rf-$label',
             deviceName: 'rf-$label-$runId',
             namespaces: namespaces,
@@ -107,18 +117,9 @@ void main() {
         apkamSymmetricKey:
             AtBytes.fromString(record.encryptedAPKAMSymmetricKey!)));
 
-    // What waitForApproval would fetch and decrypt; the approver here knows
-    // the same values from at_demo_data, and the keyfile's at-rest
-    // self-encryption needs the self key present.
-    final keys = response.atAuthKeys!
-      ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!)
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-
-    final file = File(pathFor(label));
-    if (file.existsSync()) file.deleteSync();
-    file.parent.createSync(recursive: true);
-    await FileAtKeysIo(filePath: (_) => pathFor(label)).write(atSign, keys);
+    // Awaiting the approval collects the two atSign-wide secrets it released
+    // and writes the completed keys into the keyfile.
+    await AtEnrollment.create().waitForApproval(response);
     return response.enrollmentId;
   }
 

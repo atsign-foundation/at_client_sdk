@@ -10,7 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
@@ -21,14 +21,6 @@ import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
 /// Intentionally did not prefix/suffix the file name with test to refrain from running this in the test suite.
-
-const String pkamPublicKey = 'aesPkamPublicKey';
-const String pkamPrivateKey = 'aesPkamPrivateKey';
-const String encryptionPublicKey = 'aesEncryptPublicKey';
-const String encryptionPrivateKey = 'aesEncryptPrivateKey';
-const String selfEncryptionKey = 'selfEncryptionKey';
-const String apkamSymmetricKey = 'apkamSymmetricKey';
-const String enrollmentId = 'enrollmentId';
 
 /// Stops the current client's sync, which this script never needs: enrollments
 /// are submitted and approved over the remote secondary, and replaying the
@@ -68,19 +60,30 @@ void main() {
       // Set SPP into the Remote Secondary
       var atClient = AtClientManager.getInstance().atClient;
       var otp = (await atClient.getOTP()).response;
+      final rootDomain = AtRootDomain(atClient.getPreferences()!.rootDomain,
+          atClient.getPreferences()!.rootPort);
+
+      // The session names the keyfile the suite's clients open on, so the
+      // approval completes the keys straight into it. FileAtKeysIo.write
+      // refuses to overwrite, so a keyfile a previous run left is removed.
+      final keyfile = File(
+          "${ConfigUtil.getYaml()['filePath']}/${currentAtSign}_key.atKeys");
+      if (keyfile.existsSync()) keyfile.deleteSync();
+      keyfile.parent.createSync(recursive: true);
+      final session = AtAuthSession(
+          atSign: currentAtSign,
+          rootDomain: rootDomain,
+          atKeysIo: FileAtKeysIo(filePath: (_) => keyfile.path));
 
       // Submit an enrollment request with at_auth package
       AtEnrollment atEnrollmentBase = AtEnrollment.create();
       int random = Uuid().v4().hashCode;
       AtLookUp atLookUp = secureSocketLookUps()(
-          atSign: currentAtSign,
-          rootDomain: AtRootDomain(atClient.getPreferences()!.rootDomain,
-              atClient.getPreferences()!.rootPort),
-          authenticator: null);
+          atSign: currentAtSign, rootDomain: rootDomain, authenticator: null);
 
       // Do an enrollment with access to the __config namespace
       AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
-          atSign: currentAtSign,
+          session: session,
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: otp,
@@ -89,8 +92,13 @@ void main() {
           // Without an expiry, every run leaves another revoked enrollment on
           // these never-recycled atSigns for good.
           apkamKeysExpiryDuration: const Duration(hours: 3));
-      AtEnrollmentResponse? atEnrollmentResponse =
-          await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
+      final AtEnrollmentResponse atEnrollmentResponse;
+      try {
+        atEnrollmentResponse =
+            await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
+      } finally {
+        await atLookUp.close();
+      }
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
@@ -116,55 +124,20 @@ void main() {
       expect(
           approveEnrollmentResponse?.enrollStatus, EnrollmentStatus.approved);
 
-      // Get AtChops from the AtAuthKeys
-      AtEncryptionKeyPair atEncryptionKeyPair = AtEncryptionKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!
-              .toString(),
-          '');
-
-      AtPkamKeyPair atPkamKeyPair = AtPkamKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
-          atEnrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString());
-
-      AtChopsKeys atChopsKeys =
-          AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-
-      AtChops atChops = AtChopsImpl(atChopsKeys);
-      atChops.atChopsKeys.apkamSymmetricKey = AESKey(
-          atEnrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString());
-      atLookUp.atChops = atChops;
-      atLookUp.enrollmentId = atEnrollmentResponse.enrollmentId;
-
-      // Fetch the encryption private key and self encryption key from the remote secondary.
-      atChops.atChopsKeys.atEncryptionKeyPair = AtEncryptionKeyPair.create(
-          atEnrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!
-              .toString(),
-          await getDefaultEncryptionPrivateKey(
-              currentAtSign, atEnrollmentResponse.enrollmentId, atLookUp));
-
-      String selfEncryptionKey = await getDefaultSelfEncryptionKey(
-          currentAtSign, atEnrollmentResponse.enrollmentId, atLookUp);
-      atChops.atChopsKeys.selfEncryptionKey = AESKey(selfEncryptionKey);
+      // Awaiting the approval collects the two atSign-wide secrets it
+      // released and writes the completed keys into the keyfile.
+      await AtEnrollment.create().waitForApproval(atEnrollmentResponse);
 
       // Set AtClient to null and authenticate with the new auth keys generated for enrollment
       AtClientManager.getInstance().removeAllChangeListeners();
       AtClientImpl.atClientInstanceMap.clear();
 
-      // The enrollee's own keys, completed with the two atSign-wide secrets
-      // an approval releases, authenticate as the enrollment, and are what
-      // the keyfile the suite's clients open on is written from.
-      final enrolledKeys = atEnrollmentResponse.atAuthKeys!
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(
-            atChops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey)
-        ..defaultSelfEncryptionKey =
-            AtBytes.fromString(atChops.atChopsKeys.selfEncryptionKey!.key);
+      // The keyfile authenticates as the enrollment, which is what the
+      // suite's clients open on.
       expect(
-          await Atsign(currentAtSign).authenticatesAs(
-              keys: InMemoryAtKeysIo.holding(currentAtSign, enrolledKeys),
-              rootDomain: AtRootDomain(atClient.getPreferences()!.rootDomain,
-                  atClient.getPreferences()!.rootPort)),
+          await Atsign(currentAtSign)
+              .authenticatesAs(keys: session.atKeysIo, rootDomain: rootDomain),
           atEnrollmentResponse.enrollmentId);
-      writeAtKeysToFile(currentAtSign, enrolledKeys);
       print(
           'Completed enrollment setup of the atSign: $currentAtSign with enrollment Id: ${atEnrollmentResponse.enrollmentId} with access to ${enrollmentRequest.namespaces}');
     });
@@ -178,105 +151,4 @@ void main() {
         .stopAllSubscriptions();
     exit(0);
   });
-}
-
-/// Writes the atKeys to the file.
-void writeAtKeysToFile(String atSign, AtKeys atAuthKeys) {
-  // Encrypt the keys
-  Map<String, String> encryptedAtKeysMap = <String, String>{};
-
-  String encryptedPkamPublicKey = EncryptionUtil.encryptValue(
-      atAuthKeys.apkamPublicKey!.toString(),
-      atAuthKeys.defaultSelfEncryptionKey!.toString());
-  encryptedAtKeysMap[pkamPublicKey] = encryptedPkamPublicKey;
-
-  String encryptedPkamPrivateKey = EncryptionUtil.encryptValue(
-      atAuthKeys.apkamPrivateKey!.toString(),
-      atAuthKeys.defaultSelfEncryptionKey!.toString());
-  encryptedAtKeysMap[pkamPrivateKey] = encryptedPkamPrivateKey;
-
-  String encryptedEncryptionPublicKey = EncryptionUtil.encryptValue(
-      atAuthKeys.defaultEncryptionPublicKey!.toString(),
-      atAuthKeys.defaultSelfEncryptionKey!.toString());
-  encryptedAtKeysMap[encryptionPublicKey] = encryptedEncryptionPublicKey;
-
-  String encryptedEncryptionPrivateKey = EncryptionUtil.encryptValue(
-      atAuthKeys.defaultEncryptionPrivateKey!.toString(),
-      atAuthKeys.defaultSelfEncryptionKey!.toString());
-  encryptedAtKeysMap[encryptionPrivateKey] = encryptedEncryptionPrivateKey;
-
-  encryptedAtKeysMap[selfEncryptionKey] =
-      atAuthKeys.defaultSelfEncryptionKey!.toString();
-  encryptedAtKeysMap[apkamSymmetricKey] =
-      atAuthKeys.apkamSymmetricKey!.toString();
-  encryptedAtKeysMap[enrollmentId] = atAuthKeys.enrollmentId!.toString();
-
-  // Write keys to file
-  String keysString = jsonEncode(encryptedAtKeysMap);
-  var file = File("${ConfigUtil.getYaml()['filePath']}/${atSign}_key.atKeys");
-  file.createSync(recursive: true);
-  file.writeAsStringSync(keysString);
-}
-
-/// Retrieves the encrypted "encryption private key" from the server and decrypts.
-/// This process involves using the APKAM symmetric key for decryption.
-/// Returns the original "encryption private key" after decryption.
-Future<String> getDefaultEncryptionPrivateKey(
-    String atSign, String enrollmentIdFromServer, AtLookUp atLookUp) async {
-  var privateKeyCommand =
-      'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultEncryptionPrivateKey}.__manage$atSign';
-  String encryptionPrivateKeyFromServer;
-  String encryptionPrivateKeyIV;
-  try {
-    var getPrivateKeyResult =
-        await atLookUp.executeCommand('$privateKeyCommand\n', auth: true);
-    if (getPrivateKeyResult == null || getPrivateKeyResult.isEmpty) {
-      throw AtEnrollmentException('$privateKeyCommand returned null/empty');
-    }
-    getPrivateKeyResult = getPrivateKeyResult.replaceFirst('data:', '');
-    var privateKeyResultJson = jsonDecode(getPrivateKeyResult);
-    encryptionPrivateKeyFromServer = privateKeyResultJson['value'];
-    encryptionPrivateKeyIV = privateKeyResultJson['iv'];
-  } on Exception catch (e) {
-    throw AtEnrollmentException(
-        'Exception while getting encrypted private key/self key from server: $e');
-  }
-  AtEncryptionResult? atEncryptionResult = await atLookUp.atChops
-      ?.decryptString(encryptionPrivateKeyFromServer, EncryptionKeyType.aes256,
-          keyName: 'apkamSymmetricKey',
-          iv: AtChopsUtil.generateIVFromBase64String(encryptionPrivateKeyIV));
-  return atEncryptionResult?.result;
-}
-
-/// Returns the decrypted selfEncryptionKey.
-/// Fetches the encrypted selfEncryptionKey from the server and decrypts the
-/// key with APKAM Symmetric key to get the original selfEncryptionKey.
-Future<String> getDefaultSelfEncryptionKey(
-    String atSign, String enrollmentIdFromServer, AtLookUp atLookUp) async {
-  var selfEncryptionKeyCommand =
-      'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultSelfEncryptionKey}.__manage$atSign';
-  String selfEncryptionKeyFromServer;
-  String selfEncryptionKeyIV;
-  try {
-    String? encryptedSelfEncryptionKey = await atLookUp
-        .executeCommand('$selfEncryptionKeyCommand\n', auth: true);
-    if (encryptedSelfEncryptionKey == null ||
-        encryptedSelfEncryptionKey.isEmpty) {
-      throw AtEnrollmentException(
-          '$selfEncryptionKeyCommand returned null/empty');
-    }
-    encryptedSelfEncryptionKey =
-        encryptedSelfEncryptionKey.replaceFirst('data:', '');
-    var selfEncryptionKeyResultJson = jsonDecode(encryptedSelfEncryptionKey);
-    selfEncryptionKeyFromServer = selfEncryptionKeyResultJson['value'];
-    selfEncryptionKeyIV = selfEncryptionKeyResultJson['iv'];
-  } on Exception catch (e) {
-    throw AtEnrollmentException(
-        'Exception while getting encrypted private key/self key from server: $e');
-  }
-  AtEncryptionResult? atEncryptionResult = await atLookUp.atChops
-      ?.decryptString(selfEncryptionKeyFromServer, EncryptionKeyType.aes256,
-          keyName: 'apkamSymmetricKey',
-          iv: AtChopsUtil.generateIVFromBase64String(selfEncryptionKeyIV));
-  return atEncryptionResult?.result;
 }
