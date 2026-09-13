@@ -1329,6 +1329,10 @@ class AtClientImpl implements AtClient {
       }
     }
 
+    // NOTE: before the services and the remote are closed, so the requests
+    // those closes fail are not recorded as the atServer being unreachable.
+    await attempt('closing the connection state', _connection.close);
+
     await attempt('tearing down keystore-event timers', () async {
       _expiryTimer?.cancel();
       _expiryTimer = null;
@@ -1372,7 +1376,6 @@ class AtClientImpl implements AtClient {
       await attempt('closing remote secondary connection',
           () async => _remoteSecondary!.closeConnection());
     }
-    await attempt('closing the connection state', _connection.close);
 
     _syncService = null;
     _notificationService = null;

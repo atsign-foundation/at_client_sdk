@@ -157,6 +157,30 @@ void main() {
     expect(conveyance.conveyed, hasLength(1));
   });
 
+  test(
+      'a key package that could not be checked fails the approval naming '
+      'the check, not the package', () async {
+    final conveyance = _StatusConveyance(KeyPackageStatus.unverified);
+    final enrollment = _RecordingAtEnrollment();
+
+    await expectLater(
+        approveThrough(conveyance, enrollment: enrollment),
+        throwsA(isA<EnrollmentConveyanceException>()
+            .having(
+                (e) => e.message,
+                'message',
+                allOf(contains('could not be checked'),
+                    isNot(contains('Revoke'))))
+            .having((e) => e.keyPackageStatus, 'keyPackageStatus',
+                KeyPackageStatus.unverified)),
+        reason: 'a fetch that failed during the check says nothing about the '
+            'package, so the approver is not told to revoke a device whose '
+            'package was never examined');
+
+    expect(enrollment.approvals, hasLength(1),
+        reason: 'the server-side approval had already happened');
+  });
+
   test('the conveyance refusal still reads as an AtEnrollmentException',
       () async {
     await expectLater(

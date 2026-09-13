@@ -197,7 +197,10 @@ be online**, so with no local store yet for that (atSign, enrollment) a
 refusal throws a typed exception naming the reason and hands nothing back;
 with a store present the client comes back in `refused(reason)` and the app
 decides, the same transition the stream emits when revocation lands later.
-One rule, not two.
+One rule, not two. A stopped client's state stops recording: `stop()` closes
+it before it closes the services and the remote, so the failures the stop
+itself causes are not reported as the atServer being unreachable, and
+`current` keeps the last state reported while the client was live.
 
 **Ruling 5, the key destination is the resume store.** `enroll(keys:)` files
 the minted keypair under the new enrollment id as `pending` typed material,

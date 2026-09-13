@@ -1803,7 +1803,7 @@ the moment the package is needed.
 |---|---|
 | 1 | **Conveyance fires in at_client's `EnrollmentServiceImpl.approve`, and the other approve paths route through it.** `at_client_flutter` and `at_onboarding_cli` call at_auth's `approve` directly today; both already hold an `AtClient`. Leaving them would produce an enrollment that authenticates fine and can decrypt nothing, with nothing in the code saying so |
 | 2 | **An absent key package is not an error; a rejected one is.** Absent is expected during rollout and for the self-retrofit path, which needs no conveyance. Rejected — wrong signer, bad signature, malformed — throws, so the approver learns the device cannot decrypt and can revoke. A *signed but unparseable* package is neither: the enrollee is running a newer client, the approver cannot fix it, and throwing would block approvals across a version skew |
-| 3 | **`NamespaceMember` carries a four-way status: present / absent / rejected / unsupported.** `_verifiedKeyPackage` collapses five distinct outcomes into one `null`. The log severities already distinguish them; only the return type cannot. Ruling 2 is unimplementable without this |
+| 3 | **`NamespaceMember` carries a four-way status: present / absent / rejected / unsupported** (a fifth, `unverified`, was added 2026-09-13 for a package whose `_apsk` could not be fetched: nothing is known about it, so it is neither sealed to nor called a rejection). `_verifiedKeyPackage` collapses five distinct outcomes into one `null`. The log severities already distinguish them; only the return type cannot. Ruling 2 is unimplementable without this |
 | 4 | **The approver takes the key package from the request it is approving, not a `listns` re-fetch.** The atServer already returns `metadata` on `enroll:list`; at_client's `Enrollment.fromJSON` discards it. Reading it there removes a round trip *and* a real hole: conveyance discovery iterates the approved namespaces and skips `*`, so an enrollment granted `*` alone finds no key package and conveys nothing, warning only |
 | 5 | **The `enrollmentId` claim is omitted when unknown, and an absent claim verifies.** Authority is the signature verifying against *that record's* `_apsk`, plus the server having bound the package to the record it created. A present-but-mismatched claim stays a hard rejection |
 | 6 | **The `(AtClient, enrollmentId)` Expando re-key is deferred to RF-2b.** See [20.3](#203-what-the-expando-re-key-is-actually-worth) |
@@ -6134,7 +6134,8 @@ at_onboarding_cli's `auth_cli`) were re-verified to route through
 #1 survives the extraction untouched.
 
 **The seam reports; the caller enforces.** `conveySecretsTo` returns
-the four-way `KeyPackageStatus` (20.2 #3) instead of throwing on a
+the `KeyPackageStatus` (20.2 #3; four-way then, five-way since
+`unverified` was added on 2026-09-13) instead of throwing on a
 rejected package: what to convey is substrate policy, but whether a
 just-approved device that cannot decrypt should fail the approval is
 the approver's policy, so the throw (same exception type, same message)
@@ -6162,7 +6163,7 @@ the natural reaction (retry, or report failure upstream) is wrong both
 ways. Fixed within the byte-identical-signature constraint by making
 the rejected-package throw a carrying subtype:
 `EnrollmentConveyanceException extends AtEnrollmentException`, holding
-the successful `response` and the four-way `keyPackageStatus`. Existing
+the successful `response` and the `keyPackageStatus`. Existing
 catch sites keep working (subtype, pinned by test); new callers can
 tell "approved but cannot decrypt — consider revoking" from "the
 approval failed". Exported from the main barrel `show`-narrowed to the

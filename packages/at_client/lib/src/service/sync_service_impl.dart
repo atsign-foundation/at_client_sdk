@@ -773,6 +773,8 @@ class SyncServiceImpl implements SyncService {
       try {
         batchResponse = await sendBatch(batchRequests);
         _bailIfStopped();
+      } on _SyncAbandoned {
+        rethrow;
       } on Exception catch (e) {
         // Network or auth failure for the whole batch. Leave queue
         // entries in place — next round retries.
@@ -1111,6 +1113,11 @@ class SyncServiceImpl implements SyncService {
         'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
       });
     } catch (e) {
+      if (isStopped) {
+        _logger.finer('Not syncing ${serverCommitEntry['atKey']} to local: '
+            'the service was stopped ($e)');
+        throw const _SyncAbandoned();
+      }
       _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e": e});
       _logger.severe(
           'Exception: $e while syncing entry to local ${jsonEncode(serverCommitEntry)}');
@@ -1561,8 +1568,12 @@ class SyncServiceImpl implements SyncService {
             cameFromServer: true,
           );
     } on UnAuthorizedException catch (e) {
-      _logger.finer(
-          'Failed to sync ${(builder as UpdateVerbBuilder).atKey.toString()} caused by ${e.toString()}');
+      final atKey = switch (builder) {
+        UpdateVerbBuilder(:final atKey) => atKey,
+        DeleteVerbBuilder(:final atKey) => atKey,
+        _ => builder.runtimeType,
+      };
+      _logger.finer('Failed to sync $atKey caused by ${e.toString()}');
     }
   }
 

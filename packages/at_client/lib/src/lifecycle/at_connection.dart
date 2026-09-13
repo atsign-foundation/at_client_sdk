@@ -105,6 +105,7 @@ class AtConnection {
       StreamController<AtConnectionState>.broadcast();
   AtConnectionState _current =
       AtConnectionState.offline(AtConnectionCause.unattempted);
+  bool _closed = false;
 
   /// How long [attempt] waits by default before reporting offline.
   static const Duration defaultBudget = Duration(seconds: 5);
@@ -168,6 +169,11 @@ class AtConnection {
   /// if this transition ran it, has finished; a caller that does not need
   /// that may ignore it.
   Future<void> report(AtConnectionState state) {
+    if (_closed) {
+      _logger.finer('not recording $state: the client is stopping, and its '
+          'connections fail with whatever the stop did to them');
+      return Future.value();
+    }
     final wasOnline = _current.isOnline;
     final changed = !state.sameAs(_current);
     _current = state;
@@ -183,7 +189,13 @@ class AtConnection {
     return Future.value();
   }
 
-  Future<void> close() => _changes.close();
+  /// Ends the reporting: the client is stopping, so what its connections
+  /// fail with from here says nothing about the atServer. [current] keeps
+  /// the last state reported, and [changes] is done.
+  Future<void> close() {
+    _closed = true;
+    return _changes.close();
+  }
 }
 
 /// The atServer's error codes that name a refusal of the credentials.

@@ -195,6 +195,16 @@ class EnrollmentServiceImpl implements EnrollmentService {
             response: response,
             keyPackageStatus: status);
       }
+      if (status == KeyPackageStatus.unverified) {
+        throw EnrollmentConveyanceException(
+            'Enrollment ${enrollment.enrollmentId} is approved, but the key '
+            'package it advertised could not be checked against its _apsk, '
+            'which could not be fetched, so no secrets were shared with it '
+            'and it cannot complete until they are. Nothing about the '
+            'package was refused; the check needs the atServer.',
+            response: response,
+            keyPackageStatus: status);
+      }
     }
 
     return response;

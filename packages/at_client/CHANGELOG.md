@@ -22,6 +22,29 @@
   its cause (revoked, unauthenticated, an invalid enrollment); a failure to
   reach the atServer is thrown as it is.
 - fix: a key named like the app's namespace gets the namespace appended.
+- fix: `stop()` closes the connection state before it closes the services
+  and the remote, so a request the stop itself fails is not recorded as the
+  atServer being unreachable; `AtConnection.report` after `close()` records
+  nothing.
+- fix: the status poll `notify(waitForFinalDeliveryStatus: false)` leaves
+  running hands a failure to `onError` and logs it at `warning`, instead of
+  raising an unhandled error in the zone that sent the notification. Either
+  way `notify` polls, a stop ends the poll rather than leaving it asking a
+  closed connection every two seconds, and the result carries an
+  `AtClientException` saying so.
+- fix: the notification service and the sync service log the work a
+  `stop()` cuts short at `finer` - the watermark write, the batch push and
+  the server entry being applied - rather than as failed saves and severe
+  sync errors.
+- fix: a server-side DELETE the local store refuses is logged by its key;
+  the refusal handler cast every builder to `UpdateVerbBuilder`, so a
+  refused delete surfaced as a `TypeError` logged at `severe`.
+- fix: a key package whose `_apsk` could not be fetched is reported as
+  `KeyPackageStatus.unverified` (new) and logged at `warning` as a check
+  that could not be completed, where it was reported as `rejected` and
+  logged at `severe` as a package that does not verify. An approval that
+  meets it throws `EnrollmentConveyanceException` naming the check, with no
+  advice to revoke.
   `AtClientUtil.getKeyWithNameSpace` read the name's last dot-segment as the
   namespace, so a `probe` key under the `probe` namespace was stored as
   `probe.probe` and read back as `probe`.
