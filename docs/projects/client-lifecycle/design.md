@@ -470,10 +470,11 @@ on the question of whether an app-facing package may break. This design
 answers it differently: the types those families annotate are removed with
 `AtAuth.authenticate`'s DTOs, and the app-facing packages take a major to do
 it, so there is nothing to hold and no caller to migrate one field at a
-time. The plan's rows for B, C and D point here; its remaining owed work
-(the test-tree remainder of steps 6 and 7, then `LocalSecondary`'s `AtChops`
-tier, and the open question on family F's annotation) is unchanged and stays
-a P1 row.
+time. The plan's rows for B, C and D point here. Its own work closed on
+2026-09-13: every consumer moved, `LocalSecondary` reads its keys from the
+key source and the keystore, and family F's seven fields stay deprecated
+with a legacy writer and two readers as their replacement. What the plan
+still lists is the majors' removals, a P1 row blocked on them.
 
 The PQ table carries this as a P0 row because it is on D1's critical path.
 The motivation is PQ conveyance: an approval issued through at_auth alone

@@ -86,6 +86,11 @@ at_client, and this release removes the surface those replace.
   `AtKeys.pendingEnrollmentIds` manage it, and a flush may drop pending
   material. A store written by an earlier build carries `pending` through
   unchanged as a token it does not know.
+- `AtKeys.fileLegacyMaterial` and `AtKeys.legacy`, the one writer of the flat
+  keyfile document that names no deprecated member, with
+  `AtKeys.enrollmentSymmetricKey` and `AtKeys.storedEnrollmentId` reading the
+  two flat fields the typed accessors did not cover. The seven flat fields
+  stay deprecated, and their annotations now name these.
 - `AtKeys.holdsAuthenticationMaterial`, `AtKeys.authenticationKeyPairFor`,
   `.encryptionKeyPair` and `.selfEncryptionKey`. The last two prefer typed
   material under the atSign and fall back to the flat fields, with the

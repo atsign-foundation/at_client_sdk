@@ -68,6 +68,8 @@ Future<AtClient> buildPipelineBackedClient({
   // TypeError, which now logs at severe rather than passing for a condition.
   final atLookUp = MockAtLookupImpl();
   when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
+  // the bridge reads the enrollment id off the lookup until the ladder goes
+  // ignore: deprecated_member_use
   when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
 
   // NOTE: the posture is named rather than defaulted because

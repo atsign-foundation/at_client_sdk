@@ -111,7 +111,7 @@ void main() {
       'test to verify that decryption will always use sharedKeyEncrypted if it is present in the metadata',
       () async {
     var sharedKeyDecryption = SharedWithMeDecryption(mockAtClient);
-    RSAKeypair aliceKeypair = AtChopsUtil.generateRSAKeyPair(keySize: 2048);
+    RSAKeypair aliceKeypair = RSAKeypair.fromRandom();
     var aliceEncryptionPublicKey = aliceKeypair.publicKey.toString();
     var aliceEncryptionPrivateKey = aliceKeypair.privateKey.toString();
 
@@ -142,7 +142,7 @@ void main() {
 
   test('test to check shared key decryption - with IV', () async {
     var sharedKeyDecryption = SharedWithMeDecryption(mockAtClient);
-    RSAKeypair aliceKeypair = AtChopsUtil.generateRSAKeyPair(keySize: 2048);
+    RSAKeypair aliceKeypair = RSAKeypair.fromRandom();
     var aliceEncryptionPublicKey = aliceKeypair.publicKey.toString();
     var aliceEncryptionPrivateKey = aliceKeypair.privateKey.toString();
     var aesSharedKey = AESKey.generate(32).key;
@@ -174,12 +174,6 @@ void main() {
   test('test to check self key decryption with IV', () async {
     var selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     SymmetricKey selfEncryptionKey = AESKey.generate(32);
-
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
 
     var location = 'new york';
     var ivBase64String = 'YmFzZTY0IGVuY29kaW5n';

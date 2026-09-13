@@ -65,14 +65,14 @@ at_client_flutter, and the 4 live packs (`tests/at_functional_test`,
 `tests/at_onboarding_cli_functional_tests_proxy`) are green.
 
 The workspace is the 17 members the root `pubspec.yaml` lists: 12 packages,
-the 4 live packs and `tools/wasm_shakedown`. Of those, at_commons, at_utils,
-at_chops, at_lookup, at_server_status, at_policy, at_cli_commons,
-`wasm_shakedown` and the CLI *proxy* pack are at zero today.
-⚠️ `tests/at_onboarding_cli_functional_tests` is **not**: it holds 47, all in
-`test` — 22 `AtClientPreference` storage fields, 6 `isLocalStoreRequired`, 4
-`AtLookupImpl`, 8 flat keyfile fields and 7 keyfile accessors. This plan
-recorded both CLI packs at zero until 2026-09-11, because the re-derivation
-loop above hand-listed 6 members and reached neither.
+the 4 live packs and `tools/wasm_shakedown`. On 2026-09-13 every one of
+them reports no `deprecated_member_use` outside `lib`, and only two report
+any in `lib`: at_auth's 16 and at_client's 25, the decided floors named
+under [step 3](#step-3-at_auth-builds-the-carrier-inside-400-rc2) and in the
+status paragraph of [section 4](#4-order-of-work). Both CLI packs were
+recorded at zero until 2026-09-11 while one held 47, because the
+re-derivation loop then hand-listed 6 members and reached neither; the
+recipe above enumerates every pubspec for that reason.
 The other `packages/*_flutter` directories are not members; the 10 of them
 with a `lib` carry 17 between them (at_events_flutter 6, at_follows_flutter 3,
 at_contacts_group_flutter 2, at_login_flutter 2, one each in at_chat,
@@ -85,10 +85,11 @@ plan clears them.
 ⛔ **Nor are the `example/` and `examples/` trees, and those are not merely
 uncounted — they are ungated.** No workflow analyses or builds any of them, and
 `at_client_sdk.yaml` fetches at_client_flutter's dependencies with
-`--no-example`, so nothing in CI can go red on one. Three of them use this
-plan's families: `at_client_flutter/example` 8, `examples/todos` 5,
-`examples/dockerstats` 5. That is where family H's removal broke a caller while
-this plan recorded it as having none. Treat an example as a member for counting
+`--no-example`, so nothing in CI can go red on one. Three of them used this
+plan's families on 2026-09-11 — `at_client_flutter/example` 8,
+`examples/todos` 5, `examples/dockerstats` 5 — and report none on
+2026-09-13. That is where family H's removal broke a caller while this plan
+recorded it as having none. Treat an example as a member for counting
 and for compiling, and remember two of them are red for reasons that predate
 this work: `example/` imports three packages its pubspec never declares, and
 its `apkam_example.dart` has omitted a required `signingAlgo` since
@@ -99,24 +100,24 @@ copy, so it is the one that has to end up showing the right thing.
 
 | member                              | in-tree version | lib | test |
 | ----------------------------------- | --------------- | --: | ---: |
-| at_auth                             | 4.0.0-rc2       |  56 |   86 |
-| at_client                           | 3.15.0-rc1      |  46 |  359 |
-| at_onboarding_cli                   | 2.0.0-rc1       |   — |    — |
-| at_client_flutter                   | 2.0.0-rc1       |   — |    — |
-| tests/at_functional_test            | (unpublished)   |   6 |  272 |
-| tests/at_end2end_test               | (unpublished)   |  45 |   80 |
-| tests/at_onboarding_cli_functional_tests | (unpublished) | 0 | 47 |
-| at_contact                          | (see pubspec)   |   0 |    4 |
+| at_auth                             | 4.0.0-rc2       |  16 |    0 |
+| at_client                           | 3.15.0-rc1      |  25 |    0 |
+| at_onboarding_cli                   | 2.0.0-rc1       |   0 |    0 |
+| at_client_flutter                   | 2.0.0-rc1       |   0 |    0 |
+| tests/at_functional_test            | (unpublished)   |   0 |    0 |
+| tests/at_end2end_test               | (unpublished)   |   0 |    0 |
+| tests/at_onboarding_cli_functional_tests | (unpublished) | 0 |    0 |
+| at_contact                          | (see pubspec)   |   0 |    0 |
 
-1319 uses, down from 1403 when this plan was written. The right-hand column is
-everything outside `lib` that the member's
-own `dart analyze` sees, so it carries at_auth's and at_client_flutter's 1
-`example` use each, at_onboarding_cli's 35, and at_client's 1 in `tool` — the
-figure a CI analyze step would report, rather than a `lib`-plus-`test` subset.
-The table read 1317 on 2026-09-11 before [step 0](#step-0-done-at_auth-stops-deprecating-what-it-has-no-replacement-for), and it was wrong
-in three ways beyond that: it gave the two live packs 0 in `lib` where they
-hold 6 and 45, it omitted the CLI pack's 47 entirely, and it counted only
-`lib` and `test`.
+41 uses on 2026-09-13, from 1403 when this plan was written and 785 when
+the last pass began that morning; every one of the 41 is in `lib` and is
+decided (the status paragraph of [section 4](#4-order-of-work) lists them).
+The right-hand column is everything outside `lib` that the member's own
+`dart analyze` sees — `test`, `example`, `tool` — the figure a CI analyze
+step would report. Outside the workspace, the recipe finds 26 more, all in legacy
+`*_flutter` packages this plan does not clear: 21 across nine of them and
+5 in `at_chat_flutter/example`. The rollout matrix's two arms under
+`tests/pq_matrix` report none.
 
 The test figures are downstream of the lib figures almost entirely:
 a test names `AtChops` because the client it builds takes one, and it stubs
@@ -313,15 +314,21 @@ service class does — had nothing to move to. The other 14 name
 [Step 0](#step-0-done-at_auth-stops-deprecating-what-it-has-no-replacement-for) narrows both; the remaining 432 are consumer work, in steps 6
 and 7.
 
-For gkc, and new on 2026-09-11: whether at_auth files a legacy keyfile's flat
-material as `CryptographicMaterial` on read. The paragraph under F3 measures
-that it does not, which leaves every legacy-handling site with no replacement
-to move to — so steps 6 and 7 cannot reach zero by rewriting alone. Filing it
-would make the flat fields genuinely redundant and let all 432 clear, at the
-cost of changing what a legacy document becomes in memory, which the round-trip
-pins govern. The alternative is that those sites keep the flat fields under an
-ignore naming the reason, and only the typed-keyfile sites move. The split
-between the two is not yet counted.
+Ruled by gkc on 2026-09-13, the question this plan carried from 2026-09-11 —
+whether at_auth files a legacy keyfile's flat material as
+`CryptographicMaterial` on read: **no**. F3 clears through a legacy writer
+and two readers in at_auth, not by changing what a legacy document is in
+memory and not by un-deprecating the seven fields. `AtKeys.fileLegacyMaterial`
+and `AtKeys.legacy` are the one non-deprecated writer of the flat document;
+`enrollmentSymmetricKey` and `storedEnrollmentId` read the two flat fields
+the typed accessors did not cover; the seven fields stay deprecated, their
+annotations name these, and only at_auth reads them. The paragraph under F3
+still measures what a legacy document is in memory, and that stays so on
+purpose: a legacy keyfile files no typed material, and readers tell the two
+shapes apart by that — typed active authentication material under an
+enrollment reads as a retrofit already done. Every consumer in this
+repository moved onto the writer and the readers the same day, so the split
+the question asked for was never counted.
 
 ## 4. Order of work
 
@@ -330,80 +337,83 @@ changed package, the unit suite, and the format gate under CI's Dart in
 Docker), and each step's test tree clears in the same commit as its lib. A
 step that touches a lifecycle seam runs all 4 live packs before it commits.
 
-**Where this stands on 2026-09-11.** The workspace measured 1206 uses, from
-1403, before the keyfile and lookup-wiring changes below landed in at_auth; that
-figure is re-derived, never trusted. Steps 0, 1 and 2 are done; step 3 has its
-accessors, its signing path, its keyfile self-encryption, its lookup wiring,
-its approval key material, its handshake and its `atChops` field deprecated,
-with 14 `lib` uses left in at_auth, which is its floor for this pass: every
-one is decided and named in the table under step 3, and all but two are the
-injected-signer machinery that waits for the live packs. Step 4 is done
-apart from `LocalSecondary`'s `AtChops` tier, which waits for the live packs;
-`AtClient.atChops` is `@Deprecated`. Step 5 is done: the readers of the
-enrollment id ask the client. All four live packs have run green on everything landed;
-their first runs found two defects, recorded under step 4, one of them from
-the pass before this one. Step 6's at_onboarding_cli half is done, and the package has
-since gone to a 2.0 whose surface is `authenticate()` and `atClient` over
-`Atsign.open`; step 7's at_client_flutter half was overtaken the same way,
-its 2.0 deleting the two services that held the three readings. B went with
-the auth DTOs in at_auth `4.0.0-rc2`; C and D are still annotated on
-`AtEnrollmentRequest` and `AtEnrollmentResponse`. New since these counts were
-taken: three transport fields on `AtClientPreference`, deprecated by the
-`lookUps:` factory and enumerated in F6, and the two `AtClientManager`
-members named there. The two 2.0 rows in the debt table are unmeasured since
-their majors; re-derive them with the recipe above before quoting either.
-[Step 8](#step-8-removal--at_auth-now-the-others-at-their-majors) is under
-way: gkc ruled that at_auth's surface is cleaned in this rc, and its families
-E, H, A and G are removed. **B, C and D left this plan on 2026-09-12.** The
-client-lifecycle design
-([`../client-lifecycle/design.md`](../client-lifecycle/design.md)) removes the
-request and response types they annotate together with `AtAuth.authenticate`'s
-DTOs, and takes at_client_flutter and at_onboarding_cli to a 2.0 to do it, so
-there is nothing here to hold and no caller to move field by field. B's
-surface went with the DTOs in at_auth `4.0.0-rc2`; C's and D's annotations
-are still in the tree on `AtEnrollmentRequest` and `AtEnrollmentResponse`,
-which at_auth still exports.
+**Where this stands on 2026-09-13.** Steps 0 to 7 are done. Step 4's last
+piece, `LocalSecondary`'s `AtChops` tier, went on 2026-09-13: the key
+getters read the key source and the keystore, the PKAM getters reaching the
+source through `authenticationKeyPairFor` so a keypair filed under an
+algorithm this build cannot sign with is refused rather than fallen through
+to the keystore, and a public write with no encryption private key anywhere
+is refused by the transformer's own message rather than the keystore's
+record name — the two facts the live packs surfaced when the tier went.
+Steps 6 and 7's test-tree remainders are cleared: the two live packs, the
+two onboarding-CLI packs, at_onboarding_cli, at_client_flutter and
+at_contact report no deprecated use, and neither does at_client nor at_auth
+outside `lib`. F3 cleared under the ruling recorded in
+[section 3](#3-decisions-this-plan-needs-and-the-ones-it-makes); F5 by
+passing storage bundles, the e2e pack's `TestPreferences` handing out the
+bundle beside the preference; F4 by deleting the three stubs; F2 in the
+packs by the lookup factory with `authenticatorFor`,
+`authenticatorForCramSecret` and `authenticatorForPrivateKey`; F1 in the
+unit trees by key sources holding the same keypairs (`keysHoldingApkam`)
+and by at_chops' algorithm classes where a fixture sealed or verified
+something itself. C and D have no consumer left anywhere in this repository:
+every enrollment a pack test only submits carries a `session`, every one
+whose client a test opens goes through `Atsign.enroll` and
+`PendingEnrollment.client`, and the completed keys come from awaiting the
+approval rather than from the response.
 
-**What is owed, in order.** The remaining test-tree work in steps 6 and 7;
-then `LocalSecondary`'s `AtChops` tier. One question waits on gkc rather than
-on code, stated where it arises: whether F's seven flat fields keep an
-annotation no caller can act on (step 8). The step 7 question, where an
-enrolled app's keys land when `apkam_dialog.dart` supplies a session, is
-answered by that design's ruling 5: the key destination is also the resume
-store.
+**What remains in `lib`, and why it is the floor.** at_auth's 16 are step
+3's table: the injected-signer branches and `AtChops` in the signatures
+that carry them, the door a hardware-backed signer comes through. at_client's
+25 are the `AtChops` carrier — `_atChops`, `AtClient.atChops`, the
+preference-only bridge `_createAtChops` builds from a keystore, and
+`RemoteSecondary`'s `atChops` plumbing — the four ladder writes and three
+ladder reads in `remote_secondary.dart` that step 5's ruling keeps, and
+`ApkamSigning`'s two reinstated `AtPkamKeyPair` accessors. Every one leaves
+at the major that removes `AtClient.atChops`, and none can be moved before
+it without breaking a published caller.
 
-⚠️ **Re-derive every figure here before quoting it.** The counts on
-2026-09-12, from the corrected recipe above — `lib` / `test`: at_auth **16 /
-70** with **20** annotations left in `lib`; at_client **30 / 256**;
-at_onboarding_cli **21 / 182** (plus 36 outside both); at_client_flutter **0 /
-36**, its `lib` zero being four ignores with reasons rather than a clearance.
-Whole-package totals, which include `example/` and `bin/`: at_auth 87,
-at_client 287, at_onboarding_cli 239, at_client_flutter 36, the functional pack
-272, e2e 116, the onboarding-CLI pack 47, at_contact 4, and 16 spread over six
-legacy `*_flutter` packages this plan does not clear.
+**What the test trees keep, and where it is stated.** A test whose subject
+IS the AtChops bridge, the injected-signer door or the credential ladder
+names it on purpose, under one file-level ignore whose reason is the file's
+first lines: at_auth's `at_authenticator_test`, `auth_wiring_test` and
+`enrollment_handshake_test`; at_client's `apkam_signing_keys_test`,
+`apkam_signing_deprecated_pair_test`, `signing_algo_threading_test`,
+`no_atkeysio_inertness_test`, `nskey_minting_test`, `nskey_rotation_test`,
+`startup_call_order_test` and `seeding_files_private_test`; and the three
+fixtures that hand the client a placeholder signer because the bridge that
+builds a client's AtChops from a keyfile insists on a credential
+(`legacy_encryption_decryption_test`, `legacy_client_refusal_test`,
+`full_stack_test`). The ladder's enrollment id, which the bridge that
+builds a connection's authenticator still reads off the lookup, is stubbed
+under a line ignore in the shared mocks and the five fixtures that carry
+their own lookup; the remote-backed mock client keeps the AtChops door
+beside its key source, because tests that swap in a key source of their
+own, or none, are testing exactly the client that door exists for. The
+test in at_onboarding_cli that pins which ladder a real connection is
+stamped with says so on its three lines.
 
-The annotation count is what measures the removals: **28 to 20** across
-families A, E, G and H.
+**What is owed.** Nothing in this pass. The four live packs ran green on the finished tree on 2026-09-13 evening,
+each through its own runner: functional 199 tests, e2e 73, onboarding-CLI
+21, onboarding-CLI proxy 4; at_client's unit suite 1989.
+What the majors owe is under [step 8](#step-8-removal--at_auth-now-the-others-at-their-majors):
+at_client 4.0 removes `AtClient.atChops`, `create(atChops:)`, the manager
+parameters, `RemoteSecondary.atChops`, the three storage and three
+transport fields on the preference, and `setCurrentAtSign` and
+`fromAuthSession`; the at_lookup major removes the ladder; and C's and D's
+annotations go when at_auth internalises `AtEnrollmentRequest` and
+`AtEnrollmentResponse`, which means the handshake carrying its keys other
+than on `atAuthKeys` — the client-lifecycle design's work, not this plan's.
 
-⚠️ **A THIRD kind of movement that is not progress: a reinstatement.**
-at_client's `lib` went 28 to 30 on 2026-09-12 while the tree got *better* —
-`ApkamSigning`'s reinstated accessors return `AtPkamKeyPair`, which at_chops
-deprecates, so the import and the return type each report. Restoring a
-published signature costs deprecated uses, and that is the correct trade.
+⚠️ **Re-derive every figure here before quoting it.** The recipe at the top,
+over every pubspec, on 2026-09-13 evening: 67 across 49 pubspecs — at_auth
+16, at_client 25, every other workspace member 0, and 26 in the legacy
+`*_flutter` packages and one of their examples. The figures this section used to carry — 1206, 1403,
+the per-package `lib`/`test` splits of 2026-09-12 and the three kinds of
+movement that were not progress — are history now, and the text that
+explained them stays under the steps that record it.
 
-⚠️ **Three of those movements are not work, and one of them is a RISE.** Two
-are gkc's `setCurrentAtSign(atChops:)` deprecation: at_onboarding_cli gained
-one, because the CLI passes the parameter through, and at_client **lost three**,
-because a parameter's own type annotation stops reporting once the parameter is
-deprecated. The third is at_auth's `lib` going **14 to 16** across family A,
-which removed code and reported more: taking `@Deprecated` off the `atChops`
-field makes that declaration's own `AtChops` type annotation visible, and
-turning the constructor's `this.atChops` into an explicit `AtChops? atChops`
-gives it a type annotation it never had. Both are the invisibility step 3
-records, running backwards. So the count can fall without work and rise
-without regression, and neither direction is progress on its own.
-
-**What has been built, so it is not built again.** Four things this plan now
+**What has been built, so it is not built again.** What this plan now
 depends on:
 
 - **`AtKeys.authenticationKeyPairFor`, `.encryptionKeyPair`, `.selfEncryptionKey`**
@@ -428,6 +438,19 @@ depends on:
   openssl-captured PKAM signature and its challenge, so every path that signs
   a PKAM challenge is held to the same bytes; `at_authenticator_test.dart` and
   `enrollment_handshake_test.dart` both assert it.
+- **`AtKeys.fileLegacyMaterial`, `AtKeys.legacy`, `.enrollmentSymmetricKey`,
+  `.storedEnrollmentId`** (at_auth) — the flat document's writer and the
+  two readers the accessors lacked, under the ruling in section 3.
+- **`keyfileHolding` and `keysHoldingApkam`** (at_client's
+  `test/test_utils/ml_dsa_keyfile.dart`) — real material filed typed into an
+  in-memory key source: the atSign's encryption pair and self key, and an
+  APKAM keypair under an enrollment or flat for a keyfile that names none.
+  The typed form of the AtChops a test used to hand a mock client.
+- **`TestUtils.unauthenticatedLookUp`, `.lookUpAs` and `.enrollmentSession`**
+  (the functional pack) and **`TestPreferences.storageFor` and
+  `.storageForCoLocatedClient`** (the e2e pack) — the pack fixtures' one
+  route to a connection, an authenticated connection, an enrollment session
+  and a storage bundle.
 
 ⛔ A fixture helper is only worth having if it goes through the replacement.
 One that wrapped the deprecated construction would drop the count while
@@ -768,10 +791,14 @@ of them `AtLookUp`'s or `RemoteSecondary`'s, and those fixtures are found by
 grep, not by a count, like the `hiveStoragePath` ones above. The packages that
 read the field gained infos on purpose: at_onboarding_cli 32 to 33 in `lib`,
 at_functional_test 279 to 283 in `test`, at_end2end_test 45 to 48 in `lib`,
-the two CLI packs and at_client_flutter none. What remains of step 4 is the
-`AtChopsKeys` getter on `LocalSecondary` and its "from atChops" tier — which
-waits for the live packs, since a client built from an `AtChops` and no
-keystore keys is a shape only they can show. Of the 41, by member: 15 are
+the two CLI packs and at_client_flutter none. The last piece of step 4, the
+`AtChopsKeys` getter on `LocalSecondary` and its "from atChops" tier, went
+on 2026-09-13, and the live packs showed the two things a unit tree could
+not: the onboarding-CLI pack's contract test that a keyfile client answers
+the keyfile's PKAM keys through `LocalSecondary`, which the tier had been
+serving, and the functional pack's opt-out arm, whose public write had been
+refused by the transformer only because the tier handed it an empty key.
+Both are recorded in the status paragraph of section 4. Of the 41, by member: 15 are
 `atLookUp.enrollmentId` reads, which are step 5's; 11 are `AtChops` as a type
 in the carrier's own plumbing (`remote_secondary.dart`, `at_client_impl.dart`,
 `at_client_manager.dart`); 4 are the lookup's ladder fields, which step 5's
@@ -882,15 +909,20 @@ unit tests pass. This moves a client-construction seam, so all four live packs
 ran against it on `at_virtual_env:local`, and all four are green: the
 onboarding-CLI pack +21, its proxy +4, functional +200, e2e +73.
 
-The two live packs follow the same moves on their own fixtures: at_functional
-carries 117 F1 uses (`AtChopsKeys` 24, `AtPkamKeyPair` 23,
-`AtEncryptionKeyPair` 21, `AtChopsImpl` 20, `AtChopsKeys.create` 16, and the
-signing and util members) and 34 F2 (`AtLookupImpl` 25, `atChops` 9); at_e2e
-carries 29 F1 and 8 F2, with `enrollment_setup.dart` the file that sets
-`atLookUp.atChops`. Their F3 uses (at_functional about 107, at_e2e about 87)
-wait for step 7. Both packs and at_contact also clear F5 here by passing
-`storage:` instead of the three preference fields, and at_client's own 30
-test files do the same, since the analyzer will never list them.
+**The two live packs and at_contact are done, 2026-09-13.** The functional
+pack's `AtLookupImpl` constructions went through two helpers on `TestUtils`
+— an unauthenticated connection, and one that authenticates as an enrollment
+with the keypair its keys hold through `authenticatorFor` — and the two
+tests that signed a PKAM challenge by hand sign with `signPkamChallenge`, so
+no `AtChops` is built to feed a connection anywhere in the pack. The one
+test that set the credential ladder on an already authenticated connection
+asserted nothing its sibling did not, and went. The e2e pack's five submit
+connections come from `secureSocketLookUps()` and its keystore seeding
+reads the credentials map rather than the client's `AtChops`. Both packs
+and at_contact pass storage bundles; at_contact's tests open through
+`Atsign.open` and `AtClientManager.use`. Their F3 uses cleared under step
+7. The four live packs ran on the tree that evening: see the status
+paragraph of section 4 for the figures.
 
 ### Step 7: at_onboarding_cli's and at_client_flutter's flat fields
 
@@ -903,7 +935,11 @@ the response models. at_client_flutter's half of this step went a different
 way: its 2.0 deleted `auth_service.dart` and `enrollment_service.dart`
 outright and put the dialogs and the keychain on at_client's lifecycle verbs,
 so the three readings below record what the services did rather than work
-still owed. Both packages' tests follow, and so do the live packs' F3 uses.
+still owed. Both packages' tests and the live packs' F3 uses cleared on 2026-09-13,
+under the ruling in section 3: fixtures build legacy documents with
+`AtKeys.legacy`, and reads go through `authenticationKeyPairFor`,
+`encryptionKeyPair`, `selfEncryptionKey`, `enrollmentSymmetricKey` and
+`storedEnrollmentId`.
 
 ⚠️ **at_client_flutter's 7 `lib` uses are not the mechanical moves this step
 assumes.** Read on 2026-09-11, each carries a question of its own, and none of
@@ -990,7 +1026,7 @@ carried them instead.
 **The count, decomposed.** at_client_flutter's `lib` reports 0 deprecated
 uses, from 7. Four of those were ignores with the reasons above; the 2.0
 deleted the two services that held them, so the reasons are recorded here and
-nowhere in the code. Its test tree is step 7's mechanical remainder, and
+nowhere in the code. Its test tree cleared on 2026-09-13, and
 `flutter analyze --no-pub --no-fatal-infos` is clean.
 
 ### Step 8: removal — at_auth now, the others at their majors
@@ -1029,7 +1065,7 @@ declaration and the analyzer enumerates them.
 | C | `AtEnrollmentRequest`'s `rootDomain`, `apkamPublicKey`, `encryptedAPKAMSymmetricKey` | 1 | ″ |
 | D | `AtEnrollmentResponse.atAuthKeys` | 55 | superseded: the completed keys reach the app through the store it named, and the response goes the way of the request |
 | D | `AtEnrollmentResponse.atSign`, `.rootDomain` | 0 | ″. The zero never meant removable: at_auth's own `waitForApproval` refuses without both, and at_onboarding_cli restores them under two `// ignore`s |
-| F | the seven flat `AtKeys` fields | 332 | ⛔ **not removable** — see below |
+| F | the seven flat `AtKeys` fields | 0 | kept, deprecated, with a replacement at last: `fileLegacyMaterial`, `AtKeys.legacy`, `enrollmentSymmetricKey` and `storedEnrollmentId` (gkc, 2026-09-13) — see below |
 
 ⛔ **Every figure in this plan excluded 32 packages, and one of them held a
 caller of something already removed.** The re-derivation loop enumerates the
@@ -1278,14 +1314,19 @@ committed legacy fixture. at_auth's `lib` annotations go 36 to 28.
 ⛔ **F is not a removal, and this step must not pretend otherwise.** A legacy
 `.atKeys` document decodes into the flat fields and files no
 `CryptographicMaterial` at all — `at_keys_test.dart`'s *"a legacy document
-files no typed material"* pins it, with a typed document as the control — so
-for every keyfile already on disk those seven fields are the only reader there
-is, and `toJson`, `fromJson` and `file_io`'s at-rest self-encryption are built
-on them. Deleting them drops support for every keyfile in the world. What is
-open for F is the **annotation**: step 0's ruling is that this tree does not
-deprecate what it has no replacement for, and a legacy keyfile has none.
-Whether the seven keep an annotation no caller can act on is gkc's call, and
-this step carries it as a question rather than answering it.
+files no typed material"* pins it, with a typed document as the control —
+so for every keyfile already on disk those seven fields are the only reader
+there is, and `toJson`, `fromJson` and `file_io`'s at-rest self-encryption
+are built on them. Deleting them drops support for every keyfile in the
+world. What was open for F was the **annotation**, under step 0's ruling
+that this tree does not deprecate what it has no replacement for; gkc's
+ruling of 2026-09-13 gave it one. `AtKeys.fileLegacyMaterial` and
+`AtKeys.legacy` write the flat document, `enrollmentSymmetricKey` and
+`storedEnrollmentId` read the two fields the typed accessors did not cover,
+and the seven annotations name them. The fields stay, deprecated, read by
+at_auth alone; `at_keys_test.dart`'s *"AtKeys legacy writer and readers"*
+group pins the writer against the legacy fixture's own document, and a
+swapped field reddens two of its tests.
 
 ### What C and D turn on
 
@@ -1327,18 +1368,17 @@ figure replaces its row here as it lands.
 | 1    | at_client         | 2 of 58               | none                                   |
 | 2    | at_client         | 12 of 58; and 2 in `benchmark` | ~50, the engine-only fixtures |
 | 3    | at_auth           | 18 so far; 56 owed    | 7 so far; 85 owed                      |
-| 4    | at_client         | ~23                   | ~250, every `AtChopsImpl(` built only to hand over |
+| 4    | at_client         | 21 of 46, the rest at the major | 263 to 0, the last on 2026-09-13 |
 | 5    | at_client         | 11 of 15; 4 stay as the bridge | the `enrollmentId` stubs      |
-| 6    | at_onboarding_cli | ~19 of 34             | ~30                                    |
-| 6    | the two live packs | 0 (no lib)           | ~190: their F1, F2 and F5              |
-| 6    | at_contact        | 0 (no lib)            | 4                                      |
-| 7    | at_onboarding_cli | 15 of 31              | 150, and 18 in `example`               |
-| 7    | at_client_flutter | 7                     | 40                                     |
-| 7    | the two live packs | 21, at_e2e's `lib`   | 107 functional, 53 at_e2e              |
+| 6    | at_onboarding_cli | 34 to 0, with its 2.0 | 211 to 0                               |
+| 6    | the two live packs | at_e2e's 7 `lib` uses | 205 functional and 76 e2e, to 0       |
+| 6    | at_contact        | 0 (no lib)            | 6 to 0                                 |
+| 7    | at_onboarding_cli | with step 6           | with step 6, and its `example`'s 2     |
+| 7    | at_client_flutter | 7 to 0, with its 2.0  | 25 to 0                                |
+| 7    | the two live packs | with step 6          | with step 6                            |
 
-Step 7's two figures are a ceiling rather than a target until the legacy
-question in [section 3](#3-decisions-this-plan-needs-and-the-ones-it-makes) is
-settled.
+Every row landed; the figures are the analyzer's on the day each step
+closed, and the recipe at the top re-derives today's.
 
 The 4 or so that survive in at_client until its major are the public surface
 and the ladder bridge, both `@Deprecated` by then with the replacement named.

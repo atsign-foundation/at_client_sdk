@@ -12,13 +12,10 @@ import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_demo_data/at_demo_data.dart'
-    show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 /// UC-B2.1 / UC-B2.2 — the superseded legacy enrollment, locked out at once.
@@ -52,15 +49,26 @@ void main() {
   /// A genuinely pre-PQ (RSA APKAM) enrollment with its own keyfile.
   Future<String> mintLegacyEnrollment(String label) async {
     final otp = (await owner.getOTP()).response;
+    final file = File(pathFor(label));
+    if (file.existsSync()) file.deleteSync();
+    file.parent.createSync(recursive: true);
+    // The session names the keyfile, so the approval completes the keys
+    // straight into it. FileAtKeysIo.write refuses to overwrite, so a keyfile
+    // a previous run left is removed first.
+    final session = AtAuthSession(
+        atSign: atSign,
+        rootDomain: rootDomain(),
+        atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)));
     final response = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
-            atSign: atSign,
+            session: session,
             appName: 'rt-$label',
             deviceName: 'rt-$label-$runId',
             namespaces: {namespace: 'rw'},
             otp: otp,
             signingAlgo: SigningAlgoType.rsa2048),
-        AtLookupImpl(atSign, rootDomain().rootDomain, rootDomain().rootPort));
+        secureSocketLookUps()(
+            atSign: atSign, rootDomain: rootDomain(), authenticator: null));
     final record = (await owner.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
     await owner.enrollmentService!.approve(EnrollmentRequestDecision.approved(
@@ -69,15 +77,9 @@ void main() {
         apkamSymmetricKey:
             AtBytes.fromString(record.encryptedAPKAMSymmetricKey!)));
 
-    final keys = response.atAuthKeys!
-      ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!)
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-
-    final file = File(pathFor(label));
-    if (file.existsSync()) file.deleteSync();
-    file.parent.createSync(recursive: true);
-    await FileAtKeysIo(filePath: (_) => pathFor(label)).write(atSign, keys);
+    // Awaiting the approval collects the two atSign-wide secrets it released
+    // and writes the completed keys into the keyfile.
+    await AtEnrollment.create().waitForApproval(response);
     return response.enrollmentId;
   }
 
@@ -133,6 +135,8 @@ void main() {
       // nothing carries across.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rt-l1-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rt-l1-$runId'),
       appName: 'rt-l1',
       deviceName: 'rt-l1-$runId',
       namespaces: {namespace: 'rw'},

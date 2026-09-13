@@ -38,7 +38,7 @@ void main() {
           .thenAnswer((_) async =>
               'data:{"enrollmentId":"$enrollmentId","status":"pending"}');
       // The atSign's encryption public key, which this path RSA-encrypts to.
-      when(() => mock.executeVerb(any(), sync: any(named: 'sync')))
+      when(() => mock.executeVerb(any()))
           .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]}');
       return mock;
     }
@@ -105,7 +105,7 @@ void main() {
               auth: any(named: 'auth')))
           .thenAnswer((_) async =>
               'data:{"enrollmentId":"$enrollmentId","status":"pending"}');
-      when(() => mock.executeVerb(any(), sync: any(named: 'sync')))
+      when(() => mock.executeVerb(any()))
           .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]}');
       return mock;
     }
@@ -179,21 +179,14 @@ void main() {
     AtEnrollmentImpl atEnrollmentServiceImpl = AtEnrollmentImpl();
     AtLookUp mockAtLookUp = MockAtLookUp();
 
-    String? apkamPrivateKey = pkamPrivateKeyMap[atSign]!;
-    String? apkamPublicKey = pkamPublicKeyMap[atSign]!;
     String? encryptionPublicKey = encryptionPublicKeyMap[atSign]!;
     String? encryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
     String? selfEncryptionKey = aesKeyMap[atSign]!;
     String? apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
 
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(
-        AtEncryptionKeyPair.create(encryptionPublicKey, encryptionPrivateKey),
-        AtPkamKeyPair.create(apkamPublicKey, apkamPrivateKey));
-    atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
-    atChopsKeys.selfEncryptionKey = AESKey(selfEncryptionKey);
     final iv = InitialisationVector.legacy();
-
-    AtChopsImpl atChopsImpl = AtChopsImpl(atChopsKeys);
+    // Seals as the approver does: under the enrollment's symmetric key.
+    final sealer = StringAESEncryptor(AESKey(apkamSymmetricKey));
 
     when(() => mockAtLookUp.executeVerb(any(that: LookUpVerbBuilderMatcher())))
         .thenAnswer((_) async => 'data:$encryptionPublicKey');
@@ -210,10 +203,7 @@ void main() {
                 that: startsWith(
                     'keys:get:keyName:123.${AtConstants.defaultEncryptionPrivateKey}')),
             auth: true)).thenAnswer((_) async => Future.value(jsonEncode({
-          'value': (await atChopsImpl.encryptString(
-                  encryptionPrivateKey, EncryptionKeyType.aes256,
-                  keyName: 'apkamSymmetricKey', iv: iv))
-              .result
+          'value': sealer.encrypt(encryptionPrivateKey, iv: iv)
         })));
 
     when(() =>
@@ -222,10 +212,7 @@ void main() {
                 that: startsWith(
                     'keys:get:keyName:123.${AtConstants.defaultSelfEncryptionKey}')),
             auth: true)).thenAnswer((_) async => Future.value(jsonEncode({
-          'value': (await atChopsImpl.encryptString(
-                  selfEncryptionKey, EncryptionKeyType.aes256,
-                  keyName: 'apkamSymmetricKey', iv: iv))
-              .result
+          'value': sealer.encrypt(selfEncryptionKey, iv: iv)
         })));
     when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: '123'))
         .thenAnswer((_) => Future.value(true));
@@ -685,18 +672,9 @@ void main() {
             ? InitialisationVector.legacy()
             : InitialisationVector.fromBase64(storedIvB64);
 
-        AtChopsKeys atChopsKeys = AtChopsKeys.create(
-            AtEncryptionKeyPair.create(
-                encryptionPublicKeyMap[atSign]!, encryptionPrivateKey),
-            AtPkamKeyPair.create(
-                pkamPublicKeyMap[atSign]!, pkamPrivateKeyMap[atSign]!));
-        atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
-        AtChopsImpl atChopsImpl = AtChopsImpl(atChopsKeys);
-
+        final sealer = StringAESEncryptor(AESKey(apkamSymmetricKey));
         Future<String> sealed(String value) async =>
-            (await atChopsImpl.encryptString(value, EncryptionKeyType.aes256,
-                    keyName: 'apkamSymmetricKey', iv: iv))
-                .result;
+            sealer.encrypt(value, iv: iv);
 
         AtLookUp mockAtLookUp = MockAtLookUp();
         when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: '123'))

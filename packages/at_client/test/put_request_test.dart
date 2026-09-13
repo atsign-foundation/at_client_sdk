@@ -4,7 +4,6 @@ import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-import 'package:at_chops/at_chops.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_crypto_provider.dart';
 
@@ -20,7 +19,6 @@ const testEncryptionPrivateKey =
 
 void main() {
   AtClient mockAtClient = MockAtClient();
-  AtChops mockAtChops = MockAtChops();
   group(
       'A group of test to validate public data encoding in put request transformer',
       () {
@@ -39,12 +37,6 @@ void main() {
     inputToExpectedOutput.forEach((putValue, expectedResults) {
       test(putValue, () async {
         String encryptionPrivateKey = testEncryptionPrivateKey;
-        when(() => mockAtClient.atChops).thenAnswer((_) => mockAtChops);
-        AtSigningResult mockSigningResult = AtSigningResult()
-          ..result = 'mock_signing_result';
-        registerFallbackValue(FakeAtSigningInput());
-        when(() => mockAtChops.sign(any()))
-            .thenAnswer((_) => mockSigningResult);
         var putRequestTransformer = PutRequestTransformer()
           ..atClient = mockAtClient;
         AtKey atKey =

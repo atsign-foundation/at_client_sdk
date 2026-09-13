@@ -279,7 +279,7 @@ void main() {
     // NOTE: typed material will not serialize without an atsign, and the copy
     // below is made of the serialized form.
     (await ioA.read(atSign))
-      ..enrollmentId = 'enrollment-1'
+      ..fileLegacyMaterial(enrollmentId: 'enrollment-1')
       ..atsign = atSign.toAtsign();
     await PqSigningRoot(a.client, keysIo: ioA)
         .mintIfAbsent(isFullyPrivileged: true);
@@ -332,7 +332,7 @@ void main() {
         reason: 'the control: the verify above is checking THIS message, not '
             'answering true for anything put in front of it');
 
-    expect((await ioB.read(atSign)).enrollmentId, 'enrollment-1',
+    expect((await ioB.read(atSign)).storedEnrollmentId, 'enrollment-1',
         reason: 'and the copy carries E1\'s enrollment id, which is what '
             'makes the second host present as E1 to the atServer and so pick '
             'up its namespace authorisations rather than a fresh grant');

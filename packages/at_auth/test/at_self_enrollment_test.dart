@@ -366,11 +366,10 @@ void main() {
         reason: 'the legacy enrollment has no typed signing material; its '
             'RSA keypair lives in the flat fields');
 
-    final atChops = after.authenticationFor('new-123').chops;
+    final keyPair = after.authenticationKeyPairFor('new-123')!;
+    expect(keyPair.algorithm, SigningAlgoType.mldsa65);
     const challenge = '_deadbeef@alice:cafe';
-    final result = atChops.sign(AtSigningInput(challenge)
-      ..signingAlgoType = SigningAlgoType.mldsa65
-      ..signingMode = AtSigningMode.pkam);
+    final signature = signPkamChallenge(keyPair, challenge);
     final publicKey = after
         .getKey('new-123', 'auth:mldsa65:1',
             CryptographicMaterialRole.publicAuthentication)!
@@ -378,11 +377,11 @@ void main() {
         .toString();
     final ok = await MlDsa65PureDartAlgo().verifyBytes(
         Uint8List.fromList(challenge.codeUnits),
-        signature: base64Decode(result.result),
+        signature: base64Decode(signature),
         publicKey: base64Decode(publicKey));
     expect(ok, true,
         reason: 'this is the atServer\'s verify side: the whole client chain '
-            '(keyfile -> AtChops -> pkam dispatch) must be genuinely ML-DSA');
+            '(keyfile -> keypair -> pkam signing) must be genuinely ML-DSA');
   });
 
   group('an enrollment that owns a signing key from birth', () {
@@ -510,13 +509,6 @@ void main() {
     /// BOTH arms meet — and approves or denies whatever is asked of it after.
     MockAtLookUp parkingLookUp() {
       final mock = MockAtLookUp();
-      when(() => mock.atChops).thenReturn(AtChopsImpl(
-          AtChopsKeys.create(
-              AtEncryptionKeyPair.create(
-                  encryptionKeyPair.atPublicKey.publicKey,
-                  encryptionKeyPair.atPrivateKey.privateKey),
-              null)
-            ..selfEncryptionKey = AESKey(selfEncryptionKey)));
       when(() =>
           mock.executeCommand(any(that: startsWith('enroll:request:')),
               auth: any(named: 'auth'))).thenAnswer(

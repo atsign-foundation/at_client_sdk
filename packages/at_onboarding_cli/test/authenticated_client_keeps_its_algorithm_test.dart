@@ -79,6 +79,9 @@ void main() {
     // NOTE: a real lookup rather than a mock — the client's connection stamps
     // it, and a mock would keep nothing to read back. It points at a port
     // nothing listens on, so the open comes back offline without a network.
+    // The stamping under test is the credential ladder, so its fields are
+    // named here on purpose.
+    // ignore: deprecated_member_use
     final own = AtLookupImpl(
         atSign, InternetAddress.loopbackIPv4.address, preference.rootPort);
     final service = AtOnboardingServiceImpl(atSign, preference, atLookUp: own);
@@ -92,10 +95,12 @@ void main() {
         reason: 'the client\'s connection wraps the lookup it was handed; if '
             'it built its own, the assertions below are about the wrong '
             'object');
+    // ignore: deprecated_member_use
     expect(own.signingAlgoType, SigningAlgoType.mldsa65,
         reason: 'the keyfile holds ML-DSA material for this enrollment and '
             'the preference says rsa2048; the key material is what the '
             'connection has to sign with');
+    // ignore: deprecated_member_use
     expect(own.enrollmentId, enrollmentId);
     expect(own.authenticator, isNotNull,
         reason: 'the connection authenticates from the keyfile through the '

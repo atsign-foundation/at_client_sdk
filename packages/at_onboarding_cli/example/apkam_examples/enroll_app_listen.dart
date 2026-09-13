@@ -18,8 +18,9 @@ void main(List<String> args) async {
   final enrollmentId = (await keys.read(atSign)).enrollmentToAuthenticateAs();
   final client = await Atsign(atSign).open(
       keys: keys,
-      preference: AtSignPreference.getAlicePreference(atSign, enrollmentId),
-      namespace: 'wavi');
+      preference: AtSignPreference.getAlicePreference(),
+      namespace: 'wavi',
+      storage: AtSignPreference.getAliceStorage(atSign, enrollmentId));
 
   await for (final request in client.enrollments.requests) {
     print('Approve enrollment ${request.enrollmentId} from '

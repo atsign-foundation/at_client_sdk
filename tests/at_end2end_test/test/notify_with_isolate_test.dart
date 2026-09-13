@@ -43,6 +43,7 @@ void main() {
         currentAtSign, TestConstants.namespace, authType,
         enableInitialSync: false,
         atClientPreference: getAtClientPreferences(currentAtSign),
+        storage: getAtClientStorage(currentAtSign),
         posture: PqPosture.legacy);
 
     // NOTE: the child's subscribe() returns long before its monitor has
@@ -79,6 +80,7 @@ Future<void> initSharedAtSign(SendPort mainIsolateSendPort) async {
       sharedWithAtSign, TestConstants.namespace, authType,
       enableInitialSync: false,
       atClientPreference: getAtClientPreferences(sharedWithAtSign),
+      storage: getAtClientStorage(sharedWithAtSign),
       posture: PqPosture.legacy);
 
   final notifications =
@@ -107,8 +109,6 @@ Future<void> initSharedAtSign(SendPort mainIsolateSendPort) async {
 /// `TestPreferences` singleton, so the posture is named here.
 AtClientPreference getAtClientPreferences(String atSign) {
   var atClientPreference = AtClientPreference(posture: PqPosture.legacy);
-  atClientPreference.hiveStoragePath = 'test/hive/$atSign';
-  atClientPreference.commitLogPath = 'test/hive/$atSign/commit/';
   atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
   atClientPreference.rootPort =
       ConfigUtil.getYaml()['root_server']['port'] ?? 64;
@@ -118,3 +118,8 @@ AtClientPreference getAtClientPreferences(String atSign) {
       atSign, atClientPreference);
   return atClientPreference;
 }
+
+/// The store for a spawned isolate's client, apart from every other
+/// atSign's so that two isolates never open one Hive directory.
+AtClientStorage getAtClientStorage(String atSign) => HiveAtClientStorage(
+    atSign: atSign, storagePath: 'test/hive/$atSign', closedByClient: true);

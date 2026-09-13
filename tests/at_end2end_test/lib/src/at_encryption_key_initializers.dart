@@ -21,15 +21,16 @@ class AtEncryptionKeysLoader {
     return _singleton;
   }
 
-  /// Stores the encryption keys to the local secondary key-store.
+  /// Stores [atSign]'s credentials, as `AtCredentials` holds them, in the
+  /// local secondary key-store.
   Future<void> setEncryptionKeys(AtClient atClient, String atSign) async {
+    final credentials = AtCredentials.credentialsMap[atSign]!;
     bool result;
 
     // Set encryption private key
     result = await atClient.getLocalSecondary()!.putValue(
         AtConstants.atEncryptionPrivateKey,
-        atClient
-            .atChops!.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
+        credentials[TestConstants.ENCRYPTION_PRIVATE_KEY].toString());
     if (result) {
       _logger.finer('encryption private key was set successfully');
     } else {
@@ -41,9 +42,7 @@ class AtEncryptionKeysLoader {
         '${AtConstants.atEncryptionPublicKey}$atSign';
     result = await atClient.getLocalSecondary()!.putValue(
         encryptionPublicKeyAtKey,
-        AtCredentials
-            .credentialsMap[atSign]![TestConstants.ENCRYPTION_PUBLIC_KEY]
-            .toString());
+        credentials[TestConstants.ENCRYPTION_PUBLIC_KEY].toString());
     if (result) {
       _logger.finer('encryption public key was set successfully.');
     } else {
@@ -53,22 +52,22 @@ class AtEncryptionKeysLoader {
     // set self encryption key
     result = await atClient.getLocalSecondary()!.putValue(
         AtConstants.atEncryptionSelfKey,
-        atClient.atChops!.atChopsKeys.selfEncryptionKey!.key);
+        credentials[TestConstants.SELF_ENCRYPTION_KEY].toString());
     if (result) {
       _logger.finer('self encryption key was set successfully');
     } else {
       _logger.severe('failed to set self encryption key');
     }
 
-    // set the PKAM pair. A client built without an AtChops of its own rebuilds
-    // one from the keystore, and cannot sign without these.
-    final pkam = atClient.atChops!.atChopsKeys.atPkamKeyPair!;
-    result = await atClient
-        .getLocalSecondary()!
-        .putValue(AtConstants.atPkamPublicKey, pkam.atPublicKey.publicKey);
+    // set the PKAM pair. A client built with no key source reads it from
+    // the keystore, and cannot sign without these.
+    result = await atClient.getLocalSecondary()!.putValue(
+        AtConstants.atPkamPublicKey,
+        credentials[TestConstants.PKAM_PUBLIC_KEY].toString());
     result = result &&
         await atClient.getLocalSecondary()!.putValue(
-            AtConstants.atPkamPrivateKey, pkam.atPrivateKey.privateKey);
+            AtConstants.atPkamPrivateKey,
+            credentials[TestConstants.PKAM_PRIVATE_KEY].toString());
     if (result) {
       _logger.finer('pkam key pair was set successfully');
     } else {

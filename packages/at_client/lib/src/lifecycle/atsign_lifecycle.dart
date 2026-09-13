@@ -465,10 +465,9 @@ extension AtsignLifecycle on Atsign {
     required Map<String, String> namespaces,
   }) async {
     final pending = AtKeys(atsign: this)
-      // ignore: deprecated_member_use
-      ..apkamSymmetricKey = minted.apkamSymmetricKey
-      // ignore: deprecated_member_use
-      ..enrollmentId = enrollmentId;
+      ..fileLegacyMaterial(
+          apkamSymmetricKey: minted.enrollmentSymmetricKey?.key,
+          enrollmentId: enrollmentId);
     for (final material in minted.keysForEnrollment(enrollmentId)) {
       pending.addKey(material.withStatus(CryptographicMaterialStatus.pending));
     }
@@ -499,16 +498,15 @@ extension AtsignLifecycle on Atsign {
           CryptographicMaterialAlgorithm.of(algorithm.name);
       final keyId = '${AtKeys.keyIdPrefix('auth', materialAlgorithm)}1';
       final now = DateTime.now().toUtc();
+      final mintedPair = minted.authenticationKeyPairFor(null)!;
       for (final (role, bytes) in [
-        // ignore: deprecated_member_use
         (
           CryptographicMaterialRole.privateAuthentication,
-          minted.apkamPrivateKey!
+          AtBytes.fromString(mintedPair.privateKey)
         ),
-        // ignore: deprecated_member_use
         (
           CryptographicMaterialRole.publicAuthentication,
-          minted.apkamPublicKey!
+          AtBytes.fromString(mintedPair.publicKey)
         ),
       ]) {
         pending.addKey(CryptographicMaterial(

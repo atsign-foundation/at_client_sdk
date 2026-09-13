@@ -148,10 +148,10 @@ void main() {
     // empty, where a legacy one fills them.
     final legacyKeys =
         await FileAtKeysIo(filePath: keysFilePath).read(legacyPeer);
-    expect(legacyKeys.apkamPublicKey, isNotNull,
+    expect(legacyKeys.authenticationKeyPairFor(null), isNotNull,
         reason: 'a legacy activation mints an RSA APKAM into the flat fields');
     final pqKeys = await FileAtKeysIo(filePath: keysFilePath).read(pqNative);
-    expect(pqKeys.apkamPublicKey, isNull,
+    expect(pqKeys.authenticationKeyPairFor(null), isNull,
         reason: 'a PQ activation files its ML-DSA APKAM as typed material, so '
             'a reader that cannot handle that fails loudly rather than '
             'signing with the RSA routine');
@@ -296,7 +296,7 @@ void main() {
 
     final optOutKeys =
         await FileAtKeysIo(filePath: keysFilePath).read(pqOptOut);
-    expect(optOutKeys.defaultEncryptionPublicKey, isNull,
+    expect(optOutKeys.encryptionKeyPair, isNull,
         reason: 'the opt-out is a decision not to mint the legacy keypair at '
             'all, not a decision to withhold it');
 
@@ -307,7 +307,7 @@ void main() {
     // it never could be.
     final pqKeys = await FileAtKeysIo(filePath: keysFilePath).read(pqNative);
     expect(await plookupOrNull(optOutClient, 'publickey$pqNative'),
-        pqKeys.defaultEncryptionPublicKey.toString(),
+        pqKeys.encryptionKeyPair!.atPublicKey.publicKey,
         reason: 'the positive control: an activation that minted legacy '
             'material publishes exactly the key it minted');
 

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_utils/at_utils.dart';
@@ -11,6 +10,7 @@ import 'package:test/test.dart';
 import 'fake_enrollment_directory.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_keypairs.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -52,9 +52,8 @@ void main() {
 
   MockAtClient buildMockClient(String enrollmentId) {
     final atClient = MockAtClient();
-    final atChops = AtChopsImpl(
-        AtChopsKeys.create(null, pkamKeyPairFor(atSign, enrollmentId)));
-    when(() => atClient.atChops).thenReturn(atChops);
+    when(() => atClient.atKeysIo).thenReturn(keysHoldingApkam(
+        atSign, enrollmentId, pkamKeyPairFor(atSign, enrollmentId)));
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
 
     final remoteSecondary = MockRemoteSecondary();

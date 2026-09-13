@@ -56,9 +56,10 @@ class MockAtLookupImpl extends Mock implements AtLookupImpl {
   }
 }
 
+/// The signer the deprecated `atChops` doors still take; a test of one of
+/// those doors is what hands this in.
+// ignore: deprecated_member_use
 class MockAtChops extends Mock implements AtChops {}
-
-class MockAtChopsKeys extends Mock implements AtChopsKeys {}
 
 class MockSecondaryAddressFinder extends Mock
     implements SecondaryAddressFinder {}
@@ -79,6 +80,8 @@ class MockRemoteSecondary extends Mock implements RemoteSecondary {
     // choose. Only the lookup itself is answered: what it would send is the
     // fixture's business, and a test needing that supersedes this.
     final atLookUp = MockAtLookupImpl();
+    // the bridge reads the enrollment id off the lookup until the ladder goes
+    // ignore: deprecated_member_use
     when(() => atLookUp.enrollmentId).thenReturn(null);
     when(() => this.atLookUp).thenReturn(atLookUp);
   }
@@ -226,8 +229,6 @@ class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
 
 class FakeAtKey extends Fake implements AtKey {}
-
-class FakeAtSigningInput extends Fake implements AtSigningInput {}
 
 /// The two `enroll:list` command strings `EnrollmentServiceImpl.approve`
 /// issues, in the order it issues them: the pre-approval read, then the

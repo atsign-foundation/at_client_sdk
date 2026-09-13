@@ -96,8 +96,7 @@ class EnrollmentOperations {
   AtOnboardingPreference getOnboardingPreference(
       {String? cramKey, String? atKeysFilePath}) {
     return AtOnboardingPreference()
-      ..commitLogPath = '$storageDir/commitLog/$atsign/1'
-      ..hiveStoragePath = '$storageDir/hive/$atsign/1'
+      ..storagePath = '$storageDir/hive/$atsign/1'
       ..rootDomain = 'vip.ve.atsign.zone'
       ..rootPort = virtualenvRootPort
       ..cramSecret = cramKey

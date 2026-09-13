@@ -59,7 +59,7 @@ class TestSuiteInitializer {
               '${ConfigUtil.getYaml()['filePath']}/${atSign}_key.atKeys');
     }
     final keysIo = FileAtKeysIo(
-        filePath: (a) => '${preference.hiveStoragePath}/${a}_key.atKeys');
+        filePath: (a) => '${TestPreferences.storageRoot}/${a}_key.atKeys');
     if (_seeded.add(atSign)) {
       final demo = createAtKeysFromDemoKeys(atSign);
       AtKeys? existing;
@@ -95,6 +95,7 @@ class TestSuiteInitializer {
   ///
   /// The client is always rebuilt: any client already running as the
   /// principal the keys name is stopped, since `open` refuses a second one.
+  /// It opens on [storage], or on `TestPreferences.storageFor` without one.
   ///
   /// ⛔ See `TestPreferences.getPreference` for why the choice matters on this
   /// pack's long-lived atSigns.
@@ -102,6 +103,7 @@ class TestSuiteInitializer {
       {required PqPosture posture,
       bool enableInitialSync = true,
       AtClientPreference? atClientPreference,
+      AtClientStorage? storage,
       AtClientManager? manager}) async {
     try {
       logger.info(
@@ -138,9 +140,8 @@ class TestSuiteInitializer {
         };
       }
 
-      final client = await _open(
-          manager ?? AtClientManager.getInstance(), atSign, namespace, keysIo,
-          atClientPreference);
+      final client = await _open(manager ?? AtClientManager.getInstance(),
+          atSign, namespace, keysIo, atClientPreference, storage);
       // Set Encryption Keys for currentAtSign
       await AtEncryptionKeysLoader.getInstance()
           .setEncryptionKeys(client, atSign);
@@ -188,7 +189,9 @@ class TestSuiteInitializer {
   /// answer. Naming one asks `TestPreferences` for that posture, which refuses
   /// if it disagrees with the preference already built.
   Future<AtClientManager> switchToAtSign(String atSign, String namespace,
-      {AtClientPreference? preference, PqPosture? posture}) async {
+      {AtClientPreference? preference,
+      PqPosture? posture,
+      AtClientStorage? storage}) async {
     final acm = AtClientManager.getInstance();
     final pref = preference ?? _preferenceFor(atSign, posture);
     final current = _currentClientOf(acm);
@@ -204,22 +207,30 @@ class TestSuiteInitializer {
           'nothing to open a client from. Call testInitializer for $atSign '
           'first.');
     }
-    await _open(acm, atSign, namespace, keysIo, pref);
+    await _open(acm, atSign, namespace, keysIo, pref, storage);
     return acm;
   }
 
   /// Opens [atSign]'s client on [keysIo] and makes it [manager]'s current
   /// one, stopping the client that was current and any client already
   /// running as the principal the keys name.
-  Future<AtClient> _open(AtClientManager manager, String atSign,
-      String namespace, AtKeysIo keysIo, AtClientPreference preference) async {
+  Future<AtClient> _open(
+      AtClientManager manager,
+      String atSign,
+      String namespace,
+      AtKeysIo keysIo,
+      AtClientPreference preference,
+      AtClientStorage? storage) async {
     await _currentClientOf(manager)?.stop();
     final principal = (await keysIo.read(atSign)).enrollmentToAuthenticateAs();
     for (final live in AtClientImpl.liveClientsFor(atSign)) {
       if (live.enrollmentId == principal) await live.stop();
     }
-    final client = await Atsign(atSign)
-        .open(keys: keysIo, preference: preference, namespace: namespace);
+    final client = await Atsign(atSign).open(
+        keys: keysIo,
+        preference: preference,
+        namespace: namespace,
+        storage: storage ?? TestPreferences.getInstance().storageFor(atSign));
     manager.use(client);
     return client;
   }
