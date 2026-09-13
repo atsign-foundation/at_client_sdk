@@ -35,7 +35,10 @@ import 'package:at_utils/at_progress.dart';
 /// [atLookUp] is a connection to activate over, for a caller that already
 /// holds one; it is taken as already having reached the atServer, so the
 /// provisioning wait is skipped, and it is left open. With none, a
-/// connection is built, and closed when this returns.
+/// connection is built, and closed when this returns. [awaitProvisioning]
+/// runs the provisioning wait even with [atLookUp] supplied, for a caller
+/// that built the connection itself and has not yet reached the atServer on
+/// it.
 Future<String> activateAtSign({
   required String atSign,
   required String cramSecret,
@@ -55,6 +58,7 @@ Future<String> activateAtSign({
   bool completeActivation = true,
   void Function(ProgressEvent event)? onProgress,
   AtLookUp? atLookUp,
+  bool awaitProvisioning = false,
 }) async {
   final request = AtOnboardingRequest(atSign,
       signingAlgoType: signingAlgo,
@@ -69,7 +73,9 @@ Future<String> activateAtSign({
 
   final auth = atLookUp == null
       ? AtAuthImpl()
-      : _ConnectedActivation(atLookUp: atLookUp);
+      : awaitProvisioning
+          ? AtAuthImpl(atLookUp: atLookUp)
+          : _ConnectedActivation(atLookUp: atLookUp);
   final forward =
       onProgress == null ? null : auth.progressStream.listen(onProgress);
   try {

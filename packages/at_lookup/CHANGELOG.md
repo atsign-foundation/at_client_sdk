@@ -1,5 +1,11 @@
 ## 3.7.0-rc2
 
+- feat: `AtLookUpFactory`, the function type an application hands at_client's
+  entry points so that every connection a client opens travels the way the
+  application chose, and `secureSocketLookUps` in `at_lookup_io.dart`, the
+  default over TLS on TCP. `AtLookUp.withSecureSocket` takes `onConnect`, run
+  on each connection before anything else is sent on it, for a proxy that
+  needs `from:` first.
 - fix: a request in flight when this client closes the connection fails with
   `ConnectionInvalidException('The connection was closed by this client
   before a response arrived')`, where a connection the far end dropped still

@@ -119,6 +119,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @override
   AtAuthenticator? authenticator;
 
+  /// Runs on each connection once it is up and before anything else is sent
+  /// on it. See `AtLookUp.withSecureSocket`.
+  final Future<void> Function(AtCommandExecutor connection)? onConnect;
+
   /// Permitted number of milliseconds before connection to atServer
   /// is deemed 'idle' and will be closed. The default is usually set to
   /// 10 minutes i.e. 600,000 milliseconds
@@ -163,7 +167,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       Map<String, dynamic>? clientConfig,
       AtLookupSecureSocketFactory? secureSocketFactory,
       AtLookupSecureSocketListenerFactory? socketListenerFactory,
-      AtLookupOutboundConnectionFactory? outboundConnectionFactory}) {
+      AtLookupOutboundConnectionFactory? outboundConnectionFactory,
+      this.onConnect}) {
     _currentAtSign = atSign;
     _rootDomain = rootDomain;
     _rootPort = rootPort;
@@ -352,6 +357,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   final Mutex _createConnectionMutex = Mutex();
 
   Future<void> createConnection() async {
+    var created = false;
     await _createConnectionMutex.acquire();
     try {
       if (!isConnectionAvailable()) {
@@ -380,10 +386,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           messageListener.onDisconnect = _onNotificationConnectionLost;
         }
         messageListener.listen();
+        created = true;
         logger.finer('New connection created OK');
       }
     } finally {
       _createConnectionMutex.release();
+    }
+    // NOTE: outside the mutex, and writing to the connection directly rather
+    // than through `_sendCommand`, which would come back here.
+    if (created && onConnect != null) {
+      await onConnect!(_ConnectionPreamble(this));
     }
   }
 
@@ -1353,5 +1365,23 @@ class AtLookupOutboundConnectionFactory {
 
   OutboundConnection createOutboundConnection(SecureSocket secureSocket) {
     return OutboundConnectionImpl(secureSocket);
+  }
+}
+
+/// The connection as `onConnect` sees it: a command goes straight onto the
+/// socket just opened, and its reply is read back, with nothing between.
+class _ConnectionPreamble implements AtCommandExecutor {
+  final AtLookupImpl _lookUp;
+
+  _ConnectionPreamble(this._lookUp);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    _lookUp.logger.finer('SENDING (on connect): $command');
+    await _lookUp._connection!.write(command);
+    return _lookUp.messageListener.read(
+        maxWaitMilliSeconds: maxWaitMilliSeconds,
+        transientWaitTimeMillis: transientWaitTimeMillis);
   }
 }

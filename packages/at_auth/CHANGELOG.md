@@ -77,7 +77,9 @@ at_client, and this release removes the surface those replace.
   CRAM activation as a parameter list. It waits for the atServer, mints the
   keys, submits and authenticates as the first enrollment, writes the keys
   to the store named and completes the activation, answering the enrollment
-  id. A supplied `atLookUp` is taken as having already reached the atServer.
+  id. A supplied `atLookUp` is taken as having already reached the atServer
+  unless `awaitProvisioning` is set, for a caller that built the connection
+  itself and has not reached the atServer on it yet.
 - `CryptographicMaterialStatus.pending`, the status of an enrollment's key
   material between submission and approval, ranking before `active`.
   `AtKeys.activatePending`, `AtKeys.discardEnrollment` and
