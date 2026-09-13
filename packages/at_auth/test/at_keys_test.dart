@@ -1726,4 +1726,83 @@ void main() {
       expect(ancient.enrollmentToAuthenticateAs(), 'primary');
     });
   });
+
+  group('AtKeys legacy writer and readers', () {
+    // The flat fields hold base64, as a keyfile does.
+    String b64(String text) => base64Encode(utf8.encode(text));
+
+    test('AtKeys.legacy writes the flat document the legacy decoder reads', () {
+      final written = AtKeys.legacy(
+        apkamPublicKey: encryptedAtKeysMap[auth_constants.apkamPublicKey],
+        apkamPrivateKey: encryptedAtKeysMap[auth_constants.apkamPrivateKey],
+        apkamSymmetricKey: encryptedAtKeysMap[auth_constants.apkamSymmetricKey],
+        encryptionPublicKey:
+            encryptedAtKeysMap[auth_constants.defaultEncryptionPublicKey],
+        encryptionPrivateKey:
+            encryptedAtKeysMap[auth_constants.defaultEncryptionPrivateKey],
+        selfEncryptionKey:
+            encryptedAtKeysMap[auth_constants.defaultSelfEncryptionKey],
+        enrollmentId: encryptedAtKeysMap['enrollmentId'],
+      );
+      final json = written.toJson();
+      for (final field in auth_constants.keySchemaList) {
+        expect(json[field], encryptedAtKeysMap[field],
+            reason: 'the flat field $field lands under its own name');
+      }
+      expect(json['enrollmentId'], encryptedAtKeysMap['enrollmentId']);
+      expect(json.containsKey('version'), isFalse,
+          reason: 'nothing typed was filed, so the document stays legacy');
+      expect(written.keys, isEmpty);
+    });
+
+    test('the typed readers answer from what fileLegacyMaterial filed', () {
+      final keys = AtKeys.legacy(
+        apkamPublicKey: b64('apkam-public'),
+        apkamPrivateKey: b64('apkam-private'),
+        apkamSymmetricKey: b64('apkam-symmetric'),
+        encryptionPublicKey: b64('enc-public'),
+        encryptionPrivateKey: b64('enc-private'),
+        selfEncryptionKey: b64('self-key'),
+        enrollmentId: 'E1',
+      );
+      final auth = keys.authenticationKeyPairFor(null)!;
+      expect(auth.algorithm, SigningAlgoType.rsa2048);
+      expect(auth.publicKey, b64('apkam-public'));
+      expect(auth.privateKey, b64('apkam-private'));
+      expect(keys.encryptionKeyPair!.atPublicKey.publicKey, b64('enc-public'));
+      expect(keys.encryptionKeyPair!.atPrivateKey.privateKey, b64('enc-private'));
+      expect(keys.selfEncryptionKey!.key, b64('self-key'));
+      expect(keys.enrollmentSymmetricKey!.key, b64('apkam-symmetric'));
+      expect(keys.storedEnrollmentId, 'E1');
+    });
+
+    test('a null argument leaves the field it names as it was', () {
+      final keys = AtKeys.legacy(
+          encryptionPublicKey: b64('enc-public'), encryptionPrivateKey: b64('enc-private'));
+      keys.fileLegacyMaterial(selfEncryptionKey: b64('self-key'));
+      expect(keys.encryptionKeyPair!.atPublicKey.publicKey, b64('enc-public'),
+          reason: 'filing the self key did not clear the encryption pair');
+      expect(keys.selfEncryptionKey!.key, b64('self-key'));
+      expect(keys.enrollmentSymmetricKey, isNull);
+      expect(keys.storedEnrollmentId, isNull);
+      expect(keys.authenticationKeyPairFor(null), isNull,
+          reason: 'no APKAM pair was ever filed');
+    });
+
+    test('storedEnrollmentId is the flat id alone, never a typed enrollment',
+        () {
+      final typed = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+        CryptographicMaterial(
+            keyId: 'auth:mldsa65:1',
+            enrollmentId: 'E1',
+            role: CryptographicMaterialRole.privateAuthentication,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            bytes: AtBytes.fromString('YXV0aA=='),
+            createdAt: DateTime.now().toUtc())
+      ]);
+      expect(typed.storedEnrollmentId, isNull);
+      expect(typed.enrollmentToAuthenticateAs(), 'E1',
+          reason: 'control: the typed enrollment is what authenticates');
+    });
+  });
 }
