@@ -435,6 +435,73 @@ rewrite behind the helper — and corrects the stale `hive_at_client_storage.dar
 X4 and X4a ship as one PR: #2208 keeps its release code, e2e keystore initializer and fixture
 fixes, and its per-atSign guard is replaced in place by the per-location one.
 
+### D-15 — The transport is the third leg of the platform bundle, injected at the doors (2026-09-13)
+
+How a client reaches its atServer is the application's to supply, the way its keys
+store and its storage bundle already are. at_lookup declares `AtLookUpFactory`, a
+function from what a connection is *for* (the atSign, the root domain, the
+authenticator or null, an optional `SecondaryAddressFinder`, the client config) to an
+`AtLookupMuxable`; `secureSocketLookUps({config, onConnect})` in `at_lookup_io.dart` is
+the default over TLS on TCP and the one file in at_lookup's io barrel that names the
+transport. Every entry point into at_client — `Atsign.open`, `activate`, `enroll`,
+`resumeEnrollment`, `authenticatesAs`, `buildAtClient`, `AtServiceFactory.atClient` —
+takes `lookUps:` beside `keys:` and `storage:`; the client holds it, and its own
+connection, sync's, the monitor's, the activation and enrollment handshakes and the
+connection a retrofit re-derives on all come from it. The eight decisions behind the
+shape (a function rather than a bundle object; the doors rather than the preference;
+the existing `atLookUp:` instance parameters kept; the preference's TLS fields
+deprecated; at_auth takes instances; the type and default live in at_lookup; the CLI's
+proxy convention becomes the first non-default factory; built in the lifecycle PR) are
+ruling 8 of [the client-lifecycle ledger](../client-lifecycle/decisions.md). It is
+recorded here because it is T9, and because it closes [OQ-3](#5-open-questions) for the
+transport.
+
+**Why a function, and why at the doors.** The other two legs are objects because they
+carry state; a transport carries none the factory cannot capture, so a function is the
+whole of it, and the root domain stays a per-call argument from the preference or the
+verb, so where the atDirectory is does not move. `AtClientPreference` was the wrong
+home for the same reason it was the wrong home for storage: it is serialisable tuning,
+and a transport is a live object. `AtServiceFactory` was the other candidate and takes
+the factory rather than owning it, so the one override anyone ships keeps working.
+
+**The seam rule.** Exactly one place in at_client names the TLS transport:
+`defaultLookUps` in `lib/src/lifecycle/lookups.dart`, which builds the default from the
+three deprecated preference fields and answers with the TLS defaults when no
+preference is in reach. Every other file takes the factory it is handed; a service
+that holds the client as its interface takes the factory through its `create()`, the
+way it takes `connection`, rather than reading it off the impl; at_client's public
+barrel re-exports `AtLookUpFactory` and `AtCommandExecutor` from at_lookup's main
+barrel and only `secureSocketLookUps` from `_io`; and at_auth is handed instances,
+never the type. The Hive default in `at_client_factory.dart` is the storage leg's
+equivalent seam. A change that imports `at_lookup_io.dart` for the type alone is a
+regression against the ratchet, and was one for a day: the leg first landed with seven
+at_client files importing the io barrel, measured against the two the plan recorded,
+and was brought back to one plus the barrel the same day.
+
+**What it means for `at_client_web`.** A platform implementer is three objects handed
+to the doors and no fork of at_client: a WebSocket-backed `AtLookupMuxable` behind an
+`AtLookUpFactory`, a SQLite-wasm `AtClientStorage`, an IndexedDB-backed
+`WrittenAtKeysIo`. Until T4 gives it an io-free `AtLookupImpl` to construct, the web
+factory implements `AtLookupMuxable` itself; the factory returns the interface, so
+nothing about the shape waits on T4.
+
+**What is still breaking, and what is additive.** The factory's parameter list is the
+one new public shape a later widening would break, since every factory an application
+wrote stops matching the typedef; it stays a bare function because what a web transport
+needs is captured in the closure and nothing in this doc set asks for more per call.
+Additive when wanted, and not owed now: an address-finder parameter at the doors (T7's
+web finder; `buildAtClient` already takes one) and a platform-default registration so
+the core stops building the Hive and TLS defaults itself. at_lookup's own major stays
+where it was: T3 (`Socket getSocket()` on `AtConnection`), T4 (the three io-typed
+factories `AtLookupTransport` bundles), T5 (`at_lookup_io.dart` absorbs the socket
+util) and T8 (publish 4.0.0) — which is also why the factory type still reaches
+`dart:io` transitively today, through the main barrel's export of
+`secure_socket_util.dart`.
+
+**Deprecated by this ruling.** `AtClientPreference.decryptPackets`, `tlsKeysSavePath`
+and `pathToCerts`, read by the default factory until they go in 4.0; the replacement is
+`secureSocketLookUps(config: SecureSocketConfig(...))` as `lookUps:`.
+
 ---
 
 ## 2. Measured findings

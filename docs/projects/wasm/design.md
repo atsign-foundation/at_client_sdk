@@ -30,7 +30,7 @@ leg of the platform bundle (line numbers in those sections are not re-derived).
   - [2.10 Crypto](#210-crypto)
   - [2.11 Explicitly out of scope — clock, timers, random](#211-explicitly-out-of-scope--clock-timers-random)
 - [3. Dead-end seams — the cheapest first move](#3-dead-end-seams--the-cheapest-first-move)
-- [4. `AtClientPreference` is a bag of strings, not a bag of capabilities](#4-atclientpreference-is-a-bag-of-strings-not-a-bag-of-capabilities)
+- [4. The platform bundle: capabilities are parameters on the doors](#4-the-platform-bundle-capabilities-are-parameters-on-the-doors)
 - [5. Storage backend — SQLite-wasm vs raw IndexedDB](#5-storage-backend--sqlite-wasm-vs-raw-indexeddb)
 
 ---
@@ -574,8 +574,9 @@ change *plus* a plumbing change.
 
 ---
 
-## 4. `AtClientPreference` is a bag of strings, not a bag of capabilities
+## 4. The platform bundle: capabilities are parameters on the doors
 
+`AtClientPreference` is a bag of strings, not a bag of capabilities.
 `at_client/lib/src/preference/at_client_preference.dart` has **no `dart:io` import**.
 It carries platform-specific configuration as `String?`:
 
@@ -593,24 +594,36 @@ It carries platform-specific configuration as `String?`:
 runtime.** A path is a string everywhere; it only stops meaning anything when something
 tries to open it. The type system never objects.
 
-**Design.** `AtClientPreference` should carry *capabilities* alongside its tuning
-knobs, and the filesystem paths should become an opaque storage handle whose
-interpretation belongs to the backend — a directory on native, a database name on web.
+**Design, as landed.** The preference stays what it is — serialisable tuning — and the
+platform capabilities travel beside it as named parameters on every entry point
+(`Atsign.open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`,
+`buildAtClient`, `AtServiceFactory.atClient`), held on the client and handed to
+everything under it. Three legs, the **platform bundle**:
 
-Two precedents in the same class and its neighbour show the shape:
+| Leg        | Parameter  | Type                          | Ruled                                                                 | The core's one default seam                                                 |
+| ---------- | ---------- | ----------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| keys       | `keys:`    | `AtKeysIo` (at_auth)          | the PQ program's S-5, at_auth 4.0                                     | none: the parameter is required, `FileAtKeysIo` lives in `at_auth_io.dart`   |
+| storage    | `storage:` | `AtClientStorage` (at_client) | [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05) | `HiveAtClientStorage` built in `client/at_client_factory.dart` from the deprecated `hiveStoragePath` |
+| transport  | `lookUps:` | `AtLookUpFactory` (at_lookup) | [D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13) | `defaultLookUps` in `lifecycle/lookups.dart`, TLS from the three deprecated fields above |
 
-- `at_client_preference.dart:158` — `CryptoConfig crypto`, a configured provider seam
-  resolved at runtime by `CryptoRuntime`.
-- `at_client_manager.dart:265` — `AtServiceFactory`, the existing service-level DI hook,
-  with `DefaultAtServiceFactory` at `:291` and a real override already shipping in both
-  CLI packages (`ServiceFactoryWithNoOpSyncService`).
+Three properties follow, and the ratchet holds each. Nothing below the doors names a
+platform type: a service takes the legs through its constructor, the way
+`NotificationServiceImpl.create` takes `connection` and `lookUps`, and at_auth is
+handed instances. Each leg has exactly one default seam in the core, named in the
+table, which is what a platform package replaces and what the `_io` split of at_client
+will move out. And a platform implementer is three objects handed to the doors, no
+fork of at_client: `at_client_web` is a WebSocket `AtLookupMuxable` behind a factory, a
+SQLite-wasm `AtClientStorage` and an IndexedDB `WrittenAtKeysIo`. The two candidates
+this section once weighed — `CryptoConfig` on the preference, and `AtServiceFactory`
+as the DI hook — were not chosen: `AtServiceFactory.atClient` takes the bundle rather
+than owning it, so its one shipping override keeps working, and the preference carries
+no live object. [OQ-3](decisions.md#5-open-questions) records the question and D-12 and
+D-15 its answers for the two legs that have shipped.
 
-Whether platform capabilities hang off `AtClientPreference` or off `AtServiceFactory`
-([`decisions.md`](decisions.md) OQ-3) is answered for the two that have shipped:
-neither. Storage (D-12) and the transport (the `lookUps:` factory, 2026-09-13) are
-named parameters on the entry points, held on the client beside `atKeysIo`;
-`AtServiceFactory.atClient` takes the factory rather than owning it. Open for the
-remaining capabilities.
+The filesystem paths in the table above are what the legs replace, each deprecated when
+its leg landed and gone in 4.0. `downloadPath` (file transfer,
+[§2.8](#28-filesystem-and-file-transfer)) and `keyStoreSecret` (ignored) are the two not
+yet claimed by a leg.
 
 ---
 

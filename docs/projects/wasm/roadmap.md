@@ -135,9 +135,15 @@ neutral barrel's import graph. Consumers add one import.
 
 ### Tier 3 — platform implementers
 
-- **`at_client_web`** — new, built by this project. WebSocket transport, SQLite-wasm
-  storage, IndexedDB-backed key store, `navigator.onLine` connectivity, console
-  logging.
+A platform implementer supplies the three legs of the platform bundle
+([`design.md` §4](design.md#4-the-platform-bundle-capabilities-are-parameters-on-the-doors),
+[`decisions.md` D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)) — a `WrittenAtKeysIo`, an
+`AtClientStorage` and an `AtLookUpFactory` — and hands them to at_client's entry points.
+at_client is not forked, and nothing below its doors names a platform type.
+
+- **`at_client_web`** — new, built by this project. A WebSocket-backed `AtLookupMuxable`
+  behind an `AtLookUpFactory`, SQLite-wasm `AtClientStorage`, IndexedDB-backed
+  `WrittenAtKeysIo`, `navigator.onLine` connectivity, console logging.
 - **`at_client_flutter`** — exists, but is **not** a platform implementer today. It
   implements exactly one abstraction (`KeychainAtKeysIo extends WrittenAtKeysIo`,
   `packages/at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10`), though

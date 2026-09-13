@@ -188,6 +188,19 @@ Preparation. Changes no public interface, breaks nothing, and shrinks every late
 The largest item, and the one breaking change with an unknown external blast radius.
 Design in [`design.md`](design.md) §2.1.
 
+**Where phase T stands after T9 (2026-09-13,
+[`decisions.md` D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)).** The app-facing half is done: an
+application hands `lookUps:` to at_client's doors and every connection the client opens
+comes from it, at_client names the TLS transport in one file, and `at_client_web` can
+implement `AtLookupMuxable` whole behind its factory without waiting for anything below.
+What remains is at_lookup's own major — T3, T4, T5 and T8 — which is what lets a web
+transport *reuse* `AtLookupImpl` rather than replace it, plus T6's raw sockets and T7's
+web address finder. Two things are additive when wanted and not owed now: an
+address-finder parameter at the doors (`buildAtClient` already takes one), and a
+platform-default registration so the core stops building the Hive and TLS defaults
+itself. The factory's parameter list is the one new public shape a later widening would
+break; it stays as ruled.
+
 - **T1 — Audit `implements AtConnection` and `getSocket()` callers.** In-repo:
   `remote_secondary.dart` — and only that one now. ⚠️ This row said
   `monitor.dart` too; `Monitor` gave up its socket in X6 and calls `getSocket`
@@ -1034,9 +1047,10 @@ Now verified **by execution** under T2.3 rather than by compile.
 
 ## 7. Phase 5 — `at_client_web` (W)
 
-- **W1 — New package.** WebSocket transport against `wss://<host>:<port>/ws`, the web
-  SQLite storage backend, a web `WrittenAtKeysIo` subtype, web connectivity, console
-  logging.
+- **W1 — New package.** The three legs of the platform bundle
+  ([`design.md` §4](design.md#4-the-platform-bundle-capabilities-are-parameters-on-the-doors)): a WebSocket-backed `AtLookupMuxable` against
+  `wss://<host>:<port>/ws` behind an `AtLookUpFactory`, the web SQLite `AtClientStorage`,
+  a web `WrittenAtKeysIo` subtype; plus web connectivity and console logging.
 - **W2 — Browser test harness** for the T3 and T4 gates: a page that loads the module
   and drives a virtualenv atServer. First run must confirm
   `dart test -p chrome -c dart2wasm` executes at all — unverified locally
