@@ -767,9 +767,11 @@ shortlist by cross-reads is `tests/at_end2end_test/test/pq/nskey_multi_enrollmen
 
 ✅ **All four live packs have been run against the merge, and everything it broke in them
 is fixed** (2026-09-07; the post-merge fix-forward section below holds the detail and the
-figures). What the packs still fail is #2797's, on the pre-merge backup as much as here. Still
-owed from the merge session: the spike was pushed and run through CI on 2026-09-07, the first time since the merge (what the runs showed, and what was fixed, is in the PQ plan's pointer row for the fix-forward);
-and [#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) is unreconciled.
+figures). What the packs still fail is #2797's, on the pre-merge backup as much as here. The
+spike was pushed and run through CI on 2026-09-07, the first time since the merge (what the
+runs showed, and what was fixed, is in the PQ plan's pointer row for the fix-forward), and
+[#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) was closed unmerged on
+2026-09-13 — see the loose ends below.
 
 **Found 2026-09-05 by the wrap-up's cold read and done the same day:** the X3 merge-back
 had been skipped. It landed as `51bdb6230`; `at_sync_queue.dart` kept trunk's `SyncQueueStore`
@@ -810,11 +812,14 @@ each was, and what it is now:
    `storage` of its own.
 
 ⚠️ **Two loose ends from the merge session, recorded 2026-09-07 so they are not lost:**
-- **[#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) is OPEN on trunk**
-  and unmerged — `docs(wasm): record X6's merge, and the merge-back it leaves owed`, branch
-  `gkc-x6-merge-followup` in the `-x6` worktree, 50 checks green when raised. It corrects
-  trunk's copy of this plan; **this branch's copy has moved much further since**, so the two
-  will need reconciling rather than one overwriting the other.
+- ✅ **[#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) was closed
+  unmerged on 2026-09-13**, and its branch deleted. It corrected trunk's copy of this plan
+  while the spike's copy moved further; the spike's copy reached trunk in
+  [#2224](https://github.com/atsign-foundation/at_client_sdk/pull/2224) already carrying
+  every correction #2218 made. Against that trunk, #2218 conflicted in two hunks, and its
+  side of each was the stale one: `AtClient.create` where trunk says `buildAtClient`, and
+  `refuseChangedStoragePath` described as still spike-only after the merge-back had deleted
+  it.
 - ⚠️ **The merge landed as ONE commit, not the "merge then follow-ups on top" that was asked
   for** (gkc, 2026-09-07). It could not be split: a `packages/`-only merge commit would have
   recorded trunk as merged while carrying the SPIKE's `tests/` — 73 files, including a

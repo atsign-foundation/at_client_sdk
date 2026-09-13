@@ -87,6 +87,8 @@ void main() {
       namespace: namespace,
       preference: TestPreferences.getInstance().forCoLocatedClient(bob,
           posture: legacyPlusPqProviders, device: 'bob2-$id'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(bob, device: 'bob2-$id'),
       rootDomain: bobPreference.rootDomain,
       rootPort: bobPreference.rootPort,
       deviceName: 'bob2-$id',

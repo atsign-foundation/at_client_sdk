@@ -12,7 +12,6 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_functional_test/src/config_util.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -47,7 +46,7 @@ void main() {
     final build = enrollmentKeyPackageBuilder(atSign);
 
     final request = AtEnrollmentRequest(
-      atSign: atSign,
+      session: TestUtils.enrollmentSession(atSign),
       appName: namespace,
       deviceName: 'kp-${Uuid().v4().hashCode}',
       namespaces: {namespace: 'rw'},
@@ -58,7 +57,7 @@ void main() {
 
     final response = await AtEnrollment.create().submit(
       request,
-      AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
+      TestUtils.unauthenticatedLookUp(atSign),
     );
     expect(response.enrollStatus, EnrollmentStatus.pending);
 

@@ -105,12 +105,7 @@ void main() {
         // non-rsa2048 one there, so an ML-DSA-authenticating enrollment must
         // own a signing key. rsa2048 rather than ML-DSA keeps `_apsk` in the
         // bare form.
-        dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})
-      // A store of its own: two clients of one atSign sharing a storage path
-      // share their keystore, and this one holds only what its own approval
-      // conveyed.
-      ..hiveStoragePath = 'test/hive/client/$atSign/scoped-$runId'
-      ..commitLogPath = 'test/hive/client/$atSign/scoped-$runId';
+        dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048});
 
     final scoped = await enrolAndAuthenticate(
       approver: approver,

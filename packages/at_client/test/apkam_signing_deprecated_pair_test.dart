@@ -1,6 +1,8 @@
 // The pair is deprecated on purpose and this file is what holds its contract,
-// so reading it here is the point.
+// so reading it here is the point; the pair reads the client's AtChops, so
+// the fixture hands one over.
 // ignore_for_file: deprecated_member_use_from_same_package
+// ignore_for_file: deprecated_member_use
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';

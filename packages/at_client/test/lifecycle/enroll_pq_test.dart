@@ -227,7 +227,7 @@ void main() {
 
     final completed = await store.read(atSign);
     expect(completed.pendingEnrollmentIds, isEmpty);
-    expect(completed.apkamSymmetricKey?.toString(), symmetricKey,
+    expect(completed.enrollmentSymmetricKey?.key, symmetricKey,
         reason: 'the key the approver sealed to the key package');
     expect(completed.selfEncryptionKey?.key, selfEncryptionKey,
         reason: 'opened with that key, so the whole pq exchange worked');

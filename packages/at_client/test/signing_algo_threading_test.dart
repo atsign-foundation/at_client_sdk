@@ -1,3 +1,7 @@
+// Whether a connection is stamped with the credential ladder is the assertion,
+// so this file names the ladder on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';

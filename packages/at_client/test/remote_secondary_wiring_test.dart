@@ -18,7 +18,6 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -68,11 +67,9 @@ void main() {
     final io = InMemoryAtKeysIo();
     await io.write(
         atSign,
-        AtKeys()
-          ..apkamPublicKey =
-              AtBytes.fromString(keyfilePair.atPublicKey.publicKey)
-          ..apkamPrivateKey =
-              AtBytes.fromString(keyfilePair.atPrivateKey.privateKey));
+        AtKeys.legacy(
+            apkamPublicKey: keyfilePair.atPublicKey.publicKey,
+            apkamPrivateKey: keyfilePair.atPrivateKey.privateKey));
     return io;
   }
 
@@ -163,6 +160,8 @@ void main() {
       RemoteSecondary(atSign, preference,
           atLookUp: lookUp, atChops: chops, atKeysIo: await keyfile());
 
+      // The ladder write is the assertion.
+      // ignore: deprecated_member_use
       verify(() => lookUp.atChops = chops).called(1);
     });
   });

@@ -1,3 +1,7 @@
+// The AtChops a client was handed is one of the sources this mixin resolves a
+// signing key from, so this file names it on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:async' show FutureOr;
 import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
@@ -10,8 +14,7 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show recordResolvedSigningAlgo;
 import 'package:at_commons/at_commons.dart'
-    show AtBytes, AtKey, AtKeyNotFoundException, AtValue;
-import 'package:at_commons/atsign.dart' show AtsignString;
+    show AtKey, AtKeyNotFoundException, AtValue;
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -67,7 +70,7 @@ void main() {
   late MockAtClient atClient;
   late AtChops atChops;
   late TestSigner signer;
-  late AtPkamKeyPair rsaPair;
+  late RsaKeyPair rsaPair;
   late ({Uint8List publicKey, Uint8List secretKey}) mlDsaPair;
 
   String b64(String label) => base64Encode(utf8.encode(label));
@@ -87,7 +90,7 @@ void main() {
 
   setUpAll(() async {
     registerFallbackValue(AtKey());
-    rsaPair = AtChopsUtil.generateAtPkamKeyPair();
+    rsaPair = RsaKeyPair.generate();
     mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   });
 
@@ -123,10 +126,10 @@ void main() {
         () async {
       // The mainstream client: built from a keyfile, never handed an AtChops.
       when(() => atClient.atChops).thenReturn(null);
-      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
-        ..apkamPublicKey = AtBytes.fromString(rsaPair.atPublicKey.publicKey)
-        ..apkamPrivateKey =
-            AtBytes.fromString(rsaPair.atPrivateKey.privateKey)));
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
+          keys.fileLegacyMaterial(
+              apkamPublicKey: rsaPair.atPublicKey.publicKey,
+              apkamPrivateKey: rsaPair.atPrivateKey.privateKey)));
 
       final keys = await signer.signingKeys;
 
@@ -156,10 +159,11 @@ void main() {
         () async {
       // The rig's AtChops holds one RSA keypair; the keyfile holds another.
       // Which public key comes back says which source answered.
-      final other = AtChopsUtil.generateAtPkamKeyPair();
-      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
-        ..apkamPublicKey = AtBytes.fromString(other.atPublicKey.publicKey)
-        ..apkamPrivateKey = AtBytes.fromString(other.atPrivateKey.privateKey)));
+      final other = RsaKeyPair.generate();
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
+          keys.fileLegacyMaterial(
+              apkamPublicKey: other.atPublicKey.publicKey,
+              apkamPrivateKey: other.atPrivateKey.privateKey)));
 
       expect((await signer.signingKeys).single.publicKey,
           other.atPublicKey.publicKey,

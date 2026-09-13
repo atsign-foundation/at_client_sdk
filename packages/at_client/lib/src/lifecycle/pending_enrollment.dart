@@ -160,6 +160,10 @@ class PendingEnrollment {
   /// atSign's encryption private key and self-encryption key, the symmetric
   /// key that carried them, and the flat spelling of the enrollment every
   /// published reader looks for.
+  ///
+  /// NOTE: this and [_fileFlat] write the legacy document shape on the
+  /// approval's behalf, filling only what the store does not hold yet, so
+  /// the flat fields are named directly here.
   void _completeFrom(AtKeys stored, AtKeys completed) {
     // ignore: deprecated_member_use
     stored.enrollmentId = enrollmentId;
@@ -172,8 +176,9 @@ class PendingEnrollment {
         .firstOrNull
         ?.bytes;
     // ignore: deprecated_member_use
-    stored.defaultEncryptionPrivateKey ??=
-        completed.defaultEncryptionPrivateKey;
+    final encryptionPrivateKey = completed.defaultEncryptionPrivateKey;
+    // ignore: deprecated_member_use
+    stored.defaultEncryptionPrivateKey ??= encryptionPrivateKey;
     // ignore: deprecated_member_use
     stored.defaultSelfEncryptionKey ??= completed.defaultSelfEncryptionKey;
     // ignore: deprecated_member_use

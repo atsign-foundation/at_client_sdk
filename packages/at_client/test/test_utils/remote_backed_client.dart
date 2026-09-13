@@ -4,6 +4,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'mocks.dart';
 import 'test_keypairs.dart';
+import 'ml_dsa_keyfile.dart';
 
 /// A mock [AtClient] whose puts and gets go through [remoteData], so several
 /// clients of the same atSign share one view of the atServer.
@@ -41,8 +42,18 @@ MockAtClient buildRemoteBackedMockClient({
   registerFallbackValue(NotificationParams.forUpdate(AtKey()));
   final atClient = MockAtClient(
       keyEstablishmentAlgorithms: keyEstablishmentAlgorithms, posture: posture);
-  when(() => atClient.atChops).thenReturn(AtChopsImpl(
-      AtChopsKeys.create(null, pkamKeyPairFor(atSign, enrollmentId))));
+  final pair = pkamKeyPairFor(atSign, enrollmentId);
+  when(() => atClient.atKeysIo)
+      .thenReturn(keysHoldingApkam(atSign, enrollmentId, pair));
+  // NOTE: the same keypair twice. A test that swaps in a key source of its
+  // own, or none, leaves the client no keypair there, and the AtChops door
+  // is what still answers for it.
+  // ignore: deprecated_member_use
+  when(() => atClient.atChops).thenReturn(AtChopsImpl(AtChopsKeys.create(
+      null,
+      // ignore: deprecated_member_use
+      AtPkamKeyPair.create(
+          pair.atPublicKey.publicKey, pair.atPrivateKey.privateKey))));
   when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
   when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
@@ -50,6 +61,8 @@ MockAtClient buildRemoteBackedMockClient({
   final atLookUp = MockAtLookupImpl();
   when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
   when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
+  // the bridge reads the enrollment id off the lookup until the ladder goes
+  // ignore: deprecated_member_use
   when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
 
   final localValues = localData ?? remoteData;

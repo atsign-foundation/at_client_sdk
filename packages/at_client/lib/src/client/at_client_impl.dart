@@ -1914,7 +1914,12 @@ class AtClientImpl implements AtClient {
     //Get encryptionPrivateKey for public key to signData
     String? encryptionPrivateKey;
     if (atKey.metadata.isPublic == true) {
-      encryptionPrivateKey = await localSecondary?.getEncryptionPrivateKey();
+      try {
+        encryptionPrivateKey = await localSecondary?.getEncryptionPrivateKey();
+      } on KeyNotFoundException {
+        // Left null: the transformer refuses to sign with the message a
+        // caller acts on, rather than the keystore's record name.
+      }
     }
     // Transform put request
     // Optionally passing encryption private key to sign the public data.

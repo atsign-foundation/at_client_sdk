@@ -39,12 +39,10 @@ void main() {
         storage: TestUtils.storageFor(atSign));
     AtClientManager.getInstance().use(atClient);
 
-    // The client built its own crypto context and reached the atServer on a
-    // connection of its own.
-    expect(atClient.atChops, isNotNull);
+    // The client reached the atServer on a connection of its own.
     expect(atClient.connection.current.isOnline, isTrue,
         reason: 'the one connect attempt open makes is the PKAM that proves '
-            'the derived AtChops signs');
+            'the keys sign');
 
     // 2. Full round-trip. The put drives the connection's first authenticated
     //    verb, and the get closes the loop through self encryption.

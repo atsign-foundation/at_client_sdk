@@ -17,13 +17,10 @@ import 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
-import 'package:at_demo_data/at_demo_data.dart'
-    show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 /// UC-B1.1 / B1.2 / B1.3 — the retrofit scenarios, end to end, with the
@@ -86,16 +83,32 @@ void main() {
     required Map<String, String> namespaces,
   }) async {
     final otp = (await owner.getOTP()).response;
+    final file = File(pathFor(label));
+    if (file.existsSync()) file.deleteSync();
+    file.parent.createSync(recursive: true);
+    // The session names the keyfile, so the approval completes the keys
+    // straight into it. FileAtKeysIo.write refuses to overwrite, so a keyfile
+    // a previous run left is removed first.
+    final session = AtAuthSession(
+        atSign: atSign,
+        rootDomain: AtRootDomain(
+            ConfigUtil.getYaml()['root_server']['url'],
+            ConfigUtil.getYaml()['root_server']['port'] ?? 64),
+        atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)));
     final response = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
-            atSign: atSign,
+            session: session,
             appName: 'rf-$label',
             deviceName: 'rf-$label-$runId',
             namespaces: namespaces,
             otp: otp,
             signingAlgo: SigningAlgoType.rsa2048),
-        AtLookupImpl(atSign, ConfigUtil.getYaml()['root_server']['url'],
-            ConfigUtil.getYaml()['root_server']['port'] ?? 64));
+        secureSocketLookUps()(
+            atSign: atSign,
+            rootDomain: AtRootDomain(
+                ConfigUtil.getYaml()['root_server']['url'],
+                ConfigUtil.getYaml()['root_server']['port'] ?? 64),
+            authenticator: null));
     final record = (await owner.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
     await owner.enrollmentService!.approve(EnrollmentRequestDecision.approved(
@@ -104,18 +117,9 @@ void main() {
         apkamSymmetricKey:
             AtBytes.fromString(record.encryptedAPKAMSymmetricKey!)));
 
-    // What waitForApproval would fetch and decrypt; the approver here knows
-    // the same values from at_demo_data, and the keyfile's at-rest
-    // self-encryption needs the self key present.
-    final keys = response.atAuthKeys!
-      ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!)
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-
-    final file = File(pathFor(label));
-    if (file.existsSync()) file.deleteSync();
-    file.parent.createSync(recursive: true);
-    await FileAtKeysIo(filePath: (_) => pathFor(label)).write(atSign, keys);
+    // Awaiting the approval collects the two atSign-wide secrets it released
+    // and writes the completed keys into the keyfile.
+    await AtEnrollment.create().waitForApproval(response);
     return response.enrollmentId;
   }
 
@@ -176,6 +180,8 @@ void main() {
       // succession, opened beside the owner client.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e1-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rf-e1-$runId'),
       appName: 'rf-e1',
       deviceName: 'rf-e1-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw'},
@@ -248,6 +254,8 @@ void main() {
       // client holds the atSign's, and B1.1's retrofit holds its own.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e1-clone-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rf-e1-clone-$runId'),
       // Deliberately the same (appName, deviceName) as B1.1: sibling clones
       // of one keyfile legitimately carry one app's identity, and the
       // atServer exempts this branch from the duplicate-enrollment refusal.
@@ -367,6 +375,8 @@ void main() {
           session: await legacySession('e2'),
           preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
               posture: PqPosture.legacy, device: 'rf-e2-esc-$runId'),
+          storage: TestPreferences.getInstance()
+              .storageForCoLocatedClient(atSign, device: 'rf-e2-esc-$runId'),
           appName: 'rf-e2',
           deviceName: 'rf-e2-esc-$runId',
           namespaces: {'*': 'rw', '__manage': 'rw'},
@@ -383,6 +393,8 @@ void main() {
       session: session,
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e2-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rf-e2-$runId'),
       appName: 'rf-e2',
       deviceName: 'rf-e2-$runId',
       namespaces: {namespace: 'rw'},

@@ -7,8 +7,7 @@ import 'package:at_auth/at_auth.dart'
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         WrittenAtKeysIo;
-import 'package:at_chops/at_chops.dart'
-    show AtChopsImpl, AtChopsKeys, AtChopsUtil;
+import 'package:at_chops/at_chops.dart' show RsaKeyPair;
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -30,6 +29,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -310,9 +310,8 @@ void main() {
       // has not reached the mint. Signing must not consult the startup in any
       // way: the startup's own steps sign, so a signer that waits on it
       // deadlocks both.
-      when(() => client.atKeysIo).thenReturn(InMemoryAtKeysIo());
-      when(() => client.atChops).thenReturn(AtChopsImpl(
-          AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+      when(() => client.atKeysIo).thenReturn(
+          keysHoldingApkam('@bootstrap🛠', null, RsaKeyPair.generate()));
 
       final parked = Completer<int>();
       final bootstrap =

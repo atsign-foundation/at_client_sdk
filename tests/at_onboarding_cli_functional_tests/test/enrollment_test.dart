@@ -180,9 +180,7 @@ void main() {
       AtOnboardingPreference preference_1 = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = virtualenvRootPort
-        ..isLocalStoreRequired = true
-        ..hiveStoragePath = 'storage/hive/client'
-        ..commitLogPath = 'storage/hive/client/commit'
+        ..storagePath = 'storage/hive/client'
         ..cramSecret = at_demos.cramKeyMap[atSign4] ?? atSign4.substring(1)
         ..namespace =
             'wavi' // unique identifier that can be used to identify data from your app
@@ -291,9 +289,7 @@ void main() {
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = virtualenvRootPort
-        ..isLocalStoreRequired = true
-        ..hiveStoragePath = '$storageDir/hive/client'
-        ..commitLogPath = '$storageDir/hive/client/commit'
+        ..storagePath = '$storageDir/hive/client'
         ..namespace =
             'wavi' // Unique identifier that can be used to identify data from your app
         ..rootDomain = 'vip.ve.atsign.zone'
@@ -392,9 +388,7 @@ void main() {
       AtOnboardingPreference preference = AtOnboardingPreference()
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = virtualenvRootPort
-        ..isLocalStoreRequired = true
-        ..hiveStoragePath = '$storageDir/hive/client'
-        ..commitLogPath = '$storageDir/hive/client/commit'
+        ..storagePath = '$storageDir/hive/client'
         ..namespace =
             'wavi' // Unique identifier that can be used to identify data from your app
         ..rootDomain = 'vip.ve.atsign.zone'
@@ -555,9 +549,7 @@ AtOnboardingPreference getPreferenceForAuth(String atSign) {
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..rootDomain = 'vip.ve.atsign.zone'
     ..rootPort = virtualenvRootPort
-    ..isLocalStoreRequired = true
-    ..hiveStoragePath = 'storage/hive/client'
-    ..commitLogPath = 'storage/hive/client/commit'
+    ..storagePath = 'storage/hive/client'
     ..cramSecret = at_demos.cramKeyMap[atSign] ?? atSign.substring(1)
     ..namespace =
         'wavi' // unique identifier that can be used to identify data from your app
@@ -575,7 +567,7 @@ AtOnboardingPreference getPreferenceForEnroll(String atSign) {
   AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
     ..namespace =
         'buzz' // unique identifier that can be used to identify data from your app
-    ..hiveStoragePath = 'storage/hive/enrolled'
+    ..storagePath = 'storage/hive/enrolled'
     ..atKeysFilePath = testKeysFile(atSign, suffix: 'buzzkey')
     ..appName = 'buzz'
     ..deviceName = 'iphone'

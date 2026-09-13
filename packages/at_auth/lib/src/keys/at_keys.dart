@@ -1107,25 +1107,119 @@ class AtKeys {
   // enrollmentId and arbitrary metadata. They stay readable/writable (and
   // merge flatly into the typed-keys document) so existing files keep working.
 
-  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through authenticationKeyPairFor')
   AtBytes? apkamPublicKey;
-  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through authenticationKeyPairFor')
   AtBytes? apkamPrivateKey;
-  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through encryptionKeyPair')
   AtBytes? defaultEncryptionPublicKey;
-  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through encryptionKeyPair')
   AtBytes? defaultEncryptionPrivateKey;
-  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through selfEncryptionKey')
   AtBytes? defaultSelfEncryptionKey;
-  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through enrollmentSymmetricKey')
   AtBytes? apkamSymmetricKey;
-  @Deprecated('a flat field of the legacy keyfile document; see the typed accessors')
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through storedEnrollmentId')
   String? enrollmentId;
   /// A legacy keyfile's entries outside the flat key schema: the atSign under
   /// `atsign` or `name`, and the self-encryption key stored under the atSign
   /// itself. The typed document has no equivalent, so a read and write cycle
   /// preserves them only here.
   Map<String, dynamic> metadata = {};
+
+  /// Files what a LEGACY keyfile carries flat: the atSign's RSA encryption
+  /// keypair and self-encryption key, and the APKAM keypair, symmetric key
+  /// and id of the one enrollment such a document holds. A null argument
+  /// leaves its field as it was.
+  ///
+  /// The one writer of the flat document that names no deprecated member.
+  /// Flat rather than typed on purpose: a keyfile written before the typed
+  /// section existed files no [CryptographicMaterial], and readers tell the
+  /// two shapes apart by that — typed active authentication material under an
+  /// enrollment reads as a retrofit already done. Read it back through
+  /// [authenticationKeyPairFor], [encryptionKeyPair], [selfEncryptionKey],
+  /// [enrollmentSymmetricKey] and [storedEnrollmentId].
+  void fileLegacyMaterial({
+    String? apkamPublicKey,
+    String? apkamPrivateKey,
+    String? apkamSymmetricKey,
+    String? encryptionPublicKey,
+    String? encryptionPrivateKey,
+    String? selfEncryptionKey,
+    String? enrollmentId,
+  }) {
+    // ignore: deprecated_member_use_from_same_package
+    if (apkamPublicKey != null) {
+      this.apkamPublicKey = AtBytes.fromString(apkamPublicKey);
+    }
+    // ignore: deprecated_member_use_from_same_package
+    if (apkamPrivateKey != null) {
+      this.apkamPrivateKey = AtBytes.fromString(apkamPrivateKey);
+    }
+    // ignore: deprecated_member_use_from_same_package
+    if (apkamSymmetricKey != null) {
+      this.apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey);
+    }
+    // ignore: deprecated_member_use_from_same_package
+    if (encryptionPublicKey != null) {
+      defaultEncryptionPublicKey = AtBytes.fromString(encryptionPublicKey);
+    }
+    // ignore: deprecated_member_use_from_same_package
+    if (encryptionPrivateKey != null) {
+      defaultEncryptionPrivateKey = AtBytes.fromString(encryptionPrivateKey);
+    }
+    // ignore: deprecated_member_use_from_same_package
+    if (selfEncryptionKey != null) {
+      defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionKey);
+    }
+    // ignore: deprecated_member_use_from_same_package
+    if (enrollmentId != null) this.enrollmentId = enrollmentId;
+  }
+
+  /// A legacy-shaped document holding what [fileLegacyMaterial] files and
+  /// nothing typed: the shape of every keyfile written before the typed
+  /// section existed, and of a demo atSign's credentials.
+  factory AtKeys.legacy({
+    String? apkamPublicKey,
+    String? apkamPrivateKey,
+    String? apkamSymmetricKey,
+    String? encryptionPublicKey,
+    String? encryptionPrivateKey,
+    String? selfEncryptionKey,
+    String? enrollmentId,
+  }) =>
+      AtKeys()
+        ..fileLegacyMaterial(
+          apkamPublicKey: apkamPublicKey,
+          apkamPrivateKey: apkamPrivateKey,
+          apkamSymmetricKey: apkamSymmetricKey,
+          encryptionPublicKey: encryptionPublicKey,
+          encryptionPrivateKey: encryptionPrivateKey,
+          selfEncryptionKey: selfEncryptionKey,
+          enrollmentId: enrollmentId,
+        );
+
+  /// The APKAM symmetric key of the enrollment the flat fields carry, which
+  /// unwraps what an approval released to it; null for a keyfile that
+  /// predates enrollments or holds none.
+  // ignore: deprecated_member_use_from_same_package
+  AESKey? get enrollmentSymmetricKey => switch (apkamSymmetricKey) {
+        final AtBytes key => AESKey(key.toString()),
+        null => null,
+      };
+
+  /// The enrollment id the flat fields carry, exactly as stored: null for a
+  /// keyfile from before enrollments, where [enrollmentToAuthenticateAs]
+  /// answers `primary`, and never a typed enrollment's id.
+  // ignore: deprecated_member_use_from_same_package
+  String? get storedEnrollmentId => enrollmentId;
 
   /// Encodes just the legacy flat shape — the hard-coded fields plus
   /// [metadata] — with no `version`/`atsign`/`keys`.

@@ -81,6 +81,10 @@ Future<EnrolledClient> enrolAndAuthenticate({
   required AtClientPreference preference,
   required String rootDomain,
   required int rootPort,
+
+  /// The enrolled client's own store: it and the approver are two live
+  /// principals on one atSign, and one store holds one principal.
+  required AtClientStorage storage,
   String? deviceName,
   Map<String, String>? namespaces,
 }) async {
@@ -137,7 +141,8 @@ Future<EnrolledClient> enrolAndAuthenticate({
       keys: keys,
       preference: preference
         ..rootDomain = rootDomain
-        ..rootPort = rootPort);
+        ..rootPort = rootPort,
+      storage: storage);
 
   final payload =
       SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;

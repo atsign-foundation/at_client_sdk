@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_keypairs.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -29,8 +30,8 @@ void main() {
 
   late MockAtClient atClientA; // client A, enrollment enrollA
   late MockAtClient atClientB; // client B, enrollment enrollB
-  late AtChops atChopsA;
-  late AtChops atChopsB;
+  late RsaKeyPair keyA;
+  late RsaKeyPair keyB;
   late TestEnvelopeSigner signerA;
   late TestEnvelopeSigner verifierB;
 
@@ -51,8 +52,7 @@ void main() {
         .thenAnswer((_) async => AtValue()..value = publicKey);
   }
 
-  String pkamPublicKey(AtChops atChops) =>
-      atChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+  String pkamPublicKey(RsaKeyPair keyPair) => keyPair.atPublicKey.publicKey;
 
   setUpAll(() {
     registerFallbackValue(AtKey());
@@ -61,18 +61,18 @@ void main() {
   setUp(() {
     // Two principals of one atSign, so two keys: the pair is what keeps them
     // apart, and half these tests are about A not passing for B.
-    atChopsA = AtChopsImpl(
-        AtChopsKeys.create(null, pkamKeyPairFor(atSign, 'enroll-a')));
-    atChopsB = AtChopsImpl(
-        AtChopsKeys.create(null, pkamKeyPairFor(atSign, 'enroll-b')));
+    keyA = pkamKeyPairFor(atSign, 'enroll-a');
+    keyB = pkamKeyPairFor(atSign, 'enroll-b');
 
     atClientA = MockAtClient();
-    when(() => atClientA.atChops).thenReturn(atChopsA);
+    when(() => atClientA.atKeysIo)
+        .thenReturn(keysHoldingApkam(atSign, 'enroll-a', keyA));
     when(() => atClientA.getCurrentAtSign()).thenReturn(atSign);
     stubEnrollment(atClientA, 'enroll-a');
 
     atClientB = MockAtClient();
-    when(() => atClientB.atChops).thenReturn(atChopsB);
+    when(() => atClientB.atKeysIo)
+        .thenReturn(keysHoldingApkam(atSign, 'enroll-b', keyB));
     when(() => atClientB.getCurrentAtSign()).thenReturn(atSign);
     stubEnrollment(atClientB, 'enroll-b');
 
@@ -99,7 +99,7 @@ void main() {
     test('B verifies an envelope signed by A using A\'s published _apsk key',
         () async {
       final envelope = await signerA.wrapAndSign({'secret': 's3cr3t'});
-      stubApskGet(atClientB, pkamPublicKey(atChopsA));
+      stubApskGet(atClientB, pkamPublicKey(keyA));
 
       await verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign);
 
@@ -112,7 +112,7 @@ void main() {
 
     test('string payloads round-trip', () async {
       final envelope = await signerA.wrapAndSign('just a string');
-      stubApskGet(atClientB, pkamPublicKey(atChopsA));
+      stubApskGet(atClientB, pkamPublicKey(keyA));
 
       await verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign);
     });
@@ -120,7 +120,7 @@ void main() {
     test('tampered payload fails verification', () async {
       final envelope = (await signerA.wrapAndSign({'amount': 10}))
           .withPayloadJson({'amount': 1000000});
-      stubApskGet(atClientB, pkamPublicKey(atChopsA));
+      stubApskGet(atClientB, pkamPublicKey(keyA));
 
       await expectLater(
           verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
@@ -130,7 +130,7 @@ void main() {
     test('verification against the wrong enrollment\'s key fails', () async {
       final envelope = await signerA.wrapAndSign({'secret': 's3cr3t'});
       // B's get returns B's own public key instead of A's
-      stubApskGet(atClientB, pkamPublicKey(atChopsB));
+      stubApskGet(atClientB, pkamPublicKey(keyB));
 
       await expectLater(
           verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
@@ -145,7 +145,7 @@ void main() {
             cacheExpiry: Duration(minutes: 1),
             resetOnLookup: false
           ));
-      stubApskGet(atClientB, pkamPublicKey(atChopsA));
+      stubApskGet(atClientB, pkamPublicKey(keyA));
 
       final envelope = await signerA.wrapAndSign({'a': 1});
       await cachingVerifier.verifyEnvelopeSignature(envelope,
@@ -163,7 +163,7 @@ void main() {
 
     test('with caching disabled, the _apsk key is fetched every time',
         () async {
-      stubApskGet(atClientB, pkamPublicKey(atChopsA));
+      stubApskGet(atClientB, pkamPublicKey(keyA));
 
       final envelope = await signerA.wrapAndSign({'a': 1});
       await verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign);

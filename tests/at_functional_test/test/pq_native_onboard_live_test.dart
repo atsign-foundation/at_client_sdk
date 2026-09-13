@@ -65,7 +65,7 @@ void main() {
     expect(enrollmentId, isNotNull);
 
     final keys = await keysIo.read(atSign);
-    expect(keys.apkamPublicKey, isNull,
+    expect(keys.authenticationKeyPairFor(null), isNull,
         reason: 'a PQ-native keyfile keeps its APKAM in the typed section; a '
             'reader that cannot handle that must fail loudly rather than sign '
             'an ML-DSA key with the RSA routine');
@@ -140,8 +140,8 @@ void main() {
             .bytes
             .toString());
 
-    expect(keys.defaultEncryptionPublicKey, isNotNull);
-    expect(keys.defaultSelfEncryptionKey, isNotNull,
+    expect(keys.encryptionKeyPair, isNotNull);
+    expect(keys.selfEncryptionKey, isNotNull,
         reason: 'the PQ data path never touches it, but decisions 37 keeps it '
             'until the ECOSYSTEM is PQ');
     final publicKey = await client
@@ -151,7 +151,7 @@ void main() {
     // with a `public:publickey`, so a presence check passes on provisioning
     // state even if the activation published nothing.
     expect(publicKey?.replaceFirst('data:', '').trim(),
-        keys.defaultEncryptionPublicKey.toString(),
+        keys.encryptionKeyPair!.atPublicKey.publicKey,
         reason: 'UC-B4.2: a legacy peer must be able to send to a brand-new '
             'atSign out of the box, and the key it finds has to be the one '
             'this atSign holds the private half of');

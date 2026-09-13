@@ -15,13 +15,10 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
 import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
 import 'package:at_commons/at_commons.dart' show AtBytes;
-import 'package:at_demo_data/at_demo_data.dart'
-    show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 /// UC-B0.1 — a PQ-capable client cannot PQ-upgrade against a legacy atServer.
@@ -58,16 +55,32 @@ void main() {
   Future<String> mintLegacyEnrollment(
       String label, Map<String, String> namespaces) async {
     final otp = (await owner.getOTP()).response;
+    final file = File(keyfileFor(label));
+    if (file.existsSync()) file.deleteSync();
+    file.parent.createSync(recursive: true);
+    // The session names the keyfile, so the approval completes the keys
+    // straight into it. FileAtKeysIo.write refuses to overwrite, so a keyfile
+    // a previous run left is removed first.
+    final session = AtAuthSession(
+        atSign: atSign,
+        rootDomain: AtRootDomain(
+            ConfigUtil.getYaml()['root_server']['url'],
+            ConfigUtil.getYaml()['root_server']['port'] ?? 64),
+        atKeysIo: FileAtKeysIo(filePath: (_) => keyfileFor(label)));
     final response = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
-            atSign: atSign,
+            session: session,
             appName: 'b01-$label',
             deviceName: 'b01-$label-$runId',
             namespaces: namespaces,
             otp: otp,
             signingAlgo: SigningAlgoType.rsa2048),
-        AtLookupImpl(atSign, ConfigUtil.getYaml()['root_server']['url'],
-            ConfigUtil.getYaml()['root_server']['port'] ?? 64));
+        secureSocketLookUps()(
+            atSign: atSign,
+            rootDomain: AtRootDomain(
+                ConfigUtil.getYaml()['root_server']['url'],
+                ConfigUtil.getYaml()['root_server']['port'] ?? 64),
+            authenticator: null));
     final record = (await owner.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
     await owner.enrollmentService!.approve(EnrollmentRequestDecision.approved(
@@ -76,14 +89,9 @@ void main() {
         apkamSymmetricKey:
             AtBytes.fromString(record.encryptedAPKAMSymmetricKey!)));
 
-    final keys = response.atAuthKeys!
-      ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!)
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-    final file = File(keyfileFor(label));
-    if (file.existsSync()) file.deleteSync();
-    file.parent.createSync(recursive: true);
-    await FileAtKeysIo(filePath: (_) => keyfileFor(label)).write(atSign, keys);
+    // Awaiting the approval collects the two atSign-wide secrets it released
+    // and writes the completed keys into the keyfile.
+    await AtEnrollment.create().waitForApproval(response);
     return response.enrollmentId;
   }
 
@@ -136,6 +144,8 @@ void main() {
         session: session,
         preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
             posture: PqPosture.legacy, device: 'b01-priv-rf-$runId'),
+        storage: TestPreferences.getInstance()
+            .storageForCoLocatedClient(atSign, device: 'b01-priv-rf-$runId'),
         appName: 'b01-priv',
         deviceName: 'b01-priv-rf-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw'},
@@ -160,10 +170,10 @@ void main() {
     expect(after.keys, isEmpty,
         reason: 'no typed material: an aborted upgrade must not leave PQ keys '
             'in the keyfile, or the next start would act as though it had one');
-    expect(after.apkamPublicKey, isNotNull,
+    expect(after.authenticationKeyPairFor(null), isNotNull,
         reason: 'the legacy RSA APKAM is untouched — the atSign stays usable '
             'exactly as it was');
-    expect(after.enrollmentId, legacyEnrollmentId,
+    expect(after.storedEnrollmentId, legacyEnrollmentId,
         reason: 'still the legacy enrollment; nothing was switched over');
 
     // (5) no partial state on the server.
@@ -199,6 +209,8 @@ void main() {
         session: session,
         preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
             posture: PqPosture.legacy, device: 'b01-scoped-rf-$runId'),
+        storage: TestPreferences.getInstance()
+            .storageForCoLocatedClient(atSign, device: 'b01-scoped-rf-$runId'),
         appName: 'b01-scoped',
         deviceName: 'b01-scoped-rf-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw'},

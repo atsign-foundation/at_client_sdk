@@ -291,11 +291,8 @@ void main() {
             're-authenticate as it, or the amendment below would be '
             'measuring the wrong enrollment');
 
-    final storage = 'test/hive/amend/$runId-$device';
     final preference = TestUtils.getPreference(atSign,
-        keyEstablishmentAlgorithms: algorithms, posture: legacyPlusPqProviders)
-      ..hiveStoragePath = storage
-      ..commitLogPath = storage;
+        keyEstablishmentAlgorithms: algorithms, posture: legacyPlusPqProviders);
     // NOTE: startup is deliberately NOT awaited here. The PQ bootstrap sweeps
     // for envelopes, and a sweep consumes and DELETES what it opens, so a
     // caller that awaits `startupComplete` before subscribing to
@@ -426,13 +423,10 @@ void main() {
       // order. Evicted first, as any second construction must be.
       AtClientImpl.atClientInstanceMap
           .remove(AtClientImpl.instanceKey(atSign, client.enrollmentId));
-      final storage = 'test/hive/amend/$runId-$device-sender';
       final preference = TestUtils.getPreference(atSign,
           keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
           sealsToKeyAlgorithms: order,
-          posture: legacyPlusPqProviders)
-        ..hiveStoragePath = storage
-        ..commitLogPath = storage;
+          posture: legacyPlusPqProviders);
       expect(
           await Atsign(atSign).authenticatesAs(
               keys: keyfiles[device]!,

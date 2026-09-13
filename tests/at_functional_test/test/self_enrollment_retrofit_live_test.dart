@@ -18,8 +18,6 @@ import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, parseApskValue, verifyEnvelope;
-import 'package:at_demo_data/at_demo_data.dart'
-    show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
@@ -52,15 +50,23 @@ void main() {
   /// idempotence is per keyfile.
   Future<void> mintLegacyKeyfile(String Function(String) pathFor) async {
     final otp = (await atClient.getOTP()).response;
+    final existingKeys = File(pathFor(atSign));
+    if (existingKeys.existsSync()) {
+      existingKeys.deleteSync();
+    }
+    // The session names the keyfile, so the approval completes the keys
+    // straight into it.
+    final session = TestUtils.enrollmentSession(atSign,
+        keys: FileAtKeysIo(filePath: pathFor));
     final response = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
-            atSign: atSign,
+            session: session,
             appName: 'rf2b-legacy',
             deviceName: 'rf2b-${Uuid().v4().hashCode}',
             namespaces: {namespace: 'rw'},
             otp: otp,
             signingAlgo: SigningAlgoType.rsa2048),
-        AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort));
+        TestUtils.unauthenticatedLookUp(atSign));
     final record = (await atClient.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
     await atClient.enrollmentService!.approve(
@@ -70,17 +76,9 @@ void main() {
             apkamSymmetricKey:
                 AtBytes.fromString(record.encryptedAPKAMSymmetricKey!)));
 
-    // NOTE: the keyfile's at-rest self-encryption needs the self key present.
-    final keys = response.atAuthKeys!
-      ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!)
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-
-    final existingKeys = File(pathFor(atSign));
-    if (existingKeys.existsSync()) {
-      existingKeys.deleteSync();
-    }
-    await FileAtKeysIo(filePath: pathFor).write(atSign, keys);
+    // Awaiting the approval collects the two atSign-wide secrets it released
+    // and writes the completed keys into the keyfile.
+    await AtEnrollment.create().waitForApproval(response);
   }
 
   setUpAll(() async {
@@ -183,7 +181,7 @@ void main() {
     expect(newId, isNot(session.enrollmentId));
 
     final keys = await FileAtKeysIo(filePath: keysFilePath).read(atSign);
-    expect(keys.enrollmentId, session.enrollmentId,
+    expect(keys.storedEnrollmentId, session.enrollmentId,
         reason: 'the flat fields keep the legacy enrollment; the successor '
             'lives in the typed material under its own id');
     expect(keys.signingAlgorithmForEnrollment(newId), SigningAlgoType.mldsa65);

@@ -266,13 +266,11 @@ void main() {
       expect(result, isNotNull);
       expect(result?.keys.length, 2);
       expect(result?.defaultAtsign, '@alice');
-      expect(result?.keys[0].apkamPrivateKey, isNotNull);
-      expect(result?.keys[0].apkamPublicKey, isNotNull);
-      expect(result?.keys[0].defaultSelfEncryptionKey, isNotNull);
-      expect(result?.keys[0].defaultEncryptionPrivateKey, isNotNull);
-      expect(result?.keys[0].defaultEncryptionPublicKey, isNotNull);
-      expect(result?.keys[0].apkamSymmetricKey, isNotNull);
-      expect(result?.keys[0].enrollmentId, 'enrollId1');
+      expect(result?.keys[0].authenticationKeyPairFor(null), isNotNull);
+      expect(result?.keys[0].selfEncryptionKey, isNotNull);
+      expect(result?.keys[0].encryptionKeyPair, isNotNull);
+      expect(result?.keys[0].enrollmentSymmetricKey, isNotNull);
+      expect(result?.keys[0].storedEnrollmentId, 'enrollId1');
       expect(result?.keys[0].metadata['hiveSecret'], isNotNull);
       expect(result?.keys[0].metadata['secret'], isNotNull);
       expect(result?.keys[0].metadata['name'], '@alice');
