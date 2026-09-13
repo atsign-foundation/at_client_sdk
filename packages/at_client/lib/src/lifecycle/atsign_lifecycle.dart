@@ -20,7 +20,7 @@ import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeyResolver;
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 
 /// The verbs an application reaches a working client through, on the atSign
@@ -135,7 +135,9 @@ extension AtsignLifecycle on Atsign {
     final AtLookUp lookUp;
     try {
       lookUp = await authenticatedLookUp(this, keys, rootDomain,
-          enrollmentId: enrollmentId, on: atLookUp, lookUps: lookUps);
+          enrollmentId: enrollmentId,
+          on: atLookUp,
+          lookUps: lookUps ?? defaultLookUps());
     } catch (e) {
       final state = classifyConnectionFailure(e);
       if (state != null && state.isRefused) {
@@ -348,7 +350,7 @@ extension AtsignLifecycle on Atsign {
         signingAlgo: algo,
         keyExchangeMode: mode,
         atLookUp: atLookUp,
-        lookUps: lookUps);
+        lookUps: lookUps ?? defaultLookUps(preference));
   }
 
   /// The enrollment [enroll] filed in [keys] for [app] on [device] and has not
@@ -398,7 +400,7 @@ extension AtsignLifecycle on Atsign {
               ? EnrollmentKeyExchangeMode.pq
               : EnrollmentKeyExchangeMode.legacy,
           atLookUp: atLookUp,
-          lookUps: lookUps);
+          lookUps: lookUps ?? defaultLookUps(preference));
     }
     return null;
   }

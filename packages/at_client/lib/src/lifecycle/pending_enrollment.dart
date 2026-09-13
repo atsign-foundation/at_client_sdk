@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:at_lookup/at_lookup_io.dart';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
@@ -11,7 +10,7 @@ import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeyResolver;
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookUp;
+import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookUpFactory;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -38,7 +37,7 @@ class PendingEnrollment {
   final SigningAlgoType signingAlgo;
   final EnrollmentKeyExchangeMode keyExchangeMode;
   final AtLookUp? _atLookUp;
-  final AtLookUpFactory? _lookUps;
+  final AtLookUpFactory _lookUps;
   final AtEnrollment _enrollment = AtEnrollment.create();
   final AtSignLogger _logger;
 
@@ -60,7 +59,7 @@ class PendingEnrollment {
     required this.signingAlgo,
     required this.keyExchangeMode,
     AtLookUp? atLookUp,
-    AtLookUpFactory? lookUps,
+    required AtLookUpFactory lookUps,
   })  : _atLookUp = atLookUp,
         _lookUps = lookUps,
         _logger = AtSignLogger('PendingEnrollment ($atSign)');
@@ -107,8 +106,7 @@ class PendingEnrollment {
     // The handshake's connection, built the way the application chose and
     // closed when it is done; a supplied one is the caller's to close.
     final handshake = _atLookUp ??
-        (_lookUps ?? secureSocketLookUps())(
-            atSign: atSign, rootDomain: rootDomain, authenticator: null);
+        _lookUps(atSign: atSign, rootDomain: rootDomain, authenticator: null);
     try {
       await _enrollment.waitForApproval(response,
           retryInterval: retryInterval,

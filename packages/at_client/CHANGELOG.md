@@ -23,7 +23,8 @@
   reach the atServer is thrown as it is.
 - feat: the third leg of the platform bundle, beside the keys store and the
   storage bundle: `open`, `activate`, `enroll`, `resumeEnrollment`,
-  `authenticatesAs`, `buildAtClient` and `AtServiceFactory.atClient` take
+  `authenticatesAs`, `buildAtClient`, `AtServiceFactory.atClient`,
+  `selfRetrofit` and `retrofitIdentity` take
   `lookUps:`, an at_lookup `AtLookUpFactory` that builds every connection the
   client opens - its own, its sync's, its monitor's, the file stream's and
   the one a retrofit re-derives on - so an application chooses the transport

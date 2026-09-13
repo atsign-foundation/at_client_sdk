@@ -667,7 +667,11 @@ lookup at_client built has not reached the atServer yet), so at_auth never
 learns the type. The Flutter dialogs and `AtsignFlows`, `CLIBase` and the
 `at_activate` commands take `lookUps:` and pass it through; a program that
 supplies none gets `defaultLookUps(preference)`, TLS with the preference's
-three TLS fields, which is what every site built before.
+three TLS fields, which is what every site built before. That function, in
+`lifecycle/lookups.dart`, is the one at_client file that imports
+`at_lookup_io.dart`; everything else takes the factory it is handed, so the
+package's reach into the TLS transport is one seam, beside the Hive default
+the storage leg left in `at_client_factory.dart`.
 
 Two things fell out. The CLI's `_proxyLookUp` became `proxyLookUps()`, a
 factory that sends `from:` first through `onConnect`, a hook

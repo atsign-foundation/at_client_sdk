@@ -8,6 +8,7 @@ import 'package:at_client/src/enroll/signing_key_mint.dart'
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
@@ -15,7 +16,7 @@ import 'package:at_client/src/service/enrollment_service_impl.dart'
     show EnrollmentServiceImpl;
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart' show AtClientException, Atsign;
-import 'package:at_lookup/at_lookup.dart' show AtLookUp;
+import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookUpFactory;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
@@ -104,6 +105,7 @@ Future<AtClient> selfRetrofit({
   SigningAlgoType? signingAlgo,
   AtClientStorage? storage,
   AtLookUp? atLookUp,
+  AtLookUpFactory? lookUps,
   Duration connectBudget = AtConnection.defaultBudget,
 }) async {
   final newSession = await retrofitIdentity(
@@ -115,6 +117,7 @@ Future<AtClient> selfRetrofit({
     apkamKeysExpiryDuration: apkamKeysExpiryDuration,
     signingAlgo: signingAlgo,
     atLookUp: atLookUp,
+    lookUps: lookUps,
   );
 
   preference
@@ -126,6 +129,7 @@ Future<AtClient> selfRetrofit({
       namespace: newSession.namespace,
       storage: storage,
       atLookUp: atLookUp,
+      lookUps: lookUps,
       connectBudget: connectBudget);
 
   try {
@@ -169,8 +173,9 @@ Future<AtClient> selfRetrofit({
 ///
 /// The request is submitted on [atLookUp], a connection authenticated as the
 /// legacy enrollment, which a client retrofitting itself passes from its own
-/// remote secondary; with none, one is authenticated from the session's keys
-/// for the submission and closed after it.
+/// remote secondary; with none, one is built by [lookUps] (the preference's
+/// default with none), authenticated from the session's keys for the
+/// submission and closed after it.
 @experimental
 Future<AtAuthSession> retrofitIdentity({
   required AtAuthSession session,
@@ -181,12 +186,14 @@ Future<AtAuthSession> retrofitIdentity({
   Duration? apkamKeysExpiryDuration,
   SigningAlgoType? signingAlgo,
   AtLookUp? atLookUp,
+  AtLookUpFactory? lookUps,
 }) async {
   final given = atLookUp;
   final connection = given ??
       await authenticatedLookUp(
           session.atSign, session.atKeysIo, session.rootDomain,
-          enrollmentId: session.enrollmentId);
+          enrollmentId: session.enrollmentId,
+          lookUps: lookUps ?? defaultLookUps(preference));
 
   // NOTE: the preference's value, not the posture's — an app may set
   // `authenticationKeyAlgorithm` beside a posture, and reading

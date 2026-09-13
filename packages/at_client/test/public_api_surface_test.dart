@@ -156,9 +156,12 @@ const Set<String> _atClientBarrelExports = {
   'package:at_auth/at_auth.dart',
   // show-narrowed to FileAtKeysIo, the keyfile store, for the same reason.
   'package:at_auth/at_auth_io.dart',
-  // show-narrowed to AtLookUpFactory, secureSocketLookUps and
-  // AtCommandExecutor: the communications leg of the platform bundle, which
-  // the verbs take as lookUps:, for the same reason again.
+  // show-narrowed to AtLookUpFactory and AtCommandExecutor: the
+  // communications leg of the platform bundle, which the verbs take as
+  // lookUps:, for the same reason again. From the io-free barrel, so the type
+  // an app implements never reads as io-bound.
+  'package:at_lookup/at_lookup.dart',
+  // show-narrowed to secureSocketLookUps, the TLS default, the one io export.
   'package:at_lookup/at_lookup_io.dart',
   // show-narrowed to SigningAlgoType: AtClientPreference.dataSigningKeyAlgorithms
   // takes a set of them and AtClientImpl.signingAlgoType returns one.

@@ -116,7 +116,7 @@ void main() {
   /// authentication revokes it.
   Future<AtLookUp> legacyLookUp(AtAuthSession session) =>
       authenticatedLookUp(atSign, session.atKeysIo, rootDomain,
-          enrollmentId: session.enrollmentId);
+          enrollmentId: session.enrollmentId, lookUps: secureSocketLookUps());
 
   test(
       'the rollout-window retrofit: an rsa2048 self-enrollment auto-approves '

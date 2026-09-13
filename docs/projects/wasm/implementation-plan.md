@@ -256,8 +256,15 @@ Design in [`design.md`](design.md) §2.1.
   `submit(request, lookUp)`, `waitForApproval(atLookup:)`), so a browser activation or
   enrollment that goes through at_client drags in no `dart:io`; only a caller using
   at_auth directly without a connection reaches the three defaults.
-  ✅ **The neutral name landed with T9.** What is still missing is T4's io-free
-  `AtLookupImpl` for a web factory to construct; the factory type itself blocks nothing.
+  ✅ **The neutral name landed with T9.** `AtLookUpFactory` is declared in
+  `src/at_lookup.dart`, which has no direct `dart:io` import, and at_client reaches
+  `at_lookup_io.dart` from one file, `lifecycle/lookups.dart`, where the TLS default
+  lives; its public barrel re-exports the type from the main barrel and only
+  `secureSocketLookUps` from `_io`. ⚠️ Transitively the type still pulls `dart:io`:
+  `src/at_lookup.dart` imports at_lookup's main barrel, which exports
+  `secure_socket_util.dart` and `AtLookupImpl` until T4 and T5 move them behind `_io`.
+  What is still missing is that, and T4's io-free `AtLookupImpl` for a web factory to
+  construct; the factory's shape blocks nothing.
   ⛔ **Settled: where the injected transport lives.** A parameter on the doors and a
   field on the client, exactly as `atKeysIo` and `storage` are — not
   `AtClientPreference`, which keeps only the three now-deprecated transport fields

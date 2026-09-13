@@ -2167,6 +2167,7 @@ class AtClientImpl implements AtClient {
       }
 
       final newSession = await retrofitIdentity(
+        lookUps: lookUps,
         session: AtAuthSession(
           atSign: _atSign,
           rootDomain:

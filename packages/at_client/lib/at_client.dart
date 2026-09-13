@@ -32,8 +32,9 @@ export 'package:at_auth/at_auth.dart'
         NamespacePermission,
         WrittenAtKeysIo;
 export 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
-export 'package:at_lookup/at_lookup_io.dart'
-    show AtLookUpFactory, secureSocketLookUps, AtCommandExecutor;
+export 'package:at_lookup/at_lookup.dart'
+    show AtLookUpFactory, AtCommandExecutor;
+export 'package:at_lookup/at_lookup_io.dart' show secureSocketLookUps;
 export 'package:at_chops/at_chops.dart' show SigningAlgoType;
 export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/response/enrollment.dart';
