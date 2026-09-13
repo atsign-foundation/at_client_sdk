@@ -13,6 +13,10 @@
 /// them.
 library;
 
+// A client built from an AtChops and no key source is the shape under test, so
+// this file names the AtChops on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
@@ -128,6 +132,6 @@ void main() {
     expect(config.lookup(symmetricAesGcmCryptoProviderId), isNotNull);
     expect(config.defaultProviderId, legacyCryptoProviderId,
         reason: 'reads route by the record\'s own stamp; the era default '
-            'only decides what NEW writes use, and in 3.x that is legacy');
+            'only decides what NEW writes use, and in 3.x that is the legacy provider');
   });
 }

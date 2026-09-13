@@ -33,13 +33,14 @@ void main() {
     ..sharedWith = bob;
 
   group('what it refuses', () {
-    test('a client configured to write legacy', () {
+    test('a client configured to write with the legacy provider', () {
       final atClient = strictClient();
 
       expect(
           () => CryptoRuntime.providerIdFor(atClient, null, atKey: sharedKey()),
           throwsA(isA<LegacyEncryptionRefusedException>()),
-          reason: 'the era default writes legacy, and under the flag that is '
+          reason:
+              'the era default writes with the legacy provider, and under the flag that is '
               'refused at selection — before anything is composed or in '
               'flight');
     });
@@ -68,7 +69,9 @@ void main() {
       return atKey;
     }
 
-    test('a key the PQ provider declines, whose fallback is legacy', () {
+    test(
+        'a key the PQ provider declines, whose fallback is the legacy provider',
+        () {
       final atClient = strictClient(
           crypto: CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()));
 
@@ -164,7 +167,7 @@ void main() {
       expect(CryptoRuntime.providerIdFor(atClient, null, atKey: watermark()),
           legacyCryptoProviderId,
           reason: 'the nskey path is (owner, namespace)-scoped and declines a '
-              'local key, so the id still falls back to legacy — but the '
+              'local key, so the id still falls back to the legacy provider — but the '
               'record never leaves the device, so there is nothing to harvest '
               'and nothing to refuse');
     });
@@ -216,7 +219,7 @@ void main() {
                 ..allowLegacyCryptoFallback = true),
           isFalse,
           reason: 'the two switches say opposite things and the flag wins — a '
-              'cold start is refused rather than reached under legacy');
+              'cold start is refused rather than reached with the legacy provider');
       expect(
           AtClientImpl.mayFallBackToLegacy(
               AtClientPreference()..allowLegacyCryptoFallback = true),

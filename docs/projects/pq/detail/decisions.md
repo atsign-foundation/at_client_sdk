@@ -1803,7 +1803,7 @@ the moment the package is needed.
 |---|---|
 | 1 | **Conveyance fires in at_client's `EnrollmentServiceImpl.approve`, and the other approve paths route through it.** `at_client_flutter` and `at_onboarding_cli` call at_auth's `approve` directly today; both already hold an `AtClient`. Leaving them would produce an enrollment that authenticates fine and can decrypt nothing, with nothing in the code saying so |
 | 2 | **An absent key package is not an error; a rejected one is.** Absent is expected during rollout and for the self-retrofit path, which needs no conveyance. Rejected — wrong signer, bad signature, malformed — throws, so the approver learns the device cannot decrypt and can revoke. A *signed but unparseable* package is neither: the enrollee is running a newer client, the approver cannot fix it, and throwing would block approvals across a version skew |
-| 3 | **`NamespaceMember` carries a four-way status: present / absent / rejected / unsupported.** `_verifiedKeyPackage` collapses five distinct outcomes into one `null`. The log severities already distinguish them; only the return type cannot. Ruling 2 is unimplementable without this |
+| 3 | **`NamespaceMember` carries a four-way status: present / absent / rejected / unsupported** (a fifth, `unverified`, was added 2026-09-13 for a package whose `_apsk` could not be fetched: nothing is known about it, so it is neither sealed to nor called a rejection). `_verifiedKeyPackage` collapses five distinct outcomes into one `null`. The log severities already distinguish them; only the return type cannot. Ruling 2 is unimplementable without this |
 | 4 | **The approver takes the key package from the request it is approving, not a `listns` re-fetch.** The atServer already returns `metadata` on `enroll:list`; at_client's `Enrollment.fromJSON` discards it. Reading it there removes a round trip *and* a real hole: conveyance discovery iterates the approved namespaces and skips `*`, so an enrollment granted `*` alone finds no key package and conveys nothing, warning only |
 | 5 | **The `enrollmentId` claim is omitted when unknown, and an absent claim verifies.** Authority is the signature verifying against *that record's* `_apsk`, plus the server having bound the package to the record it created. A present-but-mismatched claim stays a hard rejection |
 | 6 | **The `(AtClient, enrollmentId)` Expando re-key is deferred to RF-2b.** See [20.3](#203-what-the-expando-re-key-is-actually-worth) |
@@ -2637,10 +2637,17 @@ Cheapest first, because the common case must not pay for the rare one.
 1. **Already holds it** → return. Settles the question with no round trip, and is true for every
    enrollment that was online when it was approved.
 2. **No enrollment id** → return. Such a client authenticates with the atSign's own keys. It
-   *cannot* ask — enumerating holders goes through `enroll:listns`, which the atServer refuses
-   without APKAM authentication (observed, not inferred) — and has no reason to: it is the
-   atSign, so its route to a missing root is to mint one. This guard was added after the first
-   live run, where its absence made every legacy PKAM client broadcast and be refused.
+   does not ask: it is the atSign, so its route to a missing root is to mint one. **Amended
+   2026-09-12.** This item used to add that such a client *cannot* ask, because `enroll:listns`
+   refused a connection without APKAM authentication, observed against the atServer of
+   2026-08-04. Since at_server 3.16.4 a legacy `pkam:` connection is judged as the `primary`
+   enrollment and `enroll:listns` answers it, measured on 2026-09-12 against the `dev_env` image
+   the functional pack runs in CI: the roster came back naming `primary`, and the same verb on an
+   unauthenticated connection was refused with AT0401 as the control. So the guard is a
+   client-side choice rather than a server constraint, and whether `primary` should ask a holder
+   rather than mint is the question the PQ table's `primary` signing-root row holds open for
+   gkc. The guard was added after the first live run, where its absence made every legacy PKAM
+   client broadcast and be refused by the atServer of that day.
 
    **The first version of this guard was dead code.** It tested
    `sharing.enrollmentId == null`, but `ApkamSigning.enrollmentId` is non-nullable and
@@ -2667,8 +2674,9 @@ asserting the privilege callback is *not* consulted when the private is already 
 
 ### 31.3 What is still unproven, stated as such
 
-The full round trip is **not** demonstrated live, and UC-B5.1 stays blocked. Two observations,
-both direct:
+The full round trip was not demonstrated live when this ruling was made, and UC-B5.1 was
+blocked; the amendment at the end of this section says where it stands. Two observations from
+2026-08-04, both direct:
 
 - `requestPrivateIfAbsent`'s enumeration fails in the functional harness with *"enroll:listns
   requires APKAM authentication"*, because that harness authenticates with the atSign's own keys.
@@ -2693,10 +2701,12 @@ the sender's kpid against the key packages registered for the namespace — and 
 goes through `enroll:listns`, which the atServer refuses for a client authenticating with the
 atSign's own keys. The envelope is left unconsumed and no answer is produced.
 
-**The pull therefore requires APKAM on both sides:** the requester to enumerate holders, and the
-responder to authorize the requester. That is a property of the design rather than a defect —
-the authorization is deliberate defence in depth over the atServer's own delivery gate — but it
-means no harness using the atSign's own keys can exercise this path at either end.
+**The pull therefore required APKAM on both sides against that atServer:** the requester to
+enumerate holders, and the responder to authorize the requester. The authorization is deliberate
+defence in depth over the atServer's own delivery gate. **Amended 2026-09-12:** since at_server
+3.16.4 a connection using the atSign's own keys is judged as `primary` and `enroll:listns` answers
+it (see the amendment to 31.2), so the server admits that credential at both ends, and what keeps
+it out of the pull is guard 2 alone.
 
 Two notes on how this was reached, both of which are the point. The first attempt concluded
 nothing from an absence of log lines; that absence turned out to be an artefact of raising
@@ -2706,11 +2716,12 @@ at all — produced the transcript above immediately. And the failure is logged 
 naming the envelope, which is why it was findable at all; had it been `finer` this would have
 presented as "the sender never sent".
 
-**What UC-B5.1 now needs:** two APKAM enrollments of one atSign with genuinely distinct clients,
-which the per-atSign client cache currently prevents in a single process (see section 32). With that in place the round trip should complete,
-since the only thing observed blocking it is an authentication class the fixture would supply.
-The blocker is re-labelled from *the initiator does not exist* to *the live round trip is
-unproven* — the initiator now exists and its guards are unit-covered.
+**UC-B5.1 is proven** by `signing_root_pull_two_enrollments_test.dart` (*a holder answers
+another enrollment and the private is filed*), once
+[33](#33-keying-the-client-cache-by-atsign-enrollmentid-2026-08-04) keyed the client cache by
+(atSign, enrollmentId). That fixture uses two APKAM enrollments because the round trip needs two
+principals and the atSign's own credential does not ask (guard 2), not because the atServer
+refuses it. The initiator exists and its guards are unit-covered.
 
 ## 32. The two-enrollment fixture: what works and what does not (2026-08-04)
 
@@ -6123,7 +6134,8 @@ at_onboarding_cli's `auth_cli`) were re-verified to route through
 #1 survives the extraction untouched.
 
 **The seam reports; the caller enforces.** `conveySecretsTo` returns
-the four-way `KeyPackageStatus` (20.2 #3) instead of throwing on a
+the `KeyPackageStatus` (20.2 #3; four-way then, five-way since
+`unverified` was added on 2026-09-13) instead of throwing on a
 rejected package: what to convey is substrate policy, but whether a
 just-approved device that cannot decrypt should fail the approval is
 the approver's policy, so the throw (same exception type, same message)
@@ -6151,7 +6163,7 @@ the natural reaction (retry, or report failure upstream) is wrong both
 ways. Fixed within the byte-identical-signature constraint by making
 the rejected-package throw a carrying subtype:
 `EnrollmentConveyanceException extends AtEnrollmentException`, holding
-the successful `response` and the four-way `keyPackageStatus`. Existing
+the successful `response` and the `keyPackageStatus`. Existing
 catch sites keep working (subtype, pinned by test); new callers can
 tell "approved but cannot decrypt — consider revoking" from "the
 approval failed". Exported from the main barrel `show`-narrowed to the
@@ -13229,7 +13241,7 @@ grants a connection with no enrollment id full access — measured live against 
 running atServer: `pending`, then `approved`, with the new enrollment
 authenticating afterwards. The route, its controls and the answer to what
 becomes of the legacy credential are in
-[Why commit 7 needs no atServer change](../implementation-plan.md#why-commit-7-needs-no-atserver-change).
+[Why commit 7 needs no atServer change](implementation-plan.md#why-commit-7-needs-no-atserver-change).
 
 **The ruling stands, on the reason that never depended on this.** The null-id
 publish is a pinned working capability, and a client that has not retrofitted is
@@ -13860,9 +13872,11 @@ retrofit replaced, unless it named the successor itself, and nothing told it
 to.
 
 Pinned by `packages/at_commons/test/pkam_verb_builder_test.dart` (the bare
-`pkam:` for `primary`, as a raw literal), `packages/at_auth/test/at_auth_test.dart`
-and `packages/at_auth/test/plural_enrollments_test.dart` (which id reaches
-pkam from each keyfile shape, and the refusal), `packages/at_auth/test/at_keys_test.dart`
+`pkam:` for `primary`, as a raw literal),
+`packages/at_client/test/lifecycle/authenticates_as_test.dart` (which held
+these pins in at_auth's `at_auth_test.dart` until the check moved to
+`Atsign.authenticatesAs`) and `packages/at_auth/test/plural_enrollments_test.dart`
+(which id reaches pkam from each keyfile shape, and the refusal), `packages/at_auth/test/at_keys_test.dart`
 (the derivation itself), and
 `packages/at_client/test/at_client_create_derives_enrollment_test.dart` (the
 keys win over a caller's id, and the client is filed under them). The
@@ -14260,3 +14274,20 @@ whether or not the label mentions them.
 **Free to do now.** Neither id has reached trunk, nothing is published, and no
 persistent test atSign holds a live `__ck` conveyance: the e2e packs default to
 the legacy posture, which is what that default is for.
+
+## 140. #2161's deferral note stays as written (2026-09-01)
+
+**Decision (gkc, 2026-09-01 — offered the correction twice, declined both
+times).** [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161)
+is closed, and its *Deliberately not doing now* section says the
+`AtLookupImpl.signingAlgoType` default *"rides the next at_lookup version whenever
+one is opened for another reason"*. That did not happen: at_lookup reached
+`3.7.0-rc1` without it, and the defect was fixed one layer up in at_auth, whose
+authenticator constructors require `signingAlgo` and `hashingAlgo`
+([#2198](https://github.com/atsign-foundation/at_client_sdk/pull/2198), merged
+2026-09-01). The note is a comment on a closed issue, not code, and stays as
+written; a reader of that issue is told the wrong thing about where the fix
+went, and this ruling is where the right thing is recorded. The deprecated field
+itself needs nothing — it dies with the credential ladder in the next at_lookup
+major, and requiring it or making it nullable is breaking, so neither could land
+in 3.x.

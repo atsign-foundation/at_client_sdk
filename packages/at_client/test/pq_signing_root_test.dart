@@ -89,7 +89,7 @@ void main() {
     final secondary = MockRemoteSecondary();
     final lookup = MockAtLookUp();
     when(() => secondary.atLookUp).thenReturn(lookup);
-    when(() => lookup.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
     final published = <UpdateVerbBuilder>[];
     final verbs = <VerbBuilder>[];
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
@@ -279,7 +279,7 @@ void main() {
     // NOTE: typed material will not serialize without an atsign, and the copy
     // below is made of the serialized form.
     (await ioA.read(atSign))
-      ..enrollmentId = 'enrollment-1'
+      ..fileLegacyMaterial(enrollmentId: 'enrollment-1')
       ..atsign = atSign.toAtsign();
     await PqSigningRoot(a.client, keysIo: ioA)
         .mintIfAbsent(isFullyPrivileged: true);
@@ -332,7 +332,7 @@ void main() {
         reason: 'the control: the verify above is checking THIS message, not '
             'answering true for anything put in front of it');
 
-    expect((await ioB.read(atSign)).enrollmentId, 'enrollment-1',
+    expect((await ioB.read(atSign)).storedEnrollmentId, 'enrollment-1',
         reason: 'and the copy carries E1\'s enrollment id, which is what '
             'makes the second host present as E1 to the atServer and so pick '
             'up its namespace authorisations rather than a fresh grant');
@@ -426,7 +426,7 @@ void main() {
     final secondary = MockRemoteSecondary();
     final lookup = MockAtLookUp();
     when(() => secondary.atLookUp).thenReturn(lookup);
-    when(() => lookup.enrollmentId).thenReturn('enrollment-1');
+    when(() => atClient.enrollmentId).thenReturn('enrollment-1');
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     final verbs = <VerbBuilder>[];
@@ -479,7 +479,7 @@ void main() {
       final secondary = MockRemoteSecondary();
       final lookup = MockAtLookUp();
       when(() => secondary.atLookUp).thenReturn(lookup);
-      when(() => lookup.enrollmentId).thenReturn('enrollment-1');
+      when(() => atClient.enrollmentId).thenReturn('enrollment-1');
       when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
       when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
       String? publishedValue;
@@ -523,7 +523,7 @@ void main() {
       final secondary = MockRemoteSecondary();
       final lookup = MockAtLookUp();
       when(() => secondary.atLookUp).thenReturn(lookup);
-      when(() => lookup.enrollmentId).thenReturn('enrollment-1');
+      when(() => atClient.enrollmentId).thenReturn('enrollment-1');
       when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
       when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
       var reads = 0;
@@ -1418,12 +1418,10 @@ void main() {
           ),
           0);
       expect(broadcast.requests, isEmpty,
-          reason: 'such a client CANNOT ask — enumerating holders goes through '
-              'enroll:listns, which the atServer refuses without APKAM '
-              'authentication — and has no reason to: it is the atSign, so its '
-              'route to a missing root is to mint one. Without this guard '
-              'every legacy PKAM client broadcasts, is refused, and logs a '
-              'warning on each start');
+          reason: 'such a client does not ask: it is the atSign, so its route '
+              'to a missing root is to mint one. Without this guard every '
+              'legacy PKAM client would broadcast a request for a root it '
+              'can mint itself, on each start');
     });
 
     test('the privilege check is not consulted before the cheaper one',

@@ -1,3 +1,5 @@
+import 'package:at_auth/src/auth/at_authenticator.dart'
+    show signPkamChallenge;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart' show AtEnrollmentException;
 
@@ -36,17 +38,17 @@ String apkamPossessionSignable({
 /// what signs it, so a mismatched pair produces a signature the atServer
 /// verifies against the key it was asked to install and rejects.
 ///
-/// Signed through the at_chops path a PKAM challenge is signed through (pkam
-/// mode), because the atServer verifies both through one verifier and the two
-/// have to frame a signature identically: a key that can authenticate must be
-/// installable, and a key installed here must be able to authenticate
-/// afterwards. That path is also where the algorithms diverge — `mldsa65` signs
+/// Signed by [signPkamChallenge], the same function that signs a PKAM
+/// challenge, because the atServer verifies both through one verifier and the
+/// two have to frame a signature identically: a key that can authenticate must
+/// be installable, and a key installed here must be able to authenticate
+/// afterwards. That is also where the algorithms diverge — `mldsa65` signs
 /// the message bytes directly, while `rsa2048` signs their SHA-256 — so an
 /// implementation that hashed for both would fail on the post-quantum path
 /// alone, and pass every RSA test written for it.
 ///
-/// pkam mode, never data mode: data mode signs with the **encryption** keypair,
-/// and what is proved here is possession of an APKAM authentication key.
+/// The APKAM keypair, never the encryption one: what is proved here is
+/// possession of an APKAM authentication key.
 ///
 /// Throws [AtEnrollmentException] for any algorithm other than those two.
 /// at_chops' pkam-mode signer selects an RSA implementation for everything that
@@ -71,15 +73,14 @@ String apkamPossessionSignature({
       apkamPublicKey: apkamPublicKey,
       signingAlgo: signingAlgo.name);
 
-  // The hashing algorithm is stated rather than defaulted: the atServer
-  // verifies this signature with SHA-256 and never reads a hashingAlgo off the
-  // request, so the two agree only because both name it.
-  final signingResult = AtChopsImpl(AtChopsKeys.create(
-          null, AtPkamKeyPair.create(apkamPublicKey, apkamPrivateKey)))
-      .sign(AtSigningInput(signable)
-        ..signingAlgoType = signingAlgo
-        ..hashingAlgoType = HashingAlgoType.sha256
-        ..signingMode = AtSigningMode.pkam);
-
-  return signingResult.result as String;
+  // NOTE: SHA-256 for rsa2048 is not a choice made here. The atServer
+  // verifies with it and never reads a hashingAlgo off the request, so the two
+  // agree only because both sides fix it.
+  return signPkamChallenge(
+      (
+        algorithm: signingAlgo,
+        publicKey: apkamPublicKey,
+        privateKey: apkamPrivateKey
+      ),
+      signable);
 }

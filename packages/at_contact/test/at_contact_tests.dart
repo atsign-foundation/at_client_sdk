@@ -1,4 +1,3 @@
-import 'package:at_client/at_client.dart';
 import 'package:at_contact/at_contact.dart';
 import 'package:test/test.dart';
 
@@ -9,8 +8,7 @@ Future<void> main() async {
   late AtContact contact;
   var atSign = '@vinod';
   try {
-    await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'me', TestUtil.getPreferenceLocal());
+    await TestUtil.openAsCurrent(atSign);
     atContact = await AtContactsImpl.getInstance('@colin');
     // set contact details
     contact = AtContact(

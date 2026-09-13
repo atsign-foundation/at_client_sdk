@@ -169,7 +169,8 @@ void main() {
               'message', contains('refuses its own writes'))));
     });
 
-    test('the coupling is one-way — writing PQ without refusing legacy is fine',
+    test(
+        'the coupling is one-way — writing PQ without refusing the legacy provider is fine',
         () {
       // The inverse is a real deployment: write post-quantum where you can and
       // fall back where you must.
@@ -389,7 +390,8 @@ void main() {
   group('the data signing set', () {
     test('follows the posture, and an explicit set beats it both ways', () {
       expect(AtClientPreference().dataSigningKeyAlgorithms, isEmpty,
-          reason: 'the shipped default is legacy, where the enrollment holds '
+          reason:
+              'the shipped default is the legacy posture, where the enrollment holds '
               'no signing key of its own and its APKAM authentication key '
               'signs — which is what `_apsk` advertises, bare');
       expect(

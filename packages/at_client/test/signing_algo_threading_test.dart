@@ -1,3 +1,7 @@
+// Whether a connection is stamped with the credential ladder is the assertion,
+// so this file names the ladder on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
@@ -105,7 +109,7 @@ void main() {
     test('the resolved algorithm reaches the monitor connection', () {
       final source = File('lib/src/service/notification_service_impl.dart')
           .readAsStringSync();
-      final wiring = source.substring(source.indexOf('lookUp: AtLookUp.'));
+      final wiring = source.substring(source.indexOf('lookUp: lookUps('));
 
       expect(wiring, contains('signingAlgo: signingAlgoOf(atClient)'),
           reason: 'the monitor connection must authenticate with the '

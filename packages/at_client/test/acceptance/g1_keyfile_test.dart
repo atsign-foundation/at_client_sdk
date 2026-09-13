@@ -18,20 +18,20 @@ void main() {
     // AND   primary never reaches the wire.
     // AND   a client built with an AtKeysIo runs as the same answer, and a
     //       disagreeing id passed beside it is shouted about and ignored.
-    provenIn('packages/at_auth/test/at_auth_test.dart',
+    provenIn('packages/at_client/test/lifecycle/authenticates_as_test.dart',
         'a RETROFITTED keyfile authenticates as the successor, not the flat',
         proves: 'the typed material wins on the one shape where the flat id '
             'and the typed id are both real and differ: a legacy keyfile is '
             'retrofitted for real, authenticated with nothing passed, and '
-            'the id that reached PkamAuthenticator is the successor',
+            'the id that reached the PKAM is the successor',
         clauses: ['the one enrollment holding active typed']);
-    provenIn('packages/at_auth/test/at_auth_test.dart',
+    provenIn('packages/at_client/test/lifecycle/authenticates_as_test.dart',
         'a legacy keyfile authenticates as its flat stored enrollment',
         proves: 'with no typed material the flat stored id is what reaches '
             'pkam — asserted after checking the resolver has nothing to offer '
             'on this fixture',
         clauses: ['with none, as the flat stored']);
-    provenIn('packages/at_auth/test/at_auth_test.dart',
+    provenIn('packages/at_client/test/lifecycle/authenticates_as_test.dart',
         'an ancient keyfile with no enrollment id authenticates as primary',
         proves: 'a keyfile holding neither reaches pkam as primary',
         clauses: ['with neither, as `primary`']);

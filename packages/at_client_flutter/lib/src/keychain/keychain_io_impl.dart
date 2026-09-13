@@ -2,6 +2,7 @@ import 'package:at_auth/at_auth.dart'
     show
         AtKeys,
         AtKeysFileOverwriteException,
+        AtKeysSourceAbsentException,
         AtKeysValidationException,
         WrittenAtKeysIo;
 import 'package:at_commons/at_commons.dart';
@@ -17,11 +18,15 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
   KeychainAtKeysIo({KeychainStorage? keychainStorage})
     : keychainStorage = keychainStorage ?? KeychainStorage();
 
+  /// Throws [AtKeysSourceAbsentException] when the keychain holds nothing
+  /// for [atSign], which is how a caller tells "no keys yet" from "keys this
+  /// process cannot read": an enrollment starts on the first and refuses on
+  /// the second.
   @override
   Future<AtKeys> read(String atSign) async {
     final AtKeys? atsignKey = await _existing(atSign);
     if (atsignKey == null) {
-      throw AtKeyException(
+      throw AtKeysSourceAbsentException(
         'AtsignKey not found in keychain for atSign: $atSign',
       );
     }

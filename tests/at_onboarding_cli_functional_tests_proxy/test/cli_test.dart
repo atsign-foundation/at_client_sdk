@@ -9,8 +9,9 @@ import '../lib/features/list_enrollments_command.dart';
 import '../lib/features/approve_command.dart';
 import '../lib/features/validate_keys.dart';
 import '../lib/features/cleanup_utils.dart';
+import '../lib/virtualenv_ports.dart';
 
-const String rootServer = 'proxy:vip.ve.atsign.zone:443';
+final String rootServer = 'proxy:vip.ve.atsign.zone:$virtualenvProxyPort';
 const String appName = 'noports';
 const String namespaces = 'sshnp:rw,sshrvd:rw';
 

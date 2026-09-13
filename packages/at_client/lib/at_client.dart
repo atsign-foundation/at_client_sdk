@@ -13,11 +13,28 @@ export 'package:at_client/src/storage/hive_at_client_storage.dart';
 export 'package:at_client/src/crypto/crypto.dart';
 export 'package:at_client/src/crypto/crypto_runtime.dart';
 export 'package:at_client/src/key_stream/key_stream.dart';
+export 'package:at_client/src/lifecycle/at_connection.dart';
+export 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
+export 'package:at_client/src/lifecycle/enrollments.dart';
+export 'package:at_client/src/lifecycle/pending_enrollment.dart';
+export 'package:at_client/src/listener/at_sign_change_listener.dart';
 export 'package:at_client/src/listener/connectivity_listener.dart';
+export 'package:at_client/src/listener/switch_at_sign_event.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';
 export 'package:at_client/src/preference/at_client_preference.dart';
 export 'package:at_client/src/preference/pq_posture.dart';
-export 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
+export 'package:at_auth/at_auth.dart'
+    show
+        AtKeys,
+        AtKeysIo,
+        EnrollmentKeyExchangeMode,
+        InMemoryAtKeysIo,
+        NamespacePermission,
+        WrittenAtKeysIo;
+export 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
+export 'package:at_lookup/at_lookup.dart'
+    show AtLookUpFactory, AtCommandExecutor;
+export 'package:at_lookup/at_lookup_io.dart' show secureSocketLookUps;
 export 'package:at_chops/at_chops.dart' show SigningAlgoType;
 export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/response/enrollment.dart';

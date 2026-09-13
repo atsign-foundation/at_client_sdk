@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
@@ -135,8 +136,8 @@ class SyncServiceImpl implements SyncService {
   /// the keystore — so there is nothing for value-level encryption to protect.
   /// Saying so explicitly keeps them off the shared-data crypto path, where
   /// every post-quantum provider declines a local key and the fallback from
-  /// that decline is legacy, which a client refusing legacy then refuses
-  /// outright.
+  /// that decline is the legacy provider, which a client that refuses it then
+  /// refuses outright.
   ///
   /// A fresh instance per call: [PutRequestOptions] is mutable and the put
   /// pipeline may rewrite the options it is handed.
@@ -162,15 +163,7 @@ class SyncServiceImpl implements SyncService {
       AtClientManager? atClientManager,
       RemoteSecondary? remoteSecondary,
       bool warmStartSync = true}) async {
-    remoteSecondary ??= RemoteSecondary(
-        atClient.getCurrentAtSign()!, atClient.getPreferences()!,
-        atChops: atClient.atChops,
-        enrollmentId: atClient.enrollmentId,
-        // Sync's own connection, built with the same key material the client
-        // holds, so its authenticator matches the client's rather than
-        // falling to a different credential.
-        signingAlgoType: signingAlgoOf(atClient),
-        atKeysIo: atClient.atKeysIo);
+    remoteSecondary ??= remoteSecondaryFor(atClient);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
     await syncService.statsServiceListener();
     syncService._startPeriodicSyncTimer();
@@ -197,8 +190,24 @@ class SyncServiceImpl implements SyncService {
     });
   }
 
+  /// Sync's own connection, built from the same key material the client
+  /// holds, so its authenticator matches the client's rather than falling to
+  /// a different credential: the keyfile's keypair when it holds one, the
+  /// client's `AtChops` when it holds none.
+  @visibleForTesting
+  static RemoteSecondary remoteSecondaryFor(AtClient atClient) =>
+      RemoteSecondary(atClient.getCurrentAtSign()!, atClient.getPreferences()!,
+          atChops: atClient.atChops,
+          enrollmentId: atClient.enrollmentId,
+          signingAlgoType: signingAlgoOf(atClient),
+          atKeysIo: atClient.atKeysIo,
+          secondaryAddressFinder:
+              atClient is AtClientImpl ? atClient.secondaryAddressFinder : null,
+          lookUps: atClient is AtClientImpl ? atClient.lookUps : null);
+
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
-    _logger = AtSignLogger('SyncService (${_atClient.getCurrentAtSign()})');
+    _logger = AtSignLogger('SyncService'
+        ' (${_atClient.getCurrentAtSign()}:${_atClient.enrollmentId})');
     // _logger.level = 'info';
     _lastReceivedServerCommitIdAtKey =
         AtKey.local('lastreceivedservercommitid', currentAtSign).build();
@@ -279,7 +288,7 @@ class SyncServiceImpl implements SyncService {
   Future<void> processSyncRequests() async {
     _logger.finest('in _processSyncRequests');
     if (isStopped) {
-      _logger.info('processSyncRequests: service is stopped; ignoring');
+      _logger.finer('processSyncRequests: service is stopped; ignoring');
       return;
     }
     if (_processInProgress || _syncInProgress) {
@@ -302,8 +311,13 @@ class SyncServiceImpl implements SyncService {
     // _syncInProgress because _isInSync short-circuits on the latter.
     _processInProgress = true;
     final syncRequest = _getSyncRequest();
+    // NOTE: the round answers every queued request, so it reads the server
+    // fresh if any of them is an app's; the one dequeued may be a system
+    // request that was queued ahead of the app's.
+    final anAppIsWaiting = syncRequest.requestSource == SyncRequestSource.app ||
+        syncRequests.any((r) => r.requestSource == SyncRequestSource.app);
     try {
-      final inSync = await _isInSync(syncRequest);
+      final inSync = await _isInSync(syncRequest, forceFresh: anAppIsWaiting);
       if (isStopped) {
         // NOTE: stop() landed while _isInSync was parked on its network read.
         // Anything this run did from here would be sync activity after stop()
@@ -368,7 +382,8 @@ class SyncServiceImpl implements SyncService {
         ..message = 'Exception: $e'
         ..atClientException = wrapped);
     } on _SyncAbandoned {
-      _logger.info('sync ${syncRequest.id} abandoned: the service was stopped');
+      _logger
+          .finer('sync ${syncRequest.id} abandoned: the service was stopped');
       syncRequest.result!.atClientException = AtClientException(
           error_codes['AtClientException'], 'SyncService has been stopped');
       _syncError(syncRequest);
@@ -488,7 +503,7 @@ class SyncServiceImpl implements SyncService {
         pulledUpdates++;
       }
     }
-    _logger.info('sync round ${syncRequest.id} '
+    _logger.finer('sync round ${syncRequest.id} '
         '(${syncRequest.requestSource.name}): pulled $pulledUpdates update(s) '
         'and $pulledDeletes delete(s), $conflicts conflict(s) skipped, '
         'pushed $pushed; server commit id $_latestKnownServerCommitId');
@@ -502,7 +517,7 @@ class SyncServiceImpl implements SyncService {
     // else call the global onDone callback.
     if (syncRequest.onDone != null &&
         syncRequest.requestSource == SyncRequestSource.app) {
-      _logger.info('Sending result to onDone callback');
+      _logger.finer('Sending result to onDone callback');
       syncRequest.onDone!(syncRequest.result);
     } else if (onDone != null) {
       onDone!(syncRequest.result);
@@ -533,6 +548,17 @@ class SyncServiceImpl implements SyncService {
       return;
     }
     hasHadNoSyncRequests = false;
+    if (syncRequests.length == queueSize &&
+        syncRequest.requestSource == SyncRequestSource.system &&
+        syncRequests.any((r) => r.requestSource == SyncRequestSource.app)) {
+      // NOTE: a system request carries nothing the queue does not already
+      // know - its commit id has promoted the cache above - while an app
+      // request is a caller's demand for a fresh answer. Evicting the
+      // caller's request for it would answer that caller from the cache.
+      _logger.finer('_addSyncRequestToQueue: queue at capacity ($queueSize) '
+          'holding an app request; the system request is dropped');
+      return;
+    }
     if (syncRequests.length == queueSize) {
       // Drop-oldest sliding window: evict the head, not the tail. The
       // newest request is always retained (it represents the most
@@ -763,6 +789,8 @@ class SyncServiceImpl implements SyncService {
       try {
         batchResponse = await sendBatch(batchRequests);
         _bailIfStopped();
+      } on _SyncAbandoned {
+        rethrow;
       } on Exception catch (e) {
         // Network or auth failure for the whole batch. Leave queue
         // entries in place — next round retries.
@@ -807,7 +835,7 @@ class SyncServiceImpl implements SyncService {
             // while this batch was in flight. The server has the version this
             // batch carried and the newer op pushes next round, so removing
             // the entry unconditionally here would lose it.
-            _logger.info('${source.atKey} re-enqueued mid-push; '
+            _logger.finer('${source.atKey} re-enqueued mid-push; '
                 'keeping the newer entry queued for the next round');
           }
           _bailIfStopped();
@@ -1101,6 +1129,11 @@ class SyncServiceImpl implements SyncService {
         'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
       });
     } catch (e) {
+      if (isStopped) {
+        _logger.finer('Not syncing ${serverCommitEntry['atKey']} to local: '
+            'the service was stopped ($e)');
+        throw const _SyncAbandoned();
+      }
       _sendTelemetry('_syncFromServer.forEachEntry.exception', {"e": e});
       _logger.severe(
           'Exception: $e while syncing entry to local ${jsonEncode(serverCommitEntry)}');
@@ -1282,16 +1315,16 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  Future<bool> _isInSync(SyncRequest syncRequest) async {
+  /// [forceFresh] says an app is waiting on this answer, see
+  /// [_getServerCommitId]: a system request is a stats notification whose
+  /// commit id has already promoted the cache, so it is read from there.
+  Future<bool> _isInSync(SyncRequest syncRequest,
+      {required bool forceFresh}) async {
     if (_syncInProgress) {
       _logger.finest('*** isInSync..sync in progress');
       return true;
     }
-    // A system request is a stats notification whose commit id has already
-    // promoted the cache, so it is read from there; an app request has no
-    // such value in hand and fetches one, see [_getServerCommitId].
-    var serverCommitId = await _getServerCommitId(
-        forceFresh: syncRequest.requestSource == SyncRequestSource.app);
+    var serverCommitId = await _getServerCommitId(forceFresh: forceFresh);
     // NOTE: stop() may have landed during that network read and closed the
     // store the next line reads.
     _bailIfStopped();
@@ -1551,8 +1584,12 @@ class SyncServiceImpl implements SyncService {
             cameFromServer: true,
           );
     } on UnAuthorizedException catch (e) {
-      _logger.finer(
-          'Failed to sync ${(builder as UpdateVerbBuilder).atKey.toString()} caused by ${e.toString()}');
+      final atKey = switch (builder) {
+        UpdateVerbBuilder(:final atKey) => atKey,
+        DeleteVerbBuilder(:final atKey) => atKey,
+        _ => builder.runtimeType,
+      };
+      _logger.finer('Failed to sync $atKey caused by ${e.toString()}');
     }
   }
 
@@ -1567,10 +1604,10 @@ class SyncServiceImpl implements SyncService {
   /// no-op.
   /// Stops without draining. A round in flight ends at its next step; what it
   /// had not pushed stays queued for the next sync. Callers wanting the queue
-  /// empty first await `waitUntilCaughtUp`.
+  /// empty first wait until [isInSync] answers true.
   Future<void> stop() async {
     if (isStopped) {
-      _logger.info('stop() called, but service is already stopped. Ignoring.');
+      _logger.finer('stop() called, but service is already stopped. Ignoring.');
       return;
     }
     isStopped = true;
@@ -1605,7 +1642,7 @@ class SyncServiceImpl implements SyncService {
   /// not stopped is a no-op.
   Future<void> start() async {
     if (!isStopped) {
-      _logger.info('restart() called, but service is not stopped. Ignoring.');
+      _logger.finer('restart() called, but service is not stopped. Ignoring.');
       return;
     }
     _logger.info('Restarting sync service for $currentAtSign');

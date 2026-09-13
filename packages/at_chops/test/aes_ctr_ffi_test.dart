@@ -178,7 +178,8 @@ void main() {
       }
     });
 
-    test('a nonce of the wrong length is rejected', () async {
+    test('a nonce of the wrong length is rejected in both directions',
+        () async {
       final AESKey key = AESKey.generate(32);
       final AesCtrFfiAlgo algo = makeAlgo(key);
       final Uint8List plain = Uint8List.fromList([1, 2, 3]);
@@ -187,6 +188,11 @@ void main() {
       await expectLater(
           algo.encrypt(plain, iv: InitialisationVector.random(12)),
           throwsA(isA<AtEncryptionException>()));
+      await expectLater(
+          algo.decrypt(plain), throwsA(isA<AtDecryptionException>()));
+      await expectLater(
+          algo.decrypt(plain, iv: InitialisationVector.random(12)),
+          throwsA(isA<AtDecryptionException>()));
     });
 
     /// The backends are interchangeable for a 16-byte IV and for no other

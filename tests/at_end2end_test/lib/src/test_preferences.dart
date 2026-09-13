@@ -142,8 +142,6 @@ class TestPreferences {
     // `posture` is final on AtClientPreference, so it is a constructor
     // argument rather than one of the assignments below.
     var atClientPreference = AtClientPreference(posture: posture);
-    atClientPreference.hiveStoragePath = 'test/hive/client';
-    atClientPreference.commitLogPath = 'test/hive/client/commit';
     atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
     // Optional `root_server.port` (e.g. a base-port virtualenv run); defaults
     // to the standard root port 64 when absent.
@@ -155,38 +153,47 @@ class TestPreferences {
     return atClientPreference;
   }
 
-  /// A preference for a SECOND client of [atSign] living in this same process.
+  /// A preference for a SECOND client of [atSign] living in this same process,
+  /// to open on [storageForCoLocatedClient] with the same [device].
   ///
-  /// [getPreference] memoises one preference per atSign, so every client of
-  /// that atSign otherwise shares one `hiveStoragePath` — and a Hive store's
-  /// identity is its storage path, so one path is one store. Two enrollments
-  /// sharing a store read each other's cached material instead of the material
-  /// their own conveyance delivered, which turns a test about the product into
-  /// a test of the fixture. Separate paths are what a deployment has anyway:
+  /// [getPreference] memoises one preference per atSign, and this runs the
+  /// same posture check: a second client asking for an era the first one is
+  /// not at is refused. Two enrollments sharing a store read each other's
+  /// cached material instead of the material their own conveyance delivered,
+  /// which turns a test about the product into a test of the fixture, so the
+  /// store is separate too. Separate stores are what a deployment has anyway:
   /// two enrollments normally run as two processes.
-  ///
-  /// Returned as a **separate object** rather than the memoised one with its
-  /// path reassigned: `AtSyncQueue` reads `hiveStoragePath` off the preference
-  /// when the queue is first opened rather than when the client is built, so
-  /// reassigning the shared object would move whichever client opens its queue
-  /// after the reassignment — including the first one.
-  ///
-  /// [device] must be unique within the run: it is the whole of what keeps two
-  /// co-located clients apart on disk.
   AtClientPreference forCoLocatedClient(String atSign,
       {required PqPosture posture, required String device}) {
-    // Also the posture check: this refuses a second client asking for an era
-    // the first one is not at.
     final shared = getPreference(atSign, posture: posture);
     final preference = AtClientPreference(posture: posture)
-      ..hiveStoragePath = 'test/hive/client/$atSign/$device'
-      ..commitLogPath = 'test/hive/client/$atSign/$device/commit'
       ..rootDomain = shared.rootDomain
       ..rootPort = shared.rootPort
       ..syncRegex = shared.syncRegex;
     refuseDurableWritesToLongLivedAtSigns(atSign, preference);
     return preference;
   }
+
+  /// The directory every client this pack opens keeps its store under.
+  static const String storageRoot = 'test/hive/client';
+
+  /// The store for [atSign]'s own client, closed by the client that opens it.
+  ///
+  /// A fresh bundle on every call, at the same location, so a client stopped
+  /// and reopened reads back what its predecessor wrote and a retrofit's new
+  /// enrollment takes the store over without a hand-over step.
+  AtClientStorage storageFor(String atSign) => HiveAtClientStorage(
+      atSign: atSign, storagePath: storageRoot, closedByClient: true);
+
+  /// The store for a SECOND client of [atSign] in this same process, kept
+  /// apart from [storageFor]'s by [device], which must be unique within the
+  /// run: it is the whole of what keeps two co-located clients apart on disk.
+  AtClientStorage storageForCoLocatedClient(String atSign,
+          {required String device}) =>
+      HiveAtClientStorage(
+          atSign: atSign,
+          storagePath: '$storageRoot/$atSign/$device',
+          closedByClient: true);
 }
 
 /// A posture's name, for a refusal message.

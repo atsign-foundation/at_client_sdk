@@ -39,6 +39,28 @@ abstract interface class AtCommandExecutor {
       {int? maxWaitMilliSeconds, int? transientWaitTimeMillis});
 }
 
+/// Builds the connection a client uses to reach an atServer: what an
+/// application hands the entry points so that every connection the client
+/// opens - its own, its sync's, its monitor's - travels the way the
+/// application chose.
+///
+/// The factory captures **how bytes travel**: the transport and its settings,
+/// or a different [AtLookUp] implementation altogether. Each call names
+/// **what the connection is for**: [atSign] is whose atServer, [rootDomain]
+/// is where the atDirectory that finds it is, [authenticator] is how the
+/// connection authenticates (null for one that never does),
+/// [secondaryAddressFinder] replaces the atDirectory lookup when the caller
+/// holds one, and [clientConfig] is what the connection announces about the
+/// client. The default is `secureSocketLookUps` in
+/// `package:at_lookup/at_lookup_io.dart`.
+typedef AtLookUpFactory = AtLookupMuxable Function({
+  required String atSign,
+  required AtRootDomain rootDomain,
+  required AtAuthenticator? authenticator,
+  SecondaryAddressFinder? secondaryAddressFinder,
+  Map<String, dynamic> clientConfig,
+});
+
 abstract interface class AtLookUp {
   /// Build a lookup that talks to an atServer over TLS.
   ///
@@ -74,6 +96,10 @@ abstract interface class AtLookUp {
   /// here: a caller wanting the TLS defaults writes
   /// `secureSocketTransport(SecureSocketConfig())` and thereby states it,
   /// while a caller on another transport says nothing about TLS at all.
+  ///
+  /// [onConnect] runs on every connection this lookup opens, once it is up
+  /// and before anything else is sent on it: a proxy that needs `from:` first
+  /// to learn which atServer the connection is for is the case it exists for.
   static AtLookupMuxable withSecureSocket({
     required String atSign,
     required AtRootDomain rootDomain,
@@ -81,6 +107,7 @@ abstract interface class AtLookUp {
     required AtLookupTransport transport,
     Map<String, dynamic> clientConfig = const {},
     SecondaryAddressFinder? secondaryAddressFinder,
+    Future<void> Function(AtCommandExecutor connection)? onConnect,
   }) {
     return AtLookupImpl(
       atSign,
@@ -92,6 +119,7 @@ abstract interface class AtLookUp {
       secureSocketFactory: transport.socketFactory,
       socketListenerFactory: transport.listenerFactory,
       outboundConnectionFactory: transport.connectionFactory,
+      onConnect: onConnect,
     )..authenticator = authenticator;
   }
 
@@ -145,8 +173,8 @@ abstract interface class AtLookUp {
   /// Deprecated as a *credential*. Authentication runs through an injected
   /// [AtAuthenticator] instead, so at_lookup no longer needs to hold key
   /// material to authenticate. Callers that read this for crypto which is not
-  /// authentication should be handed their own [AtChops] - that is what
-  /// at_auth EnrollmentApprover.approve takes an approverChops for.
+  /// authentication should be handed their own key material - that is what
+  /// at_auth EnrollmentApprover.approve takes its approverKeys for.
   @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
       'instead - at_auth builds one with authenticatorForChops(). '
       'Removed with the credential ladder in the next major release.')

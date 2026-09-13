@@ -3,6 +3,8 @@ import 'package:at_client/at_client.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'mocks.dart';
+import 'test_keypairs.dart';
+import 'ml_dsa_keyfile.dart';
 
 /// A mock [AtClient] whose puts and gets go through [remoteData], so several
 /// clients of the same atSign share one view of the atServer.
@@ -25,7 +27,8 @@ import 'mocks.dart';
 /// without it a `get` returns an [AtValue] with none, and an assertion about
 /// metadata fails for want of a fixture rather than for want of the feature.
 ///
-/// Callers must `registerFallbackValue(AtKey())` in `setUpAll`.
+/// Callers must `registerFallbackValue(AtKey())` in `setUpAll`; this registers
+/// the [NotificationParams] fallback its own `notify` matcher needs.
 MockAtClient buildRemoteBackedMockClient({
   required String atSign,
   required String enrollmentId,
@@ -36,10 +39,21 @@ MockAtClient buildRemoteBackedMockClient({
   List<String>? keyEstablishmentAlgorithms,
   PqPosture? posture,
 }) {
+  registerFallbackValue(NotificationParams.forUpdate(AtKey()));
   final atClient = MockAtClient(
       keyEstablishmentAlgorithms: keyEstablishmentAlgorithms, posture: posture);
-  when(() => atClient.atChops).thenReturn(AtChopsImpl(
-      AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+  final pair = pkamKeyPairFor(atSign, enrollmentId);
+  when(() => atClient.atKeysIo)
+      .thenReturn(keysHoldingApkam(atSign, enrollmentId, pair));
+  // NOTE: the same keypair twice. A test that swaps in a key source of its
+  // own, or none, leaves the client no keypair there, and the AtChops door
+  // is what still answers for it.
+  // ignore: deprecated_member_use
+  when(() => atClient.atChops).thenReturn(AtChopsImpl(AtChopsKeys.create(
+      null,
+      // ignore: deprecated_member_use
+      AtPkamKeyPair.create(
+          pair.atPublicKey.publicKey, pair.atPrivateKey.privateKey))));
   when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
   when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
@@ -47,6 +61,8 @@ MockAtClient buildRemoteBackedMockClient({
   final atLookUp = MockAtLookupImpl();
   when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
   when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
+  // the bridge reads the enrollment id off the lookup until the ladder goes
+  // ignore: deprecated_member_use
   when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
 
   final localValues = localData ?? remoteData;
@@ -64,6 +80,36 @@ MockAtClient buildRemoteBackedMockClient({
     meta?[atKey.toString()] = atKey.metadata;
     return Future.value(true);
   });
+
+  when(() => atClient.delete(any(),
+          isDedicated: any(named: 'isDedicated'),
+          deleteRequestOptions: any(named: 'deleteRequestOptions')))
+      .thenAnswer((inv) {
+    final keyString = inv.positionalArguments[0].toString();
+    final options =
+        inv.namedArguments[#deleteRequestOptions] as DeleteRequestOptions?;
+    final remote = options?.useRemoteAtServer ?? false;
+    (remote ? remoteData : localValues).remove(keyString);
+    (remote ? remoteMetadata : localMeta)?.remove(keyString);
+    return Future.value(true);
+  });
+
+  // NOTE: the notify succeeds and delivers nothing. It models the wake-up a
+  // writer fires after storing a value another enrollment must read - a
+  // best-effort nudge on top of a stored envelope, never the route the value
+  // itself travels. A fixture that delivered would hand every test built on
+  // this a second, asynchronous path to the envelope it drives by hand.
+  final notifications = MockNotificationService();
+  when(() => atClient.notificationService).thenReturn(notifications);
+  when(() => notifications.notify(any(),
+      waitForFinalDeliveryStatus: any(named: 'waitForFinalDeliveryStatus'),
+      checkForFinalDeliveryStatus: any(named: 'checkForFinalDeliveryStatus'),
+      encryptValue: any(named: 'encryptValue'),
+      onSuccess: any(named: 'onSuccess'),
+      onError: any(named: 'onError'),
+      onSentToSecondary:
+          any(named: 'onSentToSecondary'))).thenAnswer(
+      (_) async => NotificationResult());
 
   Future<AtValue> getFrom(Invocation inv) {
     final keyString = inv.positionalArguments[0].toString();

@@ -1,4 +1,6 @@
 import 'dart:ffi';
+
+import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
 
 // ── OpenSSL EVP opaque types ─────────────────────────────────────────────────
@@ -230,9 +232,15 @@ typedef EvpDecryptUpdateDart = int Function(Pointer<EVP_CIPHER_CTX>,
 /// `EVP_EncryptUpdate`/`EVP_DecryptUpdate` take `inl` as a C `int`. Dart FFI
 /// silently truncates an out-of-range length to its low 32 bits, so reject it
 /// before the native call.
-void checkInlLength(int length, String name, String fn) {
+///
+/// [thrower] supplies the exception the calling algo reports every other
+/// failure with, so an over-length input keeps the `AtException` chaining
+/// `CryptoRuntime` applies to the rest of them. An `ArgumentError` here would
+/// escape that.
+void checkInlLength(int length, String name, String fn,
+    AtClientException Function(String) thrower) {
   if (length > 0x7fffffff) {
-    throw ArgumentError.value(length, name, 'exceeds the int32 limit of $fn');
+    throw thrower('$name exceeds the int32 limit of $fn');
   }
 }
 

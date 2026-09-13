@@ -43,7 +43,13 @@ class FunctionalTestSyncService {
       testSyncProgressListener = TestSyncProgressListener(logLabel);
       syncSvc.addProgressListener(testSyncProgressListener);
 
-      final int maxSyncCount = 5;
+      // NOTE: a budget in time, not in rounds. The service coalesces
+      // requests and answers a system request from its cache, so a burst of
+      // terminal events can arrive within a hundred milliseconds of each
+      // other while the commit the fresh check saw is still only in a stats
+      // notification on its way; five of those in a row proved nothing about
+      // whether the next round would pull it.
+      final deadline = DateTime.now().add(const Duration(seconds: 15));
       int syncCount = 1;
 
       // Call to syncService.sync to expedite the sync progress
@@ -70,12 +76,12 @@ class FunctionalTestSyncService {
               ' isInSync() confirms server and local are in sync');
           break;
         }
-        if (syncCount >= maxSyncCount) {
+        if (DateTime.now().isAfter(deadline)) {
           _logger.shout('SyncProgress $logLabel: ${syncProgress.syncStatus}'
               ' local ${syncProgress.localCommitId}'
               ' remote ${syncProgress.serverCommitId}');
           throw StateError(
-              'Have synced $syncCount times but still not in sync');
+              'Have synced $syncCount times over 15s but still not in sync');
         }
         if (syncCount > 1) {
           _logger.shout('SyncProgress $logLabel: ${syncProgress.syncStatus}'
@@ -85,6 +91,9 @@ class FunctionalTestSyncService {
               ' but not in sync; syncing again');
         }
         syncCount++;
+        // Let the round the last trigger started finish, and a pending stats
+        // notification land, before asking again.
+        await Future.delayed(const Duration(milliseconds: 250));
         // Call to syncService.sync to expedite the sync progress
         syncImpl.sync();
         // ignore: invalid_use_of_visible_for_testing_member

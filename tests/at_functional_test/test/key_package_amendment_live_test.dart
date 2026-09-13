@@ -11,6 +11,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope, verifyEnvelope;
+import 'package:at_functional_test/src/at_keys_initializer.dart'
+    show AtEncryptionKeysLoader;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
@@ -35,8 +37,9 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    final keysIo = InMemoryAtKeysIo();
-    await keysIo.write(atSign, AtKeys());
+    // Held in memory, so whatever the approver files stays with the store.
+    final keysIo = InMemoryAtKeysIo.holding(atSign,
+        AtEncryptionKeysLoader.getInstance().createAtKeysFromDemoKeys(atSign));
     final manager = await TestUtils.initAtClient(atSign, namespace,
         atKeysIo: keysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
@@ -179,7 +182,7 @@ void main() {
 
     // Arm 1: one approved enrollment reaching for another's record.
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
                 enrollmentId: other.enrollmentId, metadata: amendment()),
             lookupOf(mine)),
@@ -193,7 +196,7 @@ void main() {
     // connection to TRUE, so a check written as an authorization lookup rather
     // than an identity test passes here.
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
                 enrollmentId: mine.enrollmentId, metadata: amendment()),
             approver.getRemoteSecondary()!.atLookUp),
@@ -205,7 +208,7 @@ void main() {
     // The control: the same shape of request on its OWN connection is
     // accepted. Without it the two refusals would prove only that the verb
     // refuses everything.
-    final ok = await AtEnrollment.create().update(
+    final ok = await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
             enrollmentId: mine.enrollmentId, metadata: amendment()),
         lookupOf(mine));
@@ -228,14 +231,14 @@ void main() {
 
     // A field this build has no opinion about, standing in for one a later
     // build adds.
-    await AtEnrollment.create().update(
+    await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
             enrollmentId: client.enrollmentId,
             metadata: {'somethingLaterBuildsAdded': 'keep me'}),
         lookupOf(client));
 
     final pub = base64Encode(List<int>.filled(1216, 11));
-    await AtEnrollment.create().update(
+    await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(enrollmentId: client.enrollmentId, metadata: {
           'keyPackage': KeyPackage.payloadFor(
             createdAt: DateTime.now().toUtc(),
@@ -271,45 +274,35 @@ void main() {
   /// amendment is a startup reconciliation against the configured list, not a
   /// call.
   ///
-  /// NOTE: the client cache is evicted first. `AtClientImpl` keys it by
-  /// `(atSign, enrollmentId)` and `refuseChangedRolloutAxes` throws when a
-  /// second client asks for the same key under different rollout axes, so
-  /// without the eviction this hands back the first client.
+  /// NOTE: the client cache is evicted first. `AtClientImpl` files clients
+  /// by `(atSign, enrollmentId)`, and `open` refuses a second client for an
+  /// enrollment that is still filed as live.
   Future<AtClient> reopen(
       String device, String enrollmentId, List<String> algorithms) async {
     AtClientImpl.atClientInstanceMap
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
     final keysIo = keyfiles[device]!;
-    final auth = AtAuth.create();
-    final response = await auth.authenticate(AtAuthRequest(
-      atSign,
-      rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort),
-      atKeysIo: keysIo,
-    ));
-    expect(response.session?.enrollmentId, enrollmentId,
-        reason: 'the device keyfile must resolve to $enrollmentId, or the '
-            'amendment below would be measuring the wrong enrollment');
-    expect(response.isSuccessful, isTrue,
-        reason: 'could not re-authenticate as $enrollmentId, so the amendment '
-            'below would be measuring the wrong enrollment');
+    expect(
+        await Atsign(atSign).authenticatesAs(
+            keys: keysIo,
+            rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort)),
+        enrollmentId,
+        reason: 'the device keyfile must resolve to $enrollmentId and '
+            're-authenticate as it, or the amendment below would be '
+            'measuring the wrong enrollment');
 
-    final storage = 'test/hive/amend/$runId-$device';
     final preference = TestUtils.getPreference(atSign,
-        keyEstablishmentAlgorithms: algorithms, posture: legacyPlusPqProviders)
-      ..hiveStoragePath = storage
-      ..commitLogPath = storage;
-    final manager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign, namespace, preference,
-        atChops: auth.atChops,
-        atKeysIo: keysIo,
-        enrollmentId: enrollmentId,
-        storage: TestUtils.storageForPrincipal(atSign, enrollmentId));
+        keyEstablishmentAlgorithms: algorithms, posture: legacyPlusPqProviders);
     // NOTE: startup is deliberately NOT awaited here. The PQ bootstrap sweeps
     // for envelopes, and a sweep consumes and DELETES what it opens, so a
     // caller that awaits `startupComplete` before subscribing to
     // `receivedEnvelopes` has already missed the event — that stream is a
     // broadcast stream and does not replay.
-    return manager.atClient;
+    return Atsign(atSign).open(
+        keys: keysIo,
+        preference: preference,
+        namespace: namespace,
+        storage: TestUtils.storageForPrincipal(atSign, enrollmentId));
   }
 
   test('UC-A2.5 · an envelope sealed before the amendment still opens after it',
@@ -430,29 +423,22 @@ void main() {
       // order. Evicted first, as any second construction must be.
       AtClientImpl.atClientInstanceMap
           .remove(AtClientImpl.instanceKey(atSign, client.enrollmentId));
-      final storage = 'test/hive/amend/$runId-$device-sender';
       final preference = TestUtils.getPreference(atSign,
           keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
           sealsToKeyAlgorithms: order,
-          posture: legacyPlusPqProviders)
-        ..hiveStoragePath = storage
-        ..commitLogPath = storage;
-      final auth = AtAuth.create();
-      final response = await auth.authenticate(AtAuthRequest(
-        atSign,
-        rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort),
-        atKeysIo: keyfiles[device]!,
-      ));
-      expect(response.isSuccessful, isTrue);
-      expect(response.session!.enrollmentId, client.enrollmentId);
-      final manager = await AtClientManager(atSign).setCurrentAtSign(
-          atSign, namespace, preference,
-          atChops: auth.atChops,
-          atKeysIo: keyfiles[device]!,
-          enrollmentId: client.enrollmentId,
+          posture: legacyPlusPqProviders);
+      expect(
+          await Atsign(atSign).authenticatesAs(
+              keys: keyfiles[device]!,
+              rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort)),
+          client.enrollmentId);
+      final sender = await Atsign(atSign).open(
+          keys: keyfiles[device]!,
+          preference: preference,
+          namespace: namespace,
           storage: TestUtils.storageForPrincipal(atSign, client.enrollmentId));
 
-      final party = AtClientSecretSharing(manager.atClient)
+      final party = AtClientSecretSharing(sender)
         ..sendWakeUpNotification = false;
       await party.register();
 
@@ -561,7 +547,7 @@ void main() {
     // The control, and it runs FIRST: the same request on the same connection
     // is accepted while the enrollment is approved. Without it, the refusal
     // below is equally explained by a malformed request or a broken fixture.
-    final accepted = await AtEnrollment.create().update(
+    final accepted = await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
             enrollmentId: victim.enrollmentId, metadata: amendment('a')),
         lookupOf(victim));
@@ -578,7 +564,7 @@ void main() {
     // Arm 1: the enrollment itself. It is refused before the request is even
     // considered — the connection cannot re-authenticate.
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
                 enrollmentId: victim.enrollmentId, metadata: amendment('b')),
             lookupOf(victim)),
@@ -593,7 +579,7 @@ void main() {
     // the first arm leaves open: an owner connection is not revoked and could
     // otherwise write the record on its behalf.
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
                 enrollmentId: victim.enrollmentId, metadata: amendment('c')),
             approver.getRemoteSecondary()!.atLookUp),

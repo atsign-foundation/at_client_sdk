@@ -6,13 +6,17 @@ import 'package:at_auth/at_auth.dart'
     show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
-import 'package:at_client/src/enroll/pq_native_onboard.dart'
+import 'package:at_client/src/enroll/first_enrollment.dart'
     show firstEnrollmentAppName, firstEnrollmentDeviceName;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/at_reachability.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/client/durable_address_finder.dart';
+import 'package:at_client/src/client/secondary_address_finder_source.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
@@ -63,6 +67,10 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
+/// A defect met while stopping a client, paired with the stack of where it was
+/// raised so the step that raised it stays identifiable after the rethrow.
+typedef _HeldDefect = ({Error error, StackTrace stack});
+
 /// Implementation of the [AtClient] interface.
 class AtClientImpl implements AtClient {
   AtClientPreference? _preference;
@@ -89,6 +97,11 @@ class AtClientImpl implements AtClient {
   @visibleForTesting
   LocalSecondary? localSecondary;
   RemoteSecondary? _remoteSecondary;
+
+  late final AtConnection _connection;
+
+  @override
+  AtConnection get connection => _connection;
   static final upperCaseRegex = RegExp(r'[A-Z]');
 
   PutRequestTransformer putRequestTransformer = PutRequestTransformer();
@@ -116,6 +129,11 @@ class AtClientImpl implements AtClient {
   AtTelemetryService? get telemetry => _telemetry;
 
   @override
+  @Deprecated(
+      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
+      'and it derives what it needs from that; nothing outside at_client needs '
+      'the AtChops it holds. Removed with the AtChops compatibility API in the '
+      'next major release.')
   set atChops(AtChops? atChops) {
     _atChops = atChops;
     if (_remoteSecondary != null) {
@@ -124,6 +142,11 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+  @Deprecated(
+      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
+      'and it derives what it needs from that; nothing outside at_client needs '
+      'the AtChops it holds. Removed with the AtChops compatibility API in the '
+      'next major release.')
   AtChops? get atChops => _atChops;
 
   @override
@@ -529,6 +552,28 @@ class AtClientImpl implements AtClient {
   static bool holdsLiveClient(String atSign) =>
       liveClientsFor(atSign).isNotEmpty;
 
+  /// Whether a live client is filed for [atSign] as [enrollmentId], null
+  /// meaning the atSign's own credential; a supersession is followed to the
+  /// client that now runs under it.
+  static bool holdsLiveClientAs(String atSign, String? enrollmentId) =>
+      atClientInstanceMap.containsKey(_currentInstanceKey(
+          instanceKey(AtUtils.fixAtSign(atSign), enrollmentId)));
+
+  /// The live client whose storage is at [location], or null when none is.
+  static AtClientImpl? liveClientOn(String location) {
+    for (final client in atClientInstanceMap.values) {
+      if (client is AtClientImpl) {
+        final storage = client.storage;
+        if (storage is AtClientStorageBase &&
+            storage.location == location &&
+            !client.isStopped) {
+          return client;
+        }
+      }
+    }
+    return null;
+  }
+
   /// Every client filed for [atSign], under any enrollment.
   ///
   /// One atSign can hold several entries, one per enrolled principal, so a
@@ -643,8 +688,15 @@ class AtClientImpl implements AtClient {
     AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
     String? enrollmentId,
     AtClientStorage? storage,
+
+    /// When true, [enrollmentId], or what the keys name, is the principal
+    /// exactly: a null means the atSign's own credential and never falls
+    /// back to a lone enrolled client, which a caller naming no enrollment
+    /// is otherwise handed.
+    bool exactEnrollment = false,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -682,7 +734,9 @@ class AtClientImpl implements AtClient {
       }
     }
     // Fetch cached AtClientImpl for re-use, or create a new one and init it.
-    final cacheKey = _resolveCacheKey(currentAtSign, enrollmentId);
+    final cacheKey = exactEnrollment
+        ? _currentInstanceKey(instanceKey(currentAtSign, enrollmentId))
+        : _resolveCacheKey(currentAtSign, enrollmentId);
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(cacheKey)) {
       atClientImpl = atClientInstanceMap[cacheKey];
@@ -710,6 +764,7 @@ class AtClientImpl implements AtClient {
         atChops: atChops,
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
+        lookUps: lookUps,
         enrollmentId: enrollmentId,
         storage: storage,
       );
@@ -746,6 +801,7 @@ class AtClientImpl implements AtClient {
     AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
     this.enrollmentId,
     AtClientStorage? storage,
   }) {
@@ -753,6 +809,7 @@ class AtClientImpl implements AtClient {
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
+    this.lookUps = lookUps ?? defaultLookUps(preference);
     _preference?.namespace ??= namespace;
     // If the app configured a process-wide network timeout, apply it as the
     // single default that bounds every atServer connect / atDirectory lookup /
@@ -774,6 +831,100 @@ class AtClientImpl implements AtClient {
     _encryptionService = encryptionService;
     _atChops = atChops;
     _atKeysIo = atKeysIo;
+    _connection = AtConnection(
+        atSign: _atSign, attempt: _attemptConnection, onOnline: _recordOnline);
+  }
+
+  /// One bounded connect and authenticate on this client's own connection,
+  /// classified into the three outcomes; what [AtConnection.attempt] runs.
+  ///
+  /// A connection that is already authenticated answers at once. An attempt
+  /// that outlives [budget] is reported offline and left to finish on its own,
+  /// so a slow network that eventually answers still moves the state.
+  Future<AtConnectionState> _attemptConnection(Duration budget) async {
+    final remote = _remoteSecondary;
+    if (remote == null) {
+      return AtConnectionState.offline(AtConnectionCause.unattempted);
+    }
+    try {
+      final authenticated = await remote.atLookUp
+          .pkamAuthenticate(enrollmentId: enrollmentId)
+          .timeout(budget);
+      if (authenticated) return AtConnectionState.online();
+      return AtConnectionState.offline(AtConnectionCause.unreachable,
+          error: 'the atServer gave no challenge to sign');
+    } on TimeoutException catch (e) {
+      return AtConnectionState.offline(AtConnectionCause.unreachable, error: e);
+    } catch (e) {
+      return classifyConnectionFailure(e) ??
+          AtConnectionState.offline(AtConnectionCause.unreachable, error: e);
+    }
+  }
+
+  /// The local record that this principal has been online on this device,
+  /// which is what lets a later refusal hand back a client rather than throw.
+  String get _onlineMarkerKey =>
+      AtKey.local('lifecycle.online', _atSign).build().toString();
+
+  /// The local record of where this atSign's atServer is, as the atDirectory
+  /// last answered, for a start that cannot reach the atDirectory.
+  String get _atServerAddressKey =>
+      AtKey.local('lifecycle.atserver', _atSign).build().toString();
+
+  SecondaryAddressFinder? _defaultAddressFinder;
+  DurableSecondaryAddressFinder? _secondaryAddressFinder;
+
+  /// The atDirectory lookup every connection of this client resolves its
+  /// atServer with: the process-wide finder when one is registered, else one
+  /// of this client's own, either way remembering the answer in this
+  /// client's storage so a start with the atDirectory unreachable still
+  /// finds the atServer. A client with no local storage remembers nothing.
+  SecondaryAddressFinder get secondaryAddressFinder =>
+      _secondaryAddressFinder ??= DurableSecondaryAddressFinder(_atSign,
+          inner: () =>
+              processSecondaryAddressFinder() ??
+              (_defaultAddressFinder ??= CacheableSecondaryAddressFinder(
+                  _preference!.rootDomain, _preference!.rootPort)),
+          read: () async {
+            final store = localSecondary?.keyStore;
+            if (store == null) return null;
+            try {
+              return (await store.get(_atServerAddressKey))?.data;
+            } on KeyNotFoundException {
+              return null;
+            }
+          },
+          write: (record) async {
+            final local = localSecondary;
+            if (local == null || _isStopped) return;
+            await local.putValue(_atServerAddressKey, record);
+          });
+
+  /// Whether this client's principal has ever been online over this storage.
+  Future<bool> hasBeenOnline() async {
+    final store = localSecondary?.keyStore;
+    if (store == null) return false;
+    try {
+      final data = await store.get(_onlineMarkerKey);
+      final recorded = jsonDecode(data?.data ?? '{}');
+      return recorded is Map &&
+          recorded['enrollmentId'] ==
+              (enrollmentId ?? EnrollmentConstants.primaryEnrollmentId);
+    } on KeyNotFoundException {
+      return false;
+    }
+  }
+
+  Future<void> _recordOnline() async {
+    final local = localSecondary;
+    if (local == null || _isStopped) return;
+    await local.putValue(
+        _onlineMarkerKey,
+        jsonEncode({
+          'enrollmentId':
+              enrollmentId ?? EnrollmentConstants.primaryEnrollmentId,
+          'at': DateTime.now().toUtc().toIso8601String(),
+        }));
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
@@ -866,9 +1017,7 @@ class AtClientImpl implements AtClient {
     _pqBootstrap = PqClientBootstrap(
       this,
       keysIo: _atKeysIo,
-      gates: (_preference?.posture.configuresPqProviders ?? true)
-          ? const PqStartupGates()
-          : const PqStartupGates.inert(),
+      gates: _preference?.resolvedPqStartupGates ?? const PqStartupGates(),
       privilege: EnrollmentRecordPrivilegeResolver(this,
           listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
               .fetchEnrollmentRequests),
@@ -1107,42 +1256,89 @@ class AtClientImpl implements AtClient {
 
   Future<void> _stop({required bool keepStorageOpen}) async {
     if (_isStopped) {
-      _logger.info('stop() called: but client is already stopped. Ignoring.');
+      _logger.finer('stop() called: but client is already stopped. Ignoring.');
       return;
     }
 
     _isStopped = true;
     _logger.info('stop() called: stopping at_client for $_atSign');
 
-    await _stopBackgroundProcesses();
-    await _releaseStorage(keepOpen: keepStorageOpen);
+    // Both run before either can raise: a defect in the services must not
+    // leave storage claimed, and neither must leave a stopped client in the
+    // map for the next caller to find.
+    final serviceDefect = await _stopBackgroundProcesses();
+    final storageDefect = await _releaseStorage(keepOpen: keepStorageOpen);
     // NOTE: by identity, not by key — the map is keyed (atSign, enrollmentId),
     // so a client filed under an enrollment is not found under the bare atSign
     // and would be left in the map, stopped, for the next caller to restart.
     atClientInstanceMap.removeWhere((_, client) => identical(client, this));
+
+    final defect = serviceDefect ?? storageDefect;
+    if (defect != null) {
+      // NOTE: rethrown with the stack of where it was RAISED. A bare `throw`
+      // here restacks it onto this line, which names every teardown step
+      // equally and so names none of them.
+      Error.throwWithStackTrace(defect.error, defect.stack);
+    }
   }
 
   /// Drops this client's claim on its storage, closing a client-closed bundle
   /// unless [keepOpen]. A stopped client keeps nothing open and cannot be
   /// restarted.
-  Future<void> _releaseStorage({bool keepOpen = false}) async {
+  Future<_HeldDefect?> _releaseStorage({bool keepOpen = false}) async {
     final storage = _storage;
-    if (storage == null) return;
+    if (storage == null) return null;
     _storageReleased = true;
+    _HeldDefect? defect;
     try {
       await storage.detach(this);
       if (!keepOpen && storage.closedByClient) await storage.close();
-    } catch (e) {
+    } on Exception catch (e) {
       _logger.warning('Error while releasing storage: $e');
+    } on Error catch (e, stack) {
+      _logger.severe('Defect while releasing storage, which names a bug '
+          'rather than a passing condition: $e');
+      defect = (error: e, stack: stack);
     }
     _storage = null;
+    return defect;
   }
 
-  Future<void> _stopBackgroundProcesses() async {
+  /// Stops everything this client runs, and hands back the first DEFECT it
+  /// met rather than the first failure.
+  ///
+  /// The two are not the same thing, and the difference is why this used to
+  /// hide bugs. A teardown step can legitimately fail on an `Exception` — a
+  /// box already closed, a socket already gone — and the remaining steps must
+  /// still run, so those are logged and stepped over. An `Error` is a defect:
+  /// a `TypeError` here means the field held something of the wrong type, and
+  /// swallowing it left this client reporting itself stopped while its
+  /// services ran on. Defects are therefore held, not swallowed, and raised
+  /// by the caller once every step has had its turn.
+  Future<_HeldDefect?> _stopBackgroundProcesses() async {
     // NOTE: first, so a stopped client publishes nothing further — the PQ
     // startup halts at its next step boundary.
     _pqBootstrap?.stop();
-    try {
+
+    _HeldDefect? defect;
+    Future<void> attempt(String what, Future<void> Function() body) async {
+      try {
+        await body();
+      } on Exception catch (e) {
+        _logger.warning('Error while $what: $e');
+      } on Error catch (e, stack) {
+        _logger.severe(
+            'Defect while $what, which names a bug rather than a passing '
+            'condition: $e');
+        defect ??= (error: e, stack: stack);
+      }
+    }
+
+    // NOTE: before the services and the remote are closed, so the requests
+    // those closes fail are not recorded as the atServer being unreachable.
+    await attempt('closing the connection state', _connection.close);
+
+    await attempt('tearing down keystore-event timers', () async {
       _expiryTimer?.cancel();
       _expiryTimer = null;
       await _expirySub?.cancel();
@@ -1152,33 +1348,44 @@ class AtClientImpl implements AtClient {
       await _availableSub?.cancel();
       _availableSub = null;
       if (!_dataEventsCtrl.isClosed) await _dataEventsCtrl.close();
-    } catch (e) {
-      _logger.warning('Error while tearing down keystore-event timers: $e');
+    });
+
+    // NOTE: type-tested, not cast. These fields are declared as the
+    // INTERFACES, and neither interface declares `stop()` — only the concrete
+    // classes have one. So a field holding null (a client that never finished
+    // initialising) or any other implementation of the interface is a legal
+    // state the type system permits, and there is simply nothing to stop.
+    // Casting made that a TypeError, which the old bare `catch` then swallowed
+    // at `warning`: the effect was to hide a genuine defect behind a condition
+    // that is not one.
+    final sync = _syncService;
+    if (sync is SyncServiceImpl) {
+      await attempt('closing sync service', () async => sync.stop());
+    } else if (sync != null) {
+      _logger.info('Nothing to stop for the sync service: '
+          '${sync.runtimeType} implements SyncService but has no concrete '
+          'stop()');
     }
 
-    try {
-      await (_syncService as SyncServiceImpl).stop();
-    } catch (e) {
-      _logger.warning('Error while closing sync service: $e');
-    }
-
-    try {
-      await (_notificationService as NotificationServiceImpl).stop();
-    } catch (e) {
-      _logger.warning('Error while closing notification service: $e');
+    final notifications = _notificationService;
+    if (notifications is NotificationServiceImpl) {
+      await attempt(
+          'closing notification service', () async => notifications.stop());
+    } else if (notifications != null) {
+      _logger.info('Nothing to stop for the notification service: '
+          '${notifications.runtimeType} implements NotificationService but '
+          'has no concrete stop()');
     }
 
     if (_remoteSecondary != null) {
-      try {
-        await _remoteSecondary!.closeConnection();
-      } catch (e) {
-        _logger.warning('Error while closing remote secondary connection: $e');
-      }
+      await attempt('closing remote secondary connection',
+          () async => _remoteSecondary!.closeConnection());
     }
 
     _syncService = null;
     _notificationService = null;
     _enrollmentService = null;
+    return defect;
   }
 
   @Deprecated(
@@ -1235,19 +1442,27 @@ class AtClientImpl implements AtClient {
   /// under an ML-DSA enrollment throws out of at_chops rather than failing
   /// authentication.
   ///
+  /// Builds every connection this client opens: its own, its sync's, its
+  /// monitor's. The application's, when it supplied one to the verb that
+  /// built the client; otherwise TLS on TCP from the preference.
+  late final AtLookUpFactory lookUps;
+
   /// [atLookUp] injects an already-built lookup; passing none lets
-  /// [RemoteSecondary] open its own connection, separate from the client's
-  /// shared one.
+  /// [RemoteSecondary] open its own connection through [lookUps], separate
+  /// from the client's shared one.
   @visibleForTesting
   RemoteSecondary buildRemoteSecondary({AtLookUp? atLookUp}) => RemoteSecondary(
         _atSign,
         _preference!,
         atChops: atChops,
         atLookUp: atLookUp,
+        lookUps: lookUps,
         privateKey: _preference!.privateKey,
         enrollmentId: enrollmentId,
         signingAlgoType: signingAlgoType,
         atKeysIo: _atKeysIo,
+        connection: _connection,
+        secondaryAddressFinder: secondaryAddressFinder,
       );
 
   @override
@@ -1699,7 +1914,12 @@ class AtClientImpl implements AtClient {
     //Get encryptionPrivateKey for public key to signData
     String? encryptionPrivateKey;
     if (atKey.metadata.isPublic == true) {
-      encryptionPrivateKey = await localSecondary?.getEncryptionPrivateKey();
+      try {
+        encryptionPrivateKey = await localSecondary?.getEncryptionPrivateKey();
+      } on KeyNotFoundException {
+        // Left null: the transformer refuses to sign with the message a
+        // caller acts on, rather than the keystore's record name.
+      }
     }
     // Transform put request
     // Optionally passing encryption private key to sign the public data.
@@ -1952,6 +2172,7 @@ class AtClientImpl implements AtClient {
       }
 
       final newSession = await retrofitIdentity(
+        lookUps: lookUps,
         session: AtAuthSession(
           atSign: _atSign,
           rootDomain:
@@ -1961,8 +2182,8 @@ class AtClientImpl implements AtClient {
           // Null for a pre-enrollment atSign, which is how at_auth decides it
           // must approve its own request.
           enrollmentId: id,
-          atLookUp: _remoteSecondary!.atLookUp,
         ),
+        atLookUp: _remoteSecondary!.atLookUp,
         preference: _preference!,
         appName: appName,
         deviceName: deviceName,
@@ -1988,9 +2209,8 @@ class AtClientImpl implements AtClient {
       _logger.warning('The retrofit of $subject did not complete, so this '
           'client comes up on $subject and the next start will try again: $e');
     } on Error catch (e, stackTrace) {
-      // NOTE: an escaping Error would fail construction, and it is reachable —
-      // `retrofitIdentity` throws `ArgumentError` for a session with no
-      // AtLookUp, and an `AtKeysIo` is free to throw from `read`.
+      // NOTE: an escaping Error would fail construction, and it is reachable:
+      // an `AtKeysIo` is free to throw from `read`.
       _logger.severe('The retrofit of $subject failed with an error rather '
           'than an exception, which names a defect rather than a passing '
           'condition. This client comes up on $subject: $e\n$stackTrace');
@@ -2048,9 +2268,7 @@ class AtClientImpl implements AtClient {
         );
       }
     } on KeyNotFoundException catch (e) {
-      _logger.warning(
-        '_createAtChops  - Exception while getting encryption key pair from local secondary: ${e.toString()}',
-      );
+      _logger.finer('No encryption key pair in $atSign\'s local store: $e');
     }
     try {
       var pkamPublicKey = await localSecondary!.getPkamPublicKey();
@@ -2060,10 +2278,26 @@ class AtClientImpl implements AtClient {
         atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
       }
     } on KeyNotFoundException catch (e) {
-      _logger.warning(
-        '_createAtChops  - Exception while getting pkam key pair from local secondary: ${e.toString()}',
-      );
+      _logger.finer('No PKAM key pair in $atSign\'s local store: $e');
     }
+
+    // NOTE: said once, after both reads, because what matters is what this
+    // client ended up holding rather than which lookup missed. A store with
+    // neither keypair is the ordinary state before onboarding; a store with
+    // one of the two is a broken store, and only that is worth a warning.
+    // Each miss keeps its own detail at `finer`.
+    if (atEncryptionKeyPair == null && atPkamKeyPair == null) {
+      _logger.info('$atSign\'s local store holds no key material, so this '
+          'client holds none: it authenticates and decrypts nothing until the '
+          'store is populated.');
+    } else if (atEncryptionKeyPair == null || atPkamKeyPair == null) {
+      _logger.warning('$atSign\'s local store holds '
+          '${atPkamKeyPair == null ? 'an encryption' : 'a PKAM'} key pair but '
+          'not the other. A half-populated store is not a state onboarding '
+          'produces, and this client will fail at whichever of the two it '
+          'needs first.');
+    }
+
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
     AtChopsImpl chops = AtChopsImpl(atChopsKeys);
     return chops;
@@ -2074,7 +2308,7 @@ class AtClientImpl implements AtClient {
   ///
   /// Two switches saying opposite things: `allowLegacyCryptoFallback` is
   /// "reach this recipient however you can", `disallowLegacyEncryption` is
-  /// "never write legacy". The second wins. Refusing here rather than at
+  /// "never write with the legacy provider". The second wins. Refusing here rather than at
   /// encryption keeps the error the one the caller can act on — the
   /// destination has no post-quantum key.
   @visibleForTesting
@@ -2180,7 +2414,6 @@ class AtClientImpl implements AtClient {
       ..currentAtSign = _atSign
       ..senderAtSign = senderAtSign
       ..fileLength = fileLength;
-    _logger.info('Sending ack for stream notification:$notification');
     await handler.streamAck(
       notification,
       streamCompletionCallBack,
@@ -2397,10 +2630,8 @@ class AtClientImpl implements AtClient {
   @override
   Future<AtResponse> setSPP(String spp, {Duration? expiry}) async {
     if (expiry == null) {
-      _logger.shout(
-        'WARNING: Setting SPP without an expiration'
-        '- defaulting to ${AtClient.defaultSppExpiry}',
-      );
+      _logger.warning('Setting SPP without an expiration, so it defaults to '
+          '${AtClient.defaultSppExpiry}');
       expiry = AtClient.defaultSppExpiry;
     }
     // SPP should be 6 characters PIN. Throw exception if its less

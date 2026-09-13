@@ -1,7 +1,7 @@
 # decisions.md — Rulings, measured findings & open questions
 
 **Status:** decision record (binding).
-**Scope:** the rulings D-1..D-9 that govern the implementation-neutral `AtClient`
+**Scope:** the rulings D-1..D-16 that govern the implementation-neutral `AtClient`
 work, the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
@@ -342,7 +342,7 @@ become *safe* once storage is per-enrollment: no sibling shares a client's box, 
 on release cannot pull the store out from under another enrollment or an in-flight sync
 round. The per-atSign guard comes out — it is the wrong shape, replaced by
 [D-14](#d-14--the-storage-isolation-design-2026-09-05)'s per-location guard. PR #2208 (the
-release half) is paused behind this ruling; its release code is kept, its guard reworked.
+release half) was paused behind this ruling; its release code was kept, its guard reworked.
 
 ### D-14 — The storage-isolation design (2026-09-05)
 
@@ -397,7 +397,8 @@ the last **claim holder** — which `principalOf` renders as `atSign|enrollmentI
 carries the enrolled principal too.
 
 **4 — `storage:` is injected on both doors.** An optional `storage:` parameter on the direct
-`create` factory, threaded through `AtClientManager.setCurrentAtSign`; omitting it builds the
+factory (`buildAtClient`, as later ruled), threaded through `AtClientManager.setCurrentAtSign`
+(since deprecated in favour of `Atsign.open` plus `AtClientManager.use`); omitting it builds the
 default Hive impl from the preference's storage path (`preference.hiveStoragePath`,
 deprecated per D-12).
 Production omits it. The manager's `refuseChangedStoragePath` short-circuit check comes out —
@@ -408,6 +409,8 @@ the per-location guard subsumes it.
 enrollment per atSign) but unable to hold two live enrollments of one atSign. A fixture
 simulating several builds each via direct `create` with its own injected located storage,
 mirroring the reality that they are separate processes with separate managers.
+`AtClientManager.use(client)` has since added the other half: it makes a caller-owned client
+current without stopping the one it replaces.
 
 **6 — Lifecycle.** A location is registered when its backend opens and released only when it
 closes — never on detach, since a detached-but-open backend still occupies the location.
@@ -431,6 +434,92 @@ rewrite behind the helper — and corrects the stale `hive_at_client_storage.dar
 (distinct paths *do* isolate; only same-location collides). X4a lands on #2208's branch, so
 X4 and X4a ship as one PR: #2208 keeps its release code, e2e keystore initializer and fixture
 fixes, and its per-atSign guard is replaced in place by the per-location one.
+
+### D-15 — The transport is the third leg of the platform bundle, injected at the doors (2026-09-13)
+
+How a client reaches its atServer is the application's to supply, the way its keys
+store and its storage bundle already are. at_lookup declares `AtLookUpFactory`, a
+function from what a connection is *for* (the atSign, the root domain, the
+authenticator or null, an optional `SecondaryAddressFinder`, the client config) to an
+`AtLookupMuxable`; `secureSocketLookUps({config, onConnect})` in `at_lookup_io.dart` is
+the default over TLS on TCP and the one file in at_lookup's io barrel that names the
+transport. Every entry point into at_client — `Atsign.open`, `activate`, `enroll`,
+`resumeEnrollment`, `authenticatesAs`, `buildAtClient`, `AtServiceFactory.atClient` —
+takes `lookUps:` beside `keys:` and `storage:`; the client holds it, and its own
+connection, sync's, the monitor's, the activation and enrollment handshakes and the
+connection a retrofit re-derives on all come from it. The eight decisions behind the
+shape (a function rather than a bundle object; the doors rather than the preference;
+the existing `atLookUp:` instance parameters kept; the preference's TLS fields
+deprecated; at_auth takes instances; the type and default live in at_lookup; the CLI's
+proxy convention becomes the first non-default factory; built in the lifecycle PR) are
+ruling 8 of [the client-lifecycle ledger](../client-lifecycle/decisions.md). It is
+recorded here because it is T9, and because it closes [OQ-3](#5-open-questions) for the
+transport.
+
+**Why a function, and why at the doors.** The other two legs are objects because they
+carry state; a transport carries none the factory cannot capture, so a function is the
+whole of it, and the root domain stays a per-call argument from the preference or the
+verb, so where the atDirectory is does not move. `AtClientPreference` was the wrong
+home for the same reason it was the wrong home for storage: it is serialisable tuning,
+and a transport is a live object. `AtServiceFactory` was the other candidate and takes
+the factory rather than owning it, so the one override anyone ships keeps working.
+
+**The seam rule.** Exactly one place in at_client names the TLS transport:
+`defaultLookUps` in `lib/src/lifecycle/lookups.dart`, which builds the default from the
+three deprecated preference fields and answers with the TLS defaults when no
+preference is in reach. Every other file takes the factory it is handed; a service
+that holds the client as its interface takes the factory through its `create()`, the
+way it takes `connection`, rather than reading it off the impl; at_client's public
+barrel re-exports `AtLookUpFactory` and `AtCommandExecutor` from at_lookup's main
+barrel and only `secureSocketLookUps` from `_io`; and at_auth is handed instances,
+never the type. The Hive default in `at_client_factory.dart` is the storage leg's
+equivalent seam. A change that imports `at_lookup_io.dart` for the type alone is a
+regression against the ratchet, and was one for a day: the leg first landed with seven
+at_client files importing the io barrel, measured against the two the plan recorded,
+and was brought back to one plus the barrel the same day.
+
+**What it means for `at_client_web`.** A platform implementer is three objects handed
+to the doors and no fork of at_client: a WebSocket-backed `AtLookupMuxable` behind an
+`AtLookUpFactory`, a SQLite-wasm `AtClientStorage`, an IndexedDB-backed
+`WrittenAtKeysIo`. Until T4 gives it an io-free `AtLookupImpl` to construct, the web
+factory implements `AtLookupMuxable` itself; the factory returns the interface, so
+nothing about the shape waits on T4.
+
+**What is still breaking, and what is additive.** The factory's parameter list is the
+one new public shape a later widening would break, since every factory an application
+wrote stops matching the typedef; it stays a bare function because what a web transport
+needs is captured in the closure and nothing in this doc set asks for more per call.
+Additive when wanted, and not owed now: an address-finder parameter at the doors (T7's
+web finder; `buildAtClient` already takes one) and a platform-default registration so
+the core stops building the Hive and TLS defaults itself. at_lookup's own major stays
+where it was: T3 (`Socket getSocket()` on `AtConnection`), T4 (the three io-typed
+factories `AtLookupTransport` bundles), T5 (`at_lookup_io.dart` absorbs the socket
+util) and T8 (publish 4.0.0) — which is also why the factory type still reaches
+`dart:io` transitively today, through the main barrel's export of
+`secure_socket_util.dart`.
+
+**Deprecated by this ruling.** `AtClientPreference.decryptPackets`, `tlsKeysSavePath`
+and `pathToCerts`, read by the default factory until they go in 4.0; the replacement is
+`secureSocketLookUps(config: SecureSocketConfig(...))` as `lookUps:`.
+
+---
+
+### D-16 — The browser lane keeps enterprise identity possible (2026-09-13)
+
+An enterprise that manages atSigns from its own identity provider (Microsoft Entra, Okta)
+wants its directory to be the system of record: directory events provision, enroll,
+disable and re-enable an atSign with no human in the loop.
+[`enterprise-identity.md`](enterprise-identity.md) maps that lifecycle onto what `at_auth`
+and the atServer expose, and names what is missing — an atSign-level disable on the
+atServer, and unattended provisioning on the registrar. Its
+[section 5](enterprise-identity.md#5-constraints-the-browser-lane-must-not-violate) lists
+the constraints E1–E7 the browser lane must not violate while that work is outstanding,
+among them redirect-based OIDC only and no new process-global state.
+
+**Why.** Enterprise identity is an adoption blocker, not a program blocker: nothing in it
+stops the browser lane shipping, but a browser lane that closed one of those doors would
+stop an enterprise adopting it. None of the constraints requires the IdP integration to be
+built.
 
 ---
 
@@ -654,9 +743,10 @@ is one release instead of two. Decide per package at execution time.
 `AtServiceFactory`?** `AtServiceFactory` (`at_client_manager.dart:265`) is the closer
 analogue and already has real overrides; `AtClientPreference` is what callers already
 touch and already carries `CryptoConfig` as precedent. See
-[`design.md`](design.md) §4. **Resolved for storage by D-12** — a bundle injected through
-a static factory on `AtClient`, not a preference field. Open for the remaining
-capabilities.
+[`design.md`](design.md) §4. **Resolved for storage by D-12, and for the transport on
+2026-09-13** — a bundle and an `AtLookUpFactory`, both injected as named parameters on
+`buildAtClient` and the `Atsign` verbs (not a static on `AtClient`, and not a preference
+field). Open for the remaining capabilities.
 
 **OQ-4 — File transfer: change the API, or extract the component?** Either
 `uploadFile`/`downloadFile`/`reuploadFiles` move to `(bytes, name)` or a stream
@@ -730,3 +820,5 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-25 | at_auth 4.0.0-rc1 ([#2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179)), the PQ program's S-5: the `at_auth_io.dart` barrel split, `FileAtKeysIo` default dropped, registrar onto `package:http`. Ships one conditional export (`probe_default.dart`). |
 | 2026-08-27 | **Phase 0 matured** ([#2183](https://github.com/atsign-foundation/at_client_sdk/pull/2183)). Gate config extracted to `.github/wasm_gates.yaml`; `controls` made mandatory; `at_auth` gated. **T0.2's two-way ratchet withdrawn** for one-way baselines, **T0.3's no-conditionals ban withdrawn** and restated as a both-branches-walked requirement (D-1 amended, OQ-1 resolved), **R5 withdrawn** — T2 cannot run on a hosted runner (§2.7). T0.4 remains unimplemented. |
 | 2026-08-27 | Phase 1 in review as a three-PR stack: [#2162](https://github.com/atsign-foundation/at_client_sdk/pull/2162) (S4–S6) ready, [#2163](https://github.com/atsign-foundation/at_client_sdk/pull/2163) (S1, S2) and [#2164](https://github.com/atsign-foundation/at_client_sdk/pull/2164) (S3) draft. `plan.md` deleted, as §3 had asserted since 2026-08-13. |
+| 2026-09-13 | **The transport becomes the third leg of the platform bundle** (T9 done; OQ-3 resolved for the transport). at_lookup gains `AtLookUpFactory` and `secureSocketLookUps` (`at_lookup_io.dart`), plus an `onConnect` hook run once per new connection; at_client's entry points take `lookUps:` and carry it to the client's, sync's and monitor's connections; `AtClientPreference.decryptPackets`, `tlsKeysSavePath` and `pathToCerts` deprecated, read only by `defaultLookUps` until 4.0. Built on `gkc-client-lifecycle`. |
+| 2026-09-13 | **D-16 ruled.** The browser lane must not foreclose enterprise identity. `enterprise-identity.md` added: the IdP lifecycle mapping, the atServer and registrar gaps, and the constraints E1–E7. |

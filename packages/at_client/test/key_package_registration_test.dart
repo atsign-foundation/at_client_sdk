@@ -10,6 +10,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 import 'test_utils/remote_backed_client.dart';
 
 import 'fake_enrollment_directory.dart';
@@ -38,11 +39,13 @@ class TestRegistrant
 void main() {
   const atSign = '@alice';
   late Map<String, String> remoteData;
+  final recorded = RecordedLogs();
 
   final Uint8List seedA = Uint8List.fromList(List<int>.generate(32, (i) => i));
   late Uint8List publicKeyA;
 
   setUpAll(() async {
+    recorded.installOn();
     registerFallbackValue(AtKey());
     publicKeyA =
         (await XWingPureDartAlgo.instance.generateKeyPair(seedA)).publicKey;
@@ -79,9 +82,9 @@ void main() {
       expect(keyPackage.enrollmentId, 'enroll-a');
       expect(registrant.isRegistered, isTrue);
 
-      // the _apsk signing key was published so peers can verify envelopes
+      // the _apsk advertisement was published so peers can verify envelopes
       expect(remoteData['public:_apsk.enroll-a.a.__e$atSign'],
-          await registrant.publicSigningKey);
+          await registrant.publicSigningKeyValue);
 
       // the returned key package carries the x-wing enc key; register() does
       // NOT write it anywhere (it rides enroll:request), and nothing is
@@ -747,6 +750,39 @@ void main() {
           await VerbEnrollmentDirectory(atClient).listForNamespace('myapp');
 
       expect(members.single.keyPackage, isNull);
+    });
+
+    test(
+        'a key package whose _apsk cannot be fetched is unverified, and is '
+        'not called a rejection', () async {
+      final b = await registered('enroll-b');
+      final atClient = buildMockClient('enroll-self');
+      stubListns(
+          atClient, [record('enroll-b', await b.signedKeyPackagePayload())]);
+      when(() => atClient.get(
+              any(
+                  that: predicate<AtKey>(
+                      (k) => k.toString() == apskUri(atSign, 'enroll-b'))),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenThrow(
+              AtConnectException('The connection was closed by this client '
+                  'before a response arrived'));
+      recorded.records.clear();
+
+      final member =
+          (await VerbEnrollmentDirectory(atClient).listForNamespace('myapp'))
+              .single;
+
+      expect(member.keyPackageStatus, KeyPackageStatus.unverified,
+          reason: 'nothing is known about the package: the check needs the '
+              '_apsk, and the fetch failed before it could run');
+      expect(member.keyPackage, isNull,
+          reason: 'not sealed to now, the same as a rejection');
+      expect(recorded.at('SEVERE'), isEmpty,
+          reason: 'a fetch failure used to be logged as "does not verify '
+              'against its _apsk", which sent the reader after the package');
+      expect(recorded.at('WARNING'),
+          contains(contains('could not be checked against its _apsk')));
     });
 
     test('each member says why it has no usable key package', () async {

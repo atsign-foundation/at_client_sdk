@@ -7,21 +7,12 @@ library;
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart'
-    show
-        AtChopsImpl,
-        AtChopsKeys,
-        AtChopsUtil,
-        AtEncryptionKeyPair,
-        AtPkamKeyPair,
-        AtSigningInput,
-        AtSigningMode,
-        HashingAlgoType,
-        SigningAlgoType;
+import 'package:at_chops/at_chops.dart' show HashingAlgoType, RsaKeyPair, SigningAlgoType;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart'
+    show EnrollmentUpdateRequest, EnrollmentUpdater;
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart'
-    show AtLookUp, AtLookupImpl, AtLookUpException;
+import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookUpException;
 import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
@@ -101,22 +92,20 @@ void main() {
   /// past handshake.
   Future<bool> authenticatesWith(
       EnrolledClient client, String privateKey) async {
-    final lookup = AtLookupImpl(atSign, rootDomain, TestUtils.rootServerPort);
+    final lookup = TestUtils.unauthenticatedLookUp(atSign);
     try {
       final challenge = (await lookup.executeCommand('from:$atSign\n'))!
           .trim()
           .replaceFirst(RegExp(r'^data:'), '');
-      final chops = AtChopsImpl(AtChopsKeys.create(
-        AtEncryptionKeyPair.create(
-            client.keys.defaultEncryptionPublicKey!.toString(), ''),
-        AtPkamKeyPair.create('', privateKey),
-      ));
-      final signature = chops
-          .sign(AtSigningInput(challenge)
-            ..signingAlgoType = SigningAlgoType.rsa2048
-            ..hashingAlgoType = HashingAlgoType.sha256
-            ..signingMode = AtSigningMode.pkam)
-          .result;
+      // RSA signs with the private half alone, so the public half is not
+      // needed here.
+      final signature = signPkamChallenge(
+          (
+            algorithm: SigningAlgoType.rsa2048,
+            publicKey: '',
+            privateKey: privateKey
+          ),
+          challenge);
       final response = await lookup.executeCommand((PkamVerbBuilder()
             ..signingAlgo = SigningAlgoType.rsa2048.name
             ..hashingAlgo = HashingAlgoType.sha256.name
@@ -144,7 +133,7 @@ void main() {
   }
 
   ({String publicKey, String privateKey}) freshApkamPair() {
-    final pair = AtChopsUtil.generateAtPkamKeyPair();
+    final pair = RsaKeyPair.generate();
     return (
       publicKey: pair.atPublicKey.publicKey,
       privateKey: pair.atPrivateKey.privateKey
@@ -154,11 +143,12 @@ void main() {
   test('UC-G1.10 · rekey keeps the enrollment id', () async {
     final client = await enrol('g110-rekey');
     final before = await fetch(client);
-    final oldPrivateKey = client.keys.apkamPrivateKey!.toString();
+    final oldPrivateKey =
+        client.keys.authenticationKeyPairFor(client.enrollmentId)!.privateKey;
     final apskBefore = await readApsk(client);
     final fresh = freshApkamPair();
 
-    final response = await AtEnrollment.create().update(
+    final response = await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
           enrollmentId: client.enrollmentId,
           apkamPublicKey: fresh.publicKey,
@@ -252,7 +242,10 @@ void main() {
     // rewrites the record deliberately.
     expect(
         await authenticatesWith(
-            client, client.keys.apkamPrivateKey!.toString()),
+            client,
+            client.keys
+                .authenticationKeyPairFor(client.enrollmentId)!
+                .privateKey),
         isTrue,
         reason: 'the enrollment must still authenticate with the key it had, '
             'or a refused rekey took its credential away');
@@ -260,7 +253,7 @@ void main() {
         reason: 'and the key both refusals tried to install must not work — a '
             'refusal that had already written is worse than no guard');
 
-    final ok = await AtEnrollment.create().update(
+    final ok = await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
           enrollmentId: client.enrollmentId,
           apkamPublicKey: fresh.publicKey,
@@ -318,7 +311,7 @@ void main() {
 
     final fresh = freshApkamPair();
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
               enrollmentId: other.enrollmentId,
               apkamPublicKey: fresh.publicKey,
@@ -340,7 +333,7 @@ void main() {
     // A legacy PKAM connection carries the housekeeping enrollment `primary`,
     // so it is refused as a named enrollment rather than as an anonymous owner.
     await expectLater(
-        AtEnrollment.create().update(
+        EnrollmentUpdater().update(
             EnrollmentUpdateRequest(
               enrollmentId: mine.enrollmentId,
               apkamPublicKey: fresh.publicKey,
@@ -359,7 +352,7 @@ void main() {
             'read — and it pins that a legacy connection now HAS one, which '
             'is the thing that changed');
 
-    final ok = await AtEnrollment.create().update(
+    final ok = await EnrollmentUpdater().update(
         EnrollmentUpdateRequest(
           enrollmentId: mine.enrollmentId,
           apkamPublicKey: fresh.publicKey,

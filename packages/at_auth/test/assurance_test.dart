@@ -149,6 +149,92 @@ void main() {
       );
     });
 
+    test('accepts map update that fills a legacy field that was null', () {
+      // The document writer emits every legacy field, so a keyfile that has
+      // never held an encryption private key carries the key with null. An
+      // enrollment's approval is what fills it, and that is a completion.
+      final existing = _documentMap(
+          keys: [_symmetricMaterial()],
+          legacyJson: {auth_constants.defaultEncryptionPrivateKey: null});
+      final candidate = _documentMap(keys: [
+        _symmetricMaterial()
+      ], legacyJson: {
+        auth_constants.defaultEncryptionPrivateKey: 'bm93IGZpbGxlZA=='
+      });
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test(
+        'accepts replacing the legacy fields of a document that is not a '
+        'credential', () {
+      // A submitted enrollment's keys wait as pending material beside the
+      // request's own flat fields; nothing here authenticates or decrypts
+      // anything yet, so the next request may replace them.
+      final existing = _documentMap(keys: [], enrollments: {
+        'e-1': [
+          _enrollMaterial().withStatus(CryptographicMaterialStatus.pending)
+        ]
+      }, legacyJson: {
+        auth_constants.apkamSymmetricKey: 'Zmlyc3Q='
+      });
+      final candidate = _documentMap(keys: [], enrollments: {
+        'e-2': [
+          _enrollMaterial(enrollmentId: 'e-2')
+              .withStatus(CryptographicMaterialStatus.pending)
+        ]
+      }, legacyJson: {
+        auth_constants.apkamSymmetricKey: 'c2Vjb25k'
+      });
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('still refuses replacing a legacy field beside active material', () {
+      // The control for the case above: the same replacement, on a document
+      // that holds a live enrollment, is the loss the rule exists to refuse.
+      final existing = _documentMap(keys: [], enrollments: {
+        'e-1': [_enrollMaterial()]
+      }, legacyJson: {
+        auth_constants.apkamSymmetricKey: 'Zmlyc3Q='
+      });
+      final candidate = _documentMap(keys: [], enrollments: {
+        'e-1': [_enrollMaterial()]
+      }, legacyJson: {
+        auth_constants.apkamSymmetricKey: 'c2Vjb25k'
+      });
+
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: existing,
+          candidate: candidate,
+        ),
+        throwsA(isA<AtKeysAssuranceException>()
+            .having((e) => e.message, 'message', contains('map.legacy'))),
+      );
+    });
+
+    test('still refuses replacing a legacy field beside a flat secret', () {
+      final existing = _documentMap(keys: [], legacyJson: {
+        auth_constants.defaultSelfEncryptionKey: 'c2VsZg==',
+        auth_constants.apkamSymmetricKey: 'Zmlyc3Q=',
+      });
+      final candidate = _documentMap(keys: [], legacyJson: {
+        auth_constants.defaultSelfEncryptionKey: 'c2VsZg==',
+        auth_constants.apkamSymmetricKey: 'c2Vjb25k',
+      });
+
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: existing,
+          candidate: candidate,
+        ),
+        throwsA(isA<AtKeysAssuranceException>()
+            .having((e) => e.message, 'message', contains('map.legacy'))),
+        reason: 'a self-encryption key is a credential on its own',
+      );
+    });
+
     test('rejects map update when candidate drops all legacy fields', () {
       final existing = _fixtureLegacyJson();
       final candidate = {
@@ -203,6 +289,40 @@ void main() {
     test('rejects map update when an existing key record is missing', () {
       final existing = _documentMap(keys: [_symmetricMaterial()]);
       final candidate = _documentMap(keys: const []);
+
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: existing,
+          candidate: candidate,
+        ),
+        throwsA(isA<AtKeysAssuranceException>()),
+      );
+    });
+
+    test('accepts map update that drops a pending key record', () {
+      final existing = _documentMap(keys: [
+        _symmetricMaterial().withStatus(CryptographicMaterialStatus.pending)
+      ]);
+      final candidate = _documentMap(keys: const []);
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('accepts map update when a pending key status moves to active', () {
+      final existing = _documentMap(keys: [
+        _symmetricMaterial().withStatus(CryptographicMaterialStatus.pending)
+      ]);
+      final candidate = _documentMap(keys: [_symmetricMaterial()]);
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('rejects map update when an active key status moves back to pending',
+        () {
+      final existing = _documentMap(keys: [_symmetricMaterial()]);
+      final candidate = _documentMap(keys: [
+        _symmetricMaterial().withStatus(CryptographicMaterialStatus.pending)
+      ]);
 
       expect(
         () => assurance.validateMapUpdate(
@@ -324,6 +444,48 @@ void main() {
         ),
         throwsA(isA<AtKeysValidationException>()),
       );
+    });
+
+    test(
+        'accepts a typed document that held only pending material going back '
+        'to the legacy shape', () {
+      // A denied request discarded: the enrollment and its pending material
+      // go, and with no typed content left the document loses its header.
+      final existing = _documentMap(keys: [], enrollments: {
+        'e-1': [_pendingAuthenticationMaterial('e-1')]
+      });
+      final candidate = <String, dynamic>{'enrollmentId': null};
+
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: existing, candidate: candidate),
+          returnsNormally);
+    });
+
+    test('but a typed document holding a credential keeps its header', () {
+      // The control: the same shape with the material ACTIVE is a credential,
+      // and dropping the header would strip the enrollment it authenticates.
+      final active = _documentMap(keys: [], enrollments: {
+        'e-1': [
+          _pendingAuthenticationMaterial('e-1')
+              .withStatus(CryptographicMaterialStatus.active)
+        ]
+      });
+      // And a flat secret beside pending material is a credential too.
+      final flatSecret = _documentMap(keys: [], enrollments: {
+        'e-1': [_pendingAuthenticationMaterial('e-1')]
+      }, legacyJson: {
+        'selfEncryptionKey': 'c2VsZg=='
+      });
+      for (final existing in [active, flatSecret]) {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: existing,
+                candidate: <String, dynamic>{'enrollmentId': null}),
+            throwsA(isA<AtKeysAssuranceException>()
+                .having((e) => e.toString(), 'message', contains('map.'))),
+            reason: 'the header is pinned while the document is a credential');
+      }
     });
 
     test('rejects map update when the atsign changes on a typed-keys rewrite',
@@ -460,6 +622,18 @@ void main() {
 }
 
 final _createdAt = DateTime.utc(2024, 1, 1);
+
+CryptographicMaterial _pendingAuthenticationMaterial(String enrollmentId) {
+  return CryptographicMaterial(
+    keyId: 'auth:rsa2048:1',
+    enrollmentId: enrollmentId,
+    role: CryptographicMaterialRole.privateAuthentication,
+    algorithm: CryptographicMaterialAlgorithm.rsa2048,
+    bytes: AtBytes.fromString('dmFsdWU='),
+    createdAt: _createdAt,
+    status: CryptographicMaterialStatus.pending,
+  );
+}
 
 CryptographicMaterial _symmetricMaterial({String bytes = 'dmFsdWU='}) {
   return CryptographicMaterial(

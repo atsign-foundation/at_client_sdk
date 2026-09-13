@@ -15,12 +15,13 @@ void main() {
   CryptoConfig eraConfig() =>
       CryptoConfig.readsNskeyWritesLegacy(keyRing: InMemoryNskeyKeyRing());
 
-  test('the era default reads nskey but writes legacy', () {
+  test('the era default reads nskey but writes with the legacy provider', () {
     CryptoConfig.adoptEraDefault(client, eraConfig());
     final resolved = CryptoConfig.forClient(client);
 
     expect(resolved.defaultProviderId, legacyCryptoProviderId,
-        reason: 'writes stay legacy until 4.x — flipping this is a fleet-wide '
+        reason:
+            'writes stay with the legacy provider until 4.x — flipping this is a fleet-wide '
             'commitment, not a per-client one');
     expect(resolved.lookup(nskeyCryptoProviderId), isNotNull);
     expect(resolved.lookup(symmetricAesGcmCryptoProviderId), isNotNull,
@@ -30,7 +31,7 @@ void main() {
 
   test('a NOTIFICATION at the era default reaches the legacy provider too',
       () async {
-    // UC-B3.1: the capability stage writes legacy for put and notify alike.
+    // UC-B3.1: the capability stage writes with the legacy provider for put and notify alike.
     final legacy = _Recorder(legacyCryptoProviderId);
     final pq = _Recorder(symmetricAesGcmCryptoProviderId);
     client.getPreferences().crypto = CryptoConfig(
@@ -136,7 +137,7 @@ void main() {
             'key ring it was built with, or a restart silently loses them');
   });
 
-  test('a client never given one falls back to legacy', () {
+  test('a client never given one falls back to the legacy provider', () {
     expect(CryptoConfig.forClient(client).defaultProviderId,
         legacyCryptoProviderId);
     expect(CryptoConfig.forClient(client).providers, isEmpty);

@@ -78,6 +78,18 @@ class MockSecondaryKeyStore extends Mock
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
+  // NOTE: the same erasure: an unstubbed `lookUps` answers null into a
+  // non-nullable function type, and the services read it off the impl.
+  @override
+  final AtLookUpFactory lookUps = secureSocketLookUps();
+  // NOTE: `implements` erases the concrete getter AtClientImpl carries, and an
+  // unstubbed mocktail getter answers null, which the runtime refuses for the
+  // non-nullable AtConnection; a Monitor built from this mock reads it.
+  @override
+  final AtConnection connection = AtConnection(
+      atSign: '@alice',
+      attempt: (_) async =>
+          AtConnectionState.offline(AtConnectionCause.unattempted));
   @override
   SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
 }
@@ -112,6 +124,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
       final success = await localSecondary.putValue(
@@ -128,6 +141,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final pkamPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
@@ -144,6 +158,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final encryptionPrivateKey =
           RSAKeypair.fromRandom().privateKey.toString();
@@ -162,6 +177,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final encryptionPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
@@ -179,6 +195,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final selfEncryptionKey = EncryptionUtil.generateAESKey();
       final success = await localSecondary.putValue(
@@ -209,6 +226,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -230,6 +248,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
@@ -256,6 +275,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
@@ -283,6 +303,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -309,6 +330,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -340,6 +362,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient);
       final verbBuilder_1 = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -389,6 +412,7 @@ void main() {
         ..commitLogPath = 'test/hive/commit';
       final atClient = await AtClientImpl.create(atSign, 'wavi', preference,
           atClientManager: atClientManager);
+      atClient.syncService = MockSyncService();
       return LocalSecondary(atClient);
     }
 
@@ -945,6 +969,7 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit',
           remoteSecondary: remote);
+      c.syncService = MockSyncService();
       c.enrollmentId = enrollmentId;
       return c;
     }

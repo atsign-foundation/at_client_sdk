@@ -10,6 +10,8 @@ import 'dart:async';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/client/pq_client_bootstrap.dart'
+    show PqStartupGates;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
@@ -50,12 +52,41 @@ void main() {
   final runId = DateTime.now().microsecondsSinceEpoch;
   final namespace = 'ladder$runId';
 
+  /// The startup steps that would otherwise drive conveyance behind this
+  /// file's back, which walks it by hand: the holder's envelope listener, its
+  /// answer-store priming, and the start-time ask for missing privates.
+  ///
+  /// `collectConveyedKeys` stays ON: it is what ADOPTS the key package this
+  /// enrollment was created with, and the directory advertises that one. With
+  /// it off, `register` below mints a fresh package instead, so this client
+  /// holds one kpid while the directory publishes another — and a holder
+  /// accepts envelopes only at a kpid it holds, so every request below reaches
+  /// nobody, silently.
+  ///
+  /// ⚠️ Without this the premise below is false rather than untested. Each
+  /// install's startup is fired unawaited by its constructor, so an ask it
+  /// broadcasts can be answered and FILED inside the read state 1 expects to
+  /// miss — and the holder is already listening, which makes this file's own
+  /// `startListening` a no-op. `askOnReadMiss` stays on: state 1's own read
+  /// must still broadcast the ask that state 2 waits for.
+  const handDrivenConveyance = PqStartupGates(
+    hydrateHeldSecrets: false,
+    startEnvelopeListener: false,
+    requestMissingPrivates: false,
+  );
+
   /// Short enough to wait out, long enough that no mint here races its own
   /// expiry — a keygen, a keyfile write, a signature and two round trips.
-  const shortLockTtl = Duration(seconds: 5);
+  ///
+  /// A mint or rotation against a local virtualenv measured at most 35ms, so
+  /// this leaves ample room; the holder's `MintLease` abandons rather than
+  /// publishing if the ttl elapses first.
+  const shortLockTtl = Duration(seconds: 1);
 
+  /// Past the ttl rather than exactly it: the atServer counts from when it
+  /// stores the record, a gap that measured at most ~100ms locally.
   Future<void> waitOutTheLock() =>
-      Future.delayed(shortLockTtl + const Duration(seconds: 1));
+      Future.delayed(shortLockTtl + const Duration(milliseconds: 500));
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -86,6 +117,7 @@ void main() {
         namespace: namespace,
         preference: TestUtils.getPreference(atSign,
             posture: legacyPlusPqProviders,
+            pqStartupGates: handDrivenConveyance,
             keyEstablishmentAlgorithms: mints,
             sealsToKeyAlgorithms: sealsTo),
         rootDomain: 'vip.ve.atsign.zone',
@@ -131,8 +163,8 @@ void main() {
     await AtClientSecretSharing.forClient(old.client).register();
     await AtClientSecretSharing.forClient(rolled.client).register();
 
-    // NOTE: by hand, because this file runs `legacyPlusPqProviders` and so does
-    // not get the wired startup tail the envelope listener lives in.
+    // NOTE: by hand, because [handDrivenConveyance] turns off the startup step
+    // that would otherwise start this listener.
     // `_handleRequestPayload`, which answers another enrollment's request for a
     // secret, is reachable only from `sweepOnce`, so a holder that is not
     // listening never sees a request arriving after its own start and the
@@ -214,10 +246,11 @@ void main() {
             'it minted itself — no conveyance in this direction');
 
     // NOTE: a holder answers a request from its secret store, which the mint
-    // does not fill — the bootstrap primes it from the filing at every start,
-    // and this file drives that by hand. Priming here rather than at the mint
-    // leaves the rollout-1 install's earlier asks unanswered, which is what an
-    // ask to an unprimed holder gets: nothing back, and nothing logged.
+    // does not fill — the bootstrap would prime it from the filing at every
+    // start, and [handDrivenConveyance] leaves that to this line instead.
+    // Priming here rather than at the mint leaves the rollout-1 install's
+    // earlier asks unanswered, which is what an ask to an unprimed holder
+    // gets: nothing back, and nothing logged.
     expect(
         await oldSeeding.hydrateStoreFromFiling(
             AtClientSecretSharing.forClient(old.client)),
@@ -260,10 +293,17 @@ void main() {
             'holder to answer — `privateHalf` broadcasts an ask and returns '
             'the miss, so the caller sees it now and retries later');
 
-    // The holder listens only from here: its start-up sweep answers the
-    // requests its sync has pulled, and every ask so far is still in its store,
-    // unswept and so unanswered.
-    await AtClientSecretSharing.forClient(old.client).startListening();
+    // The holder listens only from here, so nothing could answer the ask state
+    // 1 broadcast while state 1 was measuring it.
+    final oldSharing = AtClientSecretSharing.forClient(old.client);
+    await oldSharing.startListening();
+
+    // NOTE: remote, and by hand. `startListening`'s own start-up sweep reads
+    // the LOCAL store for a client that runs sync, so it answers only the
+    // requests sync has already pulled — and state 1's ask went to the
+    // atServer moments ago. Waiting for sync to bring it down instead leaves
+    // state 2 resting on the periodic sweep, a minute away.
+    await oldSharing.sweepOnce(fromRemote: true);
 
     // ── state 2 of 3: CONVEYED, NOT FILED ──
     // The asks above are answered by `old`, which holds the private. The answer

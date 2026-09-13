@@ -24,6 +24,8 @@ MockRemoteSecondary buildRecordingRemote({
   final remote = MockRemoteSecondary();
   final lookUp = MockAtLookupImpl();
   when(() => remote.atLookUp).thenReturn(lookUp);
+  // the bridge reads the enrollment id off the lookup until the ladder goes
+  // ignore: deprecated_member_use
   when(() => lookUp.enrollmentId).thenReturn(null);
   when(() => remote.sync(any(), regex: any(named: 'regex')))
       .thenAnswer((_) async => null);
@@ -92,8 +94,13 @@ MockRemoteSecondary buildRecordingRemote({
     final command = inv.positionalArguments[0] as String;
     final head = command.split(RegExp(r'[\n{]')).first;
     events.add('cmd:$head');
-    if (command.startsWith('enroll:list')) return 'data:{}';
+    // NOTE: listns FIRST. `enroll:listns` starts with `enroll:list`, so the
+    // broader prefix answered it a map where the caller requires a list, and
+    // `listForNamespace` refused it at severe rather than reading it as an
+    // empty roster - correctly, since treating it as empty would withhold key
+    // material from every member of the namespace.
     if (command.startsWith('enroll:listns')) return 'data:[]';
+    if (command.startsWith('enroll:list')) return 'data:{}';
     if (command.startsWith('scan')) {
       final regexMatch = RegExp(r'scan (.*)\n?$').firstMatch(command);
       final re = regexMatch == null ? null : RegExp(regexMatch.group(1)!);

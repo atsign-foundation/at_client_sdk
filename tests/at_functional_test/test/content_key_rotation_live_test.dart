@@ -33,8 +33,8 @@ void main() {
           publicKey: nskeyPair.publicKeyBytes,
           privateKey: nskeyPair.privateKeyBytes);
 
-    // NOTE: the era default writes legacy, so the value this scenario rotates
-    // needs the PQ providers named explicitly.
+    // NOTE: the era default writes with the legacy provider, so the value this
+    // scenario rotates needs the PQ providers named explicitly.
     final preference =
         TestUtils.getPreference(atSign, posture: legacyPlusPqProviders)
           ..crypto = CryptoConfig.nskey(keyRing: ring);
