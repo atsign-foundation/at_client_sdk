@@ -138,6 +138,8 @@ void main() {
       session: session,
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'cap-$label-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'cap-$label-$runId'),
       appName: 'cap-$label',
       deviceName: 'cap-$label-$runId',
       namespaces: {namespace: 'rw'},

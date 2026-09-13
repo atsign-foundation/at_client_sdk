@@ -133,6 +133,8 @@ void main() {
       // nothing carries across.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rt-l1-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rt-l1-$runId'),
       appName: 'rt-l1',
       deviceName: 'rt-l1-$runId',
       namespaces: {namespace: 'rw'},

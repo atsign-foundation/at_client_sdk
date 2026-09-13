@@ -175,7 +175,6 @@ void main() {
         .atClient
         .notificationService
         .stopAllSubscriptions();
-    await AtClientManager.getInstance().atClient.stopCompactionJob();
     exit(0);
   });
 }

@@ -176,6 +176,8 @@ void main() {
       // succession, opened beside the owner client.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e1-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rf-e1-$runId'),
       appName: 'rf-e1',
       deviceName: 'rf-e1-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw'},
@@ -248,6 +250,8 @@ void main() {
       // client holds the atSign's, and B1.1's retrofit holds its own.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e1-clone-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rf-e1-clone-$runId'),
       // Deliberately the same (appName, deviceName) as B1.1: sibling clones
       // of one keyfile legitimately carry one app's identity, and the
       // atServer exempts this branch from the duplicate-enrollment refusal.
@@ -367,6 +371,8 @@ void main() {
           session: await legacySession('e2'),
           preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
               posture: PqPosture.legacy, device: 'rf-e2-esc-$runId'),
+          storage: TestPreferences.getInstance()
+              .storageForCoLocatedClient(atSign, device: 'rf-e2-esc-$runId'),
           appName: 'rf-e2',
           deviceName: 'rf-e2-esc-$runId',
           namespaces: {'*': 'rw', '__manage': 'rw'},
@@ -383,6 +389,8 @@ void main() {
       session: session,
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e2-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rf-e2-$runId'),
       appName: 'rf-e2',
       deviceName: 'rf-e2-$runId',
       namespaces: {namespace: 'rw'},

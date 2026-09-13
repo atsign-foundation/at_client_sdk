@@ -136,6 +136,8 @@ void main() {
         session: session,
         preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
             posture: PqPosture.legacy, device: 'b01-priv-rf-$runId'),
+        storage: TestPreferences.getInstance()
+            .storageForCoLocatedClient(atSign, device: 'b01-priv-rf-$runId'),
         appName: 'b01-priv',
         deviceName: 'b01-priv-rf-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw'},
@@ -199,6 +201,8 @@ void main() {
         session: session,
         preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
             posture: PqPosture.legacy, device: 'b01-scoped-rf-$runId'),
+        storage: TestPreferences.getInstance()
+            .storageForCoLocatedClient(atSign, device: 'b01-scoped-rf-$runId'),
         appName: 'b01-scoped',
         deviceName: 'b01-scoped-rf-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw'},
