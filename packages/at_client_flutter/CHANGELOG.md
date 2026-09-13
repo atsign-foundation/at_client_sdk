@@ -106,7 +106,7 @@ nothing from at_auth.
   unreadable.
 - fix: changed keychain storage name delimiter from `_` to `:`
 - feat: upgrade path to move keys from `_` to `:` -- if `:` is absent and
-  `_` is present, data is copied to `:` but `_` is left in place. In 2.0.0
+  `_` is present, data is copied to `:` but `_` is left in place. In 3.0.0
   the `_` store will be removed after copying.
 
 ## 1.1.4

@@ -53,10 +53,10 @@ class KeychainStorage {
   }
 
   // Current behaviour:
-  // 1.x.x (current):
+  // 2.x.x (current):
   //   if `:` is absent and `_` is present, copy `_` to `:` but leave `_`.
   //
-  // TODO(2.0.0): copy `_` to `:` then remove `_`.
+  // TODO(3.0.0): copy `_` to `:` then remove `_`.
   //
   // Since each app version runs in its own sandbox, there is no risk of an
   // older and newer version running simultaneously.
@@ -70,7 +70,7 @@ class KeychainStorage {
     }
 
     // See migration sequencing comment above.
-    // 1.x.x: only copy `_` to `:`, leave `_` in place.
+    // 2.x.x: only copy `_` to `:`, leave `_` in place.
 
     final keychainStorageImproperName = await _getImproperAtKeysStoreName();
     String? improperDataString;
@@ -252,8 +252,8 @@ class KeychainStorage {
   }
 
   /// Delete all persisted Atsign key data from the keychain, including any
-  /// data still held under the legacy pre-1.1.6 `_` delimited store name.
-  /// TODO(2.0.0): remove the `_` cleanup once `_` stores are deleted during
+  /// data still held under the legacy pre-2.0.0 `_` delimited store name.
+  /// TODO(3.0.0): remove the `_` cleanup once `_` stores are deleted during
   /// migration (see [_readAtKeysDataRaw] sequencing comment).
   Future<void> deleteAllAtKeysData() async {
     try {
