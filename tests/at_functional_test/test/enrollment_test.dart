@@ -487,8 +487,11 @@ void main() {
 
       // The enrollee's keys are complete, and still refused: the atServer
       // names the denied enrollment.
+      // The keys the builder was handed predate the atServer's answer, so
+      // the enrollment id is filed here: it is what the PKAM names.
       final enrolledKeys = enrolleeKeys!
         ..fileLegacyMaterial(
+            enrollmentId: atEnrollmentResponse.enrollmentId,
             encryptionPrivateKey: encryptionPrivateKeyMap[atSign]!,
             selfEncryptionKey: aesKeyMap[atSign]!);
       await expectLater(
