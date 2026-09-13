@@ -49,7 +49,7 @@ void main() {
 
     final response = await AtEnrollment.create().submit(
       AtEnrollmentRequest.pq(
-        atSign: atSign,
+        session: TestUtils.enrollmentSession(atSign),
         appName: namespace,
         deviceName: 'copied-${Uuid().v4().hashCode}',
         namespaces: {namespace: 'rw'},
@@ -107,10 +107,10 @@ void main() {
 
     // Same APKAM keypair, so the same enrollment — one enrollment id is all an
     // operator has to revoke.
-    expect(copiedKeys.apkamPublicKey!.toString(),
-        originalKeys!.apkamPublicKey!.toString());
-    expect(copiedKeys.apkamPrivateKey!.toString(),
-        originalKeys!.apkamPrivateKey!.toString());
+    final copiedApkam = copiedKeys.authenticationKeyPairFor(null)!;
+    final originalApkam = originalKeys!.authenticationKeyPairFor(null)!;
+    expect(copiedApkam.publicKey, originalApkam.publicKey);
+    expect(copiedApkam.privateKey, originalApkam.privateKey);
 
     // On the wire rather than by comparing strings: the copy authenticates as
     // that same enrollment against the live atServer.

@@ -11,7 +11,8 @@ import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
-import 'package:at_auth/at_auth.dart' show AtKeysIo, authenticatorFor;
+import 'package:at_auth/at_auth.dart'
+    show AtAuthSession, AtKeysIo, authenticatorFor;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
@@ -104,6 +105,15 @@ class TestUtils {
   /// Where this pack's atServers are found.
   static AtRootDomain get rootDomain =>
       AtRootDomain('vip.ve.atsign.zone', rootServerPort);
+
+  /// A session for an enrollment request on [atSign]: where its atServer is
+  /// looked up, and the store the keys the submission mints are filed in
+  /// once approved, in memory unless [keys] says otherwise.
+  static AtAuthSession enrollmentSession(String atSign, {AtKeysIo? keys}) =>
+      AtAuthSession(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          atKeysIo: keys ?? InMemoryAtKeysIo());
 
   /// A connection to [atSign]'s atServer that authenticates as nothing;
   /// the caller closes it.
@@ -325,22 +335,26 @@ class TestUtils {
       await keys.write(atSign, demo);
       return;
     }
-    // ignore: deprecated_member_use
-    if (held.holdsAuthenticationMaterial &&
-        held.defaultEncryptionPrivateKey != null) {
+    if (held.holdsAuthenticationMaterial && held.encryptionKeyPair != null) {
       return;
     }
+    final demoApkam = demo.authenticationKeyPairFor(null)!;
+    final demoEncryption = demo.encryptionKeyPair!;
     await keys.update(Atsign(atSign), (stored) {
-      // ignore: deprecated_member_use
-      stored.apkamPublicKey ??= demo.apkamPublicKey;
-      // ignore: deprecated_member_use
-      stored.apkamPrivateKey ??= demo.apkamPrivateKey;
-      // ignore: deprecated_member_use
-      stored.defaultEncryptionPublicKey ??= demo.defaultEncryptionPublicKey;
-      // ignore: deprecated_member_use
-      stored.defaultEncryptionPrivateKey ??= demo.defaultEncryptionPrivateKey;
-      // ignore: deprecated_member_use
-      stored.defaultSelfEncryptionKey ??= demo.defaultSelfEncryptionKey;
+      if (stored.authenticationKeyPairFor(null) == null) {
+        stored.fileLegacyMaterial(
+            apkamPublicKey: demoApkam.publicKey,
+            apkamPrivateKey: demoApkam.privateKey);
+      }
+      if (stored.encryptionKeyPair == null) {
+        stored.fileLegacyMaterial(
+            encryptionPublicKey: demoEncryption.atPublicKey.publicKey,
+            encryptionPrivateKey: demoEncryption.atPrivateKey.privateKey);
+      }
+      if (stored.selfEncryptionKey == null) {
+        stored.fileLegacyMaterial(
+            selfEncryptionKey: demo.selfEncryptionKey!.key);
+      }
       return true;
     });
   }

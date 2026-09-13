@@ -143,7 +143,8 @@ void main() {
   test('UC-G1.10 · rekey keeps the enrollment id', () async {
     final client = await enrol('g110-rekey');
     final before = await fetch(client);
-    final oldPrivateKey = client.keys.apkamPrivateKey!.toString();
+    final oldPrivateKey =
+        client.keys.authenticationKeyPairFor(client.enrollmentId)!.privateKey;
     final apskBefore = await readApsk(client);
     final fresh = freshApkamPair();
 
@@ -241,7 +242,10 @@ void main() {
     // rewrites the record deliberately.
     expect(
         await authenticatesWith(
-            client, client.keys.apkamPrivateKey!.toString()),
+            client,
+            client.keys
+                .authenticationKeyPairFor(client.enrollmentId)!
+                .privateKey),
         isTrue,
         reason: 'the enrollment must still authenticate with the key it had, '
             'or a refused rekey took its credential away');

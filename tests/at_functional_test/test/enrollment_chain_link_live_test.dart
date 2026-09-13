@@ -163,7 +163,7 @@ void main() {
 
     final response = await AtEnrollment.create().submit(
       AtEnrollmentRequest.pq(
-        atSign: atSign,
+        session: TestUtils.enrollmentSession(atSign),
         appName: namespace,
         deviceName: 'priv-${Uuid().v4().hashCode}',
         namespaces: namespaces,
@@ -224,7 +224,7 @@ void main() {
     final build = enrollmentKeyPackageBuilder(atSign);
 
     final request = AtEnrollmentRequest.pq(
-      atSign: atSign,
+      session: TestUtils.enrollmentSession(atSign),
       appName: namespace,
       deviceName: 'chain-${Uuid().v4().hashCode}',
       namespaces: {namespace: 'rw'},

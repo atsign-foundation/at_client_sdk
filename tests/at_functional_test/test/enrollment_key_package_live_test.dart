@@ -46,7 +46,7 @@ void main() {
     final build = enrollmentKeyPackageBuilder(atSign);
 
     final request = AtEnrollmentRequest(
-      atSign: atSign,
+      session: TestUtils.enrollmentSession(atSign),
       appName: namespace,
       deviceName: 'kp-${Uuid().v4().hashCode}',
       namespaces: {namespace: 'rw'},

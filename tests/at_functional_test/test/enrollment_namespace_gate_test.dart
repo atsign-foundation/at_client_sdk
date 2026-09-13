@@ -64,7 +64,7 @@ void main() {
 
     final response = await AtEnrollment.create().submit(
       AtEnrollmentRequest.pq(
-        atSign: atSign,
+        session: TestUtils.enrollmentSession(atSign),
         appName: namespace,
         deviceName: 'scoped-${Uuid().v4().hashCode}',
         namespaces: namespaces,

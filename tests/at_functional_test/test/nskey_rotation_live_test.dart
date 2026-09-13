@@ -333,9 +333,15 @@ void main() {
     // AtKeysIo would both read whichever wrote last, and the credential arm
     // below would present a live enrollment's key under a revoked id.
     expect({
-      operator.enrolled.keys.apkamPublicKey!.toString(),
-      keeper.enrolled.keys.apkamPublicKey!.toString(),
-      doomed.enrolled.keys.apkamPublicKey!.toString(),
+      operator.enrolled.keys
+          .authenticationKeyPairFor(operator.enrolled.enrollmentId)!
+          .publicKey,
+      keeper.enrolled.keys
+          .authenticationKeyPairFor(keeper.enrolled.enrollmentId)!
+          .publicKey,
+      doomed.enrolled.keys
+          .authenticationKeyPairFor(doomed.enrolled.enrollmentId)!
+          .publicKey,
     }, hasLength(3),
         reason: 'three enrollments sharing one APKAM keypair makes the '
             'credential arm below meaningless — whichever key it presents '
@@ -356,8 +362,11 @@ void main() {
       return mine?['apkamPubKey'] as String?;
     }
 
-    expect(await servedApkamKeyFor(doomed.enrolled.enrollmentId),
-        doomed.enrolled.keys.apkamPublicKey!.toString(),
+    expect(
+        await servedApkamKeyFor(doomed.enrolled.enrollmentId),
+        doomed.enrolled.keys
+            .authenticationKeyPairFor(doomed.enrolled.enrollmentId)!
+            .publicKey,
         reason: 'the keypair this test is about to present must be the one '
             'the atServer holds for the doomed enrollment, or the refusal it '
             'expects afterwards would be a signature mismatch wearing the '
@@ -460,7 +469,9 @@ void main() {
     Future<String> serverViewOf(String enrollmentId) async {
       try {
         final served = await servedApkamKeyFor(enrollmentId);
-        final held = doomed.enrolled.keys.apkamPublicKey!.toString();
+        final held = doomed.enrolled.keys
+            .authenticationKeyPairFor(doomed.enrolled.enrollmentId)!
+            .publicKey;
         return 'server says [${await statusOf(enrollmentId)}]; '
             'apkamPubKey on the record ${served == held ? "MATCHES" : "DIFFERS FROM"} '
             'the key this test presented '
