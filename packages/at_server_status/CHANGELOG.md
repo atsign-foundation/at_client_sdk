@@ -1,7 +1,18 @@
-## 1.1.2-rc1
+## 1.1.2-rc2
 
 - feat: `AtStatusImpl(lookUps: ...)` takes at_lookup's `AtLookUpFactory` for
   the connections the probe opens; TLS on TCP with none.
+- chore: drop the `dart:io` import from `AtStatus` by replacing the five
+  `HttpStatus` constants it used (`ok`, `found`, `notFound`,
+  `serviceUnavailable`, `internalServerError`) with local `int` constants of
+  identical value. `httpStatus()` already returned a plain `int`, so no public
+  API or returned value changes — this removes `dart:io` from the package's
+  import graph, which is what kept it off a web build graph. Note that
+  at_server_status still cannot *run* on the web: `AtStatusImpl` reaches the
+  atDirectory and atServer through `AtLookupImpl`, which uses TLS sockets.
+
+## 1.1.2-rc1
+
 - refactor: builds its lookup with `AtLookUp.withSecureSocket`, passing
   `authenticator: null` - every call it makes is `auth: false` and it holds no
   key material at all.

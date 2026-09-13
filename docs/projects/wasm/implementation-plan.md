@@ -131,54 +131,52 @@ Advances [`acceptance.md`](acceptance.md) T0. No behaviour change; no break.
 
 Preparation. Changes no public interface, breaks nothing, and shrinks every later diff.
 
-> **Status: all six written, none merged.** Tracked as
-> [#2158](https://github.com/atsign-foundation/at_client_sdk/issues/2158), open as a
+> **Status: S4–S6 done; S1–S3 superseded.** Tracked as
+> [#2158](https://github.com/atsign-foundation/at_client_sdk/issues/2158), written as a
 > three-PR stack, each based on the one below it:
 >
-> | PR                                                                    | Base    | Tasks  | State                                                   |
-> | --------------------------------------------------------------------- | ------- | ------ | ------------------------------------------------------- |
-> | [#2162](https://github.com/atsign-foundation/at_client_sdk/pull/2162) | `trunk` | S4–S6  | Ready, checks green, review required                    |
-> | [#2163](https://github.com/atsign-foundation/at_client_sdk/pull/2163) | #2162   | S1, S2 | **Draft.** `functional_tests_at_onboarding_cli` failing |
-> | [#2164](https://github.com/atsign-foundation/at_client_sdk/pull/2164) | #2163   | S3     | **Draft. Conflicting.** `end2end_test_14` failing       |
+> | PR                                                                    | Base    | Tasks  | State                                            |
+> | --------------------------------------------------------------------- | ------- | ------ | ------------------------------------------------ |
+> | [#2162](https://github.com/atsign-foundation/at_client_sdk/pull/2162) | `trunk` | S4–S6  | S5 and S6; S4 was already on trunk (`fea9f6681`) |
+> | [#2163](https://github.com/atsign-foundation/at_client_sdk/pull/2163) | #2162   | S1, S2 | Closed unmerged 2026-09-13 — superseded by D-15  |
+> | [#2164](https://github.com/atsign-foundation/at_client_sdk/pull/2164) | #2163   | S3     | Closed unmerged 2026-09-13 — superseded by D-12  |
 >
-> **The gate shrink is already demonstrated.** #2162 takes `dart:io` out of
-> `at_server_status` and tightens at_auth's `max_blocked_packages` from 4 to 3 in the same
-> PR — which is exactly the "T0 shrinks" the phase promises, and the first evidence that
-> the one-way baseline is tightened when convenient rather than ignored.
->
-> **Scope creep to resolve before merge.** #2163's tip commit moves at_client onto
-> `at_lookup 3.7.0-rc1` and reworks `RemoteSecondary` around its constructor, which is
-> more than S1 and S2 describe. Either it belongs to Phase 2, or S1's scope should be
-> restated to include the uptake — but it should not merge as an unnamed rider on a phase
-> whose whole premise is that it changes no interface.
+> **The gate shrinks.** #2162 takes `dart:io` out of `at_server_status` and tightens
+> at_auth's `max_blocked_packages` from 4 to 3 in the same PR — which is exactly the "T0
+> shrinks" the phase promises, and the first evidence that the one-way baseline is
+> tightened when convenient rather than ignored. Putting the import back fails the at_auth
+> ratchet at 4 blocked packages over the 3 it is baselined at.
 
-- **S1 — Plumb the at_lookup socket factories.** ✅ Written, #2163 (draft).
-  `at_client/lib/src/client/remote_secondary.dart:44-56` constructs `AtLookupImpl`
-  without passing `secureSocketFactory`, `socketListenerFactory` or
-  `outboundConnectionFactory`, all of which are constructor params at
-  `at_lookup_impl.dart:108-131`. Pass them through. Also make the second, non-injectable
-  `RemoteSecondary` construction at `at_client_impl.dart:1225` injectable.
-- **S2 — Plumb `MonitorOutboundConnectionFactory`.** ✅ Written, #2163 (draft).
-  `Monitor` accepts it at `monitor.dart:93`; `NotificationServiceImpl._` (`notification_service_impl.dart:76-84`)
-  never passes it, and `create` does not expose it. Expose and pass.
+- **S1 — Plumb the at_lookup socket factories.** ⛔ **Superseded by
+  [D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)**;
+  written as #2163, closed unmerged 2026-09-13. It passed `secureSocketFactory`,
+  `socketListenerFactory` and `outboundConnectionFactory` through `RemoteSecondary`.
+  `RemoteSecondary` now takes an `AtLookUpFactory` (`lookUps:`) and builds its connection
+  from it, so which sockets a connection uses is the factory's choice rather than three
+  parameters to plumb.
+- **S2 — Plumb `MonitorOutboundConnectionFactory`.** ⛔ **Superseded by
+  [D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)**;
+  written as #2163, closed unmerged 2026-09-13. `NotificationServiceImpl.create` takes
+  `lookUps:`, and the monitor's connection is built from it.
 - **S3 — Plumb the `AtSyncQueue` box seam.** ⛔ **Superseded by
   [D-12](decisions.md#d-12--client-storage-is-one-injected-bundle-and-it-owns-the-sync-queue-2026-09-05)**;
-  written as #2164 (draft, conflicting) before the ruling. It plumbed
-  `open({Box<String>? injectedBox})` through to `AtClientImpl.create` as the intermediate
-  step toward backend-selectable storage. The queue no longer gets a route of its own: it
-  belongs to the storage bundle (X-series below), which owns the keystore beside it. The
-  injected-box seam stays as a test seam. **#2164 needs rework, not rebasing.**
-- **S4 — Delete `sync_isolate_manager.dart`.** ✅ Written, #2162.
+  written as #2164 before the ruling, closed unmerged 2026-09-13. It plumbed a sync queue
+  through `AtClientImpl.create` to `LocalSecondary` as the intermediate step toward
+  backend-selectable storage. The queue no longer gets a route of its own: it belongs to
+  the storage bundle (X-series below), which owns the keystore beside it, and `create`
+  hands the bundle's `syncQueue` to `LocalSecondary`. The injected-box seam stays as a
+  test seam.
+- **S4 — Delete `sync_isolate_manager.dart`.** ✅ Done on trunk (`fea9f6681`).
   `@Deprecated`, `// coverage:ignore-file`, zero references anywhere in `packages/`
   outside itself, and the only `dart:isolate`
   file in any `lib/`. Note T1 would never have flagged it.
-- **S5 — Fix `at_server_status`.** ✅ Written, #2162.
+- **S5 — Fix `at_server_status`.** ✅ Done, #2162.
   Replace `HttpStatus.found` / `notFound` / `serviceUnavailable` / `internalServerError` / `ok` in
   `at_server_status/lib/src/model/at_status.dart` (eight call sites in
   `_rootHttpStatus()` and `_serverHttpStatus()`) with integer literals or a local
   constant class, then drop the `dart:io` import. **Not the one-line delete the
   predecessor doc described** — [`decisions.md`](decisions.md) §4.
-- **S6 — Move `dart_periphery` to `dev_dependencies:`** in at_chops. ✅ Written, #2162.
+- **S6 — Move `dart_periphery` to `dev_dependencies:`** in at_chops. ✅ Done, #2162.
   FFI-based, used only under `example/`.
 
 ---
@@ -1155,11 +1153,11 @@ Dependency order, one major per package:
 
 | # | Package            | Version   | Phase    | Break                                                                                                             |
 | - | ------------------ | --------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
-| 1 | `at_chops`         | minor     | C, S6    | none — dependency move only. **3.6.1 on trunk; S6 pending in #2162**                                              |
+| 1 | `at_chops`         | minor     | C, S6    | none — dependency move only. **3.6.1 published; S6 ships in 3.7.0 (#2162)**                                       |
 | 2 | `at_auth`          | **4.0.0** | *PQ S-5* | `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http`. **✅ 4.0.0-rc1 on trunk (#2179)** |
 | 3 | `at_utils`         | **4.0.0** | I1–I4    | barrel split; native handlers → `at_utils_io.dart`                                                                |
-| 4 | `at_lookup`        | **4.0.0** | T        | `Socket getSocket()` removed; factories retyped. **3.7.0-rc1 on trunk**                                           |
-| 5 | `at_server_status` | minor     | S5       | none — `HttpStatus` → literals. **1.1.2-rc1 on trunk; S5 pending in #2162**                                       |
+| 4 | `at_lookup`        | **4.0.0** | T        | `Socket getSocket()` removed; factories retyped. **3.7.0-rc1 published; 3.7.0-rc2 on trunk**                      |
+| 5 | `at_server_status` | minor     | S5       | none — `HttpStatus` → literals. **1.1.2-rc1 published; S5 ships in 1.1.2-rc2 (#2162)**                            |
 | 6 | `at_client`        | **4.0.0** | I        | `File` off the spec; storage backend selectable; connectivity injected                                            |
 | 7 | `at_client_web`    | 1.0.0     | W        | new                                                                                                               |
 | 8 | consumers          | —         | —        | `at_onboarding_cli`, `at_cli_commons`, `at_client_flutter`, both test packages                                    |
