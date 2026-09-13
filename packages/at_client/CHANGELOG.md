@@ -34,6 +34,11 @@
 - deprecated: `AtClientPreference.decryptPackets`, `tlsKeysSavePath` and
   `pathToCerts`: the transport is the factory's to configure; the default
   factory reads them until they go in 4.0.
+- `LocalSecondary`'s key getters read the client's key source and its
+  keystore, and no longer the client's `AtChops`: a client built from an
+  `AtChops` alone reads the keys its store holds, which is what onboarding
+  writes there. Keyfile material is read and written through at_auth's
+  accessors and `fileLegacyMaterial`.
 - fix: a key named like the app's namespace gets the namespace appended.
 - fix: `stop()` closes the connection state before it closes the services
   and the remote, so a request the stop itself fails is not recorded as the
