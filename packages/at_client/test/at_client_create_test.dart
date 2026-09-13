@@ -203,6 +203,26 @@ void main() {
             'enrolled clients live, a caller naming no enrollment is not '
             'handed one of them');
 
+    // The store, not the atSign, is what two clients must not share: a
+    // third enrollment on e1's directory is refused before anything opens,
+    // while another atSign under the same directory is another store.
+    await expectLater(
+        () => buildAtClient(
+            atSign: atSign,
+            namespace: 'wavi',
+            preference: offline('e1'),
+            atKeysIo: InMemoryAtKeysIo.holding(atSign, keysAs('e3'))),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            allOf(contains('storage at'), contains('as enrollment e1')))),
+        reason: 'one store holds one principal, and the refusal names the '
+            'holder');
+    final other = await buildAtClient(
+        atSign: '@factoryother', namespace: 'wavi', preference: offline('e1'));
+    expect(other.getCurrentAtSign(), '@factoryother',
+        reason: 'the control: the same directory is another store for '
+            'another atSign');
+
+    await other.stop();
     await own.stop();
     await second.stop();
     await first.stop();

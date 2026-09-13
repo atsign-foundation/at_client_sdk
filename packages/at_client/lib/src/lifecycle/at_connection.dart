@@ -328,6 +328,17 @@ bool _readsUnreachable(String message) =>
 ///
 /// [state] carries the cause: revoked, unauthenticated, an expired or
 /// unapproved enrollment, or an atSign the atDirectory has no atServer for.
+/// Thrown by `Atsign.authenticatesAs` when the atServer refused the keys:
+/// [state] is the refusal `open` would have reported, with its cause.
+class AtCredentialRefusedException extends AtException {
+  final String atSign;
+  final AtConnectionState state;
+
+  AtCredentialRefusedException(this.atSign, this.state)
+      : super('the atServer refused $atSign\'s keys (${state.cause?.name})'
+            '${state.error == null ? '' : ': ${state.error}'}');
+}
+
 class AtOpenRefusedException extends AtException {
   final String atSign;
   final AtConnectionState state;

@@ -1,6 +1,7 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
+import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -134,8 +135,9 @@ void main() {
     verify(() => lookUp.pkamAuthenticate(enrollmentId: 'primary')).called(1);
   });
 
-  test('a refusal throws, naming the enrollment, and hands nothing back',
-      () async {
+  test(
+      'a refusal throws the cause open would report, names the enrollment, '
+      'and hands nothing back', () async {
     when(() =>
             lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
         .thenAnswer((_) async => false);
@@ -145,8 +147,39 @@ void main() {
             keys: InMemoryAtKeysIo.holding(atSign, keysAs('e-7')),
             rootDomain: rootDomain,
             atLookUp: lookUp),
-        throwsA(isA<UnAuthenticatedException>()
-            .having((e) => e.message, 'message', contains('as e-7'))));
+        throwsA(isA<AtCredentialRefusedException>()
+            .having((e) => e.state.cause, 'cause',
+                AtConnectionCause.unauthenticated)
+            .having((e) => e.message, 'message', contains('e-7'))));
     verifyNever(() => lookUp.close());
+  });
+
+  test('a revoked enrollment is refused as revoked, as open reports it',
+      () async {
+    when(() =>
+            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
+        .thenThrow(AtLookUpException('AT0027', 'enrollment e-7 is revoked'));
+
+    await expectLater(
+        () => Atsign(atSign).authenticatesAs(
+            keys: InMemoryAtKeysIo.holding(atSign, keysAs('e-7')),
+            rootDomain: rootDomain,
+            atLookUp: lookUp),
+        throwsA(isA<AtCredentialRefusedException>()
+            .having((e) => e.state.cause, 'cause', AtConnectionCause.revoked)));
+  });
+
+  test('an atServer that cannot be reached is not a refusal', () async {
+    when(() =>
+            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
+        .thenThrow(AtConnectException('no route to the atServer'));
+
+    await expectLater(
+        () => Atsign(atSign).authenticatesAs(
+            keys: InMemoryAtKeysIo.holding(atSign, keysAs('e-7')),
+            rootDomain: rootDomain,
+            atLookUp: lookUp),
+        throwsA(isA<AtConnectException>()),
+        reason: 'the control: only a refusal is retyped');
   });
 }

@@ -11,7 +11,9 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_client/src/storage/hive_at_client_storage.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_utils.dart';
 
 /// Builds a client for [atSign] and wires its notification, sync and
 /// enrollment services.
@@ -70,6 +72,15 @@ Future<AtClient> buildAtClient({
         'preference.isLocalStoreRequired is false for $atSign, so this '
             'storage would never be opened');
   }
+  final location = _locationOf(atSign, preference, storage);
+  final holder = location == null ? null : AtClientImpl.liveClientOn(location);
+  if (holder != null) {
+    throw StateError('The storage at $location is held by the live client for '
+        '${holder.getCurrentAtSign()} as '
+        '${holder.enrollmentId == null ? "its own credential" : "enrollment ${holder.enrollmentId}"}. '
+        'Two clients cannot share one store; stop() that client first, or '
+        'open this one on a store of its own.');
+  }
   final client = await AtClientImpl.create(
     atSign,
     namespace,
@@ -115,4 +126,20 @@ Future<String?> _principalOf(
   }
   if (!keys.holdsAuthenticationMaterial) return enrollmentId;
   return keys.enrollmentToAuthenticateAs();
+}
+
+/// Where a client built from these arguments would keep its storage, or
+/// null when it would keep none: the bundle supplied, else the Hive store
+/// `AtClientImpl.create` opens under `preference.hiveStoragePath`.
+String? _locationOf(
+    String atSign, AtClientPreference preference, AtClientStorage? storage) {
+  if (storage != null) {
+    return storage is AtClientStorageBase ? storage.location : null;
+  }
+  if (!preference.isLocalStoreRequired) return null;
+  final path = preference.hiveStoragePath;
+  if (path == null) return null;
+  return HiveAtClientStorage(
+          atSign: AtUtils.fixAtSign(atSign), storagePath: path)
+      .location;
 }

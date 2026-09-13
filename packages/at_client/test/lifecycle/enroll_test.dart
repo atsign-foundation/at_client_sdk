@@ -23,7 +23,7 @@ class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 /// modelled faithfully: it unwraps the symmetric key the request RSA-wrapped
 /// to the atSign's encryption public key and seals the atSign's secrets under
 /// it, which is what the handshake then opens. Legacy key exchange only; the
-/// pq mode's approver needs a key-package encapsulation the live packs cover.
+/// pq mode, whose approver seals to a key package, is `enroll_pq_test.dart`.
 void main() {
   const atSign = '@alice🛠';
   const enrollmentId = 'e-1';

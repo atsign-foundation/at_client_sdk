@@ -113,7 +113,9 @@ extension AtsignLifecycle on Atsign {
   /// Authenticates once as the enrollment [keys] name, closes the
   /// connection, and hands back that enrollment id, `primary` for a keyfile
   /// that predates enrollments. No client is built and nothing is stored.
-  /// Throws [UnAuthenticatedException] when the atServer refuses.
+  /// A refusal throws [AtCredentialRefusedException] carrying the cause
+  /// `open` would have reported; a failure to reach the atServer is thrown
+  /// as it is.
   ///
   /// [atLookUp] is a connection to authenticate on instead of one built
   /// from [rootDomain], for a caller that already holds one; it is left
@@ -124,8 +126,17 @@ extension AtsignLifecycle on Atsign {
     AtLookUp? atLookUp,
   }) async {
     final enrollmentId = (await keys.read(this)).enrollmentToAuthenticateAs();
-    final lookUp = await authenticatedLookUp(this, keys, rootDomain,
-        enrollmentId: enrollmentId, on: atLookUp);
+    final AtLookUp lookUp;
+    try {
+      lookUp = await authenticatedLookUp(this, keys, rootDomain,
+          enrollmentId: enrollmentId, on: atLookUp);
+    } catch (e) {
+      final state = classifyConnectionFailure(e);
+      if (state != null && state.isRefused) {
+        throw AtCredentialRefusedException(this, state);
+      }
+      rethrow;
+    }
     if (atLookUp == null) await lookUp.close();
     return enrollmentId;
   }

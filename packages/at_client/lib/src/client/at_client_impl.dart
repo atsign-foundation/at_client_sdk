@@ -558,6 +558,21 @@ class AtClientImpl implements AtClient {
       atClientInstanceMap.containsKey(_currentInstanceKey(
           instanceKey(AtUtils.fixAtSign(atSign), enrollmentId)));
 
+  /// The live client whose storage is at [location], or null when none is.
+  static AtClientImpl? liveClientOn(String location) {
+    for (final client in atClientInstanceMap.values) {
+      if (client is AtClientImpl) {
+        final storage = client.storage;
+        if (storage is AtClientStorageBase &&
+            storage.location == location &&
+            !client.isStopped) {
+          return client;
+        }
+      }
+    }
+    return null;
+  }
+
   /// Every client filed for [atSign], under any enrollment.
   ///
   /// One atSign can hold several entries, one per enrolled principal, so a

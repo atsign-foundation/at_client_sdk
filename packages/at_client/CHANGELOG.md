@@ -13,6 +13,21 @@
 - feat: `AtClientManager.getInstance().use(client)` makes a client the
   caller built current, notifying the switch listeners, without stopping the
   previous one: an owned client is its owner's to stop.
+- `open` and `buildAtClient` refuse a second live client on the storage
+  location another client holds, as they refuse one for the same principal:
+  one store holds one principal, and the refusal names the holder rather
+  than surfacing as the storage's own "already open" mid-construction.
+- `Atsign.authenticatesAs` throws `AtCredentialRefusedException` on a
+  refusal, carrying the `AtConnectionState` `open` would have reported and
+  its cause (revoked, unauthenticated, an invalid enrollment); a failure to
+  reach the atServer is thrown as it is.
+- fix: a key named like the app's namespace gets the namespace appended.
+  `AtClientUtil.getKeyWithNameSpace` read the name's last dot-segment as the
+  namespace, so a `probe` key under the `probe` namespace was stored as
+  `probe.probe` and read back as `probe`.
+- `AtSignChangeListener` and `SwitchAtSignEvent` are exported: the manager's
+  `listenToAtSignChange` always took the one and handed the other over, and an
+  app could name neither without importing a `src/` path.
 - deprecated: `AtClientManager.setCurrentAtSign` and `fromAuthSession`,
   which built the current client for the caller. Build one with
   `Atsign.open`, `activate` or an enrollment's `client`, and make it current
