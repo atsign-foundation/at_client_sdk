@@ -8,8 +8,12 @@ command line), the approving side, and helpers — every path handing back the
 
 ## Status
 
-Draft, 2026-09-13. Nothing here is ruled; [section 6](#6-decisions-to-make)
-lists what needs a ruling, each with a recommendation. The measurements in
+Draft, 2026-09-13. One decision is ruled: **D1, the timing** — gkc ruled on
+2026-09-13 that this happens now, as at_onboarding_cli's 2.0: `at_client_cli`
+1.0.0 publishes together with the shims `at_onboarding_cli` 2.0.0 and
+`at_cli_commons` 4.0.0. The remaining decisions in
+[section 6](#6-decisions-to-make) are **paused** until gkc has brought his
+colleagues up to speed; nothing is built until they are ruled. The measurements in
 [section 1](#1-what-exists-today-measured) were taken on branch
 `gkc-client-lifecycle` at the tip that holds at_onboarding_cli 2.0.0-rc1 and
 at_cli_commons 3.1.2, against pub.dev's published 1.16.1-rc1 and 3.1.1.
@@ -201,7 +205,7 @@ final storage = HiveAtClientStorage(atSign: '@alice', storagePath: s, closedByCl
 
 | Id | Question                                                                                          | Recommendation                                                                                                                                                              |
 | -- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1 | Do this before the lifecycle majors publish (one breaking release of at_onboarding_cli), or after (two)? | Before: `at_client_cli` 1.0.0 and the shims `at_onboarding_cli` 2.0.0 / `at_cli_commons` 4.0.0 publish together; the same users act once.                                 |
+| D1 | Do this before the lifecycle majors publish (one breaking release of at_onboarding_cli), or after (two)? | **Ruled 2026-09-13: before.** `at_client_cli` 1.0.0 and the shims `at_onboarding_cli` 2.0.0 / `at_cli_commons` 4.0.0 publish together; the same users act once.       |
 | D2 | Way A, B or C in [section 3](#3-getting-there)?                                                   | A, with `git mv` so history follows the files.                                                                                                                              |
 | D3 | The entry point's name: keep `CLIBase`, or a name that mirrors the dialogs (`AtClientCli`)?      | Keep `CLIBase`: 19 files call it by name and its API does not change. A typedef for a new name costs nothing later.                                                        |
 | D4 | The binaries: keep `at_activate` and `at_register`, or one `at_client_cli` binary with subcommands? | Keep both names; scripts and READMEs across the ecosystem invoke them. The library entry points are what change.                                                            |
