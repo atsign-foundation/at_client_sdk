@@ -57,7 +57,13 @@ walk-through of every decision on 2026-09-13 confirmed them and added:
 `open` refuses a second client on a storage location another holds;
 `authenticatesAs` refuses with the cause `open` reports; the deprecated
 `getAtClient()` is gone; the CLI inherits at_client's posture default on
-every command; the pq key exchange of `enroll` is unit-tested. The work is a
+every command; the pq key exchange of `enroll` is unit-tested. The
+communications leg of the platform bundle
+([section 10](#10-the-communications-leg-of-the-platform-bundle)) was built the same
+day: the verbs take `lookUps:`, every connection a client opens comes from
+it, and the four live packs were re-run green at that tip (functional 200,
+e2e 52 and 21, onboarding-CLI 21, proxy 4), the proxy pack being the live
+proof of `proxyLookUps()`. The work is a
 **P0** row in the PQ table
 ([`../pq/implementation-plan.md`](../pq/implementation-plan.md)), since it
 gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the
@@ -263,8 +269,12 @@ that carries `metadata`, a typed exception for AT0027, and a durable copy of
 the atServer address in client storage (today's
 `CacheableSecondaryAddressFinder` is memory-only, so a cold offline start
 cannot resolve where to reconnect to). Keeps `buildAtClient` underneath the
-new verbs. `setCurrentAtSign(atChops:)` stays deprecated until 4.0, as the
-deprecation plan already records.
+new verbs. The verbs and `buildAtClient` take `lookUps:`, the factory every
+connection the client opens is built with
+([section 10](#10-the-communications-leg-of-the-platform-bundle));
+`AtClientPreference.decryptPackets`, `tlsKeysSavePath` and `pathToCerts` are
+deprecated in favour of the factory's config. `setCurrentAtSign(atChops:)`
+stays deprecated until 4.0, as the deprecation plan already records.
 
 ### at_client_flutter (2.0.0)
 
@@ -272,7 +282,8 @@ Deletes `AuthService` and `FlutterEnrollmentService` (their orchestration is
 what moved; their only external consumer is `npt_flutter`, which is being
 reworked). Keeps `KeychainStorage`, `KeychainAtKeysIo` and the dialogs under
 their current names, rewritten over at_client's verbs (Private_Messaging_Armis
-and kryzapp use the dialogs and the keychain, nothing else). Re-exports what
+and kryzapp use the dialogs and the keychain, nothing else). The dialogs and
+`AtsignFlows` take `lookUps:` and pass it to the verbs. Re-exports what
 at_client re-exports, so one import covers an app.
 
 ### at_onboarding_cli (2.0.0)
@@ -280,11 +291,14 @@ at_client re-exports, so one import covers an app.
 Keeps `at_activate`, `at_register` and the `auth_cli` sub-commands, thin over
 at_client and at_auth's registrar; keeps the three-member
 `AtOnboardingService` adapter (ruling 6); drops `EnrollmentCheckpoint`
-(ruling 5) and the eleven other service members.
+(ruling 5) and the eleven other service members. `AtOnboardingPreference.lookUps`
+is `proxyLookUps()` when the root domain names a proxy and TLS otherwise, and
+every command passes it to the verbs.
 
 ### at_cli_commons
 
-`CLIBase` builds on `open` and awaits the connection state with a budget
+`CLIBase` builds on `open`, takes `lookUps:` (the preference's with none)
+and awaits the connection state with a budget
 instead of looping on a bool. sshnoports' `admin_api` and `sshnoports` go
 through it; `noports_core` and `sshnoports` also name the service directly.
 
@@ -444,6 +458,10 @@ Three measurements, not a review:
    removed; at_cli_commons' `CLIBase` onto `open`.
 6. CHANGELOGs, READMEs and both example trees; then the port of
    `npt_flutter`, which is acceptance item 1.
+7. The communications leg of the platform bundle
+   ([section 10](#10-the-communications-leg-of-the-platform-bundle)): `AtLookUpFactory`
+   and its default, `lookUps:` on the verbs and everything under them, the
+   proxy factory, the preference's TLS fields deprecated.
 
 ## 8. Relationship to the other plans
 
@@ -538,10 +556,10 @@ grep -rn 'atAuthKeys\|\.atChops\|\.atLookUp' \
 
 A client is built from three platform-supplied things. Two are in place:
 the keys store (`AtKeysIo`, leg 1) and the storage bundle (`AtClientStorage`,
-leg 2). The third is how the client reaches the atServer. Today every place
-that needs a connection calls `AtLookUp.withSecureSocket` itself, so an
-application cannot substitute the transport, the proxy convention or a test
-double without reaching into each one. gkc asked on 2026-09-13 for the entry
+leg 2). The third is how the client reaches the atServer. Before this leg
+every place that needed a connection called `AtLookUp.withSecureSocket`
+itself, so an application could not substitute the transport, the proxy
+convention or a test double without reaching into each one. gkc asked on 2026-09-13 for the entry
 points to supply an **`AtLookUp` factory function**, used wherever a lookup is
 built. The eight decisions at the end were ruled by gkc the same day and are
 [ruling 8](decisions.md#8-the-communications-leg-an-atlookup-factory-the-entry-points-supply)
@@ -550,10 +568,13 @@ in the ledger; the leg was built the same day on the lifecycle branch, as the
 at_client's `test/lifecycle/lookups_test.dart` and the preamble's in
 at_lookup's `test/lookup_factory_test.dart`.
 
-### What builds a lookup today, measured
+### What built a lookup before the leg, measured
 
-Direct `AtLookUp.withSecureSocket` calls in library code, 10 across four
-packages (`grep -rn "AtLookUp.withSecureSocket(" packages/*/lib`):
+Direct `AtLookUp.withSecureSocket` calls in library code before the leg, 10
+across four packages (`grep -rn "AtLookUp.withSecureSocket(" packages/*/lib`;
+the same grep now finds three, at_lookup's `secureSocketLookUps` and at_auth's
+two defaults for a caller that hands it no connection, plus one in a dartdoc
+example):
 
 | Site                                                   | For                                                                                  | Varies                                                                      |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
@@ -567,17 +588,20 @@ packages (`grep -rn "AtLookUp.withSecureSocket(" packages/*/lib`):
 | at_onboarding_cli `auth_cli.dart` (`_proxyLookUp`)     | a connection through a proxy, with `from:` sent first                                | the proxy convention: `rootDomain` starting `proxy:`                        |
 | at_server_status `at_status_impl.dart`                 | the status probe                                                                     | none                                                                        |
 
-Every one passes `secureSocketTransport(SecureSocketConfig())`, the client's
+Every one passed `secureSocketTransport(SecureSocketConfig())`, the client's
 two adding the preference's `decryptPackets`, `pathToCerts` and
-`tlsKeysSavePath`. Three sites already take an optional `AtLookUp?` and build
-one only when handed none; at_client's `open`, `activate`, `enroll`,
+`tlsKeysSavePath`. Three sites took an optional `AtLookUp?` and built one
+only when handed none; at_client's `open`, `activate`, `enroll`,
 `resumeEnrollment`, `authenticatesAs` and `buildAtClient` all carry that
-`atLookUp:` parameter, and 23 test files use it to inject a mock.
+`atLookUp:` parameter still (C3), and 23 test files use it to inject a mock.
 
-What that injection does not reach: when a test hands `open` a mock lookup,
-the client's own connection is the mock, but sync's `remoteSecondaryFor` and
-the monitor build **real** lookups from the preference, so two of the three
-connections a client holds escape the double.
+What that injection did not reach: when a test handed `open` a mock lookup,
+the client's own connection was the mock, but sync's `remoteSecondaryFor` and
+the monitor built **real** lookups from the preference, so two of the three
+connections a client held escaped the double. The factory reaches all three;
+at_client's `test/lifecycle/lookups_test.dart` pins that every connection a
+client opens, its own, sync's and the monitor's, came from the one it was
+given, with a client built without one as the control.
 
 Not built through `withSecureSocket`, and not this leg: at_lookup's
 `CacheableSecondaryAddressFinder` (a raw TLS socket to the atDirectory, the
@@ -599,14 +623,21 @@ typedef AtLookUpFactory = AtLookupMuxable Function({
   Map<String, dynamic> clientConfig,
 });
 
-// at_lookup_io.dart: the default, and the only place that names the TLS transport
-AtLookUpFactory secureSocketLookUps([SecureSocketConfig? config]) =>
-    ({required atSign, required rootDomain, required authenticator,
+// at_lookup_io.dart: the default, and the only place that names the TLS
+// transport. onConnect runs once on each new connection, before anything else
+// is sent on it: the proxy's `from:` goes there.
+AtLookUpFactory secureSocketLookUps({
+  SecureSocketConfig? config,
+  Future<void> Function(AtCommandExecutor connection)? onConnect,
+}) {
+  final transport = secureSocketTransport(config ?? SecureSocketConfig());
+  return ({required atSign, required rootDomain, required authenticator,
       secondaryAddressFinder, clientConfig = const {}}) =>
         AtLookUp.withSecureSocket(
             atSign: atSign, rootDomain: rootDomain, authenticator: authenticator,
-            transport: secureSocketTransport(config ?? SecureSocketConfig()),
-            secondaryAddressFinder: secondaryAddressFinder, clientConfig: clientConfig);
+            transport: transport, secondaryAddressFinder: secondaryAddressFinder,
+            clientConfig: clientConfig, onConnect: onConnect);
+}
 ```
 
 The factory captures **how bytes travel** (the transport and its settings, or
@@ -620,38 +651,47 @@ The application supplies it where it supplies the other two legs:
 ```dart
 final client = await Atsign('@alice').open(
     keys: keys, storage: storage, preference: preference,
-    lookUps: secureSocketLookUps(SecureSocketConfig()..pathToCerts = certs));
+    lookUps: secureSocketLookUps(config: SecureSocketConfig()..pathToCerts = certs));
 ```
 
 and the client holds it: `buildRemoteSecondary`, sync's `remoteSecondaryFor`,
-the monitor, the file-stream path and the re-derive after a retrofit all call
-`client.lookUps(...)` instead of `AtLookUp.withSecureSocket(...)`. The verbs
-build the lookups they need with it and hand **instances** to at_auth
+the file-stream path and the re-derive after a retrofit all call
+`client.lookUps(...)` instead of `AtLookUp.withSecureSocket(...)`, and the
+monitor's connection comes through `NotificationServiceImpl.create(lookUps:)`,
+the way that service takes `connection`: it holds the client as its
+interface, so the caller that built the client hands it the factory. The
+verbs build the lookups they need with it and hand **instances** to at_auth
 (`AtEnrollment.submit(request, lookUp)`, `waitForApproval(atLookup:)`,
-`activateAtSign(atLookUp:)`), so at_auth never learns the type. The Flutter
-dialogs and `AtsignFlows`, `CLIBase` and the `at_activate` commands take
-`lookUps:` and pass it through; a program that supplies none gets
-`secureSocketLookUps()` built from the preference's TLS fields, which is what
-every site does today.
+`activateAtSign(atLookUp:, awaitProvisioning: true)`, the flag because a
+lookup at_client built has not reached the atServer yet), so at_auth never
+learns the type. The Flutter dialogs and `AtsignFlows`, `CLIBase` and the
+`at_activate` commands take `lookUps:` and pass it through; a program that
+supplies none gets `defaultLookUps(preference)`, TLS with the preference's
+three TLS fields, which is what every site built before.
 
-Two things fall out. The CLI's `_proxyLookUp` becomes a factory that sends
-`from:` first, supplied when the preference names a proxy: the first real
-implementation beyond the default, and the proxy convention stops being a
-string prefix each site has to know. And a test's mock reaches all three of a
-client's connections, because sync and the monitor ask the same factory.
+Two things fell out. The CLI's `_proxyLookUp` became `proxyLookUps()`, a
+factory that sends `from:` first through `onConnect`, a hook
+`withSecureSocket` gained for it: the factory is synchronous and the preamble
+is not, so the preamble is a step on the connection, run once by
+`createConnection` after it has released its mutex and before anything else
+is sent, writing to the socket directly. `AtOnboardingPreference.lookUps`
+supplies that factory when the root domain names a proxy, so the convention
+stopped being a string prefix each site had to know. And a test's factory
+reaches all three of a client's connections, because sync and the monitor
+ask the same one.
 
-### What changes where
+### What changed where
 
 | Package             | Change                                                                                                                                                                                                                              |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| at_lookup           | `AtLookUpFactory` beside `withSecureSocket`; `secureSocketLookUps` in `at_lookup_io.dart`. A minor: nothing existing changes.                                                                                                       |
+| at_lookup           | `AtLookUpFactory` beside `withSecureSocket`; `secureSocketLookUps` in `at_lookup_io.dart`; `withSecureSocket(onConnect:)`. A minor: nothing existing changes.                                                                        |
 | at_client           | `buildAtClient(lookUps:)`, `AtClientImpl.lookUps`, `AtServiceFactory.atClient(lookUps:)`; the five construction sites call it; `open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs` take `lookUps:`; the preference's three TLS fields deprecated in favour of the factory's config. |
-| at_client_flutter   | `AtsignFlows` and the four dialogs take `lookUps:`; the walkthrough shows a custom transport.                                                                                                                                       |
-| at_cli_commons      | `CLIBase.fromCommandLineArgs(lookUps:)`; the proxy factory replaces `_proxyLookUp`'s caller.                                                                                                                                        |
-| at_onboarding_cli   | the commands build through the factory the preference supplies; `_proxyLookUp` becomes that factory; `status`'s public-key lookup uses it.                                                                                          |
+| at_client_flutter   | `AtsignFlows` and the three lifecycle dialogs take `lookUps:`; the README points at at_client's factory example.                                                                                                                  |
+| at_cli_commons      | `CLIBase.fromCommandLineArgs(lookUps:)`, the preference's with none; the README's "Choosing the transport" section.                                                                                                                 |
+| at_onboarding_cli   | `AtOnboardingPreference.lookUps`; the commands, `createAtClient` and the onboarding service pass it to every verb; `proxyLookUps()` replaces `_proxyLookUp`; `status`'s public-key lookup uses it.                                    |
 | at_server_status    | `AtStatusImpl(lookUps:)`.                                                                                                                                                                                                           |
-| at_auth             | nothing: it keeps taking instances.                                                                                                                                                                                                 |
-| tests               | a pin that every connection a client opens (its own, sync's, the monitor's) came from the factory, with a control that a client built without one uses the default; the 23 files injecting `atLookUp:` keep working.                 |
+| at_auth             | keeps taking instances; `activateAtSign(awaitProvisioning:)`, so a lookup at_client built still gets the provisioning wait.                                                                                                         |
+| tests               | `test/lifecycle/lookups_test.dart`: every connection a client opens (its own, sync's, the monitor's) came from the factory, with a client built without one as the control, plus `open`'s probe and `enroll`'s submission; at_lookup's `test/lookup_factory_test.dart`: the preamble runs once per connection, before anything else. The 23 files injecting `atLookUp:` keep working; the three `Mock implements AtClientImpl` doubles carry a concrete `lookUps`, as they carry `connection`. |
 
 ### Decisions
 

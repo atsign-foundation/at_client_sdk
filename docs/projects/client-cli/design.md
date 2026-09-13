@@ -65,7 +65,9 @@ its binary has no public API. And `AtOnboardingPreference` is the one type
 that makes `at_cli_commons` depend on `at_onboarding_cli`: what programs use
 it for is the CLI's notion of *where the keys and the store are*
 (`atKeysFilePath`, `passPhrase`, `storagePath`, `storageFor`) and the
-registrar URL.
+registrar URL. Since the communications leg of the lifecycle work it also
+carries `lookUps`, the `AtLookUpFactory` the commands pass to every verb:
+`proxyLookUps()` when the root domain names a proxy, TLS otherwise.
 
 ### What at_client_flutter is, for the mirror
 
@@ -121,7 +123,9 @@ registrar HTTP (at_auth's `RegistrarService` makes the same calls: `getFreeAtSig
 and friends, `printFullParserUsage`, `MySyncProgressListener` (a
 `SyncProgressListener` that prints; six files use it, three of them this repo's own examples).
 `AtOnboardingPreference` goes with the adapter: its fields are either
-`AtClientPreference`'s or the keys-and-store conventions above.
+`AtClientPreference`'s, the keys-and-store conventions above, or `lookUps`,
+which stays a parameter of `CLIBase` and the commands, with `proxyLookUps()`
+beside `secureSocketLookUps()` as the two factories a program picks from.
 
 ## 3. Getting there
 
@@ -168,7 +172,8 @@ branch. That is a decision for gkc ([section 6](#6-decisions-to-make), D1).
 | `at_cli_commons/lib/src/sync_listener.dart`                       | removed                                        | six files, three of them this repo's examples; a `SyncProgressListener` is four lines          |
 | `at_onboarding_cli/lib/src/cli/auth_cli*.dart`                    | `lib/src/commands/`                            | `main` becomes `AtActivate.main(args)`, public; one class per command behind it                |
 | `at_onboarding_cli/lib/src/register_cli/`, `util/register_api_*` | `lib/src/register/`                            | `at_register`                                                                                  |
-| `at_onboarding_cli/lib/src/util/at_onboarding_preference.dart`   | `lib/src/keys/`                                | the keys-and-store conventions (`atKeysFilePath`, `passPhrase`, `storagePath`, `storageFor`) as a small type; the rest is `AtClientPreference` |
+| `at_onboarding_cli/lib/src/util/at_onboarding_preference.dart`   | `lib/src/keys/`                                | the keys-and-store conventions (`atKeysFilePath`, `passPhrase`, `storagePath`, `storageFor`) as a small type; the rest is `AtClientPreference`, and `lookUps` becomes a parameter of `CLIBase` and the commands |
+| `at_onboarding_cli/lib/src/util/proxy_lookups.dart`              | `lib/src/util/`                                | `proxyLookUps()`, unchanged                                                                    |
 | `at_onboarding_cli/lib/src/util/home_directory_util.dart`        | merged into `lib/src/util/`                    | one home-directory helper                                                                      |
 | `at_onboarding_cli/lib/src/onboard/`                              | removed                                        | the adapter; ruling 6's callers move to `CLIBase` or `Atsign.open` at the bump                 |
 | `at_onboarding_cli/lib/src/util/create_at_client_cli.dart`       | removed                                        | `CLIBase`                                                                                      |
@@ -199,6 +204,7 @@ final client = await Atsign('@alice').open(                          // after
 final pref = AtOnboardingPreference()..atKeysFilePath = p..storagePath = s;   // before
 final keys = FileAtKeysIo(filePath: (_) => p);                              // after
 final storage = HiveAtClientStorage(atSign: '@alice', storagePath: s, closedByClient: true);
+// pref.lookUps: pass lookUps: proxyLookUps() (or a factory of your own) to CLIBase or the verb
 ```
 
 ## 6. Decisions to make

@@ -186,7 +186,11 @@ parameters stay for now. `AtClientPreference.decryptPackets`,
 factory's `SecureSocketConfig`, and are read by the default while deprecated.
 at_onboarding_cli's proxy convention (a `rootDomain` starting `proxy:`, with
 `from:` sent first) becomes a factory the preference supplies, the first
-non-default one. Built in the lifecycle PR.
+non-default one. Built in the lifecycle PR, with two additions the build
+needed: `withSecureSocket(onConnect:)`, a hook run once on each new
+connection before anything else is sent, which is where the proxy factory
+sends `from:`; and `activateAtSign(awaitProvisioning:)`, so a lookup
+at_client built for the activation still gets the provisioning wait.
 
 Why: ten library sites in four packages each called `withSecureSocket`
 themselves, so an application could not substitute the transport, a proxy
