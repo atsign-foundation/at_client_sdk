@@ -104,6 +104,10 @@ nothing from at_auth.
   atSign the keychain does not hold, as the file store does, so `Atsign.enroll`
   and `resumeEnrollment` start on a fresh keychain rather than refusing it as
   unreadable.
+- fix: changed keychain storage name delimiter from `_` to `:`
+- feat: upgrade path to move keys from `_` to `:` -- if `:` is absent and
+  `_` is present, data is copied to `:` but `_` is left in place. In 3.0.0
+  the `_` store will be removed after copying.
 
 ## 1.1.4
 
