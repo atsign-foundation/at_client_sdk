@@ -629,9 +629,12 @@ keypair, its own namespaces. Apps migrate independently and never have to agree.
    rebuilt client never loses access. This build must be **rolled out before** the
    next one ships: that release-ordering discipline is the one thing the model asks
    of an app developer, and it replaces every piece of removed machinery.
-2. **Active use (4.x, or an explicit opt-in today).** The app now writes the
+2. **Active use (5.x, or an explicit opt-in today).** The app now writes the
    nskey data path. **The SDK never decides to write PQ — the app tells it
-   to**, implicitly by riding the 4.x default, or explicitly by naming a
+   to**, implicitly by riding the 5.x default (4.x defaults to `pqReady`, the
+   reading stage, per
+   [`decisions.md` 138](detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08)),
+   or explicitly by naming a
    `crypto` config — or, since
    [`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10),
    by building its preference with `PqPosture.pqActive`, which runs

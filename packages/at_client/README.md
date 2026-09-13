@@ -440,6 +440,65 @@ final preference = AtClientPreference(posture: PqPosture.pqReady)
   ..namespace = 'todos';
 ```
 
+### The goals
+
+- **Close the harvest-now, decrypt-later hole.** Anything recorded off the
+  wire or off an atServer today — shared records, an atSign's own records,
+  and the secrets handed to a newly approved device — is established under
+  post-quantum key exchange, so a quantum computer later cannot open it.
+  Authentication moves to a post-quantum signature for the same reason.
+- **Lose nothing.** Every capability the SDK has — encrypt for another
+  atSign, encrypt for another client of your own atSign, enroll a device,
+  revoke one — works the same way under post-quantum keys.
+- **Every app upgrades on its own schedule.** No flag day. Each record
+  carries the id of the scheme that wrote it, a client keeps every older
+  scheme it ever read, and a writer only ever uses a scheme every reader of
+  that record supports. Upgrading adds read capability and takes nothing
+  away.
+- **Crypto-agility.** Algorithms are named, not assumed: the X-Wing hybrid
+  today, pure ML-KEM-1024 beside it, and whatever comes next drops in as
+  another provider without a migration of stored data.
+
+### The rollout ladder, and why it is a ladder
+
+The default posture moves one stage per major version of `at_client`. An
+app that names no posture rides the default; an app can name a later stage
+at any time, or name `legacy` to stay put.
+
+| `at_client` | Default posture      | A client that names no posture                                                                                  |
+| ----------- | -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 3.x         | `PqPosture.legacy`   | Byte-for-byte the pre-posture SDK: RSA authentication, legacy encryption, no post-quantum startup, reads no post-quantum data |
+| 4.x         | `PqPosture.pqReady`  | ML-DSA-65 authentication, publishes its key package and namespace keys, **reads** post-quantum data, still **writes** legacy so every peer can read it |
+| 5.x         | `PqPosture.pqActive` | Writes post-quantum by default and refuses a legacy write                                                       |
+
+The order follows from the one invariant above: a record may only be
+written in a scheme every reader of it supports. So the whole population of
+clients has to be *able to read* post-quantum data (`pqReady`) before any
+client *writes* it by default (`pqActive`), and the stage that adds the
+reading has to be rolled out before the stage that changes the writing. Two
+majors give every app one release to become a reader and another to become
+a writer, with the SDK's default carrying apps that never think about it.
+Legacy key material is still minted at every stage, because when an atSign
+can stop holding it is a question about every client of that atSign, not
+about one build.
+
+**You do not have to wait for 4.x or 5.x.** The stages are postures, and a
+posture is a construction-time choice, so a 3.x app names the stage it wants:
+
+```dart
+// Reads post-quantum data, authenticates with ML-DSA-65, writes legacy
+// until every reader of your namespaces has done the same.
+final ready = AtClientPreference(posture: PqPosture.pqReady)..namespace = 'todos';
+
+// Writes post-quantum by default and refuses legacy writes: for a
+// deployment whose every client already runs pqReady or later.
+final active = AtClientPreference(posture: PqPosture.pqActive)..namespace = 'todos';
+```
+
+That is the two-release model for an app that wants to lead: ship `pqReady`
+to all of its clients first, then ship `pqActive`. A posture is a floor for
+what a client drives, never a downgrade of what its atSign already holds.
+
 | Posture                      | Authentication                                                       | Data written                                    | Reads post-quantum data                                   |
 | ---------------------------- | -------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------- |
 | `PqPosture.legacy` (default) | RSA-2048 APKAM                                                       | legacy encryption                               | no: a record sealed to a namespace key is refused         |
