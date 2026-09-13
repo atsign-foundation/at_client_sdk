@@ -2,18 +2,19 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/src/keychain/keychain_data.dart';
-import 'package:at_commons/at_commons.dart';
 
-final AtKeys dummyAtKeys = AtKeys()
-  ..apkamPrivateKey = AtBytes.fromString('privateKey12')
-  ..apkamPublicKey = AtBytes.fromString('publicKey123')
-  ..defaultSelfEncryptionKey = AtBytes.fromString('selfEncKey12')
-  ..defaultEncryptionPrivateKey = AtBytes.fromString('encPrivateKey123')
-  ..defaultEncryptionPublicKey = AtBytes.fromString('encPublicKey')
-  ..apkamSymmetricKey = AtBytes.fromString('apkamSymKey1')
-  ..enrollmentId = 'enrollId1'
-  ..metadata['hiveSecret'] = 'hiveSecret1'
-  ..metadata['secret'] = 'secret1';
+final AtKeys dummyAtKeys =
+    AtKeys.legacy(
+        apkamPrivateKey: 'privateKey12',
+        apkamPublicKey: 'publicKey123',
+        selfEncryptionKey: 'selfEncKey12',
+        encryptionPrivateKey: 'encPrivateKey123',
+        encryptionPublicKey: 'encPublicKey',
+        apkamSymmetricKey: 'apkamSymKey1',
+        enrollmentId: 'enrollId1',
+      )
+      ..metadata['hiveSecret'] = 'hiveSecret1'
+      ..metadata['secret'] = 'secret1';
 
 final String emptyAtKeysData = jsonEncode(AtKeysData().toJson());
 final String dummyAtKeysData = jsonEncode(
