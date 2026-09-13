@@ -1,8 +1,8 @@
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart' show AtKeys;
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
@@ -842,8 +842,6 @@ class LocalSecondary implements Secondary {
   @Deprecated("Use getPkamPrivateKey")
   Future<String?> getPrivateKey() => getPkamPrivateKey();
 
-  AtChopsKeys? get atChopsKeys => _atClient.atChops?.atChopsKeys;
-
   bool _keySourceRead = false;
   AtKeys? _keySourceKeys;
 
@@ -871,25 +869,29 @@ class LocalSecondary implements Secondary {
     return _keySourceKeys;
   }
 
-  /// get it from atChops if we have it, otherwise try the keystore
+  /// The APKAM keypair the key source holds for this client's enrollment,
+  /// or null when it holds none.
   ///
-  /// NOTE: the key source is deliberately not a tier here, unlike the
-  /// encryption getters below. `AtKeys.authenticationKeyPairFor` refuses an
-  /// enrollment whose typed material names an algorithm this build cannot
-  /// sign with, and falling through that refusal to the keystore is the exact
-  /// thing it exists to prevent — the keystore holds whichever credential was
-  /// written there, which on a retrofitted keyfile is another enrollment's.
-  /// A caller wanting the APKAM keypair asks `AtKeys` for it directly.
-  Future<String?> getPkamPrivateKey() async {
-    String? v = atChopsKeys?.atPkamKeyPair?.atPrivateKey.privateKey;
-    v ??= (await keyStore!.get(AtConstants.atPkamPrivateKey))?.data;
-    return v;
-  }
+  /// NOTE: through `authenticationKeyPairFor`, which REFUSES a keypair filed
+  /// under an algorithm this build cannot sign with, and that refusal is
+  /// not fallen through to the keystore: the keystore holds whichever
+  /// credential was written there, which on a retrofitted keyfile is another
+  /// enrollment's.
+  Future<({SigningAlgoType algorithm, String publicKey, String privateKey})?>
+      _keySourceApkam() async => (await _keysFromSource())
+          ?.authenticationKeyPairFor(_atClient.enrollmentId);
 
-  /// get it from atChops if we have it, then the key source, then the keystore
+  /// The PKAM private key: the key source's for this enrollment, else the
+  /// keystore's.
+  Future<String?> getPkamPrivateKey() async =>
+      (await _keySourceApkam())?.privateKey ??
+      (await keyStore!.get(AtConstants.atPkamPrivateKey))?.data;
+
+  /// The atSign's encryption private key: the key source's, else the
+  /// keystore's.
   Future<String?> getEncryptionPrivateKey() async {
-    String? v = atChopsKeys?.atEncryptionKeyPair?.atPrivateKey.privateKey;
-    v ??= (await _keysFromSource())?.encryptionKeyPair?.atPrivateKey.privateKey;
+    String? v =
+        (await _keysFromSource())?.encryptionKeyPair?.atPrivateKey.privateKey;
     v ??= (await keyStore!.get(AtConstants.atEncryptionPrivateKey))?.data;
     return v;
   }
@@ -897,29 +899,28 @@ class LocalSecondary implements Secondary {
   @Deprecated("Use getPkamPublicKey")
   Future<String?> getPublicKey() => getPkamPublicKey();
 
-  /// get it from atChops if we have it, otherwise try the keystore. The key
-  /// source is not a tier, for the reason [getPkamPrivateKey] gives.
-  Future<String?> getPkamPublicKey() async {
-    String? v = atChopsKeys?.atPkamKeyPair?.atPublicKey.publicKey;
-    v ??= (await keyStore!.get(AtConstants.atPkamPublicKey))?.data;
-    return v;
-  }
+  /// The PKAM public key: the key source's for this enrollment, else the
+  /// keystore's.
+  Future<String?> getPkamPublicKey() async =>
+      (await _keySourceApkam())?.publicKey ??
+      (await keyStore!.get(AtConstants.atPkamPublicKey))?.data;
 
-  /// get it from atChops if we have it, then the key source, then the keystore
+  /// [atSign]'s encryption public key: the key source's, else the
+  /// keystore's.
   Future<String?> getEncryptionPublicKey(String atSign) async {
     atSign = AtUtils.fixAtSign(atSign);
-    String? v = atChopsKeys?.atEncryptionKeyPair?.atPublicKey.publicKey;
-    v ??= (await _keysFromSource())?.encryptionKeyPair?.atPublicKey.publicKey;
+    String? v =
+        (await _keysFromSource())?.encryptionKeyPair?.atPublicKey.publicKey;
     v ??= (await keyStore!.get('${AtConstants.atEncryptionPublicKey}$atSign'))
         ?.data;
 
     return v;
   }
 
-  /// get it from atChops if we have it, then the key source, then the keystore
+  /// The atSign's self-encryption key: the key source's, else the
+  /// keystore's.
   Future<String?> getEncryptionSelfKey() async {
-    String? v = atChopsKeys?.selfEncryptionKey?.key;
-    v ??= (await _keysFromSource())?.selfEncryptionKey?.key;
+    String? v = (await _keysFromSource())?.selfEncryptionKey?.key;
     v ??= (await keyStore!.get(AtConstants.atEncryptionSelfKey))?.data;
     return v;
   }

@@ -16,9 +16,9 @@ import 'package:at_chops/at_chops.dart';
 /// first keyed on the atSign.
 ///
 /// A test that needs a genuinely fresh keypair — one whose value it asserts,
-/// or a second key for the same principal — calls `AtChopsUtil` directly.
-AtPkamKeyPair pkamKeyPairFor(String atSign, String? enrollmentId) =>
-    _pkamKeyPairs.putIfAbsent(
-        '$atSign/$enrollmentId', AtChopsUtil.generateAtPkamKeyPair);
+/// or a second key for the same principal — generates one with
+/// `RsaKeyPair.generate` directly.
+RsaKeyPair pkamKeyPairFor(String atSign, String? enrollmentId) =>
+    _pkamKeyPairs.putIfAbsent('$atSign/$enrollmentId', RsaKeyPair.generate);
 
-final _pkamKeyPairs = <String, AtPkamKeyPair>{};
+final _pkamKeyPairs = <String, RsaKeyPair>{};

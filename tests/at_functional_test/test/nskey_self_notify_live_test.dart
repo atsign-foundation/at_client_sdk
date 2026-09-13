@@ -53,20 +53,16 @@ void main() {
     await AtClientSecretSharing.forClient(approver).register();
   });
 
-  /// An enrollment with its **own** local store.
+  /// An enrollment with its **own** local store, which `enrolAndAuthenticate`
+  /// gives every enrollment through `FunctionalStorage.forPrincipal`.
   ///
-  /// `TestUtils.getPreference` keys `hiveStoragePath` on the atSign alone, so
-  /// without this every enrollment of one atSign lands in one directory. The
-  /// notification replay watermark is a `local:` record in that store, and a
-  /// self notification reaches every listening monitor of the atSign, so a
-  /// shared store lets the sibling's monitor advance the watermark past a
+  /// The notification replay watermark is a `local:` record in that store, and
+  /// a self notification reaches every listening monitor of the atSign, so a
+  /// shared store would let the sibling's monitor advance the watermark past a
   /// notification this client has not received.
   Future<EnrolledClient> enrol(String device) {
     final preference =
         TestUtils.getPreference(atSign, posture: legacyPlusPqProviders);
-    preference
-      ..hiveStoragePath = 'test/hive/client/$atSign/$device-$runId'
-      ..commitLogPath = 'test/hive/client/$atSign/$device-$runId';
     return enrolAndAuthenticate(
       approver: approver,
       atSign: atSign,

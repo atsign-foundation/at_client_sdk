@@ -1,3 +1,7 @@
+// The injected signer is an AtChops: the door this file exercises is the
+// deprecated one, so its types are named here on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';

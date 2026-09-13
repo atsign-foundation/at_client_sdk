@@ -42,11 +42,8 @@ Future<bool> asTheAtServerVerifies({
     return await MlDsa65PureDartAlgo().verifyBytes(message,
         signature: signature, publicKey: base64Decode(publicKey));
   }
-  final input = AtSigningVerificationInput(message, signature, publicKey)
-    ..signingAlgoType = signingAlgo
-    ..hashingAlgoType = HashingAlgoType.sha256
-    ..signingMode = AtSigningMode.pkam;
-  return await AtChopsImpl(AtChopsKeys.create(null, null)).verify(input).result;
+  return await RsaSignatureAlgo.rsa2048().verifyBytes(message,
+      signature: signature, publicKey: base64Decode(publicKey));
 }
 
 void main() {

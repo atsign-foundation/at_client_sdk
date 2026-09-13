@@ -242,6 +242,8 @@ void main() {
     // from the preference on its own (`privateKey ??= preference.privateKey`),
     // so asserting on the authenticator passes whether or not the factory
     // threaded anything. The enrollment id is held by the client alone.
+    // The ladder stamp is the assertion.
+    // ignore: deprecated_member_use
     expect(built.atLookUp.enrollmentId, 'enrollment-under-test',
         reason: 'every RemoteSecondary this client opens is configured FROM '
             'the client, so a second connection acts as the same enrollment '

@@ -30,9 +30,12 @@ void main() {
     if (keysCreatedMap.containsKey(atSign)) {
       return;
     }
-    var atLookup =
-        AtLookupImpl(atSign, 'vip.ve.atsign.zone', virtualenvRootPort);
-    await atLookup.cramAuthenticate(at_demos.cramKeyMap[atSign]!);
+    // CRAM is the authenticator; the first command that needs it runs it.
+    final atLookup = secureSocketLookUps()(
+        atSign: atSign,
+        rootDomain: AtRootDomain('vip.ve.atsign.zone', virtualenvRootPort),
+        authenticator:
+            authenticatorForCramSecret(atSign, at_demos.cramKeyMap[atSign]!));
     var command =
         'update:privatekey:at_pkam_publickey ${at_demos.pkamPublicKeyMap[atSign]}\n';
     var response = await atLookup.executeCommand(command, auth: true);
@@ -269,9 +272,7 @@ AtOnboardingPreference getPreferences(String atSign, {PqPosture? posture}) {
       : AtOnboardingPreference(posture: posture))
     ..rootDomain = 'vip.ve.atsign.zone'
     ..rootPort = virtualenvRootPort
-    ..isLocalStoreRequired = true
-    ..hiveStoragePath = 'storage/hive/client'
-    ..commitLogPath = 'storage/hive/client/commit'
+    ..storagePath = 'storage/hive/client'
     ..privateKey = null
     ..cramSecret = at_demos.cramKeyMap[atSign]
     ..atKeysFilePath = testKeysFile(atSign)
@@ -285,13 +286,13 @@ AtOnboardingPreference getPreferences(String atSign, {PqPosture? posture}) {
 Future<void> generateAtKeysFile(String atSign, String filePath) async {
   atSign = AtUtils.fixAtSign(atSign);
   Map<String, String?> atKeysMap = <String, String?>{
-    AuthKeyType.pkamPublicKey: EncryptionUtil.encryptValue(
+    AuthKeyType.aesEncryptedPkamPublicKey: EncryptionUtil.encryptValue(
         at_demos.pkamPublicKeyMap[atSign]!, at_demos.aesKeyMap[atSign]!),
-    AuthKeyType.pkamPrivateKey: EncryptionUtil.encryptValue(
+    AuthKeyType.aesEncryptedPkamPrivateKey: EncryptionUtil.encryptValue(
         at_demos.pkamPrivateKeyMap[atSign]!, at_demos.aesKeyMap[atSign]!),
-    AuthKeyType.encryptionPublicKey: EncryptionUtil.encryptValue(
+    AuthKeyType.aesEncryptedEncryptionPublicKey: EncryptionUtil.encryptValue(
         at_demos.encryptionPublicKeyMap[atSign]!, at_demos.aesKeyMap[atSign]!),
-    AuthKeyType.encryptionPrivateKey: EncryptionUtil.encryptValue(
+    AuthKeyType.aesEncryptedEncryptionPrivateKey: EncryptionUtil.encryptValue(
         at_demos.encryptionPrivateKeyMap[atSign]!, at_demos.aesKeyMap[atSign]!),
     AuthKeyType.selfEncryptionKey: at_demos.aesKeyMap[atSign],
     atSign: at_demos.aesKeyMap[atSign]

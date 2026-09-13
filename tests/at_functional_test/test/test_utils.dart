@@ -11,7 +11,9 @@ import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
 import 'package:crypto/crypto.dart';
-import 'package:at_auth/at_auth.dart' show AtKeysIo;
+import 'package:at_auth/at_auth.dart'
+    show AtAuthSession, AtKeysIo, authenticatorFor;
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
@@ -100,6 +102,37 @@ class TestUtils {
   /// Root server port for the virtualenv under test. Defaults to 64; a
   /// base-port virtualenv (set VIRTUALENV_BASE_PORT, e.g. via runLocal.sh)
   /// puts the root server at the base port itself.
+  /// Where this pack's atServers are found.
+  static AtRootDomain get rootDomain =>
+      AtRootDomain('vip.ve.atsign.zone', rootServerPort);
+
+  /// A session for an enrollment request on [atSign]: where its atServer is
+  /// looked up, and the store the keys the submission mints are filed in
+  /// once approved, in memory unless [keys] says otherwise.
+  static AtAuthSession enrollmentSession(String atSign, {AtKeysIo? keys}) =>
+      AtAuthSession(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          atKeysIo: keys ?? InMemoryAtKeysIo());
+
+  /// A connection to [atSign]'s atServer that authenticates as nothing;
+  /// the caller closes it.
+  static AtLookUp unauthenticatedLookUp(String atSign) =>
+      secureSocketLookUps()(
+          atSign: atSign, rootDomain: rootDomain, authenticator: null);
+
+  /// A connection to [atSign]'s atServer that authenticates as
+  /// [enrollmentId] with the keypair [keys] holds for it, or as the
+  /// enrollment the keys name when none is given; the caller closes it.
+  static AtLookUp lookUpAs(String atSign, AtKeys keys,
+          {String? enrollmentId}) =>
+      secureSocketLookUps()(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          authenticator: authenticatorFor(
+              InMemoryAtKeysIo.holding(atSign, keys), atSign,
+              enrollmentId: enrollmentId));
+
   static int get rootServerPort =>
       int.tryParse(Platform.environment['VIRTUALENV_BASE_PORT'] ?? '') ?? 64;
 
@@ -177,8 +210,6 @@ class TestUtils {
         sealsToKeyAlgorithms: sealsToKeyAlgorithms);
     preference.rootDomain = 'vip.ve.atsign.zone';
     preference.rootPort = rootServerPort;
-    preference.decryptPackets = false;
-    preference.tlsKeysSavePath = 'test/tlsKeysFile';
     preference.fetchOfflineNotifications = true;
     return preference;
   }
@@ -304,22 +335,26 @@ class TestUtils {
       await keys.write(atSign, demo);
       return;
     }
-    // ignore: deprecated_member_use
-    if (held.holdsAuthenticationMaterial &&
-        held.defaultEncryptionPrivateKey != null) {
+    if (held.holdsAuthenticationMaterial && held.encryptionKeyPair != null) {
       return;
     }
+    final demoApkam = demo.authenticationKeyPairFor(null)!;
+    final demoEncryption = demo.encryptionKeyPair!;
     await keys.update(Atsign(atSign), (stored) {
-      // ignore: deprecated_member_use
-      stored.apkamPublicKey ??= demo.apkamPublicKey;
-      // ignore: deprecated_member_use
-      stored.apkamPrivateKey ??= demo.apkamPrivateKey;
-      // ignore: deprecated_member_use
-      stored.defaultEncryptionPublicKey ??= demo.defaultEncryptionPublicKey;
-      // ignore: deprecated_member_use
-      stored.defaultEncryptionPrivateKey ??= demo.defaultEncryptionPrivateKey;
-      // ignore: deprecated_member_use
-      stored.defaultSelfEncryptionKey ??= demo.defaultSelfEncryptionKey;
+      if (stored.authenticationKeyPairFor(null) == null) {
+        stored.fileLegacyMaterial(
+            apkamPublicKey: demoApkam.publicKey,
+            apkamPrivateKey: demoApkam.privateKey);
+      }
+      if (stored.encryptionKeyPair == null) {
+        stored.fileLegacyMaterial(
+            encryptionPublicKey: demoEncryption.atPublicKey.publicKey,
+            encryptionPrivateKey: demoEncryption.atPrivateKey.privateKey);
+      }
+      if (stored.selfEncryptionKey == null) {
+        stored.fileLegacyMaterial(
+            selfEncryptionKey: demo.selfEncryptionKey!.key);
+      }
       return true;
     });
   }

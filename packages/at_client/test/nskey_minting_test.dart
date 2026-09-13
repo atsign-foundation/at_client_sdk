@@ -1,3 +1,7 @@
+// A client with no key source signs from its AtChops, and several tests here are
+// about that shape, so this file names the AtChops on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
@@ -79,8 +83,11 @@ void main() {
     final advertised = <String, String>{};
     final advertisedStamps = <String, DateTime>{};
     final advertisementReads = <GetRequestOptions?>[];
-    final chops = AtChopsImpl(
-        AtChopsKeys.create(null, pkamKeyPairFor(atSign, 'enroll-a')));
+    final pair = pkamKeyPairFor(atSign, 'enroll-a');
+    final chops = AtChopsImpl(AtChopsKeys.create(
+        null,
+        AtPkamKeyPair.create(
+            pair.atPublicKey.publicKey, pair.atPrivateKey.privateKey)));
 
     when(() => atClient.atChops).thenReturn(chops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);

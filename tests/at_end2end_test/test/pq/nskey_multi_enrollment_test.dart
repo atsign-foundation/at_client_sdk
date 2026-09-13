@@ -96,6 +96,8 @@ void main() {
       // location holds one client.
       preference: TestPreferences.getInstance().forCoLocatedClient(bob,
           posture: legacyPlusPqProviders, device: bob2Device),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(bob, device: bob2Device),
       rootDomain: bobPreference.rootDomain,
       rootPort: bobPreference.rootPort,
       deviceName: bob2Device,
@@ -199,6 +201,8 @@ void main() {
       // and this would be alice1's conveyance under a second name.
       preference: TestPreferences.getInstance().forCoLocatedClient(alice,
           posture: legacyPlusPqProviders, device: 'alice2-$runStamp'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(alice, device: 'alice2-$runStamp'),
       rootDomain: alicePreference.rootDomain,
       rootPort: alicePreference.rootPort,
       deviceName: 'alice2-$runStamp',

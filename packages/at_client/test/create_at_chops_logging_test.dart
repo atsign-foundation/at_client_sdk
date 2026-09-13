@@ -49,8 +49,8 @@ void main() {
     await (client as AtClientImpl).stop();
   }
 
-  final pkam = AtChopsUtil.generateAtPkamKeyPair();
-  final encryption = AtChopsUtil.generateAtEncryptionKeyPair();
+  final pkam = RsaKeyPair.generate();
+  final encryption = RsaKeyPair.generate();
 
   tearDownAll(() async {
     await HiveInstances.closeAll();

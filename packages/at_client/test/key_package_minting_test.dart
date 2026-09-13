@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart'
     show
         AtEnrollmentResponse,
-        AtKeys,
         CryptographicMaterial,
         CryptographicMaterialRole,
         InMemoryAtKeysIo,
@@ -21,12 +20,12 @@ import 'package:at_client/src/secret_sharing/key_package_minting.dart'
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope, verifyEnvelope;
 import 'package:at_commons/at_commons.dart' show AtBytes;
-import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/test_keypairs.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -46,7 +45,7 @@ void main() {
   late MockAtClient atClient;
   late MockEnrollmentUpdater enrollment;
   late MockAtLookUp atLookUp;
-  late AtChops atChops;
+  late RsaKeyPair apkamPair;
   late InMemoryAtKeysIo keysIo;
 
   late List<EnrollmentUpdateRequest> updates;
@@ -75,8 +74,7 @@ void main() {
     final envelope = SignedEnvelope.fromJson(
         updates.last.metadata!['keyPackage'] as Map<String, dynamic>);
     await verifyEnvelope(envelope,
-        signerPublicKey:
-            atChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey,
+        signerPublicKey: apkamPair.atPublicKey.publicKey,
         expecting: EnvelopeType.keyPackage);
     return KeyPackage.fromPayload(envelope.payload, enrollmentId: enrollmentId);
   }
@@ -134,15 +132,14 @@ void main() {
   });
 
   setUp(() async {
-    atChops = AtChopsImpl(
-        AtChopsKeys.create(null, pkamKeyPairFor(atSign, enrollmentId)));
-    keysIo = InMemoryAtKeysIo();
-    await keysIo.write(atSign, AtKeys(atsign: atSign.toAtsign()));
+    apkamPair = pkamKeyPairFor(atSign, enrollmentId);
+    // Flat, as an OTP-enrolled rsa2048 keyfile is: the enrollment's typed
+    // section starts empty, and filling it is what the minter does.
+    keysIo = keysHoldingApkam(atSign, null, apkamPair);
     updates = [];
     heldWhenPublished = [];
 
     atClient = MockAtClient();
-    when(() => atClient.atChops).thenReturn(atChops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.atKeysIo).thenReturn(keysIo);
     configure(const [SecretSharingAlgos.xWing]);
