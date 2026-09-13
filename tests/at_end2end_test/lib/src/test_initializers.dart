@@ -59,7 +59,7 @@ class TestSuiteInitializer {
               '${ConfigUtil.getYaml()['filePath']}/${atSign}_key.atKeys');
     }
     final keysIo = FileAtKeysIo(
-        filePath: (a) => '${preference.hiveStoragePath}/$a.nskey.atKeys');
+        filePath: (a) => '${preference.hiveStoragePath}/${a}_key.atKeys');
     if (_seeded.add(atSign)) {
       final demo = createAtKeysFromDemoKeys(atSign);
       AtKeys? existing;
