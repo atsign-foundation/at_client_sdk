@@ -2,7 +2,8 @@
 
 - **BREAKING:** `AtOnboardingService` is the three members programs call:
   `AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
-  `atClient`, over at_client's `Atsign.open` and `AtClientManager.use`.
+  `atClient`, over at_client's `Atsign.open` and `AtClientManager.use`; the
+  deprecated `getAtClient()` is removed with the rest.
   `authenticate()` answers true only when the client's connection is online;
   an offline client is still opened and held, and its `connection` says why,
   while a refusal on a device that has never held the atSign online opens
@@ -67,16 +68,13 @@
   without the word appearing anywhere; it now prints the command list and
   exits 1. `auth onboard -a <atSign> -c <secret>` is the same activation.
   `--help` and `--version` are unaffected.
-- **BREAKING:** `--posture` is resolved by role rather than inherited from
-  at_client. `onboard` and `enroll` default to `legacy` and announce it, so
-  the keys they write stay usable by a legacy app and a default invocation
-  puts no post-quantum machinery in the picture. Every other command defaults
-  to `pqReady` and **refuses** `--posture legacy`: approving a post-quantum
-  enrolment means minting a symmetric key and encapsulating it to the
-  requester's key package, which a posture configuring no post-quantum
-  providers cannot do — at_client already refuses such an approval before it
-  reaches the atServer, and this turns that runtime failure into a usage
-  message. Naming `--posture` explicitly is unchanged on every command.
+- **BREAKING:** an unnamed `--posture` is at_client's default on every
+  command, and `onboard` and `enroll` announce it. The role split that ran
+  `onboard` and `enroll` at `legacy` and every other command at `pqReady`
+  is gone, with the refusal of `--posture legacy` on the approving commands:
+  a post-quantum approval under a posture with no post-quantum providers is
+  refused by at_client when the request is read. One default for the whole
+  SDK, so the CLI moves when at_client's default does.
 - feat: `authenticate()` authenticates as the keyfile's own enrollment (at_auth
   4.0.0-rc2's `AtKeys.enrollmentToAuthenticateAs`): the one enrollment holding
   active typed authentication material, else the flat stored id, else `primary`

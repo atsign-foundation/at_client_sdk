@@ -138,8 +138,16 @@ class AuthCliArgs {
     return named == null ? null : postureNames[named];
   }
 
+  /// The name `--posture` spells [posture] by, or `custom` for one no stage
+  /// defines.
+  static String nameOf(PqPosture posture) => postureNames.entries
+      .where((entry) => identical(entry.value, posture))
+      .map((entry) => entry.key)
+      .firstWhere((_) => true, orElse: () => 'custom');
+
   /// The posture an **enroller** command — `onboard` or `enroll` — runs at:
-  /// whatever `--posture` named, else [PqPosture.legacy].
+  /// whatever `--posture` named, else at_client's default, the one
+  /// `AtOnboardingPreference()` carries.
   ///
   /// `notice` is non-null exactly when the default was taken, and is for the
   /// command to print.
@@ -147,33 +155,22 @@ class AuthCliArgs {
       ArgResults results) {
     final named = postureIn(results);
     if (named != null) return (posture: named, notice: null);
+    final inherited = AtOnboardingPreference().posture;
     return (
-      posture: PqPosture.legacy,
-      notice: 'No --posture given, so this runs at "legacy": classical keys '
-          'throughout, no post-quantum key material, and a keyfile a '
-          'previously published build can read. Name --posture pqReady or '
-          '--posture pqActive to enrol further into the rollout.',
+      posture: inherited,
+      notice: 'No --posture given, so this runs at "${nameOf(inherited)}", '
+          'at_client\'s default'
+          '${nameOf(inherited) == 'legacy' ? ': classical keys throughout, no post-quantum key material, and a keyfile a previously published build can read' : ''}'
+          '. Name --posture legacy, pqReady or pqActive to choose.',
     );
   }
 
   /// The posture an **approver** command runs at: whatever `--posture` named,
-  /// else [PqPosture.pqReady]. Naming `legacy` throws an [ArgumentError],
-  /// because a legacy posture configures none of the post-quantum providers an
-  /// approver needs to service a post-quantum enrolment.
-  static PqPosture postureForApprover(ArgResults results) {
-    final named = postureIn(results);
-    if (named == PqPosture.legacy) {
-      throw ArgumentError.value(
-          'legacy',
-          '--$argNamePosture',
-          'this command approves, lists or manages enrollments, and a legacy '
-              'posture configures no post-quantum providers — so it cannot '
-              'mint and seal the symmetric key a post-quantum enrolment asks '
-              'its approver for, and would leave such a request pending. Run '
-              'it at pqReady (the default) or pqActive');
-    }
-    return named ?? PqPosture.pqReady;
-  }
+  /// else at_client's default. A legacy posture configures none of the
+  /// post-quantum providers, so approving a post-quantum enrolment under it
+  /// is refused by at_client when the request is read, not here.
+  static PqPosture postureForApprover(ArgResults results) =>
+      postureIn(results) ?? AtOnboardingPreference().posture;
 
   /// The key-exchange modes a `--key-exchange` argument may name.
   static const Map<String, EnrollmentKeyExchangeMode> keyExchangeNames = {

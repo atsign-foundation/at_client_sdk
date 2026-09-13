@@ -52,7 +52,12 @@ Acceptance item 3, all four live packs green, was met at the at_auth shrink
 (functional 200, e2e 52 and 21, onboarding-CLI 21, proxy 4). The durable
 copy of the atServer address came last: the address the atDirectory answers
 is kept in the client's storage and a start that cannot reach the
-atDirectory connects to it, on every connection the client holds. The work is a
+atDirectory connects to it, on every connection the client holds. A
+walk-through of every decision on 2026-09-13 confirmed them and added:
+`open` refuses a second client on a storage location another holds;
+`authenticatesAs` refuses with the cause `open` reports; the deprecated
+`getAtClient()` is gone; the CLI inherits at_client's posture default on
+every command; the pq key exchange of `enroll` is unit-tested. The work is a
 **P0** row in the PQ table
 ([`../pq/implementation-plan.md`](../pq/implementation-plan.md)), since it
 gates at_auth 4.0 final, at_client_flutter 2.0, at_onboarding_cli 2.0 and the
@@ -213,7 +218,8 @@ sibling repositories that name `AtOnboardingService`, the receiver-matched
 call sites are `.authenticate()` 19, `.getAtClient()` 9, `.atClient` 5,
 `.onboard()` 3 and `.enroll()` 3 (both sshnoports only), and nothing else. So
 `AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
-`getAtClient()`/`atClient` stay with their present meaning, implemented over
+`atClient` stay with their present meaning (the deprecated `getAtClient()`
+goes too, ruled 2026-09-13), implemented over
 at_client's `open` (a `FileAtKeysIo` from `atKeysFilePath` and `passPhrase`)
 and the manager's adopt; `authenticate()` returns true only for the online
 outcome. The other ten members and the live-object getters go. Seven

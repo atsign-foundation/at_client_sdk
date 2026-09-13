@@ -23,7 +23,4 @@ abstract class AtOnboardingService {
 
   /// The client the last [authenticate] opened, or null before one has.
   AtClient? get atClient;
-
-  @Deprecated('use atClient')
-  Future<AtClient?> getAtClient();
 }

@@ -160,11 +160,12 @@ void main() {
   }, timeout: Timeout(Duration(minutes: 6)));
 
   // `authenticated == true` is a client opened at the legacy posture, which
-  // retrofits nothing. `at_activate list` runs the shipped binary path: it
-  // builds its own client through `createAtClient`, which names no posture
-  // and so runs at the SDK default, retrofits the enrolment on the spot, and
+  // retrofits nothing. `at_activate list --posture pqReady` runs the shipped
+  // binary path: it builds its own client through `createAtClient` at a
+  // posture that asks for ML-DSA-65, retrofits the enrolment on the spot, and
   // then sends `enroll:list` with `auth: true` over the retrofitted client's
-  // connection.
+  // connection. The posture is named because an unnamed one is at_client's
+  // default, which retrofits nothing.
   //
   // The retrofit is asserted rather than assumed — the keyfile is read on both
   // sides, legacy shape before and typed ML-DSA material under a second
@@ -189,7 +190,8 @@ void main() {
         await runCliCommand([
           'list', '-a', atSign, //
           '-r', 'vip.ve.atsign.zone', //
-          '-k', legacy.keysFilePath,
+          '-k', legacy.keysFilePath, //
+          '--posture', 'pqReady',
         ]),
         0,
         reason: 'at_activate list authenticates and then sends enroll:list '
@@ -207,7 +209,7 @@ void main() {
     final retrofittedIds =
         after.enrollmentIds.where((id) => id != legacy.enrollmentId).toSet();
     expect(retrofittedIds, isNotEmpty,
-        reason: 'the SDK default posture asks for mldsa65 and this enrolment '
+        reason: 'pqReady asks for mldsa65 and this enrolment '
             'holds rsa2048, so the client must have retrofitted onto a second '
             'enrolment and written its material here. Nothing new in the '
             'keyfile means no retrofit ran, and the assertion above then '

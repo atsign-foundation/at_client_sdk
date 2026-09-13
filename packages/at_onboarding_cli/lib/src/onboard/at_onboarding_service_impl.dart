@@ -84,8 +84,4 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
     return state.isOnline;
   }
-
-  @override
-  @Deprecated('use atClient')
-  Future<AtClient?> getAtClient() async => atClient;
 }

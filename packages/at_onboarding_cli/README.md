@@ -68,11 +68,13 @@ The remaining commands run on the keyfile `-k` names (that one by default):
 `--posture legacy|pqReady|pqActive` is accepted on every command and decides
 what a client built for it does post-quantum (see the
 [at_client README](../at_client/README.md#post-quantum-cryptography)).
-`onboard` and `enroll` default to `legacy`, so the keys they write stay
-usable by a legacy app; every other command defaults to `pqReady` and refuses
-`legacy`, since approving a post-quantum enrollment needs the post-quantum
-providers. `enroll --key-exchange legacy|pq` chooses how the enrollment's
-symmetric key travels, for the approver that will pick the request up.
+An unnamed `--posture` is at_client's default on every command (`legacy`
+today), and `onboard` and `enroll` say which posture they ran at. Approving
+a post-quantum enrollment needs the post-quantum providers, so under `legacy`
+at_client refuses such an approval when it reads the request; pass
+`--posture pqReady` to approve one. `enroll --key-exchange legacy|pq`
+chooses how the enrollment's symmetric key travels, for the approver that
+will pick the request up.
 
 ## APKAM enrollment
 
@@ -174,7 +176,7 @@ unchanged.
 | 1.x                                                                                        | 2.0                                                                                                                                                                                  |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `at_activate -a @alice -c <secret>` (no command)                                           | `at_activate onboard -a @alice -c <secret>`; an invocation naming no command prints the list and exits 1                                                                             |
-| `--signingAlgoType mldsa65` on `onboard`                                                   | `--posture legacy\|pqReady\|pqActive`, honoured on every command; `enroll --key-exchange legacy\|pq` for how the enrollment's key travels                                            |
+| `--signingAlgoType mldsa65` on `onboard`                                                   | `--posture legacy\|pqReady\|pqActive`, honoured on every command and defaulting to at_client's posture; `enroll --key-exchange legacy\|pq` for how the enrollment's key travels        |
 | `AtOnboardingServiceImpl(atSign, pref).onboard()`                                          | `Atsign(atSign).activate(cramSecret: ..., keys: ..., preference: pref, storage: pref.storageFor(atSign))`                                                                            |
 | `.authenticate()`                                                                          | unchanged: opens the client through `Atsign.open`, makes it current, and answers true only when its connection is online; an offline client is still held, `atClient.connection` says why |
 | `.authenticate(enrollmentId: ...)`                                                         | the keyfile decides which enrollment authenticates; a value that disagrees is logged and ignored                                                                                     |
@@ -183,7 +185,7 @@ unchanged.
 | `.close()`                                                                                 | `atClient.stop()`                                                                                                                                                                    |
 | `.isOnboarded()`                                                                           | the atDirectory's answer: `at_activate status`, or at_server_status's `AtStatusImpl`                                                                                                 |
 | `.atLookUp`, `.atChops`, `.atAuth`, `.completeActivation()`                                | none; the client's own connection does what they exposed                                                                                                                             |
-| `.getAtClient()`                                                                           | `.atClient`                                                                                                                                                                          |
+| `.getAtClient()`                                                                           | `.atClient`; the deprecated getter is gone                                                                                                                                           |
 | `AtOnboardingPreference.hiveStoragePath`, `.commitLogPath`                                 | `.storagePath`, or `.storage` for a bundle of your own; `commitLogPath` was never read                                                                                               |
 | `AtOnboardingPreference()..signingAlgoType = ...`                                          | `AtOnboardingPreference(posture: ..., authenticationKeyAlgorithm: ..., dataSigningKeyAlgorithms: ...)`, fixed at construction                                                       |
 | `package:at_onboarding_cli/src/activate_cli/activate_cli.dart`                             | removed; run the `at_activate` binary                                                                                                                                                |

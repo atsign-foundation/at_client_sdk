@@ -124,7 +124,9 @@ store, persisted per platform (the present situation, tidied); in-memory only
 ## 6. at_onboarding_cli keeps a three-member `AtOnboardingService`
 
 `LIVE`. `AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
-`getAtClient()`/`atClient` stay with their present meaning, implemented over
+`atClient` stay with their present meaning (gkc, 2026-09-13: the deprecated
+`getAtClient()` goes with the rest, its nine external callers moving to
+`atClient` at the dependency bump), implemented over
 at_client's `open` (a `FileAtKeysIo` from `atKeysFilePath` and `passPhrase`)
 and the manager's adopt; `authenticate()` answers true only for the online
 outcome. The other ten members and the live-object getters go. `CLIBase` in
