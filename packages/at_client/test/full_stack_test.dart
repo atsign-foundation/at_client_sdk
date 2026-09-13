@@ -274,6 +274,11 @@ void main() {
 
         MockLocalSecondary mockLocalSecondary =
             atClient.localSecondary = MockLocalSecondary();
+        // The self-key read reaches the local secondary now, which resolves
+        // it across the client's AtChops, its key source and the keystore. A
+        // mock standing in for that has to answer it.
+        when(() => mockLocalSecondary.getEncryptionSelfKey())
+            .thenAnswer((_) async => selfEncryptionKey);
 
         when(() => mockLocalSecondary.executeVerb(
             any(that: isA<UpdateVerbBuilder>()),
@@ -397,6 +402,11 @@ void main() {
 
         MockLocalSecondary mockLocalSecondary =
             atClient.localSecondary = MockLocalSecondary();
+        // The self-key read reaches the local secondary now, which resolves
+        // it across the client's AtChops, its key source and the keystore. A
+        // mock standing in for that has to answer it.
+        when(() => mockLocalSecondary.getEncryptionSelfKey())
+            .thenAnswer((_) async => selfEncryptionKey);
         when(() => mockLocalSecondary.executeVerb(
             any(that: isA<DeleteVerbBuilder>()),
             sync: any(named: "sync"))).thenAnswer((invocation) async {

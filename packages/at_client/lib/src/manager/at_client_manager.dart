@@ -19,16 +19,16 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
-/// Factory class for creating [AtClient], [SyncService] and [NotificationService] instances
+/// Holds the current [AtClient] and tells the switch listeners when it
+/// changes.
 ///
-/// Usage
+/// ```dart
+/// final client = await Atsign('@alice').open(keys: keys, preference: preference);
+/// AtClientManager.getInstance().use(client);
 /// ```
-/// final atClientManager = AtClientManager.getInstance().setCurrentAtSign(<current_atsign>, <app_namespace>, <preferences>)
-/// Apps have to call the above method again while switching atsign.
-/// ```
-/// atClientManager.atClient - for at client method calls
-/// atClientManager.syncService - for invoking sync. Refer [SyncService] for detailed usage
-/// atClientManager.notificationService - for notification methods. Refer [NotificationService] for detailed usage
+///
+/// `AtClientManager.getInstance().atClient` is the current client; its
+/// `syncService` and `notificationService` are that client's.
 class AtClientManager {
   final AtSignLogger _logger = AtSignLogger('AtClientManager');
 
@@ -105,10 +105,14 @@ class AtClientManager {
   ///
   /// * [serviceFactory] - Overrides service creation (primarily for testing).
   /// * [atChops] - Shared crypto context for the new services.
+  @Deprecated('Build the client with Atsign(atSign).open(keys: ..., '
+      'preference: ...) and make it current with '
+      'AtClientManager.getInstance().use(client); removed in 4.0')
   Future<AtClientManager> setCurrentAtSign(
       String atSign, String? namespace, AtClientPreference preference,
       {AtServiceFactory? serviceFactory,
-      AtChops? atChops,
+      // ignore: deprecated_member_use
+      @Deprecated("use atKeysIo") AtChops? atChops,
       AtKeysIo? atKeysIo,
       AtLookUp? atLookUp,
       String? enrollmentId,
@@ -242,6 +246,22 @@ class AtClientManager {
     return this;
   }
 
+  /// Makes [client], which the caller built and owns, the current client.
+  ///
+  /// The previous current client is not stopped: it is its owner's to stop,
+  /// and an application that keeps two clients open and switches between
+  /// them has not finished with either. The switch listeners are notified as
+  /// they are for [setCurrentAtSign]. Making the current client current
+  /// again does nothing.
+  void use(AtClient client) {
+    final previous = _currentAtClient;
+    if (identical(previous, client)) return;
+    _atSign = client.getCurrentAtSign()!;
+    _currentAtClient = client;
+    _logger.info('use: ${previous?.getCurrentAtSign()} -> $_atSign');
+    _notifyListeners(SwitchAtSignEvent(previous, client));
+  }
+
   /// Whether [storage] would leave the current client's storage as it is:
   /// either none was offered, or it is the object that client already holds.
   bool _storageIsUnchanged(AtClientStorage? storage) {
@@ -258,17 +278,16 @@ class AtClientManager {
   /// opens a fresh socket that PKAMs itself. Costs one extra PKAM handshake at
   /// startup — the accepted price of clean auth/client separation.
   ///
-  /// Set [reuse] to adopt auth's already-authenticated connection
-  /// ([session.atLookUp]) and skip the second handshake — the perf escape hatch.
-  /// When false (default) the client opens its own fresh socket.
-  ///
   /// [storage] is borrowed unless it was built with `closedByClient: true`, in
   /// which case the client closes it on [AtClient.stop]. Same rule as on
   /// [setCurrentAtSign].
+  @Deprecated('Open a client on the session\'s key source with '
+      'Atsign(session.atSign).open(keys: session.atKeysIo, preference: ...) '
+      'and make it current with AtClientManager.getInstance().use(client); '
+      'removed in 4.0')
   Future<AtClientManager> fromAuthSession(
       AtAuthSession session, AtClientPreference preference,
       {AtServiceFactory? serviceFactory,
-      bool reuse = false,
       AtClientStorage? storage,
       bool principalChange = false}) async {
     // Destructure rootDomain onto the preference for now. A follow-up will add
@@ -276,15 +295,10 @@ class AtClientManager {
     preference.rootDomain = session.rootDomain.rootDomain;
     preference.rootPort = session.rootDomain.rootPort;
 
-    if (reuse && session.atLookUp == null) {
-      _logger.warning('fromAuthSession(reuse: true) but the session carries no '
-          'authenticated AtLookUp; opening a fresh connection instead.');
-    }
-
+    // ignore: deprecated_member_use_from_same_package
     return setCurrentAtSign(session.atSign, session.namespace, preference,
         serviceFactory: serviceFactory,
         atKeysIo: session.atKeysIo,
-        atLookUp: reuse ? session.atLookUp : null,
         enrollmentId: session.enrollmentId,
         storage: storage,
         principalChange: principalChange);
@@ -348,9 +362,11 @@ abstract class AtServiceFactory {
     String? namespace,
     AtClientPreference preference,
     AtClientManager atClientManager, {
-    AtChops? atChops,
+    // ignore: deprecated_member_use
+    @Deprecated("Use atKeysIo") AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
     String? enrollmentId,
     AtClientStorage? storage,
   });
@@ -376,9 +392,11 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     String? namespace,
     AtClientPreference preference,
     AtClientManager atClientManager, {
-    AtChops? atChops,
+    // ignore: deprecated_member_use
+    @Deprecated("Use atKeysIo") AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
     String? enrollmentId,
     AtClientStorage? storage,
   }) async {
@@ -390,6 +408,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       atChops: atChops,
       atKeysIo: atKeysIo,
       atLookUp: atLookUp,
+      lookUps: lookUps,
       enrollmentId: enrollmentId,
       storage: storage,
     );
@@ -400,7 +419,11 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       AtClient atClient, AtClientManager atClientManager,
       {SecondaryAddressFinder? secondaryAddressFinder}) async {
     return await NotificationServiceImpl.create(atClient,
-        secondaryAddressFinder: secondaryAddressFinder);
+        secondaryAddressFinder: secondaryAddressFinder,
+        // NOTE: the concrete client's, and only when the client is one: a
+        // test double implementing the interface has no state to report into.
+        connection: atClient is AtClientImpl ? atClient.connection : null,
+        lookUps: atClient is AtClientImpl ? atClient.lookUps : null);
   }
 
   @override

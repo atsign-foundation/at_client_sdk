@@ -16,10 +16,8 @@ class TestUtils {
     AtPkamKeyPair atPkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
     AtChopsKeys atChopsKeys =
         AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    atChopsKeys.selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-    atChopsKeys.apkamSymmetricKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    atChopsKeys.selfEncryptionKey = AESKey.generate(32);
+    atChopsKeys.apkamSymmetricKey = AESKey.generate(32);
 
     return AtChopsImpl(atChopsKeys);
   }

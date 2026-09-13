@@ -115,25 +115,18 @@ void main() {
     var aliceEncryptionPublicKey = aliceKeypair.publicKey.toString();
     var aliceEncryptionPrivateKey = aliceKeypair.privateKey.toString();
 
-    var aesSharedKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    var aesSharedKey = AESKey.generate(32).key;
     var encryptedSharedKey =
         EncryptionUtil.encryptKey(aesSharedKey, aliceEncryptionPublicKey);
     var publicKeyCheckSum =
         EncryptionUtil.md5CheckSum(aliceEncryptionPublicKey);
     var location = 'California';
-    var ivBase64String = base64Encode(AtChopsUtil.generateRandomIV(16).ivBytes);
+    var ivBase64String = base64Encode(InitialisationVector.random(16).ivBytes);
     var encryptedLocation = EncryptionUtil.encryptValue(location, aesSharedKey,
         ivBase64: ivBase64String);
-    var atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        aliceEncryptionPublicKey, aliceEncryptionPrivateKey);
-
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, null);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
     when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
-    when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
-        .thenAnswer((_) => Future.value(aliceEncryptionPublicKey));
+    stubEncryptionKeyPair(mockLocalSecondary, '@alice',
+        RsaKeyPair.create(aliceEncryptionPublicKey, aliceEncryptionPrivateKey));
     var sharedKey = AtKey()
       ..sharedBy = '@alice'
       ..sharedWith = '@bob'
@@ -152,25 +145,18 @@ void main() {
     RSAKeypair aliceKeypair = AtChopsUtil.generateRSAKeyPair(keySize: 2048);
     var aliceEncryptionPublicKey = aliceKeypair.publicKey.toString();
     var aliceEncryptionPrivateKey = aliceKeypair.privateKey.toString();
-    var aesSharedKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    var aesSharedKey = AESKey.generate(32).key;
     var encryptedSharedKey =
         EncryptionUtil.encryptKey(aesSharedKey, aliceEncryptionPublicKey);
     var publicKeyCheckSum =
         EncryptionUtil.md5CheckSum(aliceEncryptionPublicKey);
     var location = 'California';
-    var ivBase64String = base64Encode(AtChopsUtil.generateRandomIV(16).ivBytes);
+    var ivBase64String = base64Encode(InitialisationVector.random(16).ivBytes);
     var encryptedLocation = EncryptionUtil.encryptValue(location, aesSharedKey,
         ivBase64: ivBase64String);
-    var atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        aliceEncryptionPublicKey, aliceEncryptionPrivateKey);
-
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, null);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
     when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
-    when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
-        .thenAnswer((_) => Future.value(aliceEncryptionPublicKey));
+    stubEncryptionKeyPair(mockLocalSecondary, '@alice',
+        RsaKeyPair.create(aliceEncryptionPublicKey, aliceEncryptionPrivateKey));
     when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
         .thenAnswer((_) => Future.value('data:$encryptedSharedKey'));
     var sharedKey = AtKey()
@@ -187,8 +173,7 @@ void main() {
 
   test('test to check self key decryption with IV', () async {
     var selfKeyDecryption = SelfKeyDecryption(mockAtClient);
-    SymmetricKey selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+    SymmetricKey selfEncryptionKey = AESKey.generate(32);
 
     AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
     atChopsKeys.selfEncryptionKey = selfEncryptionKey;

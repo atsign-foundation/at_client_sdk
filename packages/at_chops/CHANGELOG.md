@@ -1,5 +1,15 @@
 ## 3.7.0
 
+- feat: the barrel exports `MlDsa65Sizes`. A caller signing a PKAM challenge
+  with ML-DSA needs the FIPS 204 secret-key length to say what a wrong-sized
+  key most likely is, which is the difference between naming a mismatched
+  enrollment and reporting a byte count.
+- feat: `RsaSignatureAlgo.signBytesSync`, for callers that cannot await. The
+  PKCS#1 v1.5 computation is synchronous, and `signBytes` now delegates to it,
+  matching the pair `MlDsa65PureDartAlgo` already has. Envelope signing builds
+  a signed document in a synchronous path and had no way onto this class
+  without it.
+
 - feat: AES-CTR via OpenSSL when libcrypto is present, in one-shot (`AtPqc.aesCtr`)
   and incremental (`AesCtrFfiCipher`, for streams) form. Ciphertext is unchanged;
   hosts without libcrypto keep the pure-Dart path.

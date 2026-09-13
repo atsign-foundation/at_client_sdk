@@ -1,6 +1,8 @@
 import 'dart:core';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
+import 'package:at_onboarding_cli/src/util/proxy_lookups.dart';
 import 'package:at_onboarding_cli/src/util/registrar_api_constants.dart';
 
 class AtOnboardingPreference extends AtClientPreference {
@@ -42,6 +44,17 @@ class AtOnboardingPreference extends AtClientPreference {
   /// Flag to indicate if we're using a proxy server for connection
   bool get isUsingProxy => rootDomain.startsWith("proxy:");
 
+  AtLookUpFactory? _lookUps;
+
+  /// Builds every connection a client opened under this preference makes.
+  /// Unset, it is the proxy factory when [isUsingProxy] (each connection
+  /// sends `from:` first, which is what the proxy needs to route it) and TLS
+  /// on TCP otherwise; a program with its own transport sets it.
+  AtLookUpFactory get lookUps =>
+      _lookUps ?? (isUsingProxy ? proxyLookUps() : secureSocketLookUps());
+
+  set lookUps(AtLookUpFactory? value) => _lookUps = value;
+
   /// The password (or pass-phrase) with which the atKeys file is encrypted/decrypted.
   String? passPhrase;
 
@@ -60,4 +73,21 @@ class AtOnboardingPreference extends AtClientPreference {
   /// Leave it null and a Hive bundle is built under [storagePath], which the
   /// client closes itself.
   AtClientStorage? storage;
+
+  /// The store a client for [atSign] opens: [storage] when set, else a fresh
+  /// Hive store that the client closes when it stops, under [storagePath],
+  /// the deprecated `hiveStoragePath`, or the per-atSign directory under the
+  /// user's home.
+  ///
+  /// Fresh each call, because a closed store cannot reopen and every client
+  /// this package opens closes the store it was given.
+  AtClientStorage storageFor(String atSign) =>
+      storage ??
+      HiveAtClientStorage(
+          atSign: atSign,
+          storagePath: storagePath ??
+              // ignore: deprecated_member_use
+              hiveStoragePath ??
+              HomeDirectoryUtil.getHiveStoragePath(atSign),
+          closedByClient: true);
 }

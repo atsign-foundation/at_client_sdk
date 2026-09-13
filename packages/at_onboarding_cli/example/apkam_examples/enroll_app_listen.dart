@@ -1,158 +1,38 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/src/auth_constants.dart' as auth_constants;
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 
 import '../util/atsign_preference.dart';
 import '../util/custom_arg_parser.dart';
 
-/// Please run the following command to execute this file properly
+/// Listens for enrollment requests on an atSign and approves or denies each
+/// one from the terminal.
+///
 /// `dart enroll_app_listen.dart -a <atsign> -k <path_to_key_file>`
 void main(List<String> args) async {
   final argResults = CustomArgParser(getArgParser()).parse(args);
+  final String atSign = argResults['atsign'];
 
-  var atsign = argResults['atsign'];
-  try {
-    var atAuthKeys = await _decryptAtKeysFile(
-        await _readAtKeysFile(argResults['atKeysPath']));
-    var atChops = _createAtChops(atAuthKeys);
-    final atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(
-            atsign,
-            'wavi',
-            AtSignPreference.getAlicePreference(
-                atsign, atAuthKeys.enrollmentId!),
-            atChops: atChops,
-            enrollmentId: atAuthKeys.enrollmentId);
+  final keys = FileAtKeysIo(filePath: (_) => argResults['atKeysPath']);
+  final enrollmentId = (await keys.read(atSign)).enrollmentToAuthenticateAs();
+  final client = await Atsign(atSign).open(
+      keys: keys,
+      preference: AtSignPreference.getAlicePreference(atSign, enrollmentId),
+      namespace: 'wavi');
 
-    // alice - listen for notification
-    atClientManager.atClient.notificationService
-        .subscribe(regex: '.__manage')
-        .listen((notification) {
-      _notificationCallback(
-          notification, atClientManager.atClient, atAuthKeys, atChops);
-    });
-  } on Exception catch (e, trace) {
-    print(e.toString());
-    print(trace);
-  }
-
-  print('end of test');
-}
-
-Future<void> _notificationCallback(AtNotification notification,
-    AtClient atClient, AtKeys atAuthKeys, AtChops atChops) async {
-  print('alice enroll notification received: ${notification.toString()}');
-  final notificationKey = notification.key;
-  final enrollmentId =
-      notificationKey.substring(0, notificationKey.indexOf('.new.enrollments'));
-  print('Approve enrollmentId $enrollmentId?');
-  String? approveResponse = stdin.readLineSync();
-  print('approved?: $approveResponse');
-  String enrollRequest;
-  var enrollParamsJson = {};
-  enrollParamsJson['enrollmentId'] = enrollmentId;
-  if (approveResponse == 'yes') {
-    var encryptedAPKAMSymmetricKey =
-        jsonDecode(notification.value!)['encryptedAPKAMSymmetricKey'];
-    // workaround for a server issue where it may send encryptedAPKAMSymmetricKey or encryptedApkamSymmetricKey
-    if (encryptedAPKAMSymmetricKey == null ||
-        encryptedAPKAMSymmetricKey.isEmpty) {
-      encryptedAPKAMSymmetricKey =
-          jsonDecode(notification.value!)['encryptedApkamSymmetricKey'];
+  await for (final request in client.enrollments.requests) {
+    print('Approve enrollment ${request.enrollmentId} from '
+        '${request.appName} on ${request.deviceName} for '
+        '${request.namespace}? (yes/no)');
+    if (stdin.readLineSync() == 'yes') {
+      await client.enrollments.approve(request.enrollmentId!);
+      print('approved ${request.enrollmentId}');
+    } else {
+      await client.enrollments.deny(request.enrollmentId!);
+      print('denied ${request.enrollmentId}');
     }
-
-    final apkamSymmetricKey = (await atChops.decryptString(
-            encryptedAPKAMSymmetricKey, EncryptionKeyType.rsa2048))
-        .result;
-    print('decrypted apkam symmetric key: $apkamSymmetricKey');
-    var encryptedDefaultPrivateEncKey = EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPrivateKey!.toString(), apkamSymmetricKey);
-    var encryptedDefaultSelfEncKey = EncryptionUtil.encryptValue(
-        atAuthKeys.defaultSelfEncryptionKey!.toString(), apkamSymmetricKey);
-    enrollParamsJson['encryptedDefaultEncryptionPrivateKey'] =
-        encryptedDefaultPrivateEncKey;
-    enrollParamsJson['encryptedDefaultSelfEncryptionKey'] =
-        encryptedDefaultSelfEncKey;
-    enrollRequest = 'enroll:approve:${jsonEncode(enrollParamsJson)}\n';
-  } else {
-    enrollRequest = 'enroll:deny:${jsonEncode(enrollParamsJson)}\n';
   }
-  print('enroll request to server: $enrollRequest');
-  String? enrollResponse = await atClient
-      .getRemoteSecondary()!
-      .executeCommand(enrollRequest, auth: true);
-  print('enrollResponse: $enrollResponse');
-}
-
-Future<AtKeys> _decryptAtKeysFile(Map<String, String> jsonData) async {
-  var securityKeys = AtKeys();
-  String decryptionKey = jsonData[auth_constants.defaultSelfEncryptionKey]!;
-  var atChops =
-      AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(decryptionKey));
-  securityKeys.defaultEncryptionPublicKey = (await atChops.decryptString(
-          jsonData[auth_constants.defaultEncryptionPublicKey]!,
-          EncryptionKeyType.aes256,
-          keyName: 'selfEncryptionKey',
-          iv: AtChopsUtil.generateIVLegacy()))
-      .result;
-  securityKeys.defaultEncryptionPrivateKey = (await atChops.decryptString(
-          jsonData[auth_constants.defaultEncryptionPrivateKey]!,
-          EncryptionKeyType.aes256,
-          keyName: 'selfEncryptionKey',
-          iv: AtChopsUtil.generateIVLegacy()))
-      .result;
-  securityKeys.defaultSelfEncryptionKey = AtBytes.fromString(decryptionKey);
-  securityKeys.apkamPublicKey = (await atChops.decryptString(
-          jsonData[auth_constants.apkamPublicKey]!, EncryptionKeyType.aes256,
-          keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
-      .result;
-  securityKeys.apkamPrivateKey = (await atChops.decryptString(
-          jsonData[auth_constants.apkamPrivateKey]!, EncryptionKeyType.aes256,
-          keyName: 'selfEncryptionKey', iv: AtChopsUtil.generateIVLegacy()))
-      .result;
-  securityKeys.apkamSymmetricKey =
-      AtBytes.fromString(jsonData[auth_constants.apkamSymmetricKey]!);
-  securityKeys.enrollmentId = jsonData[AtConstants.enrollmentId];
-  return securityKeys;
-}
-
-Future<Map<String, String>> _readAtKeysFile(String? atKeysFilePath) async {
-  if (atKeysFilePath == null || atKeysFilePath.isEmpty) {
-    throw AtException(
-        'atKeys filePath is empty. atKeysFile is required to authenticate');
-  }
-  if (!File(atKeysFilePath).existsSync()) {
-    throw AtException(
-        'provided keys file does not exist. Please check whether the file path $atKeysFilePath is valid');
-  }
-  String atAuthData = await File(atKeysFilePath).readAsString();
-  Map<String, String> jsonData = <String, String>{};
-  json.decode(atAuthData).forEach((String key, dynamic value) {
-    jsonData[key] = value.toString();
-  });
-  return jsonData;
-}
-
-AtChops _createAtChops(AtKeys atKeysFile) {
-  final atEncryptionKeyPair = AtEncryptionKeyPair.create(
-      atKeysFile.defaultEncryptionPublicKey!.toString(),
-      atKeysFile.defaultEncryptionPrivateKey!.toString());
-  final atPkamKeyPair = AtPkamKeyPair.create(
-      atKeysFile.apkamPublicKey!.toString(),
-      atKeysFile.apkamPrivateKey!.toString());
-  final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-  if (atKeysFile.apkamSymmetricKey != null) {
-    atChopsKeys.apkamSymmetricKey =
-        AESKey(atKeysFile.apkamSymmetricKey!.toString());
-  }
-  atChopsKeys.selfEncryptionKey =
-      AESKey(atKeysFile.defaultSelfEncryptionKey!.toString());
-  return AtChopsImpl(atChopsKeys);
 }
 
 ArgParser getArgParser() {

@@ -2,17 +2,17 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart'
     show
-        AtEnrollment,
         AtEnrollmentResponse,
         AtKeys,
         CryptographicMaterialRole,
-        EnrollmentUpdateRequest,
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         KeyEntryStatus,
         CryptographicMaterialStatus;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart'
+    show EnrollmentUpdateRequest, EnrollmentUpdater;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, EnvelopeType, signEnvelope, verifyEnvelope;
 import 'package:at_client/src/signing/signing_key_minting.dart'
@@ -23,10 +23,11 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
-class MockAtEnrollment extends Mock implements AtEnrollment {}
+class MockEnrollmentUpdater extends Mock implements EnrollmentUpdater {}
 
 /// Giving an enrollment signing keys of its own, per the in-use set.
 void main() {
@@ -34,7 +35,7 @@ void main() {
   const enrollmentId = 'enroll-a';
 
   late MockAtClient atClient;
-  late MockAtEnrollment enrollment;
+  late MockEnrollmentUpdater enrollment;
   late MockAtLookUp atLookUp;
   late AtChops atChops;
   late InMemoryAtKeysIo keysIo;
@@ -66,7 +67,7 @@ void main() {
 
   setUp(() async {
     atChops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+        AtChopsKeys.create(null, pkamKeyPairFor(atSign, enrollmentId)));
     keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys(atsign: atSign.toAtsign()));
     updates = [];
@@ -83,9 +84,9 @@ void main() {
     atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
-    enrollment = MockAtEnrollment();
+    enrollment = MockEnrollmentUpdater();
     when(() => enrollment.update(any(), any())).thenAnswer((i) async {
       updates.add(i.positionalArguments[0] as EnrollmentUpdateRequest);
       heldWhenPublished.add(await heldKeyIds());
@@ -94,7 +95,7 @@ void main() {
   });
 
   SigningKeyMinting minter() =>
-      SigningKeyMinting(atClient, enrollment: enrollment);
+      SigningKeyMinting(atClient, updater: enrollment);
 
   /// Makes this client a **retrofitted** enrollment: its authentication key is
   /// ML-DSA-65, so the authentication and data signing keys are two different
@@ -266,7 +267,7 @@ void main() {
     late List<String> published;
 
     setUp(() {
-      when(() => atLookUp.enrollmentId).thenReturn(null);
+      when(() => atClient.enrollmentId).thenReturn(null);
       published = [];
       when(() => atClient.get(any(),
               getRequestOptions: any(named: 'getRequestOptions')))
@@ -535,7 +536,7 @@ void main() {
 
     test('an envelope signed before the withdrawal still verifies', () async {
       asRetrofittedEnrollment();
-      when(() => atLookUp.enrollmentId).thenReturn(null);
+      when(() => atClient.enrollmentId).thenReturn(null);
       final published = <String>[];
       when(() => atClient.get(any(),
           getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
@@ -583,7 +584,7 @@ void main() {
         'a two-member in-use set signs twice, and a one-algorithm verifier '
         'still verifies', () async {
       asRetrofittedEnrollment();
-      when(() => atLookUp.enrollmentId).thenReturn(null);
+      when(() => atClient.enrollmentId).thenReturn(null);
       final published = <String>[];
       when(() => atClient.get(any(),
           getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {

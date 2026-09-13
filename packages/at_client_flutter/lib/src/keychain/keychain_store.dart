@@ -1,7 +1,6 @@
 part of 'keychain_storage.dart';
 
 const _atKeysStoreName = '@atsigns';
-const _enrollmentStoreName = '@enrollment';
 const _sppStoreName = '@spp';
 String? _packageInfo;
 
@@ -27,14 +26,6 @@ class AtKeysStore extends KeychainStore {
 Future<String> _getImproperAtKeysStoreName() async {
   String packageName = await getPackageName();
   return '${_atKeysStoreName}_$packageName';
-}
-
-class EnrollmentStore extends KeychainStore {
-  final String atSign;
-  const EnrollmentStore(this.atSign);
-  String getName() {
-    return '${atSign}_$_enrollmentStoreName';
-  }
 }
 
 class SppStore extends KeychainStore {

@@ -20,16 +20,6 @@ final String dummyAtKeysData = jsonEncode(
   AtKeysData(keys: [dummyAtKeys], defaultAtsign: '@alice'),
 );
 
-final String dummyEnrollmentData = jsonEncode(
-  EnrollmentData(
-    'enrollId1',
-    dummyAtKeys,
-    1625079600000000,
-    namespace: {'namespace': 'namespace1'},
-    keysFilePath: '/path/to/keysfile',
-  ),
-);
-
 const legacyAtClientData = '''
     {
       "config": {
@@ -66,30 +56,10 @@ const legacyAtClientData = '''
     }
     ''';
 
-const legacyEnrollmentInfo = '''
-    {
-      "enrollmentId": "enrollId1",
-      "atAuthKeys": {
-        "aesPkamPublicKey": "publicKey1",
-        "aesPkamPrivateKey": "privateKey1",
-        "aesEncryptPublicKey": "encPublicKey1",
-        "aesEncryptPrivateKey": "encPrivateKey1",
-        "selfEncryptionKey": "selfEncKey1",
-        "apkamSymmetricKey": "apkamSymKey1",
-        "enrollmentId": "enrollId1"
-        },
-      "enrollmentSubmissionTimeEpoch": 1625079600000000,
-      "namespace": "namespace1",
-      "keysFilePath": "/path/to/keysfile"
-    }
-    ''';
-
 bool checkSchemaEquality(KeychainData keychainData) {
   Map<String, dynamic> jsonData = {};
   if (keychainData is AtKeysData) {
     jsonData = jsonDecode(dummyAtKeysData);
-  } else if (keychainData is EnrollmentData) {
-    jsonData = jsonDecode(dummyEnrollmentData);
   }
   final keychainDataJson = keychainData.toJson();
   if (keychainDataJson.length != jsonData.length) {

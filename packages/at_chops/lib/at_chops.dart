@@ -28,6 +28,9 @@ export 'src/algorithm/signing/ecc.dart';
 export 'src/algorithm/signing/ed25519.dart';
 export 'src/algorithm/signing/ml_dsa_65_pure_dart.dart';
 export 'src/algorithm/signing/rsa.dart';
+// FIPS 204 fixed sizes and validators: a caller signing a PKAM challenge
+// with ML-DSA needs them to say what a wrong-sized key most likely is.
+export 'src/algorithm/spec/ml_dsa_65_spec.dart';
 export 'src/at_chops_base.dart';
 export 'src/at_chops_impl.dart';
 

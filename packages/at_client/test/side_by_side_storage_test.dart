@@ -8,6 +8,8 @@ import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/mocks.dart';
+
 /// Two AtClients for one atSign, side by side in one process, each given its
 /// own `hiveStoragePath`.
 ///
@@ -40,7 +42,7 @@ void main() {
     final path =
         (Directory('${root.path}/$name')..createSync(recursive: true)).path;
     AtClientImpl.atClientInstanceMap.clear();
-    return AtClientImpl.create(
+    final client = await AtClientImpl.create(
       atSign,
       'wavi',
       AtClientPreference()
@@ -49,6 +51,11 @@ void main() {
         ..hiveStoragePath = path
         ..commitLogPath = '$path/commit',
     );
+    // NOTE: AtClientImpl.create leaves the sync service to its caller - only
+    // AtClientManager wires one - and a write on a client without one is
+    // queued but says at warning that it could not ask for a drain.
+    client.syncService = MockSyncService();
+    return client;
   }
 
   test('their keystores are separate', () async {

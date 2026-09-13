@@ -10,7 +10,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -150,26 +149,21 @@ void main() {
       AtClientManager.getInstance().removeAllChangeListeners();
       AtClientImpl.atClientInstanceMap.clear();
 
-      // Authenticate the atSign
-      AtAuth atAuth = AtAuth.create(atChops: atChops);
-      AtAuthRequest atAuthRequest = AtAuthRequest(currentAtSign,
-          atKeysIo: FileAtKeysIo(
-            filePath: (_) =>
-                '${ConfigUtil.getYaml()['filePath']}/${currentAtSign}_key.atKeys',
-          ));
-      atAuthRequest.atAuthKeys = atEnrollmentResponse.atAuthKeys;
-      atAuthRequest.atAuthKeys?.defaultEncryptionPrivateKey =
-          AtBytes.fromString(
-              atChops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
-      atAuthRequest.atAuthKeys?.defaultSelfEncryptionKey =
-          AtBytes.fromString(atChops.atChopsKeys.selfEncryptionKey!.key);
-      atAuthRequest.rootDomain = AtRootDomain(
-          atClient.getPreferences()!.rootDomain,
-          atClient.getPreferences()!.rootPort);
-
-      AtAuthResponse atAuthResponse = await atAuth.authenticate(atAuthRequest);
-      expect(atAuthResponse.isSuccessful, true);
-      writeAtKeysToFile(currentAtSign, atAuthResponse.atAuthKeys!);
+      // The enrollee's own keys, completed with the two atSign-wide secrets
+      // an approval releases, authenticate as the enrollment, and are what
+      // the keyfile the suite's clients open on is written from.
+      final enrolledKeys = atEnrollmentResponse.atAuthKeys!
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(
+            atChops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey)
+        ..defaultSelfEncryptionKey =
+            AtBytes.fromString(atChops.atChopsKeys.selfEncryptionKey!.key);
+      expect(
+          await Atsign(currentAtSign).authenticatesAs(
+              keys: InMemoryAtKeysIo.holding(currentAtSign, enrolledKeys),
+              rootDomain: AtRootDomain(atClient.getPreferences()!.rootDomain,
+                  atClient.getPreferences()!.rootPort)),
+          atEnrollmentResponse.enrollmentId);
+      writeAtKeysToFile(currentAtSign, enrolledKeys);
       print(
           'Completed enrollment setup of the atSign: $currentAtSign with enrollment Id: ${atEnrollmentResponse.enrollmentId} with access to ${enrollmentRequest.namespaces}');
     });

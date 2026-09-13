@@ -51,7 +51,7 @@ const String legacyCryptoProviderId = 'legacy';
 /// a scheme a quantum computer will one day open, so an app that catches this
 /// can tell its user the recipient cannot be reached securely.
 class LegacyEncryptionRefusedException extends AtEncryptionException {
-  /// The record that would have been written legacy.
+  /// The record that would have been written with the legacy provider.
   final String key;
 
   LegacyEncryptionRefusedException(this.key, String reason)

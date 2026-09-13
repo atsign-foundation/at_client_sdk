@@ -6,7 +6,8 @@ seam designs, the build sequence, the acceptance gates, and the decision log.
 implementations, so that a browser WasmGC build runs without runtime failures. The
 `at_client_web` platform package is the first consumer of the result.
 **Written against:** `trunk` at `20f7f4da5`, 2026-08-13. Status refreshed against
-`9d9e5f7d7`, 2026-08-27. Supersedes the single-file `plan.md` (deleted; recoverable at
+`9d9e5f7d7`, 2026-08-27, and against `gkc-client-lifecycle` on 2026-09-13 for the
+transport leg. Supersedes the single-file `plan.md` (deleted; recoverable at
 `d3e7dcdd5`, the commit that added it).
 
 > This doc is the **high-level WHY + WHAT** only: the neutrality thesis, the tier
@@ -134,18 +135,27 @@ neutral barrel's import graph. Consumers add one import.
 
 ### Tier 3 — platform implementers
 
-- **`at_client_web`** — new, built by this project. WebSocket transport, SQLite-wasm
-  storage, IndexedDB-backed key store, `navigator.onLine` connectivity, console
-  logging.
+A platform implementer supplies the three legs of the platform bundle
+([`design.md` §4](design.md#4-the-platform-bundle-capabilities-are-parameters-on-the-doors),
+[`decisions.md` D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)) — a `WrittenAtKeysIo`, an
+`AtClientStorage` and an `AtLookUpFactory` — and hands them to at_client's entry points.
+at_client is not forked, and nothing below its doors names a platform type.
+
+- **`at_client_web`** — new, built by this project. A WebSocket-backed `AtLookupMuxable`
+  behind an `AtLookUpFactory`, SQLite-wasm `AtClientStorage`, IndexedDB-backed
+  `WrittenAtKeysIo`, `navigator.onLine` connectivity, console logging.
 - **`at_client_flutter`** — exists, but is **not** a platform implementer today. It
   implements exactly one abstraction (`KeychainAtKeysIo extends WrittenAtKeysIo`,
-  `packages/at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10`); all path
-  and preference wiring lives in *app* code under `example/`. In this project it is a
-  breaking-change **consumer**. Promoting it to a true implementer is deferred.
+  `packages/at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10`), though
+  since 2.0.0-rc1 its `lib/` does thread the platform bundle: `AtsignFlows` and the
+  three lifecycle dialogs take `keys:`, `storage:` and `lookUps:` and hand them to the
+  verb they run. In this project it is a breaking-change **consumer**. Promoting it to
+  a true implementer is deferred.
 - **`at_client_cli`** — does not exist. `at_onboarding_cli` and `at_cli_commons`
   perform the role informally (`home_directory_util.dart`, the duplicated
-  `ServiceFactoryWithNoOpSyncService`). Extracting a real package is deferred; until
-  then they consume the Tier-2 `_io` barrels.
+  `ServiceFactoryWithNoOpSyncService`). A design for the package is in
+  [`../client-cli/design.md`](../client-cli/design.md); extracting it is deferred, and
+  until then they consume the Tier-2 `_io` barrels.
 
 ### Tier 4 — non-Dart consumers
 

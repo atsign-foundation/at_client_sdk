@@ -5,10 +5,11 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_functional_test/src/at_keys_initializer.dart'
+    show AtEncryptionKeysLoader;
 import 'package:at_functional_test/src/at_demo_credentials.dart'
     as demo_credentials;
 import 'package:at_functional_test/src/sync_service.dart';
@@ -357,26 +358,22 @@ Future<void> updateOrDeleteKey(AtKey atKey, int randomValueForOperation,
 }
 
 Future<dynamic> _getServerCommitEntries(String regex) async {
-  AtChopsKeys atChopsKeys = AtChopsKeys.create(
-      AtEncryptionKeyPair.create(
-          demo_credentials.encryptionPublicKeyMap[currentAtSign]!,
-          demo_credentials.encryptionPrivateKeyMap[currentAtSign]!),
-      AtPkamKeyPair.create(demo_credentials.pkamPublicKeyMap[currentAtSign]!,
-          demo_credentials.pkamPrivateKeyMap[currentAtSign]!));
-
-  AtChops atChops = AtChopsImpl(atChopsKeys);
   // No storage bundle: this client sets isLocalStoreRequired false and opens
-  // no local store at all.
-  atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
-      currentAtSign,
-      namespace,
-      AtClientPreference(posture: PqPosture.legacy)
-        ..privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign]
+  // no local store at all. The client that was current is stopped first, as
+  // a switch always has, and this one takes its place.
+  atClientManager = AtClientManager.getInstance();
+  await TestUtils.currentClientOf(atClientManager)?.stop();
+  final keys = InMemoryAtKeysIo.holding(currentAtSign,
+      AtEncryptionKeysLoader.getInstance().createAtKeysFromDemoKeys(
+          currentAtSign));
+  await TestUtils.stopClientRunningAs(currentAtSign, keys);
+  atClientManager.use(await Atsign(currentAtSign).open(
+      keys: keys,
+      preference: AtClientPreference(posture: PqPosture.legacy)
         ..isLocalStoreRequired = false
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort,
-      atChops: atChops,
-      storage: TestUtils.storageFor(currentAtSign));
+      namespace: namespace));
   var infoResponse = await atClientManager.atClient
       .getRemoteSecondary()
       ?.executeCommand('info:brief\n');

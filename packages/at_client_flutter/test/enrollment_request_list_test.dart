@@ -1,35 +1,34 @@
-/// The approval list's last hop tells the truth, and every client read goes
-/// through the service the widget was given.
+/// The approval list's last hop tells the truth, and every read goes through
+/// the client the widget was given.
 ///
 /// A conveyance refusal means the approval already went through, so the row
 /// is no longer pending and calling it a failure would invite a retry; a
-/// pq-mode request wraps no symmetric key; and an injected service belongs to
-/// the caller, who may still be using it.
+/// pq-mode request wraps no symmetric key; and a client the app owns is used
+/// without reaching AtClientManager.
 library;
 
 // ignore_for_file: experimental_member_use
 
-import 'package:at_auth/at_auth.dart';
+import 'dart:convert';
+
+import 'package:at_auth/at_auth.dart'
+    show AtEnrollmentResponse, EnrollmentRequestDecision;
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-class MockFlutterEnrollmentService extends Mock
-    implements FlutterEnrollmentService {}
-
 class MockAtClient extends Mock implements AtClient {}
 
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
+class MockEnrollmentService extends Mock implements EnrollmentService {}
 
-class MockAtLookUp extends Mock implements AtLookUp {}
+class MockNotificationService extends Mock implements NotificationService {}
 
 class FakeEnrollmentRequestDecision extends Fake
     implements EnrollmentRequestDecision {}
 
-class FakeAtLookUp extends Fake implements AtLookUp {}
+class FakeListParams extends Fake implements EnrollmentListRequestParam {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -37,54 +36,65 @@ void main() {
   const atSign = '@alice';
   const enrollmentId = 'list-eid-1';
 
-  late MockFlutterEnrollmentService service;
   late MockAtClient atClient;
-  late MockRemoteSecondary secondary;
-  late MockAtLookUp atLookUp;
+  late MockEnrollmentService service;
+  late MockNotificationService notifications;
 
   /// A pq-mode pending request: the enrollee wrapped no symmetric key.
-  final request = ServerEnrollmentRequest(
-    enrollmentId: enrollmentId,
-    appName: 'buzz',
-    deviceName: 'pixel',
-    status: EnrollmentStatus.pending,
-    namespacePermissions: const [],
-  );
+  AtNotification announcement() =>
+      AtNotification(
+          'n-1',
+          '$enrollmentId.new.enrollments.__manage$atSign',
+          atSign,
+          atSign,
+          0,
+          'key',
+          false,
+        )
+        ..value = jsonEncode({
+          'appName': 'buzz',
+          'deviceName': 'pixel',
+          'namespace': <String, String>{},
+        });
+
+  Enrollment pendingRecord() => Enrollment()
+    ..enrollmentId = enrollmentId
+    ..appName = 'buzz'
+    ..deviceName = 'pixel'
+    ..status = 'pending'
+    ..namespace = <String, String>{};
 
   setUpAll(() {
     registerFallbackValue(FakeEnrollmentRequestDecision());
-    registerFallbackValue(FakeAtLookUp());
-    registerFallbackValue(<EnrollmentStatus>[]);
+    registerFallbackValue(FakeListParams());
   });
 
   setUp(() {
     // The reset leaves AtClientManager.atClient throwing, so any client read
-    // that does not go through the injected service fails the test.
+    // that does not go through the injected client fails the test.
     AtClientManager.getInstance().reset();
 
-    service = MockFlutterEnrollmentService();
     atClient = MockAtClient();
-    secondary = MockRemoteSecondary();
-    atLookUp = MockAtLookUp();
+    service = MockEnrollmentService();
+    notifications = MockNotificationService();
 
-    when(
-      () => service.getEnrollments(statusFilters: any(named: 'statusFilters')),
-    ).thenAnswer((_) => Stream.value(request));
-    // The initial fetch is empty: the stream above is the only source of the
-    // request, and the widget de-duplicates.
-    when(
-      () => service.list(
-        any(),
-        any(),
-        drx: any(named: 'drx'),
-        arx: any(named: 'arx'),
-      ),
-    ).thenAnswer((_) async => []);
-    when(() => service.atClient).thenReturn(atClient);
-    when(() => service.dispose()).thenAnswer((_) async {});
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
-    when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
-    when(() => secondary.atLookUp).thenReturn(atLookUp);
+    when(() => atClient.enrollmentService).thenReturn(service);
+    when(() => atClient.notificationService).thenReturn(notifications);
+    when(
+      () => notifications.subscribe(
+        regex: any(named: 'regex'),
+        shouldDecrypt: any(named: 'shouldDecrypt'),
+      ),
+    ).thenAnswer((_) => Stream.value(announcement()));
+    // The roster holds the request, which is what approve() reads the wrapped
+    // key off; the initial fetch and the stream both hand it to the widget,
+    // which de-duplicates.
+    when(
+      () => service.fetchEnrollmentRequests(
+        enrollmentListParams: any(named: 'enrollmentListParams'),
+      ),
+    ).thenAnswer((_) async => [pendingRecord()]);
   });
 
   tearDown(() => AtClientManager.getInstance().reset());
@@ -92,7 +102,7 @@ void main() {
   Future<void> pumpList(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: EnrollmentRequestList(enrollmentService: service)),
+        home: Scaffold(body: EnrollmentRequestList(atClient: atClient)),
       ),
     );
     await tester.pump();
@@ -109,7 +119,7 @@ void main() {
       response: AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved),
       keyPackageStatus: KeyPackageStatus.rejected,
     );
-    when(() => service.approve(any(), any())).thenThrow(refusal);
+    when(() => service.approve(any())).thenThrow(refusal);
 
     await pumpList(tester);
     expect(find.text('Approve'), findsOneWidget);
@@ -142,7 +152,7 @@ void main() {
   testWidgets('a pq-mode request that wrapped no key is approvable', (
     tester,
   ) async {
-    when(() => service.approve(any(), any())).thenAnswer(
+    when(() => service.approve(any())).thenAnswer(
       (_) async =>
           AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved),
     );
@@ -152,8 +162,9 @@ void main() {
     await tester.pump();
 
     final decision =
-        verify(() => service.approve(captureAny(), any())).captured.single
+        verify(() => service.approve(captureAny())).captured.single
             as EnrollmentRequestDecision;
+    expect(decision.enrollmentId, enrollmentId);
     expect(
       decision.encryptedAPKAMSymmetricKey,
       isEmpty,
@@ -166,22 +177,39 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
   });
 
-  testWidgets('an injected service outlives the widget', (tester) async {
-    await pumpList(tester);
-    // Route away, disposing the widget.
-    await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: SizedBox())),
+  testWidgets('a denial goes through the client the widget was given', (
+    tester,
+  ) async {
+    when(() => service.deny(any())).thenAnswer(
+      (_) async => AtEnrollmentResponse(enrollmentId, EnrollmentStatus.denied),
     );
 
-    verifyNever(() => service.dispose());
+    await pumpList(tester);
+    await tester.tap(find.text('Reject'));
+    await tester.pump();
+
+    final decision =
+        verify(() => service.deny(captureAny())).captured.single
+            as EnrollmentRequestDecision;
+    expect(decision.enrollmentId, enrollmentId);
+    expect(find.text('No pending enrollment requests'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
   });
 
   testWidgets('works against an app-owned client, without AtClientManager', (
     tester,
   ) async {
     when(
-      () => service.getEnrollments(statusFilters: any(named: 'statusFilters')),
-    ).thenAnswer((_) => const Stream<EnrollmentServerResponse>.empty());
+      () => notifications.subscribe(
+        regex: any(named: 'regex'),
+        shouldDecrypt: any(named: 'shouldDecrypt'),
+      ),
+    ).thenAnswer((_) => const Stream<AtNotification>.empty());
+    when(
+      () => service.fetchEnrollmentRequests(
+        enrollmentListParams: any(named: 'enrollmentListParams'),
+      ),
+    ).thenAnswer((_) async => []);
 
     await pumpList(tester);
     await tester.pumpAndSettle();
@@ -193,11 +221,11 @@ void main() {
       find.textContaining('No atClient yet'),
       findsNothing,
       reason:
-          'every client read goes through the service the app supplied, '
-          'so an app that built its client with AuthService.createClient '
-          'can use this widget - reaching AtClientManager here would throw '
-          'for exactly the apps the new factory exists to serve',
+          'every client read goes through the client the app supplied, so '
+          'an app that opened its own client can use this widget - reaching '
+          'AtClientManager here would throw for exactly the apps the '
+          'lifecycle verbs exist to serve',
     );
-    verify(() => service.atClient).called(greaterThan(0));
+    expect(find.text('No pending enrollment requests'), findsOneWidget);
   });
 }

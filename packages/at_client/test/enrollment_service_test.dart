@@ -5,6 +5,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';
@@ -22,7 +23,7 @@ class RecordingAtEnrollment extends Mock implements AtEnrollment {
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision decision, AtLookUp atLookUp,
-      {AtChops? approverChops}) async {
+      {required ApproverKeyMaterial approverKeys}) async {
     approvals.add(decision);
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);
@@ -250,7 +251,8 @@ void main() {
           'abcdef01-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$atSign';
       final commands = approveListCommands();
       final secondary = MockRemoteSecondary();
-      when(() => secondary.atLookUp).thenReturn(MockAtLookUp());
+      final lookUp = MockAtLookUp();
+      when(() => secondary.atLookUp).thenReturn(lookUp);
       when(() => secondary.executeCommand(commands.first, auth: true))
           .thenAnswer((_) async => 'data:{"$enrollKey":$pendingValue}');
       when(() => secondary.executeCommand(commands.last, auth: true))
@@ -268,6 +270,18 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit',
           remoteSecondary: secondary);
+
+      // Approval seals the approver's own encryption private key and
+      // self-encryption key for the enrollee, so a client that holds neither
+      // refuses before it decides anything. This one is built with no key
+      // source, which leaves the keystore - the last of the local secondary's
+      // three tiers - as where it reads them.
+      final store = client.getLocalSecondary()!.keyStore!;
+      await store.put(AtConstants.atEncryptionPrivateKey,
+          AtData()..data = demo.encryptionPrivateKeyMap['@alice🛠']);
+      await store.put(AtConstants.atEncryptionSelfKey,
+          AtData()..data = demo.aesKeyMap['@alice🛠']);
+
       final enrollment = RecordingAtEnrollment();
       await EnrollmentServiceImpl(client, enrollment).approve(
           EnrollmentRequestDecision.approved(
@@ -422,7 +436,7 @@ void main() {
         () async {
       AtEncryptionResult? encryptedValue = await atClient.atChops
           ?.encryptString('1234', EncryptionKeyType.aes256,
-              iv: AtChopsUtil.generateIVLegacy());
+              iv: InitialisationVector.legacy());
       FakeLookupVerbBuilder fakeLookupVerbBuilder = FakeLookupVerbBuilder();
       registerFallbackValue(fakeLookupVerbBuilder);
       when(() => mockRemoteSecondary.executeVerb(any(that: LookupKeyMatcher())))

@@ -15,6 +15,11 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/preference/at_client_preference.dart'
     show AtClientPreference;
 import 'package:at_client/src/response/enrollment.dart' show Enrollment;
+import 'package:at_client/src/response/at_notification.dart'
+    show AtNotification;
+import 'package:at_client/src/service/notification_service.dart'
+    show NotificationParams, NotificationResult;
+import 'package:at_commons/at_commons.dart' show AtKey, AtKeyNotFoundException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:at_client/src/crypto/crypto.dart';
@@ -62,11 +67,59 @@ class _FakePrivilege implements EnrollmentPrivilegeResolver {
 void main() {
   late MockAtClient client;
 
+  setUpAll(() {
+    registerFallbackValue(AtKey());
+    registerFallbackValue(NotificationParams.forUpdate(AtKey()));
+  });
+
   setUp(() {
     client = MockAtClient();
     when(() => client.getCurrentAtSign()).thenReturn('@bootstrap🛠');
     when(() => client.enrollmentId).thenReturn(null);
     when(() => client.getPreferences()).thenReturn(null);
+    final syncService = MockSyncService();
+    when(() => client.syncService).thenReturn(syncService);
+
+    // NOTE: the startup steps read the atSign's own records and watch for
+    // envelopes. Answering an empty scan is what a fresh atSign looks like -
+    // the shape every step here is written for - whereas leaving these
+    // unstubbed answers null into a non-nullable type, and each step then
+    // logs a defect instead of running.
+    final notifications = MockNotificationService();
+    when(() => client.notificationService).thenReturn(notifications);
+    when(() => notifications.notify(any(),
+        waitForFinalDeliveryStatus: any(named: 'waitForFinalDeliveryStatus'),
+        checkForFinalDeliveryStatus: any(named: 'checkForFinalDeliveryStatus'),
+        encryptValue: any(named: 'encryptValue'),
+        onSuccess: any(named: 'onSuccess'),
+        onError: any(named: 'onError'),
+        onSentToSecondary:
+            any(named: 'onSentToSecondary'))).thenAnswer(
+        (_) async => NotificationResult());
+    when(() => notifications.subscribe(
+            regex: any(named: 'regex'),
+            shouldDecrypt: any(named: 'shouldDecrypt')))
+        .thenAnswer((_) => const Stream<AtNotification>.empty());
+    when(() => client.getAtKeys(
+            regex: any(named: 'regex'),
+            sharedBy: any(named: 'sharedBy'),
+            sharedWith: any(named: 'sharedWith'),
+            showHiddenKeys: any(named: 'showHiddenKeys'),
+            useRemoteAtServer: any(named: 'useRemoteAtServer')))
+        .thenAnswer((_) async => <AtKey>[]);
+    when(() => client.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async =>
+            throw AtKeyNotFoundException('${inv.positionalArguments[0]}'));
+    when(() => client.get(any())).thenAnswer((inv) async =>
+        throw AtKeyNotFoundException('${inv.positionalArguments[0]}'));
+    when(() => client.put(any(), any(),
+            putRequestOptions: any(named: 'putRequestOptions')))
+        .thenAnswer((_) async => true);
+    when(() => client.delete(any(),
+            isDedicated: any(named: 'isDedicated'),
+            deleteRequestOptions: any(named: 'deleteRequestOptions')))
+        .thenAnswer((_) async => true);
   });
 
   PqClientBootstrap build({
@@ -318,7 +371,7 @@ void main() {
       final lookUp = MockAtLookupImpl();
       when(() => client.getRemoteSecondary()).thenReturn(remote);
       when(() => remote.atLookUp).thenReturn(lookUp);
-      when(() => lookUp.enrollmentId).thenReturn(null);
+      when(() => client.enrollmentId).thenReturn(null);
       expect(
           await EnrollmentRecordPrivilegeResolver(client,
                   listEnrollments: ({enrollmentListParams}) async => [])
