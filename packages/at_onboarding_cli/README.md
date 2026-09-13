@@ -192,6 +192,111 @@ unchanged.
 | `authenticate()` copying the keyfile's keys into the client's local storage                | the client reads them from its key source                                                                                                                                            |
 | the keyfile `onboard` writes                                                               | at_auth's own document: the self-encryption key is no longer duplicated under the atSign, and a passphrase-protected file uses a salted envelope that 1.x tooling cannot read      |
 
+### Before and after
+
+The things a 1.x program commonly did, each as it was and as it is now.
+
+**Authenticate an onboarded atSign and get the client**
+
+```dart
+// 1.x
+final pref = AtOnboardingPreference()
+  ..rootDomain = 'root.atsign.org'
+  ..namespace = 'my_app'
+  ..hiveStoragePath = 'storage/hive'
+  ..commitLogPath = 'storage/commitLog'
+  ..isLocalStoreRequired = true
+  ..atKeysFilePath = 'storage/@alice_key.atKeys';
+final svc = AtOnboardingServiceImpl('@alice', pref);
+await svc.authenticate();
+final AtClient? atClient = await svc.atClient;
+final AtLookUp? atLookup = svc.atLookUp;
+
+// 2.0, smallest change: the service still authenticates and holds the client
+final pref = AtOnboardingPreference()
+  ..rootDomain = 'root.atsign.org'
+  ..namespace = 'my_app'
+  ..storagePath = 'storage/hive'
+  ..atKeysFilePath = 'storage/@alice_key.atKeys';
+final svc = AtOnboardingServiceImpl('@alice', pref);
+final online = await svc.authenticate();   // false: held, but offline; atClient.connection says why
+final AtClient atClient = svc.atClient!;
+
+// 2.0, the verb itself: no service
+final keys = FileAtKeysIo(filePath: (_) => 'storage/@alice_key.atKeys');
+final client = await Atsign('@alice').open(
+    keys: keys, preference: pref, storage: pref.storageFor('@alice'));
+print(client.connection.current);          // online | offline | refused
+```
+
+Anything the program reached through `svc.atLookUp` it does on the client's
+own connection now: `client.getRemoteSecondary()` for a verb, and the
+`connection` for whether the atServer was reached.
+
+**Onboard with a CRAM secret**
+
+```dart
+// 1.x
+final pref = AtOnboardingPreference()
+  ..cramSecret = secret
+  ..atKeysFilePath = 'storage/@alice_key.atKeys'
+  ..rootDomain = rootDomain;
+final ok = await AtOnboardingServiceImpl('@alice', pref).onboard();
+if (!ok) exit(1);
+
+// 2.0: the verb writes the keys to `keys` and hands back the client it opened
+final client = await Atsign('@alice').activate(
+    cramSecret: secret, keys: keys, preference: pref,
+    storage: pref.storageFor('@alice'));
+await client.stop();                        // a tool that wanted the keys, not a session
+```
+
+**Enroll a device, and wait for the approval**
+
+```dart
+// 1.x: the response said whether it was approved
+final AtEnrollmentResponse response = await svc.enroll(
+    'my_app', 'laptop', otp, {'my_app': 'rw'}, atKeysFile: File(path));
+if (response.enrollStatus != EnrollmentStatus.approved) exit(1);
+
+// 2.0: `enroll` files the request in `keys` as pending; `client` waits for
+// the approval and hands back the enrolled client, or throws on a denial.
+final pending = await Atsign('@alice').enroll(
+    otp: otp, app: 'my_app', device: 'laptop',
+    namespaces: {'my_app': 'rw'}, keys: keys, preference: pref);
+try {
+  final enrolled = await pending.client(pref, storage: pref.storageFor('@alice'));
+} on AtEnrollmentException catch (e) {
+  print('not approved: ${e.message}');
+  exit(1);
+}
+// After a restart, the pending request is picked up rather than repeated:
+final resumed = await Atsign('@alice').resumeEnrollment(
+    app: 'my_app', device: 'laptop', keys: keys, preference: pref);
+```
+
+**Finish**
+
+```dart
+// 1.x
+await svc.close();
+
+// 2.0
+await client.stop();
+```
+
+**The command line**
+
+```sh
+# 1.x
+at_activate -a @alice -c <cram_secret>
+at_activate -a @alice -c <cram_secret> --signingAlgoType mldsa65
+
+# 2.0: the command is named; the posture is one flag on every command
+at_activate onboard -a @alice -c <cram_secret>
+at_activate onboard -a @alice -c <cram_secret> --posture pqReady
+```
+
 ## Where to go next
 
 - [`at_auth`](../at_auth) — the keyfile format and key stores, and the

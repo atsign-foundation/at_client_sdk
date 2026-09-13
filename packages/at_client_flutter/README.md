@@ -252,6 +252,165 @@ back the client whatever the network did, and `client.connection.current`
 says whether it is online, offline or refused. A 1.x app treated every
 failure to reach the atServer as a failed login; a 2.0 app decides.
 
+### Before and after
+
+The things a 1.x app commonly did, each as it was and as it is now. The 2.0
+side shares two helpers:
+
+```dart
+// Where this app keeps the atSign's local store. closedByClient: the client
+// closes it when it stops, so there is nothing to tear down.
+Future<HiveAtClientStorage> _storage(String atSign) async {
+  final dir = await getApplicationSupportDirectory();
+  return HiveAtClientStorage(atSign: atSign, storagePath: dir.path, closedByClient: true);
+}
+
+final preference = AtClientPreference()..namespace = 'my_app';
+```
+
+**Log in from the keychain, then set up the client**
+
+```dart
+// 1.x
+final response = await AuthService().authenticate(
+  AtAuthRequest(atSign, atKeysIo: KeychainAtKeysIo(), rootDomain: rootDomain),
+  backupKeys: [KeychainAtKeysIo()],
+);
+if (!response.isSuccessful) return;
+final acp = AtClientPreference()
+  ..rootDomain = rootDomain.rootDomain
+  ..rootPort = rootDomain.rootPort
+  ..namespace = 'my_app'
+  ..hiveStoragePath = dir.path
+  ..commitLogPath = dir.path;
+await AtClientManager.getInstance().setCurrentAtSign(
+  response.atSign, 'my_app', acp,
+  enrollmentId: response.enrollmentId,
+  atChops: response.atChops,
+  atLookUp: response.atLookUp,
+);
+
+// 2.0
+final client = await PkamDialog.show(context,
+  atSign: atSign,
+  rootDomain: rootDomain,
+  keys: KeychainAtKeysIo(),
+  preference: preference,
+  storage: await _storage(atSign),
+);
+if (client == null) return;                       // cancelled, or the dialog failed
+AtClientManager.getInstance().use(client);        // if screens read the manager
+```
+
+The same for a `.atKeys` file: `keys: atKeysIo` from `AtKeysFileDialog.show`,
+plus `backupKeys: [KeychainAtKeysIo()]` to copy the keys into the keychain.
+
+**Onboard a new atSign**
+
+```dart
+// 1.x
+final request = await AtSignSelectionDialog.show(context);           // AuthRequest
+final cramKey = await RegistrarCramDialog.show(context,
+    request as AtOnboardingRequest, registrar: registrar);
+final response = await CramDialog.show(context, request: request, cramKey: cramKey!);
+if (response == null || !response.isSuccessful) return;
+await AtClientManager.getInstance().setCurrentAtSign(/* as above */);
+
+// 2.0
+final selection = await AtSignSelectionDialog.show(context);         // AtsignSelection
+final cramKey = await RegistrarCramDialog.show(context, selection!.atSign, registrar: registrar);
+final client = await CramDialog.show(context,
+  atSign: selection.atSign,
+  rootDomain: selection.rootDomain,
+  cramKey: cramKey!,
+  preference: preference,
+  storage: await _storage(selection.atSign),
+);
+if (client == null) return;
+AtClientManager.getInstance().use(client);
+```
+
+**Enroll this device with an atSign another device holds**
+
+```dart
+// 1.x: three steps, and the enrollment checkpoint lived in the keychain
+final enrollment = await ApkamActivationDialog.show(context,
+  atSign: atSign, rootDomain: rootDomain, appName: 'my_app',
+  deviceName: 'default', namespaces: {'my_app': 'rw'});
+if (enrollment?.atAuthKeys == null) return;
+final response = await PkamDialog.show(context,
+  request: AtAuthRequest(atSign, atAuthKeys: enrollment!.atAuthKeys!, rootDomain: rootDomain),
+  backupKeys: [KeychainAtKeysIo()]);
+if (response == null || !response.isSuccessful) return;
+await AtClientManager.getInstance().setCurrentAtSign(/* as above */);
+
+// 2.0: one step; the dialog waits for the approval and hands back the client.
+// A request already pending in `keys` is resumed, not repeated.
+final client = await ApkamActivationDialog.show(context,
+  atSign: atSign, rootDomain: rootDomain, appName: 'my_app',
+  deviceName: 'default', namespaces: {'my_app': 'rw'},
+  preference: preference,
+  keys: KeychainAtKeysIo(),
+  storage: await _storage(atSign),
+);
+if (client == null) return;
+AtClientManager.getInstance().use(client);
+```
+
+**Approve, deny and revoke on the manager device; passcodes**
+
+```dart
+// 1.x
+final service = FlutterEnrollmentService();
+service.getEnrollments(statusFilters: [EnrollmentStatus.pending]).listen((r) => ...);
+await AtEnrollment.create().approve(
+  EnrollmentRequestDecision.approved(
+      enrollmentId: r.enrollmentId,
+      apkamSymmetricKey: AtBytes.fromString(r.encryptedAPKAMSymmetricKey!),
+      atSign: atSign),
+  AtClientManager.getInstance().atClient.getRemoteSecondary()!.atLookUp,
+);
+final Otp otp = await service.generateOtp();
+final Otp spp = await service.setSpp(spp: value, sppExpiry: expiry);
+final active = await service.getActiveSpp();
+
+// 2.0: the client's own handle; passcodes the keychain keeps
+final enrollments = client.enrollments;
+enrollments.requests.listen((Enrollment r) => ...);      // new requests as they arrive
+final pending = await enrollments.pending();
+await enrollments.approve(r.enrollmentId!);              // or deny(id), revoke(id)
+final Passcode otp = await enrollments.otp();
+final Passcode spp = await enrollments.spp(value, expiry: expiry);
+await KeychainStorage().saveSpp(atSign, spp);
+final active = await KeychainStorage().getActiveSpp(atSign);
+```
+
+**Log out, and switch atSigns**
+
+```dart
+// 1.x: the manager owned the client
+await AtClientManager.getInstance().setCurrentAtSign(nextAtSign, 'my_app', acp, ...);
+
+// 2.0: the app owns it. Opening an atSign whose client is live is refused,
+// so every sign-in stops the previous client first.
+await client.stop();
+final next = await PkamDialog.show(context, atSign: nextAtSign, keys: KeychainAtKeysIo(),
+    preference: preference, storage: await _storage(nextAtSign));
+if (next != null) AtClientManager.getInstance().use(next);
+```
+
+**What a failed login looks like**
+
+```dart
+// 1.x: any failure to reach the atServer was a failed login
+if (!response.isSuccessful) showError(response.atClientException);
+
+// 2.0: the client comes back, and says what happened
+final state = client.connection.current;   // online | offline | refused, with a cause
+if (state.isRefused) askTheUser(state.cause);          // revoked, unauthenticated, ...
+client.connection.changes.listen((s) => setState(() => _state = s));
+```
+
 ## Where to go next
 
 - [`at_client`](../at_client) — the SDK whose `AtClient` the dialogs hand

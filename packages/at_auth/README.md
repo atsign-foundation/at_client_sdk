@@ -299,6 +299,96 @@ and the first write that gives a flat keyfile typed material leaves a
 one-off `<keyfile>.pre-v1` copy of the flat document beside it, announced
 at `shout`.
 
+### Before and after
+
+What code that imported `at_auth` directly commonly did, each as it was and
+as it is now. In every case the 4.0 side is an `at_client` verb: the thing a
+3.x caller went on to build from the response — an `AtClient` — is what the
+verb hands back.
+
+**Authenticate from a keyfile**
+
+```dart
+// 3.x: a response carrying an authenticated connection and key material
+final atAuth = AtAuth.create();
+final response = await atAuth.authenticate(AtAuthRequest(atSign,
+    atKeysIo: FileAtKeysIo(filePath: (_) => keysPath),
+    rootDomain: AtRootDomain('root.atsign.org', 64)));
+final AtLookUp lookUp = response.atLookUp!;
+final AtChops chops = response.atChops!;
+
+// 4.0: the client, whose connection and keys those were
+final client = await Atsign(atSign).open(
+    keys: FileAtKeysIo(filePath: (_) => keysPath),
+    preference: AtClientPreference()..namespace = 'my_app');
+client.connection.current;                       // did the atServer accept the keys
+final keys = await client.atKeysIo!.read(atSign); // the material, from the store
+// Which enrollment the keyfile authenticates as, with no client built:
+final principal = await Atsign(atSign).authenticatesAs(
+    keys: FileAtKeysIo(filePath: (_) => keysPath),
+    rootDomain: AtRootDomain.atsignDomain);
+```
+
+**Onboard with a CRAM secret**
+
+```dart
+// 3.x
+final response = await AtAuth.create().onboard(
+    AtOnboardingRequest(atSign)..rootDomain = 'root.atsign.org', cramSecret);
+
+// 4.0, here: the activation alone, writing the keys to `keys`
+final enrollmentId = await activateAtSign(
+    atSign: atSign, cramSecret: cramSecret,
+    keys: FileAtKeysIo(filePath: (_) => keysPath),
+    signingAlgo: SigningAlgoType.mldsa65);
+// 4.0, in at_client: the activation and the client it opens
+final client = await Atsign(atSign).activate(
+    cramSecret: cramSecret, keys: keys, preference: preference);
+```
+
+**Request an enrollment and wait for its approval**
+
+```dart
+// 3.x
+final lookUp = AtLookupImpl(atSign, 'root.atsign.org', 64);
+final enrollment = AtEnrollment.create();
+final submitted = await enrollment.submit(
+    AtEnrollmentRequest(
+        session: AtAuthSession(atSign: atSign, rootDomain: rootDomain, atKeysIo: keys),
+        appName: 'my_app', deviceName: 'laptop',
+        namespaces: {'my_app': 'rw'}, otp: otp),
+    lookUp);
+final approved = await enrollment.waitForApproval(submitted);
+
+// 4.0: the same handshake, filed in `keys` so a restart resumes it
+final pending = await Atsign(atSign).enroll(
+    otp: otp, app: 'my_app', device: 'laptop',
+    namespaces: {'my_app': 'rw'}, keys: keys, preference: preference);
+final client = await pending.client(preference);   // throws AtEnrollmentException on a denial
+```
+
+**Approve, deny, revoke; passcodes**
+
+```dart
+// 3.x: a decision object and a connection of the approver's
+await AtEnrollment.create().approve(
+    EnrollmentRequestDecision.approved(
+        enrollmentId: id, apkamSymmetricKey: symmetricKey, atSign: atSign),
+    approverLookUp);
+final Otp otp = await AtEnrollment.create().generateOtp(approverLookUp);
+
+// 4.0: the approver's client
+await client.enrollments.approve(id);              // or deny(id), revoke(id)
+final Passcode otp = await client.enrollments.otp();
+final requests = await client.enrollments.pending();
+client.enrollments.requests.listen((request) => ...);
+```
+
+`AtEnrollment.approve(decision, atLookUp, approverKeys: ...)` is still here for
+code that holds the approver's key material itself; `approverKeys` is required,
+because the approval seals the approver's encryption private key and
+self-encryption key for the enrollee.
+
 ## Where to go next
 
 | If you're building…            | Use                                                                                   |
