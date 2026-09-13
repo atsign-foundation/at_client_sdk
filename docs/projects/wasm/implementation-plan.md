@@ -1,7 +1,8 @@
 # implementation-plan.md — Build sequence & task backlog
 
-**Status:** working execution plan (prescriptive). Task status as of 2026-08-27,
-against `trunk` at `9d9e5f7d7`.
+**Status:** working execution plan (prescriptive). Task status as of 2026-09-13,
+against `gkc-client-lifecycle` (the transport leg, T9); the `trunk` baseline is
+`9d9e5f7d7`, 2026-08-27.
 **Scope:** the phase sequence and the task backlog for the implementation-neutral
 `AtClient` work, across `at_client_sdk` and `at_server`'s
 `at_persistence_secondary_server`.
@@ -187,6 +188,19 @@ Preparation. Changes no public interface, breaks nothing, and shrinks every late
 The largest item, and the one breaking change with an unknown external blast radius.
 Design in [`design.md`](design.md) §2.1.
 
+**Where phase T stands after T9 (2026-09-13,
+[`decisions.md` D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)).** The app-facing half is done: an
+application hands `lookUps:` to at_client's doors and every connection the client opens
+comes from it, at_client names the TLS transport in one file, and `at_client_web` can
+implement `AtLookupMuxable` whole behind its factory without waiting for anything below.
+What remains is at_lookup's own major — T3, T4, T5 and T8 — which is what lets a web
+transport *reuse* `AtLookupImpl` rather than replace it, plus T6's raw sockets and T7's
+web address finder. Two things are additive when wanted and not owed now: an
+address-finder parameter at the doors (`buildAtClient` already takes one), and a
+platform-default registration so the core stops building the Hive and TLS defaults
+itself. The factory's parameter list is the one new public shape a later widening would
+break; it stays as ruled.
+
 - **T1 — Audit `implements AtConnection` and `getSocket()` callers.** In-repo:
   `remote_secondary.dart` — and only that one now. ⚠️ This row said
   `monitor.dart` too; `Monitor` gave up its socket in X6 and calls `getSocket`
@@ -202,13 +216,14 @@ Design in [`design.md`](design.md) §2.1.
   `socket.destroy()`, `socket.remoteAddress`), `outbound_connection.dart` and
   `outbound_connection_impl.dart`.
 - **T4 — Retype the three factories** — `AtLookupSecureSocketFactory`,
-  `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory`, at
-  `at_lookup_impl.dart:1312,1323,1332` (this row cited `:740,749,756`, which is stale) —
+  `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory`, the
+  three classes at the foot of `at_lookup_impl.dart` (this row has cited two sets of
+  line numbers, both stale; the symbols are the citation) —
   from `SecureSocket` onto `AtTransport`. They are already injectable and already plumbed
   by S1; the return type is the whole blocker.
   ⚠️ **`AtLookupImpl`'s `dart:io` binding is five occurrences, not a rewrite** (measured
   2026-09-06): those three factory classes, which are the io implementations co-located at
-  the foot of the file, plus `createOutBoundConnection` at `:834`, whose local is typed
+  the foot of the file, plus `createOutBoundConnection`, whose local is typed
   `SecureSocket` and which catches `SocketException` — io-typed only because the factory's
   return type is. Retype the three, move their bodies to `_io`, and the core is io-free
   with no logic change. `at_lookup.dart`, where `withSecureSocket` lives, imports no
@@ -216,42 +231,61 @@ Design in [`design.md`](design.md) §2.1.
 - **T5 — `at_lookup_io.dart`.** Native transport wrapping `SecureSocket`; absorb
   `src/util/secure_socket_util.dart` whole (certs, `SecurityContext`, TLS keylog) as
   native-only.
-- **T6 — Follow the raw sockets.** `monitor_client.dart:63` and
-  `at_client/lib/src/stream/stream_notification_handler.dart:27` both call
+- **T6 — Follow the raw sockets.** `monitor_client.dart` (exported from at_lookup's
+  barrel, no consumer in this repository) and
+  `at_client/lib/src/stream/stream_notification_handler.dart` both call
   `SecureSocket.connect` directly, bypassing `SecureSocketUtil`. They must route through
   the transport or move to `_io`.
-- **T7 — Web `SecondaryAddressFinder`.** `cacheable_secondary_address_finder.dart:209,222`
-  opens a raw TLS socket to `root.atsign.org:64`. Ship a web implementation using one of
+- **T7 — Web `SecondaryAddressFinder`.** `cacheable_secondary_address_finder.dart`
+  opens a raw TLS socket to `root.atsign.org:64` through `AtLookupSecureSocketFactory`,
+  not through `AtLookUpFactory`. Ship a web implementation using one of
   the two existing escape hatches — the abstract interface, or the `proxy:<host>`
   convention. The production answer is OQ-7.
 - **T8 — Publish `at_lookup` 4.0.0.** → T0 green for at_lookup, T2.2
 - **T9 — Let the APP inject the transport, and thread it to every construction site**
-  (gkc, 2026-09-06). This is the structural gap the rest of phase T does not close:
-  retyping the factories makes a web transport *possible*, but nothing lets an app
-  *supply* one. `at_client_web` needs every `AtLookUp` its process builds to sit on a
-  WebSocket, so the transport joins [`AtClientStorage`](#5a-client-storage-bundle-x) and
-  `AtKeysIo` as a thing the app hands in.
-  **Six production sites hardcode `secureSocketTransport(...)`, in three packages**
-  (measured 2026-09-06): at_client `client/remote_secondary.dart:150` and
-  `service/notification_service_impl.dart:92` — the only two files in at_client importing
-  `at_lookup_io.dart`, and the sync service inherits the first through its own
-  `RemoteSecondary`; at_auth `at_auth_impl.dart:151` and `:259` and
-  `enroll/enrollment_handshake.dart:61`; at_server_status `at_status_impl.dart:115`.
-  ⚠️ **at_auth is not optional here.** A web app authenticates *before* it has an
-  `AtClient`, so an injection that reaches only at_client still drags `dart:io` through
-  onboarding, `authenticate` and the enrollment handshake. The transport is an
-  ecosystem-level injection, not an at_client parameter.
-  ⚠️ **The factory is nearer neutral than "not yet built":** `withSecureSocket` already
-  takes an `AtLookupTransport`, so what is missing is a neutral NAME and an io-free
-  `AtLookupImpl` for it to construct (T4). Its own dartdoc anticipates the sibling:
-  "Named for its transport, so a differently-transported factory can join it later rather
-  than this one growing a mode flag."
-  **Open: where the injected transport lives.** `AtClientPreference` is the wrong home —
-  it is a data bag, the transport is a live object carrying three factories, and
-  `setPreferences` would make it swappable mid-life. Reading it off `AtClient` matches
-  `atKeysIo` exactly and reaches `NotificationServiceImpl` and `SyncServiceImpl`, which
-  build their own connections; a shared platform bundle carrying transport + storage +
-  keysIo is the other shape. Not settled.
+  (gkc, 2026-09-06). ✅ **DONE 2026-09-13**, on the client-lifecycle branch, as the
+  third leg of the platform bundle. This was the structural gap the rest of phase T
+  did not close: retyping the factories makes a web transport *possible*, but nothing
+  let an app *supply* one. `AtLookUpFactory` (at_lookup, `src/at_lookup.dart`, which
+  imports no `dart:io`) is what an application hands in — the atSign, the root domain,
+  the authenticator, an optional address finder and the client config in, an
+  `AtLookupMuxable` out — and `secureSocketLookUps` in `at_lookup_io.dart`, the one
+  file naming the TLS transport, is the default. `Atsign.open`, `activate`, `enroll`,
+  `resumeEnrollment`, `authenticatesAs`, `buildAtClient` and
+  `AtServiceFactory.atClient` take `lookUps:` beside `keys:` and
+  [`storage:`](#5a-client-storage-bundle-x); `AtClientImpl.lookUps` holds it, and
+  `buildRemoteSecondary`, `SyncServiceImpl.remoteSecondaryFor` and the monitor (through
+  `NotificationServiceImpl.create(lookUps:)`) all build through it, so every connection
+  a client opens travels the way the app chose. `at_client_web` hands in a factory
+  returning a WebSocket-backed `AtLookupMuxable` once T4 gives it one to construct.
+  **What is still hardcoded, re-measured 2026-09-13: three sites, all in at_auth** —
+  `at_auth_impl.dart`'s activation lookup, `enroll/enrollment_handshake.dart`'s
+  `waitForApproval` default, and a dartdoc example in `enroll/at_enrollment.dart` — each
+  the default for a caller that hands at_auth no connection. at_client hardcodes none
+  and calls `AtLookUp.withSecureSocket` nowhere; at_server_status takes a factory too.
+  ⚠️ **at_auth still owns those three.** Logging in no longer goes through at_auth —
+  `Atsign.open` takes `lookUps:` and at_auth 4.0 removed `AtAuth` — and at_client hands
+  at_auth the connections it built (`activateAtSign(atLookUp:, awaitProvisioning:)`,
+  `submit(request, lookUp)`, `waitForApproval(atLookup:)`), so a browser activation or
+  enrollment that goes through at_client drags in no `dart:io`; only a caller using
+  at_auth directly without a connection reaches the three defaults.
+  ✅ **The neutral name landed with T9.** `AtLookUpFactory` is declared in
+  `src/at_lookup.dart`, which has no direct `dart:io` import, and at_client reaches
+  `at_lookup_io.dart` from one file, `lifecycle/lookups.dart`, where the TLS default
+  lives; its public barrel re-exports the type from the main barrel and only
+  `secureSocketLookUps` from `_io`. ⚠️ Transitively the type still pulls `dart:io`:
+  `src/at_lookup.dart` imports at_lookup's main barrel, which exports
+  `secure_socket_util.dart` and `AtLookupImpl` until T4 and T5 move them behind `_io`.
+  What is still missing is that, and T4's io-free `AtLookupImpl` for a web factory to
+  construct; the factory's shape blocks nothing.
+  ⛔ **Settled: where the injected transport lives.** A parameter on the doors and a
+  field on the client, exactly as `atKeysIo` and `storage` are — not
+  `AtClientPreference`, which keeps only the three now-deprecated transport fields
+  (`decryptPackets`, `tlsKeysSavePath`, `pathToCerts`) the default factory,
+  `defaultLookUps(preference)` in at_client's `lifecycle/lookups.dart`, reads until 4.0.
+  The proxy convention at_onboarding_cli carried as a string prefix is the first
+  non-default factory, `proxyLookUps()`, which sends `from:<atSign>` first on every
+  connection through `withSecureSocket`'s `onConnect` hook.
 
 ---
 
@@ -329,8 +363,10 @@ D-12. Independent of the P series, which is `at_server`-side.
   which the per-atSign Hive guard now refuses; (b) a sync round outliving `stop()` and
   touching closed storage (`processSyncRequests → syncQueueSyncSnapshot → size`), fixed
   first and separately as *a stopped sync service abandons its round* (#2206); (c) **the e2e pack
-  depends on cached-client resurrection for key material** — `getAtClient()` calls
-  `setCurrentAtSign` with no `atKeysIo`/`atChops`, and its own comment says so; a fresh
+  depended on cached-client resurrection for key material** — `getAtClient()` called
+  `setCurrentAtSign` with no `atKeysIo`/`atChops`, and its own comment said so
+  (`getAtClient()` is gone in at_onboarding_cli 2.0.0-rc1; the service builds through
+  `Atsign.open` and `AtClientManager.use`); a fresh
   client on switch-back rebuilt `AtChops` from its keystore and 14 tests died with
   `PKAM Keypair required for signing`. Why the reopened keystore lacked the keys is NOT
   established. And trunk's `AtClient.stop()` dartdoc *promises* resurrection: "Local
@@ -409,11 +445,14 @@ D-12. Independent of the P series, which is `at_server`-side.
   which added `storage:` to the existing doors instead. It builds a client and wires its
   three services, taking `storage` alongside `atKeysIo`, registers nothing, and refuses an
   atSign whose client is already live rather than handing back one the caller does not own.
-  `AtOnboardingPreference.storage` carries a bundle through to `setCurrentAtSign`;
+  `AtOnboardingPreference.storage` carried a bundle through to `setCurrentAtSign`;
   `at_cli_commons` needed no change, because `CLIBase` already passes the caller's own
-  preference object through untouched. `AuthService.createClient` turns a completed
-  authentication into a client the app owns, and `FlutterEnrollmentService` takes an
-  optional client so it can work against one.
+  preference object through untouched. `AuthService.createClient` turned a completed
+  authentication into a client the app owned, and `FlutterEnrollmentService` took an
+  optional client so it could work against one — both classes have since gone, in
+  at_client_flutter 2.0.0-rc1, and what they orchestrated is at_client's lifecycle
+  verbs; `setCurrentAtSign` is deprecated in favour of `Atsign.open` and
+  `AtClientManager.use`.
   **`AtClientStorage.closedByClient`** (gkc's idea, 2026-09-06) moves lifetime ownership onto
   the bundle instead of inferring it from how the storage arrived. That removed the last
   argument for `hiveStoragePath`, which is now deprecated along with `commitLogPath` — the
@@ -423,8 +462,9 @@ D-12. Independent of the P series, which is `at_server`-side.
   `AtClientManager` positionally and non-nullably, and relaxing that makes the three
   existing `ServiceFactoryWithNoOpSyncService` overrides illegal. `buildAtClient` (then `AtClient.create`) takes
   per-service builder callbacks instead, which covers the only override anyone uses.
-  ⚠️ **Owed.** `at_onboarding_cli` and `at_cli_commons` still set `hiveStoragePath` as their
-  default (eleven analyzer infos); moving them onto client-closed bundles changes when the
+  ⚠️ **Owed, in part.** `at_onboarding_cli` still reads `hiveStoragePath` as a deprecated
+  fallback in two places (`at_cli_commons` no longer names it; re-derive the info count
+  before quoting one); moving the CLI onto client-closed bundles changes when the
   client's store closes, so it wants the live packs rather than riding in on unit
   green. Eleven example apps in the other widget packages still set `commitLogPath`, each
   needing its own version decision. **X6 changes storage ownership semantics, so the live
@@ -492,16 +532,19 @@ D-12. Independent of the P series, which is `at_server`-side.
     the reconnect BACKOFF and is conditioned on "a connection that also carries verb
     traffic" — Monitor's is dedicated. This PR changes at_lookup by zero lines and at_lookup
     is ahead of at_client on the release train.
-    **It has a live test as well as three unit tests**, and it needed no test hook: the
-    atServer writes a stats notification to every monitor connection every 15s by default
-    (`at_secondary_config.dart:63` on at_server `origin/trunk`), and on every successful
-    change verb besides, so an idle atSign still ticks every 15s — a real clock to
-    bracket the budget around. `tests/at_functional_test/test/monitor_silence_test.dart`
-    runs two 45-second arms differing only in the budget — 3s must rebuild, 40s must not —
-    observed through the public `currentListenerStateStream`, with the stats-arrive premise
-    asserted first so a server that stopped sending them fails as itself. ⚠️ What no test
-    here does is wedge a real atServer into answering heartbeats while delivering nothing;
-    the arms reproduce the condition the watchdog keys on, not the fault that causes it.
+    **Its coverage is three unit tests**, and it needed no test hook: the budget is
+    injected through `AtClientPreference`, so the arms that matter — a budget under the
+    delivery gap must rebuild, one over it must not, and a zero budget disables the check —
+    run in milliseconds. They live in `packages/at_client/test/monitor_test.dart`, group
+    `a connection that is up but silent`, and each asserts through the public
+    `currentListenerStateStream` as well as the muxable's start count, with the
+    arrivals-happened premise asserted alongside so a silent fake fails as itself.
+    ⚠️ What no test here does is wedge a real atServer into answering heartbeats while
+    delivering nothing; the arms reproduce the condition the watchdog keys on, not the
+    fault that causes it.
+    ⚠️ **The live arms were removed** (gkc, 2026-09-10). They bracketed the budget around
+    the atServer's real 15s stats cadence, which cost two 45-second arms — 90s, 30% of the
+    whole functional pack — for properties the injected budget pins in milliseconds.
   - **The Flutter app-owned path works end to end.** `EnrollmentRequestList` takes an
     optional `enrollmentService` and every client read goes through it.
     ⚠️ **It was six reaches, not five, and the sixth fires first**: the service's constructor
@@ -724,9 +767,11 @@ shortlist by cross-reads is `tests/at_end2end_test/test/pq/nskey_multi_enrollmen
 
 ✅ **All four live packs have been run against the merge, and everything it broke in them
 is fixed** (2026-09-07; the post-merge fix-forward section below holds the detail and the
-figures). What the packs still fail is #2797's, on the pre-merge backup as much as here. Still
-owed from the merge session: the spike was pushed and run through CI on 2026-09-07, the first time since the merge (what the runs showed, and what was fixed, is in the PQ plan's pointer row for the fix-forward);
-and [#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) is unreconciled.
+figures). What the packs still fail is #2797's, on the pre-merge backup as much as here. The
+spike was pushed and run through CI on 2026-09-07, the first time since the merge (what the
+runs showed, and what was fixed, is in the PQ plan's pointer row for the fix-forward), and
+[#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) was closed unmerged on
+2026-09-13 — see the loose ends below.
 
 **Found 2026-09-05 by the wrap-up's cold read and done the same day:** the X3 merge-back
 had been skipped. It landed as `51bdb6230`; `at_sync_queue.dart` kept trunk's `SyncQueueStore`
@@ -767,11 +812,14 @@ each was, and what it is now:
    `storage` of its own.
 
 ⚠️ **Two loose ends from the merge session, recorded 2026-09-07 so they are not lost:**
-- **[#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) is OPEN on trunk**
-  and unmerged — `docs(wasm): record X6's merge, and the merge-back it leaves owed`, branch
-  `gkc-x6-merge-followup` in the `-x6` worktree, 50 checks green when raised. It corrects
-  trunk's copy of this plan; **this branch's copy has moved much further since**, so the two
-  will need reconciling rather than one overwriting the other.
+- ✅ **[#2218](https://github.com/atsign-foundation/at_client_sdk/pull/2218) was closed
+  unmerged on 2026-09-13**, and its branch deleted. It corrected trunk's copy of this plan
+  while the spike's copy moved further; the spike's copy reached trunk in
+  [#2224](https://github.com/atsign-foundation/at_client_sdk/pull/2224) already carrying
+  every correction #2218 made. Against that trunk, #2218 conflicted in two hunks, and its
+  side of each was the stale one: `AtClient.create` where trunk says `buildAtClient`, and
+  `refuseChangedStoragePath` described as still spike-only after the merge-back had deleted
+  it.
 - ⚠️ **The merge landed as ONE commit, not the "merge then follow-ups on top" that was asked
   for** (gkc, 2026-09-07). It could not be split: a `packages/`-only merge commit would have
   recorded trunk as merged while carrying the SPIKE's `tests/` — 73 files, including a
@@ -1004,9 +1052,10 @@ Now verified **by execution** under T2.3 rather than by compile.
 
 ## 7. Phase 5 — `at_client_web` (W)
 
-- **W1 — New package.** WebSocket transport against `wss://<host>:<port>/ws`, the web
-  SQLite storage backend, a web `WrittenAtKeysIo` subtype, web connectivity, console
-  logging.
+- **W1 — New package.** The three legs of the platform bundle
+  ([`design.md` §4](design.md#4-the-platform-bundle-capabilities-are-parameters-on-the-doors)): a WebSocket-backed `AtLookupMuxable` against
+  `wss://<host>:<port>/ws` behind an `AtLookUpFactory`, the web SQLite `AtClientStorage`,
+  a web `WrittenAtKeysIo` subtype; plus web connectivity and console logging.
 - **W2 — Browser test harness** for the T3 and T4 gates: a page that loads the module
   and drives a virtualenv atServer. First run must confirm
   `dart test -p chrome -c dart2wasm` executes at all — unverified locally

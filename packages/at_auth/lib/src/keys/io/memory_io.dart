@@ -14,6 +14,20 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
   /// to the same entry.
   final Map<Atsign, AtKeys> _internal = {};
 
+  InMemoryAtKeysIo();
+
+  /// An in-memory store already holding [atKeys] for [atsign].
+  ///
+  /// For a caller that has a key set in hand and needs a *source* to
+  /// authenticate from, which is what [AtAuthRequest] takes. at_auth wraps a
+  /// fixed key set exactly this way internally, so this is the same object
+  /// the authentication would have built.
+  factory InMemoryAtKeysIo.holding(String atsign, AtKeys atKeys) {
+    final io = InMemoryAtKeysIo();
+    io._internal[atsign.toAtsign()] = atKeys;
+    return io;
+  }
+
   /// Returns the keys for [atsign], or throws if nothing has been loaded into
   /// memory for that atsign.
   @override

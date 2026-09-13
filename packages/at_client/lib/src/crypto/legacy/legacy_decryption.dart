@@ -7,6 +7,19 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_utils/at_logger.dart';
 import 'legacy_encryption.dart';
+import 'string_crypto.dart';
+
+/// The hashing algorithm a record's `pubKeyHash.hashingAlgo` names.
+///
+/// The switch is exhaustive, so a new [HashingAlgoType] stops this compiling
+/// rather than failing at runtime.
+AtHashingAlgorithm _hashingAlgorithmFor(HashingAlgoType algoType) =>
+    switch (algoType) {
+      HashingAlgoType.sha256 => SHA256HashingAlgo(),
+      HashingAlgoType.sha512 => SHA512HashingAlgo(),
+      HashingAlgoType.md5 => Md5HashingAlgo(),
+      HashingAlgoType.argon2id => Argon2idHashingAlgo(),
+    };
 
 class LegacyDecryption {
   static AtKeyDecryption build(AtKey key, AtClient atClient) {
@@ -66,18 +79,10 @@ class SelfKeyDecryption implements AtKeyDecryption {
           exceptionScenario: ExceptionScenario.decryptionFailed);
     }
 
-    // Get SelfEncryptionKey from atChops
-    // https://github.com/atsign-foundation/at_client_sdk/issues/1294 causes selfEncryptionKey to be null in atChops.
-    // Fetch from LocalSecondary until the above issue is fixed.
+    // The local secondary resolves this across every tier the client has:
+    // an injected AtChops, then its key source, then the keystore.
     String? selfEncryptionKey =
-        _atClient.atChops?.atChopsKeys.selfEncryptionKey?.key;
-    if (selfEncryptionKey.isNullOrEmpty) {
-      // Fetch Self Encryption Key from Local Secondary
-      // Remove this call after the atChops has self encryption key populated from AtClientMobile.
-      selfEncryptionKey =
-          await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
-    }
-    // If selfEncryptionKey is null in atChops and in Local Secondary throw exception.
+        await _atClient.getLocalSecondary()!.getEncryptionSelfKey();
     if (selfEncryptionKey.isNullOrEmpty) {
       throw SelfKeyNotFoundException(
           'Failed to decrypt the key: ${atKey.toString()} caused by self encryption key not found',
@@ -87,23 +92,22 @@ class SelfKeyDecryption implements AtKeyDecryption {
 
     InitialisationVector iV;
     if (atKey.metadata.ivNonce != null) {
-      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+      iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
     } else {
-      iV = AtChopsUtil.generateIVLegacy();
+      iV = InitialisationVector.legacy();
     }
-    AtEncryptionResult decryptionResultFromAtChops;
+    String decryptedValue;
     try {
       var encryptionAlgo = AESEncryptionAlgo(
           AESKey(DefaultResponseParser().parse(selfEncryptionKey!).response));
-      decryptionResultFromAtChops = await _atClient.atChops!.decryptString(
-          encryptedValue, EncryptionKeyType.aes256,
-          encryptionAlgorithm: encryptionAlgo, iv: iV);
+      decryptedValue =
+          await decryptStringFromBase64(encryptedValue, encryptionAlgo, iv: iV);
     } on AtDecryptionException catch (e) {
       _logger.severe(
           'decryption exception during decryption of key: ${atKey.key}. Reason: ${e.toString()}');
       rethrow;
     }
-    return decryptionResultFromAtChops.result;
+    return decryptedValue;
   }
 }
 
@@ -137,24 +141,22 @@ class SharedByMeDecryption extends AbstractAtKeyEncryption
     }
     InitialisationVector iV;
     if (atKey.metadata.ivNonce != null) {
-      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+      iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
     } else {
-      iV = AtChopsUtil.generateIVLegacy();
+      iV = InitialisationVector.legacy();
     }
-    AtEncryptionResult decryptionResultFromAtChops;
+    String decryptedValue;
     try {
       var encryptionAlgo = AESEncryptionAlgo(AESKey(symmetricKey));
-      decryptionResultFromAtChops = await _atClient.atChops!.decryptString(
-          encryptedValue, EncryptionKeyType.aes256,
-          encryptionAlgorithm: encryptionAlgo, iv: iV);
-      _logger.finer(
-          'decryptionResultFromAtChops: ${decryptionResultFromAtChops.result}');
+      decryptedValue =
+          await decryptStringFromBase64(encryptedValue, encryptionAlgo, iv: iV);
+      _logger.finer('decrypted value: $decryptedValue');
     } on AtDecryptionException catch (e) {
       _logger.severe(
           'decryption exception during of key: ${atKey.key}. Reason: ${e.toString()}');
       rethrow;
     }
-    return decryptionResultFromAtChops.result;
+    return decryptedValue;
   }
 }
 
@@ -204,7 +206,7 @@ class SharedWithMeDecryption implements AtKeyDecryption {
 
     final isPubKeyHashMismatch = atKey.metadata.pubKeyHash != null &&
         atKey.metadata.pubKeyHash?.hash !=
-            AtChops.hashWith(HashingAlgoType.fromString(
+            _hashingAlgorithmFor(HashingAlgoType.fromString(
                     atKey.metadata.pubKeyHash!.hashingAlgo))
                 .hash(currentAtSignPublicKey!.codeUnits);
 
@@ -220,27 +222,26 @@ class SharedWithMeDecryption implements AtKeyDecryption {
       );
     }
 
-    AtEncryptionResult decryptionResultFromAtChops;
+    String decryptedValue;
     try {
       InitialisationVector iV;
       if (atKey.metadata.ivNonce != null) {
-        iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+        iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
       } else {
-        iV = AtChopsUtil.generateIVLegacy();
+        iV = InitialisationVector.legacy();
       }
-      final decryptionResult = await _atClient.atChops!
-          .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
-      var encryptionAlgo = AESEncryptionAlgo(AESKey(
-          DefaultResponseParser().parse(decryptionResult.result).response));
-      decryptionResultFromAtChops = await _atClient.atChops!.decryptString(
-          encryptedValue, EncryptionKeyType.aes256,
-          encryptionAlgorithm: encryptionAlgo, iv: iV);
+      final sharedKey = await decryptStringFromBase64(
+          encryptedSharedKey, await atSignDecryptionAlgo(_atClient));
+      var encryptionAlgo = AESEncryptionAlgo(
+          AESKey(DefaultResponseParser().parse(sharedKey).response));
+      decryptedValue =
+          await decryptStringFromBase64(encryptedValue, encryptionAlgo, iv: iV);
     } on AtDecryptionException catch (e) {
       _logger.severe(
           'decryption exception during of key: ${atKey.key}. Reason: ${e.toString()}');
       rethrow;
     }
-    return decryptionResultFromAtChops.result;
+    return decryptedValue;
   }
 
   Future<String> _getEncryptedSharedKey(AtKey atKey) async {

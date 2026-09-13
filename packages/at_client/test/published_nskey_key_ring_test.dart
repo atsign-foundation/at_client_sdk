@@ -10,6 +10,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 /// Discovery of another atSign's advertised nskey.
 ///
@@ -23,7 +25,7 @@ void main() {
   const namespace = 'app_1.my_apps';
 
   late XWingKeyPair bobKey;
-  late AtChops bobChops;
+  late RsaKeyPair bobApkam;
   late AtClientEnvelopeSigner bobSigner;
 
   setUpAll(() async {
@@ -34,23 +36,23 @@ void main() {
 
   /// A mock client that signs as [enrollmentId] of [atSign].
   MockAtClient signingClient(
-      String atSign, String enrollmentId, AtChops atChops) {
+      String atSign, String enrollmentId, RsaKeyPair apkam) {
     final atClient = MockAtClient();
     final remoteSecondary = MockRemoteSecondary();
     final atLookUp = MockAtLookUp();
-    when(() => atClient.atChops).thenReturn(atChops);
+    when(() => atClient.atKeysIo)
+        .thenReturn(keysHoldingApkam(atSign, enrollmentId, apkam));
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
     return atClient;
   }
 
   setUp(() {
-    bobChops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+    bobApkam = pkamKeyPairFor(bob, 'enroll-bob');
     bobSigner =
-        AtClientEnvelopeSigner(signingClient(bob, 'enroll-bob', bobChops));
+        AtClientEnvelopeSigner(signingClient(bob, 'enroll-bob', bobApkam));
   });
 
   /// Every field `mintAndPublish` writes, unsigned, so a test can take one
@@ -69,8 +71,7 @@ void main() {
           advertisementPayload(pair, suites: suites),
           type: EnvelopeType.nskeyRing);
 
-  String bobsApskPublicKey() =>
-      bobChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+  String bobsApskPublicKey() => bobApkam.atPublicKey.publicKey;
 
   /// Alice's client: her advertisement fetch succeeds [succeedFor] times and
   /// throws afterwards — the shape of an atServer that goes unreachable — and
@@ -83,8 +84,8 @@ void main() {
     final fetches = <int>[];
     final atClient = MockAtClient();
     when(() => atClient.getCurrentAtSign()).thenReturn(alice);
-    when(() => atClient.atChops).thenReturn(AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+    when(() => atClient.atKeysIo)
+        .thenReturn(keysHoldingApkam(alice, null, pkamKeyPairFor(alice, null)));
     // One answer for both gets the ring drives — the advertisement itself and
     // the `_apsk` the verify checks it against — branching on the key, because
     // a mocktail named-argument matcher also matches the argument's absence.
@@ -213,8 +214,8 @@ void main() {
       final localSecondary = MockLocalSecondary();
       when(() => atClient.getCurrentAtSign()).thenReturn(alice);
       when(() => atClient.getLocalSecondary()).thenReturn(localSecondary);
-      when(() => atClient.atChops).thenReturn(AtChopsImpl(
-          AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+      when(() => atClient.atKeysIo).thenReturn(
+          keysHoldingApkam(alice, null, pkamKeyPairFor(alice, null)));
 
       // How each advertisement read asked. A mocktail stub cannot tell a
       // local-first get from a remote one on its own, so the options are what
@@ -348,7 +349,7 @@ void main() {
       // pass: the shape-aware field check, the signer claim from the protected
       // header's kid, the verify over protected.payload, and the payload out
       // of base64url.
-      final pair = bobChops.atChopsKeys.atPkamKeyPair!;
+      final pair = bobApkam;
       final envelope = signEnvelope(advertisementPayload(bobKey),
           keys: [
             ApkamSigningKeys(
@@ -370,11 +371,13 @@ void main() {
     test('an advertisement signed by another atSign is rejected', () async {
       // Bob's advertisement, but the `_apsk` served for him is somebody else's
       // — which is what a substituted key looks like from the sender's side.
-      final mallory = AtChopsImpl(
-          AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+      // NOTE: generated rather than taken from the shared cache. This key's
+      // job is to NOT be bob's, so it must not be keyed by anything that
+      // could ever collide with him.
+      final mallory = RsaKeyPair.generate();
       final c = client(
         payload: await signedPayloadFor(bobKey),
-        apskPublicKey: mallory.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey,
+        apskPublicKey: mallory.atPublicKey.publicKey,
       );
 
       await expectLater(

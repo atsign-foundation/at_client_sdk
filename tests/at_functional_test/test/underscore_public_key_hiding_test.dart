@@ -3,7 +3,6 @@ library;
 
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -64,7 +63,7 @@ void main() {
     // remote secondary with `auth: false` reuses the already authenticated
     // connection.
     final outsider =
-        AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
+        TestUtils.unauthenticatedLookUp(atSign);
     try {
       final plain = await outsider.executeCommand('scan\n');
       final hidden = await outsider.executeCommand('scan:showhidden:true\n');

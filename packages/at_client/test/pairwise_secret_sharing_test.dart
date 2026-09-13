@@ -15,6 +15,8 @@ import 'package:test/test.dart';
 
 import 'fake_enrollment_directory.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -82,9 +84,8 @@ void main() {
   MockAtClient buildMockClient(String enrollmentId,
       {MockSyncService? syncService}) {
     final atClient = MockAtClient();
-    final atChops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
-    when(() => atClient.atChops).thenReturn(atChops);
+    when(() => atClient.atKeysIo).thenReturn(keysHoldingApkam(
+        atSign, enrollmentId, pkamKeyPairFor(atSign, enrollmentId)));
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     final sync = syncService ?? MockSyncService();
     when(() => atClient.syncService).thenReturn(sync);
@@ -121,7 +122,7 @@ void main() {
     final atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
     when(() => atClient.put(any(), any(),
         putRequestOptions: any(named: 'putRequestOptions'))).thenAnswer((inv) {

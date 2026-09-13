@@ -102,11 +102,14 @@ Future<void> prewarm() async {
   }
 
   final rsa = RsaKeyPair.generate();
-  final rsaSign = RsaSigningAlgo(rsa, HashingAlgoType.sha256);
+  final rsaSign = RsaSignatureAlgo.rsa2048();
+  final rsaSecret = base64Decode(rsa.atPrivateKey.privateKey);
+  final rsaPublic = base64Decode(rsa.atPublicKey.publicKey);
   final rsaEnc = RsaEncryptionAlgo.fromKeyPair(rsa);
   for (var i = 0; i < 3; i++) {
-    rsaSign.verify(challenge, rsaSign.sign(challenge),
-        publicKey: rsa.atPublicKey.publicKey);
+    await rsaSign.verifyBytes(challenge,
+        signature: rsaSign.signBytesSync(challenge, secretKey: rsaSecret),
+        publicKey: rsaPublic);
     rsaEnc.decrypt(rsaEnc.encrypt(ck));
   }
 }
@@ -215,16 +218,22 @@ Future<List<Timing>> perAuth(int iterations) async {
       iterations: iterations));
 
   final rsa = RsaKeyPair.generate();
-  final rsaAlgo = RsaSigningAlgo(rsa, HashingAlgoType.sha256);
-  final rsaSig = rsaAlgo.sign(challenge);
-  results.add(await measure('legacy RSA-2048 sign (PKAM challenge)',
-      'per authentication', () async => rsaAlgo.sign(challenge),
+  final rsaAlgo = RsaSignatureAlgo.rsa2048();
+  // Decoded once, outside the measured closures: the base64 step is not part
+  // of what these figures are about.
+  final rsaSecret = base64Decode(rsa.atPrivateKey.privateKey);
+  final rsaPublic = base64Decode(rsa.atPublicKey.publicKey);
+  final rsaSig = rsaAlgo.signBytesSync(challenge, secretKey: rsaSecret);
+  results.add(await measure(
+      'legacy RSA-2048 sign (PKAM challenge)',
+      'per authentication',
+      () async => rsaAlgo.signBytesSync(challenge, secretKey: rsaSecret),
       iterations: iterations));
   results.add(await measure(
       'legacy RSA-2048 verify (PKAM challenge)',
       'per authentication',
-      () async => rsaAlgo.verify(challenge, rsaSig,
-          publicKey: rsa.atPublicKey.publicKey),
+      () async => rsaAlgo.verifyBytes(challenge,
+          signature: rsaSig, publicKey: rsaPublic),
       iterations: iterations));
   return results;
 }

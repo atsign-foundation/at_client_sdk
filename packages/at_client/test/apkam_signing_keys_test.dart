@@ -1,3 +1,7 @@
+// The AtChops a client was handed is one of the sources this mixin resolves a
+// signing key from, so this file names it on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:async' show FutureOr;
 import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
@@ -11,7 +15,6 @@ import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show recordResolvedSigningAlgo;
 import 'package:at_commons/at_commons.dart'
     show AtKey, AtKeyNotFoundException, AtValue;
-import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -67,7 +70,7 @@ void main() {
   late MockAtClient atClient;
   late AtChops atChops;
   late TestSigner signer;
-  late AtPkamKeyPair rsaPair;
+  late RsaKeyPair rsaPair;
   late ({Uint8List publicKey, Uint8List secretKey}) mlDsaPair;
 
   String b64(String label) => base64Encode(utf8.encode(label));
@@ -87,7 +90,7 @@ void main() {
 
   setUpAll(() async {
     registerFallbackValue(AtKey());
-    rsaPair = AtChopsUtil.generateAtPkamKeyPair();
+    rsaPair = RsaKeyPair.generate();
     mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   });
 
@@ -104,7 +107,7 @@ void main() {
     final atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
     signer = TestSigner(atClient);
   });
@@ -117,7 +120,55 @@ void main() {
       expect(keys, hasLength(1));
       expect(keys.single.publicKey, pkamPublicKey());
       expect(keys.single.algorithm, SigningAlgoType.rsa2048);
-      expect(await signer.publicSigningKey, pkamPublicKey());
+    });
+
+    test('the keyfile\'s APKAM keypair answers a client holding no AtChops',
+        () async {
+      // The mainstream client: built from a keyfile, never handed an AtChops.
+      when(() => atClient.atChops).thenReturn(null);
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
+          keys.fileLegacyMaterial(
+              apkamPublicKey: rsaPair.atPublicKey.publicKey,
+              apkamPrivateKey: rsaPair.atPrivateKey.privateKey)));
+
+      final keys = await signer.signingKeys;
+
+      expect(keys.single.publicKey, rsaPair.atPublicKey.publicKey);
+      expect(keys.single.algorithm, SigningAlgoType.rsa2048,
+          reason: 'the flat fields carry no algorithm, and are rsa2048');
+    });
+
+    test('typed ML-DSA authentication material names its own algorithm',
+        () async {
+      when(() => atClient.atChops).thenReturn(null);
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
+          keys.fileApkamMaterial(
+              enrollmentId: enrollmentId,
+              algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+              publicKey: base64Encode(mlDsaPair.publicKey),
+              privateKey: base64Encode(mlDsaPair.secretKey))));
+
+      final keys = await signer.signingKeys;
+
+      expect(keys.single.publicKey, base64Encode(mlDsaPair.publicKey));
+      expect(keys.single.algorithm, SigningAlgoType.mldsa65,
+          reason: 'from the material, not from a preference or a default');
+    });
+
+    test('the keyfile\'s APKAM keypair wins over an injected AtChops',
+        () async {
+      // The rig's AtChops holds one RSA keypair; the keyfile holds another.
+      // Which public key comes back says which source answered.
+      final other = RsaKeyPair.generate();
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
+          keys.fileLegacyMaterial(
+              apkamPublicKey: other.atPublicKey.publicKey,
+              apkamPrivateKey: other.atPrivateKey.privateKey)));
+
+      expect((await signer.signingKeys).single.publicKey,
+          other.atPublicKey.publicKey,
+          reason: 'the keyfile is the source; the AtChops is the door for a '
+              'client that has no keyfile');
     });
 
     test('the fallback signs under the algorithm the client resolved',
@@ -153,7 +204,6 @@ void main() {
       expect(keys.map((k) => k.publicKey), isNot(contains(pkamPublicKey())),
           reason: 'the authentication keypair authenticates and nothing else '
               'once the enrollment has signing keys of its own');
-      expect(await signer.publicSigningKey, b64('mldsa-pub'));
     });
 
     test('a held key this build cannot sign an envelope with is skipped',

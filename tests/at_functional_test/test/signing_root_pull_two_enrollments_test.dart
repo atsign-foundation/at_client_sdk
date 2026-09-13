@@ -27,12 +27,16 @@ import 'test_utils.dart';
 /// so it never rides the `enroll:listns` fan-out, and nothing re-mints a root
 /// that is already published, so no later event can produce a replacement.
 ///
-/// It needs two genuine enrollments and nothing less. The pull authenticates
-/// on **both** sides — the requester to enumerate holders, the responder to
-/// authorize the requester before answering — and both go through
-/// `enroll:listns`, which the atServer answers only for an APKAM-authenticated
-/// connection. A client using the atSign's own keys is refused at either end,
-/// which is why `enrolAndAuthenticate` exists.
+/// It needs two genuine enrollments and nothing less: a seeker that lacks the
+/// root and a holder that has it, each with its own authenticated client. The
+/// atSign's own credential cannot be the seeker, since it does not ask for a
+/// root (its route to a missing one is to mint one), which is why
+/// `enrolAndAuthenticate` exists. The pull authenticates on **both** sides,
+/// the requester to enumerate holders and the responder to authorize the
+/// requester before answering, and both go through `enroll:listns`; since
+/// at_server 3.16.4 that verb also answers a connection using the atSign's
+/// own keys, judged as `primary`, so the server is not what rules that
+/// credential out.
 ///
 /// On secondAtSign, which nothing else roots, because the conveyed private
 /// must be THE root private: filing checks correspondence against the
@@ -150,10 +154,9 @@ void main() {
       namespace: namespace,
     );
     expect(asked, greaterThan(0),
-        reason: 'the request must reach at least one key package — this is '
-            'the enumeration that only an APKAM-authenticated connection can '
-            'perform, and it is the half the single-client harness could not '
-            'reach at all');
+        reason: 'the request must reach at least one key package: the '
+            'enumeration of holders, which the single-client harness never '
+            "performs because the atSign's own credential does not ask");
 
     await holderSharing.sweepOnce(fromRemote: true);
 

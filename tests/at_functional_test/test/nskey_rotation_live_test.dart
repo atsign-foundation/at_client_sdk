@@ -8,7 +8,6 @@ library;
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
@@ -18,7 +17,6 @@ import 'package:at_client/src/crypto/nskey/nskey_rotation.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -61,15 +59,21 @@ void main() {
   /// after a cold-start mint takes the lock, a rotation of the same namespace
   /// is refused until it lapses — long enough that no mint here races its own
   /// expiry, short enough to wait out.
-  const shortLockTtl = Duration(seconds: 5);
+  ///
+  /// The floor is the winner's own budget: a holder carries the matching
+  /// `MintLease` and abandons rather than publishing once the ttl has elapsed,
+  /// so this must outlast a mint. A mint or rotation against a local
+  /// virtualenv measured at most 35ms, which this leaves ample room over.
+  const shortLockTtl = Duration(seconds: 1);
 
   /// Waits until the lock a mint just took has expired.
   ///
-  /// A second past the ttl, because the atServer starts counting when it
-  /// stores the record — after this client sent it — so waiting exactly the
-  /// ttl can land a moment early.
+  /// Past the ttl rather than exactly it, because the atServer starts counting
+  /// when it stores the record — after this client sent it — so waiting the
+  /// ttl alone can land a moment early. That gap measured at most ~100ms
+  /// against a local virtualenv.
   Future<void> pastTheCooldown() =>
-      Future.delayed(shortLockTtl + const Duration(seconds: 1));
+      Future.delayed(shortLockTtl + const Duration(milliseconds: 500));
 
   Future<EnrolledClient> enrol(String device,
           {AtKeysIo? atKeysIo, Map<String, String>? namespaces}) =>
@@ -329,9 +333,15 @@ void main() {
     // AtKeysIo would both read whichever wrote last, and the credential arm
     // below would present a live enrollment's key under a revoked id.
     expect({
-      operator.enrolled.keys.apkamPublicKey!.toString(),
-      keeper.enrolled.keys.apkamPublicKey!.toString(),
-      doomed.enrolled.keys.apkamPublicKey!.toString(),
+      operator.enrolled.keys
+          .authenticationKeyPairFor(operator.enrolled.enrollmentId)!
+          .publicKey,
+      keeper.enrolled.keys
+          .authenticationKeyPairFor(keeper.enrolled.enrollmentId)!
+          .publicKey,
+      doomed.enrolled.keys
+          .authenticationKeyPairFor(doomed.enrolled.enrollmentId)!
+          .publicKey,
     }, hasLength(3),
         reason: 'three enrollments sharing one APKAM keypair makes the '
             'credential arm below meaningless — whichever key it presents '
@@ -352,8 +362,11 @@ void main() {
       return mine?['apkamPubKey'] as String?;
     }
 
-    expect(await servedApkamKeyFor(doomed.enrolled.enrollmentId),
-        doomed.enrolled.keys.apkamPublicKey!.toString(),
+    expect(
+        await servedApkamKeyFor(doomed.enrolled.enrollmentId),
+        doomed.enrolled.keys
+            .authenticationKeyPairFor(doomed.enrolled.enrollmentId)!
+            .publicKey,
         reason: 'the keypair this test is about to present must be the one '
             'the atServer holds for the doomed enrollment, or the refusal it '
             'expects afterwards would be a signature mismatch wearing the '
@@ -368,14 +381,8 @@ void main() {
     /// mechanism as readily as for its presence.
     Future<String> authOutcome(EnrolledClient enrolled) async {
       final lookup =
-          AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
-            ..enrollmentId = enrolled.enrollmentId
-            ..atChops = AtChopsImpl(AtChopsKeys.create(
-              AtEncryptionKeyPair.create(
-                  enrolled.keys.defaultEncryptionPublicKey!.toString(), ''),
-              AtPkamKeyPair.create(enrolled.keys.apkamPublicKey!.toString(),
-                  enrolled.keys.apkamPrivateKey!.toString()),
-            ));
+          TestUtils.lookUpAs(atSign, enrolled.keys,
+        enrollmentId: enrolled.enrollmentId);
       try {
         final accepted =
             await lookup.pkamAuthenticate(enrollmentId: enrolled.enrollmentId);
@@ -462,7 +469,9 @@ void main() {
     Future<String> serverViewOf(String enrollmentId) async {
       try {
         final served = await servedApkamKeyFor(enrollmentId);
-        final held = doomed.enrolled.keys.apkamPublicKey!.toString();
+        final held = doomed.enrolled.keys
+            .authenticationKeyPairFor(doomed.enrolled.enrollmentId)!
+            .publicKey;
         return 'server says [${await statusOf(enrollmentId)}]; '
             'apkamPubKey on the record ${served == held ? "MATCHES" : "DIFFERS FROM"} '
             'the key this test presented '

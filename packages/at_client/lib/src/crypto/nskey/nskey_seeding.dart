@@ -64,7 +64,7 @@ class NskeySeeding {
     final own = atClient.getPreferences()?.namespace;
     final ownNamespace =
         (own == null || own.isEmpty) ? const <String>{} : {own};
-    final enrollmentId = atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
+    final enrollmentId = atClient.enrollmentId;
     if (isAtSignCredential(enrollmentId)) return ownNamespace;
 
     try {
@@ -284,8 +284,7 @@ class NskeySeeding {
 
     // NOTE: the atSign's own credential is not an enrollment the atServer will
     // answer about, and the verb behind the lookup is APKAM-gated.
-    if (isAtSignCredential(
-        atClient.getRemoteSecondary()?.atLookUp.enrollmentId)) {
+    if (isAtSignCredential(atClient.enrollmentId)) {
       return false;
     }
 

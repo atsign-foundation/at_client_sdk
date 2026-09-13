@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart';
@@ -9,17 +8,17 @@ import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'utils/at_client_cache.dart';
+import 'utils/lifecycle.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
 
-/// An [AtOnboardingService] binds to the enrollment it last authenticated as:
-/// it holds an [AtLookUp] whose connection the atServer has bound to that
-/// enrollment. The atServer refuses a `__manage` key fetch whose enrollment id
-/// differs from the one the connection authenticated as, so an instance carried
-/// from one enrollment into the next fetches keys it is not authorized to read.
+/// The CLI's enrollment commands against a real atServer: a request is
+/// submitted through at_client, decided through `at_activate`, and the
+/// keyfile it completes authenticates or not as the decision says.
 ///
-/// Every test below therefore builds its own instances, and every
-/// authentication gets a fresh one — see [authenticateWithApkamKeys].
+/// Every authentication opens its own client and stops it afterwards, because
+/// a client stays live in this process until stopped and a second open for
+/// the same atSign is refused while one is — see [authenticateWithApkamKeys].
 void main() {
   String atSign = '@sitaram🛠';
   String masterKeysFilePath = testKeysFile(atSign);
@@ -31,17 +30,14 @@ void main() {
 
   // Runs once before all tests.
   setUpAll(() async {
-    AtOnboardingService onboardingService = AtOnboardingServiceImpl(
+    await activateThroughCli(
         atSign,
         getOnboardingPreference(atSign, masterKeysFilePath)
           // Fetched cram key from the at_demos repo.
           ..cramSecret = cramKeyMap[atSign]);
-
-    bool onboardingStatus = await onboardingService.onboard();
-    expect(onboardingStatus, true);
     // NOTE: the static client cache is keyed on `(atSign, enrollmentId)`
     // alone, so without this eviction the CLI commands below run against the
-    // client the onboard left behind rather than the one they ask for.
+    // client the activation left behind rather than the one they ask for.
     await evictCachedAtClients();
     // Set SPP
     List<String> args = [
@@ -62,7 +58,7 @@ void main() {
 
   group('A group of tests to validate enrollment commands', () {
     /// The test verifies the following scenario's
-    /// 1. Onboards an atSign
+    /// 1. Activates an atSign
     /// 2. Sets Semi Permanent Passcode
     /// 3. Submits an enrollment request
     /// 4. Approves the enrollment request
@@ -74,18 +70,22 @@ void main() {
     test(
         'A test to verify end-to-end flow of approve revoke unrevoke of an enrollment',
         () async {
-      AtOnboardingService enrollmentService = AtOnboardingServiceImpl(
-          atSign, getOnboardingPreference(atSign, apkamKeysFilePath));
+      final preference = getOnboardingPreference(atSign, apkamKeysFilePath);
 
-      // Submit enrollment request
-      AtEnrollmentResponse atEnrollmentResponse = await enrollmentService
-          .sendEnrollRequest(
-              'wavi', 'local-device', 'ABC123', {'e2etest': 'rw'});
-      String enrollmentId = atEnrollmentResponse.enrollmentId;
+      // Submit enrollment request; the keyfile named holds it pending.
+      final pending = await Atsign(atSign).enroll(
+          otp: 'ABC123',
+          app: 'wavi',
+          device: 'local-device',
+          namespaces: {'e2etest': 'rw'},
+          keys: keyfileOf(preference),
+          preference: preference);
+      String enrollmentId = pending.enrollmentId;
       logger.info(
           'Submitted enrollment successfully with enrollmentId: $enrollmentId');
-      expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
       expect(enrollmentId.isNotEmpty, true);
+      expect(File(apkamKeysFilePath).existsSync(), true,
+          reason: 'the submission is on disk before anyone approves it');
 
       // Approve enrollment request
       List<String> args = [
@@ -103,10 +103,8 @@ void main() {
       expect(res, 0);
       logger.info('Approved enrollment with enrollmentId: $enrollmentId');
 
-      // Generate Atkeys file for the enrollment request.
-      await enrollmentService.awaitApproval(atEnrollmentResponse);
-      await enrollmentService.createAtKeysFile(atEnrollmentResponse,
-          atKeysFile: File(apkamKeysFilePath));
+      // The approval completes the keyfile.
+      await pending.awaitApproval();
 
       // Authenticate with APKAM keys
       expect(
@@ -140,12 +138,8 @@ void main() {
       // this stays red.
       bool revokedStillAuthenticates = true;
       for (var i = 0; i < 20; i++) {
-        try {
-          revokedStillAuthenticates = await authenticateWithApkamKeys(
-              atSign, apkamKeysFilePath, enrollmentId);
-        } on AtAuthenticationException {
-          revokedStillAuthenticates = false;
-        }
+        revokedStillAuthenticates = await authenticateWithApkamKeys(
+            atSign, apkamKeysFilePath, enrollmentId);
         if (!revokedStillAuthenticates) break;
         await Future<void>.delayed(Duration(milliseconds: 500));
       }
@@ -176,22 +170,23 @@ void main() {
     });
 
     test('A test to verify password protected of atKeys file', () async {
-      // The pass-phrase encrypts the atKeys file written upon approval of the
-      // enrollment request.
-      AtOnboardingService enrollmentService = AtOnboardingServiceImpl(
-          atSign,
+      // The pass-phrase encrypts the atKeys file the enrollment writes.
+      final preference =
           getOnboardingPreference(atSign, passwordProtectedKeysFilePath)
             ..passPhrase = passPhrase
-            ..hashingAlgoType = HashingAlgoType.argon2id);
+            ..hashingAlgoType = HashingAlgoType.argon2id;
 
       // Submit enrollment request
-      AtEnrollmentResponse atEnrollmentResponse = await enrollmentService
-          .sendEnrollRequest(
-              'buzz', 'local-device', 'ABC123', {'e2etest': 'rw'});
-      String enrollmentId = atEnrollmentResponse.enrollmentId;
+      final pending = await Atsign(atSign).enroll(
+          otp: 'ABC123',
+          app: 'buzz',
+          device: 'local-device',
+          namespaces: {'e2etest': 'rw'},
+          keys: keyfileOf(preference),
+          preference: preference);
+      String enrollmentId = pending.enrollmentId;
       logger.info(
           'Submitted enrollment successfully with enrollmentId: $enrollmentId');
-      expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
       expect(enrollmentId.isNotEmpty, true);
 
       // Approve enrollment request
@@ -210,10 +205,8 @@ void main() {
       expect(res, 0);
       logger.info('Approved enrollment with enrollmentId: $enrollmentId');
 
-      // Generate Atkeys file for the enrollment request.
-      await enrollmentService.awaitApproval(atEnrollmentResponse);
-      await enrollmentService.createAtKeysFile(atEnrollmentResponse,
-          atKeysFile: File(passwordProtectedKeysFilePath));
+      // The approval completes the keyfile, encrypted under the pass-phrase.
+      await pending.awaitApproval();
 
       // Authenticate with APKAM keys
       expect(
@@ -250,15 +243,17 @@ void main() {
   });
 }
 
-/// Authenticates [atSign] as [enrollmentId] using the keys in
-/// [atKeysFilePath], on an [AtOnboardingService] created for this call alone.
+/// Whether the keys in [atKeysFilePath] authenticate [atSign] as
+/// [enrollmentId], through an [AtOnboardingService] created for this call
+/// alone and whose client is stopped before this returns.
 ///
-/// The instance is not returned or reused: authenticating binds it to
-/// [enrollmentId], and reusing it for a different enrollment is what makes the
-/// atServer refuse the next `__manage` key fetch.
+/// A client stays live in this process until stopped, and a second open for
+/// the same atSign is refused while one is; a keyfile the atServer refuses
+/// answers false, the way a program calling `authenticate()` sees it.
 Future<bool> authenticateWithApkamKeys(
     String atSign, String atKeysFilePath, String enrollmentId,
     {String? passPhrase, HashingAlgoType? hashingAlgoType}) async {
+  await evictCachedAtClients();
   AtOnboardingPreference preference =
       getOnboardingPreference(atSign, atKeysFilePath);
   if (passPhrase != null) {
@@ -269,7 +264,13 @@ Future<bool> authenticateWithApkamKeys(
   }
   AtOnboardingService onboardingService =
       AtOnboardingServiceImpl(atSign, preference);
-  return await onboardingService.authenticate();
+  final online = await onboardingService.authenticate();
+  if (online) {
+    expect(onboardingService.atClient!.enrollmentId, enrollmentId,
+        reason: 'the keyfile names the enrollment the client runs as');
+  }
+  await onboardingService.atClient?.stop();
+  return online;
 }
 
 AtOnboardingPreference getOnboardingPreference(

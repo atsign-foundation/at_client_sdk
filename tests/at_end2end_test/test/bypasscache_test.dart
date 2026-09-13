@@ -35,8 +35,8 @@ void main() async {
   /// Makes [atSign] the current atSign and returns its client, which is used
   /// only for its authenticated connection to that atSign's atServer.
   ///
-  /// Switching rebuilds the client with credentials; `setCurrentAtSign` alone
-  /// leaves one that cannot authenticate an APKAM enrollment.
+  /// Switching reopens the client from the key source it was brought up
+  /// from, which is what authenticates its APKAM enrollment.
   Future<AtClient> as(String atSign) async {
     final atClientManager = await TestSuiteInitializer.getInstance()
         .switchToAtSign(atSign, namespace, posture: PqPosture.legacy);

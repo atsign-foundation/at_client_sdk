@@ -1,5 +1,307 @@
 ## 3.15.0-rc1
 
+- feat: `Atsign('@alice').open(keys: ..., preference: ...)` builds a client
+  from a key source, tries once to reach the atServer within a short budget,
+  and hands back a client the caller owns and stops. The client comes back
+  offline as readily as online, serving everything its local storage holds;
+  `client.connection.current` says which of `online`, `offline` or `refused`
+  it reached and why, `client.connection.changes` reports every change, and
+  `client.connection.attempt()` tries again now. The one refusal that throws,
+  as `AtOpenRefusedException`, is the first open of a principal on a device:
+  with nothing held locally there is nothing to serve. Every verb on the
+  client's own connection keeps the state current.
+- feat: `AtClientManager.getInstance().use(client)` makes a client the
+  caller built current, notifying the switch listeners, without stopping the
+  previous one: an owned client is its owner's to stop.
+- `open` and `buildAtClient` refuse a second live client on the storage
+  location another client holds, as they refuse one for the same principal:
+  one store holds one principal, and the refusal names the holder rather
+  than surfacing as the storage's own "already open" mid-construction.
+- `Atsign.authenticatesAs` throws `AtCredentialRefusedException` on a
+  refusal, carrying the `AtConnectionState` `open` would have reported and
+  its cause (revoked, unauthenticated, an invalid enrollment); a failure to
+  reach the atServer is thrown as it is.
+- feat: the third leg of the platform bundle, beside the keys store and the
+  storage bundle: `open`, `activate`, `enroll`, `resumeEnrollment`,
+  `authenticatesAs`, `buildAtClient`, `AtServiceFactory.atClient`,
+  `selfRetrofit` and `retrofitIdentity` take
+  `lookUps:`, an at_lookup `AtLookUpFactory` that builds every connection the
+  client opens - its own, its sync's, its monitor's, the file stream's and
+  the one a retrofit re-derives on - so an application chooses the transport
+  or a proxy convention once. With none, `secureSocketLookUps` over TLS on
+  TCP, configured from the preference. The barrel re-exports
+  `AtLookUpFactory`, `secureSocketLookUps` and `AtCommandExecutor`.
+- deprecated: `AtClientPreference.decryptPackets`, `tlsKeysSavePath` and
+  `pathToCerts`: the transport is the factory's to configure; the default
+  factory reads them until they go in 4.0.
+- `LocalSecondary`'s key getters read the client's key source and its
+  keystore, and no longer the client's `AtChops`: a client built from an
+  `AtChops` alone reads the keys its store holds, which is what onboarding
+  writes there. The PKAM getters ask the key source for the client's
+  enrollment through `authenticationKeyPairFor`, so a keypair filed under
+  an algorithm this build cannot sign with is refused rather than read from
+  the keystore. Keyfile material is read and written through at_auth's
+  accessors and `fileLegacyMaterial`.
+- fix: a public `put` on a client holding no encryption private key is
+  refused as "Failed to sign the public data", not with the keystore's
+  record name.
+- fix: a key named like the app's namespace gets the namespace appended.
+- fix: `stop()` closes the connection state before it closes the services
+  and the remote, so a request the stop itself fails is not recorded as the
+  atServer being unreachable. A stopped client's `connection.current` is
+  offline with the new `AtConnectionCause.stopped`, emitted as the last
+  change; a report after that records nothing.
+- fix: a sync round reads the server's commit id fresh whenever an app's
+  `sync()` is waiting on it, whichever request it dequeues, and a stats
+  notification no longer pushes an app's request out of a full queue. A
+  system request queued ahead of an app's used to be answered from the
+  cache, so a caller who had just seen the server ahead got a round that
+  pulled nothing and reported success.
+- fix: the status poll `notify(waitForFinalDeliveryStatus: false)` leaves
+  running hands a failure to `onError` and logs it at `warning`, instead of
+  raising an unhandled error in the zone that sent the notification. Either
+  way `notify` polls, a stop ends the poll rather than leaving it asking a
+  closed connection every two seconds, and the result carries an
+  `AtClientException` saying so.
+- fix: the notification service and the sync service log the work a
+  `stop()` cuts short at `finer` - the watermark write, the batch push and
+  the server entry being applied - rather than as failed saves and severe
+  sync errors.
+- fix: a server-side DELETE the local store refuses is logged by its key;
+  the refusal handler cast every builder to `UpdateVerbBuilder`, so a
+  refused delete surfaced as a `TypeError` logged at `severe`.
+- fix: a key package whose `_apsk` could not be fetched is reported as
+  `KeyPackageStatus.unverified` (new) and logged at `warning` as a check
+  that could not be completed, where it was reported as `rejected` and
+  logged at `severe` as a package that does not verify. An approval checks
+  the package up to three times a second apart before reporting that, since
+  the atServer writes the `_apsk` at approval; if every attempt fails it
+  throws `EnrollmentConveyanceException` naming the check, with no advice to
+  revoke.
+  `AtClientUtil.getKeyWithNameSpace` read the name's last dot-segment as the
+  namespace, so a `probe` key under the `probe` namespace was stored as
+  `probe.probe` and read back as `probe`.
+- `AtSignChangeListener` and `SwitchAtSignEvent` are exported: the manager's
+  `listenToAtSignChange` always took the one and handed the other over, and an
+  app could name neither without importing a `src/` path.
+- deprecated: `AtClientManager.setCurrentAtSign` and `fromAuthSession`,
+  which built the current client for the caller. Build one with
+  `Atsign.open`, `activate` or an enrollment's `client`, and make it current
+  with `use`; both go in 4.0.
+- feat: `Atsign('@alice').activate(cramSecret: ..., keys: ..., preference:
+  ...)` activates a new atSign with its one-time secret, writes the keys the
+  activation mints into the store named, and opens a client on them that the
+  caller owns. The preference's `authenticationKeyAlgorithm` decides whether
+  the atSign is post-quantum from birth, in which case the signing key, the
+  key package and the signing root are minted as the PQ-native helpers did;
+  `signingAlgo` overrides it. `pqNativeOnboard` is that call with ML-DSA-65
+  forced, followed by `AtClientManager.use`, and no longer takes an
+  `AtAuth`; `pqNativeActivationMaterial` is the minting the two share.
+- The self-retrofit no longer authenticates through at_auth after filing the
+  new enrollment: it checks that the keyfile now authenticates as the new
+  id, and the client's own connection performs the PKAM, reporting a refusal
+  into `client.connection`.
+- `client.connection.awaitOnline(budget:, retryInterval:)` attempts until
+  the connection is online, refused, or the budget is spent, and says where
+  it ended; `open` takes a `serviceFactory`, so a process that must not sync
+  supplies the no-op sync service the CLIs use; `client.enrollments` gains
+  `fetch`, `unrevoke` and `delete`, and an `otp` or `spp` asked for with no
+  expiry leaves the atServer's default in force.
+- `open` refuses a second client for the same principal, the enrollment the
+  keys name, rather than for the atSign: another enrollment of the atSign
+  opens beside the first, on a store of its own, as `buildAtClient` now also
+  allows. `AtClientImpl.create` takes `exactEnrollment`, which the factory
+  sets so a client naming no enrollment never stands in for a lone enrolled
+  one, and `AtClientImpl.holdsLiveClientAs` asks about one principal.
+- feat: the atServer address the atDirectory answers is kept in the client's
+  storage, and a start that cannot reach the atDirectory connects to the
+  address it last gave: every connection of a client, its own, the monitor's
+  and sync's, resolves through one finder that remembers the answer for the
+  client's own atSign. The atDirectory saying the atSign has no atServer is
+  never masked, and a client with no local storage remembers nothing.
+- feat: `Atsign('@alice').authenticatesAs(keys: ..., rootDomain: ...)`
+  authenticates once as the enrollment the keys name and hands back its id,
+  building no client; a refusal throws `UnAuthenticatedException`.
+- `selfRetrofit` hands back the client it opens on the successor, over
+  `Atsign.open`, and no longer takes a manager or stops a legacy client; a
+  retrofit over the legacy client's own store is that client's to arrange.
+  `retrofitIdentity` takes the connection to submit on as `atLookUp`, and
+  with none authenticates one from the session's keys for the submission.
+- `activate` takes `provisioningBudget` and `provisioningPollInterval`: it
+  polls for a newly registered atSign to be provisioned until the budget,
+  five minutes with none, is spent. The pending document
+  `enroll` files carries the atSign's encryption public key as typed
+  material rather than in its flat field, which a file store self-encrypts
+  under a key the device is only given at approval; the completion copies it
+  into the flat field for legacy readers. An rsa2048 enrollment's keypair is
+  typed only while the request is pending: the completion moves it into the
+  flat APKAM fields and drops the typed copy, the shape a legacy enrollment
+  has always had and the one the self-retrofit reads as not yet upgraded. An
+  mldsa65 enrollment's keypair stays typed and never reaches the flat fields,
+  as a PQ-native activation's does.
+- feat: `Atsign('@alice').enroll(otp: ..., app: ..., device: ...,
+  namespaces: ..., keys: ..., preference: ...)` submits an enrollment and
+  files the keys it minted in the store the caller named, as `pending` under
+  the new enrollment with the app, device and namespaces asked for. It hands
+  back a `PendingEnrollment` whose `client(preference)` waits for the
+  decision, completes the keys in that store on approval and opens a client
+  the caller owns; a denial removes the pending keys and throws. After a
+  restart, `resumeEnrollment(app: ..., device: ..., keys: ..., preference:
+  ...)` finds the same request in the store and hands the handle back, so
+  the store is the resume record and nothing else has to be kept. `open` on
+  a store that holds nothing but a pending enrollment refuses with
+  `AtEnrollmentPendingException`, naming that verb.
+- feat: `client.enrollments` is the approving side: `pending()` and `list()`
+  read the roster, `approve(id)`, `deny(id)` and `revoke(id)` decide an
+  enrollment by its id, and `otp()` and `spp(...)` issue the passcodes a new
+  request quotes, each answering a `Passcode` with its expiry. An approval
+  made here conveys this atSign's secrets to the enrollee's key package as
+  well as wrapping them under the legacy key, which an approval issued
+  through at_auth alone does not. No at_auth type is named by any of it.
+  `deny` and `revoke` run the `enroll:` verb on the client's own connection
+  and answer what the atServer answered; a refusal throws
+  `AtEnrollmentException` quoting it.
+- `EnrollmentUpdater` and `EnrollmentUpdateRequest`, an approved enrollment
+  amending its own record over `enroll:update`, move here from at_auth and
+  are exported from `package:at_client/at_client_mixins.dart`.
+- **BREAKING:** `AtClientManager.fromAuthSession` loses `reuse`: an
+  `AtAuthSession` carries no connection, so the client always opens its own.
+  `makeActivationPqNative` is gone with the `AtOnboardingRequest` it stamped;
+  `Atsign.activate` with `signingAlgo: SigningAlgoType.mldsa65`, or
+  `pqNativeActivationMaterial` for the minting alone, replaces it.
+- fix: an enrolled client with no atServer reachable authorises its local
+  reads and writes from the grants its keyfile recorded at the last
+  authenticated start, logging at `warning` that it did, instead of refusing
+  every one of them because the enrollment record could not be fetched. A
+  refusal from an atServer that answered is not a fallback case, and a
+  keyfile holding no recorded grants still refuses. The record is fetched
+  again on the next call, so a grant that changed while offline is noticed
+  as soon as the network is back.
+- The notification monitor reports `online` to the client's connection state
+  each time it reaches `listening`, so a client that only reads locally still
+  learns that the network came back.
+- `ApkamSigning.publicSigningKey` and `.privateSigningKey` are back, as the
+  synchronous accessors 3.14.0 published and reading the same place they did,
+  and both are **deprecated**. They answer the APKAM *authentication*
+  keypair. Two reasons to move off them, the first being the one that bites:
+  `_apsk` lists that key only while the enrollment holds no signing keys of
+  its own, so a signature made with it can verify against nothing; and a key
+  per algorithm is the model now, which one key cannot describe.
+  **Migration:** read `signingKeys` — every key this enrollment signs with,
+  strongest first — and `publicSigningKeyValue` for what gets advertised.
+  They are removed with `AtClient.atChops` in at_client 4.0.
+  - They **refuse** when the enrollment authenticates with anything but
+    `rsa2048`: the slot then holds base64 raw bytes of a post-quantum key,
+    and handing those to a caller expecting RSA is a corrupted value rather
+    than a policy mismatch. They also refuse, naming the client, where
+    3.14.0 met an absent keypair with a null-check failure.
+  - They log at `shout` under a posture that configures post-quantum
+    providers, which is where the advertisement may already have stopped
+    naming this key.
+- **BREAKING:** the asynchronous `ApkamSigning.publicSigningKey` — the
+  strongest held signing key — is removed, its name returned to the accessor
+  above. It had no caller outside this package's own tests, and choosing one
+  key out of several was the signer's decision to make: read `signingKeys`.
+- Approving an enrollment refuses, naming what is missing, when this
+  client cannot read its own encryption private key and
+  self-encryption key. at_auth used to refuse it at the end of a
+  nullable hand-off; its `approverKeys` is required now, so the refusal
+  belongs on this side, where the local secondary's tiers are what was
+  asked and the message can say so.
+- refactor: `AtClientPreference.pqStartupGates` is for tests. Nothing in
+  any package's `lib` builds its own set, so a client runs every
+  post-quantum startup step or none, and which of the two is the
+  posture's business — one `@internal` getter derives it now, where the
+  client used to restate the rule beside it.
+- refactor: every reader of "which enrollment am I" reads
+  `AtClient.enrollmentId` rather than the connection's `atLookUp.enrollmentId`.
+  `RemoteSecondary` writes the connection's id from the client's at every
+  build and rebuild, so the two agree by construction; the e2e retrofit test
+  now asserts it at the one moment they could have parted.
+- `AtClient.atChops` is deprecated, getter and setter. Build the client from a
+  keyfile — `AtClientImpl.create(atKeysIo:)` — and it derives what it needs
+  from that; nothing outside at_client needs the `AtChops` it holds. The
+  constructor's `atChops:` was already deprecated.
+- refactor: a client's remote connections — its own and sync's — authenticate
+  from the keyfile's keypair when the keyfile holds one; the client's
+  `AtChops` is the door when it holds none, which a client built from an
+  `AtChops` with an empty key source beside it needs — the shape the
+  functional pack builds, where a first form of this change that dropped the
+  `AtChops` failed 36 of its tests. Same bytes: a test verifies the PKAM
+  signature under the keyfile's public key when the keyfile holds one, and
+  under the `AtChops`' when it holds none. The credential fields at_lookup
+  reads are still written on the lookup, for a lookup from before the
+  authenticator seam; they go with that ladder in the at_lookup major.
+- refactor: `ApkamSigning.authenticationSigningKey` reads the enrollment's
+  APKAM authentication keypair from the keyfile, typed material first and
+  the flat pair as `rsa2048` otherwise, the way `heldSigningKeys` already
+  reads the signing keys; the client's `AtChops` answers only for a client
+  built without a key source. It is now asynchronous, since a keyfile is
+  read rather than held.
+- refactor: approving an enrollment hands at_auth this client's encryption
+  private key and self-encryption key, resolved by the local secondary
+  across its three tiers, rather than the client's `AtChops`. A client with
+  no local secondary, or holding neither key, passes none and at_auth
+  refuses the approval as before.
+- feat: `AtClientPreference.pqStartupGates` names which post-quantum startup
+  steps a client runs; null keeps today's behaviour and lets the posture
+  decide. The set is read once, by a startup the constructor fires, so a
+  set handed to a running client cannot be applied, and
+  `rolloutDifferencesFrom` reports it as a rollout difference rather than
+  leaving a client describing a configuration it never ran.
+  `PqStartupGates` compares by value.
+- refactor: the legacy shared key is wrapped and unwrapped with the atSign's
+  own RSA key taken from the client's key material rather than from its
+  `AtChops`, so those three calls no longer need one. Unwrapping asks only for
+  the private half, which is all RSA decryption reads and the only half a
+  keystore-backed client is guaranteed to hold.
+- feat: `LocalSecondary`'s encryption key getters resolve across three tiers
+  rather than two: an injected `AtChops`, then the client's `atKeysIo`, then
+  the keystore. A client handed a key source now serves its encryption
+  keypair and self-encryption key from it, which is what lets a caller pass
+  `atKeysIo:` instead of building an `AtChops`. The two PKAM getters
+  deliberately do not consult the source: `authenticationKeyPairFor` refuses
+  an enrollment whose material this build cannot sign with, and falling
+  through that refusal to the keystore is the thing it exists to prevent.
+- refactor: the legacy self-key paths read the local secondary rather than
+  reaching into `atClient.atChops` first and falling back to it. Same
+  resolution, one tier deeper, and they now see a key source.
+- refactor: envelope signing and the public-data signature use
+  `RsaSignatureAlgo` instead of the deprecated `RsaSigningAlgo` and
+  `AtChops.sign`. Both produce the same bytes: the committed JWS vector
+  re-signs identically, and a new pin in `put_request_test.dart` holds the
+  base64 `dataSignature` for a fixed key and value, which the old and new
+  classes were measured to agree on.
+- refactor: signing a public value now uses the encryption private key the
+  caller already passes in, which was previously only null-checked while the
+  key came from `AtChops`. Same key in a correctly wired client, and one
+  fewer reader of a surface that is going away.
+- refactor: RSA envelope signing refuses a key whose modulus is not 2048
+  bits, where `RsaSigningAlgo` checked nothing. Envelope signing is
+  rsa2048-only — `signEnvelope` throws for any other RSA size before reaching
+  the algorithm — so the check can only fire on key material that disagrees
+  with the algorithm its own document names, and such a signature never
+  verified against a reader that trusts the label.
+- refactor: the legacy encryption paths call their AES and RSA algorithms
+  directly instead of going through `AtChops.encryptString` and
+  `decryptString`. Two helpers beside them carry the base64 and utf8 steps the
+  wrapper did and keep its exception mapping, so a failure inside a cipher
+  still arrives as `AtEncryptionException` or `AtDecryptionException` and a
+  malformed input still surfaces as whatever the conversion throws. The
+  encrypt path's chained diagnostic now names `Intent.shareData` and
+  `ExceptionScenario.encryptionFailed`; the wrapper named the decrypt pair on
+  both sides. `AtEncryptionResult` leaves these paths with them. The three RSA
+  calls that pass no algorithm stay, because they read the client's key pair
+  out of `AtChops`.
+- refactor: the two legacy hashing calls build their algorithm directly
+  instead of going through `AtChops.hashWith`, whose class is deprecated. The
+  shared-key write hashes with `SHA512HashingAlgo`, and the read maps a
+  record's `pubKeyHash.hashingAlgo` through an exhaustive switch over
+  `HashingAlgoType`, so a new member of that enum stops this package
+  compiling rather than failing at runtime. `Md5HashingAlgo` stands in for the
+  `DefaultHash` the old factory returned, which subclasses it with no body of
+  its own.
+
 - **BREAKING (within this unpublished rc):** the CK-conveyance provider ids
   drop their AEAD segments — `at/nskey/XWING/AES/GCM` becomes `at/nskey/XWING`,
   and `at/nskey/MLKEM1024/AES/GCM` becomes `at/nskey/MLKEM1024`. X-Wing seals
@@ -3018,6 +3320,57 @@ hunting for a constructor argument that never existed in a release. -->
   question — privilege is a property of an enrollment that is currently
   approved, so a revoked record answering it would grant authority the
   atServer no longer honours.
+- fix: `stop()` and the atSign switch that calls it no longer report success
+  after a teardown step failed to run. Each step caught everything and logged
+  it at `warning`, so a `TypeError` — a field holding the wrong type, meaning
+  the step never happened — was indistinguishable from a socket that was
+  already gone. A failure is now separated from a defect: an `Exception` is
+  logged and stepped over, because the remaining steps must still run, while
+  an `Error` is held with the stack of where it was raised and thrown once
+  every step has had its turn. Storage is released and the client removed from
+  the instance map first, so a defect cannot leave storage claimed or a
+  stopped client discoverable. The sync and notification services are now
+  type-tested rather than cast: neither interface declares `stop()`, so a
+  field holding null or another implementation is a legal state with nothing
+  to stop, and the cast turned that into the very defect the catch then hid.
+- fix: a write whose sync trigger failed no longer reports that the write was
+  not queued. `LocalSecondary` queued the write and then asked the sync
+  service to drain, both inside one `try`, so any failure of the second was
+  logged as `failed to enqueue <key>` at `shout` — naming the durable half,
+  which had already succeeded. Measured over the unit suite, 79 of those lines
+  were the trigger and none of them was a genuine enqueue failure. The two are
+  now separate: a write that cannot be queued is still shouted about and named,
+  because nothing will push it until the periodic safety net finds it, while a
+  write that is queued but could not ask for a drain says so, and says that it
+  waits for the next trigger. Neither failure fails the write.
+- fix: a background path that swallows an error now logs a defect at `severe`
+  and a condition at the level it always used. Sixteen sites — the PQ startup's
+  steps, the envelope listener and its sweeps, the notification watermark, the
+  conveyance read, the collection envelope fetches and the sync trigger —
+  caught everything and logged it at `warning`, so a defect sat among the
+  conditions and read as one. Two errors are defects, and both mean the same
+  thing — a null reached a place that needed a value: a `TypeError` is a value
+  of the wrong type arriving at the call, and a `NoSuchMethodError` is a member
+  invoked on a null receiver. Neither is anything the network or the store can
+  produce. Every other error stays a condition, `StateError` included, because
+  this codebase raises it for a store that is not open yet and a service that
+  is not wired yet. The errors are still swallowed: these
+  paths run on background triggers with nobody to hand an error to, and one
+  escaping into the zone a timer fired in can take the isolate down.
+- fix: `setSPP` without an expiry logs at `warning` rather than `shout`.
+  Applying a documented default is not the loudest thing a client can say, and
+  the line contradicted itself by carrying the word "WARNING" while logging a
+  level above `severe`. The text loses that prefix and gains the space it was
+  missing between the sentence and the default.
+- fix: a client reports the key material it found in its own local store once,
+  and at a level that says which situation it is in. It used to log a warning
+  for each of the two keypairs it failed to read, so every client built before
+  onboarding produced two warnings about the ordinary state — 244 of them in
+  the unit suite alone, which is where the lines that mean something were
+  sitting. A store holding neither keypair is now one `info` line; a store
+  holding one and not the other is a `warning`, because onboarding does not
+  produce half a store and such a client fails at whichever key it needs
+  first. Each individual miss keeps its detail at `finer`.
 
 ## 3.14.0
 - feat (experimental): per-APKAM same-atSign secret-sharing substrate —

@@ -81,7 +81,8 @@ void main() {
         ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
       await fileAtKeysIo.write(atsign, atKeys);
 
-      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atsign));
+      await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atsign),
+          atsign: atsign);
     });
 
     test('Test write() -> throws due to overwrite', () {
@@ -125,6 +126,7 @@ void main() {
       // encrypted file the decrypted keys are the same as the original keys
       // Note: the method call below tests the encrypted keys read path too
       await matchesEncryptedAtKeys(atKeys, fileAtKeysIo.filePath!(atsign),
+          atsign: atsign,
           passPhrase: passPhrase);
     });
 
@@ -674,35 +676,19 @@ void main() {
   });
 }
 
+/// What [filePath] holds for [atsign], decoded through the store that wrote
+/// it, matched against [atKeys] field by field.
+///
+/// NOTE: the decoding is the store's own rather than hand-rolled here, so this
+/// asserts the round trip and not the at-rest form. The form itself is pinned
+/// independently in `legacy_field_self_encryption_test.dart`, against
+/// ciphertext openssl produced and against the committed legacy fixture.
 Future<void> matchesEncryptedAtKeys(AtKeys atKeys, String filePath,
-    {String? passPhrase}) async {
-  final fileAtKeysIo =
-      FileAtKeysIo(filePath: (_) => filePath, passPhrase: passPhrase);
+    {required String atsign, String? passPhrase}) async {
+  final written = await FileAtKeysIo(
+    filePath: (_) => filePath,
+    passPhrase: passPhrase,
+  ).read(atsign);
 
-  Map<String, dynamic> atKeysFromFile =
-      jsonDecode(File(filePath).readAsStringSync());
-
-  // decrypt if passPhrase available
-  if (passPhrase != null) {
-    atKeysFromFile =
-        await fileAtKeysIo.decodeAtKeys(atKeysFromFile, passPhrase: passPhrase);
-  }
-
-  // decrypt the atKeys read from file with self encryption key
-  AtKeys decryptedAtKeys = await fileAtKeysIo.decryptAtKeysWithSelfEncKey(
-      atKeysFromFile, PkamAuthMode.keysFile);
-
-  expect(decryptedAtKeys.apkamPrivateKey.toString(),
-      atKeys.apkamPrivateKey.toString());
-  expect(decryptedAtKeys.apkamPublicKey.toString(),
-      atKeys.apkamPublicKey.toString());
-  expect(decryptedAtKeys.apkamSymmetricKey.toString(),
-      atKeys.apkamSymmetricKey.toString());
-  expect(decryptedAtKeys.defaultEncryptionPrivateKey.toString(),
-      atKeys.defaultEncryptionPrivateKey.toString());
-  expect(decryptedAtKeys.defaultEncryptionPublicKey.toString(),
-      atKeys.defaultEncryptionPublicKey.toString());
-  expect(decryptedAtKeys.defaultSelfEncryptionKey.toString(),
-      atKeys.defaultSelfEncryptionKey.toString());
-  expect(decryptedAtKeys.enrollmentId, atKeys.enrollmentId);
+  expectLegacyAtKeys(written, atKeys);
 }

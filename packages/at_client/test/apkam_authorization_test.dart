@@ -7,6 +7,8 @@ import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/mocks.dart';
+
 /// Supplies the enrollment record the client would otherwise fetch, through
 /// the `@visibleForTesting` seam on `LocalSecondary`.
 ///
@@ -36,6 +38,7 @@ void main() {
           AtClientPreference()
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
+      atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
       seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
       //1. create a self key in wavi namespace
@@ -130,6 +133,7 @@ void main() {
           AtClientPreference()
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
+      atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
       seedEnrollment(atClient, {"wavi": "rw"});
       //1. create a self key in wavi namespace should pass
@@ -204,6 +208,7 @@ void main() {
           AtClientPreference()
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
+      atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
       seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
       //1. create a self key in wavi namespace
@@ -276,6 +281,7 @@ void main() {
           AtClientPreference()
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
+      enrolledAtClient.syncService = MockSyncService();
       enrolledAtClient.enrollmentId = newEnrollmentId;
       seedEnrollment(enrolledAtClient, {"wavi": "rw"});
       // delete self key in wavi namespace should pass
@@ -328,6 +334,7 @@ void main() {
           AtClientPreference()
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
+      atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
       seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
 
@@ -417,6 +424,7 @@ void main() {
           AtClientPreference()
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
+      atClient.syncService = MockSyncService();
       atClient.enrollmentId = privilegedEnrollment;
       seedEnrollment(atClient, {"*": "rw"});
       //1. create a key in wavi namespace
@@ -485,6 +493,7 @@ void main() {
           AtClientPreference()
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
+      enrolledAtClient.syncService = MockSyncService();
       enrolledAtClient.enrollmentId = newEnrollmentId;
       seedEnrollment(enrolledAtClient, {"wavi": "rw"});
       // llookup on wavi namespace should be allowed
@@ -534,6 +543,7 @@ void main() {
           AtClientPreference()
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
+      atClient.syncService = MockSyncService();
       atClient.enrollmentId = testEnrollmentId;
       seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
       //1. create a key in wavi namespace
@@ -614,6 +624,7 @@ void main() {
           AtClientPreference()
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
+      enrolledAtClient.syncService = MockSyncService();
       enrolledAtClient.enrollmentId = newEnrollmentId;
       seedEnrollment(enrolledAtClient, {"wavi": "rw"});
       // enrolled client should be able to see wavi key and reserved key in scan. Buzz key and no namespace keys should not be returned

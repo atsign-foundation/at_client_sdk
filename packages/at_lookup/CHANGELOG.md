@@ -1,5 +1,22 @@
 ## 3.7.0-rc2
 
+- feat: `AtLookUpFactory`, the function type an application hands at_client's
+  entry points so that every connection a client opens travels the way the
+  application chose, and `secureSocketLookUps` in `at_lookup_io.dart`, the
+  default over TLS on TCP. `AtLookUp.withSecureSocket` takes `onConnect`, run
+  on each connection before anything else is sent on it, for a proxy that
+  needs `from:` first.
+- fix: a request in flight when this client closes the connection fails with
+  `ConnectionInvalidException('The connection was closed by this client
+  before a response arrived')`, where a connection the far end dropped still
+  reads `The connection went away before a response arrived`. Either is
+  logged once, at `info`, by the listener that failed the read; at_lookup no
+  longer logs it twice more at `severe` as an error in sending to the server.
+- fix: `createConnection` is single-flight. Two callers racing through it —
+  a `pkamAuthenticate` beside a verb's own authentication — each opened a
+  socket, the second replacing the first while the handshake ran on the
+  first, so the authenticated flag landed on a socket the atServer had seen
+  no PKAM on and every verb on it was refused as unauthenticated.
 - fix: opening and closing a connection, and sending the monitor command, are
   logged at `finer` rather than `info`
 

@@ -27,7 +27,7 @@ class EnrollmentRecordPrivilegeResolver implements EnrollmentPrivilegeResolver {
 
   @override
   Future<bool> isFullyPrivileged() async {
-    final id = _atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
+    final id = _atClient.enrollmentId;
     if (id == null || isAtSignCredential(id)) return true;
     return isEnrollmentFullyPrivileged(id);
   }

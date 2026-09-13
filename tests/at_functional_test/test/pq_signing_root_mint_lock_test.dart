@@ -154,7 +154,7 @@ void main() {
     // Nothing releases a mint lock but its ttl, so the mint below holds it and
     // the rotation that follows is refused until it lapses. Shortened from the
     // production `mintLockTtl`, which would make this test wait two minutes.
-    const lockTtl = Duration(seconds: 5);
+    const lockTtl = Duration(seconds: 1);
     final ring = PublishedNskeyKeyRing(atClient, lockTtl: lockTtl);
 
     // Seed, then rotate: the second write goes through the rotation lever
@@ -163,7 +163,7 @@ void main() {
     final first = await ring.mintAndPublish(ns);
     // A second past the ttl: the atServer starts counting when it stores the
     // record, after this client sent it.
-    await Future.delayed(lockTtl + const Duration(seconds: 1));
+    await Future.delayed(lockTtl + const Duration(milliseconds: 500));
     final second = (await ring.rotate(ns)).rotated;
 
     expect(second.nskeyKid, isNot(first.nskeyKid),

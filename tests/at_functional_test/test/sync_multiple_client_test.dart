@@ -5,10 +5,12 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/sqlite.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_functional_test/src/at_keys_initializer.dart'
+    show AtEncryptionKeysLoader;
 import 'package:at_functional_test/src/at_demo_credentials.dart'
     as demo_credentials;
 import 'package:at_functional_test/src/sync_service.dart';
@@ -26,8 +28,7 @@ enum ClientId { client1, client2 }
 
 class ChildIsolatePreferences {
   late ClientId clientId;
-  late String hiveStoragePath;
-  late String commitLogPath;
+  late String storagePath;
   late SendPort sendPort;
   late List<String> localKeysList;
 }
@@ -92,14 +93,12 @@ void main() async {
   var clientInitializationParameters = {
     'client1': ChildIsolatePreferences()
       ..clientId = ClientId.client1
-      ..hiveStoragePath = clientOneHiveKeyStorePath
-      ..commitLogPath = '$clientOneHiveKeyStorePath/commit'
+      ..storagePath = clientOneHiveKeyStorePath
       ..sendPort = mainIsolateReceivePort.sendPort
       ..localKeysList = atKeyEntityList,
     'client2': ChildIsolatePreferences()
       ..clientId = ClientId.client2
-      ..hiveStoragePath = clientTwoHiveKeyStorePath
-      ..commitLogPath = '$clientTwoHiveKeyStorePath/commit'
+      ..storagePath = clientTwoHiveKeyStorePath
       ..sendPort = mainIsolateReceivePort.sendPort
       ..localKeysList = atKeyEntityList
   };
@@ -326,10 +325,8 @@ Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
 }
 
 Future<void> startClient(ChildIsolatePreferences clientParameters) async {
-  var atClientPreferences = _getAtClientPreference(
-      currentAtSign, clientParameters.clientId.name,
-      hiveStoragePath: clientParameters.hiveStoragePath,
-      commitLogPath: clientParameters.commitLogPath);
+  var atClientPreferences =
+      _getAtClientPreference(currentAtSign, clientParameters.clientId.name);
   // This isolate has no file-level fixture - TestUtils' static is null in a
   // fresh heap - so it builds its bundle from the path the main isolate sent.
   atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
@@ -337,7 +334,7 @@ Future<void> startClient(ChildIsolatePreferences clientParameters) async {
       preference: atClientPreferences,
       storage: HiveAtClientStorage(
           atSign: currentAtSign,
-          storagePath: clientParameters.hiveStoragePath));
+          storagePath: clientParameters.storagePath));
 }
 
 Future<void> updateOrDeleteKey(AtKey atKey, int randomValueForOperation,
@@ -357,26 +354,23 @@ Future<void> updateOrDeleteKey(AtKey atKey, int randomValueForOperation,
 }
 
 Future<dynamic> _getServerCommitEntries(String regex) async {
-  AtChopsKeys atChopsKeys = AtChopsKeys.create(
-      AtEncryptionKeyPair.create(
-          demo_credentials.encryptionPublicKeyMap[currentAtSign]!,
-          demo_credentials.encryptionPrivateKeyMap[currentAtSign]!),
-      AtPkamKeyPair.create(demo_credentials.pkamPublicKeyMap[currentAtSign]!,
-          demo_credentials.pkamPrivateKeyMap[currentAtSign]!));
-
-  AtChops atChops = AtChopsImpl(atChopsKeys);
-  // No storage bundle: this client sets isLocalStoreRequired false and opens
-  // no local store at all.
-  atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
-      currentAtSign,
-      namespace,
-      AtClientPreference(posture: PqPosture.legacy)
-        ..privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign]
-        ..isLocalStoreRequired = false
+  // An in-memory store: this client only reads the atServer's commit log,
+  // so nothing it holds needs to outlive it. The client that was current is
+  // stopped first, as a switch always has, and this one takes its place.
+  atClientManager = AtClientManager.getInstance();
+  await TestUtils.currentClientOf(atClientManager)?.stop();
+  final keys = InMemoryAtKeysIo.holding(currentAtSign,
+      AtEncryptionKeysLoader.getInstance().createAtKeysFromDemoKeys(
+          currentAtSign));
+  await TestUtils.stopClientRunningAs(currentAtSign, keys);
+  atClientManager.use(await Atsign(currentAtSign).open(
+      keys: keys,
+      preference: AtClientPreference(posture: PqPosture.legacy)
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort,
-      atChops: atChops,
-      storage: TestUtils.storageFor(currentAtSign));
+      namespace: namespace,
+      storage: InMemoryAtClientStorage(
+          atSign: currentAtSign, closedByClient: true)));
   var infoResponse = await atClientManager.atClient
       .getRemoteSecondary()
       ?.executeCommand('info:brief\n');
@@ -464,14 +458,11 @@ bool assertConvergence(
   return converged;
 }
 
-AtClientPreference _getAtClientPreference(String currentAtSign, String clientId,
-    {required String hiveStoragePath, required String commitLogPath}) {
+AtClientPreference _getAtClientPreference(
+    String currentAtSign, String clientId) {
   // NOTE: initAtClient refuses a preference whose posture differs from the one
   // it is passed, so this posture and the caller's must agree.
   var preference = AtClientPreference(posture: PqPosture.legacy);
-  preference.hiveStoragePath = hiveStoragePath;
-  preference.commitLogPath = commitLogPath;
-  preference.isLocalStoreRequired = true;
   preference.privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign];
   preference.rootDomain = 'vip.ve.atsign.zone';
   preference.rootPort = TestUtils.rootServerPort;

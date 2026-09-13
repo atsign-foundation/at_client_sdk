@@ -32,6 +32,18 @@ class MockLocalSecondary extends Mock implements LocalSecondary {
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
+  // NOTE: the same erasure: an unstubbed `lookUps` answers null into a
+  // non-nullable function type, and the services read it off the impl.
+  @override
+  final AtLookUpFactory lookUps = secureSocketLookUps();
+  // NOTE: `implements` erases the concrete getter AtClientImpl carries, and an
+  // unstubbed mocktail getter answers null, which the runtime refuses for the
+  // non-nullable AtConnection; a Monitor built from this mock reads it.
+  @override
+  final AtConnection connection = AtConnection(
+      atSign: '@alice',
+      attempt: (_) async =>
+          AtConnectionState.offline(AtConnectionCause.unattempted));
   @override
   SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
 
@@ -103,7 +115,7 @@ class RecordingProvider extends CryptoProvider {
 
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
-  AtChops mockAtChops = MockAtChops();
+  final mockAtChops = MockAtChops();
   AtClientManager mockAtClientManager = MockAtClientManager();
   FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
@@ -724,7 +736,7 @@ void main() {
               .having((e) => '$e', 'message', contains('joined by a dot'))),
           reason: 'an id in no namespace cannot be encrypted for a recipient. '
               'Before this, it reached the crypto layer, declined every '
-              'post-quantum provider, fell back to legacy and surfaced as a '
+              'post-quantum provider, fell back to the legacy provider and surfaced as a '
               'refusal about encryption — three layers from the mistake');
 
       expect(recorder.seen, isNull,
@@ -1659,7 +1671,7 @@ void main() {
       expect((captured[1] as PutRequestOptions).shouldEncrypt, isFalse,
           reason: 'routing a never-synced record through the shared-data '
               'crypto path is what made it refusable: every post-quantum '
-              'provider declines a local key and the fallback is legacy');
+              'provider declines a local key and the fallback is the legacy provider');
     });
 
     test('a write failure does not escape into the connect sequence', () async {

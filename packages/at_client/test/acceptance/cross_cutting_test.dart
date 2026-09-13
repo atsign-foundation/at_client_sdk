@@ -79,7 +79,7 @@ void main() {
       // is the app's release decision — and never downgrades behind its back
       // either: an explicit provider id is honoured or thrown, never
       // substituted, and under disallowLegacyEncryption a legacy-only path is
-      // REFUSED, never quietly written legacy. The cold-start refusal's own
+      // REFUSED, never quietly written with the legacy provider. The cold-start refusal's own
       // rows are UC-A3.3/UC-A4.2.
       const bob = '@bob';
       const namespace = 'app_1.my_apps';
@@ -98,7 +98,7 @@ void main() {
       expect(CryptoRuntime.providerIdFor(capability, null, atKey: toBob()),
           legacyCryptoProviderId,
           reason: 'this client resolves both PQ providers — the ladder, not a '
-              'missing capability, is what keeps its writes legacy');
+              'missing capability, is what keeps its writes on the legacy provider');
 
       final active = MockAtClient();
       active.getPreferences()
@@ -194,7 +194,7 @@ void main() {
             RegExp(r'appMetadata:([A-Za-z0-9+/=]+)').firstMatch(fragment);
         expect(encoded, isNotNull,
             reason: 'appMetadata must reach the wire at all — when the sync '
-                'push dropped it, every cross-atSign read fell back to legacy '
+                'push dropped it, every cross-atSign read fell back to the legacy provider '
                 'for every provider, with no error anywhere');
         final decoded = jsonDecode(utf8.decode(base64Decode(encoded![1]!)))
             as Map<String, dynamic>;

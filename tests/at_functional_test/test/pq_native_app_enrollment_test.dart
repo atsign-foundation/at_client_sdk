@@ -35,19 +35,16 @@ void main() {
   late AtClient approver;
 
   setUpAll(() async {
-    final keysIo = InMemoryAtKeysIo();
-    await keysIo.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
-    final manager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign,
-        namespace,
-        TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
-        atKeysIo: keysIo,
-        atChops: loader.createAtChopsFromDemoKeys(atSign),
+    approver = await Atsign(atSign).open(
+        keys: InMemoryAtKeysIo.holding(
+            atSign, loader.createAtKeysFromDemoKeys(atSign)),
+        preference:
+            TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
+        namespace: namespace,
         storage: TestUtils.storageFor(atSign));
-    await loader.setEncryptionKeys(manager.atClient, atSign);
-    await AtClientSecretSharing.forClient(manager.atClient).register();
-    approver = manager.atClient;
+    await loader.setEncryptionKeys(approver, atSign);
+    await AtClientSecretSharing.forClient(approver).register();
   });
 
   /// One enrolment at [signingAlgo], under a pqActive preference so that the

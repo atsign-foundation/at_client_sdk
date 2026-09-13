@@ -235,62 +235,10 @@ void main() {
     });
   });
 
-  group('EnrollmentData Tests', () {
-    late KeychainStorage keyChainStorage;
-    late MockBiometricStorage mockBiometricStorage;
-    late MockBiometricStorageFile mockBiometricStorageFile;
-    String alice = '@alice';
-
-    setUp(() {
-      mockBiometricStorage = MockBiometricStorage();
-      mockBiometricStorageFile = MockBiometricStorageFile();
-      keyChainStorage = KeychainStorage(biometricStorage: mockBiometricStorage);
-    });
-
-    test('readEnrollmentData returns EnrollmentData if data exists', () async {
-      when(
-        () => mockBiometricStorage.getStorage(
-          any(),
-          options: any(named: 'options'),
-        ),
-      ).thenAnswer((_) async => mockBiometricStorageFile);
-      when(
-        () => mockBiometricStorageFile.read(),
-      ).thenAnswer((_) async => dummyEnrollmentData);
-
-      final result = await keyChainStorage.readEnrollmentData(alice);
-
-      expect(result, isNotNull);
-      expect(result.runtimeType, EnrollmentData);
-      expect(result?.enrollmentId, 'enrollId1');
-    });
-
-    test('readEnrollmentData returns null if no data exists', () async {
-      when(
-        () => mockBiometricStorage.getStorage(
-          any(),
-          options: any(named: 'options'),
-        ),
-      ).thenAnswer((_) async => mockBiometricStorageFile);
-      when(() => mockBiometricStorageFile.read()).thenAnswer((_) async => null);
-
-      final result = await keyChainStorage.readEnrollmentData(alice);
-
-      expect(result, isNull);
-    });
-
-    tearDown(() {
-      reset(mockBiometricStorage);
-      reset(mockBiometricStorageFile);
-    });
-  });
-
   group("Legacy Keychain Support", () {
     late KeychainStorage keyChainStorage;
     late MockBiometricStorage mockBiometricStorage;
     late MockBiometricStorageFile mockBiometricStorageFile;
-
-    // Enrollment Schema hasn't changed, so no tests needed for that.
 
     setUp(() {
       resetMocktailState();
@@ -314,13 +262,11 @@ void main() {
       expect(result, isNotNull);
       expect(result?.keys.length, 2);
       expect(result?.defaultAtsign, '@alice');
-      expect(result?.keys[0].apkamPrivateKey, isNotNull);
-      expect(result?.keys[0].apkamPublicKey, isNotNull);
-      expect(result?.keys[0].defaultSelfEncryptionKey, isNotNull);
-      expect(result?.keys[0].defaultEncryptionPrivateKey, isNotNull);
-      expect(result?.keys[0].defaultEncryptionPublicKey, isNotNull);
-      expect(result?.keys[0].apkamSymmetricKey, isNotNull);
-      expect(result?.keys[0].enrollmentId, 'enrollId1');
+      expect(result?.keys[0].authenticationKeyPairFor(null), isNotNull);
+      expect(result?.keys[0].selfEncryptionKey, isNotNull);
+      expect(result?.keys[0].encryptionKeyPair, isNotNull);
+      expect(result?.keys[0].enrollmentSymmetricKey, isNotNull);
+      expect(result?.keys[0].storedEnrollmentId, 'enrollId1');
       expect(result?.keys[0].metadata['hiveSecret'], isNotNull);
       expect(result?.keys[0].metadata['secret'], isNotNull);
       expect(result?.keys[0].metadata['name'], '@alice');
@@ -381,21 +327,6 @@ void main() {
         ),
       ).thenAnswer((_) async => mockBiometricStorageFile);
       final result = await keyChainStorage.readAtKeysData();
-      expect(result, isNotNull);
-      expect(checkSchemaEquality(result!), isTrue);
-    });
-
-    test('EnrollmentData schema equivalence check', () async {
-      when(
-        () => mockBiometricStorageFile.read(),
-      ).thenAnswer((_) async => dummyEnrollmentData);
-      when(
-        () => mockBiometricStorage.getStorage(
-          any(),
-          options: any(named: 'options'),
-        ),
-      ).thenAnswer((_) async => mockBiometricStorageFile);
-      final result = await keyChainStorage.readEnrollmentData('@alice');
       expect(result, isNotNull);
       expect(checkSchemaEquality(result!), isTrue);
     });

@@ -17,13 +17,10 @@ import 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
-import 'package:at_demo_data/at_demo_data.dart'
-    show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 /// UC-B1.1 / B1.2 / B1.3 — the retrofit scenarios, end to end, with the
@@ -86,16 +83,32 @@ void main() {
     required Map<String, String> namespaces,
   }) async {
     final otp = (await owner.getOTP()).response;
+    final file = File(pathFor(label));
+    if (file.existsSync()) file.deleteSync();
+    file.parent.createSync(recursive: true);
+    // The session names the keyfile, so the approval completes the keys
+    // straight into it. FileAtKeysIo.write refuses to overwrite, so a keyfile
+    // a previous run left is removed first.
+    final session = AtAuthSession(
+        atSign: atSign,
+        rootDomain: AtRootDomain(
+            ConfigUtil.getYaml()['root_server']['url'],
+            ConfigUtil.getYaml()['root_server']['port'] ?? 64),
+        atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)));
     final response = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
-            atSign: atSign,
+            session: session,
             appName: 'rf-$label',
             deviceName: 'rf-$label-$runId',
             namespaces: namespaces,
             otp: otp,
             signingAlgo: SigningAlgoType.rsa2048),
-        AtLookupImpl(atSign, ConfigUtil.getYaml()['root_server']['url'],
-            ConfigUtil.getYaml()['root_server']['port'] ?? 64));
+        secureSocketLookUps()(
+            atSign: atSign,
+            rootDomain: AtRootDomain(
+                ConfigUtil.getYaml()['root_server']['url'],
+                ConfigUtil.getYaml()['root_server']['port'] ?? 64),
+            authenticator: null));
     final record = (await owner.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
     await owner.enrollmentService!.approve(EnrollmentRequestDecision.approved(
@@ -104,31 +117,27 @@ void main() {
         apkamSymmetricKey:
             AtBytes.fromString(record.encryptedAPKAMSymmetricKey!)));
 
-    // What waitForApproval would fetch and decrypt; the approver here knows
-    // the same values from at_demo_data, and the keyfile's at-rest
-    // self-encryption needs the self key present.
-    final keys = response.atAuthKeys!
-      ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!)
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-
-    final file = File(pathFor(label));
-    if (file.existsSync()) file.deleteSync();
-    file.parent.createSync(recursive: true);
-    await FileAtKeysIo(filePath: (_) => pathFor(label)).write(atSign, keys);
+    // Awaiting the approval collects the two atSign-wide secrets it released
+    // and writes the completed keys into the keyfile.
+    await AtEnrollment.create().waitForApproval(response);
     return response.enrollmentId;
   }
 
+  /// The legacy enrollment's session, authenticated first: the connection the
+  /// retrofit submits on IS the retrofit's authority, so a keyfile that
+  /// cannot authenticate has no retrofit to attempt.
   Future<AtAuthSession> legacySession(String label) async {
-    final auth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
-        atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)))
-      ..namespace = namespace
-      ..rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'],
-          ConfigUtil.getYaml()['root_server']['port'] ?? 64));
-    expect(auth.isSuccessful, true,
-        reason: 'the legacy enrollment must authenticate before it can '
-            'retrofit — that connection IS the retrofit\'s authority');
-    return auth.session!;
+    final keysIo = FileAtKeysIo(filePath: (_) => pathFor(label));
+    final rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'],
+        ConfigUtil.getYaml()['root_server']['port'] ?? 64);
+    final enrollmentId = await Atsign(atSign)
+        .authenticatesAs(keys: keysIo, rootDomain: rootDomain);
+    return AtAuthSession(
+        atSign: atSign,
+        rootDomain: rootDomain,
+        atKeysIo: keysIo,
+        namespace: namespace,
+        enrollmentId: enrollmentId);
   }
 
   /// The published root's bytes, or null when the atSign has none.
@@ -162,27 +171,33 @@ void main() {
     // The clone B1.2 uses, taken while the keyfile is still pre-PQ.
     File(pathFor('e1')).copySync(pathFor('e1c'));
 
-    final manager = await selfRetrofit(
+    final client = await selfRetrofit(
       // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
-      // Its own store location: the owner client holds the atSign's, and a
-      // dedicated manager carries nothing across, so this is a second
-      // principal rather than a succession.
+      // Its own store location: the owner client holds the atSign's, and
+      // nothing carries across, so this is a second principal rather than a
+      // succession, opened beside the owner client.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e1-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rf-e1-$runId'),
       appName: 'rf-e1',
       deviceName: 'rf-e1-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw'},
-      // A dedicated manager keeps the owner client live alongside — through
-      // the singleton, switching would stop it.
-      manager: AtClientManager(atSign),
     );
-    final client = manager.atClient;
     privileged = client;
     privilegedKeysIo = session.atKeysIo;
 
     expect(client.enrollmentId, isNot(session.enrollmentId));
+    // The connection's id is written from the client's at every rebuild, and
+    // every reader of "which enrollment am I" now asks the client. This is the
+    // moment the two could have parted, so it is the moment they are compared.
+    // ignore: deprecated_member_use
+    expect(client.getRemoteSecondary()!.atLookUp.enrollmentId,
+        client.enrollmentId,
+        reason: 'the retrofitted connection must authenticate as the '
+            'enrollment the client says it is');
     expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65);
 
     final granted = (await client.enrollmentService!.fetchEnrollmentRequests())
@@ -231,7 +246,7 @@ void main() {
     // The clone authenticates as the SAME legacy enrollment as B1.1's
     // original — that is what makes it a clone rather than another device.
     final cloneSession = await legacySession('e1c');
-    final manager = await selfRetrofit(
+    final clone = await selfRetrofit(
       // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: cloneSession,
@@ -239,15 +254,15 @@ void main() {
       // client holds the atSign's, and B1.1's retrofit holds its own.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e1-clone-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rf-e1-clone-$runId'),
       // Deliberately the same (appName, deviceName) as B1.1: sibling clones
       // of one keyfile legitimately carry one app's identity, and the
       // atServer exempts this branch from the duplicate-enrollment refusal.
       appName: 'rf-e1',
       deviceName: 'rf-e1-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw'},
-      manager: AtClientManager(atSign),
     );
-    final clone = manager.atClient;
 
     expect(clone.enrollmentId, isNotNull);
     expect(clone.enrollmentId, isNot(cloneSession.enrollmentId),
@@ -360,10 +375,11 @@ void main() {
           session: await legacySession('e2'),
           preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
               posture: PqPosture.legacy, device: 'rf-e2-esc-$runId'),
+          storage: TestPreferences.getInstance()
+              .storageForCoLocatedClient(atSign, device: 'rf-e2-esc-$runId'),
           appName: 'rf-e2',
           deviceName: 'rf-e2-esc-$runId',
           namespaces: {'*': 'rw', '__manage': 'rw'},
-          manager: AtClientManager(atSign),
         ),
         throwsA(anything),
         reason: 'without this refusal any scoped keyfile could self-spawn a '
@@ -371,18 +387,18 @@ void main() {
             'privilege-escalation verb rather than an upgrade');
 
     final session = await legacySession('e2');
-    final manager = await selfRetrofit(
+    final scoped = await selfRetrofit(
       // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e2-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rf-e2-$runId'),
       appName: 'rf-e2',
       deviceName: 'rf-e2-$runId',
       namespaces: {namespace: 'rw'},
-      manager: AtClientManager(atSign),
     );
-    final scoped = manager.atClient;
 
     expect(scoped.enrollmentId, isNot(session.enrollmentId));
     expect(AtClientImpl.signingAlgoOf(scoped), SigningAlgoType.mldsa65,
