@@ -18,3 +18,10 @@ analyzer:
   exclude:
     - example/**
     - examples/**
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
