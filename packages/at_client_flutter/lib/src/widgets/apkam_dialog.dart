@@ -41,6 +41,10 @@ class ApkamActivationDialog extends StatefulWidget {
   final AtClientPreference preference;
   final WrittenAtKeysIo? keys;
   final AtClientStorage? storage;
+
+  /// Builds every connection the enrollment and the client open; see
+  /// `Atsign.enroll`.
+  final AtLookUpFactory? lookUps;
   final SigningAlgoType? signingAlgo;
   final EnrollmentKeyExchangeMode? keyExchangeMode;
 
@@ -59,6 +63,7 @@ class ApkamActivationDialog extends StatefulWidget {
     required this.preference,
     this.keys,
     this.storage,
+    this.lookUps,
     this.signingAlgo,
     this.keyExchangeMode,
     required this.themeData,
@@ -79,6 +84,7 @@ class ApkamActivationDialog extends StatefulWidget {
     required AtClientPreference preference,
     WrittenAtKeysIo? keys,
     AtClientStorage? storage,
+    AtLookUpFactory? lookUps,
     SigningAlgoType? signingAlgo,
     EnrollmentKeyExchangeMode? keyExchangeMode,
   }) async {
@@ -93,6 +99,7 @@ class ApkamActivationDialog extends StatefulWidget {
         preference: preference,
         keys: keys,
         storage: storage,
+        lookUps: lookUps,
         signingAlgo: signingAlgo,
         keyExchangeMode: keyExchangeMode,
         themeData: Theme.of(context),
@@ -128,6 +135,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
         device: widget.deviceName,
         keys: _keys,
         preference: under(widget.preference, widget.rootDomain),
+        lookUps: widget.lookUps,
       );
     } catch (e) {
       // An unreadable store is reported when the request goes out.
@@ -151,6 +159,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     preference: under(widget.preference, widget.rootDomain),
     signingAlgo: widget.signingAlgo,
     keyExchangeMode: widget.keyExchangeMode,
+    lookUps: widget.lookUps,
   );
 
   Future<void> _awaitAndOpen(PendingEnrollment pending) async {

@@ -2,6 +2,12 @@
 
 ## 2.0.0-rc1
 
+- feat: `PkamDialog`, `CramDialog` and `ApkamActivationDialog` take
+  `lookUps:`, at_client's `AtLookUpFactory`, and hand it to the verb they
+  run, so every connection the client they hand back opens travels the way
+  the app chose; `AtsignFlows` carries it. The third leg of the platform
+  bundle, after `keys:` and `storage:`.
+
 The dialogs and the keychain build on at_client's lifecycle verbs
 (`Atsign.open`, `activate`, `enroll` and `resumeEnrollment`, and
 `client.enrollments` on the approving side) and hand back the `AtClient` they

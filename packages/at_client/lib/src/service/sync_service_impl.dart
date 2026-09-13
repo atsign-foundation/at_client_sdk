@@ -201,9 +201,9 @@ class SyncServiceImpl implements SyncService {
           enrollmentId: atClient.enrollmentId,
           signingAlgoType: signingAlgoOf(atClient),
           atKeysIo: atClient.atKeysIo,
-          secondaryAddressFinder: atClient is AtClientImpl
-              ? atClient.secondaryAddressFinder
-              : null);
+          secondaryAddressFinder:
+              atClient is AtClientImpl ? atClient.secondaryAddressFinder : null,
+          lookUps: atClient is AtClientImpl ? atClient.lookUps : null);
 
   SyncServiceImpl._(this._atClient, this._remoteSecondary) {
     _logger = AtSignLogger('SyncService'

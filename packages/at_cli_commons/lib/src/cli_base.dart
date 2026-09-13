@@ -151,6 +151,7 @@ class CLIBase {
     Set<String> hide = const {},
     bool addLegacyRootDomainArg = true,
     AtOnboardingPreference? preference,
+    AtLookUpFactory? lookUps,
   }) async {
     parser ??= createArgsParser(
       namespace: namespace,
@@ -193,7 +194,8 @@ class CLIBase {
         syncDisabled: parsedArgs['never-sync'],
         maxConnectAttempts: int.parse(parsedArgs['max-connect-attempts']),
         passPhrase: parsedArgs['pass-phrase'],
-        preference: preference);
+        preference: preference,
+        lookUps: lookUps);
 
     await cliBase.init();
 
@@ -213,6 +215,10 @@ class CLIBase {
   final int maxConnectAttempts;
 
   final AtOnboardingPreference? preference;
+
+  /// Builds every connection the client opens; with none, the preference's
+  /// (TLS on TCP, or the proxy convention when its root domain names one).
+  final AtLookUpFactory? lookUps;
 
   late final String atKeysFilePathToUse;
   late final String localStoragePathToUse;
@@ -255,7 +261,8 @@ class CLIBase {
       this.syncDisabled = false,
       this.maxConnectAttempts = defaultMaxConnectAttempts,
       this.passPhrase,
-      this.preference}) {
+      this.preference,
+      this.lookUps}) {
     this.atSign = AtUtils.fixAtSign(atSign);
     if (homeDir == null) {
       if (atKeysFilePath == null) {
@@ -350,6 +357,7 @@ class CLIBase {
           preference: atOnboardingConfig,
           namespace: nameSpace,
           storage: atOnboardingConfig.storageFor(atSign),
+          lookUps: lookUps ?? atOnboardingConfig.lookUps,
           serviceFactory: atServiceFactory);
     } on AtOpenRefusedException catch (e) {
       stderr.writeln();

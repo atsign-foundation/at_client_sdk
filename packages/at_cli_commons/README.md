@@ -78,6 +78,22 @@ type they take — including `SigningAlgoType` — is nameable from
 only through the posture, so an app that wants legacy writes refused adopts
 `PqPosture.pqActive` or builds a posture that says so.
 
+## Choosing the transport
+
+`CLIBase` opens the client with the `AtLookUpFactory` you hand it, or the
+preference's when you hand none: `proxyLookUps()` when the root domain names
+a proxy (`--root-server proxy:host:port`), and TLS on TCP with the defaults
+otherwise. Every connection the client opens comes from it - its own, its
+sync's, its monitor's.
+
+```dart
+final atClient = (await CLIBase.fromCommandLineArgs(
+  args,
+  lookUps: secureSocketLookUps(
+      config: SecureSocketConfig()..pathToCerts = '/etc/ssl/atsign'),
+)).atClient;
+```
+
 ## Upgrading
 
 `CLIBase` kept its API through at_onboarding_cli 2.0 and at_auth 4.0: a

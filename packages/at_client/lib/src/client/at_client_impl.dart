@@ -13,6 +13,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/at_reachability.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/durable_address_finder.dart';
 import 'package:at_client/src/client/secondary_address_finder_source.dart';
@@ -687,6 +688,7 @@ class AtClientImpl implements AtClient {
     AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
     String? enrollmentId,
     AtClientStorage? storage,
 
@@ -762,6 +764,7 @@ class AtClientImpl implements AtClient {
         atChops: atChops,
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
+        lookUps: lookUps,
         enrollmentId: enrollmentId,
         storage: storage,
       );
@@ -798,6 +801,7 @@ class AtClientImpl implements AtClient {
     AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
     this.enrollmentId,
     AtClientStorage? storage,
   }) {
@@ -805,6 +809,7 @@ class AtClientImpl implements AtClient {
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
+    this.lookUps = lookUps ?? defaultLookUps(preference);
     _preference?.namespace ??= namespace;
     // If the app configured a process-wide network timeout, apply it as the
     // single default that bounds every atServer connect / atDirectory lookup /
@@ -1437,15 +1442,21 @@ class AtClientImpl implements AtClient {
   /// under an ML-DSA enrollment throws out of at_chops rather than failing
   /// authentication.
   ///
+  /// Builds every connection this client opens: its own, its sync's, its
+  /// monitor's. The application's, when it supplied one to the verb that
+  /// built the client; otherwise TLS on TCP from the preference.
+  late final AtLookUpFactory lookUps;
+
   /// [atLookUp] injects an already-built lookup; passing none lets
-  /// [RemoteSecondary] open its own connection, separate from the client's
-  /// shared one.
+  /// [RemoteSecondary] open its own connection through [lookUps], separate
+  /// from the client's shared one.
   @visibleForTesting
   RemoteSecondary buildRemoteSecondary({AtLookUp? atLookUp}) => RemoteSecondary(
         _atSign,
         _preference!,
         atChops: atChops,
         atLookUp: atLookUp,
+        lookUps: lookUps,
         privateKey: _preference!.privateKey,
         enrollmentId: enrollmentId,
         signingAlgoType: signingAlgoType,

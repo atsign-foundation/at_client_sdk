@@ -155,7 +155,13 @@ in the `_storage(...)` and `_adopt(...)` functions.
 
 The dialogs take the `AtClientPreference` and, optionally, the `AtClientStorage`
 the client opens on; with no storage a Hive store opens under
-`preference.hiveStoragePath`.
+`preference.hiveStoragePath`. They also take `lookUps:`, at_client's
+`AtLookUpFactory`, for an app that chooses its transport or reaches its
+atServers through a proxy: every connection the client they hand back opens
+comes from it. With none, TLS on TCP with the defaults. Together with
+`keys:` these are the three platform-supplied things a client is built from;
+[at_client's README](../at_client/README.md#in-code-one-import-four-verbs)
+shows the factory.
 
 ## Keychain storage
 

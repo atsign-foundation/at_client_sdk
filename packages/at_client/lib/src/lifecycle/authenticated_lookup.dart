@@ -1,6 +1,6 @@
 import 'package:at_auth/at_auth.dart' show AtKeysIo, authenticatorFor;
 import 'package:at_commons/at_commons.dart'
-    show AtRootDomain, SecureSocketConfig, UnAuthenticatedException;
+    show AtRootDomain, UnAuthenticatedException;
 import 'package:at_lookup/at_lookup_io.dart';
 
 /// A connection to [atSign]'s atServer authenticated as [enrollmentId], or
@@ -16,14 +16,14 @@ Future<AtLookUp> authenticatedLookUp(
   AtRootDomain rootDomain, {
   String? enrollmentId,
   AtLookUp? on,
+  AtLookUpFactory? lookUps,
 }) async {
   final id =
       enrollmentId ?? (await keys.read(atSign)).enrollmentToAuthenticateAs();
   final lookUp = on ??
-      AtLookUp.withSecureSocket(
+      (lookUps ?? secureSocketLookUps())(
           atSign: atSign,
           rootDomain: rootDomain,
-          transport: secureSocketTransport(SecureSocketConfig()),
           authenticator: authenticatorFor(keys, atSign, enrollmentId: id));
   try {
     if (!await lookUp.pkamAuthenticate(enrollmentId: id)) {

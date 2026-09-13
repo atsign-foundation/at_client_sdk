@@ -16,6 +16,7 @@ import 'package:at_client/src/crypto/nskey/nskey_provider.dart'
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
     show NskeyPrivateFiling;
 import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -224,15 +225,20 @@ class NotificationServiceImpl extends NotificationService {
   ///   builds reports `online` into each time it reaches `listening`; the
   ///   caller that built the client passes it, since this service holds the
   ///   client as its interface and the interface's double has none.
+  /// - [lookUps] builds the monitor's connection; the caller passes the
+  ///   client's own factory for the same reason, and TLS on TCP is the
+  ///   default when none arrives.
   static Future<NotificationService> create(AtClient atClient,
       {Monitor? monitor,
       SecondaryAddressFinder? secondaryAddressFinder,
-      AtConnection? connection}) async {
+      AtConnection? connection,
+      AtLookUpFactory? lookUps}) async {
     return NotificationServiceImpl._(
         atClient: atClient,
         monitor: monitor,
         secondaryAddressFinder: secondaryAddressFinder,
-        connection: connection);
+        connection: connection,
+        lookUps: lookUps);
   }
 
   final String myStatsNotifKey;
@@ -241,7 +247,8 @@ class NotificationServiceImpl extends NotificationService {
       {required this.atClient,
       Monitor? monitor,
       SecondaryAddressFinder? secondaryAddressFinder,
-      AtConnection? connection})
+      AtConnection? connection,
+      AtLookUpFactory? lookUps})
       : myStatsNotifKey = 'statsNotification.${atClient.atSign}' {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
@@ -252,6 +259,7 @@ class NotificationServiceImpl extends NotificationService {
 
     final preference = atClient.getPreferences()!;
     final chops = atClient.atChops;
+    lookUps ??= defaultLookUps(preference);
     this.monitor = monitor ??
         Monitor(
           atSign: atSign,
@@ -262,14 +270,10 @@ class NotificationServiceImpl extends NotificationService {
           // safe yet: no atServer implements `monitor:multiplexed`, so
           // nothing holds a notification back while a verb response is in
           // flight.
-          lookUp: AtLookUp.withSecureSocket(
+          lookUp: lookUps(
             atSign: atSign,
             rootDomain:
                 AtRootDomain(preference.rootDomain, preference.rootPort),
-            transport: secureSocketTransport(SecureSocketConfig()
-              ..decryptPackets = preference.decryptPackets
-              ..pathToCerts = preference.pathToCerts
-              ..tlsKeysSavePath = preference.tlsKeysSavePath),
             // Reproduces exactly what Monitor's own PKAM did: the same
             // AtChops, the same signing and hashing algorithms, the same
             // enrollment id. `null` when there is no signer, which fails the

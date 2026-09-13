@@ -1,5 +1,12 @@
 ## 2.0.0-rc1
 
+- feat: `AtOnboardingPreference.lookUps` is the `AtLookUpFactory` every
+  client opened under the preference builds its connections with: set it
+  for a transport of your own; unset, it is `proxyLookUps()` when the root
+  domain names a proxy and TLS on TCP otherwise. `proxyLookUps()` (new,
+  exported) sends `from:<atSign>` first on every connection, which is what
+  the proxy needs to route it; the commands used to do that on the one
+  connection they built and on none of the client's others.
 - **BREAKING:** `AtOnboardingService` is the three members programs call:
   `AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
   `atClient`, over at_client's `Atsign.open` and `AtClientManager.use`; the

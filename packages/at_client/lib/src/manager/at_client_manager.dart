@@ -366,6 +366,7 @@ abstract class AtServiceFactory {
     @Deprecated("Use atKeysIo") AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
     String? enrollmentId,
     AtClientStorage? storage,
   });
@@ -395,6 +396,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
     @Deprecated("Use atKeysIo") AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
     String? enrollmentId,
     AtClientStorage? storage,
   }) async {
@@ -406,6 +408,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
       atChops: atChops,
       atKeysIo: atKeysIo,
       atLookUp: atLookUp,
+      lookUps: lookUps,
       enrollmentId: enrollmentId,
       storage: storage,
     );
@@ -419,7 +422,8 @@ class DefaultAtServiceFactory implements AtServiceFactory {
         secondaryAddressFinder: secondaryAddressFinder,
         // NOTE: the concrete client's, and only when the client is one: a
         // test double implementing the interface has no state to report into.
-        connection: atClient is AtClientImpl ? atClient.connection : null);
+        connection: atClient is AtClientImpl ? atClient.connection : null,
+        lookUps: atClient is AtClientImpl ? atClient.lookUps : null);
   }
 
   @override

@@ -437,10 +437,9 @@ Future<int> status(ArgResults ar) async {
   try {
     // NOTE: a public key lookup needs no authentication, and no credential is
     // held here.
-    final AtLookUp al = AtLookUp.withSecureSocket(
+    final AtLookUp al = onboardingPreferenceFrom(ar).lookUps(
       atSign: atSign,
       rootDomain: rootDomain,
-      transport: secureSocketTransport(SecureSocketConfig()),
       authenticator: null,
     );
     try {
@@ -534,9 +533,7 @@ Future<void> activate(String atSign, AtOnboardingPreference preference,
   final atKeysFilePath = preference.atKeysFilePath!;
   AtFileUtil.ensureWritable(File(atKeysFilePath));
   preference.cramSecret ??= await _cramSecretFromRegistrar(atSign, preference);
-  final connection =
-      atLookUp ?? await _proxyLookUp(atSign, preference, context: 'onboard');
-  if (await _isActivated(atSign, preference, connection)) {
+  if (await _isActivated(atSign, preference, atLookUp)) {
     throw AtActivateException('atsign $atSign is already activated');
   }
 
@@ -549,7 +546,8 @@ Future<void> activate(String atSign, AtOnboardingPreference preference,
       provisioningBudget: provisioningPollInterval * maxRetries,
       provisioningPollInterval: provisioningPollInterval,
       onProgress: printProgress,
-      atLookUp: connection);
+      atLookUp: atLookUp,
+      lookUps: preference.lookUps);
   stdout.writeln('[Success] Your keyfile stored at path: $atKeysFilePath');
   await AtFileUtil.setSecureFilePermissions(atKeysFilePath);
   if (preference.passPhrase != null) {
@@ -609,7 +607,9 @@ Future<bool> _isActivated(String atSign, AtOnboardingPreference preference,
   }
   try {
     final status = await AtStatusImpl(
-            rootUrl: preference.rootDomain, rootPort: preference.rootPort)
+            rootUrl: preference.rootDomain,
+            rootPort: preference.rootPort,
+            lookUps: preference.lookUps)
         .get(atSign);
     return status.status() == AtSignStatus.activated;
   } catch (e) {
@@ -618,27 +618,6 @@ Future<bool> _isActivated(String atSign, AtOnboardingPreference preference,
         'Could not determine atsign activation status: $e',
         intent: Intent.fetchData);
   }
-}
-
-/// A connection to a proxied atServer, with the `from:` that tells the proxy
-/// which atSign the connection is for already sent; null when [preference]
-/// names no proxy, since the atDirectory then finds the atServer.
-Future<AtLookUp?> _proxyLookUp(String atSign, AtOnboardingPreference preference,
-    {required String context}) async {
-  if (!preference.isUsingProxy) return null;
-  final lookUp = AtLookUp.withSecureSocket(
-    atSign: atSign,
-    rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
-    transport: secureSocketTransport(SecureSocketConfig()),
-    authenticator: null,
-  );
-  try {
-    final response = await lookUp.executeCommand('from:$atSign\n', auth: false);
-    logger.info('$context: from: for $atSign answered $response');
-  } catch (e) {
-    logger.warning('$context: from: for $atSign failed: $e - continuing');
-  }
-  return lookUp;
 }
 
 /// auth enroll : require atSign, app name, device name, otp, atKeys path
@@ -722,14 +701,13 @@ Future<AtClient> enrolDevice({
 }) async {
   final keys = FileAtKeysIo(
       filePath: (_) => atKeysFilePath, passPhrase: preference.passPhrase);
-  final connection =
-      atLookUp ?? await _proxyLookUp(atSign, preference, context: 'enroll');
   var pending = await Atsign(atSign).resumeEnrollment(
       app: app,
       device: device,
       keys: keys,
       preference: preference,
-      atLookUp: connection);
+      atLookUp: atLookUp,
+      lookUps: preference.lookUps);
   if (pending != null) {
     stderr.writeln('${chalk.blue('[Information]')} Resuming enrollment '
         '${pending.enrollmentId}, submitted earlier from this keyfile');
@@ -744,7 +722,8 @@ Future<AtClient> enrolDevice({
         signingAlgo: signingAlgo,
         keyExchangeMode: keyExchangeMode,
         apkamKeysExpiry: apkamKeysExpiry,
-        atLookUp: connection);
+        atLookUp: atLookUp,
+        lookUps: preference.lookUps);
   }
   stdout.writeln('Enrollment ID: ${pending.enrollmentId}');
   final narration = pending.progress.listen(printProgress);

@@ -10,6 +10,7 @@ import 'package:at_client/src/enroll/signing_key_mint.dart'
     show mintAdvertisedSigningKey;
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/lifecycle/pending_enrollment.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -63,11 +64,14 @@ extension AtsignLifecycle on Atsign {
   /// [namespace] defaults to the preference's. [storage] is the client's
   /// local storage, borrowed unless it was built with `closedByClient: true`;
   /// with none, a Hive store opens under `preference.hiveStoragePath`.
-  /// [atLookUp] is a connection to use instead of one built from the
-  /// preference, for a caller that already holds one. [serviceFactory]
-  /// supplies the client's notification, sync and enrollment services in
-  /// place of the defaults; a process that must not sync hands in a factory
-  /// whose sync service does nothing.
+  /// [lookUps] builds every connection the client opens - its own, its
+  /// sync's, its monitor's - and is how an application chooses the transport
+  /// or a proxy convention; with none, TLS on TCP from the preference.
+  /// [atLookUp] is a connection to use instead of one built, for a caller
+  /// that already holds one. [serviceFactory] supplies the client's
+  /// notification, sync and enrollment services in place of the defaults; a
+  /// process that must not sync hands in a factory whose sync service does
+  /// nothing.
   ///
   /// Refuses, as `buildAtClient` does, while a client for this atSign as the
   /// same enrollment is live in this process; another enrollment of the
@@ -78,6 +82,7 @@ extension AtsignLifecycle on Atsign {
     String? namespace,
     AtClientStorage? storage,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
     AtServiceFactory? serviceFactory,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
@@ -89,6 +94,7 @@ extension AtsignLifecycle on Atsign {
       storage: storage,
       atKeysIo: keys,
       atLookUp: atLookUp,
+      lookUps: lookUps,
       notificationServiceBuilder: serviceFactory == null
           ? null
           : (client) => serviceFactory.notificationService(
@@ -117,19 +123,19 @@ extension AtsignLifecycle on Atsign {
   /// `open` would have reported; a failure to reach the atServer is thrown
   /// as it is.
   ///
-  /// [atLookUp] is a connection to authenticate on instead of one built
-  /// from [rootDomain], for a caller that already holds one; it is left
-  /// open.
+  /// [lookUps] builds the connection; [atLookUp] is one to authenticate on
+  /// instead, for a caller that already holds one, and is left open.
   Future<String> authenticatesAs({
     required AtKeysIo keys,
     required AtRootDomain rootDomain,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
   }) async {
     final enrollmentId = (await keys.read(this)).enrollmentToAuthenticateAs();
     final AtLookUp lookUp;
     try {
       lookUp = await authenticatedLookUp(this, keys, rootDomain,
-          enrollmentId: enrollmentId, on: atLookUp);
+          enrollmentId: enrollmentId, on: atLookUp, lookUps: lookUps);
     } catch (e) {
       final state = classifyConnectionFailure(e);
       if (state != null && state.isRefused) {
@@ -159,9 +165,10 @@ extension AtsignLifecycle on Atsign {
   /// answers or [provisioningBudget] is spent, five minutes with none, and
   /// then throws [AtTimeoutException].
   ///
-  /// See [open] for [namespace], [storage], [atLookUp] and [connectBudget];
-  /// a supplied [atLookUp] serves the activation too, and is taken as having
-  /// already reached the atServer, so the provisioning wait is skipped.
+  /// See [open] for [namespace], [storage], [lookUps], [atLookUp] and
+  /// [connectBudget]; the activation runs on a connection [lookUps] builds,
+  /// or on a supplied [atLookUp], which is taken as having already reached
+  /// the atServer, so the provisioning wait is skipped.
   Future<AtClient> activate({
     required String cramSecret,
     required WrittenAtKeysIo keys,
@@ -176,10 +183,12 @@ extension AtsignLifecycle on Atsign {
     Duration provisioningPollInterval = RetryOptions.defaultRetryDelay,
     void Function(ProgressEvent event)? onProgress,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
     final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
     final pqNative = algo == SigningAlgoType.mldsa65;
+    final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);
     ({
       SigningAlgoType algorithm,
       String publicKey,
@@ -194,24 +203,34 @@ extension AtsignLifecycle on Atsign {
       advertisedSigningKey = material.advertisedSigningKey;
       metadataBuilder = material.metadataBuilder;
     }
-    await activateAtSign(
-        atSign: this,
-        cramSecret: cramSecret,
-        keys: keys,
-        signingAlgo: algo,
-        rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
-        appName: app,
-        deviceName: device,
-        mintLegacyMaterial:
-            mintLegacyMaterial ?? preference.posture.mintLegacyMaterial,
-        metadataBuilder: metadataBuilder,
-        advertisedSigningKey: advertisedSigningKey,
-        retryOptions: RetryOptions(
-            maxRetries: RetryOptions.defaultMaxRetries,
-            retryDelay: provisioningPollInterval,
-            overallTimeout: provisioningBudget),
-        onProgress: onProgress,
-        atLookUp: atLookUp);
+    // The activation's own connection, built the way the application chose
+    // and closed when it is done; a supplied one is the caller's to close.
+    final connection = atLookUp ??
+        (lookUps ?? defaultLookUps(preference))(
+            atSign: this, rootDomain: rootDomain, authenticator: null);
+    try {
+      await activateAtSign(
+          atSign: this,
+          cramSecret: cramSecret,
+          keys: keys,
+          signingAlgo: algo,
+          rootDomain: rootDomain,
+          appName: app,
+          deviceName: device,
+          mintLegacyMaterial:
+              mintLegacyMaterial ?? preference.posture.mintLegacyMaterial,
+          metadataBuilder: metadataBuilder,
+          advertisedSigningKey: advertisedSigningKey,
+          retryOptions: RetryOptions(
+              maxRetries: RetryOptions.defaultMaxRetries,
+              retryDelay: provisioningPollInterval,
+              overallTimeout: provisioningBudget),
+          onProgress: onProgress,
+          atLookUp: connection,
+          awaitProvisioning: atLookUp == null);
+    } finally {
+      if (atLookUp == null) await connection.close();
+    }
 
     final client = await open(
         keys: keys,
@@ -219,6 +238,7 @@ extension AtsignLifecycle on Atsign {
         namespace: namespace,
         storage: storage,
         atLookUp: atLookUp,
+        lookUps: lookUps,
         connectBudget: connectBudget);
     if (pqNative) {
       await mintSigningRootAfterActivation(client, atKeysIo: keys);
@@ -239,9 +259,11 @@ extension AtsignLifecycle on Atsign {
   /// [signingAlgo] is the APKAM algorithm the enrollment authenticates with
   /// and [keyExchangeMode] how its symmetric key travels; both default to the
   /// preference's posture. [apkamKeysExpiry] asks the atServer to expire the
-  /// enrollment's keys after that long. [atLookUp] is a connection to submit
-  /// on, for a caller that already holds one; the request itself travels
-  /// unauthenticated, since this device holds no credential yet.
+  /// enrollment's keys after that long. [lookUps] builds the connection the
+  /// request goes out on and every one the enrollment opens after it;
+  /// [atLookUp] is one to submit on instead, for a caller that already holds
+  /// one. The request itself travels unauthenticated, since this device
+  /// holds no credential yet.
   Future<PendingEnrollment> enroll({
     required String otp,
     required String app,
@@ -253,6 +275,7 @@ extension AtsignLifecycle on Atsign {
     EnrollmentKeyExchangeMode? keyExchangeMode,
     Duration? apkamKeysExpiry,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
   }) async {
     final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);
     final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
@@ -296,11 +319,8 @@ extension AtsignLifecycle on Atsign {
     request.apkamKeysExpiryDuration = apkamKeysExpiry;
 
     final lookUp = atLookUp ??
-        AtLookUp.withSecureSocket(
-            atSign: this,
-            rootDomain: rootDomain,
-            transport: secureSocketTransport(SecureSocketConfig()),
-            authenticator: null);
+        (lookUps ?? defaultLookUps(preference))(
+            atSign: this, rootDomain: rootDomain, authenticator: null);
     final AtEnrollmentResponse response;
     try {
       response = await AtEnrollment.create().submit(request, lookUp);
@@ -327,21 +347,24 @@ extension AtsignLifecycle on Atsign {
         rootDomain: rootDomain,
         signingAlgo: algo,
         keyExchangeMode: mode,
-        atLookUp: atLookUp);
+        atLookUp: atLookUp,
+        lookUps: lookUps);
   }
 
   /// The enrollment [enroll] filed in [keys] for [app] on [device] and has not
   /// yet completed, or null when there is none: the way an application picks
   /// up an enrollment it submitted before a restart.
   ///
-  /// [preference] supplies the root domain; [atLookUp] a connection for the
-  /// approval handshake, for a caller that already holds one.
+  /// [preference] supplies the root domain; [lookUps] builds the connections
+  /// the enrollment opens, and [atLookUp] is one for the approval handshake,
+  /// for a caller that already holds one.
   Future<PendingEnrollment?> resumeEnrollment({
     required String app,
     required String device,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
   }) async {
     final AtKeys stored;
     try {
@@ -374,7 +397,8 @@ extension AtsignLifecycle on Atsign {
           keyExchangeMode: stored.apkamSymmetricKey == null
               ? EnrollmentKeyExchangeMode.pq
               : EnrollmentKeyExchangeMode.legacy,
-          atLookUp: atLookUp);
+          atLookUp: atLookUp,
+          lookUps: lookUps);
     }
     return null;
   }

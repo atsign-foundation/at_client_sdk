@@ -70,7 +70,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           preference: atOnboardingPreference,
           storage: atOnboardingPreference.storageFor(_atSign),
           serviceFactory: atServiceFactory,
-          atLookUp: _atLookUp);
+          atLookUp: _atLookUp,
+          lookUps: atOnboardingPreference.lookUps);
     } on AtOpenRefusedException catch (e) {
       logger.warning(e.message);
       return false;

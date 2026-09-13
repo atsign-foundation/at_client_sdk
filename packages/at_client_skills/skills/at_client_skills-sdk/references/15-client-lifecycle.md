@@ -43,10 +43,11 @@ final resumed = await Atsign('@alice').resumeEnrollment(
 final principal = await Atsign('@alice').authenticatesAs(keys: keys);
 ```
 
-`open` also takes `serviceFactory:` (a process that must not sync hands in
-`ServiceFactoryWithNoOpSyncService` from `at_cli_commons`), `atLookUp:` (a
-connection the caller already holds) and `connectBudget:` (how long the one
-connect attempt waits before the client comes back offline, 5 s by default).
+`open` also takes `lookUps:` ([section 3](#3-connections)), `serviceFactory:`
+(a process that must not sync hands in `ServiceFactoryWithNoOpSyncService`
+from `at_cli_commons`), `atLookUp:` (a connection the caller already holds)
+and `connectBudget:` (how long the one connect attempt waits before the
+client comes back offline, 5 s by default).
 
 **What can refuse:**
 
@@ -81,7 +82,43 @@ HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: tru
 
 ---
 
-## 3. Connection state
+## 3. Connections
+
+The third platform-supplied thing, beside the keys store and the storage
+bundle: an `AtLookUpFactory` that builds **every** connection the client
+opens - its own, its sync service's, its monitor's, the file stream's and
+the one a retrofit re-derives on - so an application chooses the transport
+once.
+
+```dart
+// TLS on TCP, the default; the config is where TLS settings now live.
+lookUps: secureSocketLookUps(config: SecureSocketConfig()..pathToCerts = '/certs')
+
+// Behind a proxy that routes on the atSign: send `from:` first on every connection.
+lookUps: secureSocketLookUps(onConnect: (c) => c.sendSync('from:@alice\n'))
+
+// A factory of your own: any AtLookUp implementation, another transport.
+AtLookupMuxable mine({required atSign, required rootDomain, required authenticator,
+    secondaryAddressFinder, clientConfig = const {}}) => ...;
+```
+
+- Each call names what the connection is for: the atSign, the root domain,
+  the authenticator (null for a connection that never authenticates), an
+  optional address finder and the client config. The factory captures how
+  bytes travel.
+- The Flutter dialogs (`PkamDialog.show(..., lookUps: ...)` and the others)
+  and `CLIBase.fromCommandLineArgs(args, lookUps: ...)` pass it through.
+  `AtOnboardingPreference.lookUps` is what the CLI uses with none: the proxy
+  factory when the root domain names a proxy, TLS otherwise.
+- `AtClientPreference.decryptPackets`, `pathToCerts` and `tlsKeysSavePath`
+  are deprecated: the transport is the factory's to configure. The default
+  factory reads them until they go.
+- A test's factory reaches all of a client's connections, where a lookup
+  injected through `atLookUp:` reaches only the client's own.
+
+---
+
+## 4. Connection state
 
 `open` makes one bounded connect attempt and hands the client back **whatever
 happened**. `client.connection` is the record:
@@ -115,7 +152,7 @@ the client the app switches to via `AtClientManager.listenToAtSignChange`.
 
 ---
 
-## 4. The sync service
+## 5. The sync service
 
 `client.syncService` moves data between the local store and the atServer. It
 runs on its own from the moment the client is built:
@@ -140,7 +177,7 @@ client's.
 
 ---
 
-## 5. The notification service
+## 6. The notification service
 
 `client.notificationService` is the live channel from the atServer.
 
@@ -168,7 +205,7 @@ final sub = client.notificationService
 
 ---
 
-## 6. Owning the client: current, switching, stopping
+## 7. Owning the client: current, switching, stopping
 
 ```dart
 AtClientManager.getInstance().use(client);   // for code that reads .atClient

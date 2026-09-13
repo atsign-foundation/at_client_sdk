@@ -72,6 +72,7 @@ Future<AtClient> createAtClient(
             filePath: (_) => atKeysFilePathToUse, passPhrase: passPhrase),
         preference: preference,
         storage: preference.storageFor(atSign),
+        lookUps: preference.lookUps,
         serviceFactory: ServiceFactoryWithNoOpSyncService());
   } on AtOpenRefusedException catch (e) {
     stderr.writeln(chalk.brightRed(e.message));

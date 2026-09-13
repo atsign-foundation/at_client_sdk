@@ -78,6 +78,10 @@ class MockSecondaryKeyStore extends Mock
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
+  // NOTE: the same erasure: an unstubbed `lookUps` answers null into a
+  // non-nullable function type, and the services read it off the impl.
+  @override
+  final AtLookUpFactory lookUps = secureSocketLookUps();
   // NOTE: `implements` erases the concrete getter AtClientImpl carries, and an
   // unstubbed mocktail getter answers null, which the runtime refuses for the
   // non-nullable AtConnection; a Monitor built from this mock reads it.

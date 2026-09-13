@@ -156,6 +156,10 @@ const Set<String> _atClientBarrelExports = {
   'package:at_auth/at_auth.dart',
   // show-narrowed to FileAtKeysIo, the keyfile store, for the same reason.
   'package:at_auth/at_auth_io.dart',
+  // show-narrowed to AtLookUpFactory, secureSocketLookUps and
+  // AtCommandExecutor: the communications leg of the platform bundle, which
+  // the verbs take as lookUps:, for the same reason again.
+  'package:at_lookup/at_lookup_io.dart',
   // show-narrowed to SigningAlgoType: AtClientPreference.dataSigningKeyAlgorithms
   // takes a set of them and AtClientImpl.signingAlgoType returns one.
   'package:at_chops/at_chops.dart',

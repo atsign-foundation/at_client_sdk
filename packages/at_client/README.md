@@ -149,6 +149,31 @@ final passcode = await owner.enrollments.otp();
 AtClientManager.getInstance().use(client);
 ```
 
+Three things are the platform's to supply, and every verb takes them the
+same way: **`keys:`**, where the atSign's keys live (`FileAtKeysIo`, the
+Flutter keychain, memory); **`storage:`**, the client's local store
+(`HiveAtClientStorage`, or a bundle of your own); and **`lookUps:`**, how
+the client reaches its atServer. The last is an `AtLookUpFactory`, a function
+that builds every connection the client opens - its own, its sync's, its
+monitor's - so a transport or a proxy convention is chosen once:
+
+```dart
+final client = await Atsign('@alice').open(
+    keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
+    storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
+    preference: AtClientPreference()..namespace = 'todos',
+    lookUps: secureSocketLookUps(
+        config: SecureSocketConfig()..pathToCerts = '/certs',
+        onConnect: (connection) => connection.sendSync('from:@alice\n')));
+```
+
+With no `lookUps`, connections are TLS on TCP with the defaults;
+`secureSocketLookUps` is that default, taking a `SecureSocketConfig` and an
+`onConnect` run on each new connection before anything else (a proxy that
+routes on `from:` is what that is for). A factory of your own can hand back
+any `AtLookUp`. The preference's `decryptPackets`, `pathToCerts` and
+`tlsKeysSavePath` are deprecated in favour of the factory's config.
+
 `Atsign.authenticatesAs(keys: ..., rootDomain: ...)` answers which
 enrollment a keys store authenticates as without building a client.
 Flutter apps get the same verbs behind dialogs in

@@ -543,7 +543,12 @@ that needs a connection calls `AtLookUp.withSecureSocket` itself, so an
 application cannot substitute the transport, the proxy convention or a test
 double without reaching into each one. gkc asked on 2026-09-13 for the entry
 points to supply an **`AtLookUp` factory function**, used wherever a lookup is
-built. Draft; the decisions at the end are not ruled.
+built. The eight decisions at the end were ruled by gkc the same day and are
+[ruling 8](decisions.md#8-the-communications-leg-an-atlookup-factory-the-entry-points-supply)
+in the ledger; the leg was built the same day on the lifecycle branch, as the
+"what changes where" table below describes, with the every-connection pin in
+at_client's `test/lifecycle/lookups_test.dart` and the preamble's in
+at_lookup's `test/lookup_factory_test.dart`.
 
 ### What builds a lookup today, measured
 
@@ -649,6 +654,8 @@ client's connections, because sync and the monitor ask the same factory.
 | tests               | a pin that every connection a client opens (its own, sync's, the monitor's) came from the factory, with a control that a client built without one uses the default; the 23 files injecting `atLookUp:` keep working.                 |
 
 ### Decisions
+
+All ruled 2026-09-13, each as recommended.
 
 | Id | Question                                                                                                          | Recommendation                                                                                                                                                                     |
 | -- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

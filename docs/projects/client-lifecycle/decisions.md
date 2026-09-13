@@ -14,8 +14,8 @@ status says so; nothing is appended as history.
 | `SUPERSEDED`        | Replaced outright. Title struck.                                                   |
 | `REJECTED`          | Considered and not adopted. Title struck; the body stays so it isn't re-proposed.  |
 
-All 7 were made by gkc on 2026-09-12, in one conversation, each after the
-measurement it cites.
+Rulings 1 to 7 were made by gkc on 2026-09-12, in one conversation, each
+after the measurement it cites; ruling 8 on 2026-09-13.
 
 ## 1. at_client owns the client lifecycle; at_auth is the protocol layer under it
 
@@ -167,3 +167,35 @@ for the client's public API. The ruling as first made preferred a branch from
 trunk so as not to carry the speed-up branch's 82 commits through every
 rebase; gkc chose to start at once on top of them instead, accepting that
 this PR stacks on #2229 until that merges.
+
+## 8. The communications leg: an `AtLookUp` factory the entry points supply
+
+`LIVE`. The third leg of the platform bundle, after the keys store and the
+storage bundle. at_lookup gains `AtLookUpFactory`, a function type taking the
+atSign, the root domain, the authenticator, an optional address finder and the
+client config and returning an `AtLookupMuxable`, and `secureSocketLookUps`,
+the default that builds through `withSecureSocket` on the TLS transport. The
+verbs (`open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`),
+`buildAtClient` and `AtServiceFactory.atClient` take `lookUps:`; the client
+holds it, and the client's own connection, sync's, the monitor's, the
+file-stream path and the re-derive after a retrofit all ask it. The Flutter
+dialogs and `AtsignFlows`, `CLIBase` and the `at_activate` commands pass it
+through. at_auth keeps taking instances. The existing `atLookUp:` instance
+parameters stay for now. `AtClientPreference.decryptPackets`,
+`tlsKeysSavePath` and `pathToCerts` are deprecated in favour of the default
+factory's `SecureSocketConfig`, and are read by the default while deprecated.
+at_onboarding_cli's proxy convention (a `rootDomain` starting `proxy:`, with
+`from:` sent first) becomes a factory the preference supplies, the first
+non-default one. Built in the lifecycle PR.
+
+Why: ten library sites in four packages each called `withSecureSocket`
+themselves, so an application could not substitute the transport, a proxy
+convention or a test double without reaching into each; and a test that
+injected a lookup through `atLookUp:` reached the client's own connection
+only, while sync's and the monitor's were built real from the preference. A
+function was chosen over a bundle object because the other two legs are
+objects for the state they carry, and a factory captures what it needs; the
+root domain stays a per-call argument from the preference or the verb, so
+where the atDirectory is does not move. The measurement and the shape are
+[section 10](design.md#10-the-communications-leg-of-the-platform-bundle) of
+the design.

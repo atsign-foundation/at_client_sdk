@@ -23,7 +23,11 @@ class AtStatusImpl implements AtServerStatus {
     _rootPort = value;
   }
 
-  AtStatusImpl({String? rootUrl, int? rootPort}) {
+  /// Builds the connections the status probe opens; TLS on TCP with none.
+  final AtLookUpFactory lookUps;
+
+  AtStatusImpl({String? rootUrl, int? rootPort, AtLookUpFactory? lookUps})
+      : lookUps = lookUps ?? secureSocketLookUps() {
     rootUrl ??= 'root.atsign.org';
     _rootUrl = rootUrl;
     rootPort ??= 64;
@@ -109,10 +113,9 @@ class AtStatusImpl implements AtServerStatus {
       // authenticator: null - every call below passes `auth: false`, and this
       // class holds no key material at all. Stating it beats a connection that
       // would fail at the first authenticated verb.
-      final atLookupImpl = AtLookUp.withSecureSocket(
+      final atLookupImpl = lookUps(
         atSign: atSign!,
         rootDomain: AtRootDomain(_rootUrl!, _rootPort!),
-        transport: secureSocketTransport(SecureSocketConfig()),
         authenticator: null,
       );
       await atLookupImpl.executeCommand('from:$atSign\n');

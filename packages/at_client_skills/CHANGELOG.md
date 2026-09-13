@@ -8,12 +8,13 @@
   `AtClientManager.setCurrentAtSign` are gone from the skill (rewritten
   `references/05-flutter-auth.md`; `SKILL.md` §10).
 - New: AtClient lifecycle — the `Atsign` verbs (`open`, `activate`, `enroll`,
-  `resumeEnrollment`), the storage object (`HiveAtClientStorage`), the
-  connection state (`client.connection`: online / offline / refused, the
-  causes, `awaitOnline`), the sync and notification services' start and stop,
-  `AtClientManager.use`, and what `stop()` does and does not do (new
-  `references/15-client-lifecycle.md`; `SKILL.md` §11; later sections
-  renumbered).
+  `resumeEnrollment`), the platform bundle a client is built from (`keys:`,
+  `storage:` and `lookUps:`, the `AtLookUpFactory` that builds every
+  connection the client opens), the connection state (`client.connection`:
+  online / offline / refused, the causes, `awaitOnline`), the sync and
+  notification services' start and stop, `AtClientManager.use`, and what
+  `stop()` does and does not do (new `references/15-client-lifecycle.md`;
+  `SKILL.md` §11; later sections renumbered).
 - The package map, the headless-agent and sync references and the
   deprecation guide drop `at_auth` and `setCurrentAtSign`, and name
   `hiveStoragePath` / `commitLogPath` as deprecated in favour of a storage

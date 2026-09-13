@@ -62,6 +62,7 @@ void main() {
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
           storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
         ),
       ).thenAnswer(
         (_) => Future.error(Exception('the atServer refused this device')),
@@ -94,6 +95,7 @@ void main() {
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
           storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
           onProgress: any(named: 'onProgress'),
         ),
       ).thenAnswer(
@@ -125,6 +127,7 @@ void main() {
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
           storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
           onProgress: any(named: 'onProgress'),
         ),
       ).called(1);
@@ -139,6 +142,7 @@ void main() {
           device: any(named: 'device'),
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
+          lookUps: any(named: 'lookUps'),
         ),
       ).thenAnswer((_) async => null);
       when(
@@ -152,6 +156,7 @@ void main() {
           preference: any(named: 'preference'),
           signingAlgo: any(named: 'signingAlgo'),
           keyExchangeMode: any(named: 'keyExchangeMode'),
+          lookUps: any(named: 'lookUps'),
         ),
       ).thenAnswer((_) => Future.error(Exception('invalid otp')));
 
@@ -205,6 +210,7 @@ void main() {
           device: any(named: 'device'),
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
+          lookUps: any(named: 'lookUps'),
         ),
       ).thenAnswer((_) async => null);
       when(
@@ -218,6 +224,7 @@ void main() {
           preference: any(named: 'preference'),
           signingAlgo: any(named: 'signingAlgo'),
           keyExchangeMode: any(named: 'keyExchangeMode'),
+          lookUps: any(named: 'lookUps'),
         ),
       ).thenAnswer((_) async => pending);
       when(() => pending.enrollmentId).thenReturn('enroll-1');
@@ -262,6 +269,7 @@ void main() {
           preference: any(named: 'preference'),
           signingAlgo: any(named: 'signingAlgo'),
           keyExchangeMode: any(named: 'keyExchangeMode'),
+          lookUps: any(named: 'lookUps'),
         ),
       ).captured.single;
       expect(
@@ -285,6 +293,7 @@ void main() {
           device: any(named: 'device'),
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
+          lookUps: any(named: 'lookUps'),
         ),
       ).thenAnswer((_) async => pending);
       when(() => pending.enrollmentId).thenReturn('enroll-1');
@@ -325,6 +334,7 @@ void main() {
           preference: any(named: 'preference'),
           signingAlgo: any(named: 'signingAlgo'),
           keyExchangeMode: any(named: 'keyExchangeMode'),
+          lookUps: any(named: 'lookUps'),
         ),
       );
     });

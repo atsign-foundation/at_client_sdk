@@ -31,7 +31,9 @@ import 'package:at_utils/at_utils.dart';
 /// closing it and the caller closes it when done; a bundle built with
 /// `closedByClient: true` is closed by the client instead. Supplying none
 /// falls back to a Hive store under the deprecated
-/// `preference.hiveStoragePath`.
+/// `preference.hiveStoragePath`. [lookUps] builds every connection the
+/// client opens (its own, its sync's, its monitor's); with none, TLS on TCP
+/// from the preference.
 ///
 /// With [atKeysIo] the enrollment is the keys' own answer,
 /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
@@ -52,6 +54,7 @@ Future<AtClient> buildAtClient({
   AtKeysIo? atKeysIo,
   String? enrollmentId,
   AtLookUp? atLookUp,
+  AtLookUpFactory? lookUps,
   SecondaryAddressFinder? secondaryAddressFinder,
   FutureOr<NotificationService> Function(AtClient)? notificationServiceBuilder,
   FutureOr<SyncService> Function(AtClient)? syncServiceBuilder,
@@ -87,6 +90,7 @@ Future<AtClient> buildAtClient({
     preference,
     atKeysIo: atKeysIo,
     atLookUp: atLookUp,
+    lookUps: lookUps,
     enrollmentId: enrollmentId,
     storage: storage,
     exactEnrollment: true,
@@ -96,7 +100,8 @@ Future<AtClient> buildAtClient({
         ? await NotificationServiceImpl.create(client,
             secondaryAddressFinder: secondaryAddressFinder ??
                 (client is AtClientImpl ? client.secondaryAddressFinder : null),
-            connection: client.connection)
+            connection: client.connection,
+            lookUps: client is AtClientImpl ? client.lookUps : null)
         : await notificationServiceBuilder(client);
     client.syncService = syncServiceBuilder == null
         ? await SyncServiceImpl.create(client)

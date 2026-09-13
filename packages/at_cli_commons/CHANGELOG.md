@@ -1,5 +1,9 @@
 ## 3.1.2
 
+- feat: `CLIBase.fromCommandLineArgs(lookUps: ...)` and the constructor's
+  `lookUps` hand at_client's `AtLookUpFactory` to `open`; with none, the
+  preference's, which is the proxy factory when the root domain names a
+  proxy and TLS on TCP otherwise.
 - feat: `CLIBase` opens its client through at_client's `Atsign.open` and
   waits for the connection to come online with a budget of
   `maxConnectAttempts` tries, three seconds apart, instead of

@@ -112,6 +112,12 @@ final pref = AtOnboardingPreference()
   ..storagePath = 'storage/hive';
 ```
 
+`pref.lookUps` is the `AtLookUpFactory` every client opened under the
+preference builds its connections with, and the commands pass it to the
+verbs: `proxyLookUps()` when `rootDomain` names a proxy (`proxy:host:port`),
+which sends `from:<atSign>` first on every connection so the proxy can route
+it, and TLS on TCP otherwise. Set it for a transport of your own.
+
 Activate a new atSign with its CRAM secret (`OnboardingUtil` fetches one
 from the registrar against an emailed verification code):
 

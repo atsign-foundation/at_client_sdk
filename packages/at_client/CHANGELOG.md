@@ -21,6 +21,18 @@
   refusal, carrying the `AtConnectionState` `open` would have reported and
   its cause (revoked, unauthenticated, an invalid enrollment); a failure to
   reach the atServer is thrown as it is.
+- feat: the third leg of the platform bundle, beside the keys store and the
+  storage bundle: `open`, `activate`, `enroll`, `resumeEnrollment`,
+  `authenticatesAs`, `buildAtClient` and `AtServiceFactory.atClient` take
+  `lookUps:`, an at_lookup `AtLookUpFactory` that builds every connection the
+  client opens - its own, its sync's, its monitor's, the file stream's and
+  the one a retrofit re-derives on - so an application chooses the transport
+  or a proxy convention once. With none, `secureSocketLookUps` over TLS on
+  TCP, configured from the preference. The barrel re-exports
+  `AtLookUpFactory`, `secureSocketLookUps` and `AtCommandExecutor`.
+- deprecated: `AtClientPreference.decryptPackets`, `tlsKeysSavePath` and
+  `pathToCerts`: the transport is the factory's to configure; the default
+  factory reads them until they go in 4.0.
 - fix: a key named like the app's namespace gets the namespace appended.
 - fix: `stop()` closes the connection state before it closes the services
   and the remote, so a request the stop itself fails is not recorded as the

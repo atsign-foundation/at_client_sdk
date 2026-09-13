@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:at_lookup/at_lookup_io.dart';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
@@ -37,15 +38,17 @@ class PendingEnrollment {
   final SigningAlgoType signingAlgo;
   final EnrollmentKeyExchangeMode keyExchangeMode;
   final AtLookUp? _atLookUp;
+  final AtLookUpFactory? _lookUps;
   final AtEnrollment _enrollment = AtEnrollment.create();
   final AtSignLogger _logger;
 
   /// What the wait is doing, as it does it.
   Stream<ProgressEvent> get progress => _enrollment.progressStream;
 
-  /// [atLookUp] is the connection the approval handshake runs on, for a
-  /// caller that already holds one; with none, one is built from the atSign
-  /// and root domain.
+  /// [lookUps] builds the connection the approval handshake runs on and the
+  /// ones the client opened on the completed keys uses; [atLookUp] is a
+  /// connection for the handshake instead, for a caller that already holds
+  /// one, and is left open.
   PendingEnrollment({
     required this.atSign,
     required this.enrollmentId,
@@ -57,7 +60,9 @@ class PendingEnrollment {
     required this.signingAlgo,
     required this.keyExchangeMode,
     AtLookUp? atLookUp,
+    AtLookUpFactory? lookUps,
   })  : _atLookUp = atLookUp,
+        _lookUps = lookUps,
         _logger = AtSignLogger('PendingEnrollment ($atSign)');
 
   /// Waits for the manager's decision, and on approval completes the keys in
@@ -99,14 +104,21 @@ class PendingEnrollment {
           : null,
     );
 
+    // The handshake's connection, built the way the application chose and
+    // closed when it is done; a supplied one is the caller's to close.
+    final handshake = _atLookUp ??
+        (_lookUps ?? secureSocketLookUps())(
+            atSign: atSign, rootDomain: rootDomain, authenticator: null);
     try {
       await _enrollment.waitForApproval(response,
           retryInterval: retryInterval,
           maxRetries: maxRetries,
-          atLookup: _atLookUp);
+          atLookup: handshake);
     } on AtEnrollmentException catch (e) {
       if (e.message.contains('denied')) await _discard();
       rethrow;
+    } finally {
+      if (_atLookUp == null) await handshake.close();
     }
 
     await keys.update(atSign, (stored) {
@@ -142,6 +154,7 @@ class PendingEnrollment {
         namespace: namespace,
         storage: storage,
         atLookUp: _atLookUp,
+        lookUps: _lookUps,
         connectBudget: connectBudget);
   }
 

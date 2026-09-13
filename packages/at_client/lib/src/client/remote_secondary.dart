@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart'
@@ -164,17 +165,14 @@ class RemoteSecondary implements Secondary {
       SigningAlgoType? signingAlgoType,
       AtKeysIo? atKeysIo,
       AtConnection? connection,
-      SecondaryAddressFinder? secondaryAddressFinder}) {
+      SecondaryAddressFinder? secondaryAddressFinder,
+      AtLookUpFactory? lookUps}) {
     _atSign = AtUtils.fixAtSign(atSign);
     _secondaryAddressFinder = secondaryAddressFinder;
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
     _connection = connection;
     privateKey ??= preference.privateKey;
-    SecureSocketConfig secureSocketConfig = SecureSocketConfig()
-      ..decryptPackets = preference.decryptPackets
-      ..pathToCerts = preference.pathToCerts
-      ..tlsKeysSavePath = preference.tlsKeysSavePath;
     _atChops = atChops;
     _atKeysIo = atKeysIo;
     _privateKey = privateKey;
@@ -184,10 +182,9 @@ class RemoteSecondary implements Secondary {
     // _installAuthenticator supplies below from whichever of the four shapes
     // this client actually holds.
     this.atLookUp = atLookUp ??
-        AtLookUp.withSecureSocket(
+        (lookUps ?? defaultLookUps(preference))(
           atSign: atSign,
           rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
-          transport: secureSocketTransport(secureSocketConfig),
           authenticator: null,
           secondaryAddressFinder:
               secondaryAddressFinder ?? processSecondaryAddressFinder(),

@@ -40,6 +40,7 @@ class PkamDialog extends StatefulWidget {
     required this.preference,
     this.rootDomain,
     this.storage,
+    this.lookUps,
     this.onAuthenticationComplete,
     this.title,
     this.description,
@@ -52,6 +53,9 @@ class PkamDialog extends StatefulWidget {
   final AtClientPreference preference;
   final AtRootDomain? rootDomain;
   final AtClientStorage? storage;
+
+  /// Builds every connection the client opens; see `Atsign.open`.
+  final AtLookUpFactory? lookUps;
   final void Function(AtClient client)? onAuthenticationComplete;
   final String? title;
   final String? description;
@@ -67,6 +71,7 @@ class PkamDialog extends StatefulWidget {
     required AtClientPreference preference,
     AtRootDomain? rootDomain,
     AtClientStorage? storage,
+    AtLookUpFactory? lookUps,
     void Function(AtClient client)? onAuthenticationComplete,
     String? title,
     String? description,
@@ -80,6 +85,7 @@ class PkamDialog extends StatefulWidget {
         preference: preference,
         rootDomain: rootDomain,
         storage: storage,
+        lookUps: lookUps,
         onAuthenticationComplete: onAuthenticationComplete,
         title: title,
         description: description,
@@ -110,6 +116,7 @@ class _PkamDialogState extends State<PkamDialog> {
         keys: widget.keys,
         preference: under(widget.preference, widget.rootDomain),
         storage: widget.storage,
+        lookUps: widget.lookUps,
       );
       await _backUp();
       if (widget.onAuthenticationComplete != null) {

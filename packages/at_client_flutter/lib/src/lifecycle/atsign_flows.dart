@@ -26,12 +26,14 @@ class AtsignFlows {
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
     AtClientStorage? storage,
+    AtLookUpFactory? lookUps,
     void Function(ProgressEvent event)? onProgress,
   }) => Atsign(atSign).activate(
     cramSecret: cramSecret,
     keys: keys,
     preference: preference,
     storage: storage,
+    lookUps: lookUps,
     onProgress: onProgress,
   );
 
@@ -40,8 +42,10 @@ class AtsignFlows {
     required AtKeysIo keys,
     required AtClientPreference preference,
     AtClientStorage? storage,
-  }) =>
-      Atsign(atSign).open(keys: keys, preference: preference, storage: storage);
+    AtLookUpFactory? lookUps,
+  }) => Atsign(
+    atSign,
+  ).open(keys: keys, preference: preference, storage: storage, lookUps: lookUps);
 
   Future<PendingEnrollment?> resumeEnrollment(
     String atSign, {
@@ -49,11 +53,13 @@ class AtsignFlows {
     required String device,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
+    AtLookUpFactory? lookUps,
   }) => Atsign(atSign).resumeEnrollment(
     app: app,
     device: device,
     keys: keys,
     preference: preference,
+    lookUps: lookUps,
   );
 
   Future<PendingEnrollment> enroll(
@@ -66,6 +72,7 @@ class AtsignFlows {
     required AtClientPreference preference,
     SigningAlgoType? signingAlgo,
     EnrollmentKeyExchangeMode? keyExchangeMode,
+    AtLookUpFactory? lookUps,
   }) => Atsign(atSign).enroll(
     otp: otp,
     app: app,
@@ -75,6 +82,7 @@ class AtsignFlows {
     preference: preference,
     signingAlgo: signingAlgo,
     keyExchangeMode: keyExchangeMode,
+    lookUps: lookUps,
   );
 }
 

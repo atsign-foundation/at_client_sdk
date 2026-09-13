@@ -45,6 +45,7 @@ class CramDialog extends StatefulWidget {
     this.rootDomain,
     this.keys,
     this.storage,
+    this.lookUps,
     this.progressBuilder,
     this.onOnboardingComplete,
     this.title,
@@ -58,6 +59,10 @@ class CramDialog extends StatefulWidget {
   final AtRootDomain? rootDomain;
   final WrittenAtKeysIo? keys;
   final AtClientStorage? storage;
+
+  /// Builds every connection the activation and the client open; see
+  /// `Atsign.activate`.
+  final AtLookUpFactory? lookUps;
   final Widget Function(ProgressEvent)? progressBuilder;
   final void Function(AtClient client)? onOnboardingComplete;
   final String? title;
@@ -74,6 +79,7 @@ class CramDialog extends StatefulWidget {
     AtRootDomain? rootDomain,
     WrittenAtKeysIo? keys,
     AtClientStorage? storage,
+    AtLookUpFactory? lookUps,
     Widget Function(ProgressEvent)? progressBuilder,
     void Function(AtClient client)? onOnboardingComplete,
     String? title,
@@ -88,6 +94,7 @@ class CramDialog extends StatefulWidget {
         rootDomain: rootDomain,
         keys: keys,
         storage: storage,
+        lookUps: lookUps,
         progressBuilder: progressBuilder,
         onOnboardingComplete: onOnboardingComplete,
         title: title,
@@ -123,6 +130,7 @@ class _CramDialogState extends State<CramDialog> {
         keys: widget.keys ?? KeychainAtKeysIo(),
         preference: under(widget.preference, widget.rootDomain),
         storage: widget.storage,
+        lookUps: widget.lookUps,
         onProgress: _progress.add,
       );
       if (widget.onOnboardingComplete != null) {

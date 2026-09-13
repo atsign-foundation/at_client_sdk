@@ -382,11 +382,23 @@ final client = await Atsign('@alice').open(
   keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
   preference: AtClientPreference()..namespace = 'my_namespace'..syncRegex = 'my_namespace',
   storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
+  lookUps: secureSocketLookUps(),   // optional: how every connection is built
 );
 // Also: Atsign(a).activate(cramSecret:, keys:, preference:)  — onboard a new atSign
 //       Atsign(a).enroll(otp:, app:, device:, namespaces:, keys:, preference:) → PendingEnrollment
 //       Atsign(a).resumeEnrollment(app:, device:, keys:, preference:)         — after a restart
 ```
+
+**The platform bundle** is the three things every verb takes the same way:
+`keys:` (where the keys live), `storage:` (the local store) and `lookUps:`
+(an `AtLookUpFactory` that builds **every** connection the client opens: its
+own, its sync's, its monitor's). Omit `lookUps` for TLS on TCP with the
+defaults; pass `secureSocketLookUps(config: SecureSocketConfig()..pathToCerts
+= ...)` for TLS settings, `secureSocketLookUps(onConnect: ...)` for a proxy
+that needs `from:` first, or a factory of your own for another transport. The
+Flutter dialogs and `CLIBase` take `lookUps:` too. The preference's
+`decryptPackets`, `pathToCerts` and `tlsKeysSavePath` are deprecated in its
+favour.
 
 **Connection state — the client comes back whatever the network did:**
 
