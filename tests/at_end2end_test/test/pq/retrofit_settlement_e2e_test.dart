@@ -108,14 +108,13 @@ void main() {
 
   /// Authenticates as the LEGACY enrollment, from the pre-retrofit snapshot
   /// once one exists: the keys name the enrollment, so the live keyfile would
-  /// resolve the successor after a retrofit.
-  Future<AtAuthResponse> authenticateLegacy(String label) async {
+  /// resolve the successor after a retrofit. Hands back the enrollment id it
+  /// authenticated as; a refusal throws.
+  Future<String> authenticateLegacy(String label) async {
     final snapshot = preRetrofitPathFor(label);
     final path = File(snapshot).existsSync() ? snapshot : pathFor(label);
-    return AtAuth.create().authenticate(
-        AtAuthRequest(atSign, atKeysIo: FileAtKeysIo(filePath: (_) => path))
-          ..namespace = namespace
-          ..rootDomain = rootDomain());
+    return Atsign(atSign).authenticatesAs(
+        keys: FileAtKeysIo(filePath: (_) => path), rootDomain: rootDomain());
   }
 
   /// Retrofits [label] and gives the successor one authentication of its own,
@@ -125,12 +124,15 @@ void main() {
   /// there, in the same act that revokes the predecessor.
   Future<String> retrofit(String label) async {
     File(pathFor(label)).copySync(preRetrofitPathFor(label));
-    final session = (await AtAuth.create().authenticate(AtAuthRequest(atSign,
-            atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)))
-          ..namespace = namespace
-          ..rootDomain = rootDomain()))
-        .session!;
-    final manager = await selfRetrofit(
+    final keysIo = FileAtKeysIo(filePath: (_) => pathFor(label));
+    final session = AtAuthSession(
+        atSign: atSign,
+        rootDomain: rootDomain(),
+        atKeysIo: keysIo,
+        namespace: namespace,
+        enrollmentId: await Atsign(atSign)
+            .authenticatesAs(keys: keysIo, rootDomain: rootDomain()));
+    final client = await selfRetrofit(
       // Explicit because the parameter default is the RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
@@ -139,21 +141,17 @@ void main() {
       appName: 'cap-$label',
       deviceName: 'cap-$label-$runId',
       namespaces: {namespace: 'rw'},
-      manager: AtClientManager(atSign),
     );
-    expect(
-        AtClientImpl.signingAlgoOf(manager.atClient), SigningAlgoType.mldsa65,
+    expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65,
         reason: 'the retrofit itself must have succeeded, or the settlement '
             'is being attributed to a retrofit that never happened');
     expect(
-        await manager.atClient
-            .getRemoteSecondary()!
-            .executeCommand('scan\n', auth: true),
+        await client.getRemoteSecondary()!.executeCommand('scan\n', auth: true),
         startsWith('data:'),
         reason: 'the successor must authenticate on its own connection, '
             'because that is what settles the predecessor; a retrofit whose '
             'successor never authenticates settles nothing');
-    final successor = manager.atClient.enrollmentId;
+    final successor = client.enrollmentId;
     expect(successor, isNotNull,
         reason: 'the retrofitted client must know the enrollment it came up '
             'on, or the stamp below cannot be looked for anywhere');
@@ -193,8 +191,8 @@ void main() {
     expect(expiryOf(noneBefore), isNull,
         reason: 'the third parent must have NO expiry, or the arm that says '
             'it gains none is about a value that was already there');
-    expect((await authenticateLegacy('short')).isSuccessful, isTrue);
-    expect((await authenticateLegacy('long')).isSuccessful, isTrue);
+    expect(await authenticateLegacy('short'), shortId);
+    expect(await authenticateLegacy('long'), longId);
 
     final shortSuccessor = await retrofit('short');
 
@@ -243,7 +241,7 @@ void main() {
         reason: 'the superseded parent is refused as revoked the moment its '
             'successor has authenticated — there is no grace in which a copy '
             'of its keyfile goes on working');
-    expect((await authenticateLegacy('long')).isSuccessful, isTrue,
+    expect(await authenticateLegacy('long'), longId,
         reason: 'a sibling legacy enrollment that never retrofitted is '
             'unaffected, which is what makes the refusal above attributable '
             'to the settlement rather than to the environment');

@@ -34,12 +34,8 @@ void main() {
   });
 
   setUp(() async {
-    // Invoking 'setCurrentAtSign' in setUp method to set currentAtSign before each test.
-    atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
-        currentAtSign,
-        'wavi',
-        TestUtils.getPreference(currentAtSign, posture: PqPosture.legacy),
-        storage: TestUtils.storageFor(currentAtSign));
+    // The current atSign is set before each test.
+    atClientManager = await TestUtils.initAtClient(currentAtSign, 'wavi', posture: PqPosture.legacy);
   });
 
   test('notify updating of a key to sharedWith atSign - using await', () async {
@@ -201,11 +197,7 @@ void main() {
     // First off, let's initialize local storage and lastNotificationTime
     // for the receiving atSign
     logger.info('Switching to $sharedWithAtSign');
-    atClientManager = await atClientManager.setCurrentAtSign(
-        sharedWithAtSign,
-        'wavi',
-        TestUtils.getPreference(sharedWithAtSign, posture: PqPosture.legacy),
-        storage: TestUtils.storageFor(sharedWithAtSign));
+    atClientManager = await TestUtils.initAtClient(sharedWithAtSign, 'wavi', posture: PqPosture.legacy);
     atClientManager.atClient.notificationService.subscribe(regex: 'nothing');
 
     int? lnt;
@@ -224,11 +216,7 @@ void main() {
 
     logger.info('Switching to $currentAtSign');
     // Switch to the sending atSign
-    atClientManager = await atClientManager.setCurrentAtSign(
-        currentAtSign,
-        'wavi',
-        TestUtils.getPreference(currentAtSign, posture: PqPosture.legacy),
-        storage: TestUtils.storageFor(currentAtSign));
+    atClientManager = await TestUtils.initAtClient(currentAtSign, 'wavi', posture: PqPosture.legacy);
 
     logger.info('Sending notification');
     // And send a notification
@@ -244,11 +232,7 @@ void main() {
 
     logger.info('Switching to $sharedWithAtSign');
     // Switch to the receiving atSign
-    atClientManager = await atClientManager.setCurrentAtSign(
-        sharedWithAtSign,
-        'wavi',
-        TestUtils.getPreference(sharedWithAtSign, posture: PqPosture.legacy),
-        storage: TestUtils.storageFor(sharedWithAtSign));
+    atClientManager = await TestUtils.initAtClient(sharedWithAtSign, 'wavi', posture: PqPosture.legacy);
 
     logger.info('Subscribing to notifications');
     // and subscribe to notifications
@@ -273,11 +257,7 @@ void main() {
     const sendNamespace = 'sendlive.wavi';
     final sentValue = 'send-live-${Random().nextInt(1000000)}';
 
-    await AtClientManager.getInstance().setCurrentAtSign(
-        currentAtSign,
-        namespace,
-        TestUtils.getPreference(currentAtSign, posture: PqPosture.legacy),
-        storage: TestUtils.storageFor(currentAtSign));
+    await TestUtils.initAtClient(currentAtSign, namespace, posture: PqPosture.legacy);
 
     final notificationId = await AtClientManager.getInstance()
         .atClient
@@ -297,11 +277,7 @@ void main() {
             'field would put "$id" here — which no recipient regex matches');
 
     logger.info('Switching to $sharedWithAtSign');
-    atClientManager = await atClientManager.setCurrentAtSign(
-        sharedWithAtSign,
-        'wavi',
-        TestUtils.getPreference(sharedWithAtSign, posture: PqPosture.legacy),
-        storage: TestUtils.storageFor(sharedWithAtSign));
+    atClientManager = await TestUtils.initAtClient(sharedWithAtSign, 'wavi', posture: PqPosture.legacy);
 
     final received = Completer<String>();
     final subscription = atClientManager.atClient.notificationService
@@ -328,11 +304,7 @@ void main() {
 
   group('A group of tests for notification fetch', () {
     test('A test to verify non existent notification', () async {
-      await AtClientManager.getInstance().setCurrentAtSign(
-          currentAtSign,
-          namespace,
-          TestUtils.getPreference(currentAtSign, posture: PqPosture.legacy),
-          storage: TestUtils.storageFor(currentAtSign));
+      await TestUtils.initAtClient(currentAtSign, namespace, posture: PqPosture.legacy);
       var notificationResult = await AtClientManager.getInstance()
           .atClient
           .notificationService
@@ -342,11 +314,7 @@ void main() {
     });
 
     test('A test to verify the notification expiry', () async {
-      await AtClientManager.getInstance().setCurrentAtSign(
-          currentAtSign,
-          namespace,
-          TestUtils.getPreference(currentAtSign, posture: PqPosture.legacy),
-          storage: TestUtils.storageFor(currentAtSign));
+      await TestUtils.initAtClient(currentAtSign, namespace, posture: PqPosture.legacy);
       for (int i = 0; i < 10; i++) {
         logger.info('Testing notification expiry - test run #$i');
         var atKey = (AtKey.shared('test-notification-expiry',

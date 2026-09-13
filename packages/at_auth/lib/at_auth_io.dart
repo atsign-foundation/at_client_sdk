@@ -15,9 +15,11 @@
 /// import 'package:at_auth/at_auth_io.dart';
 ///
 /// retrofitSerializer = fileRetrofitSerializer;      // lock the keyfile
-/// final request = AtAuthRequest(atSign,
-///     atKeysIo: FileAtKeysIo(),                     // read keys from disk
-///     probeSocket: secureSocketProbe);              // TLS-handshake probe
+/// final enrollmentId = await activateAtSign(
+///     atSign: atSign,
+///     cramSecret: secret,
+///     keys: FileAtKeysIo(),                         // write keys to disk
+///     signingAlgo: SigningAlgoType.rsa2048);
 /// ```
 ///
 /// Each has a working default without this barrel — no serialiser, no keyfile,

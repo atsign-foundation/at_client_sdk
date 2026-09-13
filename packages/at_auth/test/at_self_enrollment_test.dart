@@ -280,7 +280,9 @@ void main() {
     final denials = commands.where((c) => c.startsWith('enroll:deny')).toList();
     expect(denials, hasLength(1),
         reason: 'the abort must deny the enrollment it just created');
-    expect(denials.single, contains('new-123'));
+    // FROZEN: the same command at_client's `client.enrollments.deny` sends,
+    // built through the one EnrollVerbBuilder; the atServer parses this.
+    expect(denials.single, 'enroll:deny:{"enrollmentId":"new-123"}\n');
   });
 
   test(

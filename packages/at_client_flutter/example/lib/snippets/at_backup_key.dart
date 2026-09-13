@@ -1,10 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_commons/atsign.dart';
 import 'package:at_file_saver/at_file_saver.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:file_picker/file_picker.dart';
@@ -193,25 +190,29 @@ class BackupKeyWidget extends StatelessWidget {
       } else if (Platform.isIOS) {
         if (context.mounted) {
           var size = MediaQuery.of(context).size;
-          await Share.shareXFiles(
-            [XFile(tempFilePath)],
-            sharePositionOrigin: Rect.fromLTWH(
-              0,
-              0,
-              size.width,
-              size.height / 2,
-            ),
-          ).then((ShareResult shareResult) {
-            if (shareResult.status == ShareResultStatus.success &&
-                context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('File saved successfully')),
-              );
-            }
-          });
+          await SharePlus.instance
+              .share(
+                ShareParams(
+                  files: [XFile(tempFilePath)],
+                  sharePositionOrigin: Rect.fromLTWH(
+                    0,
+                    0,
+                    size.width,
+                    size.height / 2,
+                  ),
+                ),
+              )
+              .then((ShareResult shareResult) {
+                if (shareResult.status == ShareResultStatus.success &&
+                    context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('File saved successfully')),
+                  );
+                }
+              });
         }
       } else {
-        final path = await FilePicker.platform.saveFile(
+        final path = await FilePicker.saveFile(
           fileName: '$atsign${Strings.keyFileName}',
         );
         if (path == null) return;
@@ -258,16 +259,26 @@ class BackupKeyWidget extends StatelessWidget {
 
   void shareFile({required BuildContext context, required String path}) async {
     var size = MediaQuery.of(context).size;
-    await Share.shareXFiles(
-      [XFile(path)],
-      sharePositionOrigin: Rect.fromLTWH(0, 0, size.width, size.height / 2),
-    ).then((ShareResult shareResult) {
-      if (shareResult.status == ShareResultStatus.success && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File saved successfully')),
-        );
-      }
-    });
+    await SharePlus.instance
+        .share(
+          ShareParams(
+            files: [XFile(path)],
+            sharePositionOrigin: Rect.fromLTWH(
+              0,
+              0,
+              size.width,
+              size.height / 2,
+            ),
+          ),
+        )
+        .then((ShareResult shareResult) {
+          if (shareResult.status == ShareResultStatus.success &&
+              context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('File saved successfully')),
+            );
+          }
+        });
   }
 
   static Future<String?> getDownloadPath() async {

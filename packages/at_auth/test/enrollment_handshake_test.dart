@@ -334,7 +334,6 @@ void main() {
       expect(AtEnrollment.defaultRetryInterval, const Duration(seconds: 2));
       expect(AtEnrollment.defaultMaxRetries, 15);
       expect(AtEnrollment.defaultLogProgress, true);
-      expect(AtEnrollment.defaultOtpExpiry, const Duration(minutes: 5));
     });
 
     test('is what a caller stating no preference actually gets', () async {

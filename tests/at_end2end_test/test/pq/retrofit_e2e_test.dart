@@ -119,16 +119,21 @@ void main() {
     return response.enrollmentId;
   }
 
+  /// The legacy enrollment's session, authenticated first: the connection the
+  /// retrofit submits on IS the retrofit's authority, so a keyfile that
+  /// cannot authenticate has no retrofit to attempt.
   Future<AtAuthSession> legacySession(String label) async {
-    final auth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
-        atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)))
-      ..namespace = namespace
-      ..rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'],
-          ConfigUtil.getYaml()['root_server']['port'] ?? 64));
-    expect(auth.isSuccessful, true,
-        reason: 'the legacy enrollment must authenticate before it can '
-            'retrofit — that connection IS the retrofit\'s authority');
-    return auth.session!;
+    final keysIo = FileAtKeysIo(filePath: (_) => pathFor(label));
+    final rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'],
+        ConfigUtil.getYaml()['root_server']['port'] ?? 64);
+    final enrollmentId = await Atsign(atSign)
+        .authenticatesAs(keys: keysIo, rootDomain: rootDomain);
+    return AtAuthSession(
+        atSign: atSign,
+        rootDomain: rootDomain,
+        atKeysIo: keysIo,
+        namespace: namespace,
+        enrollmentId: enrollmentId);
   }
 
   /// The published root's bytes, or null when the atSign has none.
@@ -162,23 +167,19 @@ void main() {
     // The clone B1.2 uses, taken while the keyfile is still pre-PQ.
     File(pathFor('e1')).copySync(pathFor('e1c'));
 
-    final manager = await selfRetrofit(
+    final client = await selfRetrofit(
       // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
-      // Its own store location: the owner client holds the atSign's, and a
-      // dedicated manager carries nothing across, so this is a second
-      // principal rather than a succession.
+      // Its own store location: the owner client holds the atSign's, and
+      // nothing carries across, so this is a second principal rather than a
+      // succession, opened beside the owner client.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e1-$runId'),
       appName: 'rf-e1',
       deviceName: 'rf-e1-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw'},
-      // A dedicated manager keeps the owner client live alongside — through
-      // the singleton, switching would stop it.
-      manager: AtClientManager(atSign),
     );
-    final client = manager.atClient;
     privileged = client;
     privilegedKeysIo = session.atKeysIo;
 
@@ -239,7 +240,7 @@ void main() {
     // The clone authenticates as the SAME legacy enrollment as B1.1's
     // original — that is what makes it a clone rather than another device.
     final cloneSession = await legacySession('e1c');
-    final manager = await selfRetrofit(
+    final clone = await selfRetrofit(
       // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: cloneSession,
@@ -253,9 +254,7 @@ void main() {
       appName: 'rf-e1',
       deviceName: 'rf-e1-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw'},
-      manager: AtClientManager(atSign),
     );
-    final clone = manager.atClient;
 
     expect(clone.enrollmentId, isNotNull);
     expect(clone.enrollmentId, isNot(cloneSession.enrollmentId),
@@ -371,7 +370,6 @@ void main() {
           appName: 'rf-e2',
           deviceName: 'rf-e2-esc-$runId',
           namespaces: {'*': 'rw', '__manage': 'rw'},
-          manager: AtClientManager(atSign),
         ),
         throwsA(anything),
         reason: 'without this refusal any scoped keyfile could self-spawn a '
@@ -379,7 +377,7 @@ void main() {
             'privilege-escalation verb rather than an upgrade');
 
     final session = await legacySession('e2');
-    final manager = await selfRetrofit(
+    final scoped = await selfRetrofit(
       // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
@@ -388,9 +386,7 @@ void main() {
       appName: 'rf-e2',
       deviceName: 'rf-e2-$runId',
       namespaces: {namespace: 'rw'},
-      manager: AtClientManager(atSign),
     );
-    final scoped = manager.atClient;
 
     expect(scoped.enrollmentId, isNot(session.enrollmentId));
     expect(AtClientImpl.signingAlgoOf(scoped), SigningAlgoType.mldsa65,

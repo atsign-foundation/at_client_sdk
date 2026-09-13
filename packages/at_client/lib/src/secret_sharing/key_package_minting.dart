@@ -3,16 +3,16 @@ import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
     show
-        AtEnrollment,
         AtKeys,
         CryptographicMaterialAlgorithm,
         CryptographicMaterial,
         CryptographicMaterialRole,
-        EnrollmentUpdateRequest,
         KeyEntryStatus,
         CryptographicMaterialStatus,
         WrittenAtKeysIo;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/enroll/enrollment_update_request.dart';
+import 'package:at_client/src/enroll/enrollment_updater.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -51,8 +51,8 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// list already holds every algorithm it names and finds nothing to do.
 @experimental
 class KeyPackageMinting with ApkamSigning {
-  KeyPackageMinting(this.atClient, {AtEnrollment? enrollment})
-      : _enrollment = enrollment ?? AtEnrollment.create();
+  KeyPackageMinting(this.atClient, {EnrollmentUpdater? updater})
+      : _updater = updater ?? EnrollmentUpdater();
 
   @override
   final AtClient atClient;
@@ -60,7 +60,7 @@ class KeyPackageMinting with ApkamSigning {
   @override
   final AtSignLogger logger = AtSignLogger('KeyPackageMinting');
 
-  final AtEnrollment _enrollment;
+  final EnrollmentUpdater _updater;
 
   /// Mints, files and advertises an encapsulation keypair for every algorithm
   /// the configured list names and this enrollment lacks; retires every one it
@@ -280,7 +280,7 @@ class KeyPackageMinting with ApkamSigning {
       createdAt: DateTime.now().toUtc(),
       keys: keys,
     );
-    await _enrollment.update(
+    await _updater.update(
         EnrollmentUpdateRequest(
           enrollmentId: enrolment,
           metadata: {

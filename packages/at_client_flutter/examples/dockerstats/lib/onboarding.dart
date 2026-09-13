@@ -1,4 +1,3 @@
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/extensions.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -20,26 +19,25 @@ Future<bool> loginWithKeychain(BuildContext context) async {
     return false;
   }
 
-  final request = await AtSignSelectionDialog.show(
+  final selection = await AtSignSelectionDialog.show(
     context,
     existingAtSigns: atSigns,
   );
-  if (request == null || !context.mounted) return false;
+  if (selection == null || !context.mounted) return false;
 
-  final authRequest = AtAuthRequest(
-    request.atSign,
-    atKeysIo: KeychainAtKeysIo(),
-    rootDomain: request.rootDomain,
-  );
-  final response = await PkamDialog.show(
+  final storage = await _storage(selection.atSign);
+  if (!context.mounted) return false;
+  final client = await PkamDialog.show(
     context,
-    request: authRequest,
-    backupKeys: [KeychainAtKeysIo()],
+    atSign: selection.atSign,
+    rootDomain: selection.rootDomain,
+    keys: KeychainAtKeysIo(),
+    preference: _preference(),
+    storage: storage,
   );
-  final session = response?.session;
-  if (session == null) return false;
+  if (client == null) return false;
 
-  await _setupAtClient(session);
+  _adopt(client);
   return true;
 }
 
@@ -47,56 +45,49 @@ Future<bool> loginWithFile(BuildContext context) async {
   final atKeysIo = await AtKeysFileDialog.show(context);
   if (atKeysIo == null || !context.mounted) return false;
 
-  final authRequest = AtAuthRequest(
-    atKeysIo.getAtsign(),
-    atKeysIo: atKeysIo,
-    rootDomain: AtRootDomain.atsignDomain,
-  );
-  final response = await PkamDialog.show(
+  final atSign = atKeysIo.getAtsign();
+  final storage = await _storage(atSign);
+  if (!context.mounted) return false;
+  // backupKeys: the file's keys are copied into the keychain once the client
+  // is open, so the next login can come from the keychain.
+  final client = await PkamDialog.show(
     context,
-    request: authRequest,
+    atSign: atSign,
+    keys: atKeysIo,
+    preference: _preference(),
+    storage: storage,
     backupKeys: [KeychainAtKeysIo()],
   );
-  final session = response?.session;
-  if (session == null) return false;
+  if (client == null) return false;
 
-  await _setupAtClient(session);
+  _adopt(client);
   return true;
 }
 
 Future<bool> loginWithApkam(BuildContext context) async {
-  final request = await AtSignSelectionDialog.show(context);
-  if (request == null || !context.mounted) return false;
+  final selection = await AtSignSelectionDialog.show(context);
+  if (selection == null || !context.mounted) return false;
 
-  final enrollmentResponse = await ApkamActivationDialog.show(
+  final storage = await _storage(selection.atSign);
+  if (!context.mounted) return false;
+  // The dialog submits the enrollment request, waits for an enrolled client
+  // to approve it, and hands back the client that opens on the approved
+  // keys. Those keys are filed in the keychain, which is also where a request
+  // submitted earlier for this app and device is resumed from.
+  final client = await ApkamActivationDialog.show(
     context,
-    atSign: request.atSign,
-    rootDomain: request.rootDomain,
+    atSign: selection.atSign,
+    rootDomain: selection.rootDomain,
     appName: _namespace,
     deviceName: 'default',
     namespaces: {_namespace: 'rw'},
-    // Where this enrollment's keys land. The enrolled app holds the only
-    // copy, so the destination is the app's choice; at_auth writes the
-    // completed keyset there once the approval releases it.
-    atKeysIo: KeychainAtKeysIo(),
+    preference: _preference(),
+    keys: KeychainAtKeysIo(),
+    storage: storage,
   );
-  final enrolled = enrollmentResponse?.session;
-  if (enrolled == null || !context.mounted) return false;
+  if (client == null) return false;
 
-  final authRequest = AtAuthRequest(
-    request.atSign,
-    atKeysIo: enrolled.atKeysIo,
-    rootDomain: request.rootDomain,
-  );
-  final response = await PkamDialog.show(
-    context,
-    request: authRequest,
-    backupKeys: [KeychainAtKeysIo()],
-  );
-  final session = response?.session;
-  if (session == null) return false;
-
-  await _setupAtClient(session);
+  _adopt(client);
   return true;
 }
 
@@ -104,28 +95,27 @@ Future<void> logout() async {
   AtClientManager.getInstance().reset();
 }
 
-/// Every flow here hands authentication a key source, so it always answers
-/// with a session — and the client rebuilds its own connection from the
-/// session's source rather than adopting auth's live objects.
-Future<void> _setupAtClient(AtAuthSession session) async {
+AtClientPreference _preference() => AtClientPreference()
+  ..namespace = _namespace
+  ..fetchOfflineNotifications = false;
+
+/// Where this app keeps [atSign]'s local store. closedByClient: the app picks
+/// the backend and the location, and the client still closes the store when
+/// it stops, so there is nothing to tear down.
+Future<HiveAtClientStorage> _storage(String atSign) async {
   final dir = await getApplicationSupportDirectory();
-  final acp = AtClientPreference()
-    ..namespace = _namespace
-    ..fetchOfflineNotifications = false;
-  // closedByClient: the app picks the backend and the location, and the client
-  // still closes the store when it stops, so there is nothing to tear down.
-  final storage = HiveAtClientStorage(
-    atSign: session.atSign,
+  return HiveAtClientStorage(
+    atSign: atSign,
     storagePath: dir.path,
     closedByClient: true,
   );
+}
 
-  await AtClientManager.getInstance().fromAuthSession(
-    session,
-    acp,
-    storage: storage,
-  );
-  _log.info('atClient ready for ${session.atSign}');
+/// Every dialog hands back a client the app owns. This app keeps one current
+/// client in [AtClientManager], since its screens read it from there.
+void _adopt(AtClient client) {
+  AtClientManager.getInstance().use(client);
+  _log.info('atClient ready for ${client.getCurrentAtSign()}');
 }
 
 void _snack(BuildContext context, String message) {

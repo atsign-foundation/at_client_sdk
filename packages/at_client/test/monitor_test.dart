@@ -149,6 +149,49 @@ void main() {
 
   tearDown(() async => muxable.dispose());
 
+  group('the client connection state', () {
+    late AtConnection connection;
+
+    setUp(() {
+      connection = AtConnection(
+          atSign: '@alice',
+          attempt: (_) async =>
+              AtConnectionState.offline(AtConnectionCause.unattempted));
+      monitor = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference(),
+        lookUp: muxable,
+        handleNotification: (String n) async => received.add(n),
+        getLastNotificationTime: () async => null,
+        connection: connection,
+      );
+      monitor.logger.level = 'severe';
+    });
+
+    test('is told online when the monitor reaches listening', () async {
+      expect(connection.current.isOnline, isFalse);
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(monitor.currentState, NotificationListenerState.listening);
+      expect(connection.current.isOnline, isTrue,
+          reason: 'a monitor that is receiving is an authenticated connection '
+              'to the atServer');
+    });
+
+    test('is not told offline when the connection drops', () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.dropConnection();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(monitor.currentState, NotificationListenerState.notConnected);
+      expect(connection.current.isOnline, isTrue,
+          reason: 'a dropped monitor says nothing about whether the atServer '
+              'is reachable; the next failing verb does');
+    });
+  });
+
   group('start', () {
     test('reaches listening, and passes a null watermark through', () async {
       monitor.start();

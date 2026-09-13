@@ -215,7 +215,7 @@ void main() {
       //       the signing root signs and never receives an encapsulation — so a
       //       namespace with no nskey has no PQ path at all. The failure is a
       //       distinct exception naming the namespace, not a generic encryption
-      //       error. With the legacy fallback opted in (final 3.x only) the
+      //       error. With the legacy fallback opted in (any posture below pqActive) the
       //       write proceeds with the legacy provider, and every SUBSEQUENT write uses the
       //       nskey once it exists; records already written stay legacy-encrypted, and
       //       re-encrypting them is an explicit migration. Rare in practice:

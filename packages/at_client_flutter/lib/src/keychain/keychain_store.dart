@@ -1,7 +1,6 @@
 import 'package:package_info_plus/package_info_plus.dart';
 
 const _atKeysStoreName = '@atsigns';
-const _enrollmentStoreName = '@enrollment';
 const _sppStoreName = '@spp';
 String? _packageInfo;
 
@@ -19,14 +18,6 @@ class AtKeysStore extends KeychainStore {
   static Future<String> getName() async {
     String packageName = await getPackageName();
     return '${_atKeysStoreName}_$packageName';
-  }
-}
-
-class EnrollmentStore extends KeychainStore {
-  final String atSign;
-  const EnrollmentStore(this.atSign);
-  String getName() {
-    return '${atSign}_$_enrollmentStoreName';
   }
 }
 

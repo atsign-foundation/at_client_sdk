@@ -6,6 +6,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_commons/at_commons.dart';
@@ -979,20 +980,31 @@ class LocalSecondary implements Secondary {
   }
 
   /// The enrollment record for the enrollment this client authenticates as,
-  /// memoised for the life of this object. Null when the client holds no
-  /// enrollment id — it is authenticating with the atSign's own keys and has
-  /// no id to fetch a record by.
+  /// memoised for the life of this object once the atServer has answered.
+  /// Null when the client holds no enrollment id — it is authenticating with
+  /// the atSign's own keys and has no id to fetch a record by.
   ///
   /// Shared rather than re-fetched: two readers of one record are two chances
   /// to describe it differently, so a second caller reuses this memo instead
-  /// of issuing its own `enroll:fetch`.
-  Future<Enrollment?> getEnrollmentDetails() async =>
-      enrollment ??= await _getEnrollmentDetails();
+  /// of issuing its own `enroll:fetch`. A record read from the keyfile while
+  /// the atServer was unreachable is not the memo: the next caller asks the
+  /// atServer again, so a grant that changed while offline is noticed as soon
+  /// as the network is back.
+  Future<Enrollment?> getEnrollmentDetails() async {
+    if (enrollment != null && !_enrollmentIsFromKeyfile) return enrollment;
+    return enrollment = await _getEnrollmentDetails();
+  }
 
-  /// Always goes to the atServer, so that a grant changed since the last start
-  /// is noticed; there is deliberately no durable cache. The only reuse is the
-  /// in-memory memo in [getEnrollmentDetails], which makes this one fetch per
-  /// client rather than per call.
+  /// Whether [enrollment] was read from the keyfile's snapshot rather than
+  /// fetched, so that [getEnrollmentDetails] retries the fetch.
+  bool _enrollmentIsFromKeyfile = false;
+
+  /// Goes to the atServer, so that a grant changed since the last start is
+  /// noticed, and only when no atServer can be reached falls back to the
+  /// grants the keyfile last recorded — the snapshot the client's startup
+  /// refreshes on every authenticated start. A refusal is not a fallback
+  /// case: an atServer that answered and said no has decided, and the
+  /// keyfile's copy does not outrank it.
   Future<Enrollment?> _getEnrollmentDetails() async {
     if (isAtSignCredential(_atClient.enrollmentId)) {
       return null;
@@ -1013,10 +1025,23 @@ class LocalSecondary implements Secondary {
     }
 
     if (enrollmentInfoFromServer == null) {
+      final fromKeyfile = fetchFailure == null ||
+              classifyConnectionFailure(fetchFailure)?.isOffline != true
+          ? null
+          : await _enrollmentFromKeyfile();
+      if (fromKeyfile != null) {
+        _logger.warning('Could not fetch the enrollment record for '
+            '${_atClient.enrollmentId} ($fetchFailure); authorising from the '
+            'grants the keyfile last recorded, ${fromKeyfile.namespace}, until '
+            'the atServer can be reached');
+        _enrollmentIsFromKeyfile = true;
+        return fromKeyfile;
+      }
       throw AtKeyNotFoundException('Failed to fetch the enrollment record for '
           '${_atClient.enrollmentId} from the atServer'
           '${fetchFailure == null ? '' : ': $fetchFailure'}');
     }
+    _enrollmentIsFromKeyfile = false;
 
     enrollmentInfoFromServer =
         enrollmentInfoFromServer.replaceFirst(RegExp('^data:'), '');
@@ -1035,6 +1060,32 @@ class LocalSecondary implements Secondary {
           'Enrollment key for enrollmentId: ${_atClient.enrollmentId} not found in server');
     }
     return enrollment!;
+  }
+
+  /// The grants the keyfile recorded for this enrollment, as an [Enrollment]
+  /// with no status, or null when the keyfile holds no snapshot for it: a
+  /// keyfile written before snapshots existed, on a client that has not yet
+  /// had an authenticated start to record one.
+  Future<Enrollment?> _enrollmentFromKeyfile() async {
+    final keysIo = _atClient.atKeysIo;
+    final enrollmentId = _atClient.enrollmentId;
+    if (keysIo == null || enrollmentId == null) return null;
+    final AtKeys keys;
+    try {
+      keys = await keysIo.read(_atClient.getCurrentAtSign()!);
+    } on Exception catch (e) {
+      _logger.warning('Could not read the keyfile for its enrollment '
+          'snapshot: $e');
+      return null;
+    }
+    final snapshot = keys.enrollmentInfo(enrollmentId);
+    final grants = snapshot?.namespaces;
+    if (grants == null) return null;
+    return Enrollment()
+      ..enrollmentId = enrollmentId
+      ..appName = snapshot!.appName
+      ..deviceName = snapshot.deviceName
+      ..namespace = Map<String, dynamic>.from(grants);
   }
 
   bool _isReadAllowed(VerbBuilder verbBuilder, String access) {
