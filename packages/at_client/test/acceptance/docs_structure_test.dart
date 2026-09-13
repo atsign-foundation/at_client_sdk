@@ -37,6 +37,45 @@ Set<String> _headingSlugs(String markdown) =>
         .map((m) => _slug(m.group(1)!))
         .toSet();
 
+/// The anchors GitHub actually offers for [markdown]: every heading's slug,
+/// with a repeated slug suffixed `-1`, `-2` in order of appearance, which is
+/// how a link to the second "The ruling" under a numbered section resolves.
+/// [_headingSlugs] collapses repeats and is right for the checks that want
+/// the set of distinct headings; this one is right for resolving links.
+Set<String> _anchorSlugs(String markdown) {
+  final seen = <String, int>{};
+  final anchors = <String>{};
+  for (final m
+      in RegExp(r'^#{1,6}\s+(.*?)\s*$', multiLine: true).allMatches(markdown)) {
+    final slug = _slug(m.group(1)!);
+    final n = seen.update(slug, (v) => v + 1, ifAbsent: () => 0);
+    anchors.add(n == 0 ? slug : '$slug-$n');
+  }
+  return anchors;
+}
+
+/// Strips fenced blocks and then code spans, because a `](target)` inside
+/// either is a quotation of link syntax rather than a link — the PQ detail
+/// files describe past link repairs in exactly that form.
+String _withoutCode(String s) =>
+    _withoutCodeSpans(s.replaceAll(RegExp(r'```.*?```', dotAll: true), ''));
+
+/// The Markdown files under `docs/` that git tracks, so a gitignored draft
+/// present in one checkout cannot redden the rail there and nowhere else.
+List<File> _trackedDocs() {
+  final root = repoRoot();
+  final ls =
+      Process.runSync('git', ['-C', root.path, 'ls-files', '--', 'docs']);
+  if (ls.exitCode != 0) {
+    throw StateError('git ls-files failed: ${ls.stderr}');
+  }
+  return (ls.stdout as String)
+      .split('\n')
+      .where((p) => p.endsWith('.md'))
+      .map((p) => File('${root.path}/$p'))
+      .toList();
+}
+
 const _liveFiles = <String>[
   'decisions.md',
   'implementation-plan.md',
@@ -96,6 +135,110 @@ void main() {
                 'the later one is often the fresher');
       });
     }
+  });
+
+  group('every link in the doc set resolves', () {
+    // A heading renamed in one file breaks links from every other silently;
+    // this is the check that reads the target. Links to the web are not
+    // resolved, and a target inside a code span or a fence is prose about a
+    // link rather than one.
+    test('every relative link reaches a file, and every anchor a heading', () {
+      final docs = _trackedDocs();
+      final anchorsOf = <String, Set<String>>{};
+      final broken = <String>[];
+      var checked = 0;
+      for (final doc in docs) {
+        final lines = _withoutCode(doc.readAsStringSync()).split('\n');
+        for (var i = 0; i < lines.length; i++) {
+          for (final m in RegExp(r'\]\(([^)\s]+)\)').allMatches(lines[i])) {
+            final target = m.group(1)!;
+            if (target.startsWith('http') || target.startsWith('mailto:')) {
+              continue;
+            }
+            checked++;
+            final hash = target.indexOf('#');
+            final path = hash < 0 ? target : target.substring(0, hash);
+            final anchor = hash < 0 ? '' : target.substring(hash + 1);
+            final file = path.isEmpty
+                ? doc
+                : File(
+                    Uri.file(doc.parent.path + '/').resolve(path).toFilePath());
+            final where = '${doc.path.substring(repoRoot().path.length + 1)}:'
+                '${i + 1} -> $target';
+            final kind = FileSystemEntity.typeSync(file.path);
+            if (kind == FileSystemEntityType.notFound) {
+              broken.add('$where (no such file)');
+              continue;
+            }
+            // A directory link renders as a listing and carries no headings.
+            if (anchor.isEmpty || kind == FileSystemEntityType.directory) {
+              continue;
+            }
+            final anchors = anchorsOf.putIfAbsent(
+                file.path, () => _anchorSlugs(file.readAsStringSync()));
+            if (!anchors.contains(anchor)) {
+              broken.add('$where (no such heading)');
+            }
+          }
+        }
+      }
+      expect(docs, isNotEmpty, reason: 'git ls-files found no docs');
+      expect(checked, greaterThan(100),
+          reason: 'only $checked links found across ${docs.length} docs, so '
+              'the link pattern is not matching what the docs write');
+      expect(broken, isEmpty,
+          reason: 'a link reaches nothing. Renamed heading: update every '
+              'link to it (grep the old slug). Moved or deleted file: repoint '
+              'or unlink; a name kept as plain text loses nothing. A target '
+              'outside this repository is broken for everyone but its author.'
+              '\n  ${broken.join('\n  ')}');
+    });
+  });
+
+  group('every table row has its header\'s cell count', () {
+    // A row with the wrong count still RENDERS, with its content in the wrong
+    // column or silently dropped past the header, so nothing but a count sees
+    // it. An unescaped `|` inside a code span splits the cell too; `\|` does
+    // not. A one-cell row is a deliberate band or caption and is exempt.
+    test('no table row is malformed', () {
+      final docs = _trackedDocs();
+      int cells(String line) => RegExp(r'(?<!\\)\|').allMatches(line).length;
+      final malformed = <String>[];
+      var rows = 0;
+      for (final doc in docs) {
+        final lines = doc.readAsStringSync().split('\n');
+        final where = doc.path.substring(repoRoot().path.length + 1);
+        var i = 0;
+        while (i < lines.length) {
+          final isHeader = lines[i].startsWith('|') &&
+              i + 1 < lines.length &&
+              RegExp(r'^\|\s*:?-{2,}').hasMatch(lines[i + 1]);
+          if (!isHeader) {
+            i++;
+            continue;
+          }
+          final expected = cells(lines[i]);
+          i += 2;
+          while (i < lines.length && lines[i].startsWith('|')) {
+            rows++;
+            final n = cells(lines[i]);
+            if (n != expected && n != 2) {
+              malformed.add('$where:${i + 1} has ${n - 1} cells, header has '
+                  '${expected - 1}');
+            }
+            i++;
+          }
+        }
+      }
+      expect(rows, greaterThan(100),
+          reason: 'only $rows table rows found across ${docs.length} docs, so '
+              'the table pattern is not matching what the docs write');
+      expect(malformed, isEmpty,
+          reason: 'a table row does not match its header. Rebuild the row '
+              'from its cells rather than appending to it, and escape any '
+              'literal pipe as \\|, code spans included:'
+              '\n  ${malformed.join('\n  ')}');
+    });
   });
 
   group('the ledger index and its bodies stay in step', () {
@@ -327,7 +470,8 @@ void main() {
   group('a row that says owed does not point at a section that says done', () {
     // The check is deliberately one-directional: a section with no done marker
     // is not evidence of anything, so only "row says owed, body says done" is
-    // a failure. On an intended change, move the row — do not soften the body.
+    // a failure. On an intended change, delete the row — do not soften the
+    // body.
     test('no TODO row names a section whose body declares itself done', () {
       final plan = _read('implementation-plan.md');
       final detail = _read('detail/implementation-plan.md');
@@ -373,6 +517,38 @@ void main() {
               'row records a rejected proposal or a measurement that closed a '
               'question, that is not "done" — promote it to decisions.md, '
               'because no commit can contain a thing that was never built:'
+              '\n  ${wrong.join('\n  ')}');
+    });
+
+    // The rows in the P0-P3 bands name no section, so the check above never
+    // sees them; a done marker inside such a row's own cells is the same
+    // defect. On 2026-09-11 a P1 row sat for two days with ✅ DONE in its
+    // cell, invisible from the heading, and two rows were inserted beside it.
+    test('no TODO row carries a done marker in its own cells', () {
+      final plan = _read('implementation-plan.md');
+      final todoStart = plan.indexOf('\n## TODO\n') + '\n## TODO\n'.length;
+      expect(todoStart, greaterThan(0), reason: 'the TODO table did not parse');
+      final rest = plan.substring(todoStart);
+      final todo = rest.substring(0, rest.indexOf('\n## '));
+
+      final rows = RegExp(r'^\| \*\*(.+?)\*\*.*$', multiLine: true)
+          .allMatches(todo)
+          .toList();
+      expect(rows, isNotEmpty, reason: 'no bold-titled TODO rows parsed');
+
+      final done = RegExp(r'✅|\bDONE\b|\bCOMPLETE\b|\bCLOSED\b');
+      final wrong = <String>[];
+      for (final row in rows) {
+        final hit = done.firstMatch(_withoutCodeSpans(row.group(0)!));
+        if (hit != null) {
+          wrong.add('"${row.group(1)}" carries "${hit.group(0)}"');
+        }
+      }
+      expect(wrong, isEmpty,
+          reason: 'a TODO row says, in its own cells, that something is done. '
+              'If the whole item is done, DELETE the row. If half is done, '
+              'reword the row to name only what is still owed - the done half '
+              'is in git log - so the heading says what the cell says:'
               '\n  ${wrong.join('\n  ')}');
     });
   });

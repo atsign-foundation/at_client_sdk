@@ -738,8 +738,9 @@ abstraction and the spike's `HiveInstances.forPath(path)` default together, and 
 references to a `plans/wasm/` directory that does not exist. ⚠️ **Recorded as "nine dangling
 links" until 2026-09-07, and both halves of that were wrong** (corrected on the spike
 2026-09-06, and this copy had not caught up): it is ten lines, one of which names two files,
-and only **two** of the ten are markdown links — in `implementation-plan.md`'s T-series rows.
-The other eight are prose references that no link checker sees: `decisions.md` ×3,
+and the **two** that were markdown links, in `implementation-plan.md`'s T-series rows, were
+unlinked on 2026-09-12 when a link resolver joined the doc rails, so all ten are now
+prose references that no link checker sees: `decisions.md` ×3, `implementation-plan.md` ×2,
 `js-api.md` ×5.
 
 ### Post-merge fix-forward — the analysis, so none of it is re-derived
@@ -1023,7 +1024,7 @@ Now verified **by execution** under T2.3 rather than by compile.
 
 ## 8. Phase 6 — the JS/TS facade (J)
 
-Design in [`js-api.md`](js-api.md) and [`plans/wasm/api-designing.md`](../../../plans/wasm/api-designing.md)
+Design in [`js-api.md`](js-api.md) and `plans/wasm/api-designing.md` (a planning note outside this repository)
 (the Dart-side Layer A/B/C split); rulings D-7..D-11 in [`decisions.md`](decisions.md).
 Builds on W1. Adds no Dart package — everything lands inside `at_client_web`.
 
@@ -1059,7 +1060,7 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
   `'unknown'` event, never drop it or throw. → T6.5
 - **J4 — The TS-supplied `KeyStore` seam.** Adapt a JS object behind the Dart storage
   interface, so Node consumers supply storage without a Dart package. Owned jointly with
-  [`plans/wasm/key-storage.md`](../../../plans/wasm/key-storage.md). → T6.6
+  `plans/wasm/key-storage.md` (outside this repository). → T6.6
 - **J5 — Entry point.** `packages/at_client_web/web/at_client_js.dart` — the `main()`
   that installs the facade on the global scope. Compiled with `dart compile js`; keep the
   dart2wasm build green in CI to preserve the option.
