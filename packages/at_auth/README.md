@@ -252,6 +252,43 @@ All three verbs write atomically (write-to-temp + rename), so a crash
 mid-write can never truncate the keyfile, and a rewrite over an existing
 file first preserves the previous state as `<file>.bak` alongside it.
 
+## Migrating from 3.x
+
+4.0 keeps the key material, the `.atKeys` stores and the enrollment
+handshakes, and hands everything an application used to call to
+[`at_client`](../at_client)'s `Atsign` verbs. An app on `at_client_flutter`
+or `at_onboarding_cli` follows those packages' own migration notes and never
+sees this table; it is for code that imported `package:at_auth/at_auth.dart`
+directly.
+
+| 3.x                                                                                              | 4.0                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AtAuth.create().onboard(AtOnboardingRequest(atSign)..rootDomain = ..., cramSecret)`             | `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ..., rootDomain: ...)` here, or `Atsign(atSign).activate(...)` in at_client, which opens the client as well                |
+| `AtAuth.create().authenticate(AtAuthRequest(atSign, atKeysIo: ...))`                             | `Atsign(atSign).open(keys: ..., preference: ...)`; `Atsign(atSign).authenticatesAs(keys: ..., rootDomain: ...)` for the check that builds no client                                           |
+| `AtAuthResponse.atChops`, `.atLookUp`, `.atAuthKeys`; `AtAuthSession.atLookUp`                   | the `AtClient` `open` hands back; its keys are read from the store it opened on (`keys.read(atSign)`), and the connection is its own                                                            |
+| `AtAuth.atChops`, `AtAuth.atLookUp`, `AtAuth.completeActivation()`                               | gone; `activateAtSign` completes the activation itself                                                                                                                                          |
+| `AtEnrollment.submit(request, atLookUp)` / `.waitForApproval(response)`                          | unchanged; or `Atsign(atSign).enroll(...)` and `PendingEnrollment.client(...)`, which file the request in the keys store and resume it after a restart                                          |
+| `AtEnrollment.approve(decision, atLookUp)`                                                       | `client.enrollments.approve(enrollmentId)`; here, `approve(decision, atLookUp, approverKeys: ...)` requires the approver's encryption private key and self-encryption key                        |
+| `AtEnrollment.deny(...)` / `.revoke(...)`                                                        | `client.enrollments.deny(id)` / `.revoke(id)`                                                                                                                                                   |
+| `AtEnrollment.list(statuses, atLookUp)`                                                          | `client.enrollments.list(statuses: ...)`, `.pending()`, `.fetch(id)`                                                                                                                            |
+| `AtEnrollment.generateOtp(...)` / `.setSpp(...)`, answering an `Otp`                             | `client.enrollments.otp()` / `.spp(value)`, answering a `Passcode`                                                                                                                              |
+| `AtEnrollment.update(EnrollmentUpdateRequest, atLookUp)`                                         | `EnrollmentUpdater().update(request, atLookUp)` from `package:at_client/at_client_mixins.dart`                                                                                                  |
+| `AtAuthRequest.enrollmentId`, or any caller naming the enrollment to authenticate as             | the keys decide: `AtKeys.enrollmentToAuthenticateAs()` — the enrollment holding active typed authentication material, else the flat stored id, else `primary`                                    |
+| `AtKeys.toAtChops()` / `.toAtChopsForEnrollment(id)`                                             | `AtKeys.authenticationFor(id)` for the `AtChops` and its algorithm; `authenticationKeyPairFor(id)`, `encryptionKeyPair` and `selfEncryptionKey` for the material alone                          |
+| `KeyIOMixin`'s `decryptAtKeysWithSelfEncKey`, `encryptAtKeysWithSelfEncKey`, `generateKeyPairs`, `decodeAtKeys` | `FileAtKeysIo.read` / `.write`, which apply the passphrase envelope and the self-encryption themselves                                                                            |
+| `AtKeys.copyWith(...)`                                                                           | `AtKeys.addKey(...)`                                                                                                                                                                            |
+| `import 'package:at_auth/at_auth.dart'` for `FileAtKeysIo`                                       | `import 'package:at_auth/at_auth_io.dart'`, the `dart:io` barrel; at_client re-exports it                                                                                                       |
+| `ActivateApiEndpoint`, `RegistrarApiEndpoint.login` / `.validate`                                | `RegistrarApiEndpoint.requestOtp` / `.validateOtp`                                                                                                                                              |
+| `AtEnrollmentRequest(atSign: ..., rootDomain: ..., apkamPublicKey: ..., encryptedAPKAMSymmetricKey: ...)` | still accepted, deprecated: pass `session: AtAuthSession(...)`, which names the atSign, the root domain and the key destination                                                       |
+| `AtEnrollmentResponse.atSign`, `.rootDomain`, `.atAuthKeys`                                      | still present, deprecated: read `session.atSign`, `session.rootDomain` and the keys from `session.atKeysIo`                                                                                     |
+
+Behaviour that changed with no signature to catch it: a self-enrollment no
+longer approves its own request, since the atServer approves a retrofit
+outright; `waitForApproval` no longer pauses 500 ms before each attempt;
+and the first write that gives a flat keyfile typed material leaves a
+one-off `<keyfile>.pre-v1` copy of the flat document beside it, announced
+at `shout`.
+
 ## Where to go next
 
 | If you're building…            | Use                                                                                   |

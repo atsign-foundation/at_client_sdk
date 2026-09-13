@@ -4,16 +4,18 @@
 
 # at_onboarding_cli
 
-CLI-side wrapper around [`at_auth`](../at_auth) that provides the
-command-line tooling end users and CLI apps need to **register**,
-**onboard**, and **enroll** atSigns — plus a library surface for
-building your own onboarding tooling.
+The command-line tools, and a small library, for **registering**,
+**activating** and **enrolling** atSigns from a terminal or a headless
+program. The lifecycle itself is [`at_client`](../at_client)'s —
+`Atsign.activate`, `Atsign.open` and `Atsign.enroll` do the work — and this
+package wraps those verbs in two binaries, plus an `AtOnboardingService`
+for programs written against earlier versions.
 
-If you're new to the Atsign Protocol lifecycle (register → onboard → APKAM
+If you're new to the Atsign Protocol lifecycle (register → activate → APKAM
 enroll), read
 [`at_auth`'s README](../at_auth/README.md#the-atsign-lifecycle) first —
-this package is the CLI concretisation of that model. [`at_client_flutter`](../at_client_flutter)
-is the Flutter-UI equivalent.
+this package is the CLI concretisation of that model.
+[`at_client_flutter`](../at_client_flutter) is the Flutter-UI equivalent.
 
 ## Turnkey CLI tools
 
@@ -29,22 +31,48 @@ dart pub global activate at_onboarding_cli
 at_register -e your_email@example.com
 ```
 
-Fetches a free atSign, emails you a verification code, then runs
-`at_activate` automatically once you paste the code back. The generated
-`.atKeys` file lands in `~/.atsign/keys/`.
+Fetches a free atSign, emails you a verification code, then activates the
+atSign once you paste the code back. The generated `.atKeys` file lands in
+`~/.atsign/keys/`.
 
-### `at_activate` — onboard an atSign (Phase 2 of the lifecycle)
+### `at_activate` — the atSign's lifecycle from the terminal
+
+Every invocation names a command; `at_activate` with none prints the list
+and exits 1.
 
 ```sh
-# Using a CRAM secret from email / registrar
-at_activate -a @alice -c <cram_secret>
+# Activate a newly registered atSign with the CRAM secret the registrar sent
+at_activate onboard -a @alice -c <cram_secret>
 
-# OR using an email-delivered verification code
-at_activate -a @alice
+# ...or let at_activate fetch it: the registrar emails a verification code,
+# which you paste back
+at_activate onboard -a @alice
 ```
 
-Either form produces the **master `.atKeys`** in `~/.atsign/keys/`.
-**These are the root of trust for `@alice` — back them up.**
+Either form writes the **master `.atKeys`** to
+`~/.atsign/keys/@alice_key.atKeys`. **These are the root of trust for
+`@alice` — back them up.**
+
+The remaining commands run on the keyfile `-k` names (that one by default):
+
+| Command                                            | What it does                                                                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `status -a @alice`                                 | asks where the atSign stands; the exit code says: 0 activated, 1 atServer up but not yet activated, 2 atServer unreachable, 3 no such atSign, 4 atDirectory unreachable |
+| `enroll -a @alice --app <app> --device <device> --namespaces <ns:rw,...> --passcode <otp>` | submits an APKAM enrollment for a new app and device and waits for its approval; run again for the same app and device, it resumes the wait rather than submitting a second request |
+| `otp` / `spp`                                      | issues a one-time passcode, or sets a semi-permanent one, that a new enrollment quotes                                    |
+| `list`, `fetch`                                    | the enrollment roster, or one enrollment's record                                                                        |
+| `approve`, `deny`, `revoke`, `unrevoke`, `delete`  | decides an enrollment by its id; `auto` listens and approves the requests that match its app and device patterns        |
+| `interactive`                                      | a shell over the commands above                                                                                          |
+| `decrypt`                                          | writes a passphrase-protected keyfile out decrypted                                                                     |
+
+`--posture legacy|pqReady|pqActive` is accepted on every command and decides
+what a client built for it does post-quantum (see the
+[at_client README](../at_client/README.md#post-quantum-cryptography)).
+`onboard` and `enroll` default to `legacy`, so the keys they write stay
+usable by a legacy app; every other command defaults to `pqReady` and refuses
+`legacy`, since approving a post-quantum enrollment needs the post-quantum
+providers. `enroll --key-exchange legacy|pq` chooses how the enrollment's
+symmetric key travels, for the approver that will pick the request up.
 
 ## APKAM enrollment
 
@@ -57,7 +85,7 @@ worked example lives under [`example/apkam_examples/`](example/apkam_examples):
   namespaces
 - [`enroll_app_listen.dart`](example/apkam_examples/enroll_app_listen.dart)
   — a device holding the master keys listens for and approves /
-  denies incoming requests
+  denies incoming requests, through `client.enrollments`
 - [`apkam_authenticate.dart`](example/apkam_examples/apkam_authenticate.dart)
   — the new device authenticates with its newly-issued scoped keys
 
@@ -67,9 +95,11 @@ Full step-by-step walkthrough:
 ## Library usage
 
 The lifecycle is at_client's: one import, and the verbs are on the atSign.
+`AtOnboardingPreference` extends `AtClientPreference` with where the keyfile
+and the local storage live, and `storageFor(atSign)` is the store a client
+for that atSign opens under it.
 
 ```dart
-import 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 
@@ -78,38 +108,53 @@ final pref = AtOnboardingPreference()
   ..rootDomain = 'root.atsign.org'
   ..namespace = 'my_app'
   ..storagePath = 'storage/hive';
+```
 
-// Activate a new atSign with its CRAM secret; `OnboardingUtil` fetches one
-// from the registrar against an emailed verification code.
-final client = await Atsign('@alice').activate(
+Activate a new atSign with its CRAM secret (`OnboardingUtil` fetches one
+from the registrar against an emailed verification code):
+
+```dart
+final owner = await Atsign('@alice').activate(
     cramSecret: secret, keys: keys, preference: pref,
     storage: pref.storageFor('@alice'));
+```
 
-// Open a client on keys already held. It comes back online, offline or
-// refused, and `connection` says which.
+Open a client on keys already held. It comes back online, offline or
+refused, and `connection` says which:
+
+```dart
 final client = await Atsign('@alice').open(
     keys: keys, preference: pref, storage: pref.storageFor('@alice'));
 print(client.connection.current);
+```
 
-// Enrol a new device, quoting a passcode an enrolled client issued, and wait
-// for that client to approve. The keyfile is the resume record: a request
-// already in it is picked up by `resumeEnrollment` rather than repeated.
+Enrol a new device, quoting a passcode an enrolled client issued, and wait
+for that client to approve. The keyfile is the resume record: a request
+already in it is picked up by `resumeEnrollment` rather than repeated.
+
+```dart
 final pending = await Atsign('@alice').enroll(
     otp: otp, app: 'my_app', device: 'laptop',
     namespaces: {'my_app': 'rw'}, keys: keys, preference: pref);
-final client = await pending.client(pref, storage: pref.storageFor('@alice'));
-
-// The approving side, on an enrolled client.
-for (final request in await client.enrollments.pending()) {
-  await client.enrollments.approve(request.enrollmentId!);
-}
-final otp = await client.enrollments.otp();
+final enrolled = await pending.client(pref, storage: pref.storageFor('@alice'));
 ```
 
-`AtOnboardingService` stays for programs written against earlier versions of
-this package: `AtOnboardingServiceImpl('@alice', pref).authenticate()` opens
-the client from `pref.atKeysFilePath`, makes it
-`AtClientManager.getInstance().atClient`, and answers whether it is online.
+The approving side, on an enrolled client:
+
+```dart
+for (final request in await owner.enrollments.pending()) {
+  await owner.enrollments.approve(request.enrollmentId!);
+}
+final passcode = await owner.enrollments.otp();
+```
+
+Two helpers stay for programs written against earlier versions of this
+package. `AtOnboardingServiceImpl('@alice', pref).authenticate()` opens the
+client from `pref.atKeysFilePath`, makes it
+`AtClientManager.getInstance().atClient`, and answers whether it is online;
+`createAtClient(atSign: '@alice', atKeysFilePath: ..., rootDomain: ...)`
+does the same from bare arguments and waits for the connection with a
+budget of `maxConnectAttempts` tries.
 
 Worked examples covering each flow:
 [`example/`](example) and
@@ -118,6 +163,32 @@ Worked examples covering each flow:
 Most **app** developers don't need this library directly — they use
 [`at_cli_commons`](../at_cli_commons)' `CLIBase`, which opens the client
 through at_client.
+
+## Migrating from 1.x
+
+2.0 moves everything `AtOnboardingService` orchestrated to at_client, keeps
+`authenticate()` and `atClient` for the programs that call them, and makes
+`at_activate` name its command. The `.atKeys` file a 1.x tool wrote is read
+unchanged.
+
+| 1.x                                                                                        | 2.0                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `at_activate -a @alice -c <secret>` (no command)                                           | `at_activate onboard -a @alice -c <secret>`; an invocation naming no command prints the list and exits 1                                                                             |
+| `--signingAlgoType mldsa65` on `onboard`                                                   | `--posture legacy\|pqReady\|pqActive`, honoured on every command; `enroll --key-exchange legacy\|pq` for how the enrollment's key travels                                            |
+| `AtOnboardingServiceImpl(atSign, pref).onboard()`                                          | `Atsign(atSign).activate(cramSecret: ..., keys: ..., preference: pref, storage: pref.storageFor(atSign))`                                                                            |
+| `.authenticate()`                                                                          | unchanged: opens the client through `Atsign.open`, makes it current, and answers true only when its connection is online; an offline client is still held, `atClient.connection` says why |
+| `.authenticate(enrollmentId: ...)`                                                         | the keyfile decides which enrollment authenticates; a value that disagrees is logged and ignored                                                                                     |
+| `.enroll(...)`, `.sendEnrollRequest(...)`, `.awaitApproval(...)`, `.createAtKeysFile(...)` | `Atsign(atSign).enroll(...)` and `PendingEnrollment.client(...)`; the keyfile named on `enroll` is the resume record, and `Atsign.resumeEnrollment` picks a pending request up after a restart |
+| the `*.enrollment.checkpoint` file                                                         | gone; the keyfile holds the pending keys                                                                                                                                             |
+| `.close()`                                                                                 | `atClient.stop()`                                                                                                                                                                    |
+| `.isOnboarded()`                                                                           | the atDirectory's answer: `at_activate status`, or at_server_status's `AtStatusImpl`                                                                                                 |
+| `.atLookUp`, `.atChops`, `.atAuth`, `.completeActivation()`                                | none; the client's own connection does what they exposed                                                                                                                             |
+| `.getAtClient()`                                                                           | `.atClient`                                                                                                                                                                          |
+| `AtOnboardingPreference.hiveStoragePath`, `.commitLogPath`                                 | `.storagePath`, or `.storage` for a bundle of your own; `commitLogPath` was never read                                                                                               |
+| `AtOnboardingPreference()..signingAlgoType = ...`                                          | `AtOnboardingPreference(posture: ..., authenticationKeyAlgorithm: ..., dataSigningKeyAlgorithms: ...)`, fixed at construction                                                       |
+| `package:at_onboarding_cli/src/activate_cli/activate_cli.dart`                             | removed; run the `at_activate` binary                                                                                                                                                |
+| `authenticate()` copying the keyfile's keys into the client's local storage                | the client reads them from its key source                                                                                                                                            |
+| the keyfile `onboard` writes                                                               | at_auth's own document: the self-encryption key is no longer duplicated under the atSign, and a passphrase-protected file uses a salted envelope that 1.x tooling cannot read      |
 
 ## Where to go next
 

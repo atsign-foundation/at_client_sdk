@@ -35,11 +35,12 @@ nothing from at_auth.
   over `client.enrollments`; with none it uses `AtClientManager`'s current
   client, as it always has. Its cards render at_client's `Enrollment`, whose
   `namespacePermissions` and `enrollmentStatus` are what they read.
-- BREAKING: the keychain holds keys only. `EnrollmentData`, `Otp` and
-  `KeychainStorage`'s `readEnrollmentData`, `writeEnrollmentData`,
-  `deleteEnrollmentData`, `validateEnrollment` and `saveSpp` are gone: an
-  enrollment awaiting approval lives in the keys store as pending key
-  material, which is how it is resumed.
+- BREAKING: the keychain holds keys and passcodes only. `EnrollmentData`,
+  `Otp` and `KeychainStorage`'s `readEnrollmentData`, `writeEnrollmentData`,
+  `deleteEnrollmentData` and `validateEnrollment` are gone: an enrollment
+  awaiting approval lives in the keys store as pending key material, which
+  is how it is resumed. `saveSpp` takes the `Passcode` `client.enrollments.spp`
+  answers.
 - BREAKING: at_auth is no longer re-exported. `AtAuthRequest`, `AuthResponse`
   and the other request and response types an app reached through this
   barrel are gone, along with `AtEnrollmentRequest` and `AtEnrollmentResponse`;

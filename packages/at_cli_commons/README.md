@@ -18,9 +18,14 @@ Future<void> main(List<String> args) async {
 
 `CLIBase.fromCommandLineArgs(...)` parses the standard at-SDK flags
 (`-a <atsign>`, `-k <keys-file>`, `-n <namespace>`, `-r <root-domain>`,
-etc.), loads the user's `.atKeys` file, opens the client through at_client's
-`Atsign.open`, waits for its connection to come online, and hands back a
-ready `AtClient`.
+`-s <storage-dir>`, `-P <pass-phrase>`, `--never-sync`,
+`--max-connect-attempts`, `-v`), loads the user's `.atKeys` file, opens the
+client through at_client's `Atsign.open`, waits for its connection to come
+online — `max-connect-attempts` tries, three seconds apart — and hands back
+a ready `AtClient`. A refusal by the atServer (revoked keys, an unapproved
+enrollment) is thrown at once as `AtOpenRefusedException`; a connection
+still offline when the budget is spent is
+`SecondaryServerConnectivityException`.
 
 Two worked examples live under [`example/bin/`](example/bin):
 
@@ -43,7 +48,7 @@ object:
 
 ```dart
 final pref = AtOnboardingPreference()
-  ..someCustomField = 'my value';
+  ..appName = 'my_app';
 
 final atClient = (await CLIBase.fromCommandLineArgs(
   args,
@@ -51,7 +56,7 @@ final atClient = (await CLIBase.fromCommandLineArgs(
 )).atClient;
 
 // pref.hiveStoragePath, pref.namespace, etc. are now populated by CLIBase.
-// pref.someCustomField is untouched.
+// pref.appName is untouched.
 ```
 
 The post-quantum rollout flags are **final at construction** — what a client
@@ -61,7 +66,7 @@ constructor rather than assigned afterwards:
 ```dart
 final pref = AtOnboardingPreference(
   posture: PqPosture.pqActive,
-)..someCustomField = 'my value';
+)..appName = 'my_app';
 ```
 
 `posture`, `authenticationKeyAlgorithm`, `dataSigningKeyAlgorithms` and
@@ -72,6 +77,17 @@ type they take — including `SigningAlgoType` — is nameable from
 `disallowLegacyEncryption` is deliberately **not** among them: it is settable
 only through the posture, so an app that wants legacy writes refused adopts
 `PqPosture.pqActive` or builds a posture that says so.
+
+## Upgrading
+
+`CLIBase` kept its API through at_onboarding_cli 2.0 and at_auth 4.0: a
+program that calls `CLIBase.fromCommandLineArgs(args)` needs no change. What
+moved underneath is that the client is opened through `Atsign.open` rather
+than re-authenticated in a loop, so a refusal surfaces as
+`AtOpenRefusedException` where it used to surface as a connectivity
+exception, and the local storage location is
+`AtOnboardingPreference.storagePath` rather than the deprecated
+`hiveStoragePath` (the store lands in the same place).
 
 ## Where to go next
 

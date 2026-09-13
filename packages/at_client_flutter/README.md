@@ -177,6 +177,9 @@ hand-rolled `read` → mutate → `flush`; see
 `write` is create-only, like every other `WrittenAtKeysIo`: it throws
 `AtKeysFileOverwriteException` if the atSign already has an entry. To
 persist a change to keys that are already stored, use `flush` or `update`.
+`read` of an atSign the keychain does not hold throws
+`AtKeysSourceAbsentException`, as the file store does, which is how
+`Atsign.enroll` tells "no keys yet" from "keys this process cannot read".
 
 An enrollment awaiting approval lives in the keys store too, as pending key
 material: `ApkamActivationDialog` reads it back and resumes the wait rather
@@ -216,6 +219,38 @@ final atKeysIo = FileAtKeysIo(
 );
 atKeysIo.write(atSign, atKeys);
 ```
+
+## Migrating from 1.x
+
+2.0 removes the two services that orchestrated at_auth for an app and stops
+re-exporting at_auth. The dialogs take the atSign, the keys store and the
+`AtClientPreference`, and hand back the `AtClient` they opened; an app with
+its own UI calls the `Atsign` verbs directly. Nothing an app reads after
+login changes.
+
+| 1.x                                                                                              | 2.0                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AuthService().onboard(AtOnboardingRequest(atSign)..rootDomain = ..., cramKey)`                  | `CramDialog.show(context, atSign: ..., cramKey: ..., preference: ...)` → `AtClient`, or `Atsign(atSign).activate(cramSecret: ..., keys: KeychainAtKeysIo(), preference: ...)`      |
+| `AuthService().authenticate(AtAuthRequest(atSign, atKeysIo: ...), backupKeys: ...)`              | `PkamDialog.show(context, atSign: ..., keys: ..., preference: ..., backupKeys: ...)` → `AtClient`, or `Atsign(atSign).open(keys: ..., preference: ...)`                           |
+| `AtClientManager.getInstance().setCurrentAtSign(..., atChops: response.atChops, ...)` afterwards | `AtClientManager.getInstance().use(client)`; `setCurrentAtSign` is deprecated                                                                                                      |
+| `response.isSuccessful`, `response.atAuthKeys`, `response.atLookUp`                              | a null client means the dialog failed or was cancelled; the keys are in the store the client opened on; the connection is the client's (`client.connection.current`)               |
+| `FlutterEnrollmentService().enroll(AtEnrollmentRequest(...))` then `awaitApproval`, then a `PkamDialog` | `ApkamActivationDialog.show(context, atSign: ..., rootDomain: ..., appName: ..., deviceName: ..., namespaces: ..., preference: ...)` → `AtClient`, or `Atsign(atSign).enroll(...)` then `pending.client(preference)` |
+| `FlutterEnrollmentService().approve(...)` / `.deny(...)` / `.revoke(...)`                        | `client.enrollments.approve(id)` / `.deny(id)` / `.revoke(id)`; `EnrollmentRequestList(atClient: client)` renders the roster and decides                                          |
+| `.getEnrollments(...)` / `.list(statuses, atLookUp)`                                             | `client.enrollments.requests` (a stream of new requests) / `.list(statuses: ...)` / `.pending()`                                                                                   |
+| `.generateOtp()` / `.setSpp(spp: ...)`, answering an `Otp`                                       | `client.enrollments.otp()` / `.spp(value, expiry: ...)`, answering a `Passcode`; `KeychainStorage().saveSpp(atSign, passcode)` keeps it                                             |
+| `.getActiveSpp()` / `.getAllSpps()`                                                              | `KeychainStorage().getActiveSpp(atSign)` / `.getAllSpps(atSign)`                                                                                                                   |
+| `.isManagerKey()`                                                                                | no direct equivalent: read `client.enrollments.list()` and look for an approved enrollment holding `__manage`, which is what it did                                                 |
+| `AtSignSelectionDialog.show(context)` → `AuthRequest`                                            | → `AtsignSelection` (`atSign`, `rootDomain`)                                                                                                                                       |
+| `RegistrarCramDialog.show(context, request, registrar: ...)`                                     | `RegistrarCramDialog.show(context, atSign, registrar: ...)`                                                                                                                        |
+| `ApkamActivationDialog.show(...)` → `AtEnrollmentResponse`, `atKeysIo:`                          | → `AtClient`; `keys:` is where the enrollment's keys are filed, the keychain by default, and a request already pending there is resumed rather than repeated                       |
+| `EnrollmentRequestList()` on the manager's current client                                        | unchanged; `EnrollmentRequestList(atClient: ...)` for an app that passes its client around                                                                                          |
+| `KeychainStorage.readEnrollmentData` / `writeEnrollmentData` / `deleteEnrollmentData` / `validateEnrollment`, `EnrollmentData`, `Otp` | gone: an enrollment awaiting approval lives in the keys store as pending key material                                                                              |
+| `import 'package:at_client_flutter/at_client_flutter.dart'` for `AtAuthRequest`, `AtEnrollmentRequest`, `AtEnrollmentResponse`, ... | gone with the services; `AtKeys`, `AtKeysIo`, `FileAtKeysIo`, `InMemoryAtKeysIo`, `NamespacePermission` and `EnrollmentKeyExchangeMode` still come through, from at_client, and `RegistrarService` from at_auth |
+
+A returning user's login can now come back **offline**: `PkamDialog` hands
+back the client whatever the network did, and `client.connection.current`
+says whether it is online, offline or refused. A 1.x app treated every
+failure to reach the atServer as a failed login; a 2.0 app decides.
 
 ## Where to go next
 

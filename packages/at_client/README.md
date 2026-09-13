@@ -156,6 +156,10 @@ Flutter apps get the same verbs behind dialogs in
 [`at_onboarding_cli`](../at_onboarding_cli)'s commands and
 [`at_cli_commons`](../at_cli_commons)' `CLIBase`.
 
+`AtClientManager.setCurrentAtSign` and `fromAuthSession`, which built the
+current client for the caller, are deprecated and go in 4.0: build the
+client with a verb above and make it current with `use`.
+
 ## Collections
 
 For the common "CRUD on typed, shareable records" use case,
@@ -420,9 +424,61 @@ For compact examples of provider registration and per-write overrides, see
 [`test/put_request_test.dart`](test/put_request_test.dart). For notification
 provider selection, see
 [`test/notification_service_test.dart`](test/notification_service_test.dart).
-For storage and lazy-provider recovery behavior, see
-[`test/crypto_storage_test.dart`](test/crypto_storage_test.dart)
-and [`test/crypto_runtime_test.dart`](test/crypto_runtime_test.dart).
+For lazy-provider recovery behavior, see
+[`test/crypto_runtime_test.dart`](test/crypto_runtime_test.dart).
+
+## Post-quantum cryptography
+
+`at_client` can run every path an adversary could record today — data
+shared between atSigns, an atSign's own data, and the secrets an enrollment
+approval hands a new device — under post-quantum key establishment, and
+authenticate with a post-quantum signature. It is opt-in per client, through
+the preference's **posture**, which is fixed at construction:
+
+```dart
+final preference = AtClientPreference(posture: PqPosture.pqReady)
+  ..namespace = 'todos';
+```
+
+| Posture                      | Authentication                                                       | Data written                                    | Reads post-quantum data                                   |
+| ---------------------------- | -------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------- |
+| `PqPosture.legacy` (default) | RSA-2048 APKAM                                                       | legacy encryption                               | no: a record sealed to a namespace key is refused         |
+| `PqPosture.pqReady`          | ML-DSA-65 APKAM; publishes a key package and the atSign's namespace keys | legacy encryption, so pre-quantum peers read it | yes                                                       |
+| `PqPosture.pqActive`         | ML-DSA-65 APKAM and an ML-DSA-65 data signing key                    | post-quantum by default; legacy writes refused  | yes                                                       |
+
+What each posture switches on:
+
+- **The `nskey` data path.** Each namespace an atSign owns gets a
+  key-establishment keypair, published as an APKAM-signed advertisement
+  (`public:__nskey.<namespace>@<atSign>`). A writer establishes a content key
+  to the recipient's namespace key and encrypts the record with AES-256-GCM;
+  a reader that holds the namespace key's private half opens it. A sender
+  follows whatever the recipient advertised, ordered by
+  `AtClientPreference.sealsToKeyAlgorithms`. The X-Wing hybrid (ML-KEM-768 +
+  X25519) is the default; pure ML-KEM-1024 is selected with
+  `keyEstablishmentAlgorithms`, and every build opens both.
+- **Post-quantum enrollment.** Under `pqReady` or `pqActive`,
+  `Atsign.enroll` submits a request that advertises a key package, and the
+  approving client (`client.enrollments.approve`) seals the atSign's secrets
+  to it instead of wrapping them with RSA; `enroll(keyExchangeMode: ...)`
+  overrides that per request. A `legacy` client cannot approve such a
+  request and refuses before anything reaches the atServer.
+- **ML-DSA-65 authentication.** The enrollment's APKAM keypair is ML-DSA-65,
+  filed as typed material in the keys store while the flat legacy fields are
+  left as they were. A client whose posture asks for a stronger
+  authentication key than its enrollment holds re-enrolls itself at its
+  first start and comes up on the new enrollment. This needs an atServer
+  that verifies ML-DSA signatures; a `legacy` client makes no such demand.
+- **Signed advertisements and key packages.** Everything a peer relies on
+  is carried in a signed envelope and verified before use; the signing keys
+  chain to a per-atSign signing root that only fully privileged
+  enrollments hold.
+
+`pqActive` is for a deployment that controls every client of its
+namespaces and has seeded them: a destination with no published namespace
+key is refused rather than written with the legacy provider. The design,
+the acceptance catalogue and the decision log are under
+[`docs/projects/pq/`](../../docs/projects/pq/roadmap.md).
 
 ## Further reading
 
