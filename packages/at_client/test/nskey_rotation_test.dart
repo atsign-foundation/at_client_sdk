@@ -1,3 +1,7 @@
+// A client with no key source signs from its AtChops, and the key source is what
+// several tests here vary, so this file names the AtChops on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 import 'dart:typed_data';
 

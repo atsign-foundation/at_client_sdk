@@ -24,6 +24,8 @@ MockRemoteSecondary buildRecordingRemote({
   final remote = MockRemoteSecondary();
   final lookUp = MockAtLookupImpl();
   when(() => remote.atLookUp).thenReturn(lookUp);
+  // the bridge reads the enrollment id off the lookup until the ladder goes
+  // ignore: deprecated_member_use
   when(() => lookUp.enrollmentId).thenReturn(null);
   when(() => remote.sync(any(), regex: any(named: 'regex')))
       .thenAnswer((_) async => null);

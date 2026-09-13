@@ -135,6 +135,28 @@ Future<InMemoryAtKeysIo> keyfileHolding(
   return target;
 }
 
+/// A key source holding [atSign]'s APKAM [keyPair]: typed rsa2048 material
+/// under [enrollmentId] when one is named, the flat legacy pair otherwise.
+///
+/// The typed form of the AtChops a test used to hand a mock client so that
+/// it could sign; `ApkamSigning` reads the keypair from here.
+InMemoryAtKeysIo keysHoldingApkam(
+    String atSign, String? enrollmentId, RsaKeyPair keyPair) {
+  final keys = AtKeys(atsign: atSign.toAtsign());
+  if (enrollmentId == null) {
+    keys.fileLegacyMaterial(
+        apkamPublicKey: keyPair.atPublicKey.publicKey,
+        apkamPrivateKey: keyPair.atPrivateKey.privateKey);
+  } else {
+    keys.fileApkamMaterial(
+        enrollmentId: enrollmentId,
+        algorithm: CryptographicMaterialAlgorithm.rsa2048,
+        publicKey: keyPair.atPublicKey.publicKey,
+        privateKey: keyPair.atPrivateKey.privateKey);
+  }
+  return InMemoryAtKeysIo.holding(atSign, keys);
+}
+
 /// A keyfile whose [enrollmentId] has active typed ML-DSA **authentication**
 /// material, and nothing else.
 ///

@@ -1,7 +1,6 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/ml_dsa_keyfile.dart';
@@ -17,13 +16,6 @@ import 'test_utils/mocks.dart';
 /// under an ML-DSA enrollment and failing every reconnect against the
 /// record-authoritative atServer.
 void main() {
-  final mockAtChopsKeys = MockAtChopsKeys();
-
-  setUp(() {
-    var key = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
-    when(() => mockAtChopsKeys.selfEncryptionKey).thenReturn(AESKey(key));
-  });
-
   test(
       'an injected-AtChops client still resolves its enrollment algorithm '
       'from the key material', () async {
@@ -41,9 +33,6 @@ void main() {
       'unit',
       preferences,
       remoteSecondary: MockRemoteSecondary(),
-      // Injected, so _createAtChops never runs.
-      // ignore: deprecated_member_use_from_same_package
-      atChops: AtChopsImpl(mockAtChopsKeys),
       atKeysIo: await mlDsaKeyfile(atSign, enrollmentId),
       enrollmentId: enrollmentId,
     ) as AtClientImpl;
@@ -66,19 +55,23 @@ void main() {
       ..commitLogPath = 'test/hive/path';
 
     // A keyfile with no typed entries at all — the flat-fields legacy shape.
-    final io = InMemoryAtKeysIo();
     // NOTE: the legacy posture above is deliberate — a pqReady client holding
     // a legacy enrollment retrofits rather than falling back, which is a
     // different behaviour.
-    await io.write(atSign, AtKeys());
+    final io = InMemoryAtKeysIo.holding(
+        atSign,
+        AtKeys.legacy(
+            apkamPublicKey: _flatApkamPublicKey,
+            apkamPrivateKey: _flatApkamPrivateKey,
+            encryptionPublicKey: 'ZmxhdC1lbmMtcHVibGlj',
+            encryptionPrivateKey: 'ZmxhdC1lbmMtcHJpdmF0ZQ==',
+            selfEncryptionKey: 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus='));
 
     final ac = await AtClientImpl.create(
       atSign,
       'unit',
       preferences,
       remoteSecondary: MockRemoteSecondary(),
-      // ignore: deprecated_member_use_from_same_package
-      atChops: AtChopsImpl(mockAtChopsKeys),
       atKeysIo: io,
       enrollmentId: enrollmentId,
     ) as AtClientImpl;
@@ -131,6 +124,8 @@ void main() {
     // The keypair is not survivable: serving the flat fields signs PKAM as the
     // enrollment that owns them.
     final pkam =
+        // Reads the carrier the client derived; the derivation is what this asserts.
+        // ignore: deprecated_member_use
         (ac.atChops as AtChopsImpl).atChopsKeys.atPkamKeyPair!.atPublicKey;
     expect(pkam.publicKey, isNot(_flatApkamPublicKey),
         reason: 'the flat fields belong to a different enrollment');

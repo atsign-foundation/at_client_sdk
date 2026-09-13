@@ -6,7 +6,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:at_chops/at_chops.dart';
 import 'test_utils/mocks.dart';
 
 class MockGetRequestTransformer extends Mock implements GetRequestTransformer {}
@@ -18,7 +17,7 @@ void main() {
   Atsign theseTestsOtherAtsign = '@delta'.toAtsign();
   AtLookupImpl mockAtLookup = MockAtLookupImpl();
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
-  AtChops mockAtChops = MockAtChops();
+  final mockAtChops = MockAtChops();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   var atClientPreferenceWithAtChops = AtClientPreference();
   var lookupVerbBuilder = LookupVerbBuilder()

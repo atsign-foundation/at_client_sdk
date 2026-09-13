@@ -160,6 +160,8 @@ void main() {
       RemoteSecondary(atSign, preference,
           atLookUp: lookUp, atChops: chops, atKeysIo: await keyfile());
 
+      // The ladder write is the assertion.
+      // ignore: deprecated_member_use
       verify(() => lookUp.atChops = chops).called(1);
     });
   });

@@ -175,7 +175,6 @@ void main() {
     var selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     SymmetricKey selfEncryptionKey = AESKey.generate(32);
 
-
     var location = 'new york';
     var ivBase64String = 'YmFzZTY0IGVuY29kaW5n';
 

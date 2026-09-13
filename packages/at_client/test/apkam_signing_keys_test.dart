@@ -1,3 +1,7 @@
+// The AtChops a client was handed is one of the sources this mixin resolves a
+// signing key from, so this file names it on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:async' show FutureOr;
 import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
@@ -66,7 +70,7 @@ void main() {
   late MockAtClient atClient;
   late AtChops atChops;
   late TestSigner signer;
-  late AtPkamKeyPair rsaPair;
+  late RsaKeyPair rsaPair;
   late ({Uint8List publicKey, Uint8List secretKey}) mlDsaPair;
 
   String b64(String label) => base64Encode(utf8.encode(label));
@@ -86,7 +90,7 @@ void main() {
 
   setUpAll(() async {
     registerFallbackValue(AtKey());
-    rsaPair = AtChopsUtil.generateAtPkamKeyPair();
+    rsaPair = RsaKeyPair.generate();
     mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   });
 
@@ -155,7 +159,7 @@ void main() {
         () async {
       // The rig's AtChops holds one RSA keypair; the keyfile holds another.
       // Which public key comes back says which source answered.
-      final other = AtChopsUtil.generateAtPkamKeyPair();
+      final other = RsaKeyPair.generate();
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
           keys.fileLegacyMaterial(
               apkamPublicKey: other.atPublicKey.publicKey,

@@ -29,6 +29,10 @@
 /// assertion bounds the anchor's position from the other side.
 library;
 
+// A client built from an AtChops beside a key source holding no credential is
+// the shape under test, so this file names the AtChops on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 import 'dart:io';
 

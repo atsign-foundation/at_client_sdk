@@ -55,7 +55,6 @@ void main() {
     SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     SymmetricKey selfEncryptionKey = AESKey.generate(32);
 
-
     var location = 'san francisco';
     var encryptedLocation =
         EncryptionUtil.encryptValue(location, selfEncryptionKey.key);
@@ -74,7 +73,6 @@ void main() {
   test('test to check self encryption key decrypt method with IV', () async {
     SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
     SymmetricKey selfEncryptionKey = AESKey.generate(32);
-
 
     var location = 'new york';
     var ivBase64String = 'YmFzZTY0IGVuY29kaW5n';

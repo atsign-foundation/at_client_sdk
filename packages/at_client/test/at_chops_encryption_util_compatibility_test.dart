@@ -1,39 +1,39 @@
+import 'dart:convert';
+
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
-// Tests to verify whether encryption with EncryptionUtil, decryption with AtChops works and vice versa.
+// Tests to verify that what EncryptionUtil encrypts, at_chops' algorithm
+// classes decrypt, and vice versa.
 void main() {
   test(
       'A test to verify encrypting AES key with encryption util and decryption with at_chops',
       () async {
     // Generate RSA key pair. Generate AES key. Encrypt AES key using RSA public key using EncryptionUtil method
-    // Decrypt encryptedAESKey using AtChops (uses RSA private key)
-    var encryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+    // Decrypt encryptedAESKey with the RSA algorithm class (uses RSA private key)
+    var encryptionKeyPair = RsaKeyPair.generate();
     var encryptionPublicKey = encryptionKeyPair.atPublicKey.publicKey;
     var aesKey = EncryptionUtil.generateAESKey();
     var encryptedAesKey =
         EncryptionUtil.encryptKey(aesKey, encryptionPublicKey);
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(encryptionKeyPair, null);
-    var atChops = AtChopsImpl(atChopsKeys);
-    var decryptedAesKey = (await atChops.decryptString(
-            encryptedAesKey, EncryptionKeyType.rsa2048))
-        .result;
+    var decryptedAesKey = utf8.decode(
+        RsaEncryptionAlgo.fromKeyPair(encryptionKeyPair)
+            .decrypt(base64Decode(encryptedAesKey)));
     expect(decryptedAesKey, aesKey);
   });
   test(
       'A test to verify encrypting AES key with at_chops and decryption with EncryptionUtil',
       () async {
-    // Generate RSA key pair. Generate AES key. Encrypt AES key using AtChops(uses RSA public key)
+    // Generate RSA key pair. Generate AES key. Encrypt AES key with the RSA algorithm class (uses RSA public key)
     // Decrypt encryptedAESKey with EncryptionUtil using RSA private key
-    var encryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+    var encryptionKeyPair = RsaKeyPair.generate();
     var encryptionPrivateKey = encryptionKeyPair.atPrivateKey.privateKey;
     var aesKey = AESKey.generate(32).key;
 
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(encryptionKeyPair, null);
-    var atChops = AtChopsImpl(atChopsKeys);
-    var encryptedAesKey =
-        (await atChops.encryptString(aesKey, EncryptionKeyType.rsa2048)).result;
+    var encryptedAesKey = base64Encode(
+        RsaEncryptionAlgo.fromKeyPair(encryptionKeyPair)
+            .encrypt(utf8.encode(aesKey)));
 
     var decryptedAesKey =
         //ignore: deprecated_member_use_from_same_package
@@ -45,36 +45,24 @@ void main() {
       'A test to verify data encryption with encryption util and decryption with at_chops',
       () async {
     // Generate AES key. Encrypt data with EncryptionUtil using AES key
-    // Create a AESEncryption algo object using AES key and pass it to AtChops. Decrypt the encrypted value with AtChops
+    // Decrypt the encrypted value with the AES algorithm class under the legacy IV
     var aesKey = EncryptionUtil.generateAESKey();
     var dataToEncrypt = 'alice@atsign.com';
     var encryptedData = EncryptionUtil.encryptValue(dataToEncrypt, aesKey);
-    var encryptionAlgo = AESEncryptionAlgo(AESKey(aesKey));
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    var atChops = AtChopsImpl(atChopsKeys);
-    var decryptedData = (await atChops.decryptString(
-            encryptedData, EncryptionKeyType.aes256,
-            encryptionAlgorithm: encryptionAlgo,
-            iv: InitialisationVector.legacy()))
-        .result;
+    var decryptedData = StringAESEncryptor(AESKey(aesKey))
+        .decrypt(encryptedData, iv: InitialisationVector.legacy());
     expect(decryptedData, dataToEncrypt);
   });
 
   test(
       'A test to verify data encryption with at_chops  and decryption with encryption_util',
       () async {
-    // Generate AES key. Encrypt data with AtChops using AES key
+    // Generate AES key. Encrypt data with the AES algorithm class under the legacy IV
     // Decrypt the encrypted value with EncryptionUtil
     var aesKey = AESKey.generate(32);
     var dataToEncrypt = 'alice@atsign.com';
-    var encryptionAlgo = AESEncryptionAlgo(AESKey(aesKey.key));
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    var atChops = AtChopsImpl(atChopsKeys);
-    var encryptedData = (await atChops.encryptString(
-            dataToEncrypt, EncryptionKeyType.aes256,
-            encryptionAlgorithm: encryptionAlgo,
-            iv: InitialisationVector.legacy()))
-        .result;
+    var encryptedData = StringAESEncryptor(aesKey)
+        .encrypt(dataToEncrypt, iv: InitialisationVector.legacy());
     var decryptedData = EncryptionUtil.decryptValue(encryptedData, aesKey.key);
     expect(decryptedData, dataToEncrypt);
   });
@@ -83,36 +71,24 @@ void main() {
       'A test to verify data(with emoji) encryption with encryption util and decryption with at_chops',
       () async {
     // Generate AES key. Encrypt data with EncryptionUtil using AES key
-    // Create a AESEncryption algo object using AES key and pass it to AtChops. Decrypt the encrypted value with AtChops
+    // Decrypt the encrypted value with the AES algorithm class under the legacy IV
     var aesKey = EncryptionUtil.generateAESKey();
     var dataToEncrypt = 'alice@🦄🛠';
     var encryptedData = EncryptionUtil.encryptValue(dataToEncrypt, aesKey);
-    var encryptionAlgo = AESEncryptionAlgo(AESKey(aesKey));
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    var atChops = AtChopsImpl(atChopsKeys);
-    var decryptedData = (await atChops.decryptString(
-            encryptedData, EncryptionKeyType.aes256,
-            encryptionAlgorithm: encryptionAlgo,
-            iv: InitialisationVector.legacy()))
-        .result;
+    var decryptedData = StringAESEncryptor(AESKey(aesKey))
+        .decrypt(encryptedData, iv: InitialisationVector.legacy());
     expect(decryptedData, dataToEncrypt);
   });
 
   test(
       'A test to verify data(with emoji) encryption with at_chops  and decryption with encryption_util',
       () async {
-    // Generate AES key. Encrypt data with AtChops using AES key
+    // Generate AES key. Encrypt data with the AES algorithm class under the legacy IV
     // Decrypt the encrypted value with EncryptionUtil
     var aesKey = AESKey.generate(32);
     var dataToEncrypt = 'alice@🦄🛠';
-    var encryptionAlgo = AESEncryptionAlgo(AESKey(aesKey.key));
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    var atChops = AtChopsImpl(atChopsKeys);
-    var encryptedData = (await atChops.encryptString(
-            dataToEncrypt, EncryptionKeyType.aes256,
-            encryptionAlgorithm: encryptionAlgo,
-            iv: InitialisationVector.legacy()))
-        .result;
+    var encryptedData = StringAESEncryptor(aesKey)
+        .encrypt(dataToEncrypt, iv: InitialisationVector.legacy());
     var decryptedData = EncryptionUtil.decryptValue(encryptedData, aesKey.key);
     expect(decryptedData, dataToEncrypt);
   });

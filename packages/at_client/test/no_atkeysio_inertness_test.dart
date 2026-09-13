@@ -13,6 +13,10 @@
 /// them.
 library;
 
+// A client built from an AtChops and no key source is the shape under test, so
+// this file names the AtChops on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';

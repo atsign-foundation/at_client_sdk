@@ -115,7 +115,7 @@ class RecordingProvider extends CryptoProvider {
 
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
-  AtChops mockAtChops = MockAtChops();
+  final mockAtChops = MockAtChops();
   AtClientManager mockAtClientManager = MockAtClientManager();
   FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =

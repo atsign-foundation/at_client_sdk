@@ -8,6 +8,11 @@
 /// `CryptoProviderNotRegistered` naming the id it could not find.
 library;
 
+// The bridge that builds a client's AtChops from a keyfile insists on a
+// credential, so this fixture hands the client a placeholder signer; nothing
+// here signs, and the key source carries the material that is read.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 import 'dart:io';
 
