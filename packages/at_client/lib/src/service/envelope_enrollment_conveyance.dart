@@ -6,6 +6,8 @@ import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show AtClientStoppedException;
 import 'package:at_client/src/enroll/privilege_resolver.dart'
     show EnrollmentPrivilegeResolver, isFullyPrivileged;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
@@ -287,6 +289,9 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
             ),
             inReplyTo: EnvelopeAddressing.unsolicited);
         conveyed++;
+      } on AtClientStoppedException catch (e) {
+        _logger.info('Stopped sweeping root links at enrollment $id: $e');
+        break;
       } catch (e) {
         _logger.warning('Could not sweep a root link for enrollment $id: $e');
       }

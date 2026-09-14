@@ -287,6 +287,11 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// Pausing this stream stops reading the socket, so back-pressure reaches
   /// the atServer through TCP rather than being absorbed by an unbounded
   /// buffer in this process.
+  ///
+  /// A reconnect the atServer refuses — the enrollment revoked, expired,
+  /// denied or not yet approved, or the authentication rejected — ends
+  /// notifications as [stopNotifications] does: the refusal arrives on this
+  /// stream as an error, and the stream then closes.
   Stream<String> get notifications;
 
   /// Ask the atServer to start sending notifications on this connection.
@@ -313,6 +318,15 @@ abstract interface class AtLookupMuxable implements AtLookUp {
 
   /// Whether [startNotifications] is in force.
   bool get isNotifying;
+
+  /// Refuses every later request that would need a new connection or a new
+  /// authentication: it throws [ConnectionInvalidException] instead, and a
+  /// lost notification connection is not reconnected. An authenticated
+  /// connection already open stays usable until it closes.
+  ///
+  /// For an owner that is finished with this lookup for good, such as a
+  /// stopped client. Nothing undoes it.
+  void refuseNewConnections();
 
   // Where `AtLookupImpl` accepts more than `AtLookUp` does, restated here so
   // a caller can hold this interface without losing anything: two methods,

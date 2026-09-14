@@ -319,6 +319,66 @@ void main() {
               'the connection the caller just asked to be rid of');
     });
 
+    test(
+        'a reconnect the atServer refuses ends notifications and hands the '
+        'refusal to the subscriber', () async {
+      var authCount = 0;
+      // The message a revoked enrollment's reconnect fails with, as logged by
+      // the functional pack.
+      final refusal = UnAuthenticatedException('Failed connecting to @alice. '
+          'error:AT0027:enrollment_id: e1 is revoked');
+      final atLookup = build(authenticator: (_) async {
+        if (++authCount > 1) throw refusal;
+        return true;
+      })
+        ..heartbeatInterval = const Duration(hours: 1);
+      await atLookup.startNotifications();
+      final errors = <Object>[];
+      var done = false;
+      atLookup.notifications
+          .listen((_) {}, onError: errors.add, onDone: () => done = true);
+
+      await socket.serverCloses();
+      // The first attempt at 1s is refused; the second would be at 3s.
+      await Future.delayed(const Duration(milliseconds: 3500));
+
+      expect(authCount, 2,
+          reason: 'a refusal is an answer a retry does not change, so the '
+              'refused attempt is the last');
+      expect(sockets, hasLength(2));
+      expect(errors, [same(refusal)],
+          reason: 'the subscriber is told why notifications ended');
+      expect(done, isTrue, reason: 'and the stream then closes');
+      expect(atLookup.isNotifying, isFalse);
+      expect(atLookup.isReconnectingNotifications, isFalse);
+    });
+
+    test('a reconnect that fails for any other reason keeps trying', () async {
+      var authCount = 0;
+      final atLookup = build(authenticator: (_) async {
+        if (++authCount > 1) {
+          throw UnAuthenticatedException('Failed connecting to @alice. '
+              'The authenticator reported failure');
+        }
+        return true;
+      })
+        ..heartbeatInterval = const Duration(hours: 1);
+      await atLookup.startNotifications();
+      final errors = <Object>[];
+      atLookup.notifications.listen((_) {}, onError: errors.add);
+
+      await socket.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 3500));
+
+      expect(authCount, 3,
+          reason: 'a failure that names no refusal code may clear, so the '
+              'loop retries it on its backoff');
+      expect(errors, isEmpty);
+      expect(atLookup.isNotifying, isTrue);
+
+      await atLookup.stopNotifications();
+    });
+
     test('the heartbeat probes a quiet connection with noop:0', () async {
       final atLookup = authenticated()
         ..heartbeatInterval = const Duration(milliseconds: 40);
@@ -717,6 +777,65 @@ void main() {
       expect(seen, [true, false],
           reason: 'a deliberate stop is still a transition a subscriber must '
               'see - otherwise it reads as a connection that is still up');
+    });
+  });
+
+  group('refuseNewConnections', () {
+    test('a request that needs a new connection is refused and opens none',
+        () async {
+      final atLookup = authenticated();
+      atLookup.refuseNewConnections();
+
+      await expectLater(
+          atLookup.executeCommand('llookup:k@alice\n', auth: true),
+          throwsA(isA<ConnectionInvalidException>()));
+      expect(sockets, isEmpty);
+    });
+
+    test(
+        'an open connection that is not yet authenticated is not authenticated',
+        () async {
+      var authCount = 0;
+      final atLookup = build(authenticator: (_) async {
+        authCount++;
+        return true;
+      });
+      await (atLookup as AtLookupImpl).createConnection();
+      atLookup.refuseNewConnections();
+
+      await expectLater(
+          atLookup.executeCommand('llookup:k@alice\n', auth: true),
+          throwsA(isA<ConnectionInvalidException>()));
+      expect(authCount, 0,
+          reason: 'an atServer that refused this client once refuses a second '
+              'authentication on the same socket as well');
+      expect(sockets, hasLength(1));
+      await atLookup.close();
+    });
+
+    test('control: without it the same request connects', () async {
+      final atLookup = authenticated();
+      unawaited(atLookup
+          .executeCommand('llookup:k@alice\n', auth: true)
+          .then((_) {}, onError: (_) {}));
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(sockets, hasLength(1));
+      await atLookup.close();
+    });
+
+    test('a lost notification connection is not reconnected', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      await atLookup.startNotifications();
+      atLookup.refuseNewConnections();
+
+      await socket.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(sockets, hasLength(1));
+      expect(atLookup.isNotifying, isFalse);
+      expect(atLookup.isReconnectingNotifications, isFalse);
     });
   });
 

@@ -6,6 +6,8 @@ import 'dart:typed_data' show Uint8List;
 import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, PqOpenException;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
     show pqOpenFromBase64, pqSealToBase64;
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show AtClientStoppedException, classifyConnectionFailure;
 import 'package:at_client/src/client/request_options.dart'
     show DeleteRequestOptions, GetRequestOptions, PutRequestOptions;
 import 'package:at_client/src/response/at_notification.dart'
@@ -618,6 +620,17 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// resolves any racing [waitForSecret]).
   static const String secretRequestKind = 'request';
 
+  /// Why [error] fails every later write of a fan-out the same way, or null
+  /// when it is about one member: the atServer refusing this client's own
+  /// credentials, or this client having been stopped.
+  static String? _fanOutEndedBy(Object error) {
+    if (error is AtClientStoppedException) return 'this client was stopped';
+    if (classifyConnectionFailure(error)?.isRefused ?? false) {
+      return 'the atServer refused this client\'s credentials';
+    }
+    return null;
+  }
+
   /// Whether [member] is this client, so a broadcast skips itself.
   ///
   /// Identity is the **enrollment**, not the kpid: a kpid is the reader's
@@ -669,6 +682,13 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               inReplyTo: EnvelopeAddressing.unsolicited);
           sent++;
         } catch (e) {
+          final reason = _fanOutEndedBy(e);
+          if (reason != null) {
+            logger.warning('Stopped requesting secrets in $namespace at '
+                'enrollment ${member.enrollmentId}: $reason, so no remaining '
+                'member can be asked: $e');
+            break;
+          }
           // Warning, not finer: a request that never went out is
           // indistinguishable from one nobody answered.
           logger.warning('Could not request secrets from enrollment '
@@ -1021,6 +1041,13 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               inReplyTo: EnvelopeAddressing.unsolicited);
           pushed++;
         } catch (e) {
+          final reason = _fanOutEndedBy(e);
+          if (reason != null) {
+            logger.warning('Stopped pushing "${secret.name}" in '
+                '${secret.namespace} at enrollment ${member.enrollmentId}: '
+                '$reason, so no remaining member can be reached: $e');
+            break;
+          }
           logger.warning('Could not push "${secret.name}" to enrollment '
               '${member.enrollmentId} (kpid ${to.kpid}) in '
               '${secret.namespace}: $e. The remaining members are still '

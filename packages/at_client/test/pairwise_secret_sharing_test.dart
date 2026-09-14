@@ -988,6 +988,80 @@ void main() {
     });
   });
 
+  group('a fan-out stops once the atServer refuses this client', () {
+    // The message a revoked enrollment's writes fail with, as a put surfaces it.
+    final revoked = AtClientException.message('Exception: Failed connecting '
+        'to @alice. error:AT0027:enrollment_id: enroll-a is revoked');
+    final transient = AtClientException.message(
+        'Exception: The connection went away before a response arrived');
+    late int envelopeWrites;
+
+    setUp(() async {
+      final sharerC = buildSharer('enroll-c', seedC);
+      directory.seed('enroll-c', await sharerC.register());
+      for (final id in ['enroll-a', 'enroll-b', 'enroll-c']) {
+        directory.authorize('myapp', id);
+      }
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v'));
+      envelopeWrites = 0;
+    });
+
+    void failEnvelopeWritesWith(Object error) {
+      when(() => sharerA.atClient.put(
+              any(that: predicate((k) => '$k'.contains('.__ssenv.'))), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async {
+        envelopeWrites++;
+        throw error;
+      });
+    }
+
+    test('a request asks no one after a refusal', () async {
+      failEnvelopeWritesWith(revoked);
+      final sent = await sharerA.requestSecretsFromNamespace('myapp');
+      expect(sent, 0);
+      expect(envelopeWrites, 1,
+          reason: 'the refusal is of this client, so every other member would '
+              'be refused the same way');
+    });
+
+    test('a push reaches no one after a refusal', () async {
+      failEnvelopeWritesWith(revoked);
+      final pushed = await sharerA.pushSecretToNamespaceMembers(
+          sharerA.secretStore.getSecret('myapp', 'token')!);
+      expect(pushed, 0);
+      expect(envelopeWrites, 1);
+    });
+
+    test('a request and a push reach no one once this client is stopped',
+        () async {
+      failEnvelopeWritesWith(AtClientStoppedException('stopped'));
+      expect(await sharerA.requestSecretsFromNamespace('myapp'), 0);
+      expect(envelopeWrites, 1);
+      expect(
+          await sharerA.pushSecretToNamespaceMembers(
+              sharerA.secretStore.getSecret('myapp', 'token')!),
+          0);
+      expect(envelopeWrites, 2,
+          reason: 'a stopped client sends nothing, so asking the next member '
+              'fails the same way');
+    });
+
+    test('a failure that is not a refusal still reaches the rest', () async {
+      failEnvelopeWritesWith(transient);
+      expect(await sharerA.requestSecretsFromNamespace('myapp'), 0);
+      expect(envelopeWrites, 2,
+          reason: 'one unreachable member must not stop the others being '
+              'asked');
+      expect(
+          await sharerA.pushSecretToNamespaceMembers(
+              sharerA.secretStore.getSecret('myapp', 'token')!),
+          0);
+      expect(envelopeWrites, 4);
+    });
+  });
+
   group('a broadcast identifies itself by enrollment, not by kpid', () {
     // NOTE: KeyPackage.kpid is the reader's preferred key, not an identity —
     // an instance can hold a keypair the directory no longer serves, so a kpid

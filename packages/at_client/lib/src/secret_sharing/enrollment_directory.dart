@@ -1,6 +1,8 @@
 import 'dart:convert' show jsonDecode;
 
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show AtClientStoppedException;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -229,9 +231,10 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
 /// Verifies an advertised key package against the `_apsk` of the enrollment
 /// whose record carries it, and says why if it is unusable.
 ///
-/// Never throws: a rejection concerns **this advertisement only**, so a caller
-/// listing a roster can drop one member and keep the rest rather than let a
-/// single bad record deny every other enrollment its secrets.
+/// Throws nothing but [AtClientStoppedException]: a rejection concerns **this
+/// advertisement only**, so a caller listing a roster can drop one member and
+/// keep the rest rather than let a single bad record deny every other
+/// enrollment its secrets, while a stopped client can check none of them.
 @experimental
 Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
   Object? advertised, {
@@ -276,6 +279,8 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
         'does not verify against its _apsk, so the key it offers is only as '
         'trustworthy as whatever served it; not sealing to it: $e');
     return (null, KeyPackageStatus.rejected);
+  } on AtClientStoppedException {
+    rethrow;
   } catch (e) {
     _logger.warning('the key package advertised by enrollment $enrollmentId '
         'could not be checked against its _apsk, which could not be fetched; '

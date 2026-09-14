@@ -785,6 +785,35 @@ void main() {
           contains(contains('could not be checked against its _apsk')));
     });
 
+    test('a stopped client ends the roster read instead of warning per member',
+        () async {
+      final b = await registered('enroll-b');
+      final d = await registered('enroll-d');
+      final atClient = buildMockClient('enroll-self');
+      stubListns(atClient, [
+        record('enroll-b', await b.signedKeyPackagePayload()),
+        record('enroll-d', await d.signedKeyPackagePayload()),
+      ]);
+      var apskReads = 0;
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((_) async {
+        apskReads++;
+        throw AtClientStoppedException('stopped');
+      });
+      recorded.records.clear();
+
+      await expectLater(
+          VerbEnrollmentDirectory(atClient).listForNamespace('myapp'),
+          throwsA(isA<AtClientStoppedException>()));
+
+      expect(apskReads, 1,
+          reason: 'every later member would be refused the same way');
+      expect(recorded.at('WARNING'), isEmpty,
+          reason: 'a stopped client is not an _apsk that could not be '
+              'fetched');
+    });
+
     test('each member says why it has no usable key package', () async {
       final b = await registered('enroll-b');
       final d = await registered('enroll-d');

@@ -361,6 +361,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     await _createConnectionMutex.acquire();
     try {
       if (!isConnectionAvailable()) {
+        if (_refusingNewConnections) {
+          throw ConnectionInvalidException('the connection to $_currentAtSign '
+              'is closed, and this lookup opens no new one');
+        }
         if (_connection != null) {
           // Clean up the connection before creating a new one
           logger.finer('Closing old connection');
@@ -824,6 +828,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     try {
       await requestResponseMutex.acquire();
 
+      if (auth && _isAuthRequired() && _refusingNewConnections) {
+        throw ConnectionInvalidException('the connection to $_currentAtSign '
+            'is not authenticated, and this lookup authenticates no new one');
+      }
       if (auth && _isAuthRequired()) {
         if (authenticator != null) {
           await _authenticateWith(authenticator!);
@@ -891,6 +899,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   Future<void> close() async {
     await _closeConnection();
   }
+
+  bool _refusingNewConnections = false;
+
+  @override
+  void refuseNewConnections() => _refusingNewConnections = true;
 
   /// Closes the connection and fails whatever was waiting on it.
   ///
@@ -1045,6 +1058,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         // start followed that stop, interfere with the connection the restart
         // just made.
         if (!_isNotifying || generation != _notifyGeneration) return;
+        if (_refusingNewConnections) {
+          await stopNotifications();
+          return;
+        }
         try {
           await _openNotificationStream();
           logger.info('Notification connection re-established');
@@ -1053,6 +1070,15 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           _emitConnectionUp(true);
           return;
         } catch (e) {
+          if (_isCredentialRefusal(e)) {
+            logger.warning(
+                'Not reconnecting notifications for $_currentAtSign: '
+                'the atServer refused its credentials, which trying again does '
+                'not change: $e');
+            _notificationController?.addError(e);
+            await stopNotifications();
+            return;
+          }
           logger.warning('Reconnect attempt $_reconnectIx failed: $e');
         }
       }
@@ -1062,6 +1088,15 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       if (generation == _notifyGeneration) _reconnecting = false;
     }
   }
+
+  /// Whether [error] is the atServer refusing this client's credentials — the
+  /// enrollment denied, not yet approved, revoked or expired, or the
+  /// authentication rejected — rather than a failure to reach it.
+  static bool _isCredentialRefusal(Object error) =>
+      _credentialRefusal.hasMatch('$error');
+
+  static final RegExp _credentialRefusal =
+      RegExp(r'error:AT0(025|026|027|029|401)\b');
 
   void _startHeartbeat() {
     _stopHeartbeat();

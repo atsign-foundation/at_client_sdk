@@ -103,7 +103,6 @@ class KeyPackageMinting with ApkamSigning {
       return nothing;
     }
 
-    final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
     final enrolment = atClient.enrollmentId;
     if (enrolment == null || isAtSignCredential(enrolment)) {
       logger.info('Not reconciling the key package for $atSign: the atSign\'s '
@@ -129,7 +128,8 @@ class KeyPackageMinting with ApkamSigning {
     ];
     if (missing.isEmpty && superseded.isEmpty) {
       if (await _publishedPackageRejected(enrolment)) {
-        await _publish(enrolment, atLookUp!, held);
+        await _publish(
+            enrolment, atClient.getRemoteSecondary()!.atLookUp, held);
         logger.info('Signed the key package for $enrolment again: the '
             'published one no longer verified against its _apsk, so no peer '
             'would seal to this enrollment');
@@ -185,9 +185,11 @@ class KeyPackageMinting with ApkamSigning {
 
     // NOTE: published only after the filing, so no advertisement ever names a
     // key whose private half this client does not already hold.
+    // NOTE: the lookup is read here, not up front: a stop that lands during
+    // the mint makes this read throw rather than reconnect.
     await _publish(
       enrolment,
-      atLookUp!,
+      atClient.getRemoteSecondary()!.atLookUp,
       [
         for (final key in minted)
           PackageKey.fromBytes(

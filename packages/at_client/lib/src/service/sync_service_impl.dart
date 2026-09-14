@@ -1298,6 +1298,9 @@ class SyncServiceImpl implements SyncService {
       // same answer the round-decision sees.
       return pendingPushCount == 0 &&
           lastReceivedServerCommitId == serverCommitId;
+    } on _SyncAbandoned {
+      throw AtClientException(
+          error_codes['AtClientException'], 'SyncService has been stopped');
     } on Exception catch (e) {
       var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
       _logger.severe('exception in isInSync $cause');
@@ -1374,6 +1377,9 @@ class SyncServiceImpl implements SyncService {
         return cached;
       }
     }
+    // NOTE: a stopped service opens no new connection, whether a round or an
+    // app's isInSync() is asking.
+    _bailIfStopped();
     var fresh = await syncUtil.getLatestServerCommitId(
         _remoteSecondary, _atClient.getPreferences()!.syncRegex);
     // If server commit id is null, set to -1;

@@ -223,6 +223,31 @@ void main() {
     });
   });
 
+  test('a stop that lands during the reconcile sends no update', () async {
+    await fileHeldKey(SecretSharingAlgos.xWing);
+    configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
+    final remoteSecondary = MockRemoteSecondary();
+    when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
+    var stopped = false;
+    when(() => remoteSecondary.atLookUp).thenAnswer((_) {
+      if (stopped) throw AtClientStoppedException('stopped');
+      return atLookUp;
+    });
+    // NOTE: the stop lands at the reconcile's first read of the enrollment
+    // id, after anything that could have read the lookup up front.
+    when(() => atClient.enrollmentId).thenAnswer((_) {
+      stopped = true;
+      return enrollmentId;
+    });
+
+    await expectLater(minter().reconcileKeyPackage(),
+        throwsA(isA<AtClientStoppedException>()));
+
+    expect(updates, isEmpty,
+        reason: 'a lookup read before the stop would still reach the '
+            'atServer, opening a new connection for a stopped client');
+  });
+
   group('gaining a key', () {
     test('a second algorithm is minted, filed and advertised beside the first',
         () async {

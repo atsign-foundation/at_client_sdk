@@ -195,7 +195,9 @@ final sub = client.notificationService
   send whose receipt you rely on, wait for `listening` to be true, or for
   `currentListenerStateStream` to emit `NotificationListenerState.listening`.
 - The monitor reconnects on its own after a network loss until
-  `stopListening()`; `currentListenerState` says where it is.
+  `stopListening()`; `currentListenerState` says where it is. It stops when
+  the atServer refuses the client's keys, and `client.connection` then reads
+  `refused` with the cause.
 - `send(to:, namespace:, body:, expiration:)` for fire-and-forget; `notify(...)`
   for the full `NotificationParams`. A `notify` that does not wait for the
   final status (`waitForFinalDeliveryStatus: false`) reports a failure through
@@ -232,7 +234,8 @@ await client.stop();
   opens on it. If the writes must reach the atServer before the process ends,
   wait until `isInSync()` answers true first.
 - A stopped client is not restarted. `isStopped` is true, its services are
-  gone, and the atSign can be opened again at once.
+  gone, and the atSign can be opened again at once. It opens no new
+  connection: a remote call it makes throws `AtClientStoppedException`.
 - Every `open` of the same atSign and enrollment, or on the same store, while
   the client is live is refused: **stop first, then open**.
 

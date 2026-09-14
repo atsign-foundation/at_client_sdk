@@ -341,6 +341,13 @@ AtConnectionCause? _refusalCauseIn(String message) {
 bool _readsUnreachable(String message) =>
     _unreachableText.any((pattern) => message.contains(pattern));
 
+/// Thrown by a remote operation of a client that has been stopped: a stopped
+/// client opens no new connection to its atServer, so work of its that is
+/// still running ends here.
+class AtClientStoppedException extends AtClientException {
+  AtClientStoppedException(super.message) : super.message();
+}
+
 /// `open` was refused, and this device holds nothing for the principal, so
 /// there is no client to hand back: the first open of a principal on a device
 /// must be online.

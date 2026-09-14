@@ -264,6 +264,49 @@ void main() {
             'worse than no anchor');
   });
 
+  test('a stopped sweeper reads no further enrollment', () async {
+    final enrolleeClient = buildMockClient(enrolleeId);
+    final enrollee = AtClientSecretSharing.forClient(enrolleeClient);
+    await enrollee.register();
+    final advertised = await enrollee.signedKeyPackagePayload();
+
+    final sweeperClient = buildMockClient('sweeper-1');
+    await AtClientSecretSharing.forClient(sweeperClient).register();
+    await giveRoot(sweeperClient);
+    final listCommand = (EnrollVerbBuilder()
+          ..operation = EnrollOperationEnum.list
+          ..enrollmentStatusFilter = [EnrollmentStatus.approved])
+        .buildCommand();
+    Map<String, Object?> approved(String id) => {
+          'appName': 'buzz',
+          'deviceName': 'pixel-$id',
+          'namespace': {namespace: 'rw'},
+          'metadata': {'keyPackage': advertised},
+        };
+    final secondary = sweeperClient.getRemoteSecondary()!;
+    when(() => secondary.executeCommand(listCommand, auth: true))
+        .thenAnswer((_) async => 'data:${jsonEncode({
+                  '$enrolleeId.new.enrollments.__manage$atSign':
+                      approved(enrolleeId),
+                  'scoped-2.new.enrollments.__manage$atSign':
+                      approved('scoped-2'),
+                })}');
+    var apskReads = 0;
+    when(() => sweeperClient.get(
+            any(that: predicate<AtKey>((k) => '$k'.contains('_apsk.'))),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((_) async {
+      apskReads++;
+      throw AtClientStoppedException('stopped');
+    });
+
+    final service = EnrollmentServiceImpl(sweeperClient, AtEnrollment.create());
+    expect(await service.sweepUnanchoredEnrollments(), 0);
+    expect(apskReads, 1,
+        reason: 'a stopped client reads no _apsk, so every later enrollment '
+            'would fail the same way');
+  });
+
   test('an enrollment with no key package is skipped, not failed', () async {
     final sweeperClient = buildMockClient('sweeper-2');
     await AtClientSecretSharing.forClient(sweeperClient).register();

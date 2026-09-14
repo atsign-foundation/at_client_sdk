@@ -177,8 +177,16 @@ class Monitor {
         lookUp.notificationConnectionUp.listen(_onConnectionState);
     _notificationSubscription ??= lookUp.notifications.listen(
       _onNotification,
-      onError: (Object e) =>
-          logger.warning('Error on the notification stream: $e'),
+      onError: (Object e) {
+        final refusal = _refusalIn(e);
+        if (refusal != null) {
+          logger.warning('Notifications ended: the atServer refused this '
+              'client\'s credentials: $e');
+          connection?.report(refusal);
+          return;
+        }
+        logger.warning('Error on the notification stream: $e');
+      },
     );
 
     // Its own guard: reading the watermark is a local keystore operation, not
@@ -225,9 +233,23 @@ class Monitor {
       _armSilenceTimer();
       logger.info('monitor started');
     } catch (e) {
+      final refusal = _refusalIn(e);
+      if (refusal != null) {
+        logger.warning('Not retrying the notification start: the atServer '
+            'refused this client\'s credentials: $e');
+        await connection?.report(refusal);
+        return;
+      }
       logger.warning('Failed to start notifications: $e');
       _scheduleStartRetry();
     }
+  }
+
+  /// The refused state [error] names, or null when it is not the atServer
+  /// refusing this client's credentials.
+  static AtConnectionState? _refusalIn(Object error) {
+    final state = classifyConnectionFailure(error);
+    return state != null && state.isRefused ? state : null;
   }
 
   /// Tries the first connect again, while the caller still wants to listen.

@@ -103,6 +103,13 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
 
   void reconnected() => _up.add(true);
 
+  /// A reconnect the atServer refuses, as at_lookup ends it: the refusal on
+  /// the notification stream, then the stop.
+  Future<void> refuseReconnect(Object refusal) async {
+    _notifications.addError(refusal);
+    await stopNotifications();
+  }
+
   Future<void> dispose() async {
     // NOT awaited: close() on a single-subscription controller returns a
     // `done` that only completes once a subscriber has taken the event, and
@@ -175,6 +182,40 @@ void main() {
       expect(connection.current.isOnline, isTrue,
           reason: 'a monitor that is receiving is an authenticated connection '
               'to the atServer');
+    });
+
+    /// What a revoked enrollment's reconnect fails with.
+    final revoked = UnAuthenticatedException('Failed connecting to @alice. '
+        'error:AT0027:enrollment_id: e1 is revoked');
+
+    test(
+        'is told refused, and the start is not retried, when the atServer '
+        'refuses the credentials', () async {
+      muxable.startError = revoked;
+
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(muxable.startCalls, 1,
+          reason: 'the first retry is due at 1s; a refusal is an answer a '
+              'retry does not change');
+      expect(connection.current.isRefused, isTrue);
+      expect(connection.current.cause, AtConnectionCause.revoked);
+    }, timeout: Timeout(Duration(seconds: 15)));
+
+    test('is told refused when a reconnect is refused', () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(connection.current.isOnline, isTrue);
+
+      await muxable.refuseReconnect(revoked);
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(connection.current.isRefused, isTrue,
+          reason: 'nothing else carries a notification connection\'s refusal '
+              'to the client, so an app would keep waiting on a revoked '
+              'enrollment');
+      expect(connection.current.cause, AtConnectionCause.revoked);
     });
 
     test('is not told offline when the connection drops', () async {
@@ -288,8 +329,8 @@ void main() {
 
       expect(muxable.startCalls, greaterThan(1),
           reason: 'the monitor asked again on its own, which is what the '
-              'public contract promises: reconnect until successful or until '
-              'stopListening');
+              'public contract promises for a failure that is not a refusal: '
+              'reconnect until successful or until stopListening');
       expect(monitor.currentState, NotificationListenerState.listening,
           reason: 'and once the fault cleared it actually got there');
     }, timeout: Timeout(Duration(seconds: 15)));

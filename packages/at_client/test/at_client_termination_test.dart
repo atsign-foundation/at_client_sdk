@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -25,6 +26,8 @@ Future<AtClient> _initializeAtClient(String atSign) async {
 }
 
 void main() {
+  setUpAll(() => registerFallbackValue(StatsVerbBuilder()));
+
   tearDown(() async {
     final activeInstances = List<AtClient>.from(
       AtClientImpl.atClientInstanceMap.values,
@@ -91,6 +94,89 @@ void main() {
         },
       );
 
+      test('work that resumes while stop() runs opens no new connection',
+          () async {
+        final mockAtLookup = MockAtLookUp();
+        when(() => mockAtLookup.close()).thenAnswer((_) async {});
+        final remoteSecondary = RemoteSecondary(
+            '@stop_window', _createPreference('stop_window'),
+            atLookUp: mockAtLookup);
+        final atClient = await AtClientImpl.create(
+          '@stop_window',
+          'test',
+          _createPreference('stop_window'),
+          remoteSecondary: remoteSecondary,
+        ) as AtClientImpl;
+
+        // NOTE: the connection state reports `stopped` as the stop's first
+        // step, while the services and the remote are still to be stopped.
+        final outcome = Completer<Object?>();
+        atClient.connection.changes.listen((state) {
+          if (state.cause != AtConnectionCause.stopped) return;
+          remoteSecondary
+              .executeCommand('llookup:k@stop_window\n', auth: true)
+              .then((_) => outcome.complete('reached the atServer'),
+                  onError: outcome.complete);
+        });
+
+        await atClient.stop();
+
+        expect(await outcome.future, isA<AtClientStoppedException>());
+        verifyNever(
+            () => mockAtLookup.executeCommand(any(), auth: any(named: 'auth')));
+      });
+
+      test(
+          'a stopping remote secondary refuses new connections on the lookup '
+          'it built, and leaves an injected one alone', () async {
+        final owned = _MockMuxable();
+        final built = RemoteSecondary('@owned', AtClientPreference(),
+            lookUps: _lookUpsReturning(owned));
+        built.refuseNewWork();
+        verify(() => owned.refuseNewConnections()).called(1);
+
+        final injected = _MockMuxable();
+        final given = RemoteSecondary('@injected', AtClientPreference(),
+            atLookUp: injected);
+        given.refuseNewWork();
+        verifyNever(() => injected.refuseNewConnections());
+      });
+
+      test(
+          'a request that was waiting when the stop began ends as stopped, not '
+          'as a failed connection', () async {
+        final owned = _MockMuxable();
+        final gate = Completer<void>();
+        when(() => owned.executeCommand(any(), auth: any(named: 'auth')))
+            .thenAnswer((_) async {
+          await gate.future;
+          throw ConnectionInvalidException('no new connection');
+        });
+        final remoteSecondary = RemoteSecondary(
+            '@waiting', AtClientPreference(),
+            lookUps: _lookUpsReturning(owned));
+
+        final running =
+            remoteSecondary.executeCommand('llookup:k@waiting\n', auth: true);
+        remoteSecondary.refuseNewWork();
+        gate.complete();
+
+        await expectLater(running, throwsA(isA<AtClientStoppedException>()));
+      });
+
+      test('control: the same failure without a stop is the connection failure',
+          () async {
+        final owned = _MockMuxable();
+        when(() => owned.executeCommand(any(), auth: any(named: 'auth')))
+            .thenThrow(ConnectionInvalidException('no new connection'));
+        final remoteSecondary = RemoteSecondary('@live', AtClientPreference(),
+            lookUps: _lookUpsReturning(owned));
+
+        await expectLater(
+            remoteSecondary.executeCommand('llookup:k@live\n', auth: true),
+            throwsA(isA<ConnectionInvalidException>()));
+      });
+
       test('close() should close RemoteSecondary connection', () async {
         final mockAtLookup = MockAtLookUp();
         bool calledFlag = false;
@@ -106,6 +192,36 @@ void main() {
 
         await remoteSecondary.closeConnection();
         expect(calledFlag, true);
+      });
+
+      test('a remote secondary whose connection stop() closed opens no new one',
+          () async {
+        final mockAtLookup = MockAtLookUp();
+        when(() => mockAtLookup.close()).thenAnswer((_) async {});
+        final remoteSecondary = RemoteSecondary(
+          '@test',
+          AtClientPreference(),
+          atLookUp: mockAtLookup,
+        );
+        await remoteSecondary.executeCommand('llookup:k@test\n', auth: true);
+        verify(() => mockAtLookup.executeCommand(any(), auth: true)).called(1);
+
+        await remoteSecondary.closeConnection();
+
+        await expectLater(
+            remoteSecondary.executeCommand('llookup:k@test\n', auth: true),
+            throwsA(isA<AtClientStoppedException>()));
+        await expectLater(remoteSecondary.executeVerb(StatsVerbBuilder()),
+            throwsA(isA<AtClientStoppedException>()));
+        await expectLater(
+            remoteSecondary.sync(0), throwsA(isA<AtClientStoppedException>()));
+        verifyNever(
+            () => mockAtLookup.executeCommand(any(), auth: any(named: 'auth')));
+        verifyNever(() => mockAtLookup.executeVerb(any()));
+        expect(() => remoteSecondary.atLookUp,
+            throwsA(isA<AtClientStoppedException>()),
+            reason: 'a caller holding the lookup would open a connection '
+                'for the stopped client itself');
       });
     });
 
@@ -349,6 +465,18 @@ class _CapturingAtSignChangeListener implements AtSignChangeListener {
   @override
   void listenToAtSignChange(SwitchAtSignEvent event) => _onEvent(event);
 }
+
+class _MockMuxable extends Mock implements AtLookupMuxable {}
+
+/// A lookup factory that hands back [lookUp], as a client's own factory hands
+/// back the lookup it builds.
+AtLookUpFactory _lookUpsReturning(AtLookupMuxable lookUp) => (
+        {required String atSign,
+        required AtRootDomain rootDomain,
+        required AtAuthenticator? authenticator,
+        SecondaryAddressFinder? secondaryAddressFinder,
+        Map<String, dynamic> clientConfig = const {}}) =>
+    lookUp;
 
 /// Stands in for the muxable the Monitor now drives, so these tests exercise
 /// Monitor's own state handling rather than a socket.

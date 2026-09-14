@@ -4,6 +4,8 @@ import 'dart:typed_data' show Uint8List;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show AtClientStoppedException;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_commons/at_commons.dart';
@@ -323,6 +325,8 @@ class PqSigningChain {
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
       return _fieldFrom(value, field);
+    } on AtClientStoppedException {
+      rethrow;
     } catch (e) {
       _logger.info('No _apsk readable for enrollment $enrollmentId: $e');
       return null;

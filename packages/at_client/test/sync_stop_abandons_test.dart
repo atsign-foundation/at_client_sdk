@@ -219,6 +219,17 @@ void main() {
           reason: 'the refusal is logged with the key it was about');
     });
 
+    test('isInSync on a stopped service asks the atServer nothing', () async {
+      stubFreshClient();
+      await sync.stop();
+
+      await expectLater(sync.isInSync(), throwsA(isA<AtClientException>()));
+
+      verifyNever(() => remote.executeVerb(any()));
+      expect(recorded.at('SEVERE'), isEmpty,
+          reason: 'a stopped service is not an atServer that failed to answer');
+    });
+
     test('the round ends at its next step and touches nothing further',
         () async {
       final gate = Completer<List<String>>();

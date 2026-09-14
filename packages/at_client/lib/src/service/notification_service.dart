@@ -47,7 +47,10 @@ abstract class NotificationService {
   /// Whether the service **is** currently listening for notifications.
   /// If network connectivity is lost or weird, the listener will detect that,
   /// and will disconnect and periodically try to reconnect until successful,
-  /// or until [stopListening] has been called.
+  /// or until [stopListening] has been called. It stops trying when the
+  /// atServer refuses this client's credentials — the enrollment revoked,
+  /// expired, denied or not yet approved, or the authentication rejected —
+  /// and reports that on the client's connection state.
   NotificationListenerState get currentListenerState;
 
   /// Get an event every time the currentListenerState is set. **NB** The

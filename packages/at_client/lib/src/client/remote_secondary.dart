@@ -31,7 +31,17 @@ class RemoteSecondary implements Secondary {
 
   late AtClientPreference _preference;
 
-  late AtLookUp atLookUp;
+  late AtLookUp _atLookUp;
+
+  /// The lookup this secondary sends through. Once [closeConnection] has run
+  /// it throws [AtClientStoppedException], since a caller holding the lookup
+  /// would open a new connection for the stopped client itself.
+  AtLookUp get atLookUp {
+    _refuseIfClosed();
+    return _atLookUp;
+  }
+
+  set atLookUp(AtLookUp value) => _atLookUp = value;
 
   /// The atDirectory lookup this connection resolves its atServer with, or
   /// null to read the process-wide one per lookup.
@@ -66,6 +76,28 @@ class RemoteSecondary implements Secondary {
   /// one: every verb that comes back says online, every one that cannot get
   /// out or is refused says which.
   AtConnection? _connection;
+
+  /// Set by [closeConnection], after which nothing here reaches the atServer.
+  bool _closed = false;
+
+  /// Whether this secondary built [atLookUp] itself, and so may refuse new
+  /// connections on it: one the caller supplied may outlive this client.
+  bool _ownsLookUp = false;
+
+  void _refuseIfClosed() {
+    if (_closed) {
+      throw AtClientStoppedException('the client for $_atSign has been '
+          'stopped, so it opens no new connection to its atServer');
+    }
+  }
+
+  /// A request that was already waiting when the stop began fails for want of
+  /// a connection; that is the stop, not the atServer being unreachable.
+  void _refuseIfClosedAfter(Object error) {
+    if (_closed && (classifyConnectionFailure(error)?.isOffline ?? false)) {
+      _refuseIfClosed();
+    }
+  }
 
   void _reportSuccess() => _connection?.report(AtConnectionState.online());
 
@@ -190,6 +222,7 @@ class RemoteSecondary implements Secondary {
     // credentials, and credentials now travel as an authenticator, which
     // _installAuthenticator supplies below from whichever of the four shapes
     // this client actually holds.
+    _ownsLookUp = atLookUp == null;
     this.atLookUp = atLookUp ??
         (lookUps ?? defaultLookUps(preference))(
           atSign: atSign,
@@ -250,6 +283,7 @@ class RemoteSecondary implements Secondary {
           'Removed in 4.0.')
       sync = false,
       bool cameFromServer = false}) async {
+    _refuseIfClosed();
     try {
       String verbResult;
       logger.finer('Command sent to server: ${builder.buildCommand()}');
@@ -258,11 +292,13 @@ class RemoteSecondary implements Secondary {
       _reportSuccess();
       return verbResult;
     } on AtException catch (e) {
+      _refuseIfClosedAfter(e);
       _reportFailure(e);
       throw e
         ..stack(AtChainedException(_getIntent(builder),
             ExceptionScenario.remoteVerbExecutionFailed, e.message));
     } on AtLookUpException catch (e) {
+      _refuseIfClosedAfter(e);
       _reportFailure(e);
       var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
@@ -295,6 +331,7 @@ class RemoteSecondary implements Secondary {
       throw BufferOverFlowException(
           'The length of value exceeds the maximum allowed length. Maximum buffer size is ${_preference.maxDataSize} bytes. Found ${atCommand.length} bytes');
     }
+    _refuseIfClosed();
     try {
       String? verbResult;
       verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
@@ -304,11 +341,13 @@ class RemoteSecondary implements Secondary {
       if (auth) _reportSuccess();
       return verbResult;
     } on AtException catch (e) {
+      _refuseIfClosedAfter(e);
       _reportFailure(e);
       e.stack(AtChainedException(Intent.fetchData,
           ExceptionScenario.remoteVerbExecutionFailed, e.message));
       rethrow;
     } on AtLookUpException catch (e) {
+      _refuseIfClosedAfter(e);
       _reportFailure(e);
       var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
@@ -327,6 +366,7 @@ class RemoteSecondary implements Secondary {
     if (secret == null) {
       throw UnAuthenticatedException('Cram secret cannot be null');
     }
+    _refuseIfClosed();
     var authResult = await atLookUp.cramAuthenticate(secret);
     return authResult;
   }
@@ -339,11 +379,13 @@ class RemoteSecondary implements Secondary {
       ..limit = _preference.syncPageLimit;
 
     var atCommand = syncVerbBuilder.buildCommand();
+    _refuseIfClosed();
     try {
       final result = await atLookUp.executeCommand(atCommand, auth: true);
       _reportSuccess();
       return result;
     } catch (e) {
+      _refuseIfClosedAfter(e);
       _reportFailure(e);
       rethrow;
     }
@@ -394,7 +436,21 @@ class RemoteSecondary implements Secondary {
     return Intent.fetchData;
   }
 
+  /// Refuses every later verb here, as [closeConnection] does, while leaving
+  /// a request already in flight to finish: the client's stop calls this
+  /// first, so work that resumes while the rest of the stop runs opens no new
+  /// connection.
+  void refuseNewWork() {
+    _closed = true;
+    final lookUp = _atLookUp;
+    if (_ownsLookUp && lookUp is AtLookupMuxable) lookUp.refuseNewConnections();
+  }
+
+  /// Closes the connection for good: this is the client's stop, and every
+  /// later verb here throws [AtClientStoppedException] rather than opening a
+  /// new connection.
   Future<void> closeConnection() async {
-    await atLookUp.close();
+    _closed = true;
+    await _atLookUp.close();
   }
 }

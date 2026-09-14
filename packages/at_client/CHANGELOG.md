@@ -1,5 +1,18 @@
 ## 3.15.0-rc1
 
+- fix: a stopped client opens no new connection to its atServer. Its work
+  still running when `stop()` returns - a directory read, a secret request,
+  the rest of its post-quantum startup - fails with the new
+  `AtClientStoppedException` instead of reconnecting and authenticating
+  again, as does reading its `RemoteSecondary.atLookUp`, and a roster read, a
+  root-link sweep or a fan-out to a namespace's members ends there.
+  `isInSync()` on a stopped sync service throws rather than asking the
+  atServer.
+- fix: a client whose credentials the atServer refuses - the enrollment
+  revoked, expired, denied or not yet approved, or the authentication
+  rejected - stops retrying. The notification listener neither restarts nor
+  reconnects and reports the refusal on `client.connection`, and a secret
+  request or push to a namespace's members stops at the first refusal.
 - fix: a sync round stopped while it applies a push batch's response
   abandons the rest of the batch, rather than logging each remaining entry
   at severe and carrying on against storage the stop may be closing.
