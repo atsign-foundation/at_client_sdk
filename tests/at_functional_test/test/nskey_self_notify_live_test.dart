@@ -9,7 +9,6 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -78,16 +77,6 @@ void main() {
 
   test('a self notification reaches a second enrollment and decrypts',
       timeout: Timeout(Duration(minutes: 3)), () async {
-    // NOTE: raised HERE, not in `setUpAll`. `TestUtils.initAtClient` sets
-    // `AtSignLogger.root_level` as its first statement, so a level set before
-    // it is silently undone. `finest` is what this file needs: the monitor's
-    // `RECEIVED notification` frames, which distinguish a receiver that got the
-    // treaty and discarded it from one that never saw it, log at `finer`.
-    AtSignLogger.root_level = 'finest';
-    expect(AtSignLogger.root_level, 'finest',
-        reason: 'the level must survive setup, or every conclusion drawn from '
-            'the absence of a log line below is a claim about the filter');
-
     // NOTE: the nskey is minted by the APPROVER, before either enrollment
     // exists. Conveyance at approval can only hand over material the approver
     // already holds, so a later mint leaves the receiver with no private for
@@ -179,6 +168,19 @@ void main() {
       }
     });
     addTearDown(subscription.cancel);
+    // What the receiver was handed and did NOT deliver. With `seen` this
+    // separates a notification that arrived and could not be opened, or is
+    // still waiting for its key, from one that never arrived.
+    final dropped = <DroppedNotification>[];
+    final droppedSubscription = notifications.droppedEvents.listen(dropped.add);
+    addTearDown(droppedSubscription.cancel);
+    var parked = 0;
+    final parkedSubscription =
+        notifications.parkedEvents.listen((_) => parked++);
+    addTearDown(parkedSubscription.cancel);
+    String undelivered() => '  it dropped ${dropped.length}: '
+        '${dropped.map((d) => d.reason).toList()}\n'
+        '  it parked $parked, waiting for a key';
 
     // NOTE: wait until the monitor is REGISTERED before notifying anything.
     // `MonitorVerbHandler` subscribes to the atServer's inbound stream only
@@ -204,6 +206,7 @@ void main() {
           'the treaty notification did not reach the second enrollment within '
           '90s, and the notify above reported `delivered`.\n'
           "  the monitor saw ${seen.length}: $seen\n"
+          '${undelivered()}\n'
           '${seen.isNotEmpty ? "  It IS receiving, so this is not monitor readiness." : "  It received NOTHING, not even statsNotification, so the "
               "monitor is not up and this says nothing about delivery."}'),
     );
@@ -219,6 +222,9 @@ void main() {
             'appMetadata in the record; a notification has to carry it in the '
             'notification, and without it the receiver falls back to the legacy provider '
             'and hunts a shared_key a PQ write never created');
+
+    expect(dropped.where((d) => d.key.contains('treaty$runId')), isEmpty,
+        reason: 'delivered once and dropped for no other subscriber either');
 
     expect(notification.value, value,
         reason: 'the second enrollment opens the content key with the nskey '
@@ -310,7 +316,8 @@ void main() {
           'asked only for what followed the reconnect — which is what happened '
           'while the two enrollments shared one store, because the SENDER\'s '
           'monitor received this and moved the shared watermark past it.\n'
-          '  the monitor saw ${seen.length}: $seen'),
+          '  the monitor saw ${seen.length}: $seen\n'
+          '${undelivered()}'),
     );
 
     expect(afterOutage.metadata?.appMetadata?.providerId,
