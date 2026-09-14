@@ -132,17 +132,33 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   Stream<int> get parkedEvents => _parkedController.stream;
 
-  /// Transforms [n] for one subscriber and delivers it if the regex matches.
-  Future<void> _deliver(AtNotification n, NotificationConfig config,
-      StreamController controller) async {
-    final transformed =
-        await NotificationResponseTransformer(atClient).transform(Tuple()
+  /// Delivers [n] to one subscriber if its regex matches, as that subscriber
+  /// asked for it.
+  ///
+  /// [transforms] holds this notification's transforms, keyed by whether they
+  /// decrypt, so every subscriber shares one decryption and gets its own copy
+  /// of the result. The regex is matched first wherever the key is not itself
+  /// ciphertext, so a subscriber that does not receive the notification
+  /// decrypts nothing.
+  Future<void> _deliver(
+      AtNotification n,
+      NotificationConfig config,
+      StreamController controller,
+      Map<bool, Future<AtNotification>> transforms) async {
+    bool matches(String key) =>
+        config.regex == emptyRegex || hasRegexMatch(key, config.regex);
+
+    final keyIsCiphertext = NotificationResponseTransformer.decryptsKey(n);
+    if (!keyIsCiphertext && !matches(n.key)) return;
+    final transformed = await transforms.putIfAbsent(
+        keyIsCiphertext || config.shouldDecrypt,
+        () => NotificationResponseTransformer(atClient).transform(Tuple()
           ..one = n
-          ..two = config);
-    if (config.regex != emptyRegex && !hasRegexMatch(n.key, config.regex)) {
-      return;
+          ..two = config));
+    if (keyIsCiphertext && !matches(transformed.key)) return;
+    if (!controller.isClosed) {
+      controller.add(NotificationResponseTransformer.copyOf(transformed));
     }
-    if (!controller.isClosed) controller.add(transformed);
   }
 
   /// Holds [n] until the generation it needs is filed.
@@ -209,9 +225,18 @@ class NotificationServiceImpl extends NotificationService {
     logger.info('The nskey private for ${key.namespace} generation '
         '${key.nskeyKid} was filed; re-driving ${waiting.length} parked '
         'notification(s)');
+    // Every subscriber parked on one notification holds the same instance, so
+    // re-driving them shares one decryption too.
+    final transformsByNotification =
+        Map<AtNotification, Map<bool, Future<AtNotification>>>.identity();
     for (final parked in waiting) {
       try {
-        await _deliver(parked.notification, parked.config, parked.controller);
+        await _deliver(
+            parked.notification,
+            parked.config,
+            parked.controller,
+            transformsByNotification.putIfAbsent(
+                parked.notification, () => {}));
       } catch (e) {
         logger.warning('Re-driving parked notification '
             '${parked.notification.key} failed, and nothing retries it '
@@ -570,11 +595,12 @@ class NotificationServiceImpl extends NotificationService {
         // processes them out of order sees a value it cannot open. `.toList()`
         // because a subscriber registering or cancelling mid-notification
         // would otherwise throw ConcurrentModificationError.
+        final transforms = <bool, Future<AtNotification>>{};
         for (final entry in _streamListeners.entries.toList()) {
           final notificationConfig = entry.key;
           final streamController = entry.value;
           try {
-            await _deliver(n, notificationConfig, streamController);
+            await _deliver(n, notificationConfig, streamController, transforms);
           } on NskeyPrivateUnavailableException catch (e) {
             _park(e, n, notificationConfig, streamController);
           } catch (e) {
