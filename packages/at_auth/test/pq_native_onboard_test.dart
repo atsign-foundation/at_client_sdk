@@ -10,7 +10,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_server_status/at_server_status.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -20,16 +19,13 @@ class MockAtEnrollment extends Mock implements AtEnrollment {}
 
 class MockPkamAuthenticator extends Mock implements PkamAuthenticator {}
 
-class MockAtServerStatus extends Mock implements AtServerStatus {}
-
 class FakeVerbBuilder extends Fake implements VerbBuilder {}
 
 class FakeAtLookUp extends Fake implements AtLookupImpl {}
 
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 
-class FakeSecondaryAddressFinder extends Fake
-    implements CacheableSecondaryAddressFinder {
+class FakeSecondaryAddressFinder implements SecondaryAddressFinder {
   @override
   Future<SecondaryAddress> findSecondary(String atSign,
           {Duration? timeout}) async =>
@@ -67,12 +63,13 @@ void main() {
     mockAtLookUp = MockAtLookUp();
     mockAtEnrollment = MockAtEnrollment();
     final mockPkam = MockPkamAuthenticator();
-    final mockStatus = MockAtServerStatus();
 
-    when(() => mockStatus.get(any())).thenAnswer((_) async => AtStatus(
-        serverStatus: ServerStatus.teapot,
-        rootStatus: RootStatus.found,
-        atSignStatus: AtSignStatus.teapot));
+    when(() => mockAtLookUp.secondaryAddressFinder)
+        .thenReturn(FakeSecondaryAddressFinder());
+    when(() =>
+        mockAtLookUp.executeCommand(any(that: startsWith('lookup:publickey')),
+            auth: any(named: 'auth'))).thenAnswer(
+        (_) async => throw AtLookUpException('AT0015', 'key not found'));
     when(() => mockAtLookUp.cramAuthenticate(cramSecret))
         .thenAnswer((_) async => true);
     when(() => mockAtLookUp.executeVerb(any()))
@@ -87,10 +84,7 @@ void main() {
     atAuth = AtAuthImpl(
         atLookUp: mockAtLookUp,
         pkamAuthenticator: mockPkam,
-        atEnrollment: mockAtEnrollment,
-        atServerStatus: mockStatus)
-      ..secondaryAddressFinder = FakeSecondaryAddressFinder()
-      ..probeSocket = ((host, port) async {});
+        atEnrollment: mockAtEnrollment);
   });
 
   tearDown(() => tempDir.deleteSync(recursive: true));

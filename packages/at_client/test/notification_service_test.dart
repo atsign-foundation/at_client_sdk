@@ -1412,8 +1412,10 @@ void main() {
     });
 
     test(
-        'getLastNotificationTime() returns null if checkOfflineNotifications is set to false',
+        'getLastNotificationTime() answers the service\'s creation time, and '
+        'ignores the stored watermark, when fetchOfflineNotifications is false',
         () async {
+      registerFallbackValue(FakeAtKey());
       when(() => mockAtClientImpl.getPreferences())
           .thenAnswer((_) => AtClientPreference()
             ..namespace = 'wavi'
@@ -1421,18 +1423,37 @@ void main() {
 
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
           .thenAnswer((_) async => true);
+      // A watermark from long before this service existed, which a client
+      // fetching offline notifications would resume from.
+      when(() => mockAtClientImpl.get(any())).thenAnswer((_) async =>
+          AtValue()..value = jsonEncode({'epochMillis': 1234567890123}));
 
+      final beforeCreate = DateTime.now().millisecondsSinceEpoch;
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           monitor: fakeMonitor) as NotificationServiceImpl;
-
+      final afterCreate = DateTime.now().millisecondsSinceEpoch;
       notificationServiceImpl.stopAllSubscriptions();
-      expect(await notificationServiceImpl.getLastNotificationTime(), null);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // NOTE: the mock client is shared across this file, so calls other tests
+      // made are still recorded on it.
+      clearInteractions(mockAtClientImpl);
+      expect(
+          await notificationServiceImpl.getLastNotificationTime(),
+          allOf(greaterThanOrEqualTo(beforeCreate),
+              lessThanOrEqualTo(afterCreate)),
+          reason: 'nothing received before the service existed, and '
+              'everything since — not null, which is delivered nothing sent '
+              'before `monitor:` went out');
+      verifyNever(() => mockAtClientImpl.put(any(), any(),
+          putRequestOptions: any(named: 'putRequestOptions')));
+      verifyNever(() => mockAtClientImpl.get(any()));
     });
 
     test(
-        'getLastNotificationTime() returns null if checkOfflineNotifications is true but there is no stored value',
-        () async {
+        'getLastNotificationTime() answers, and seeds, the service\'s creation '
+        'time when there is no stored value', () async {
       registerFallbackValue(FakeAtKey());
 
       when(() => mockAtClientImpl.getPreferences())
@@ -1443,9 +1464,14 @@ void main() {
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
           .thenAnswer((_) async => true);
 
+      final beforeCreate = DateTime.now().millisecondsSinceEpoch;
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           monitor: fakeMonitor) as NotificationServiceImpl;
+      final afterCreate = DateTime.now().millisecondsSinceEpoch;
+      // Long enough that "when it was created" and "when it was asked" are
+      // different numbers.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
 
       notificationServiceImpl.stopAllSubscriptions();
 
@@ -1460,7 +1486,28 @@ void main() {
       // the mock doesn't throw when no legacy keys are present.
       when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
 
-      expect(await notificationServiceImpl.getLastNotificationTime(), null);
+      // NOTE: the mock client is shared across this file, so puts other tests
+      // made are still recorded on it.
+      clearInteractions(mockAtClientImpl);
+      final beforeAsk = DateTime.now().millisecondsSinceEpoch;
+      final answered = await notificationServiceImpl.getLastNotificationTime();
+
+      expect(
+          answered,
+          allOf(greaterThanOrEqualTo(beforeCreate),
+              lessThanOrEqualTo(afterCreate)),
+          reason: 'the creation time: a monitor asking for nothing sent before '
+              '`monitor:` misses replies to what the app sent before that');
+      expect(answered, lessThan(beforeAsk),
+          reason: 'not the time of the call, which is when the monitor '
+              'connects');
+      final seeded = verify(() => mockAtClientImpl.put(any(), captureAny(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .captured
+          .single as String;
+      expect((jsonDecode(seeded) as Map)['epochMillis'], answered,
+          reason: 'seeded with the same time, so a reconnect before any '
+              'notification arrives resumes from the same point');
     });
 
     /// The test case verifies the following:
@@ -1655,7 +1702,10 @@ void main() {
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
 
-      expect(await service.getLastNotificationTime(), isNull);
+      // NOTE: the mock client is shared across this file, so puts other tests
+      // made are still recorded on it.
+      clearInteractions(mockAtClientImpl);
+      expect(await service.getLastNotificationTime(), isNotNull);
 
       final captured = verify(() => mockAtClientImpl.put(any(), captureAny(),
           putRequestOptions: captureAny(named: 'putRequestOptions'))).captured;
@@ -1681,7 +1731,8 @@ void main() {
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenThrow(AtKeyException('keystore unavailable'));
 
-      await expectLater(service.getLastNotificationTime(), completion(isNull),
+      await expectLater(
+          service.getLastNotificationTime(), completion(isNotNull),
           reason: 'seeding the watermark is an optimisation — failing to seed '
               'it costs one replayed window, where letting the failure out '
               'costs the listener entirely');

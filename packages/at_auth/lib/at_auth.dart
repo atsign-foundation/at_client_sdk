@@ -9,10 +9,6 @@ export 'src/auth/at_authenticator.dart';
 // CRAM activation as a parameter list: the verb at_client's `activate` builds
 // on, and the shape the request object above is being replaced by.
 export 'src/auth/activation.dart';
-// Reachability probes. `httpsProbe` is WASM-safe; `defaultProbe` is
-// whichever of it and `secureSocketProbe` suits the platform compiled for.
-export 'src/auth/probe_default.dart';
-export 'src/auth/server_probe.dart';
 
 // Contains models related to onboarding and authentication requests and responses.
 export 'src/auth/models/retry_options.dart';

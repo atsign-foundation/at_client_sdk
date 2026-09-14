@@ -9,7 +9,7 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -30,16 +30,16 @@ class EnrollmentHandshake {
 
   EnrollmentHandshake(this._progress);
 
-  /// waits for Approval of the enrollmentId related to [enrollmentResponse]
-  /// completes the end of the handshake for the APKAM flow
+  /// Waits over [atLookup] for the enrollment in [enrollmentResponse] to be
+  /// approved, then collects what the approval released into its keys.
   ///
-  /// returns [AtEnrollmentResponse] to intake additional keys provided after submission
+  /// [atLookup] is left open for the caller to close.
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     required Duration retryInterval,
     required bool logProgress,
     required int maxRetries,
-    AtLookUp? atLookup,
+    required AtLookupMuxable atLookup,
   }) async {
     if (enrollmentResponse.atSign == null ||
         enrollmentResponse.atSign!.isEmpty) {
@@ -55,29 +55,15 @@ class EnrollmentHandshake {
           'AtAuthKeys are not avaialbe in the enrollemnt response');
     }
 
-    final builtHere = atLookup == null;
-    atLookup ??= AtLookUp.withSecureSocket(
-      atSign: enrollmentResponse.atSign!,
-      rootDomain: enrollmentResponse.rootDomain!,
-      transport: secureSocketTransport(SecureSocketConfig()),
-      // Installed below, from the in-memory keys this handshake just wrote.
-      authenticator: null,
-    );
-    try {
-      await _handshake(enrollmentResponse, atLookup,
-          retryInterval: retryInterval,
-          logProgress: logProgress,
-          maxRetries: maxRetries);
-    } finally {
-      // A connection built for the handshake ends with it; the client that
-      // opens on the completed keys makes one of its own.
-      if (builtHere) await atLookup.close();
-    }
+    await _handshake(enrollmentResponse, atLookup,
+        retryInterval: retryInterval,
+        logProgress: logProgress,
+        maxRetries: maxRetries);
   }
 
   Future<void> _handshake(
     AtEnrollmentResponse enrollmentResponse,
-    AtLookUp atLookup, {
+    AtLookupMuxable atLookup, {
     required Duration retryInterval,
     required bool logProgress,
     required int maxRetries,
@@ -92,17 +78,13 @@ class EnrollmentHandshake {
     final AtKeys handshakeKeys = enrollmentResponse.atAuthKeys!;
     final String handshakeEnrollmentId = enrollmentResponse.enrollmentId;
 
-    if (atLookup is AtLookupMuxable) {
-      final memory = InMemoryAtKeysIo();
-      await memory.write(enrollmentResponse.atSign!, handshakeKeys);
-      atLookup.authenticator = authenticatorFor(
-        memory,
-        enrollmentResponse.atSign!,
-        enrollmentId: handshakeEnrollmentId,
-      );
-    } else {
-      _installLadder(atLookup, handshakeKeys, handshakeEnrollmentId);
-    }
+    final memory = InMemoryAtKeysIo();
+    await memory.write(enrollmentResponse.atSign!, handshakeKeys);
+    atLookup.authenticator = authenticatorFor(
+      memory,
+      enrollmentResponse.atSign!,
+      enrollmentId: handshakeEnrollmentId,
+    );
 
     await _waitForPkamAuthSuccess(
       atLookup,
@@ -222,34 +204,6 @@ class EnrollmentHandshake {
 
     var map = jsonDecode(jsonString);
     return map;
-  }
-
-  /// The credential-ladder form of the enrollment's APKAM keypair, for a
-  /// caller-supplied lookup from before the authenticator seam: the ladder is
-  /// the only way to authenticate it, and both fields go with that ladder in
-  /// the at_lookup major.
-  ///
-  /// The algorithm is stated because the ladder's default is rsa2048 whatever
-  /// the keypair is, and signing an ML-DSA key with the RSA routine fails
-  /// inside at_chops on a key length, naming neither the enrollment nor the
-  /// mismatch.
-  void _installLadder(AtLookUp atLookup, AtKeys keys, String? enrollmentId) {
-    final keyPair = keys.authenticationKeyPairFor(enrollmentId);
-    if (keyPair == null) {
-      throw AtEnrollmentException(
-          'AtKeys holds no authentication keypair for enrollment $enrollmentId, '
-          'so there is nothing to authenticate the handshake with');
-    }
-    // NOTE: the ladder takes an AtChops and nothing else, so one is built here
-    // and only here, around the keypair alone; it leaves with the ladder.
-    // ignore: deprecated_member_use
-    atLookup.atChops = AtChopsImpl(AtChopsKeys.create(
-      null,
-      // ignore: deprecated_member_use
-      AtPkamKeyPair.create(keyPair.publicKey, keyPair.privateKey),
-    ));
-    // ignore: deprecated_member_use
-    atLookup.signingAlgoType = keyPair.algorithm;
   }
 
   Future<void> _waitForPkamAuthSuccess(

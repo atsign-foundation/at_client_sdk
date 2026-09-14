@@ -8,7 +8,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  at_lookup: ^3.4.2
+  at_lookup: ^3.7.0-rc2
   at_client: ^3.10.0
   at_commons: ^5.5.0
   at_demo_data: ^1.2.0

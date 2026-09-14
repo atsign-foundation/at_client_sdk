@@ -676,7 +676,7 @@ void main() {
         Future<String> sealed(String value) async =>
             sealer.encrypt(value, iv: iv);
 
-        AtLookUp mockAtLookUp = MockAtLookUp();
+        AtLookupMuxable mockAtLookUp = MockAtLookUp();
         when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: '123'))
             .thenAnswer((_) async => true);
         when(() => mockAtLookUp.executeCommand(

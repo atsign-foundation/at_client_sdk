@@ -81,13 +81,11 @@ class AtKeys {
     'atsign',
     'enrollments',
     'atsignKeys',
-    // Obsolete, and reserved BECAUSE it is obsolete. at_auth 3.3.0 wrote a
-    // top-level `keys` array on every keyfile whose atSign was set, empty
-    // whenever it held no typed material, and reserved the name itself. This
-    // build drops it in [fromJson] and never writes one, so leaving it out
-    // here would make it a legacy value that has to be preserved verbatim —
-    // and the update assurance would then refuse the first flush onto every
-    // keyfile 3.3.0 wrote, with the mutation lost rather than reported.
+    // Always empty. Every versioned document carries `"keys": []`, because
+    // readers in the field may expect the array wherever there is a `version`.
+    // [fromJson] drops it and [toJson] writes it afresh, so it never reaches
+    // [metadata]; were it not reserved, the update assurance would read it as
+    // a legacy value to preserve verbatim and refuse the flush.
     'keys',
   };
 
@@ -891,24 +889,13 @@ class AtKeys {
       throw AtKeysUnsupportedVersionException(
           'Unsupported atKeys version: $version');
     }
-    // A top-level `keys` array predates the enrollments[]/atsignKeys[] split.
+    // The top-level `keys` array is written empty on every versioned
+    // document, and typed material lives in enrollments[]/atsignKeys[].
     //
-    // Refused only when it CARRIES something. A populated one cannot be read
-    // here silently: `keys` is no longer a reserved field, so the array would
-    // be swept into [metadata] as a legacy value, the document would read as
-    // holding no typed material at all, and the caller would authenticate
-    // from the flat block — as the legacy enrollment — while the live
-    // enrollment's credentials sat unread beside it.
-    //
-    // An EMPTY one is accepted, because that is the only shape any released
-    // build ever wrote. The version that introduced `keys` never populated
-    // it: `addKey` has no caller outside `AtKeys` itself there, so every
-    // keyfile it onboarded carries `"keys": []` with the real material in the
-    // flat block below. Refusing those would strand every keyfile a released
-    // build produced, to guard against mis-filing an array holding nothing.
-    // Measured, not assumed: a keyfile written by the published version was
-    // read back here, and it differs from one this build accepts by exactly
-    // this empty array.
+    // A POPULATED one is refused: it is the shape that preceded that split,
+    // and reading it would file its material nowhere, so the caller would
+    // authenticate from the flat block — as the legacy enrollment — while the
+    // live enrollment's credentials sat unread beside it.
     if (json.containsKey('keys')) {
       final legacyKeys = json['keys'];
       if (legacyKeys is! List || legacyKeys.isNotEmpty) {
@@ -918,8 +905,7 @@ class AtKeys {
             'regenerated; reading it here would file its key material as '
             'legacy metadata and authenticate as the wrong enrollment.');
       }
-      // Dropped rather than carried, so it does not reach [metadata] and get
-      // written back out on the next save.
+      // Dropped rather than carried: [toJson] writes its own.
       json = Map<String, dynamic>.from(json)..remove('keys');
     }
 
@@ -1032,6 +1018,9 @@ class AtKeys {
       ..._toLegacyJson(),
       'version': supportedVersion,
       'atsign': atsign.toString(),
+      // NOTE: always present and always empty. Readers in the field may
+      // expect the array wherever there is a `version`.
+      'keys': <Object?>[],
       if (_atSignMaterialsByKeyId.isNotEmpty)
         'atsignKeys': encodeAtKeysDocument(atSignKeys),
       if (_enrollments.isNotEmpty)

@@ -158,7 +158,6 @@ default.
 | `at_lookup/lib/src/monitor_client.dart:63`                                  | `SecureSocket.connect(host, int.parse(port))` — raw, bypasses even `SecureSocketUtil`.                                                                                                                             |
 | `at_client/lib/src/stream/stream_notification_handler.dart:27`              | `SecureSocket.connect(host, port)` — raw.                                                                                                                                                                          |
 | `at_lookup/lib/src/cache/cacheable_secondary_address_finder.dart:209,222`   | raw TLS socket to `root.atsign.org:64` for directory lookup.                                                                                                                                                       |
-| `at_auth/lib/src/auth/socket_probe_io.dart`                                 | the provisioning probe → `SecureSocket.connect`, behind the `at_auth_io.dart` barrel since S-5. **Owned by the PQ program's S-5**, not here.                                                                       |
 
 **The ABI leak** is the interface, not the implementation:
 

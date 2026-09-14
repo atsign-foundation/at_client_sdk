@@ -32,13 +32,11 @@ import 'package:at_utils/at_progress.dart';
 ///
 /// [retryOptions] bounds the wait for a newly registered atSign to be
 /// provisioned, minutes by default. [onProgress] hears each step.
-/// [atLookUp] is a connection to activate over, for a caller that already
-/// holds one; it is taken as already having reached the atServer, so the
-/// provisioning wait is skipped, and it is left open. With none, a
-/// connection is built, and closed when this returns. [awaitProvisioning]
-/// runs the provisioning wait even with [atLookUp] supplied, for a caller
-/// that built the connection itself and has not yet reached the atServer on
-/// it.
+/// [atLookUp] is the connection to activate over, and it is left open for the
+/// caller to close. It is taken as already having reached the atServer, so the
+/// provisioning wait is skipped, unless [awaitProvisioning] is set: for a
+/// caller that has not yet reached the atServer on it, which is where a newly
+/// registered atSign may still be starting.
 Future<String> activateAtSign({
   required String atSign,
   required String cramSecret,
@@ -57,7 +55,7 @@ Future<String> activateAtSign({
   RetryOptions retryOptions = RetryOptions.defaultRetryOptions,
   bool completeActivation = true,
   void Function(ProgressEvent event)? onProgress,
-  AtLookUp? atLookUp,
+  required AtLookupMuxable atLookUp,
   bool awaitProvisioning = false,
 }) async {
   final request = AtOnboardingRequest(atSign,
@@ -71,11 +69,9 @@ Future<String> activateAtSign({
     ..metadataBuilder = metadataBuilder
     ..advertisedSigningKey = advertisedSigningKey;
 
-  final auth = atLookUp == null
-      ? AtAuthImpl()
-      : awaitProvisioning
-          ? AtAuthImpl(atLookUp: atLookUp)
-          : _ConnectedActivation(atLookUp: atLookUp);
+  final auth = awaitProvisioning
+      ? AtAuthImpl(atLookUp: atLookUp)
+      : _ConnectedActivation(atLookUp: atLookUp);
   final forward =
       onProgress == null ? null : auth.progressStream.listen(onProgress);
   try {
@@ -95,7 +91,6 @@ Future<String> activateAtSign({
       await Future<void>.delayed(Duration.zero);
       await forward.cancel();
     }
-    if (atLookUp == null) await auth.atLookUp?.close();
   }
 }
 
@@ -103,7 +98,7 @@ Future<String> activateAtSign({
 /// reached the atServer: the provisioning wait, whose job is to find out
 /// whether it can be reached, has nothing to wait for.
 class _ConnectedActivation extends AtAuthImpl {
-  _ConnectedActivation({required AtLookUp atLookUp})
+  _ConnectedActivation({required AtLookupMuxable atLookUp})
       : super(atLookUp: atLookUp);
 
   @override

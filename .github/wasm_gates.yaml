@@ -38,12 +38,10 @@ at_auth:
   # raw socket or the dart:io HTTP stack moved to at_auth_io.dart.
   #
   # All three blocked packages are inherited: at_lookup (sockets), at_utils and
-  # chalkdart (the logger). They come off as each is ported, and at_server_status
-  # just did, having dropped the dart:io import it held for five HttpStatus
-  # constants. It is not gated in its own right: at_server_status.dart exports
-  # at_status_impl.dart, which names at_lookup_io.dart's socket transport
-  # directly, so the package sits wholly on the native side of that seam and has
-  # no line to hold. It joins when at_lookup's transport becomes injectable.
+  # chalkdart (the logger), each reached through at_lookup.dart or
+  # at_logger.dart and coming off as each is ported. at_auth builds no
+  # connection of its own - its atServer check asks over the lookup it is
+  # handed - so nothing it reaches imports at_lookup_io.dart or at_server_status.
   ratchets:
     - barrel: package:at_auth/at_auth.dart
       allowed_offenders: []
@@ -55,16 +53,3 @@ at_auth:
     - barrel: package:at_auth/at_auth_io.dart
       reaches_file: lib/src/keys/io/file_io.dart
       because: the filesystem code it exists to quarantine
-
-    # Not an island — the conditional seam. probe_default.dart exports
-    # probe_default_web.dart, or probe_default_io.dart if (dart.library.io).
-    # The web half is the empty allowed_offenders above; this is the other half,
-    # the web barrel walked with io semantics, which must come out down the
-    # native branch. Without it the ratchet passes just as well when the
-    # conditional was skipped and neither branch was seen.
-    #
-    # File axis, not library: at_auth.dart under io resolution reaches dart:io
-    # through half a dozen files, so reaches_library would prove nothing here.
-    - barrel: package:at_auth/at_auth.dart
-      reaches_file: lib/src/auth/socket_probe_io.dart
-      because: the conditional export in probe_default.dart
