@@ -6,8 +6,6 @@ library;
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/secret_sharing/key_package_persistence.dart';
 import 'package:at_functional_test/src/config_util.dart';

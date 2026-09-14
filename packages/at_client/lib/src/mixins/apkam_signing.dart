@@ -1,6 +1,7 @@
 import 'dart:async' show Completer;
 
 import 'package:at_auth/at_auth.dart' show AtKeys, KeyEntryStatus;
+// ignore: deprecated_member_use
 import 'package:at_chops/at_chops.dart' show AtPkamKeyPair, SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
@@ -310,6 +311,7 @@ mixin ApkamSigning {
 
   /// The keypair behind the two deprecated accessors, with the refusals and
   /// the warning they share.
+  // ignore: deprecated_member_use
   AtPkamKeyPair _authenticationKeyPair() {
     final algorithm = signingAlgoOf(atClient);
     if (algorithm != SigningAlgoType.rsa2048) {

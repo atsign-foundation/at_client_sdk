@@ -7,7 +7,6 @@ library;
 
 import 'dart:io';
 
-import 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/config_util.dart';

@@ -7,7 +7,6 @@ library;
 
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeys, InMemoryAtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/at_keys_initializer.dart'

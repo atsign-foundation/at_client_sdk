@@ -10,7 +10,6 @@ import 'dart:async' show Completer;
 import 'dart:convert' show jsonDecode;
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeys, InMemoryAtKeysIo;
 import 'package:at_client/at_client.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;

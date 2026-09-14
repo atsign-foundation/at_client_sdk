@@ -5,7 +5,6 @@
 library;
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/secret_sharing/key_package_minting.dart'
@@ -13,7 +12,6 @@ import 'package:at_client/src/secret_sharing/key_package_minting.dart'
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
 import 'package:at_lookup/at_lookup.dart';

@@ -6,7 +6,6 @@ library;
 
 import 'dart:convert';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show pqSigningRootMintLockKey, pqSigningRootMintLockRecordName;

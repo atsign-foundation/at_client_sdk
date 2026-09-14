@@ -17,6 +17,7 @@ abstract interface class AtAuth {
 
   factory AtAuth.create(
       {required AtLookupMuxable atLookUp,
+      // ignore: deprecated_member_use
       AtChops? atChops,
       CramAuthenticator? cramAuthenticator,
       PkamAuthenticator? pkamAuthenticator,

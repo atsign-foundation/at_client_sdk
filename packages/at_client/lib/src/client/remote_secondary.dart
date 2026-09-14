@@ -37,12 +37,16 @@ class RemoteSecondary implements Secondary {
   /// null to read the process-wide one per lookup.
   SecondaryAddressFinder? _secondaryAddressFinder;
 
+  // ignore: deprecated_member_use
   AtChops? _atChops;
 
+  // ignore: deprecated_member_use
   AtChops? get atChops => _atChops;
 
+  // ignore: deprecated_member_use
   set atChops(AtChops? value) {
     _atChops = value;
+    // ignore: deprecated_member_use
     atLookUp.atChops = value;
     _installAuthenticator();
   }
@@ -97,6 +101,7 @@ class RemoteSecondary implements Secondary {
       lookUp.authenticator = authenticatorFor(
         io,
         _atSign,
+        // ignore: deprecated_member_use
         enrollmentId: lookUp.enrollmentId,
         chops: _atChops,
       );
@@ -112,6 +117,7 @@ class RemoteSecondary implements Secondary {
       lookUp.authenticator = authenticatorForChops(
         _atSign,
         chops,
+        // ignore: deprecated_member_use
         enrollmentId: lookUp.enrollmentId,
         signingAlgo: _signingAlgoType,
         // The same preference field the constructor stamps on the lookup, so
@@ -128,6 +134,7 @@ class RemoteSecondary implements Secondary {
       lookUp.authenticator = authenticatorForPrivateKey(
         _atSign,
         privateKey,
+        // ignore: deprecated_member_use
         enrollmentId: lookUp.enrollmentId,
       );
       return;
@@ -160,6 +167,7 @@ class RemoteSecondary implements Secondary {
   /// process-wide finder is read per lookup.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
+      // ignore: deprecated_member_use
       AtChops? atChops,
       AtLookUp? atLookUp,
       String? enrollmentId,
@@ -191,6 +199,7 @@ class RemoteSecondary implements Secondary {
               secondaryAddressFinder ?? processSecondaryAddressFinder(),
           clientConfig: _getClientConfig(),
         );
+    // ignore: deprecated_member_use
     this.atLookUp.enrollmentId = enrollmentId;
     final resolvedSigningAlgo =
         // ignore: deprecated_member_use_from_same_package
@@ -198,8 +207,11 @@ class RemoteSecondary implements Secondary {
     logger.finer(
         'signingAlgoType: $resolvedSigningAlgo hashingAlgoType: ${preference.hashingAlgoType}');
     _signingAlgoType = resolvedSigningAlgo;
+    // ignore: deprecated_member_use
     this.atLookUp.signingAlgoType = resolvedSigningAlgo;
+    // ignore: deprecated_member_use
     this.atLookUp.hashingAlgoType = preference.hashingAlgoType;
+    // ignore: deprecated_member_use
     this.atLookUp.atChops = atChops;
     _installAuthenticator();
   }
