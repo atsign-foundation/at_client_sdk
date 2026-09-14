@@ -725,12 +725,6 @@ class SyncServiceImpl implements SyncService {
       final atKeys = await localSecondary.peekSyncQueue(limit: batchSize);
       _bailIfStopped();
       if (atKeys.isEmpty) break;
-      // Snapshot the queue size BEFORE this batch so the
-      // no-progress guard at the bottom can detect "the entries
-      // we just tried didn't get removed" without conflating it
-      // with "the queue is large because more writes arrived".
-      final queueSizeBefore = await localSecondary.syncQueueSize;
-      _bailIfStopped();
       // Build the batch. Order in `batchRequests` mirrors the order
       // we got from `peekSyncQueue` — and the response comes back
       // 1-indexed by batch id, so index N-1 in our list is the entry
@@ -798,6 +792,8 @@ class SyncServiceImpl implements SyncService {
         _logger.severe('sendBatch failed: $cause');
         return keyInfoList;
       }
+      var accepted = 0;
+      var removedFromQueue = 0;
       for (final entry in batchResponse) {
         try {
           final batchId = entry['id'] as int;
@@ -816,6 +812,7 @@ class SyncServiceImpl implements SyncService {
             // Leave in queue for retry. Don't remove.
             continue;
           }
+          accepted++;
           _promoteServerCommitId(commitId);
           // Track the high-water mark of OUR successful pushes
           // separately from the broader server cursor so
@@ -830,7 +827,9 @@ class SyncServiceImpl implements SyncService {
           }
           final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
               source.atKey, source.seq);
-          if (!removed) {
+          if (removed) {
+            removedFromQueue++;
+          } else {
             // NOTE: a newer local write to this atKey replaced the queue entry
             // while this batch was in flight. The server has the version this
             // batch carried and the newer op pushes next round, so removing
@@ -844,6 +843,8 @@ class SyncServiceImpl implements SyncService {
             SyncDirection.localToRemote,
             _syncQueueOpToCommitOp(source.op),
           ));
+        } on _SyncAbandoned {
+          rethrow;
         } on Exception catch (e) {
           final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
           _logger.severe(
@@ -870,30 +871,19 @@ class SyncServiceImpl implements SyncService {
         serverCommitId: _latestKnownServerCommitId,
       );
       _bailIfStopped();
-      // Defensive: if every entry in this batch failed (e.g. a
-      // server-side per-key authorization issue), the entries we
-      // tried weren't removed from the queue. Compare against the
-      // pre-batch snapshot — if size hasn't dropped at all (after
-      // accounting for any new writes that arrived during the
-      // batch), bail out and let a subsequent round retry.
-      // Concurrent writes during the batch can keep `pendingNow`
-      // ≥ `queueSizeBefore`, which is fine — those new writes will
-      // be drained when the next round picks them up; what matters
-      // here is whether the in-batch entries themselves got
-      // removed.
-      final pendingNow = await localSecondary.syncQueueSize;
-      _bailIfStopped();
-      final pendingFront = await localSecondary.peekSyncQueue(limit: 1);
-      _bailIfStopped();
-      final atKeysSet = atKeys.toSet();
-      final allBatchKeysStillPresent =
-          pendingFront.isNotEmpty && atKeysSet.contains(pendingFront.first);
-      if (pendingNow > 0 &&
-          pendingNow >= queueSizeBefore &&
-          allBatchKeysStillPresent) {
-        _logger.warning('sync queue: $pendingNow pending after batch (was '
-            '$queueSizeBefore); none of the in-batch entries were '
-            'removed — bailing out, will retry next round');
+      // NOTE: a batch that removed nothing leaves its entries at the front of
+      // the queue, so the next batch would be the same one; the round ends
+      // here rather than sending it again.
+      if (removedFromQueue == 0) {
+        if (accepted == 0) {
+          _logger.warning('sync queue: the atServer accepted none of the '
+              '${batchRequests.length} entries in this batch; ending the '
+              'round, and they are retried in the next one');
+        } else {
+          _logger.finer('sync queue: every entry the atServer accepted in '
+              'this batch was rewritten while its push was in flight; ending '
+              'the round, and the rewrites push in the next one');
+        }
         break;
       }
     }

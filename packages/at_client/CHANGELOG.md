@@ -1,5 +1,11 @@
 ## 3.15.0-rc1
 
+- fix: a sync round stopped while it applies a push batch's response
+  abandons the rest of the batch, rather than logging each remaining entry
+  at severe and carrying on against storage the stop may be closing.
+- fix: a push batch whose entries were all rewritten while in flight ends
+  the round without warning that the batch failed; the warning is kept for a
+  batch the atServer accepted nothing from.
 - feat: `at_client_mixins.dart` exports `SignedEnvelope`, the type
   `EnvelopeSigning.wrapAndSign` returns, so a caller can name it without
   importing `src/`.

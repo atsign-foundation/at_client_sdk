@@ -23,6 +23,7 @@ import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 
 class _MockAtClient extends Mock implements AtClient {
   @override
@@ -49,13 +50,16 @@ void main() {
   late LocalSecondary local;
   late HiveAtPersistenceFactory factory;
   late SyncServiceImpl service;
+  final recorded = RecordedLogs();
 
   setUpAll(() {
+    recorded.installOn(level: 'finer');
     registerFallbackValue(AtKey());
     registerFallbackValue(StatsVerbBuilder());
   });
 
   setUp(() async {
+    recorded.records.clear();
     AtClientImpl.atClientInstanceMap.remove(atSignStr);
     factory = HiveAtPersistenceFactory();
     final bundle = await factory.initialize(atSignStr,
@@ -158,5 +162,71 @@ void main() {
             'a second update here would mean the queue kept the wrong op');
     expect(await local.readSyncQueueEntry(key.toString()), isNull,
         reason: 'the delete\'s own removal succeeds: its version matched');
+  });
+  test(
+      'a round that ends because its entry was rewritten mid-push does not '
+      'report the batch as refused', () async {
+    final key = testKey();
+    await local.executeVerb(
+        UpdateVerbBuilder()
+          ..atKey = key
+          ..value = 'v1',
+        sync: true);
+
+    final batchCommands = <String>[];
+    when(() =>
+            remote.executeCommand(any(that: startsWith('batch:')), auth: true))
+        .thenAnswer((invocation) async {
+      batchCommands.add(invocation.positionalArguments.first as String);
+      if (batchCommands.length == 1) {
+        await local.executeVerb(DeleteVerbBuilder()..atKey = testKey(),
+            sync: true);
+      }
+      return 'data:[{"id":1,"response":{"data":"7"}}]';
+    });
+
+    service.sync();
+    await Future.delayed(Duration.zero);
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    expect(batchCommands, hasLength(1),
+        reason: 'the round ends once its batch removed nothing, and the '
+            'rewrite pushes in the next one');
+    expect(recorded.at('INFO'), contains(contains('Will push')),
+        reason: 'the recorder saw the round, so a warning would have been '
+            'seen too');
+    expect(recorded.at('WARNING'), isEmpty,
+        reason: 'the atServer accepted the entry; "none of the in-batch '
+            'entries were removed" said the batch had failed');
+  });
+
+  test('a batch the atServer refuses ends the round at warning', () async {
+    await local.executeVerb(
+        UpdateVerbBuilder()
+          ..atKey = testKey()
+          ..value = 'v1',
+        sync: true);
+
+    final batchCommands = <String>[];
+    when(() =>
+            remote.executeCommand(any(that: startsWith('batch:')), auth: true))
+        .thenAnswer((invocation) async {
+      batchCommands.add(invocation.positionalArguments.first as String);
+      return 'data:[{"id":1,"response":{"error_code":"AT0003",'
+          '"error_message":"refused"}}]';
+    });
+
+    service.sync();
+    await Future.delayed(Duration.zero);
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    expect(batchCommands, hasLength(1),
+        reason: 'an entry every push refuses stays at the front of the '
+            'queue, so a round that did not end here would send it forever');
+    expect(recorded.at('WARNING'),
+        contains(contains('the atServer accepted none of the 1 entries')),
+        reason: 'a round that pushed nothing says so');
+    expect(await local.readSyncQueueEntry(testKey().toString()), isNotNull,
+        reason: 'the refused entry stays queued for a later round');
   });
 }

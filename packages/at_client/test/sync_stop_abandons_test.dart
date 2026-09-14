@@ -115,6 +115,56 @@ void main() {
     });
 
     test(
+        'a stop that lands while a batch response is being applied abandons '
+        'the rest of the batch', () async {
+      stubFreshClient();
+      const first = 'k1.wavi@abandon';
+      const second = 'k2.wavi@abandon';
+      when(() => localSecondary.syncQueueSize).thenAnswer((_) async => 2);
+      when(() => localSecondary.peekSyncQueue(limit: any(named: 'limit')))
+          .thenAnswer((_) async => [first, second]);
+      when(() => localSecondary.readSyncQueueEntry(any())).thenAnswer(
+          (invocation) async => SyncQueueEntry(
+              atKey: invocation.positionalArguments.single as String,
+              op: SyncQueueOp.delete,
+              ts: 1,
+              seq: 1));
+      when(() => localSecondary.keyStore).thenReturn(_MockKeyStore());
+      when(() => remote.executeCommand(any(), auth: any(named: 'auth')))
+          .thenAnswer((_) async => 'data:${jsonEncode([
+                    {
+                      'id': 1,
+                      'response': {'data': '7'}
+                    },
+                    {
+                      'id': 2,
+                      'response': {'data': '8'}
+                    },
+                  ])}');
+      when(() => localSecondary.removeFromSyncQueueIfUnchanged(first, 1))
+          .thenAnswer((_) async {
+        await sync.stop();
+        return true;
+      });
+      when(() => localSecondary.removeFromSyncQueueIfUnchanged(second, 1))
+          .thenAnswer((_) async => true);
+
+      await expectLater(
+          sync.syncInternal(-1, SyncRequest()..result = SyncResult(),
+              localCommitIdBeforeSync: 1),
+          throwsA(isA<Exception>()));
+
+      verify(() => localSecondary.removeFromSyncQueueIfUnchanged(first, 1))
+          .called(1);
+      verifyNever(
+          () => localSecondary.removeFromSyncQueueIfUnchanged(second, 1));
+      expect(recorded.at('SEVERE'), isEmpty,
+          reason: 'the stop is not a failed batch entry; "exception processing '
+              'batch response entry ...: Instance of \'_SyncAbandoned\'" was '
+              'what a green run printed for it');
+    });
+
+    test(
         'a server entry the stop interrupts is abandoned, not logged as failed',
         () async {
       stubFreshClient();
