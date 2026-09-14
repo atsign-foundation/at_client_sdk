@@ -2,7 +2,7 @@
 ///
 /// Judges a [Shakedown] the caller already has — no walking, no processes, no
 /// `package:test`. That is what makes the baseline logic testable, and the gap
-/// it closes was real: both gated packages baseline an empty allowed offender
+/// it closes was real: every gated package baselines an empty allowed offender
 /// set over a package owning no offender, so [RatchetVerdict.added] is empty
 /// whichever way round the subtraction is written. No live baseline can tell the
 /// correct implementation from the reversed one.
