@@ -42,6 +42,11 @@
   an algorithm this build cannot sign with is refused rather than read from
   the keystore. Keyfile material is read and written through at_auth's
   accessors and `fileLegacyMaterial`.
+- fix: an encrypted notification is decrypted once however many
+  subscribers receive it, and only for subscribers whose regex matches.
+  Each subscriber gets its own copy of the notification, so one
+  subscriber's changes never reach another, and a subscriber with
+  `shouldDecrypt: false` gets the value as it arrived.
 - fix: a public `put` on a client holding no encryption private key is
   refused as "Failed to sign the public data", not with the keystore's
   record name.
