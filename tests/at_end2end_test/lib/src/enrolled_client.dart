@@ -7,7 +7,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show SignedEnvelope;
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_end2end_test/src/enrollment_approval.dart';
 import 'package:uuid/uuid.dart';
 
 /// A live, APKAM-authenticated client for one approved enrollment, with its
@@ -101,10 +101,9 @@ Future<EnrolledClient> enrolAndAuthenticate({
   Map<String, dynamic>? built;
   final build = enrollmentKeyPackageBuilder(atSign);
 
-  final atLookUp = AtLookUp.withSecureSocket(
+  final atLookUp = secureSocketLookUps()(
     atSign: atSign,
     rootDomain: AtRootDomain(rootDomain, rootPort),
-    transport: secureSocketTransport(SecureSocketConfig()),
     authenticator: null,
   );
   final AtEnrollmentResponse response;
@@ -134,7 +133,8 @@ Future<EnrolledClient> enrolAndAuthenticate({
   // the enrollee sent, which it reads off the request.
   await approver.enrollments.approve(response.enrollmentId);
 
-  await AtEnrollment.create().waitForApproval(response);
+  await awaitEnrollmentApproval(response,
+      atSign: atSign, rootDomain: AtRootDomain(rootDomain, rootPort));
 
   final keys = (response.session ?? session).atKeysIo;
   final client = await Atsign(atSign).open(

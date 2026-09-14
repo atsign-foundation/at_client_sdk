@@ -13,6 +13,7 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_end2end_test/config/config_util.dart';
+import 'package:at_end2end_test/src/enrollment_approval.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
@@ -79,7 +80,8 @@ void main() {
 
     // Awaiting the approval collects the two atSign-wide secrets it released
     // and writes the completed keys into the keyfile.
-    await AtEnrollment.create().waitForApproval(response);
+    await awaitEnrollmentApproval(response,
+        atSign: atSign, rootDomain: rootDomain());
     return response.enrollmentId;
   }
 
