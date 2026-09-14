@@ -342,7 +342,7 @@ For everything T2 cannot reach: IndexedDB, the SQLite-wasm VFS, `WebSocket`,
 
 | ID   | Gate                                                                                                                                             | Done when       |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
-| T3.1 | `dart test -p chrome -c dart2wasm` green for the `at_client_web` storage backend, including a write/reload/read cycle against the IndexedDB VFS. | All tests pass. |
+| T3.1 | `dart test -p chrome -c dart2wasm` green for the `at_client_web` storage backend, including a write/reload/read cycle against the IndexedDB VFS. **V2** — the V1 default bundle has no storage backend (D-17), and which VFS is D-21's product call, not this gate's. | All tests pass. |
 | T3.2 | Same for the `at_client_web` transport, against a stub WebSocket endpoint.                                                                       | All tests pass. |
 | T3.3 | The whole T2 set re-run under Chrome, confirming no dart2js-vs-Chrome-WasmGC divergence.                                                         | All tests pass. |
 
@@ -412,6 +412,62 @@ what crosses is what the TypeScript signature promised.
 | X1  | **Persistence conversion integrity.** The hive→sqlite→hive round-trip gate stays green, and `bin/compare_persistence.dart` reports identical for a native-SQLite vs web-SQLite database written from the same workload. | Exit 0 from both. Proves the web open path produces the same on-disk schema, not merely a working one. |
 | X2  | **Payload budget.** Measure and record the shipped byte total — compiled `.wasm` + `sqlite3.wasm` + JS glue, gzipped and Brotli.                                                                                        | A recorded number, taken **before** the SQLite-vs-IndexedDB decision, not after.                       |
 | X3  | **Argon2id timing.** Measured under T3 and again under T4.6.                                                                                                                                                            | A recorded number; drives the deferred UX work.                                                        |
+
+---
+
+## 9a. Gates added 2026-08-30
+
+These follow from D-17..D-22. Three of them close holes where the existing ladder measured
+**speed** on a concern named for **correctness** or **confidentiality**.
+
+### 9a.1 Confidentiality — key material *(new; the existing key gates measure only time)*
+
+The only key-material gates today paste an `.atKeys` file into a page and record Argon2id
+wall-clock. Nothing tests the property the concern is named for.
+
+| # | Gate | Proves |
+| --- | --- | --- |
+| X-K1 | After a key write, the IndexedDB record is **not plaintext** | the envelope is actually applied |
+| X-K2 | `exportKey` on the wrapping key **throws** | the key is genuinely non-extractable |
+| X-K3 | "Ciphertext present, wrapping key missing" raises a **distinct documented error code**, not a generic decrypt failure | the eviction case is handled, not merely survived |
+| X-K4 | Generate → store → reload → retrieve → decrypt round-trips in **Chrome *and* Safari** | Safari's storage policy is the risk; this gate blocks the key-storage design from being treated as approved |
+
+### 9a.2 Remote-only correctness *(new — D-17, D-18)*
+
+| # | Gate | Proves |
+| --- | --- | --- |
+| X-R1 | A client built on the **remote-only bundle** constructs with **no Hive box and no SQLite** in the process — including on the **write** path | the bundle supplies a no-op sync queue, so `LocalSecondary`'s lazily-opened Hive path is never entered. This is the D-18 regression. The gate is on *this bundle*, not on the process: a consumer who injects a SQLite bundle is expected to open one |
+| X-R2 | A remote-only client **reads data written by a local-storage client** | unstamped keys route to the legacy provider on read; without this the client writes fine and fails on pre-existing data |
+| X-R3 | A write is not acknowledged until the atServer accepts it | write-through, not write-back — no reintroduced durability question |
+| X-R4 | Notification resume across two sequential clients does not replay | under D-18 the checkpoint read **silently succeeds and returns nothing**, so this is a correctness bug rather than a crash. If in-memory is chosen instead, the gate is an explicit test *documenting* the replay |
+| X-R5 | Two clients for two different atSigns coexist in one process with independent caches | D-22 multi-tenancy, demonstrated rather than promised |
+
+### 9a.3 Deployment contract *(new — the environment the other gates assume)*
+
+| # | Gate | Proves |
+| --- | --- | --- |
+| X-D1 | The host page is served over **HTTPS or localhost** | `crypto.subtle` exists. Every crypto and key-storage measurement is invalid without it — on plain http they would report the design as broken and every primitive as pure Dart |
+| X-D2 | Response headers include `script-src 'wasm-unsafe-eval'` and `application/wasm`, verified against the deployed artifact | the contract is executable, not aspirational |
+| X-D3 | `COOP`/`COEP` are **absent** | D-21 — cross-origin isolation would break popup OIDC, and nothing in V1 needs it |
+
+### 9a.4 Surface stability *(new — D-20)*
+
+| # | Gate | Proves |
+| --- | --- | --- |
+| X-S1 | Every method on the JS/TS surface returns a `Promise` — a **surface** test, not a behaviour test | the V2 storage upgrade cannot become a breaking npm change (D-20) |
+| X-S2 | `dist/index.js` and `dist/index.d.ts` are **generated**, and a clean rebuild produces no diff | D-23 — the shipped behaviour and the published types cannot drift, because neither is hand-maintained |
+| X-S3 | A **timeout-bounded** Node smoke test resolves a real call | the shim ordering trap is a silent hang, not an error; a bare `await` cannot tell a hang from slowness |
+
+### 9a.5 A standing rule for every tier
+
+**Classify each failure before acting on it:**
+
+- **bucket (a)** — harness or platform artefact
+- **bucket (b)** — genuine algorithm or protocol output mismatch
+
+**Bucket (b) is a stop condition.** Without this triage, `@TestOn('vm')` annotations
+silently convert evidence into exclusions, and a `continue-on-error` tier reports green
+while the thing it was built to detect goes unrecorded.
 
 ---
 

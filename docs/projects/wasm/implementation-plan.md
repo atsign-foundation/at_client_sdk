@@ -30,6 +30,30 @@ for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer sto
 
 ---
 
+> ## ⚠️ Scope change, 2026-08-30 (amended 2026-09-06) — V1 ships remote-only
+>
+> The first browser release **ships** a remote-only storage bundle as its default: no
+> SQLite, no VFS, no `sqlite3.wasm`, no Hive in the shipped payload. It is a default, not a
+> prohibition — under D-12 storage is an injected bundle, so the SQLite, `:memory:` and Hive
+> bundles stay injectable for a consumer who wants one. See [`decisions.md`](decisions.md)
+> D-17.
+>
+> **What this does to the backlog below:**
+>
+> | Group | Status |
+> | --- | --- |
+> | Transport tasks | **unchanged, and now the critical path.** Also cheaper than assumed: the atServer already speaks WebSocket natively and the WSS proxy is built, so there is **no server-side transport work** |
+> | Storage / persistence / sync-queue tasks | **deferred to V2** *as browser-lane work*. Correct as written; not withdrawn. `decisions.md` D-21 constrains the VFS choice for when they resume. **The X series below is not deferred** — it is `at_client`-side and lands on its own merits; it is what makes the browser's remote-only bundle injectable at all |
+> | Crypto tasks | **re-specified** — see [`design.md`](design.md) §C1. The `dart:html` claim was right about `better_cryptography`, not `cryptography`, and the Argon2id question is now settled statically |
+> | Key-storage tasks | **unchanged, and now the whole storage story** |
+> | JS packaging tasks | **re-specified by D-23** — author the facade once in TypeScript; generate both `.js` and `.d.ts` |
+>
+> A new task group is implied and not yet written up here: the **remote-only
+> `AtClientStorage`** that delivers remote-only (D-18) — a write-through keystore and a
+> no-op sync queue, injected through the X-series gateway rather than as a second route. It
+> replaces what would otherwise have been a sweep through 21 null-assertion call sites.
+
+
 ## 0. How to read this plan
 
 Task ids are stable and referenced from the other docs. Each carries a goal, the
@@ -58,7 +82,7 @@ S1..S6        T1..T8          P1..P5         C1..C4
 (in review)   (transport)     (persistence)  (crypto verify)
   │                │               │              │
   │                ▼               ▼              │
-  │           at_lookup 4.0.0   web SQLite        │
+  │           at_lookup 4.0.0   web SQLite (V2)   │
   │                │               │              │
   └────────────────┴───────┬───────┴──────────────┘
                            ▼
@@ -292,17 +316,24 @@ break; it stays as ruled.
 In `at_server`'s `at_persistence_secondary_server`. Independent of T; can run in
 parallel. Design in [`design.md`](design.md) §0.2 and §5.
 
-- **P1 — Decide the VFS** (`IndexedDbFileSystem` vs OPFS) on a measurement, and record
-  it. Blocks P2's web path and sets `at_client_web`'s execution model. OQ-5.
+> **V2, tracked as [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754).** V1 ships remote-only
+> ([`decisions.md`](decisions.md) D-17), so no task here is on V1's path; a SQLite bundle in
+> a browser waits on all of them. Re-verified 2026-09-14 on at_server trunk `1c51474d`:
+> P1–P4 not started, P5 done.
+
+- **P1 — Decide the VFS** (`IndexedDbFileSystem` vs OPFS) as a product pick-two, not on a
+  measurement (D-21), and record it. Blocks P2's web path and sets `at_client_web`'s
+  execution model. OQ-5.
 - **P2 — Split `src/impl/sqlite/sqlite_database.dart`'s `open`.** Prerequisite and the
   bulk of the work: retype the `_db` field and `raw` getter from `Database` to
-  `CommonDatabase`, and repoint the four stores from `package:sqlite3/sqlite3.dart` to
+  `CommonDatabase`, and repoint the five importers (the four stores and `sqlite_schema.dart`)
+  from `package:sqlite3/sqlite3.dart` to
   `package:sqlite3/common.dart`. Only the `open` call needs to differ; store bodies are
   unchanged. Native keeps `DynamicLibrary.open` (the Linux `libsqlite3.so.0` soname
   workaround) and `Directory().createSync`; web opens via `package:sqlite3/wasm.dart`
   with the P1 VFS.
-- **P3 — Gate the `File` uses** in `sqlite_at_commit_log.dart` (~line 185) and
-  `sqlite_at_access_log.dart` (~line 104). Both are log stores that client bundles do
+- **P3 — Gate the `File` uses** in `sqlite_at_commit_log.dart` (`:299`) and
+  `sqlite_at_access_log.dart` (`:106`). Both are log stores that client bundles do
   not instantiate — confirm that, then gate rather than port.
 - **P4 — Extend `SqlitePersistenceConfig`** with the web open parameters (database
   name, VFS choice) alongside the native `storagePath`.
@@ -1034,15 +1065,30 @@ count is sound for at_client's own sync service, and the extension seam is fine 
 
 Now verified **by execution** under T2.3 rather than by compile.
 
-- **C1 — `cryptography`** must resolve to its pure-Dart implementation; its 2.x browser
-  path uses Web Crypto via `dart:html`, which dart2wasm rejects. Critical path — it
-  backs X-Wing, X25519, AES-GCM, the X25519 key pair, Argon2id and `at_chops_util`.
+- **C1 — `cryptography`** — ⚠️ **re-specified 2026-08-30; see [`design.md`](design.md)
+  §C1.** The former wording ("must resolve to its pure-Dart implementation; its browser
+  path uses Web Crypto via `dart:html`") was wrong on both halves. The package has **no
+  `dart:html` anywhere in `lib/`** — it uses `dart:js_interop` with a **runtime**
+  `window.isSecureContext` probe — so the browser branch is selected under *both* web
+  targets and "resolves to pure Dart" is not a checkable property. The real question is
+  which primitives that branch accelerates at runtime, which is a T3 measurement, not a
+  T0/T1 graph property. Still critical path: it backs X-Wing, X25519, AES-GCM, the X25519
+  key pair, Argon2id and `at_chops_util`.
+  **Argon2id is already settled** — no override in 2.9.0, and Argon2id is absent from the
+  WebCrypto spec, so it always resolves to `DartArgon2id`. The deferred Argon2id UX work
+  stands.
 - **C2 — `pqcrypto: ^0.3.0`.** Backs `ml_kem_768_pure_dart.dart` and
   `ml_dsa_65_pure_dart.dart` — the algorithms a WASM build must use. Note
   `ml_kem_768_pure_dart.dart` imports `package:pqcrypto/src/…` for `KyberLevel`, a
   private-path import that can break on any upstream release.
 - **C3 — `better_cryptography`.** Backs `aes.dart`, `aes_ctr_factory.dart`,
-  `ed25519.dart`, `at_chops_util.dart`. A `cryptography` fork with unknown WASM status.
+  `ed25519.dart`, `at_chops_util.dart`. ⚠️ **Status is no longer unknown, and this is the
+  higher-risk row of the two.** It is a `1.0.0+1` fork whose browser backend imports
+  **`dart:html` + `package:js`**, selected at compile time by `dart.library.html`, with
+  **no secure-context gate at all** — so outside a secure context the expected outcome is
+  a throw on every encrypt, not a fallback. It sits on the **default AES path**, i.e. the
+  hot path. Tracked separately from C1: the two packages resolve by different mechanisms
+  and fail differently, and must not be merged into one row.
 - **C4 — Measure Argon2id in pure Dart under WASM.** The number is the deferred UX
   input for `.atKeys` passphrase decryption. → X3
 
@@ -1052,14 +1098,16 @@ Now verified **by execution** under T2.3 rather than by compile.
 
 - **W1 — New package.** The three legs of the platform bundle
   ([`design.md` §4](design.md#4-the-platform-bundle-capabilities-are-parameters-on-the-doors)): a WebSocket-backed `AtLookupMuxable` against
-  `wss://<host>:<port>/ws` behind an `AtLookUpFactory`, the web SQLite `AtClientStorage`,
+  `wss://<host>:<port>/ws` behind an `AtLookUpFactory`, a remote-only `AtClientStorage` as the
+  V1 default ([`decisions.md`](decisions.md) D-18; a web SQLite one is V2, behind P1–P4),
   a web `WrittenAtKeysIo` subtype; plus web connectivity and console logging.
 - **W2 — Browser test harness** for the T3 and T4 gates: a page that loads the module
   and drives a virtualenv atServer. First run must confirm
   `dart test -p chrome -c dart2wasm` executes at all — unverified locally
   ([`decisions.md`](decisions.md) §2.3).
 - **W3 — First live browser session.** → T4.1, T4.2
-- **W4 — Payload measurement.** Compiled output + `sqlite3.wasm` + JS glue, gzipped and
+- **W4 — Payload measurement.** Compiled output + JS glue, plus `sqlite3.wasm` for a
+  SQLite bundle (D-17), gzipped and
   Brotli, for **both** compile targets. Record **before** revisiting the IndexedDB
   question. → X2
 
@@ -1067,8 +1115,9 @@ Now verified **by execution** under T2.3 rather than by compile.
 
 ## 8. Phase 6 — the JS/TS facade (J)
 
-Design in [`js-api.md`](js-api.md) and [`plans/wasm/api-designing.md`](../../../plans/wasm/api-designing.md)
-(the Dart-side Layer A/B/C split); rulings D-7..D-11 in [`decisions.md`](decisions.md).
+Design in [`js-api.md`](js-api.md) and in the Layer A/B/C design note (the Dart-side
+facade split, held as working notes outside this repo); rulings D-7..D-11 in
+[`decisions.md`](decisions.md).
 Builds on W1. Adds no Dart package — everything lands inside `at_client_web`.
 
 **Rewritten 2026-08-18 for the collections pivot (D-10, D-11).** J1 previously described
@@ -1103,7 +1152,7 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
   `'unknown'` event, never drop it or throw. → T6.5
 - **J4 — The TS-supplied `KeyStore` seam.** Adapt a JS object behind the Dart storage
   interface, so Node consumers supply storage without a Dart package. Owned jointly with
-  [`plans/wasm/key-storage.md`](../../../plans/wasm/key-storage.md). → T6.6
+  the browser key-storage design note. → T6.6
 - **J5 — Entry point.** `packages/at_client_web/web/at_client_js.dart` — the `main()`
   that installs the facade on the global scope. Compiled with `dart compile js`; keep the
   dart2wasm build green in CI to preserve the option.
@@ -1137,7 +1186,7 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
   a browser; the flow needs paste, upload or QR feeding bytes into the existing decode
   path.
 - **D3 — Argon2id performance work,** driven by C4.
-- **D4 — Raw IndexedDB backend,** only if W4's payload measurement rules `sqlite3.wasm`
+- **D4 — Raw IndexedDB backend** (V2, as all local storage is under D-17), only if W4's payload measurement rules `sqlite3.wasm`
   out.
 - **D5 — `at_client_cli` and `at_client_flutter` as true platform implementers.**
   Deferred under [`decisions.md`](decisions.md) D-4; the `_io` barrels serve until then.
@@ -1158,6 +1207,7 @@ Dependency order, one major per package:
 | 3 | `at_utils`         | **4.0.0** | I1–I4    | barrel split; native handlers → `at_utils_io.dart`                                                                |
 | 4 | `at_lookup`        | **4.0.0** | T        | `Socket getSocket()` removed; factories retyped. **3.7.0-rc1 published; 3.7.0-rc2 on trunk**                      |
 | 5 | `at_server_status` | minor     | S5       | none — `HttpStatus` → literals. **1.1.2-rc1 published; S5 ships in 1.1.2-rc2 (#2162)**                            |
+| 5a | `at_persistence_secondary_server` | minor | P | none — additive web open path ([at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754)). **V2** |
 | 6 | `at_client`        | **4.0.0** | I        | `File` off the spec; storage backend selectable; connectivity injected                                            |
 | 7 | `at_client_web`    | 1.0.0     | W        | new                                                                                                               |
 | 8 | consumers          | —         | —        | `at_onboarding_cli`, `at_cli_commons`, `at_client_flutter`, both test packages                                    |
