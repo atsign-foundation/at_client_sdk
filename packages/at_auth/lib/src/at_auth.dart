@@ -51,6 +51,6 @@ abstract interface class AtAuth {
   Future<void> completeActivation();
 
   /// Waits, over [atLookUp], until the atDirectory knows the atSign and its
-  /// atServer answers; for onboarding, the atSign must also not be activated.
+  /// atServer answers.
   Future<void> validateAtServer(AuthRequest authRequest);
 }

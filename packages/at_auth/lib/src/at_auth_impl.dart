@@ -435,8 +435,7 @@ class AtAuthImpl implements AtAuth {
   }
 
   /// Waits, over [atLookUp], until the atDirectory knows the atSign and its
-  /// atServer answers; for onboarding, the atSign must also not be activated
-  /// yet.
+  /// atServer answers.
   ///
   /// Retried until the request's overall deadline, then throws an
   /// [AtTimeoutException] carrying the last failure.
@@ -484,11 +483,10 @@ class AtAuthImpl implements AtAuth {
                 '${atRequest.rootDomain.rootDomain}: ${check.cause}');
           case AtSignServerState.atServerUnreachable:
             throw _AtServerNotAnswering(check.cause);
+          // NOTE: a public key does not prove the CRAM secret is spent, so an
+          // atSign that looks activated is not refused onboarding here; the
+          // CRAM exchange refuses one that really is.
           case AtSignServerState.activated:
-            if (atRequest is AtOnboardingRequest) {
-              throw AtException('atSign: ${atRequest.atSign} is already '
-                  'onboarded. Cannot perform onboarding again.');
-            }
           case AtSignServerState.notActivated:
         }
 

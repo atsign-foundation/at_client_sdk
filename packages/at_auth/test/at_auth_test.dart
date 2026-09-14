@@ -94,7 +94,7 @@ void main() {
     test(
         'validateAtServer honours overallTimeout instead of running all retries',
         () async {
-      // The atServer never answers, so without a deadline validateAtServer
+      // The atServer cannot be reached, so without a deadline validateAtServer
       // would retry maxRetries(10) x retryDelay(2s) ~= 20s. A short
       // overallTimeout must cut that short and surface an AtTimeoutException.
       when(() => mockAtLookUp.executeCommand(
@@ -117,6 +117,26 @@ void main() {
       sw.stop();
       expect(sw.elapsed, lessThan(const Duration(seconds: 5)),
           reason: 'should honour overallTimeout (300ms), not 10 x 2s retries');
+    });
+
+    test('validateAtServer lets an onboarding through when the atSign has a '
+        'public key', () async {
+      when(() => mockAtLookUp.executeCommand(
+              any(that: startsWith('lookup:publickey')),
+              auth: any(named: 'auth')))
+          .thenAnswer((_) async => 'data:MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A');
+      final request = AtOnboardingRequest('@alice🛠',
+          signingAlgoType: SigningAlgoType.rsa2048,
+          atKeysIo: fileAtKeysIo,
+          retryOptions: const RetryOptions(
+              maxRetries: 10,
+              retryDelay: Duration(milliseconds: 100),
+              overallTimeout: Duration(seconds: 2)));
+
+      await expectLater(atAuth.validateAtServer(request), completes,
+          reason: 'a public key does not prove the CRAM secret is spent - a '
+              'provisioning step can install one before activation - so the '
+              'CRAM exchange, not this check, refuses an activated atSign');
     });
 
     test('Test onboard - cramAuthenticate returns false', () async {
