@@ -11,12 +11,16 @@ import 'package:at_auth/at_auth.dart'
         CryptographicMaterialStatus,
         WrittenAtKeysIo;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/enroll/authorised_namespaces.dart'
+    show authorisedNamespacesOf;
 import 'package:at_client/src/enroll/enrollment_update_request.dart';
 import 'package:at_client/src/enroll/enrollment_updater.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
+import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
+    show EnrollmentDirectory, KeyPackageStatus, VerbEnrollmentDirectory;
 import 'package:at_client/src/secret_sharing/key_package.dart'
     show KeyPackage, PackageKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -48,11 +52,18 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// and the next start publishes it.
 ///
 /// **Inert unless something changed.** An enrollment created under the current
-/// list already holds every algorithm it names and finds nothing to do.
+/// list already holds every algorithm it names and finds nothing to do —
+/// unless its published package no longer verifies against the `_apsk` it
+/// advertises now, in which case the same keys are signed again.
 @experimental
 class KeyPackageMinting with ApkamSigning {
-  KeyPackageMinting(this.atClient, {EnrollmentUpdater? updater})
-      : _updater = updater ?? EnrollmentUpdater();
+  /// [directory] reads back the published package the way a peer does; a
+  /// fresh [VerbEnrollmentDirectory] per reconcile when null, so no `_apsk` it
+  /// cached earlier answers for the current one.
+  KeyPackageMinting(this.atClient,
+      {EnrollmentUpdater? updater, EnrollmentDirectory? directory})
+      : _updater = updater ?? EnrollmentUpdater(),
+        _directory = directory;
 
   @override
   final AtClient atClient;
@@ -61,6 +72,8 @@ class KeyPackageMinting with ApkamSigning {
   final AtSignLogger logger = AtSignLogger('KeyPackageMinting');
 
   final EnrollmentUpdater _updater;
+
+  final EnrollmentDirectory? _directory;
 
   /// Mints, files and advertises an encapsulation keypair for every algorithm
   /// the configured list names and this enrollment lacks; retires every one it
@@ -114,7 +127,15 @@ class KeyPackageMinting with ApkamSigning {
       for (final key in active)
         if (!wanted.contains(key.alg)) key
     ];
-    if (missing.isEmpty && superseded.isEmpty) return nothing;
+    if (missing.isEmpty && superseded.isEmpty) {
+      if (await _publishedPackageRejected(enrolment)) {
+        await _publish(enrolment, atLookUp!, held);
+        logger.info('Signed the key package for $enrolment again: the '
+            'published one no longer verified against its _apsk, so no peer '
+            'would seal to this enrollment');
+      }
+      return nothing;
+    }
 
     // NOTE: the mint runs before the write, so a mint that throws leaves the
     // keyfile and the advertisement exactly as they were.
@@ -195,6 +216,36 @@ class KeyPackageMinting with ApkamSigning {
           'sealed to them still opens');
     }
     return (minted: missing, retired: [for (final key in superseded) key.alg]);
+  }
+
+  /// Whether a peer reading [enrolment]'s published key package refuses it
+  /// for a signature that does not verify against its current `_apsk`.
+  ///
+  /// That happens when `_apsk` stops naming the key the package was signed
+  /// with: the authentication key leaves the advertisement once the enrollment
+  /// holds signing keys of its own. Read through the client's own namespace
+  /// when it names one, else through a namespace its enrollment is granted —
+  /// a package is listed under every namespace its enrollment may read. False
+  /// when there is none, when the package is absent or could not be checked,
+  /// and when a read fails, so a start is never failed by the check.
+  Future<bool> _publishedPackageRejected(String enrolment) async {
+    try {
+      final own = atClient.getPreferences()?.namespace;
+      final namespace = (own != null && own.isNotEmpty)
+          ? own
+          : ((await authorisedNamespacesOf(atClient)).toList()..sort())
+              .firstOrNull;
+      if (namespace == null) return false;
+      final members = await (_directory ?? VerbEnrollmentDirectory(atClient))
+          .listForNamespace(namespace);
+      return members.any((m) =>
+          m.enrollmentId == enrolment &&
+          m.keyPackageStatus == KeyPackageStatus.rejected);
+    } catch (e) {
+      logger.warning('Could not check whether the key package published for '
+          '$enrolment still verifies; the next start checks again: $e');
+      return false;
+    }
   }
 
   /// Every encapsulation key [enrolment] advertises in [keys] — active and

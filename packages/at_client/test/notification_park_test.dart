@@ -201,6 +201,8 @@ void main() {
 
   test('a failure no filing can fix is dropped, not parked', () async {
     final seen = <AtNotification>[];
+    final dropped = <DroppedNotification>[];
+    service.droppedEvents.listen(dropped.add);
     service.subscribe(shouldDecrypt: true).listen(seen.add);
 
     await service.handleNotificationReceipt(
@@ -212,6 +214,10 @@ void main() {
         reason: 'the park is for a key that is coming; a corrupt ciphertext '
             'would sit there until its ttl and be dropped anyway, having '
             'delayed nothing but the report');
+    expect(dropped.map((d) => d.key), ['@alice:corrupt.$_namespace@alice']);
+    expect(dropped.single.reason, contains('the ciphertext is corrupt'),
+        reason: 'the drop names why, so a caller can tell a notification that '
+            'arrived and could not be opened from one that never arrived');
   });
 
   test('the park outlasts the conveyance it is waiting for', () {
@@ -227,6 +233,8 @@ void main() {
   test('the park is bounded, and says what it drops', () async {
     NotificationServiceImpl.maxParked = 2;
     addTearDown(() => NotificationServiceImpl.maxParked = 64);
+    final dropped = <DroppedNotification>[];
+    service.droppedEvents.listen(dropped.add);
 
     service.subscribe(shouldDecrypt: true).listen((_) {});
     for (var i = 0; i < 4; i++) {
@@ -239,5 +247,41 @@ void main() {
         reason: 'a park that grows without limit is a leak, and a held '
             'notification nothing re-drives is the same data loss with a '
             'longer fuse');
+    expect(
+        dropped.map((d) => d.key),
+        [
+          '@alice:treaty0.$_namespace@alice',
+          '@alice:treaty1.$_namespace@alice'
+        ],
+        reason: 'the oldest go, and each is reported');
+  });
+
+  test('notifications still parked at shutdown are reported as dropped',
+      () async {
+    final dropped = <DroppedNotification>[];
+    service.droppedEvents.listen(dropped.add);
+    service.subscribe(shouldDecrypt: true).listen((_) {});
+
+    await service.handleNotificationReceipt(
+        _frame('@alice:treaty.$_namespace@alice', waiting.id));
+    await Future<void>.delayed(Duration.zero);
+    expect(service.parkedCount, 1, reason: 'precondition: it parked');
+
+    service.stopAllSubscriptions();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(dropped.map((d) => d.key), ['@alice:treaty.$_namespace@alice']);
+  });
+
+  test('a frame that cannot be parsed is reported as dropped', () async {
+    final dropped = <DroppedNotification>[];
+    service.droppedEvents.listen(dropped.add);
+
+    await service.handleNotificationReceipt('notification: {not json\n');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(dropped, hasLength(1));
+    expect(dropped.single.key, isEmpty,
+        reason: 'nothing names a key in a frame that could not be parsed');
   });
 }

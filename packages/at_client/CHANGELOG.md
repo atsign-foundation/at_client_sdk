@@ -53,6 +53,13 @@
   time the atServer delivered nothing sent before `monitor:` went out, so
   replies to notifications the app sent before its monitor connected were
   never received.
+- fix: an enrollment's key package is signed again at startup when it no
+  longer verifies against the enrollment's `_apsk`. Minting the
+  enrollment's first signing key of its own takes the authentication key
+  that signed the package out of `_apsk`, and every peer then refused the
+  package and sealed nothing to the enrollment. The check reads the
+  package back through the client's namespace, or a namespace its
+  enrollment is granted.
 - fix: an encrypted notification is decrypted once however many
   subscribers receive it, and only for subscribers whose regex matches.
   Each subscriber gets its own copy of the notification, so one
