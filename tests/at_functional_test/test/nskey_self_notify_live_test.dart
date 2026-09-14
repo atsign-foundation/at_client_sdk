@@ -184,12 +184,12 @@ void main() {
 
     // NOTE: wait until the monitor is REGISTERED before notifying anything.
     // `MonitorVerbHandler` subscribes to the atServer's inbound stream only
-    // when it processes the `monitor:` command, and that stream is a broadcast
-    // with no backlog, so a notification enqueued before that instant is never
-    // delivered on that connection at all. The only recovery is the
-    // `monitor:…:<epochMillis>` form, and a first-ever monitor has no
-    // last-received time to send. See [awaitMonitorListening] for why
-    // `listening` now answers this and what it still cannot promise.
+    // when it processes the `monitor:` command; a notification enqueued before
+    // that instant reaches this connection only through the replay the
+    // `monitor:…:<epochMillis>` form asks for, which a first monitor now sends
+    // from the service's creation time. Waiting keeps this row about live
+    // delivery rather than replay. See [awaitMonitorListening] for why
+    // `listening` answers this and what it still cannot promise.
     await awaitMonitorListening(notifications);
 
     // The provider is chosen PER CALL, not by posture: a per-call algorithm

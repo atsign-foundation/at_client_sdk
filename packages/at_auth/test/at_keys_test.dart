@@ -134,11 +134,11 @@ void main() {
 
     test('a version 1 document carrying a POPULATED keys array is refused', () {
       // The shape that preceded grouping by enrollment. A populated one is
-      // refused rather than read, because `keys` is no longer reserved:
-      // parsing it would sweep the whole array into `metadata` as a legacy
-      // value, leave the document reading as untyped, and authenticate from
-      // the flat block as the LEGACY enrollment while the live enrollment's
-      // credentials sat unread beside it.
+      // refused rather than read, because `keys` is a reserved name that no
+      // container reads: parsing it would discard the whole array, leave the
+      // document reading as untyped, and authenticate from the flat block as
+      // the LEGACY enrollment while the live enrollment's credentials sat
+      // unread beside it.
       expect(
         () => AtKeys.fromJson({
           'version': 1,
@@ -181,9 +181,9 @@ void main() {
       expect(keys.enrollmentId, 'abc-123',
           reason: 'the flat block must still be read - accepting the empty '
               'array is worthless if the material beside it is dropped');
-      expect(keys.toJson().containsKey('keys'), isFalse,
-          reason: 'and the dead field must not be carried into `metadata` '
-              'and written back out on the next flush');
+      expect(keys.metadata.containsKey('keys'), isFalse,
+          reason: 'the field is reserved, so it must not be carried into '
+              '`metadata` and written back out beside the one toJson writes');
     });
 
     test('and the same document without it parses', () {
@@ -194,6 +194,58 @@ void main() {
           {'version': 1, 'atsign': '@alice', 'enrollments': <Object?>[]});
       expect(keys.atsign, '@alice'.toAtsign());
       expect(keys.keys, isEmpty);
+    });
+
+    test('a versioned document carries an empty top-level keys array', () {
+      // Readers in the field may expect a `keys` array wherever there is a
+      // `version`, so every versioned document carries one, empty, beside the
+      // containers that hold the material. Pinned as raw JSON: comparing
+      // against a list this test builds would pass for any empty iterable.
+      final json = (AtKeys(keysList: [
+        symmetricKey('self'),
+        ...rsaKeyPair('pair', enrollmentId: 'enroll-1'),
+      ])
+            ..atsign = '@alice'.toAtsign())
+          .toJson();
+
+      expect(json['version'], 1);
+      expect(jsonEncode(json['keys']), '[]',
+          reason: 'a top-level "keys": [] beside "version" is a wire contract '
+              'with readers outside this tree');
+      expect(json.containsKey('atsignKeys'), isTrue);
+      expect(json.containsKey('enrollments'), isTrue,
+          reason: 'the material stays in its containers; the top-level array '
+              'is empty however much the document holds');
+    });
+
+    test(
+        'reading and re-writing a versioned document keeps exactly one '
+        'empty keys array', () {
+      final written = (AtKeys(keysList: [
+        ...rsaKeyPair('pair', enrollmentId: 'enroll-1'),
+      ])
+            ..atsign = '@alice'.toAtsign())
+          .toJson();
+      final reread = AtKeys.fromJson(
+          jsonDecode(jsonEncode(written)) as Map<String, dynamic>);
+      final rewritten = reread.toJson();
+
+      expect(jsonEncode(rewritten['keys']), '[]');
+      expect(reread.metadata.containsKey('keys'), isFalse);
+      expect(reread.keysForEnrollment('enroll-1'), hasLength(2),
+          reason: 'the empty array is accepted on read, not taken for the '
+              'populated shape that is refused');
+      expect(rewritten, equals(written));
+    });
+
+    test(
+        'control: a document holding no typed material carries neither '
+        'version nor keys', () {
+      // Without this arm the pins above pass for a toJson that stamps every
+      // document it writes, legacy files included.
+      final json = legacyAtKeys(atsign: '@alice'.toAtsign()).toJson();
+      expect(json.containsKey('version'), isFalse);
+      expect(json.containsKey('keys'), isFalse);
     });
   });
 

@@ -57,8 +57,8 @@ void main() {
       }
     });
 
-    // Gets past the first-call-returns-null branch, so the reconnect below has
-    // a watermark to resume from.
+    // Seeds the watermark now, so the reconnect below has one to resume from
+    // whether or not the monitor's own first read has run yet.
     final service = client.notificationService as NotificationServiceImpl;
     await service.getLastNotificationTime();
 

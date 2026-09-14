@@ -111,8 +111,9 @@ void main() {
     //       for field, not byte for byte, because the emitter has one fixed
     //       order. A version:1 document carrying a POPULATED top-level keys
     //       array is refused by name rather than read as legacy; an EMPTY one
-    //       is accepted, because that is the only shape any released build
-    //       wrote and refusing it stranded every keyfile they produced.
+    //       is accepted and dropped.
+    // AND   every version:1 document is written with an empty top-level keys
+    //       array, and a document holding no typed material carries neither.
     provenIn('packages/at_auth/test/at_keys_test.dart',
         'a legacy document round-trips field-for-field through a new build',
         proves: 'no upgrade markers are added. This test was named '
@@ -138,5 +139,20 @@ void main() {
     provenIn('packages/at_auth/test/at_keys_test.dart',
         'and the same document without it parses',
         proves: 'the control: fromJson does not simply refuse everything');
+    provenIn('packages/at_auth/test/at_keys_test.dart',
+        'a versioned document carries an empty top-level keys array',
+        proves: 'the written shape, pinned as raw JSON beside version and '
+            'both containers',
+        clauses: ['readers in the field may expect']);
+    provenIn(
+        'packages/at_auth/test/at_keys_test.dart',
+        'reading and re-writing a versioned document keeps exactly one '
+            'empty keys array',
+        proves: 'the empty array read back is dropped and written afresh, '
+            'never carried into metadata, and the document re-emits equal');
+    provenIn('packages/at_auth/test/at_keys_test.dart',
+        'control: a document holding no typed material carries neither',
+        proves: 'the control: toJson does not stamp keys onto every document '
+            'it writes');
   });
 }

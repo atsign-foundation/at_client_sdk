@@ -98,7 +98,8 @@ at_lookup names the concrete class.** Consumers hold `AtLookUp` or
 `secureSocketLookUps()` supplies, which an application hands to at_client's
 entry points so that every connection a client opens travels the way the
 application chose. `AtLookUp.withSecureSocket` is where that default factory
-lands; at_auth still calls it directly when a caller hands it no lookup.
+lands, and no library outside at_lookup calls it directly: at_auth 4.0.0-rc2
+requires the lookup rather than building one for a caller that hands it none.
 
 ⚠️ **38 is not the plan's "64 construction sites" with a different name.** 64
 counts constructions; 38 counts every use in scope — constructions, type

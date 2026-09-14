@@ -140,9 +140,9 @@ AtAuthenticator authenticatorForChops(
 /// exactly that caller from its `cramSecret` field.
 ///
 /// Nothing in this tree sets `AtClientPreference.cramSecret` - every in-tree
-/// CRAM goes through onboarding, which builds its own lookup - but the field
-/// is public and an external consumer can, so removing the ladder without
-/// this would take CRAM away from them silently.
+/// CRAM goes through onboarding, which authenticates with the secret it is
+/// handed - but the field is public and an external consumer can, so
+/// removing the ladder without this would take CRAM away from them silently.
 AtAuthenticator authenticatorForCramSecret(
   String atSign,
   String cramSecret, {

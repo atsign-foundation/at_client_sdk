@@ -2964,8 +2964,10 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   self-encrypted field's ciphertext unchanged, and only the key **order** may
   differ, because the emitter has one fixed order. A `version: 1` document
   carrying a **populated** top-level `keys` array is **refused by name**, not
-  read as legacy; an **empty** one is accepted and dropped, because that is the
-  only shape any released build ever wrote.
+  read as legacy; an **empty** one is accepted and dropped. Every `version: 1`
+  document is **written** with an empty top-level `keys` array beside
+  `version`, because readers in the field may expect the array wherever
+  there is a `version`.
 
   ⚠️ **The guarantee is field-for-field, not byte-identical** — a
   foreign-ordered legacy file comes back in the emitter's fixed order.
@@ -2973,9 +2975,9 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   ⚠️ **The empty `keys` array is accepted deliberately.** A keyfile
   CRAM-onboarded with the published at_auth that introduced `keys` carries
   `"keys": []` — that build never populated the array, since `addKey` has no
-  caller outside `AtKeys` itself there — so refusing the empty shape would
-  strand every keyfile a release had written, to guard an array carrying
-  nothing.
+  caller outside `AtKeys` itself there — and every versioned document written
+  now carries one too, so refusing the empty shape would strand them all, to
+  guard an array carrying nothing.
 
 ### 16.3 The wire rows
 
