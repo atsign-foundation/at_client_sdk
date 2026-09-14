@@ -106,8 +106,7 @@ class AtClientImpl implements AtClient {
 
   PutRequestTransformer putRequestTransformer = PutRequestTransformer();
 
-  @override
-  // ignore: override_on_non_overriding_member
+  // ignore: deprecated_member_use
   AtChops? _atChops;
 
   AtKeysIo? _atKeysIo;
@@ -798,6 +797,7 @@ class AtClientImpl implements AtClient {
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
     AtKeyValueStore<String, AtData, AtMetaData?>? localSecondaryKeyStore,
+    // ignore: deprecated_member_use
     AtChops? atChops,
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
@@ -2236,6 +2236,7 @@ class AtClientImpl implements AtClient {
     }
   }
 
+  // ignore: deprecated_member_use
   Future<AtChops> _createAtChops(String atSign) async {
     // When the client was handed an AtKeysIo *source* (and no live
     // AtChops/AtLookUp was injected by auth), derive our own PKAM+encryption
@@ -2252,7 +2253,9 @@ class AtClientImpl implements AtClient {
       // records nothing when its own read throws.
       return keys.authenticationFor(enrollmentId).chops;
     }
+    // ignore: deprecated_member_use
     AtEncryptionKeyPair? atEncryptionKeyPair;
+    // ignore: deprecated_member_use
     AtPkamKeyPair? atPkamKeyPair;
     try {
       var encryptionPublicKey = await localSecondary!.getEncryptionPublicKey(
@@ -2261,6 +2264,7 @@ class AtClientImpl implements AtClient {
       var encryptionPrivateKey =
           await localSecondary!.getEncryptionPrivateKey();
       if (encryptionPublicKey != null && encryptionPrivateKey != null) {
+        // ignore: deprecated_member_use
         atEncryptionKeyPair = AtEncryptionKeyPair.create(
           encryptionPublicKey,
           encryptionPrivateKey,
@@ -2274,6 +2278,7 @@ class AtClientImpl implements AtClient {
       var pkamPrivateKey = await localSecondary!.getPkamPrivateKey();
 
       if (pkamPublicKey != null && pkamPrivateKey != null) {
+        // ignore: deprecated_member_use
         atPkamKeyPair = AtPkamKeyPair.create(pkamPublicKey, pkamPrivateKey);
       }
     } on KeyNotFoundException catch (e) {
@@ -2297,7 +2302,9 @@ class AtClientImpl implements AtClient {
           'needs first.');
     }
 
+    // ignore: deprecated_member_use
     final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
+    // ignore: deprecated_member_use
     AtChopsImpl chops = AtChopsImpl(atChopsKeys);
     return chops;
   }

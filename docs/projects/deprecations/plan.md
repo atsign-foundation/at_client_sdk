@@ -65,21 +65,24 @@ at_client_flutter, and the 4 live packs (`tests/at_functional_test`,
 `tests/at_onboarding_cli_functional_tests_proxy`) are green.
 
 The workspace is the 17 members the root `pubspec.yaml` lists: 12 packages,
-the 4 live packs and `tools/wasm_shakedown`. On 2026-09-13 every one of
-them reports no `deprecated_member_use` outside `lib`, and only two report
-any in `lib`: at_auth's 16 and at_client's 25, the decided floors named
-under [step 3](#step-3-at_auth-builds-the-carrier-inside-400-rc2) and in the
-status paragraph of [section 4](#4-order-of-work). Both CLI packs were
+the 4 live packs and `tools/wasm_shakedown`. On 2026-09-14 every one of
+them reports no `deprecated_member_use`. The decided floors — at_auth's 16
+uses in `lib` and at_client's 25, named under
+[step 3](#step-3-at_auth-builds-the-carrier-inside-400-rc2) and in the
+status paragraph of [section 4](#4-order-of-work) — each sit under a
+line-level `// ignore: deprecated_member_use`, so the recipe counts them at
+zero; a new use on any other line still reports. Both CLI packs were
 recorded at zero until 2026-09-11 while one held 47, because the
 re-derivation loop then hand-listed 6 members and reached neither; the
 recipe above enumerates every pubspec for that reason.
 The other `packages/*_flutter` directories are not members; the 10 of them
-with a `lib` carry 17 between them (at_events_flutter 6, at_follows_flutter 3,
-at_contacts_group_flutter 2, at_login_flutter 2, one each in at_chat,
-at_contacts, at_location and at_theme; count with
+with a `lib` carry 16 between them (at_events_flutter 6, at_follows_flutter 3,
+at_contacts_group_flutter 2, at_login_flutter 2, one each in at_contacts,
+at_location and at_theme; count with
 `for d in packages/*_flutter; do (cd $d && flutter analyze --no-pub --no-fatal-infos | grep -c deprecated_member_use); done`),
 none in this plan's families, and 4 of them fail `flutter analyze` for
-unrelated reasons. They are listed so the figure is true, not because this
+unrelated reasons. at_chat_flutter is one of the 4, and it no longer resolves
+every import, so its zero is a floor rather than a count. They are listed so the figure is true, not because this
 plan clears them.
 
 ⛔ **Nor are the `example/` and `examples/` trees, and those are not merely
@@ -371,7 +374,10 @@ preference-only bridge `_createAtChops` builds from a keystore, and
 ladder reads in `remote_secondary.dart` that step 5's ruling keeps, and
 `ApkamSigning`'s two reinstated `AtPkamKeyPair` accessors. Every one leaves
 at the major that removes `AtClient.atChops`, and none can be moved before
-it without breaking a published caller.
+it without breaking a published caller. Each carries a line-level
+`// ignore: deprecated_member_use` — 14 lines in at_auth, 23 in at_client,
+since a line can hold more than one use — and never a file-level one, so a
+new use beside them still reports.
 
 **What the test trees keep, and where it is stated.** A test whose subject
 IS the AtChops bridge, the injected-signer door or the credential ladder
@@ -406,9 +412,9 @@ annotations go when at_auth internalises `AtEnrollmentRequest` and
 than on `atAuthKeys` — the client-lifecycle design's work, not this plan's.
 
 ⚠️ **Re-derive every figure here before quoting it.** The recipe at the top,
-over every pubspec, on 2026-09-13 evening: 67 across 49 pubspecs — at_auth
-16, at_client 25, every other workspace member 0, and 26 in the legacy
-`*_flutter` packages and one of their examples. The figures this section used to carry — 1206, 1403,
+over every pubspec, on 2026-09-14: 16 across 49 pubspecs, all in 7 legacy
+`*_flutter` packages; every workspace member counts 0, at_auth and at_client
+because their floors are under line ignores. The figures this section used to carry — 67, 1206, 1403,
 the per-package `lib`/`test` splits of 2026-09-12 and the three kinds of
 movement that were not progress — are history now, and the text that
 explained them stays under the steps that record it.

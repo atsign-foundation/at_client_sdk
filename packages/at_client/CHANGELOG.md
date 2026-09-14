@@ -1,5 +1,10 @@
 ## 3.15.0-rc1
 
+- feat: `at_client_mixins.dart` exports `SignedEnvelope`, the type
+  `EnvelopeSigning.wrapAndSign` returns, so a caller can name it without
+  importing `src/`.
+- fix: `collection` is a declared dependency. The library imports it, and
+  only the tests declared it, so a consumer resolved it transitively.
 - fix: with `fetchOfflineNotifications` off, a monitor reconnect no longer re-delivers every notification received since the notification service was created.
 - `Atsign.activate`, `enroll` and `resumeEnrollment`, `PendingEnrollment` and
   `pqNativeOnboard` type a supplied `atLookUp` as `AtLookupMuxable`, the

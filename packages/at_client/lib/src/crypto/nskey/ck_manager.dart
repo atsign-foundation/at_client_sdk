@@ -5,7 +5,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
-import 'package:at_client/src/crypto/nskey/nskey_resolver.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;

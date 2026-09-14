@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';

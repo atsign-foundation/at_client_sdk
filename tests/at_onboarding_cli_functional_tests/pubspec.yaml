@@ -12,6 +12,10 @@ dependencies:
   at_client: ^3.10.0
   at_commons: ^5.5.0
   at_demo_data: ^1.2.0
+  at_auth: ^4.0.0-rc2
+  at_chops: ^3.6.0
+  at_onboarding_cli: ^2.0.0-rc1
+  at_utils: ^3.2.0
 
 dev_dependencies:
   lints: ^6.0.0

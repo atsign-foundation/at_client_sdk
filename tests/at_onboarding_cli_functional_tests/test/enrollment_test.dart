@@ -482,7 +482,7 @@ Future<void> _notificationCallback(
   final notificationKey = notification.key;
   final enrollmentId =
       notificationKey.substring(0, notificationKey.indexOf('.new.enrollments'));
-  var enrollRequest;
+  String enrollRequest;
   var enrollParamsJson = {};
   enrollParamsJson['enrollmentId'] = enrollmentId;
   final encryptedApkamSymmetricKey =

@@ -2,8 +2,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart' show internal, visibleForTesting;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
-import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show pqCryptoProviderIds;
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
 import 'package:at_client/src/preference/pq_posture.dart';
@@ -140,8 +138,9 @@ class AtClientPreference {
     final differences = <String>[];
 
     void compare(String axis, Object? asked, Object? running) {
-      if (asked != running)
+      if (asked != running) {
         differences.add('$axis (asked $asked, running $running)');
+      }
     }
 
     compare('posture.writesPqByDefault', other.posture.writesPqByDefault,

@@ -261,8 +261,8 @@ class AtKeys {
     required String privateKey,
   }) {
     final now = DateTime.now().toUtc();
-    final keyId = keyIdPrefix('auth', algorithm) +
-        '${nextAuthenticationGeneration(enrollmentId, algorithm)}';
+    final generation = nextAuthenticationGeneration(enrollmentId, algorithm);
+    final keyId = '${keyIdPrefix('auth', algorithm)}$generation';
     addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
@@ -306,8 +306,8 @@ class AtKeys {
     required String privateKey,
   }) {
     final now = DateTime.now().toUtc();
-    final keyId = keyIdPrefix('sign', algorithm) +
-        '${nextSigningGeneration(enrollmentId, algorithm)}';
+    final generation = nextSigningGeneration(enrollmentId, algorithm);
+    final keyId = '${keyIdPrefix('sign', algorithm)}$generation';
     addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
@@ -1414,6 +1414,7 @@ class AtKeys {
   /// way this happens. [authenticationAlgorithmFor] raises it, so a caller
   /// wanting only the algorithm is refused on the same terms as one wanting
   /// the signer.
+  // ignore: deprecated_member_use
   ({AtChops chops, SigningAlgoType? algorithm}) authenticationFor(
       String? enrollmentId) {
     final algorithm = authenticationAlgorithmFor(enrollmentId);

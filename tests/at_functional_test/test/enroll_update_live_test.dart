@@ -13,7 +13,6 @@ import 'package:at_client/at_client_mixins.dart'
     show EnrollmentUpdateRequest, EnrollmentUpdater;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookUpException;
-import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
 import 'package:test/test.dart';

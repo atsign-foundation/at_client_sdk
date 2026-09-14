@@ -21,7 +21,6 @@ import 'package:at_client/src/secret_sharing/key_package_minting.dart'
     show KeyPackageMinting;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope, verifyEnvelope;
-import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
