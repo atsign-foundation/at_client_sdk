@@ -2,8 +2,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:meta/meta.dart' show internal, visibleForTesting;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
-import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show pqCryptoProviderIds;
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
 import 'package:at_client/src/preference/pq_posture.dart';
@@ -140,8 +138,9 @@ class AtClientPreference {
     final differences = <String>[];
 
     void compare(String axis, Object? asked, Object? running) {
-      if (asked != running)
+      if (asked != running) {
         differences.add('$axis (asked $asked, running $running)');
+      }
     }
 
     compare('posture.writesPqByDefault', other.posture.writesPqByDefault,
@@ -399,8 +398,8 @@ class AtClientPreference {
   /// last one it received. Defaults to true.
   ///
   /// Set to false to ignore those. Notifications received since the client's
-  /// notification service was created are delivered either way, including any
-  /// that arrived before its monitor connected.
+  /// notification service was created are delivered once either way, including
+  /// any that arrived before its monitor connected.
   bool fetchOfflineNotifications = true;
 
   @Deprecated('No longer needed. at_chops will be used by default')

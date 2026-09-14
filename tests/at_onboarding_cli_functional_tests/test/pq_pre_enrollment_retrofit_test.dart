@@ -119,7 +119,7 @@ void main() {
     expect(await service.authenticate(), true,
         reason: 'authentication is with the FLAT key; a failure here is the '
             'fixture, not the behaviour under test');
-    final client = await service.atClient;
+    final client = service.atClient;
     return client!;
   }
 

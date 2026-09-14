@@ -42,12 +42,12 @@ void main() {
 
     final runtime = CryptoRuntime(client);
     expect(await runtime.encryptForNotification(notified, 'hi'),
-        '${legacyCryptoProviderId} encrypted hi',
+        '$legacyCryptoProviderId encrypted hi',
         reason: 'the notification was encrypted rather than refused — the '
             'refusal is pqActive\'s, and a capability build that refused '
             'here could not be rolled out ahead of the active one');
     expect(await runtime.encryptForPut(put, 'hi'),
-        '${legacyCryptoProviderId} encrypted hi');
+        '$legacyCryptoProviderId encrypted hi');
 
     expect(legacy.encryptCalls, 2,
         reason: 'BOTH paths reached the legacy provider — put and notify '

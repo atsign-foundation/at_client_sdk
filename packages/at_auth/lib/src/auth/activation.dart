@@ -98,8 +98,7 @@ Future<String> activateAtSign({
 /// reached the atServer: the provisioning wait, whose job is to find out
 /// whether it can be reached, has nothing to wait for.
 class _ConnectedActivation extends AtAuthImpl {
-  _ConnectedActivation({required AtLookupMuxable atLookUp})
-      : super(atLookUp: atLookUp);
+  _ConnectedActivation({required super.atLookUp});
 
   @override
   Future<void> validateAtServer(AuthRequest atRequest) async {}

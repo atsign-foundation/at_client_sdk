@@ -8,11 +8,8 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
-import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';

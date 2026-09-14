@@ -1,8 +1,6 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/ml_dsa_keyfile.dart';

@@ -1,5 +1,6 @@
 /// The one frozen PKAM signature this package's tests pin against, so every
 /// path that signs a PKAM challenge is held to the same bytes.
+library;
 
 /// The demo key maps are keyed on the emoji atSigns, so PKAM can sign for real
 /// with [pkamPinAtSign]'s demo PKAM private key rather than with placeholder

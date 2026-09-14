@@ -2,6 +2,8 @@ export 'package:at_client/src/mixins/at_client_bindings.dart';
 export 'package:at_client/src/mixins/apkam_signing.dart';
 export 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 export 'package:at_client/src/mixins/envelope_signing.dart';
+export 'package:at_client/src/signing/envelope_signature.dart'
+    show SignedEnvelope;
 export 'package:at_client/src/enroll/pq_native_onboard.dart';
 export 'package:at_client/src/enroll/signing_key_mint.dart';
 export 'package:at_client/src/enroll/enrollment_update_request.dart';

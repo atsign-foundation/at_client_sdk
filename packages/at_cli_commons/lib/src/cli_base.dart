@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 import 'package:at_cli_commons/src/service_factories.dart';
 import 'package:at_cli_commons/src/utils.dart';
 import 'package:at_client/at_client.dart';

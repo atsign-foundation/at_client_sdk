@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';

@@ -3,12 +3,9 @@
 
 import 'dart:convert';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_client/src/client/at_client_impl.dart';
-import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 

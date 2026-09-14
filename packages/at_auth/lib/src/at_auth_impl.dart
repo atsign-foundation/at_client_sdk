@@ -38,6 +38,7 @@ class AtAuthImpl implements AtAuth {
 
   /// The signer a caller injected through [AtAuth.create], else the one
   /// [authenticate] and [onboard] build from the keys they resolved.
+  // ignore: deprecated_member_use
   AtChops? _chops;
 
   CramAuthenticator? cramAuthenticator;
@@ -51,6 +52,7 @@ class AtAuthImpl implements AtAuth {
 
   AtAuthImpl(
       {required this.atLookUp,
+      // ignore: deprecated_member_use
       AtChops? atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
@@ -165,8 +167,11 @@ class AtAuthImpl implements AtAuth {
     // directly, and name the algorithm: at_lookup defaults to rsa2048 and
     // would otherwise sign an ML-DSA key with the RSA routine.
     if (atOnboardingRequest.signingAlgoType != SigningAlgoType.rsa2048) {
+      // ignore: deprecated_member_use
       _chops ??= AtChopsImpl(AtChopsKeys.create(
-          null, AtPkamKeyPair.create(mint.apkamPublicKey, mint.apkamPrivateKey))
+          null,
+          // ignore: deprecated_member_use
+          AtPkamKeyPair.create(mint.apkamPublicKey, mint.apkamPrivateKey))
         ..selfEncryptionKey = _atAuthKeys.defaultSelfEncryptionKey == null
             ? null
             : AESKey(_atAuthKeys.defaultSelfEncryptionKey!.toString()));

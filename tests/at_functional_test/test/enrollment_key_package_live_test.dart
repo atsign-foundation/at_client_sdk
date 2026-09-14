@@ -7,10 +7,7 @@ library;
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';

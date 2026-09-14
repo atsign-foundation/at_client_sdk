@@ -10,7 +10,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/at_auth_io.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';

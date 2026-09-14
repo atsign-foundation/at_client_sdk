@@ -5,13 +5,13 @@
 library;
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/secret_sharing/key_package_minting.dart'
+    show KeyPackageMinting;
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -55,11 +55,53 @@ void main() {
       'public:_apsk.$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
       '$atSign';
 
+  /// Revokes [enrollmentId] once the test is done, so a record the test left
+  /// in a deliberately broken state stops being read by every later test that
+  /// lists this namespace.
+  void revokeAfterwards(String enrollmentId) => addTearDown(() async {
+        final revoked = await approver.enrollmentService!.revoke(
+            EnrollmentRequestDecision.revoked(enrollmentId, atSign));
+        expect(revoked.enrollmentStatus, EnrollmentStatus.revoked);
+      });
+
+  /// How a peer listing [namespace] sees [enrolled]'s key package.
+  ///
+  /// NOTE: a new directory per read. Its signer caches each `_apsk` for five
+  /// minutes, so a reused one answers from the record fetched before a heal.
+  Future<KeyPackageStatus> packageAsPeersSeeIt(EnrolledClient enrolled) async {
+    final members = await VerbEnrollmentDirectory(enrolled.client)
+        .listForNamespace(namespace);
+    return members
+        .singleWhere((m) => m.enrollmentId == enrolled.enrollmentId)
+        .keyPackageStatus;
+  }
+
+  /// Asserts that a heal left [enrolled]'s published key package refused by
+  /// peers, and that the reconcile a start runs next signs it again.
+  Future<void> expectTheHealedPackageIsSignedAgain(
+      EnrolledClient enrolled) async {
+    expect(await packageAsPeersSeeIt(enrolled), KeyPackageStatus.rejected,
+        reason: 'precondition: the package was signed by the authentication '
+            'key, which the heal has just removed from `_apsk`');
+
+    final reconciled =
+        await KeyPackageMinting(enrolled.client).reconcileKeyPackage();
+    expect(reconciled.minted, isEmpty,
+        reason: 'no key changes; only the signature does');
+
+    expect(await packageAsPeersSeeIt(enrolled), KeyPackageStatus.present,
+        reason: 'a package no peer accepts leaves the enrollment unreachable '
+            'for anything sealed to it, so the reconcile signs it again under '
+            'the key `_apsk` now names');
+  }
+
   test(
       'the atServer publishes _apsk itself, and refuses a cross-enrollment '
       'overwrite', () async {
     final victim = await enrol('apsk-victim');
     final attacker = await enrol('apsk-attacker');
+    // The attacker ends this test with a junk `_apsk` it wrote itself.
+    revokeAfterwards(attacker.enrollmentId);
 
     expect(attacker.enrollmentId, isNot(victim.enrollmentId),
         reason: 'the attack under test is one enrollment reaching for '
@@ -203,6 +245,39 @@ void main() {
     expect(value, isNot(startsWith('{')),
         reason: 'stated the other way round, so this cannot pass on a '
             'serialization that merely contains the key');
+
+    await expectTheHealedPackageIsSignedAgain(enrolled);
+  });
+
+  test(
+      'an rsa2048 enrollment that heals an ML-DSA signing key signs its key '
+      'package again', () async {
+    // The rollout path: an existing rsa2048 enrollment whose preference comes
+    // to name an ML-DSA signing key. Its package was signed by the rsa2048
+    // authentication key, which leaves `_apsk` the moment the enrollment holds
+    // a signing key of its own.
+    final keysIo = InMemoryAtKeysIo();
+    final enrolled = await enrolAndAuthenticate(
+      approver: approver,
+      atSign: atSign,
+      namespace: namespace,
+      preference: TestUtils.getPreference(atSign,
+          dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65},
+          posture: PqPosture.legacy),
+      rootDomain: rootDomain,
+      rootPort: TestUtils.rootServerPort,
+      deviceName: 'apsk-heal-mldsa-$runId',
+      atKeysIo: keysIo,
+      storage: TestUtils.storage,
+    );
+
+    final reconciled =
+        await SigningKeyMinting(enrolled.client).reconcileSigningKeys();
+    expect(reconciled.minted, [SigningAlgoType.mldsa65],
+        reason: 'precondition: a signing key was minted, so the rsa2048 '
+            'authentication key has left `_apsk`');
+
+    await expectTheHealedPackageIsSignedAgain(enrolled);
   });
 
   test('enroll:listns answers an APKAM connection with the namespace members',

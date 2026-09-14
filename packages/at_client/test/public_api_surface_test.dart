@@ -196,6 +196,9 @@ const Set<String> _atClientMixinsBarrelExports = {
   'package:at_client/src/mixins/apkam_signing.dart',
   'package:at_client/src/mixins/at_client_envelope_signer.dart',
   'package:at_client/src/mixins/envelope_signing.dart',
+  // show-narrowed to SignedEnvelope, the type EnvelopeSigning.wrapAndSign
+  // returns.
+  'package:at_client/src/signing/envelope_signature.dart',
   'package:at_client/src/enroll/pq_native_onboard.dart',
   'package:at_client/src/enroll/self_retrofit.dart',
   // `EnrollmentUpdater` is the one emitter of `enroll:update`, and the live
