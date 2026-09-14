@@ -399,8 +399,8 @@ class AtClientPreference {
   /// last one it received. Defaults to true.
   ///
   /// Set to false to ignore those. Notifications received since the client's
-  /// notification service was created are delivered either way, including any
-  /// that arrived before its monitor connected.
+  /// notification service was created are delivered once either way, including
+  /// any that arrived before its monitor connected.
   bool fetchOfflineNotifications = true;
 
   @Deprecated('No longer needed. at_chops will be used by default')
