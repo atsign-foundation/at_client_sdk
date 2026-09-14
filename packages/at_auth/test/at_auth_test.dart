@@ -80,10 +80,10 @@ void main() {
           .thenReturn(fakeSecondaryAddressFinder);
       // The atServer check's own question: an atServer with no public key,
       // so the atSign is there to be activated.
-      when(() => mockAtLookUp.executeCommand(
-              any(that: startsWith('lookup:publickey')),
-              auth: any(named: 'auth')))
-          .thenAnswer((_) async => throw AtLookUpException('AT0015', 'key not found'));
+      when(() =>
+          mockAtLookUp.executeCommand(any(that: startsWith('lookup:publickey')),
+              auth: any(named: 'auth'))).thenAnswer(
+          (_) async => throw AtLookUpException('AT0015', 'key not found'));
       atAuth = AtAuthImpl(
           atLookUp: mockAtLookUp,
           pkamAuthenticator: mockPkamAuthenticator,
@@ -97,10 +97,10 @@ void main() {
       // The atServer cannot be reached, so without a deadline validateAtServer
       // would retry maxRetries(10) x retryDelay(2s) ~= 20s. A short
       // overallTimeout must cut that short and surface an AtTimeoutException.
-      when(() => mockAtLookUp.executeCommand(
-              any(that: startsWith('lookup:publickey')),
-              auth: any(named: 'auth')))
-          .thenAnswer((_) async => throw Exception('simulated unreachable atServer'));
+      when(() =>
+          mockAtLookUp.executeCommand(any(that: startsWith('lookup:publickey')),
+              auth: any(named: 'auth'))).thenAnswer(
+          (_) async => throw Exception('simulated unreachable atServer'));
       final request = AtOnboardingRequest('@alice🛠',
           signingAlgoType: SigningAlgoType.rsa2048,
           atKeysIo: fileAtKeysIo,
@@ -119,7 +119,8 @@ void main() {
           reason: 'should honour overallTimeout (300ms), not 10 x 2s retries');
     });
 
-    test('validateAtServer lets an onboarding through when the atSign has a '
+    test(
+        'validateAtServer lets an onboarding through when the atSign has a '
         'public key', () async {
       when(() => mockAtLookUp.executeCommand(
               any(that: startsWith('lookup:publickey')),
@@ -142,8 +143,8 @@ void main() {
     test('Test onboard - cramAuthenticate returns false', () async {
       when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
           .thenAnswer((_) => Future.value(false));
-      when(() => mockAtLookUp.executeCommand(
-              any(that: isNot(startsWith('lookup:publickey')))))
+      when(() => mockAtLookUp
+              .executeCommand(any(that: isNot(startsWith('lookup:publickey')))))
           .thenAnswer((_) => Future.value('data:1'));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
@@ -154,7 +155,6 @@ void main() {
 
       final atOnboardingRequest = AtOnboardingRequest('@aaron🛠',
           signingAlgoType: SigningAlgoType.rsa2048);
-
 
       expect(
           () async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
@@ -176,7 +176,6 @@ void main() {
         ..atKeysIo = fileAtKeysIo
         ..appName = 'wavi'
         ..deviceName = 'iphone';
-
 
       // The person reading this exception is mid-failure; the wrapped
       // message is the only clue they get about what the server said.
@@ -212,7 +211,6 @@ void main() {
         ..atKeysIo = fileAtKeysIo
         ..appName = 'wavi'
         ..deviceName = 'iphone';
-
 
       final response = await atAuth.onboard(
         atOnboardingRequest,
@@ -302,7 +300,6 @@ void main() {
       final atOnboardingRequest = AtOnboardingRequest('@colin🛠',
           signingAlgoType: SigningAlgoType.rsa2048)
         ..atKeysIo = fileAtKeysIo;
-
 
       final response = await atAuth.onboard(
         atOnboardingRequest,

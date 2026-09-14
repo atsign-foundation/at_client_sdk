@@ -86,7 +86,8 @@ void main() {
   });
 
   test('no public key at all means not activated', () async {
-    answerLookup(() async => throw AtLookUpException('AT0015', 'key not found'));
+    answerLookup(
+        () async => throw AtLookUpException('AT0015', 'key not found'));
 
     final check = await checkAtSignServer(lookUp, '@alice');
 

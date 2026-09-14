@@ -481,8 +481,7 @@ const Duration provisioningPollInterval = Duration(seconds: 2);
 /// [atLookUp] is a connection to activate over, for a test; a run finds the
 /// atServer through the atDirectory.
 @visibleForTesting
-Future<bool> onboard(ArgResults argResults,
-    {AtLookupMuxable? atLookUp}) async {
+Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
   if (argResults[AuthCliArgs.argNameVersion]) {
     stdout.writeln('Version: $packageVersion');
     return false;
@@ -629,8 +628,7 @@ Future<bool> _isActivated(String atSign, AtOnboardingPreference preference,
 ///
 /// [atLookUp] is a connection to enrol over, for a test.
 @visibleForTesting
-Future<bool> enroll(ArgResults argResults,
-    {AtLookupMuxable? atLookUp}) async {
+Future<bool> enroll(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
   if (!argResults.wasParsed(AuthCliArgs.argNameAtKeys)) {
     throw ArgumentError('The --${AuthCliArgs.argNameAtKeys} option is'
         ' mandatory for the "enroll" command');

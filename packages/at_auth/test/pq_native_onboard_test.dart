@@ -66,10 +66,10 @@ void main() {
 
     when(() => mockAtLookUp.secondaryAddressFinder)
         .thenReturn(FakeSecondaryAddressFinder());
-    when(() => mockAtLookUp.executeCommand(
-            any(that: startsWith('lookup:publickey')),
-            auth: any(named: 'auth')))
-        .thenAnswer((_) async => throw AtLookUpException('AT0015', 'key not found'));
+    when(() =>
+        mockAtLookUp.executeCommand(any(that: startsWith('lookup:publickey')),
+            auth: any(named: 'auth'))).thenAnswer(
+        (_) async => throw AtLookUpException('AT0015', 'key not found'));
     when(() => mockAtLookUp.cramAuthenticate(cramSecret))
         .thenAnswer((_) async => true);
     when(() => mockAtLookUp.executeVerb(any()))
