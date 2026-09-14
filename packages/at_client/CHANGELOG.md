@@ -1,5 +1,6 @@
 ## 3.15.0-rc1
 
+- fix: with `fetchOfflineNotifications` off, a monitor reconnect no longer re-delivers every notification received since the notification service was created.
 - `Atsign.activate`, `enroll` and `resumeEnrollment`, `PendingEnrollment` and
   `pqNativeOnboard` type a supplied `atLookUp` as `AtLookupMuxable`, the
   interface `lookUps:` builds: at_auth installs its authenticator on the

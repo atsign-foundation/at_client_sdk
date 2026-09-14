@@ -1451,6 +1451,66 @@ void main() {
       verifyNever(() => mockAtClientImpl.get(any()));
     });
 
+    group('with fetchOfflineNotifications false, after a notification arrives',
+        () {
+      late NotificationServiceImpl service;
+      late int createdAtMillis;
+
+      Future<void> receive(String id, int epochMillis) =>
+          service.handleNotificationReceipt('notification: '
+              '{"id":"$id","from":"@alice","to":"@alice",'
+              '"key":"$id.wavi@alice","value":null,"operation":"update",'
+              '"epochMillis":$epochMillis,'
+              '"messageType":"MessageType.key","isEncrypted":false}');
+
+      setUp(() async {
+        registerFallbackValue(FakeAtKey());
+        when(() => mockAtClientImpl.getPreferences())
+            .thenAnswer((_) => AtClientPreference()
+              ..namespace = 'wavi'
+              ..fetchOfflineNotifications = false);
+        when(() =>
+                mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+            .thenAnswer((_) async => true);
+        when(() => mockAtClientImpl.get(any())).thenAnswer((_) async =>
+            AtValue()..value = jsonEncode({'epochMillis': 1234567890123}));
+        when(() => mockAtClientImpl.put(any(), any(),
+                putRequestOptions: any(named: 'putRequestOptions')))
+            .thenAnswer((_) async => true);
+
+        service = await NotificationServiceImpl.create(mockAtClientImpl,
+            monitor: fakeMonitor) as NotificationServiceImpl;
+        createdAtMillis = (await service.getLastNotificationTime())!;
+      });
+
+      tearDown(() => service.stopAllSubscriptions());
+
+      test(
+          'getLastNotificationTime() answers that notification\'s time, '
+          'without reading the store', () async {
+        await receive('1', createdAtMillis + 5000);
+        clearInteractions(mockAtClientImpl);
+
+        expect(await service.getLastNotificationTime(), createdAtMillis + 5000,
+            reason: 'a reconnect resumes after what this service has already '
+                'delivered, so the atServer replays none of it');
+        verifyNever(() => mockAtClientImpl.get(any()));
+      });
+
+      test('an earlier notification does not move it back', () async {
+        await receive('1', createdAtMillis + 5000);
+        await receive('2', createdAtMillis + 2000);
+
+        expect(await service.getLastNotificationTime(), createdAtMillis + 5000);
+      });
+
+      test('a stats notification does not move it', () async {
+        await receive('-1', createdAtMillis + 5000);
+
+        expect(await service.getLastNotificationTime(), createdAtMillis);
+      });
+    });
+
     test(
         'getLastNotificationTime() answers, and seeds, the service\'s creation '
         'time when there is no stored value', () async {

@@ -61,6 +61,9 @@ class NotificationServiceImpl extends NotificationService {
   /// resumes from when the store holds none.
   final DateTime _createdAt = DateTime.now();
 
+  /// The epoch millis of the latest notification this service received.
+  int? _lastReceivedMillis;
+
   @visibleForTesting
   AtClientValidation atClientValidation = AtClientValidation();
 
@@ -466,16 +469,16 @@ class NotificationServiceImpl extends NotificationService {
   ///
   /// The last received notification's time when
   /// [AtClientPreference.fetchOfflineNotifications] is true and the store holds
-  /// one. Otherwise the time this service was created — seeded into the store
-  /// when offline fetching is on, and never read from or written to it when it
-  /// is off. Never null: a monitor started with no time is delivered nothing
+  /// one, else the time this service was created, seeded into the store. When
+  /// it is false, the latest notification this service received, else its
+  /// creation time, and the store is neither read nor seeded.
+  /// Never null: a monitor started with no time is delivered nothing
   /// sent before `monitor:` went out, and by then the app may already have
   /// sent notifications whose replies have arrived.
   @visibleForTesting
   Future<int?> getLastNotificationTime() async {
     if (atClient.getPreferences()!.fetchOfflineNotifications == false) {
-      // Nothing received before this service existed, and everything since.
-      return _createdAt.millisecondsSinceEpoch;
+      return _lastReceivedMillis ?? _createdAt.millisecondsSinceEpoch;
     }
 
     // Migration runs first and returns the canonical key's value
@@ -574,8 +577,12 @@ class NotificationServiceImpl extends NotificationService {
         } else {
           logger.finer('Received ${n.key}');
         }
-        // Saves latest notification id to the keys if its not a stats notification.
+        // Records the latest notification's time, and saves it to the keys, if
+        // it is not a stats notification.
         if (n.id != '-1') {
+          if (n.epochMillis > (_lastReceivedMillis ?? 0)) {
+            _lastReceivedMillis = n.epochMillis;
+          }
           // NOTE: stop() may have landed during the previous write and closed
           // the store this one goes to.
           if (isStopped) return;
