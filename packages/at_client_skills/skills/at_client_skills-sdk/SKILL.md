@@ -13,7 +13,8 @@ description: >
   how to do request/response RPC between atsigns (AtRpc), how to run headless
   agents or CLIs (CLIBase) or coordinate multiple agent instances, how to read
   or write directly against the remote atServer (useRemoteAtServer), how to
-  publish intentionally public data (AtKey.public / isPublic), which
+  publish intentionally public data (AtKey.public / isPublic), what
+  exceptions to catch around an SDK call (AtException, getTraceMessage), which
   pub.dev packages to add, how to unit-test without a live atServer, or
   whether to use AtCollection vs notifications+SQLite. Warns
   against deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
@@ -23,7 +24,7 @@ compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
   version: "1.4.0"
-  last_modified: "Wed, 09 Sep 2026 00:00:00 GMT"
+  last_modified: "Fri, 11 Sep 2026"
 ---
 
 # atsign-dart-sdk Skill
@@ -553,7 +554,46 @@ publishing public data.
 
 ---
 
-## 17. Deprecated — Do Not Use
+## 17. Error Handling
+
+Three families get thrown, and they are not handled the same way:
+
+- **`ArgumentError` / `StateError`** — your bug (namespace without a `.`,
+  `create` on an id that exists, mutating an item you do not own). Fix the
+  call; do not catch.
+- **`AtException` and its subtypes** — everything the protocol layer throws.
+  This is the one catch-all worth writing.
+- **`CollectionOpException`, `TimeoutException` (`dart:async`),
+  `AtAuthenticationException` (`at_auth`)** — outside the `AtException` tree,
+  so `on AtException` will not catch them. `CollectionOpException` is the one
+  that bites: an `AtCollection` write fans out per recipient and those keys
+  fail independently, so it carries a per-key breakdown and means the write
+  was *partially* applied.
+
+```dart
+try {
+  await atClient.get(key);
+} on AtException catch (e) {
+  _log.warning(e.getTraceMessage());   // NOT '$e'
+}
+```
+
+`toString()` shows only the innermost message; `getTraceMessage()` returns the
+whole chain the SDK assembled as the failure propagated. Branch on
+`e.exceptionScenario` rather than matching message text — but note it and
+`intent` are both nullable.
+
+Every `AtException` type arrives with
+`import 'package:at_client/at_client.dart'`: `at_client` re-exports
+`at_commons`, and does **not** export its own deprecated `AtClientException` /
+`AtKeyException` copies.
+
+Read [references/17-error-handling.md](references/17-error-handling.md) for
+what each operation throws and the two normalisation traps.
+
+---
+
+## 18. Deprecated — Do Not Use
 
 | Avoid                                                                                                                                                        | Use instead                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
@@ -570,7 +610,7 @@ for the full migration table from old `AtCollectionModel` patterns to
 
 ---
 
-## 18. Canonical Examples & Future Scope
+## 19. Canonical Examples & Future Scope
 
 - `packages/at_client/example/bin/collections_domain_objects.dart`
 - `packages/at_client/example/bin/collections_subcollections.dart`

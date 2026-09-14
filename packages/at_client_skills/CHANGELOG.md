@@ -11,6 +11,9 @@
   `AtOnboardingService.enroll` and the `enrollmentService` approver side
   (`references/16-apkam-enrolment.md`). Adds `at_onboarding_cli` to the
   package map.
+- Document error handling — the three exception families, `getTraceMessage()`
+  over `toString()`, `CollectionOpException` partial failures, and what each
+  operation throws (`references/17-error-handling.md`).
 
 ## 1.3.0 — 2026-07-31
 
