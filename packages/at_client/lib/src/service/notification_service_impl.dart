@@ -57,6 +57,10 @@ class NotificationServiceImpl extends NotificationService {
   late final AtSignLogger logger;
   DateTime? _lastReceipt;
 
+  /// When this service was created: the watermark a first monitor connect
+  /// resumes from when the store holds none.
+  final DateTime _createdAt = DateTime.now();
+
   @visibleForTesting
   AtClientValidation atClientValidation = AtClientValidation();
 
@@ -457,17 +461,21 @@ class NotificationServiceImpl extends NotificationService {
     return canonicalValue;
   }
 
-  /// Return the last received notification DateTime in epochMillis when
-  /// [AtClientPreference.fetchOfflineNotifications] is set true.
+  /// The epochMillis a monitor connect asks the atServer to deliver
+  /// notifications from.
   ///
-  /// Returns null when the key which holds the lastNotificationReceived
-  /// does not exist.
+  /// The last received notification's time when
+  /// [AtClientPreference.fetchOfflineNotifications] is true and the store holds
+  /// one. Otherwise the time this service was created — seeded into the store
+  /// when offline fetching is on, and never read from or written to it when it
+  /// is off. Never null: a monitor started with no time is delivered nothing
+  /// sent before `monitor:` went out, and by then the app may already have
+  /// sent notifications whose replies have arrived.
   @visibleForTesting
   Future<int?> getLastNotificationTime() async {
     if (atClient.getPreferences()!.fetchOfflineNotifications == false) {
-      // fetchOfflineNotifications == false means issue `monitor` command without a lastNotificationTime
-      // which will result in the server not sending any previously received notifications
-      return null;
+      // Nothing received before this service existed, and everything since.
+      return _createdAt.millisecondsSinceEpoch;
     }
 
     // Migration runs first and returns the canonical key's value
@@ -481,18 +489,16 @@ class NotificationServiceImpl extends NotificationService {
     }
 
     // First-call branch: no last-received-notification record exists.
-    // Set the record to "now" so that subsequent calls (after a
-    // restart, say) will return a value, but return null for THIS
-    // call to keep first-run semantics ("don't replay history I never
-    // saw"). Without this seed, a short-lived first session followed
-    // by a longer second session would silently miss any notifications
-    // that arrived in between.
+    // Seeded with the creation time and answered with it, so a restart or a
+    // reconnect before any notification arrives resumes from the same point.
+    // Nothing sent before this service existed is replayed.
+    final createdAtMillis = _createdAt.millisecondsSinceEpoch;
     AtNotification n = AtNotification(
       'abcd-123456-wxyz',
       '@bob:notification.foo.bar.baz@alice',
       '@alice',
       '@bob',
-      DateTime.now().millisecondsSinceEpoch,
+      createdAtMillis,
       MessageTypeEnum.key.toString(),
       false,
       value: 'placeholder',
@@ -510,7 +516,7 @@ class NotificationServiceImpl extends NotificationService {
           'watermark; the next monitor connect will seed it again: $e');
     }
 
-    return null;
+    return createdAtMillis;
   }
 
   @visibleForTesting

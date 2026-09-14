@@ -395,8 +395,12 @@ class AtClientPreference {
       "namespace presence will become mandatory in next major version of the SDK")
   bool enforceNamespace = true;
 
-  /// Fetch the notifications received when the client is offline. Defaults to true.
-  /// Set to false to ignore the notifications received when device is offline.
+  /// Fetch the notifications received while the client was offline, from the
+  /// last one it received. Defaults to true.
+  ///
+  /// Set to false to ignore those. Notifications received since the client's
+  /// notification service was created are delivered either way, including any
+  /// that arrived before its monitor connected.
   bool fetchOfflineNotifications = true;
 
   @Deprecated('No longer needed. at_chops will be used by default')

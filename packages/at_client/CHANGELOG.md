@@ -46,6 +46,12 @@
   an algorithm this build cannot sign with is refused rather than read from
   the keystore. Keyfile material is read and written through at_auth's
   accessors and `fileLegacyMaterial`.
+- fix: a client with no last-received-notification watermark, and a client
+  with `fetchOfflineNotifications` off, start their monitor from the time
+  the notification service was created rather than with no time. With no
+  time the atServer delivered nothing sent before `monitor:` went out, so
+  replies to notifications the app sent before its monitor connected were
+  never received.
 - fix: an encrypted notification is decrypted once however many
   subscribers receive it, and only for subscribers whose regex matches.
   Each subscriber gets its own copy of the notification, so one
