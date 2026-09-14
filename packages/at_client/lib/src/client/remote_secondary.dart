@@ -135,8 +135,9 @@ class RemoteSecondary implements Secondary {
 
     // Last in the ladder's own order. Nothing in this tree sets
     // `preference.cramSecret` - every in-tree CRAM goes through onboarding,
-    // which builds its own lookup - but the field is public API, so a consumer
-    // that sets it must keep working through the seam.
+    // which authenticates with the secret it is handed - but the field is
+    // public API, so a consumer that sets it must keep working through the
+    // seam.
     final cramSecret = _cramSecret;
     if (cramSecret != null) {
       lookUp.authenticator = authenticatorForCramSecret(_atSign, cramSecret);

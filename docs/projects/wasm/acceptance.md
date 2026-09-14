@@ -227,23 +227,18 @@ was removed — the failure output already prints the full live walk.
 
 ### T0.3 — conditionals must have both branches walked
 
-**Restated. The original ban is withdrawn.** This gate read: no file under a neutral
-package's `lib/` contains `if (dart.library.`, turnable on immediately because the tree
-had zero. `at_auth` 4.0.0-rc1 then shipped exactly one, deliberately and with a recorded
-rationale — `lib/src/auth/probe_default.dart` exports `probe_default_web.dart`, or
-`probe_default_io.dart` under `dart.library.io`. Both branches are real implementations;
-neither is a stub. A ban would have had to allow-list the one construct it exists to
-forbid on the day it was written. See [`decisions.md`](decisions.md) D-1 and OQ-1.
+**A conditional in a gated package must have both of its branches walked.** The ratchet
+resolves web-side, which covers one branch. A `control` resolves with io semantics by
+default, so pointing one at the same barrel covers the other — and `environment: web` on a
+control pins the web branch where that is the half in question. Absent the second walk,
+the ratchet passes just as convincingly when the conditional was skipped and neither
+branch was seen. Put the control on the file axis — `reaches_file` naming the native
+branch's file — because a barrel under io resolution usually reaches `dart:io` through
+other files as well, and `reaches_library` would prove nothing there.
 
-What is enforced instead: **a conditional in a gated package must have both of its
-branches walked.** The ratchet resolves web-side, which covers one branch. A `control`
-resolves with io semantics by default, so pointing one at the same barrel covers the
-other — and `environment: web` on a control pins the web branch where that is the half
-in question. Absent the second walk, the ratchet passes just as convincingly when the
-conditional was skipped and neither branch was seen. at_auth's stanza carries exactly
-this control, on the file axis rather than the library axis, because `at_auth.dart` under
-io resolution reaches `dart:io` through half a dozen files and `reaches_library` would
-prove nothing there.
+This is not a ban on `if (dart.library.`: a conditional whose two branches are both real
+implementations, with a recorded reason why one cannot serve both platforms, is allowed.
+See [`decisions.md`](decisions.md) D-1 and OQ-1.
 
 The construct stays discouraged by D-1 — this makes it *auditable* where it survives, not
 approved as a default.

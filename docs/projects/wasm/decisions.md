@@ -40,27 +40,31 @@ is neither. D-3 accepts that cost deliberately.
 **Scope.** Applies to `at_client`, `at_lookup`, `at_utils`, `at_chops` and
 `at_server_status`. `at_auth` is governed by the PQ program (§5, OQ-1).
 
-**Amended 2026-08-27 — one shipped exception, and the reason it is not a precedent.**
+**Amended 2026-08-27, and again 2026-09-14 — one shipped exception, since removed.**
 `at_auth` 4.0.0-rc1 ([#2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179))
-ships `lib/src/auth/probe_default.dart`, a conditional export selecting the reachability
+shipped `lib/src/auth/probe_default.dart`, a conditional export selecting the reachability
 probe: `probe_default_web.dart`, or `probe_default_io.dart` under `dart.library.io`.
 
-It stands, because the premise of this ruling does not hold for it. D-1 rejects
-conditionals on the grounds that the non-native branch is a stub. Here **both branches are
-real implementations, and the choice is not substitutable**: an atServer answers an HTTP
-GET only when the TLS handshake negotiates `http/1.1` over ALPN, which a browser does as a
-matter of course and `package:http`'s VM client does not — the same GET on the VM lands on
-the atServer's line protocol and comes back `@error:AT0003`. A TLS handshake is what is
-available under `dart:io`, and it is sufficient there. Injection is still offered:
-a caller wanting the other probe, or any other, sets `probeSocket`.
+It stood on 2026-08-27 because the premise of this ruling did not hold for it. D-1 rejects
+conditionals on the grounds that the non-native branch is a stub. There **both branches
+were real implementations, and the choice was not substitutable**: an atServer answers an
+HTTP GET only when the TLS handshake negotiates `http/1.1` over ALPN, which a browser does
+as a matter of course and `package:http`'s VM client does not — the same GET on the VM
+lands on the atServer's line protocol and comes back `@error:AT0003`.
 
-What this costs. The ban specified as [`acceptance.md`](acceptance.md) T0.3 is withdrawn —
-it would have had to allow-list the one construct it exists to forbid, on the day it was
-written. T0.3 is restated as an audit requirement instead: a conditional in a gated
-package must have **both** branches walked: the web branch by the ratchet, the native
-branch by a `control`, which resolves with io semantics. Without that second half the
-ratchet reads green just as convincingly when the conditional was skipped and neither
-branch was seen.
+`at_auth` 4.0.0-rc2 removes it, with the probes and the `probeSocket` hook. `at_auth`
+builds no connection of its own: its atServer check is `at_lookup`'s `checkAtSignServer`,
+in the neutral `at_lookup.dart`, which asks the atDirectory and then sends
+`lookup:publickey` over the `AtLookUp` the caller hands it. Which transport carries that is
+the caller's injection, so the question the conditional answered no longer arises. On
+2026-09-14 no package `lib/` in this repository contains `if (dart.library.`.
+
+What it cost, and what is open. The ban specified as [`acceptance.md`](acceptance.md) T0.3
+was withdrawn for the exception — it would have had to allow-list the one construct it
+exists to forbid, on the day it was written — and restated as an audit requirement: a
+conditional in a gated package must have **both** branches walked, the web branch by the
+ratchet and the native branch by a `control`, which resolves with io semantics. The
+exception that forced the withdrawal is gone; whether the ban comes back is not yet ruled.
 
 The construct remains discouraged, and the burden stays on the conditional: two real
 implementations, a documented reason why one cannot serve both platforms, an injection
@@ -84,8 +88,8 @@ legitimate uses (e.g. a read-only `AtKeysIo` subtype refusing `write`).
 `at_lookup` 4.x, `at_client` 4.x and `at_utils` 4.x are expected. Specifically:
 
 - `Socket getSocket()` leaves `AtConnection`
-- `atServerStatus ??= AtStatusImpl(...)` and the hardcoded `HiveAtPersistenceFactory`
-  are removed
+- the hardcoded `HiveAtPersistenceFactory` is removed (`at_auth`'s
+  `atServerStatus ??= AtStatusImpl(...)`, listed here too, went in `at_auth` 4.0.0-rc2)
 - `dart:io File` leaves the `AtClient` public surface
 - `at_utils.dart` stops exporting `pseudo_server_socket.dart` and `app_config.dart`
 
@@ -679,7 +683,7 @@ trunk commit the plan was *written against* — it never held the file.
 | Position                                                                                       | Status                                                                                                                         |
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | T0.2's **two-way** ratchet — a loosened baseline fails and demands an edit                     | Shipped **one-way**. A fix passes with no edit here; only tightening ever requires one. [`acceptance.md`](acceptance.md) T0.2. |
-| T0.3's ban on `if (dart.library.` in a neutral `lib/`                                          | Withdrawn — D-1's amendment above. Restated as: both branches of a conditional must be walked.                                 |
+| T0.3's ban on `if (dart.library.` in a neutral `lib/`                                          | Withdrawn — D-1's amendment above: both branches of a conditional must be walked. Its cause is gone; not re-ruled.             |
 | R5 — add the `dart test -p node -c dart2wasm` matrix dimension, allowed-to-fail                | Withdrawn. The hosted runner cannot load a suite at all; waits on a pinned Dart/Node pair. §2.7.                               |
 | R1's plan to lift `packages/at_auth/test/wasm/dep_tree_test.dart` into a shared *test* utility | Shipped as a standalone CLI, `tools/wasm_shakedown`, run as its own CI job rather than as a per-package test.                  |
 
@@ -701,9 +705,11 @@ sites in `_rootHttpStatus()` and `_serverHttpStatus()`. Deleting the import does
 compile. The fix is integer literals or a local constant class. The claim was wrong
 when written — the file is unchanged since `33a062a61`.
 
-Related and unlisted: `at_server_status` is on the client path via `at_auth`
-(`at_auth_impl.dart:19`), and `at_auth_impl.dart:437` carries a second native default,
-`atServerStatus ??= AtStatusImpl(...)`.
+Related and unlisted when written: `at_server_status` was on the client path via
+`at_auth`, whose `at_auth_impl.dart` carried a second native default,
+`atServerStatus ??= AtStatusImpl(...)`. `at_auth` 4.0.0-rc2 drops both the dependency and
+the default; the check it served is `at_lookup`'s `checkAtSignServer`, over an injected
+lookup.
 
 **`at_client_flutter` is not a platform implementer.** It implements exactly one
 abstraction — `KeychainAtKeysIo extends WrittenAtKeysIo`
@@ -730,9 +736,11 @@ shipped one *conditional* default the prototype did not have: the reachability p
 `probe_default.dart`. Neither the prototype's `src/io/defaults_stub.dart` nor
 `at_auth_web.dart` exists on trunk.
 
-So the inconsistency this question raised is settled, and not by either of the two answers
-it offered. The ruling is recorded against D-1 above: the conditional stands on the
-narrow ground that both of its branches are real, and it costs T0.3 its ban.
+So the inconsistency this question raised was settled on 2026-08-27, and not by either of
+the two answers it offered: the conditional stood on the narrow ground that both of its
+branches were real, and it cost T0.3 its ban. **4.0.0-rc2 makes the answer *removed* on
+both axes** (2026-09-14): the probe and its conditional are gone, and `at_auth` checks an
+atServer over the lookup its caller hands it. The record is against D-1 above.
 
 **OQ-2 — Do the `_io` barrels ship in the same major as the interface change, or one
 release ahead?** Shipping the barrel first lets consumers migrate their imports before
@@ -822,3 +830,4 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-27 | Phase 1 in review as a three-PR stack: [#2162](https://github.com/atsign-foundation/at_client_sdk/pull/2162) (S4–S6) ready, [#2163](https://github.com/atsign-foundation/at_client_sdk/pull/2163) (S1, S2) and [#2164](https://github.com/atsign-foundation/at_client_sdk/pull/2164) (S3) draft. `plan.md` deleted, as §3 had asserted since 2026-08-13. |
 | 2026-09-13 | **The transport becomes the third leg of the platform bundle** (T9 done; OQ-3 resolved for the transport). at_lookup gains `AtLookUpFactory` and `secureSocketLookUps` (`at_lookup_io.dart`), plus an `onConnect` hook run once per new connection; at_client's entry points take `lookUps:` and carry it to the client's, sync's and monitor's connections; `AtClientPreference.decryptPackets`, `tlsKeysSavePath` and `pathToCerts` deprecated, read only by `defaultLookUps` until 4.0. Built on `gkc-client-lifecycle`. |
 | 2026-09-13 | **D-16 ruled.** The browser lane must not foreclose enterprise identity. `enterprise-identity.md` added: the IdP lifecycle mapping, the atServer and registrar gaps, and the constraints E1–E7. |
+| 2026-09-14 | **at_auth 4.0.0-rc2 builds no connection of its own.** Its lookup fallbacks, `atServerStatus ??=` and the reachability probes go; callers hand it an `AtLookupMuxable`, and its atServer check is at_lookup's neutral `checkAtSignServer`. The `probe_default.dart` conditional export goes with them, so D-1's one exception is gone; T0.3's ban is not re-ruled. `at_auth.dart` then reaches `dart:io` only through `at_lookup.dart` and `at_logger.dart`. |

@@ -27,7 +27,7 @@ void main(List<String> args) async {
           mandatory: false,
           defaultsTo: 'root.atsign.org');
     final argResults = parser.parse(args);
-    AtLookUp atLookUp = secureSocketLookUps()(
+    AtLookupMuxable atLookUp = secureSocketLookUps()(
         atSign: argResults['atsign'],
         rootDomain: AtRootDomain(argResults['rootDomain'], 64),
         authenticator: null);
@@ -59,7 +59,8 @@ void main(List<String> args) async {
     // Once approved, waitForApproval persists the keys into session.atKeysIo and
     // populates atEnrollmentResponse.session; open a client on that key source
     // with at_client's Atsign.open instead of touching atAuthKeys.
-    // await atEnrollmentBase.waitForApproval(atEnrollmentResponse);
+    // await atEnrollmentBase.waitForApproval(atEnrollmentResponse,
+    //     atLookup: atLookUp);
   } on Exception catch (e, trace) {
     print(trace);
   } on ArgumentError catch (e, trace) {

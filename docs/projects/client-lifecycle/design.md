@@ -573,9 +573,9 @@ at_lookup's `test/lookup_factory_test.dart`.
 
 Direct `AtLookUp.withSecureSocket` calls in library code before the leg, 10
 across four packages (`grep -rn "AtLookUp.withSecureSocket(" packages/*/lib`;
-the same grep now finds three, at_lookup's `secureSocketLookUps` and at_auth's
-two defaults for a caller that hands it no connection, plus one in a dartdoc
-example):
+the same grep now finds one, at_lookup's `secureSocketLookUps`; at_auth's two
+defaults for a caller that handed it no connection went in at_auth 4.0.0-rc2,
+which requires the connection):
 
 | Site                                                   | For                                                                                  | Varies                                                                      |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
@@ -607,10 +607,9 @@ given, with a client built without one as the control.
 Not built through `withSecureSocket`, and not this leg: at_lookup's
 `CacheableSecondaryAddressFinder` (a raw TLS socket to the atDirectory, the
 `SecondaryAddressFinder` interface being the injection point), at_client's
-`StreamNotificationHandler` (the legacy file stream, a raw socket), at_auth's
-provisioning probe (`socket_probe_io.dart`), and at_lookup's `MonitorClient`
-(exported, no caller in this repository). The WASM design's transport section
-owns those.
+`StreamNotificationHandler` (the legacy file stream, a raw socket), and
+at_lookup's `MonitorClient` (exported, no caller in this repository). The WASM
+design's transport section owns those.
 
 ### The shape
 

@@ -1467,12 +1467,15 @@ errors on any `dart:io` reachable from the entry point, so:
   `AtKeysIo` interfaces, `InMemoryAtKeysIo`, `authenticatorFor` and the
   enrolment handshakes,
   and the registrar **on `package:http`** (no `dart:io HttpClient`, so it is WASM-safe).
-- **`at_auth_io.dart`** (new non-wasm barrel): `FileAtKeysIo` + the `dart:io`
-  socket-probe default. CLI and `at_client_flutter`'s `file_picker` import it —
-  so `FileAtKeysIo` never leaves `at_auth` (no relocation, no UI→CLI arrow).
-- Two inline-`dart:io` bits in `at_auth_impl.dart` are **extracted**: drop the
-  `atKeysIo ??= FileAtKeysIo()` default (require injection); move `_defaultProbeSocket`
-  to the io barrel, leaving only the injected `probeSocket` hook in the core.
+- **`at_auth_io.dart`** (new non-wasm barrel): `FileAtKeysIo`, the file retrofit
+  serializer and the registrar's `dart:io` client. CLI and `at_client_flutter`'s
+  `file_picker` import it — so `FileAtKeysIo` never leaves `at_auth` (no
+  relocation, no UI→CLI arrow).
+- The inline-`dart:io` bits in `at_auth_impl.dart` are **removed**: the
+  `atKeysIo ??= FileAtKeysIo()` default is dropped (require injection), and at_auth
+  builds no connection of its own — the caller hands it an `AtLookupMuxable`, and
+  its atServer check is at_lookup's neutral `checkAtSignServer` over that lookup,
+  so no reachability probe is left to extract.
 
 ### File partition
 
