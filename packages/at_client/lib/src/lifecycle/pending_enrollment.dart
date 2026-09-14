@@ -10,7 +10,7 @@ import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeyResolver;
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookUpFactory;
+import 'package:at_lookup/at_lookup.dart' show AtLookUpFactory, AtLookupMuxable;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -36,7 +36,7 @@ class PendingEnrollment {
   final AtRootDomain rootDomain;
   final SigningAlgoType signingAlgo;
   final EnrollmentKeyExchangeMode keyExchangeMode;
-  final AtLookUp? _atLookUp;
+  final AtLookupMuxable? _atLookUp;
   final AtLookUpFactory _lookUps;
   final AtEnrollment _enrollment = AtEnrollment.create();
   final AtSignLogger _logger;
@@ -58,7 +58,7 @@ class PendingEnrollment {
     required this.rootDomain,
     required this.signingAlgo,
     required this.keyExchangeMode,
-    AtLookUp? atLookUp,
+    AtLookupMuxable? atLookUp,
     required AtLookUpFactory lookUps,
   })  : _atLookUp = atLookUp,
         _lookUps = lookUps,

@@ -1,5 +1,9 @@
 ## 3.15.0-rc1
 
+- `Atsign.activate`, `enroll` and `resumeEnrollment`, `PendingEnrollment` and
+  `pqNativeOnboard` type a supplied `atLookUp` as `AtLookupMuxable`, the
+  interface `lookUps:` builds: at_auth installs its authenticator on the
+  connection it is given and builds none of its own.
 - feat: `Atsign('@alice').open(keys: ..., preference: ...)` builds a client
   from a key source, tries once to reach the atServer within a short budget,
   and hands back a client the caller owns and stops. The client comes back

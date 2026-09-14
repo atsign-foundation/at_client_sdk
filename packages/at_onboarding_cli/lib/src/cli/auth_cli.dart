@@ -11,7 +11,6 @@ import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/util/at_file_util.dart';
 import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
-import 'package:at_server_status/at_server_status.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
@@ -482,7 +481,8 @@ const Duration provisioningPollInterval = Duration(seconds: 2);
 /// [atLookUp] is a connection to activate over, for a test; a run finds the
 /// atServer through the atDirectory.
 @visibleForTesting
-Future<bool> onboard(ArgResults argResults, {AtLookUp? atLookUp}) async {
+Future<bool> onboard(ArgResults argResults,
+    {AtLookupMuxable? atLookUp}) async {
   if (argResults[AuthCliArgs.argNameVersion]) {
     stdout.writeln('Version: $packageVersion');
     return false;
@@ -529,7 +529,7 @@ Future<bool> onboard(ArgResults argResults, {AtLookUp? atLookUp}) async {
 /// provisioned: that many polls, [provisioningPollInterval] apart.
 @visibleForTesting
 Future<void> activate(String atSign, AtOnboardingPreference preference,
-    {int maxRetries = 50, AtLookUp? atLookUp}) async {
+    {int maxRetries = 50, AtLookupMuxable? atLookUp}) async {
   final atKeysFilePath = preference.atKeysFilePath!;
   AtFileUtil.ensureWritable(File(atKeysFilePath));
   preference.cramSecret ??= await _cramSecretFromRegistrar(atSign, preference);
@@ -588,7 +588,9 @@ Future<String> _cramSecretFromRegistrar(
 /// Whether [atSign]'s atServer already holds an encryption public key, which
 /// an activation publishes and nothing else does. Asked through
 /// [connection] when there is one, since a proxied atServer is not the
-/// atDirectory's to report on; otherwise the atDirectory's status is read.
+/// atDirectory's to report on; otherwise over a connection the preference's
+/// lookUps builds. An atServer that cannot be asked is taken as not activated,
+/// and the activation's own wait reports why.
 Future<bool> _isActivated(String atSign, AtOnboardingPreference preference,
     AtLookUp? connection) async {
   if (connection != null) {
@@ -605,18 +607,18 @@ Future<bool> _isActivated(String atSign, AtOnboardingPreference preference,
       return false;
     }
   }
+  final lookUp = preference.lookUps(
+      atSign: atSign,
+      rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
+      authenticator: null);
   try {
-    final status = await AtStatusImpl(
-            rootUrl: preference.rootDomain,
-            rootPort: preference.rootPort,
-            lookUps: preference.lookUps)
-        .get(atSign);
-    return status.status() == AtSignStatus.activated;
-  } catch (e) {
-    stderr.writeln('${chalk.brightRed('[Error]')} $e');
-    throw AtActivateException(
-        'Could not determine atsign activation status: $e',
-        intent: Intent.fetchData);
+    final check = await checkAtSignServer(lookUp, atSign);
+    if (check.cause != null) {
+      logger.info('$atSign is taken as not activated: $check');
+    }
+    return check.state == AtSignServerState.activated;
+  } finally {
+    await lookUp.close();
   }
 }
 
@@ -627,7 +629,8 @@ Future<bool> _isActivated(String atSign, AtOnboardingPreference preference,
 ///
 /// [atLookUp] is a connection to enrol over, for a test.
 @visibleForTesting
-Future<bool> enroll(ArgResults argResults, {AtLookUp? atLookUp}) async {
+Future<bool> enroll(ArgResults argResults,
+    {AtLookupMuxable? atLookUp}) async {
   if (!argResults.wasParsed(AuthCliArgs.argNameAtKeys)) {
     throw ArgumentError('The --${AuthCliArgs.argNameAtKeys} option is'
         ' mandatory for the "enroll" command');
@@ -697,7 +700,7 @@ Future<AtClient> enrolDevice({
   Duration? apkamKeysExpiry,
   int maxRetries = 5,
   Duration retryInterval = approvalPollInterval,
-  AtLookUp? atLookUp,
+  AtLookupMuxable? atLookUp,
 }) async {
   final keys = FileAtKeysIo(
       filePath: (_) => atKeysFilePath, passPhrase: preference.passPhrase);

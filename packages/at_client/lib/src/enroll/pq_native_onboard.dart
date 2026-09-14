@@ -8,7 +8,7 @@ import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookUp;
+import 'package:at_lookup/at_lookup.dart' show AtLookupMuxable;
 import 'package:meta/meta.dart' show experimental;
 
 export 'package:at_client/src/enroll/first_enrollment.dart';
@@ -59,7 +59,7 @@ Future<AtClientManager> pqNativeOnboard({
   /// atSign's first client, so there is no earlier holder to inherit
   /// from and the caller supplies it.
   AtClientStorage? storage,
-  AtLookUp? atLookUp,
+  AtLookupMuxable? atLookUp,
 }) async {
   if (atKeysIo is! WrittenAtKeysIo) {
     throw ArgumentError.value(
