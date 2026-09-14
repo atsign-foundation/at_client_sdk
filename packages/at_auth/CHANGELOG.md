@@ -82,6 +82,12 @@ at_client, and this release removes the surface those replace.
 - `AtKeys.metadata` is no longer deprecated: it carries a legacy keyfile's
   entries outside the flat schema, and the typed document has no
   equivalent.
+- A typed keyfile (`"version": 1`) is written with an empty top-level
+  `"keys": []` again, as 3.3.0 wrote it. at_auth 3.3.0 refuses a versioned
+  keyfile without the array, so a keyfile written by 4.0.0-rc1 could not be
+  read by an application still on 3.3.0. Typed material stays in
+  `enrollments` and `atsignKeys`, and a document holding none is still
+  written in the legacy shape with neither field.
 
 ### Added
 

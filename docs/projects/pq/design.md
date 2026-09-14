@@ -2165,15 +2165,17 @@ sweep — the signature gained its enrollment in row A1.)
 Reading, in order of what a file can contain:
 
 1. no `version` — the legacy flat shape;
-2. `version: 1` with `keys: []` — written by at_auth ≥ 3.3.0 on any flush,
-   carrying nothing a legacy file does not;
-3. `version: 1` with `enrollments[]` and/or `atsignKeys[]`.
+2. `version: 1` with `keys: []` and no containers — written by at_auth 3.3.0
+   on any flush, carrying nothing a legacy file does not;
+3. `version: 1` with `keys: []` beside `enrollments[]` and/or `atsignKeys[]`.
 
-Writing emits (1) when there is no typed material and (3) otherwise. Shape (2)
-is never written again — and a `version: 1` document carrying a top-level
-`keys` is now **refused by name**: `keys` is no longer reserved, so parsing it
-would sweep the whole array into `metadata` as a legacy value and authenticate
-from the flat block as the wrong enrollment.
+Writing emits (1) when there is no typed material and (3) otherwise. The
+top-level `keys` array is always present and always empty in (3), because
+readers in the field may expect it wherever there is a `version`
+([ruling 141](detail/decisions.md#141-a-typed-keyfile-carries-an-empty-top-level-keys-array-2026-09-14)). A `version: 1` document whose top-level `keys` is
+**populated** is **refused by name**: no container reads that array, so parsing
+it would discard the material and authenticate from the flat block as the wrong
+enrollment.
 
 ### 9.3 `_apsk`
 

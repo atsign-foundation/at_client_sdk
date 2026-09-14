@@ -181,7 +181,8 @@ three layers, outermost first:
    - **Legacy flat** (no `version` field): a flat JSON object of the
      fields above plus `selfEncryptionKey`, `apkamSymmetricKey`, and
      `enrollmentId`.
-   - **Typed-keys** (`"version": 1`): adds `atsign` and two containers
+   - **Typed-keys** (`"version": 1`): adds `atsign`, an empty top-level
+     `keys` array, and two containers
      of typed key materials, while the legacy fields stay flat at the
      top level — a typed-keys file's legacy portion is byte-identical to
      a legacy-only file, so legacy readers can still use it.
@@ -204,9 +205,11 @@ three layers, outermost first:
      kid — a key package's, whose id is a digest of the key itself —
      keeps that kid.
 
-     ⚠️ A `"version": 1` document carrying a top-level `keys` array is an
-     older shape and is **refused**, naming itself, rather than read as a
-     legacy-only file. Nothing released ever wrote one.
+     ⚠️ The top-level `keys` array is always written empty, because readers
+     in the field may expect it wherever there is a `version`; typed material
+     never goes there. A `"version": 1` document whose top-level `keys` is
+     **populated** is an older shape and is **refused**, naming itself,
+     rather than read as a legacy-only file.
 
 In memory, `AtKeys` always holds plaintext; all three layers are applied
 and peeled exclusively by `FileAtKeysIo`.
