@@ -125,5 +125,5 @@ dependency_overrides:
   at_persistence_secondary_server:
     git:
       url: https://github.com/atsign-foundation/at_server.git
-      ref: st/at_persistence-at_utils-4.0.0-compat
+      ref: 166658a362a6c92fd611d1be7540aabffbaaa333
       path: packages/at_persistence_secondary_server
