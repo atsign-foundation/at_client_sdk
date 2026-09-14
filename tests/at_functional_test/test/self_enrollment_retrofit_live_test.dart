@@ -19,6 +19,7 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, parseApskValue, verifyEnvelope;
 import 'package:at_functional_test/src/config_util.dart';
+import 'package:at_functional_test/src/enrollment_approval.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
@@ -78,7 +79,8 @@ void main() {
 
     // Awaiting the approval collects the two atSign-wide secrets it released
     // and writes the completed keys into the keyfile.
-    await AtEnrollment.create().waitForApproval(response);
+    await awaitEnrollmentApproval(response,
+        atSign: atSign, rootDomain: TestUtils.rootDomain);
   }
 
   setUpAll(() async {

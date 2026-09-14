@@ -87,12 +87,11 @@ void main() {
       // 3.3.0's `toJson` emitted `version`, `atsign` and a top-level `keys`
       // array together whenever the atSign was set — which is every normal
       // keyfile — with `keys` empty while it held no typed material, and it
-      // reserved that name itself. This build drops the field in
-      // `AtKeys.fromJson` and never writes one, so unless it stays RESERVED
-      // here the assurance reads it as a legacy value the candidate failed to
-      // preserve and refuses the write. That refusal lands on the first
-      // enrollment, retrofit or key-filing save onto any keyfile 3.3.0 wrote,
-      // and the mutation is lost rather than reported.
+      // reserved that name itself. Every versioned document still carries an
+      // empty one, and unless the name stays RESERVED here the assurance reads
+      // it as a legacy value to preserve verbatim and refuses the write. That
+      // refusal lands on the first enrollment, retrofit or key-filing save onto
+      // any such keyfile, and the mutation is lost rather than reported.
       //
       // The fixture alone does not cover this: it predates 3.3.0 and carries
       // neither `version` nor `keys`.

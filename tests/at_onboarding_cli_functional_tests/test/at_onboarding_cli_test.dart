@@ -8,7 +8,6 @@ import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
-import 'package:at_server_status/at_server_status.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
@@ -167,26 +166,38 @@ void main() {
       AtOnboardingPreference atOnboardingPreference = getPreferences(atSign);
       File atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
 
-      Future<bool> activated() async =>
-          (await AtStatusImpl(
-                      rootUrl: atOnboardingPreference.rootDomain,
-                      rootPort: atOnboardingPreference.rootPort)
-                  .get(atSign))
-              .status() ==
-          AtSignStatus.activated;
+      final rootDomain = AtRootDomain(
+          atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+      Future<bool> activated() async {
+        final lookUp = secureSocketLookUps()(
+            atSign: atSign, rootDomain: rootDomain, authenticator: null);
+        try {
+          return (await checkAtSignServer(lookUp, atSign)).state ==
+              AtSignServerState.activated;
+        } finally {
+          await lookUp.close();
+        }
+      }
 
       // The protocol half alone: the keys are minted and filed, and the CRAM
       // secret is left on the atServer, so the atDirectory does not yet
       // report the atSign activated.
-      await activateAtSign(
-          atSign: atSign,
-          cramSecret: atOnboardingPreference.cramSecret!,
-          keys: FileAtKeysIo(
-              filePath: (_) => atOnboardingPreference.atKeysFilePath!),
-          signingAlgo: atOnboardingPreference.authenticationKeyAlgorithm,
-          rootDomain: AtRootDomain(atOnboardingPreference.rootDomain,
-              atOnboardingPreference.rootPort),
-          completeActivation: false);
+      final activationLookUp = secureSocketLookUps()(
+          atSign: atSign, rootDomain: rootDomain, authenticator: null);
+      try {
+        await activateAtSign(
+            atSign: atSign,
+            cramSecret: atOnboardingPreference.cramSecret!,
+            keys: FileAtKeysIo(
+                filePath: (_) => atOnboardingPreference.atKeysFilePath!),
+            signingAlgo: atOnboardingPreference.authenticationKeyAlgorithm,
+            rootDomain: rootDomain,
+            completeActivation: false,
+            atLookUp: activationLookUp,
+            awaitProvisioning: true);
+      } finally {
+        await activationLookUp.close();
+      }
       expect(await activated(), false);
       expect(await atKeysFile.exists(), true);
       await atKeysFile.delete();

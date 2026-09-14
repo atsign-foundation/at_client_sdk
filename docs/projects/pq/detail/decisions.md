@@ -14291,3 +14291,39 @@ went, and this ruling is where the right thing is recorded. The deprecated field
 itself needs nothing — it dies with the credential ladder in the next at_lookup
 major, and requiring it or making it nullable is breaking, so neither could land
 in 3.x.
+
+## 141. A typed keyfile carries an empty top-level `keys` array (2026-09-14)
+
+**Decision (gkc, 2026-09-14).** `AtKeys.toJson` writes `"keys": []` at the top
+level of every `version: 1` document, beside `version` and `atsign`. It reverses
+the earlier choice to stop writing the field once typed material moved into
+`enrollments[]` and `atsignKeys[]`.
+
+**Why.** Production code outside this tree expects a `keys` array wherever a
+keyfile has a `version`, and at_auth 3.3.0 — the latest stable release on
+pub.dev — is one such reader. It wrote `version`, `atsign` and an empty `keys`
+together on every keyfile whose atSign was set, and its `AtKeys.fromJson` reads
+the array with `expectList(json['keys'], 'keys')`, which throws when the field
+is absent. Measured on 2026-09-14 with a probe resolved against the published
+3.3.0: the golden document this build writes reads back with its atSign,
+enrollment id and flat keys intact, and the same document without `"keys": []`
+is refused with `AtKeysParseException: Expected array at keys`. So every typed
+keyfile written without the field was unreadable by an application still on
+3.3.0.
+
+**What does not change.**
+
+- The array is always empty. Typed material is filed in its containers, and a
+  top-level `keys` that is **populated** is still refused by name on read, as
+  the shape that preceded the containers.
+- `fromJson` still accepts the empty array and drops it; `toJson` writes its
+  own. `keys` stays a reserved top-level name, so it never reaches `metadata`
+  and the update assurance never reads it as a legacy value to preserve.
+- A document holding no typed material is still written in the legacy shape,
+  with neither `version` nor `keys` (UC-G1.4).
+
+**Pinned** by `packages/at_auth/test/at_keys_test.dart`: *"a versioned document
+carries an empty top-level keys array"* compares the written array as raw JSON,
+and its control, *"a document holding no typed material carries neither version
+nor keys"*, stays green when the writer is removed and goes red when the array
+is stamped onto the legacy shape.

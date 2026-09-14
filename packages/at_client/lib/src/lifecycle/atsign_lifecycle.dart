@@ -184,7 +184,7 @@ extension AtsignLifecycle on Atsign {
     Duration? provisioningBudget,
     Duration provisioningPollInterval = RetryOptions.defaultRetryDelay,
     void Function(ProgressEvent event)? onProgress,
-    AtLookUp? atLookUp,
+    AtLookupMuxable? atLookUp,
     AtLookUpFactory? lookUps,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
@@ -276,7 +276,7 @@ extension AtsignLifecycle on Atsign {
     SigningAlgoType? signingAlgo,
     EnrollmentKeyExchangeMode? keyExchangeMode,
     Duration? apkamKeysExpiry,
-    AtLookUp? atLookUp,
+    AtLookupMuxable? atLookUp,
     AtLookUpFactory? lookUps,
   }) async {
     final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);
@@ -365,7 +365,7 @@ extension AtsignLifecycle on Atsign {
     required String device,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
-    AtLookUp? atLookUp,
+    AtLookupMuxable? atLookUp,
     AtLookUpFactory? lookUps,
   }) async {
     final AtKeys stored;
