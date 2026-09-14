@@ -1,5 +1,8 @@
 ## 2.0.0-rc1
 
+- build: at_server_status is no longer a dependency. Whether an atSign is
+  already activated is asked with at_lookup's `checkAtSignServer`, over a
+  connection the preference's `lookUps` builds.
 - feat: `AtOnboardingPreference.lookUps` is the `AtLookUpFactory` every
   client opened under the preference builds its connections with: set it
   for a transport of your own; unset, it is `proxyLookUps()` when the root

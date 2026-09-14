@@ -1,5 +1,5 @@
-// What the handshake installs on a lookup that cannot take an authenticator
-// is the credential ladder, so this file names the ladder on purpose.
+// That the handshake never writes the credential ladder is asserted, so this
+// file names the ladder on purpose.
 // ignore_for_file: deprecated_member_use
 
 import 'dart:convert';
@@ -18,10 +18,6 @@ import 'test_utils/pkam_pin.dart';
 
 /// `AtLookupImpl` implements `AtLookupMuxable`, so this double has the seam.
 class MockAtLookUp extends Mock implements AtLookupImpl {}
-
-/// The frozen interface alone: no authenticator seam, only the credential
-/// fields.
-class MockPlainLookUp extends Mock implements AtLookUp {}
 
 /// Runs an installed [AtAuthenticator] for real and records what it sent.
 class _RecordingExecutor implements AtCommandExecutor {
@@ -313,19 +309,6 @@ void main() {
           isTrue,
           reason: 'signed over the challenge bytes directly, as the atServer '
               'verifies mldsa65');
-    });
-
-    test('a lookup without the seam gets the credential fields instead',
-        () async {
-      final lookup = MockPlainLookUp();
-      await stubLookUp(lookup, [Poll.approved]);
-
-      await AtEnrollmentImpl()
-          .waitForApproval(responseFor(rsaKeys()), atLookup: lookup);
-
-      verify(() => lookup.atChops = any(that: isNotNull)).called(1);
-      // The demo keypair is RSA and names no other algorithm.
-      verifyNever(() => lookup.signingAlgoType = SigningAlgoType.mldsa65);
     });
   });
 

@@ -1174,11 +1174,11 @@ files.
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `at_auth.dart` free of `dart:io`; `FileAtKeysIo` in `at_auth_io.dart`; the `atKeysIo ??=` default removed; registrar on `package:http`; `_defaultProbeSocket` moved | **PQ S-5** ([`../pq/implementation-plan.md`](../pq/implementation-plan.md):312-326) | **✅ Landed** — 4.0.0-rc1, [#2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179), 2026-08-25. `at_auth` is gated in `.github/wasm_gates.yaml` |
 | Consumer bumps onto `at_auth ^4.0.0`                                                                                                                                | **PQ S-6** (:328-339)                                                               | Follows S-5. Still to come; coordinate with ladder step 8                                                                                                    |
-| A ruling on conditional-default vs removed-default in at_auth                                                                                                       | OQ-1                                                                                | **✅ Resolved** 2026-08-27 — removed default *and* one conditional probe. [`decisions.md`](decisions.md) D-1, OQ-1                                            |
+| A ruling on conditional-default vs removed-default in at_auth                                                                                                       | OQ-1                                                                                | **✅ Resolved** 2026-08-27 — removed default *and* one conditional probe; the probe removed in 4.0.0-rc2. [`decisions.md`](decisions.md) D-1, OQ-1             |
 
 This project does **not** touch `at_auth`. The predecessor doc's tasks I4–I8 are
 removed for that reason ([`decisions.md`](decisions.md) §3). If S-5 slips, the sweep
 proceeds without it — `at_auth` simply remains a blocked package in R1's ratchet until
 it lands. It landed, so this contingency is spent: `at_auth` is now a gated package, and
-its four remaining blocked packages (`at_lookup`, `at_utils`, `chalkdart`,
-`at_server_status`) are all inherited and come off as each is ported.
+its three remaining blocked packages (`at_lookup`, `at_utils`, `chalkdart`) are all
+inherited and come off as each is ported.

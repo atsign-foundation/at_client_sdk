@@ -1,5 +1,11 @@
 ## 3.7.0-rc2
 
+- feat: `checkAtSignServer(lookUp, atSign)` reports whether an atSign is in
+  the atDirectory, whether its atServer answers and whether it is activated,
+  as an `AtSignServerState` with the cause of any failure. It asks over the
+  lookup it is given - that lookup's finder, that lookup's transport - so it
+  needs no `dart:io` of its own and the answer is about the route the caller's
+  connections take.
 - feat: `AtLookUpFactory`, the function type an application hands at_client's
   entry points so that every connection a client opens travels the way the
   application chose, and `secureSocketLookUps` in `at_lookup_io.dart`, the

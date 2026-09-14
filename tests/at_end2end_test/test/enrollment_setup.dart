@@ -14,6 +14,7 @@ import 'package:at_auth/at_auth_io.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
+import 'package:at_end2end_test/src/enrollment_approval.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -126,7 +127,8 @@ void main() {
 
       // Awaiting the approval collects the two atSign-wide secrets it
       // released and writes the completed keys into the keyfile.
-      await AtEnrollment.create().waitForApproval(atEnrollmentResponse);
+      await awaitEnrollmentApproval(atEnrollmentResponse,
+          atSign: currentAtSign, rootDomain: rootDomain);
 
       // Set AtClient to null and authenticate with the new auth keys generated for enrollment
       AtClientManager.getInstance().removeAllChangeListeners();

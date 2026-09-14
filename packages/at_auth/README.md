@@ -20,13 +20,13 @@ on those, rather than consuming `at_auth` directly.
 
 ## What `at_auth` does
 
-| Capability                      | Entry point                                                                  |
-| ------------------------------- | ---------------------------------------------------------------------------- |
-| CRAM activation of a new atSign | `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ...)`  |
-| APKAM enrollment (request side) | `AtEnrollment.submit(...)`, then `AtEnrollment.waitForApproval(...)`         |
-| APKAM enrollment (approve side) | `AtEnrollment.approve(...)`                                                  |
-| The `.atKeys` store             | `AtKeys`, `AtKeysIo` and its file, in-memory and keychain implementations    |
-| Free atSign registration        | `RegistrarService` (fetches CRAM key by email)                               |
+| Capability                      | Entry point                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| CRAM activation of a new atSign | `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ..., atLookUp: ...)` |
+| APKAM enrollment (request side) | `AtEnrollment.submit(...)`, then `AtEnrollment.waitForApproval(...)`                       |
+| APKAM enrollment (approve side) | `AtEnrollment.approve(...)`                                                                |
+| The `.atKeys` store             | `AtKeys`, `AtKeysIo` and its file, in-memory and keychain implementations                  |
+| Free atSign registration        | `RegistrarService` (fetches CRAM key by email)                                             |
 
 Logging in is at_client's: `Atsign('@alice').open(keys: ..., preference: ...)`
 builds the client and authenticates on the client's own connection, and
@@ -181,7 +181,8 @@ three layers, outermost first:
    - **Legacy flat** (no `version` field): a flat JSON object of the
      fields above plus `selfEncryptionKey`, `apkamSymmetricKey`, and
      `enrollmentId`.
-   - **Typed-keys** (`"version": 1`): adds `atsign` and two containers
+   - **Typed-keys** (`"version": 1`): adds `atsign`, an empty top-level
+     `keys` array, and two containers
      of typed key materials, while the legacy fields stay flat at the
      top level — a typed-keys file's legacy portion is byte-identical to
      a legacy-only file, so legacy readers can still use it.
@@ -204,9 +205,11 @@ three layers, outermost first:
      kid — a key package's, whose id is a digest of the key itself —
      keeps that kid.
 
-     ⚠️ A `"version": 1` document carrying a top-level `keys` array is an
-     older shape and is **refused**, naming itself, rather than read as a
-     legacy-only file. Nothing released ever wrote one.
+     ⚠️ The top-level `keys` array is always written empty, because readers
+     in the field may expect it wherever there is a `version`; typed material
+     never goes there. A `"version": 1` document whose top-level `keys` is
+     **populated** is an older shape and is **refused**, naming itself,
+     rather than read as a legacy-only file.
 
 In memory, `AtKeys` always holds plaintext; all three layers are applied
 and peeled exclusively by `FileAtKeysIo`.
@@ -274,11 +277,11 @@ directly.
 
 | 3.x                                                                                              | 4.0                                                                                                                                                                                             |
 | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AtAuth.create().onboard(AtOnboardingRequest(atSign)..rootDomain = ..., cramSecret)`             | `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ..., rootDomain: ...)` here, or `Atsign(atSign).activate(...)` in at_client, which opens the client as well                |
+| `AtAuth.create().onboard(AtOnboardingRequest(atSign)..rootDomain = ..., cramSecret)`             | `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ..., rootDomain: ..., atLookUp: ...)` here, or `Atsign(atSign).activate(...)` in at_client, which opens the client as well |
 | `AtAuth.create().authenticate(AtAuthRequest(atSign, atKeysIo: ...))`                             | `Atsign(atSign).open(keys: ..., preference: ...)`; `Atsign(atSign).authenticatesAs(keys: ..., rootDomain: ...)` for the check that builds no client                                           |
 | `AtAuthResponse.atChops`, `.atLookUp`, `.atAuthKeys`; `AtAuthSession.atLookUp`                   | the `AtClient` `open` hands back; its keys are read from the store it opened on (`keys.read(atSign)`), and the connection is its own                                                            |
 | `AtAuth.atChops`, `AtAuth.atLookUp`, `AtAuth.completeActivation()`                               | gone; `activateAtSign` completes the activation itself                                                                                                                                          |
-| `AtEnrollment.submit(request, atLookUp)` / `.waitForApproval(response)`                          | unchanged; or `Atsign(atSign).enroll(...)` and `PendingEnrollment.client(...)`, which file the request in the keys store and resume it after a restart                                          |
+| `AtEnrollment.submit(request, atLookUp)` / `.waitForApproval(response)`                          | `waitForApproval(response, atLookup: ...)` takes the connection it runs on and leaves it open; or `Atsign(atSign).enroll(...)` and `PendingEnrollment.client(...)`, which file the request in the keys store and resume it after a restart |
 | `AtEnrollment.approve(decision, atLookUp)`                                                       | `client.enrollments.approve(enrollmentId)`; here, `approve(decision, atLookUp, approverKeys: ...)` requires the approver's encryption private key and self-encryption key                        |
 | `AtEnrollment.deny(...)` / `.revoke(...)`                                                        | `client.enrollments.deny(id)` / `.revoke(id)`                                                                                                                                                   |
 | `AtEnrollment.list(statuses, atLookUp)`                                                          | `client.enrollments.list(statuses: ...)`, `.pending()`, `.fetch(id)`                                                                                                                            |
@@ -338,11 +341,16 @@ final principal = await Atsign(atSign).authenticatesAs(
 final response = await AtAuth.create().onboard(
     AtOnboardingRequest(atSign)..rootDomain = 'root.atsign.org', cramSecret);
 
-// 4.0, here: the activation alone, writing the keys to `keys`
+// 4.0, here: the activation alone, writing the keys to `keys`, over a
+// connection the app builds with its lookUps factory and closes itself
+final lookUp = secureSocketLookUps()(
+    atSign: atSign, rootDomain: AtRootDomain.atsignDomain, authenticator: null);
 final enrollmentId = await activateAtSign(
     atSign: atSign, cramSecret: cramSecret,
     keys: FileAtKeysIo(filePath: (_) => keysPath),
-    signingAlgo: SigningAlgoType.mldsa65);
+    signingAlgo: SigningAlgoType.mldsa65,
+    atLookUp: lookUp, awaitProvisioning: true);
+await lookUp.close();
 // 4.0, in at_client: the activation and the client it opens
 final client = await Atsign(atSign).activate(
     cramSecret: cramSecret, keys: keys, preference: preference);

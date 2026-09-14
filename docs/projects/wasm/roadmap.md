@@ -201,9 +201,10 @@ Two things about this tier are worth stating at roadmap level:
    open strategy under the same `SqliteDatabase`, not a parallel backend.
 
 Goal 4 is **behavioural, not API-level**. Neutrality requires removing native defaults
-(`atKeysIo ??= FileAtKeysIo()`, `atServerStatus ??= AtStatusImpl(...)`, the hardcoded
-`HiveAtPersistenceFactory`, `Socket getSocket()` on `AtConnection`). Those are breaking
-changes and are accepted as such — [`decisions.md`](decisions.md) D-3.
+(the hardcoded `HiveAtPersistenceFactory`, `Socket getSocket()` on `AtConnection`;
+`at_auth`'s `atKeysIo ??= FileAtKeysIo()` and `atServerStatus ??= AtStatusImpl(...)` are
+already gone). Those are breaking changes and are accepted as such —
+[`decisions.md`](decisions.md) D-3.
 
 ### Non-goals
 

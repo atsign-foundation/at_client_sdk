@@ -1096,11 +1096,10 @@ class AtClientImpl implements AtClient {
       }
       return;
     }
-    _logger.info(
-        'disallowLegacyEncryption is false, so this client may still encrypt '
-        'new data with the legacy (RSA/AES) provider — harvestable now, '
-        'openable by a quantum computer later. It becomes the default in '
-        'at_client 4.0; set it on AtClientPreference to opt in early.');
+    _logger.info('disallowLegacyEncryption is false, so this client will be '
+        'permitted to encrypt new data with the legacy (RSA/AES) provider. See '
+        'https://github.com/atsign-foundation/at_client_sdk/blob/trunk/README.md#post-quantum-cryptography '
+        'for more information regarding migration');
   }
 
   /// Arms (or re-arms) the one-shot expiry [Timer] at the
