@@ -66,6 +66,26 @@ final legacyPlusPqProviders = PqPosture(
 /// an atServer version: `listening` means the same against every one of them.
 /// What would turn this back into a proof is an atServer that answers
 /// `monitor:` at all.
+/// The mint lock ttl a live test takes in place of the production two minutes.
+///
+/// Nothing releases a mint lock but expiry, so the ttl is a cooldown: after a
+/// mint takes the lock, a rotation of the same namespace is refused until it
+/// lapses, and a test that rotates must wait it out with [waitOutMintLock].
+///
+/// NOTE: it must outlast a whole mint on the slowest CI runner, because the
+/// holder carries the lock's lease and abandons rather than publishing once the
+/// ttl has elapsed. A mint against a local virtualenv measures in tens of
+/// milliseconds, but a runner running the pack at half its usual speed has
+/// overrun a one-second ttl mid-mint.
+const liveMintLockTtl = Duration(seconds: 5);
+
+/// Waits until a mint lock taken just before has expired on the atServer.
+///
+/// Past the ttl rather than exactly it: the atServer starts counting when it
+/// stores the record, after the client sent it.
+Future<void> waitOutMintLock() =>
+    Future.delayed(liveMintLockTtl + const Duration(milliseconds: 500));
+
 Future<void> awaitMonitorListening(NotificationServiceImpl notifications,
     {Duration timeout = const Duration(seconds: 60)}) async {
   bool stateIsListening() =>
