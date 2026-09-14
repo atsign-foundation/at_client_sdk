@@ -73,7 +73,8 @@ abstract class AtEnrollment {
   ///
   ///     AtEnrollmentResponse atEnrollmentResponse =
   ///         await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
-  ///     await atEnrollmentBase.waitForApproval(atEnrollmentResponse);
+  ///     await atEnrollmentBase.waitForApproval(atEnrollmentResponse,
+  ///         atLookup: atLookUp);
   ///     // atEnrollmentResponse.session.atKeysIo now holds the keys; open a
   ///     // client on it with at_client's Atsign.open.
   ///```
@@ -106,10 +107,10 @@ abstract class AtEnrollment {
   ///  To approve an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// final atLookup = AtLookUp.withSecureSocket(
+  /// // lookUps: the application's AtLookUpFactory, such as secureSocketLookUps()
+  /// final atLookup = lookUps(
   ///   atSign: '@alice',
   ///   rootDomain: AtRootDomain.atsignDomain,
-  ///   transport: secureSocketTransport(SecureSocketConfig()),
   ///   authenticator: authenticatorFor(keysIo, '@alice'),
   /// );
   ///
@@ -165,21 +166,20 @@ abstract class AtEnrollment {
   ///         await atEnrollmentBase?.submit(dummyEnrollmentRequest, atLookUp!);
   ///
   /// try{
-  ///   await atEnrollment.waitForApproval(
-  ///     enrollmentResponse: atEnrollmentResponse!,
-  ///   );
+  ///   await atEnrollment.waitForApproval(atEnrollmentResponse!,
+  ///       atLookup: atLookUp);
   /// }catch{
   ///   // Handle errors
   /// }
   /// ```
   /// [atLookup] is the connection the approval handshake runs on — the PKAM
-  /// retries and the post-approval key fetches. When null, one is built from
-  /// the response's atSign and rootDomain.
+  /// retries and the post-approval key fetches — and it is left open for the
+  /// caller to close.
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     bool logProgress = defaultLogProgress,
     int maxRetries = defaultMaxRetries,
     Duration retryInterval = defaultRetryInterval,
-    AtLookUp? atLookup,
+    required AtLookupMuxable atLookup,
   });
 }

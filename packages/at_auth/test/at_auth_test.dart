@@ -15,7 +15,6 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_server_status/at_server_status.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -40,16 +39,13 @@ class MockAtEnrollment extends Mock implements AtEnrollment {}
 
 class MockPkamAuthenticator extends Mock implements PkamAuthenticator {}
 
-class MockAtServerStatus extends Mock implements AtServerStatus {}
-
 class FakeVerbBuilder extends Fake implements VerbBuilder {}
 
 class FakeAtLookUp extends Fake implements AtLookupImpl {}
 
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 
-class FakeSecondaryAddressFinder extends Fake
-    implements CacheableSecondaryAddressFinder {
+class FakeSecondaryAddressFinder implements SecondaryAddressFinder {
   @override
   Future<SecondaryAddress> findSecondary(String atSign,
       {Duration? timeout}) async {
@@ -61,7 +57,6 @@ void main() {
   late AtAuthImpl atAuth;
   late MockAtLookUp mockAtLookUp;
   late MockPkamAuthenticator mockPkamAuthenticator;
-  late MockAtServerStatus mockAtServerStatus;
   late AtEnrollment mockAtEnrollment;
   late FileAtKeysIo fileAtKeysIo;
   late FakeSecondaryAddressFinder fakeSecondaryAddressFinder;
@@ -81,30 +76,31 @@ void main() {
       mockPkamAuthenticator = MockPkamAuthenticator();
       mockAtEnrollment = MockAtEnrollment();
       fakeSecondaryAddressFinder = FakeSecondaryAddressFinder();
-      mockAtServerStatus = MockAtServerStatus();
-      when(() => mockAtServerStatus.get(any())).thenAnswer((_) => Future.value(
-          AtStatus(
-              serverStatus: ServerStatus.teapot,
-              rootStatus: RootStatus.found,
-              atSignStatus: AtSignStatus.teapot)));
+      when(() => mockAtLookUp.secondaryAddressFinder)
+          .thenReturn(fakeSecondaryAddressFinder);
+      // The atServer check's own question: an atServer with no public key,
+      // so the atSign is there to be activated.
+      when(() => mockAtLookUp.executeCommand(
+              any(that: startsWith('lookup:publickey')),
+              auth: any(named: 'auth')))
+          .thenAnswer((_) async => throw AtLookUpException('AT0015', 'key not found'));
       atAuth = AtAuthImpl(
           atLookUp: mockAtLookUp,
           pkamAuthenticator: mockPkamAuthenticator,
-          atEnrollment: mockAtEnrollment,
-          atServerStatus: mockAtServerStatus);
+          atEnrollment: mockAtEnrollment);
     });
     var testCramSecret = 'cram123';
 
     test(
         'validateAtServer honours overallTimeout instead of running all retries',
         () async {
-      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
-      // Every probe fails, so without a deadline validateAtServer would retry
-      // maxRetries(10) x retryDelay(2s) ~= 20s. A short overallTimeout must cut
-      // that short and surface an AtTimeoutException.
-      atAuth.probeSocket = (host, port) async {
-        throw Exception('simulated unreachable atServer');
-      };
+      // The atServer never answers, so without a deadline validateAtServer
+      // would retry maxRetries(10) x retryDelay(2s) ~= 20s. A short
+      // overallTimeout must cut that short and surface an AtTimeoutException.
+      when(() => mockAtLookUp.executeCommand(
+              any(that: startsWith('lookup:publickey')),
+              auth: any(named: 'auth')))
+          .thenAnswer((_) async => throw Exception('simulated unreachable atServer'));
       final request = AtOnboardingRequest('@alice🛠',
           signingAlgoType: SigningAlgoType.rsa2048,
           atKeysIo: fileAtKeysIo,
@@ -126,7 +122,8 @@ void main() {
     test('Test onboard - cramAuthenticate returns false', () async {
       when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
           .thenAnswer((_) => Future.value(false));
-      when(() => mockAtLookUp.executeCommand(any()))
+      when(() => mockAtLookUp.executeCommand(
+              any(that: isNot(startsWith('lookup:publickey')))))
           .thenAnswer((_) => Future.value('data:1'));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
@@ -138,8 +135,6 @@ void main() {
       final atOnboardingRequest = AtOnboardingRequest('@aaron🛠',
           signingAlgoType: SigningAlgoType.rsa2048);
 
-      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
-      atAuth.probeSocket = (host, port) async {};
 
       expect(
           () async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
@@ -162,8 +157,6 @@ void main() {
         ..appName = 'wavi'
         ..deviceName = 'iphone';
 
-      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
-      atAuth.probeSocket = (host, port) async {};
 
       // The person reading this exception is mid-failure; the wrapped
       // message is the only clue they get about what the server said.
@@ -200,8 +193,6 @@ void main() {
         ..appName = 'wavi'
         ..deviceName = 'iphone';
 
-      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
-      atAuth.probeSocket = (host, port) async {};
 
       final response = await atAuth.onboard(
         atOnboardingRequest,
@@ -238,8 +229,6 @@ void main() {
         ..atKeysIo = InMemoryAtKeysIo()
         ..appName = 'wavi'
         ..deviceName = 'iphone';
-      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
-      atAuth.probeSocket = (host, port) async {};
 
       await atAuth.onboard(atOnboardingRequest, testCramSecret);
 
@@ -294,8 +283,6 @@ void main() {
           signingAlgoType: SigningAlgoType.rsa2048)
         ..atKeysIo = fileAtKeysIo;
 
-      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
-      atAuth.probeSocket = (host, port) async {};
 
       final response = await atAuth.onboard(
         atOnboardingRequest,

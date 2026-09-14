@@ -56,7 +56,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     bool logProgress = AtEnrollment.defaultLogProgress,
     int maxRetries = AtEnrollment.defaultMaxRetries,
-    AtLookUp? atLookup,
+    required AtLookupMuxable atLookup,
   }) =>
       _handshake.waitForApproval(
         enrollmentResponse,

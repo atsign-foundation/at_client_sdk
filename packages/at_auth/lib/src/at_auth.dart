@@ -11,11 +11,12 @@ import 'package:at_utils/at_progress.dart';
 /// The activation engine `activateAtSign` drives: CRAM authentication, key
 /// minting and the first enrollment. Logging in is at_client's `Atsign.open`.
 abstract interface class AtAuth {
-  AtLookUp? atLookUp;
+  /// The connection every step of the activation travels over.
+  AtLookupMuxable get atLookUp;
   Stream<ProgressEvent> get progressStream;
 
   factory AtAuth.create(
-      {AtLookUp? atLookUp,
+      {required AtLookupMuxable atLookUp,
       AtChops? atChops,
       CramAuthenticator? cramAuthenticator,
       PkamAuthenticator? pkamAuthenticator,
@@ -49,8 +50,7 @@ abstract interface class AtAuth {
   /// - Delete cram secret from server
   Future<void> completeActivation();
 
-  /// Validate atsign's secondary server status
-  /// - Check if atsign's secondary server is reachable in atDirectory
-  /// - validates the server for onboarding and looks for teapot
+  /// Waits, over [atLookUp], until the atDirectory knows the atSign and its
+  /// atServer answers; for onboarding, the atSign must also not be activated.
   Future<void> validateAtServer(AuthRequest authRequest);
 }

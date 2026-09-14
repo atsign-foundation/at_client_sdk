@@ -23,8 +23,14 @@ at_client, and this release removes the surface those replace.
 - **BREAKING:** `AtAuthSession` carries no `atLookUp`. A session is what a
   client is built from — the atSign, where its atServer is looked up, the key
   source and the enrollment the keys authenticate as — and the client opens
-  a connection of its own. The enrolment handshake closes the connection it
-  built when the caller supplied none.
+  a connection of its own.
+- **BREAKING:** `httpsProbe`, `defaultProbe` and `secureSocketProbe` are
+  removed, and at_auth builds no connection of its own. The atServer check
+  before an activation asks over the activation's own lookup with at_lookup's
+  `checkAtSignServer`: the atDirectory through that lookup's finder, the
+  atServer over its transport. at_auth no longer depends on
+  at_server_status, and nothing its main barrel reaches imports
+  `at_lookup_io.dart`.
 - **BREAKING:** `AtKeys.toAtChops` and `.toAtChopsForEnrollment` are
   library-private; `AtKeys.authenticationFor` is the public route, and
   `authenticationKeyPairFor`, `encryptionKeyPair` and `selfEncryptionKey`
@@ -44,6 +50,12 @@ at_client, and this release removes the surface those replace.
 
 ### Changed
 
+- **BREAKING:** `activateAtSign` requires `atLookUp` and
+  `AtEnrollment.waitForApproval` requires `atLookup`, each an
+  `AtLookupMuxable`, because each installs an authenticator on it. Neither
+  builds a connection when none is given, and neither closes the one it is
+  given. The at_lookup floor moves to `^3.7.0-rc2`, the release carrying
+  `checkAtSignServer`.
 - **BREAKING:** `AtEnrollment.approve` takes `approverKeys`, an
   `ApproverKeyMaterial` holding the approver's encryption private key and
   self-encryption key, and it is required: approval reads nothing off the
@@ -73,13 +85,13 @@ at_client, and this release removes the surface those replace.
 
 ### Added
 
-- `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ...)`:
-  CRAM activation as a parameter list. It waits for the atServer, mints the
-  keys, submits and authenticates as the first enrollment, writes the keys
-  to the store named and completes the activation, answering the enrollment
-  id. A supplied `atLookUp` is taken as having already reached the atServer
-  unless `awaitProvisioning` is set, for a caller that built the connection
-  itself and has not reached the atServer on it yet.
+- `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ...,
+  atLookUp: ...)`: CRAM activation as a parameter list. It waits for the
+  atServer, mints the keys, submits and authenticates as the first
+  enrollment, writes the keys to the store named and completes the
+  activation, answering the enrollment id. The `atLookUp` it runs over is
+  taken as having already reached the atServer unless `awaitProvisioning` is
+  set, for a caller that has not reached the atServer on it yet.
 - `CryptographicMaterialStatus.pending`, the status of an enrollment's key
   material between submission and approval, ranking before `active`.
   `AtKeys.activatePending`, `AtKeys.discardEnrollment` and
@@ -113,9 +125,9 @@ at_client, and this release removes the surface those replace.
   back to the legacy shape, which is what a denied enrollment leaves behind.
 - A keyfile whose atSign material is typed derives a working `AtChops`; a
   typed-only document produced empty encryption keys.
-- The enrolment handshake installs an authenticator on a lookup that takes
-  one and sets at_lookup's credential fields only on one that cannot; both
-  were written and one was never read.
+- The enrolment handshake installs an authenticator on its lookup and never
+  writes at_lookup's credential fields; both were written, and one was never
+  read.
 
 ## 4.0.0-rc1
 
