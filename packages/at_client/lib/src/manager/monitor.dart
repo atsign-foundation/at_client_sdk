@@ -182,7 +182,7 @@ class Monitor {
         if (refusal != null) {
           logger.warning('Notifications ended: the atServer refused this '
               'client\'s credentials: $e');
-          connection?.report(refusal);
+          _endOnRefusal(refusal);
           return;
         }
         logger.warning('Error on the notification stream: $e');
@@ -237,7 +237,7 @@ class Monitor {
       if (refusal != null) {
         logger.warning('Not retrying the notification start: the atServer '
             'refused this client\'s credentials: $e');
-        await connection?.report(refusal);
+        _endOnRefusal(refusal);
         return;
       }
       logger.warning('Failed to start notifications: $e');
@@ -245,12 +245,19 @@ class Monitor {
     }
   }
 
-  /// The refused state [error] names, or null when it is not the atServer
-  /// refusing this client's credentials.
-  static AtConnectionState? _refusalIn(Object error) {
-    final state = classifyConnectionFailure(error);
-    return state != null && state.isRefused ? state : null;
+  /// Ends the retries, not the monitor: the target state goes back to not
+  /// connected, so a later [start] — the enrollment approved after all, or the
+  /// keys changed — is a fresh start rather than a no-op.
+  void _endOnRefusal(AtConnectionState refusal) {
+    _targetState = NotificationListenerState.notConnected;
+    _setCurrentState(NotificationListenerState.notConnected);
+    unawaited(connection?.report(refusal) ?? Future<void>.value());
   }
+
+  /// The refused state [error] names, or null when it is not an answer from
+  /// the atServer that a retry cannot change.
+  static AtConnectionState? _refusalIn(Object error) =>
+      credentialRefusalStateIn(error);
 
   /// Tries the first connect again, while the caller still wants to listen.
   void _scheduleStartRetry() {

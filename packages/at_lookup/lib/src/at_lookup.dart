@@ -288,10 +288,10 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// the atServer through TCP rather than being absorbed by an unbounded
   /// buffer in this process.
   ///
-  /// A reconnect the atServer refuses — the enrollment revoked, expired,
-  /// denied or not yet approved, or the authentication rejected — ends
-  /// notifications as [stopNotifications] does: the refusal arrives on this
-  /// stream as an error, and the stream then closes.
+  /// A reconnect the atServer refuses — the enrollment denied, pending,
+  /// revoked or expired, see [credentialRefusalIn] — ends notifications as
+  /// [stopNotifications] does: the refusal arrives on this stream as an
+  /// error, and the stream then closes.
   Stream<String> get notifications;
 
   /// Ask the atServer to start sending notifications on this connection.

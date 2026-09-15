@@ -3,12 +3,16 @@
 - feat: `AtLookupMuxable.refuseNewConnections()`, for an owner finished with
   a lookup for good: a request that would need a new connection or a new
   authentication throws `ConnectionInvalidException` instead, and a lost
-  notification connection is not reconnected.
-- fix: a notification reconnect the atServer refuses - the enrollment
-  revoked, expired, denied or not yet approved, or the authentication
-  rejected - ends notifications. The refusal arrives on `notifications` as an
-  error and the stream closes, where the reconnect loop used to retry it
-  every 34 seconds for as long as the process ran.
+  notification connection is not reconnected. An implementer of the interface
+  adds the member.
+- feat: `credentialRefusalIn(error)` reads the atServer's own answer out of a
+  failure - the enrollment denied, pending, revoked or expired - so a retry
+  loop can tell an answer trying again cannot change from a failure to reach
+  or authenticate that it may.
+- fix: a notification reconnect the atServer refuses - the enrollment denied,
+  pending, revoked or expired - ends notifications. The refusal arrives on
+  `notifications` as an error and the stream closes, where the reconnect loop
+  used to retry it every 34 seconds for as long as the process ran.
 - feat: `checkAtSignServer(lookUp, atSign)` reports whether an atSign is in
   the atDirectory, whether its atServer answers and whether it is activated,
   as an `AtSignServerState` with the cause of any failure. It asks over the

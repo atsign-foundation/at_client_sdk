@@ -8,6 +8,8 @@ import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show AtConnectionState, credentialRefusalStateIn;
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
@@ -106,6 +108,10 @@ class SyncServiceImpl implements SyncService {
   /// exception path, etc.). Cancelled in [stop], restarted in
   /// [start].
   Timer? _periodicSyncTimer;
+
+  /// Set when the atServer refused this client's credentials: no round asks
+  /// it anything again until [start] is called.
+  AtConnectionState? _refusal;
   static const Duration _periodicSyncInterval = Duration(seconds: 30);
 
   @override
@@ -291,6 +297,22 @@ class SyncServiceImpl implements SyncService {
       _logger.finer('processSyncRequests: service is stopped; ignoring');
       return;
     }
+    final refusal = _refusal;
+    if (refusal != null) {
+      final exception = AtClientException(
+          error_codes['AtClientException'],
+          'Not syncing: the atServer refused this client\'s credentials '
+          '(${refusal.cause?.name})');
+      while (syncRequests.isNotEmpty) {
+        final request = syncRequests.removeFirst();
+        request.result ??= SyncResult();
+        request.result!
+          ..syncStatus = SyncStatus.failure
+          ..atClientException = exception;
+        _safeInvokeOnError(request);
+      }
+      return;
+    }
     if (_processInProgress || _syncInProgress) {
       // In the on-demand trigger model every enqueue (and every drain
       // tail) calls processSyncRequests, so this branch fires
@@ -381,6 +403,7 @@ class SyncServiceImpl implements SyncService {
         ..startedAt = DateTime.now().toUtc()
         ..message = 'Exception: $e'
         ..atClientException = wrapped);
+      _endRoundsIfRefused(e);
     } on _SyncAbandoned {
       _logger
           .finer('sync ${syncRequest.id} abandoned: the service was stopped');
@@ -411,6 +434,21 @@ class SyncServiceImpl implements SyncService {
       _drainQueueIfPending();
     }
     return;
+  }
+
+  /// Ends the rounds when [error] is the atServer refusing this client's
+  /// credentials, which another round does not change: the periodic timer is
+  /// cancelled, later requests fail without asking, and the refusal is
+  /// reported on the client's connection state.
+  void _endRoundsIfRefused(Object error) {
+    final state = credentialRefusalStateIn(error);
+    if (state == null) return;
+    _refusal = state;
+    _periodicSyncTimer?.cancel();
+    _periodicSyncTimer = null;
+    _logger.warning('Not syncing again: the atServer refused this client\'s '
+        'credentials: $error');
+    unawaited(_atClient.connection.report(state));
   }
 
   void _informSyncProgress(SyncProgress syncProgress,
@@ -800,6 +838,7 @@ class SyncServiceImpl implements SyncService {
         // entries in place — next round retries.
         final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
         _logger.severe('sendBatch failed: $cause');
+        _endRoundsIfRefused(e);
         return keyInfoList;
       }
       var accepted = 0;
@@ -1653,6 +1692,7 @@ class SyncServiceImpl implements SyncService {
     }
     _logger.info('Restarting sync service for $currentAtSign');
     isStopped = false;
+    _refusal = null;
     // Re-subscribe to stats notifications. New sync() calls after restart
     // will queue normally and fire their microtask trigger as usual.
     await statsServiceListener();

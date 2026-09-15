@@ -199,4 +199,55 @@ void main() {
               'text is not read as either');
     });
   });
+  group('a refusal a retry cannot change is read from the atServer\'s answer',
+      () {
+    // The atServer's own answer to an expired enrollment, from its pkam
+    // handler; AT0029 above is the code at_commons assigns the typed
+    // exception, and no atServer sends it.
+    const expiredAnswerText = 'Failed connecting to @alice. '
+        'error:AT0028:enrollment_id: e1 is expired or invalid';
+
+    test('an expired enrollment is refused as an invalid enrollment', () {
+      expectClassified(
+          UnAuthenticatedException(expiredAnswerText),
+          AtConnectionOutcome.refused,
+          AtConnectionCause.invalidEnrollment,
+          'the atServer named the enrollment expired');
+      expect(
+          credentialRefusalStateIn(UnAuthenticatedException(expiredAnswerText))
+              ?.cause,
+          AtConnectionCause.invalidEnrollment);
+    });
+
+    test('a revocation is one', () {
+      final state =
+          credentialRefusalStateIn(UnAuthenticatedException(revokedText));
+      expect(state?.isRefused, isTrue);
+      expect(state?.cause, AtConnectionCause.revoked);
+    });
+
+    test(
+        'an authentication that failed for no reason the atServer named is '
+        'not one', () {
+      expect(
+          credentialRefusalStateIn(UnAuthenticatedException(
+              'Failed connecting to @alice. The authenticator reported '
+              'failure')),
+          isNull,
+          reason: 'open() reports it as refused, which is right for a first '
+              'open; a retry loop must not give up on it');
+      expect(
+          credentialRefusalStateIn(
+              AtLookUpException('AT0401', unauthenticatedText)),
+          isNull,
+          reason: 'AT0401 is the code at_lookup gives the exception type, not '
+              'an answer the atServer gave');
+      expect(
+          credentialRefusalStateIn(
+              AtLookUpException('AT0014', 'error:AT0028-Too Many Requests')),
+          isNull,
+          reason: 'a thrown exception shares the expired code and travels '
+              'with a dash, and a throttle clears');
+    });
+  });
 }

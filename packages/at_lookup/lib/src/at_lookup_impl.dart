@@ -1070,7 +1070,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           _emitConnectionUp(true);
           return;
         } catch (e) {
-          if (_isCredentialRefusal(e)) {
+          if (credentialRefusalIn(e) != null) {
             logger.warning(
                 'Not reconnecting notifications for $_currentAtSign: '
                 'the atServer refused its credentials, which trying again does '
@@ -1088,15 +1088,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       if (generation == _notifyGeneration) _reconnecting = false;
     }
   }
-
-  /// Whether [error] is the atServer refusing this client's credentials — the
-  /// enrollment denied, not yet approved, revoked or expired, or the
-  /// authentication rejected — rather than a failure to reach it.
-  static bool _isCredentialRefusal(Object error) =>
-      _credentialRefusal.hasMatch('$error');
-
-  static final RegExp _credentialRefusal =
-      RegExp(r'error:AT0(025|026|027|029|401)\b');
 
   void _startHeartbeat() {
     _stopHeartbeat();

@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:io' show SocketException, HandshakeException;
 
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
+import 'package:at_lookup/at_lookup.dart'
+    show AtLookUpException, CredentialRefusal, credentialRefusalIn;
 import 'package:at_utils/at_logger.dart';
 
 /// How far a client got towards its atServer.
@@ -328,7 +329,30 @@ AtConnectionState? _classifyCode(String code, String message, Object error) {
   return AtConnectionState.online();
 }
 
+/// The refused state [error] carries when the atServer answered that this
+/// client's enrollment is denied, pending, revoked or expired, or null.
+///
+/// Narrower than [classifyConnectionFailure], which also reports an
+/// authentication that failed on the way to the atServer as refused — right
+/// for an `open` that has nothing to serve, wrong for a retry loop, since
+/// only an answer from the atServer is one that trying again cannot change.
+AtConnectionState? credentialRefusalStateIn(Object error) {
+  final refusal = credentialRefusalIn(error);
+  if (refusal == null) return null;
+  return AtConnectionState.refused(_causeOf(refusal), error: error);
+}
+
+AtConnectionCause _causeOf(CredentialRefusal refusal) => switch (refusal) {
+      CredentialRefusal.revoked => AtConnectionCause.revoked,
+      CredentialRefusal.expired => AtConnectionCause.invalidEnrollment,
+      CredentialRefusal.denied ||
+      CredentialRefusal.pending =>
+        AtConnectionCause.enrollmentNotApproved,
+    };
+
 AtConnectionCause? _refusalCauseIn(String message) {
+  final answered = credentialRefusalIn(message);
+  if (answered != null) return _causeOf(answered);
   for (final entry in _refusalCodes.entries) {
     if (message.contains('error:${entry.key}') ||
         message.contains('${entry.key}:')) {

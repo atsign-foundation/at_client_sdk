@@ -353,6 +353,27 @@ void main() {
       expect(atLookup.isReconnectingNotifications, isFalse);
     });
 
+    test('a reconnect refused for an expired enrollment ends the same way',
+        () async {
+      var authCount = 0;
+      final atLookup = build(authenticator: (_) async {
+        if (++authCount > 1) {
+          throw UnAuthenticatedException('Failed connecting to @alice. '
+              'error:AT0028:enrollment_id: e1 is expired or invalid');
+        }
+        return true;
+      })
+        ..heartbeatInterval = const Duration(hours: 1);
+      await atLookup.startNotifications();
+      atLookup.notifications.listen((_) {}, onError: (_) {});
+
+      await socket.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 3500));
+
+      expect(authCount, 2);
+      expect(atLookup.isNotifying, isFalse);
+    });
+
     test('a reconnect that fails for any other reason keeps trying', () async {
       var authCount = 0;
       final atLookup = build(authenticator: (_) async {

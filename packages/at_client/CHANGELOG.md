@@ -11,11 +11,17 @@
 - fix: a `sync()` request that carries `onDone` and fails is answered once;
   it used to stay queued, and the same round was run again for it on every
   microtask, firing `onError` each time.
-- fix: a client whose credentials the atServer refuses - the enrollment
-  revoked, expired, denied or not yet approved, or the authentication
-  rejected - stops retrying. The notification listener neither restarts nor
-  reconnects and reports the refusal on `client.connection`, and a secret
-  request or push to a namespace's members stops at the first refusal.
+- fix: a client whose enrollment the atServer answers is denied, pending,
+  revoked or expired stops retrying. The notification listener neither
+  reconnects nor retries its start and reports the refusal on
+  `client.connection`, though a later `startListening()` starts it again;
+  the sync service schedules no further round until it is restarted,
+  answering a `sync()` in the meantime as a failure; and a secret request or
+  push to a namespace's members stops at the first refusal. An
+  authentication that failed on the way to the atServer is still retried.
+  `credentialRefusalStateIn(error)` is the refused state such an answer
+  carries, for a retry loop; `classifyConnectionFailure` stays the
+  classifier for `open`.
 - fix: a sync round stopped while it applies a push batch's response
   abandons the rest of the batch, rather than logging each remaining entry
   at severe and carrying on against storage the stop may be closing.

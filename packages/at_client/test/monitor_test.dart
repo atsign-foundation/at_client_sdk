@@ -218,6 +218,41 @@ void main() {
       expect(connection.current.cause, AtConnectionCause.revoked);
     });
 
+    test('a refused monitor can be started again', () async {
+      muxable.startError = revoked;
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(connection.current.isRefused, isTrue);
+
+      // The enrollment is approved after all, or the app switched keys.
+      muxable.startError = null;
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(muxable.startCalls, 2,
+          reason: 'a refusal ends the retries, not the monitor: an app that '
+              'asks again after the refusal is answered');
+      expect(monitor.currentState, NotificationListenerState.listening);
+    });
+
+    test('a start that failed for no reason the atServer named is retried',
+        () async {
+      muxable.startError = UnAuthenticatedException(
+          'Failed connecting to @alice. The authenticator reported failure');
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(muxable.startCalls, 1);
+
+      muxable.startError = null;
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(muxable.startCalls, greaterThan(1),
+          reason: 'only an answer from the atServer ends the retries; an '
+              'authentication that failed on the way there may succeed next '
+              'time');
+      expect(connection.current.isRefused, isFalse);
+    }, timeout: Timeout(Duration(seconds: 15)));
+
     test('is not told offline when the connection drops', () async {
       monitor.start();
       await Future.delayed(const Duration(milliseconds: 20));

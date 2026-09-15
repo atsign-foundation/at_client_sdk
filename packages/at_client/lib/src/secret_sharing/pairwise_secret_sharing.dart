@@ -7,7 +7,8 @@ import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, PqOpenException;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
     show pqOpenFromBase64, pqSealToBase64;
 import 'package:at_client/src/lifecycle/at_connection.dart'
-    show AtClientStoppedException, classifyConnectionFailure;
+    show AtClientStoppedException;
+import 'package:at_lookup/at_lookup.dart' show credentialRefusalIn;
 import 'package:at_client/src/client/request_options.dart'
     show DeleteRequestOptions, GetRequestOptions, PutRequestOptions;
 import 'package:at_client/src/response/at_notification.dart'
@@ -625,7 +626,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// credentials, or this client having been stopped.
   static String? _fanOutEndedBy(Object error) {
     if (error is AtClientStoppedException) return 'this client was stopped';
-    if (classifyConnectionFailure(error)?.isRefused ?? false) {
+    if (credentialRefusalIn(error) != null) {
       return 'the atServer refused this client\'s credentials';
     }
     return null;

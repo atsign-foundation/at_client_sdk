@@ -1048,6 +1048,16 @@ void main() {
               'fails the same way');
     });
 
+    test('an authentication failure naming no refusal still reaches the rest',
+        () async {
+      failEnvelopeWritesWith(UnAuthenticatedException(
+          'Failed connecting to @alice. The authenticator reported failure'));
+      expect(await sharerA.requestSecretsFromNamespace('myapp'), 0);
+      expect(envelopeWrites, 2,
+          reason: 'the atServer named no enrollment state, so the next '
+              'member may well be reachable');
+    });
+
     test('a failure that is not a refusal still reaches the rest', () async {
       failEnvelopeWritesWith(transient);
       expect(await sharerA.requestSecretsFromNamespace('myapp'), 0);
