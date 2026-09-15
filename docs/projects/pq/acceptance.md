@@ -530,6 +530,12 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      approver → enrollee precisely so that no atSign-level KEM has to exist; the
      approver is encapsulating to a key that arrived unauthenticated, which is
      trust-on-first-use gated by a person approving a named device.
+     `alice1` conveys it **before** approving, and without checking the package
+     against E2's `_apsk`: the approval encrypts E2's keys under it and cannot
+     be repeated, so a stop between the two would otherwise leave E2 approved
+     with a key nothing holds. The `_apsk` would come from the same atServer
+     that serves the package and receives what the key encrypts, so the check
+     adds nothing for this key.
   3. `alice1` approves E2; the server records `alice2`'s single `apkamPublicKey` +
      `signingAlgo` + key package + metadata for E2, and populates E2's `_apsk` from
      the enrollment record, **unwrapped** — no signed envelope around it, because apps
@@ -550,6 +556,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
        `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice`
        (`shareAllSecretsWithEnrollment(E2, approvedNamespaces)`).
   5. `alice2` consumes the envelope + bundle, decapsulates, verifies, persists AtKeys.
+     A retried or raced approval leaves more than one conveyed `apkamSymmetricKey`,
+     so `alice2` tries each and keeps only the one that decrypts the keys its
+     approval encrypted.
   6. `alice2` verifies PQ APKAM auth.
 - **Then:**
   - Nothing in the conveyance path is RSA-wrapped — the `apkamSymmetricKey` rides the

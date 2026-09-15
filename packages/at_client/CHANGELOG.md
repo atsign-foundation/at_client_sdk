@@ -1,5 +1,15 @@
 ## 3.15.0-rc1
 
+- fix: approving an enrollment that asks its approver to mint the symmetric
+  key conveys that key before `enroll:approve`, not after. A stop between
+  the two used to leave the enrollment approved with its keys encrypted under
+  a key nothing held, and the atServer refuses a second approval. The key is
+  sealed without checking the advertised package against `_apsk`, which the
+  atServer publishes only at approval. `enrollmentApkamSymmetricKeyResolver`
+  now offers every conveyed key, and the enrollee keeps the one that decrypts
+  its keys, since a retried or raced approval leaves more than one.
+  `EnrollmentConveyance` gains `conveyMintedApkamSymmetricKey`, and
+  `conveySecretsTo` no longer takes `mintedApkamSymmetricKey`.
 - fix: each start of a fully privileged client publishes a signing root it
   filed and a stop kept from publishing, and a root the record does not
   publish signs nothing until it is. Only activation and a self-retrofit

@@ -35,14 +35,15 @@ const String enrollmentApkamSymmetricKeySecretName =
 
 final AtSignLogger _logger = AtSignLogger('EnrollmentSymmetricKey');
 
-/// Collects the `apkamSymmetricKey` an approver encapsulated to this
-/// enrollment's key package.
+/// Offers each `apkamSymmetricKey` an approver encapsulated to this
+/// enrollment's key package, once, as it is found.
 ///
 /// Pass the result to `AtEnrollmentRequest.apkamSymmetricKeyResolver` whenever
 /// the request uses `EnrollmentKeyExchangeMode.pq`. It runs inside
 /// `waitForApproval`, once PKAM authentication has succeeded — the earliest
-/// moment this enrollment can read anything, and the earliest the approver
-/// could have written it.
+/// moment this enrollment can read anything. An approval that was retried or
+/// raced leaves more than one key, and the handshake keeps the one that
+/// decrypts what the approval encrypted.
 ///
 /// Built on [AtLookUp] rather than an `AtClient` because a client is
 /// constructed *from* the keys this call is fetching the last piece of.
@@ -54,36 +55,41 @@ final AtSignLogger _logger = AtSignLogger('EnrollmentSymmetricKey');
 /// the signature, anyone who read the public key package could seal a symmetric
 /// key of their choosing to this enrollment.
 @experimental
-Future<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
+Stream<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
   String atSign, {
   Duration timeout = const Duration(seconds: 30),
   Duration pollInterval = const Duration(seconds: 2),
 }) {
-  return (AtKeys keys, AtLookUp atLookUp) async {
+  return (AtKeys keys, AtLookUp atLookUp) async* {
     final (kpid, secretKey, keyAlgo) = await _keyPackageHalves(keys);
 
-    // NOTE: [timeout] is headroom over a mechanical race inside the approver's
-    // single approve() call — the atServer marks the enrollment approved, which
-    // is what lets PKAM start succeeding, a moment before at_client finishes
-    // writing the envelope. It is not a latency budget, and it never waits for
-    // the human: the approval has already happened by the time this runs.
+    // NOTE: [timeout] rides out scans and lookups that fail transiently, and
+    // never waits for the human. The approver writes the envelope before it
+    // approves, so by the time PKAM succeeds the key is already there to find.
     final DateTime deadline = DateTime.now().toUtc().add(timeout);
+    final offered = <String>{};
     while (true) {
       for (final envelopeKey in await _envelopeKeys(atLookUp, kpid)) {
+        if (offered.contains(envelopeKey)) continue;
         final String? value = await _openIfSymmetricKey(
             atLookUp, envelopeKey, atSign, kpid, secretKey, keyAlgo);
         if (value != null) {
-          _logger.info('Collected the conveyed apkamSymmetricKey from '
+          offered.add(envelopeKey);
+          _logger.info('Collected a conveyed apkamSymmetricKey from '
               '$envelopeKey');
-          return value;
+          yield value;
         }
       }
       if (DateTime.now().toUtc().isAfter(deadline)) {
-        throw StateError(
-            'No conveyed apkamSymmetricKey arrived for key package $kpid '
-            'within $timeout. The enrollment is approved but cannot decrypt '
-            'anything without it — the approver is running a client that does '
-            'not convey, or the envelope did not reach this atServer.');
+        throw StateError(offered.isEmpty
+            ? 'No conveyed apkamSymmetricKey arrived for key package $kpid '
+                'within $timeout. The enrollment is approved but cannot '
+                'decrypt anything without it — the approver is running a '
+                'client that does not convey, or the envelope did not reach '
+                'this atServer.'
+            : 'None of the ${offered.length} apkamSymmetricKey(s) conveyed to '
+                'key package $kpid within $timeout decrypts what this '
+                'enrollment was approved with.');
       }
       await Future<void>.delayed(pollInterval);
     }

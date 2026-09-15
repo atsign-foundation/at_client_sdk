@@ -1318,6 +1318,15 @@ tail. There is no atSign-level encapsulation target — `public:pq_signing_root@
 signs only ([§1.4](#14-the-nskey-and-the-signing-root)). **No server change** beyond
 ferrying the request tail.
 
+The approver seals the key **before** `enroll:approve`, and does not check the package
+against the enrollee's `_apsk` first. The approval encrypts the enrollee's keys under the
+key and the atServer refuses a second one, so a stop between the two used to leave an
+approved enrollment whose key nothing held. The `_apsk` would come from the same atServer
+that serves the package and receives what the key encrypts, so for this key the check
+protects nothing. Links, the root private, nskey privates and app secrets still go after
+approval, checked. A retried or raced approval leaves several conveyed keys, and the
+enrollee's handshake keeps the first that decrypts both keys its approval encrypted.
+
 ### 3.1 What the standards check established
 
 Established by a full check against original sources on 2026-08-06, and recorded

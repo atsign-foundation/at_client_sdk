@@ -242,30 +242,9 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
   String? apkamId,
 }) async {
   if (advertised == null) return (null, KeyPackageStatus.absent);
-  if (advertised is! Map) {
-    _logger.severe('enrollment $enrollmentId advertised a key package that '
-        'is not a map; not sealing to it');
-    return (null, KeyPackageStatus.rejected);
-  }
-  final SignedEnvelope envelope;
-  try {
-    envelope = SignedEnvelope.fromJson(advertised);
-  } on AtSigningVerificationException catch (e) {
-    _logger.severe('enrollment $enrollmentId advertised a key package that is '
-        'not a signed envelope; not sealing to it: $e');
-    return (null, KeyPackageStatus.rejected);
-  }
-
-  // NOTE: a package naming no signer is not suspicious — one riding
-  // `enroll:request` is signed before the atServer has assigned an id — so
-  // only a disagreement is refused, which would be one enrollment offering a
-  // key package as another's.
-  final String? claimedSigner = envelope.signerEnrollmentId;
-  if (claimedSigner != null && claimedSigner != enrollmentId) {
-    _logger.severe('enrollment $enrollmentId advertised a key package signed '
-        'by $claimedSigner; not sealing to it');
-    return (null, KeyPackageStatus.rejected);
-  }
+  final envelope =
+      _advertisedEnvelope(advertised, enrollmentId: enrollmentId, report: true);
+  if (envelope == null) return (null, KeyPackageStatus.rejected);
 
   try {
     await signer.verifyEnvelopeSignature(envelope,
@@ -299,6 +278,62 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
         'this version cannot parse: $e');
     return (null, KeyPackageStatus.unsupported);
   }
+}
+
+/// The key package inside [advertised] without checking its signature, or
+/// null when there is none this version can read.
+///
+/// Anything the package receives this way is only as trustworthy as the
+/// atServer that served it; [verifyAdvertisedKeyPackage] is the checked read.
+@experimental
+KeyPackage? readAdvertisedKeyPackage(Object? advertised,
+    {required String enrollmentId}) {
+  if (advertised == null) return null;
+  final envelope = _advertisedEnvelope(advertised,
+      enrollmentId: enrollmentId, report: false);
+  if (envelope == null) return null;
+  try {
+    return KeyPackage.fromPayload(envelope.payload, enrollmentId: enrollmentId);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// The signed envelope [advertised] carries for [enrollmentId], or null when
+/// it is not one; [report] logs why.
+SignedEnvelope? _advertisedEnvelope(Object advertised,
+    {required String enrollmentId, required bool report}) {
+  if (advertised is! Map) {
+    if (report) {
+      _logger.severe('enrollment $enrollmentId advertised a key package that '
+          'is not a map; not sealing to it');
+    }
+    return null;
+  }
+  final SignedEnvelope envelope;
+  try {
+    envelope = SignedEnvelope.fromJson(advertised);
+  } on AtSigningVerificationException catch (e) {
+    if (report) {
+      _logger.severe('enrollment $enrollmentId advertised a key package that '
+          'is not a signed envelope; not sealing to it: $e');
+    }
+    return null;
+  }
+
+  // NOTE: a package naming no signer is not suspicious — one riding
+  // `enroll:request` is signed before the atServer has assigned an id — so
+  // only a disagreement is refused, which would be one enrollment offering a
+  // key package as another's.
+  final String? claimedSigner = envelope.signerEnrollmentId;
+  if (claimedSigner != null && claimedSigner != enrollmentId) {
+    if (report) {
+      _logger.severe('enrollment $enrollmentId advertised a key package '
+          'signed by $claimedSigner; not sealing to it');
+    }
+    return null;
+  }
+  return envelope;
 }
 
 /// Strips the at-protocol `data:` prefix and JSON-decodes a verb response.

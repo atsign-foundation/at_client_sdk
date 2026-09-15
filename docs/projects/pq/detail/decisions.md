@@ -2146,11 +2146,16 @@ than exercised in both states by a unit test.
 
 **The poll timeout is not a latency budget, and sizing it as one was a mistake worth
 recording.** It never waits for the human — by the time the resolver runs, the PKAM loop
-has already succeeded, so the approval has happened, however long that took. What is left
-is a mechanical race inside the approver's single `approve()` call: the atServer marks the
-enrollment approved, which is what lets PKAM start succeeding, a moment before at_client
-finishes writing the envelope. 30s is headroom over one or two round trips. If nothing has
-arrived by then the approver did not convey, and waiting longer recovers nothing.
+has already succeeded, so the approval has happened, however long that took. Since
+2026-09-15 the approver conveys the minted key before `enroll:approve`, so the envelope is
+already written when PKAM first succeeds, and 30s rides out scans and lookups that fail
+transiently. If nothing has arrived by then the approver did not convey, and waiting longer
+recovers nothing. This said the approver conveyed after approving, and that the 30s was
+headroom over the race between the atServer marking the enrollment approved and at_client
+finishing the envelope; a stop in that window left the enrollment approved with a key
+nothing held, and the atServer refuses a second approval. The enrollee now tries every
+conveyed key and keeps the one that decrypts what its approval encrypted, because a retried
+or raced approval leaves more than one.
 
 **Still owed:** the functional rails point at a locally built image and must be reverted
 before any client PR, and the new test cannot pass against `vip` until the atServer

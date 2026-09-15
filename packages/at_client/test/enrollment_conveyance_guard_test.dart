@@ -153,7 +153,10 @@ void main() {
               KeyPackageStatus.unverified)));
       expect(fetches(), EnvelopeEnrollmentConveyance.verifyAttempts,
           reason: 'every attempt was spent before the check was given up');
-      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty);
+      expect(
+          remoteData.keys.where((k) => k.contains('.__ssenv.')), hasLength(1),
+          reason: 'only the minted symmetric key, conveyed before the '
+              'approval; nothing that waits on the check went');
     });
   });
 
@@ -255,9 +258,9 @@ void main() {
         approveWith(approver),
         throwsA(isA<AtEnrollmentException>()
             .having((e) => e.message, 'message', contains('register()'))),
-        reason: 'the approver has just approved a device that cannot receive '
-            'its key, so the error has to name the fix rather than surface a '
-            'Bad state from inside the substrate');
+        reason: 'the approver cannot convey the key the approval would '
+            'encrypt under, so the error has to name the fix rather than '
+            'surface a Bad state from inside the substrate');
   });
 
   test('an approver that has registered conveys the key', () async {
