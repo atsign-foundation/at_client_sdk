@@ -56,6 +56,7 @@ AtAuthenticator authenticatorFor(
   String atSign, {
   String? cramSecret,
   String? enrollmentId,
+  // ignore: deprecated_member_use
   AtChops? chops,
   SigningAlgoType? signingAlgo,
   Map<String, dynamic> clientConfig = const {},
@@ -95,6 +96,7 @@ AtAuthenticator authenticatorFor(
 /// caller nor the mismatch.
 AtAuthenticator authenticatorForChops(
   String atSign,
+  // ignore: deprecated_member_use
   AtChops chops, {
   required SigningAlgoType signingAlgo,
   required HashingAlgoType hashingAlgo,
@@ -112,9 +114,11 @@ AtAuthenticator authenticatorForChops(
       fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
       fromResponse = validatedFromChallenge(fromResponse, atSign);
 
+      // ignore: deprecated_member_use
       final signingResult = chops.sign(AtSigningInput(fromResponse)
         ..signingAlgoType = signingAlgo
         ..hashingAlgoType = hashingAlgo
+        // ignore: deprecated_member_use
         ..signingMode = AtSigningMode.pkam);
 
       final pkamResponse = await executor.sendSync((PkamVerbBuilder()
@@ -208,6 +212,7 @@ Future<bool> _pkam(
   AtKeys keys,
   String? enrollmentId,
   Map<String, dynamic> clientConfig,
+  // ignore: deprecated_member_use
   AtChops? injectedChops,
   SigningAlgoType? injectedAlgo,
 ) async {
@@ -215,6 +220,7 @@ Future<bool> _pkam(
   // at_lookup signs with by default - so a legacy enrollment is rsa2048.
   // Exactly one of these answers: a signer the caller brought, or the
   // keypair this keyfile holds.
+  // ignore: deprecated_member_use
   final AtChops? signer;
   ({SigningAlgoType algorithm, String publicKey, String privateKey})? keyPair;
   final SigningAlgoType signingAlgo;
@@ -268,9 +274,11 @@ Future<bool> _pkam(
   final String signature;
   if (signer != null) {
     signature = signer
+        // ignore: deprecated_member_use
         .sign(AtSigningInput(fromResponse)
           ..signingAlgoType = signingAlgo
           ..hashingAlgoType = hashingAlgo
+          // ignore: deprecated_member_use
           ..signingMode = AtSigningMode.pkam)
         .result;
   } else if (keyPair != null) {

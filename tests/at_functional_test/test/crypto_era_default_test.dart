@@ -5,7 +5,6 @@
 @Tags(['pq'])
 library;
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';

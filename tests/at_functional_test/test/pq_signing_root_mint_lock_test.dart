@@ -6,7 +6,6 @@ library;
 
 import 'dart:convert';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show pqSigningRootMintLockKey, pqSigningRootMintLockRecordName;
@@ -152,18 +151,14 @@ void main() {
     // working on that one and nothing else would say so.
     final ns = 'rot${DateTime.now().microsecondsSinceEpoch}.$namespace';
     // Nothing releases a mint lock but its ttl, so the mint below holds it and
-    // the rotation that follows is refused until it lapses. Shortened from the
-    // production `mintLockTtl`, which would make this test wait two minutes.
-    const lockTtl = Duration(seconds: 1);
-    final ring = PublishedNskeyKeyRing(atClient, lockTtl: lockTtl);
+    // the rotation that follows is refused until it lapses.
+    final ring = PublishedNskeyKeyRing(atClient, lockTtl: liveMintLockTtl);
 
     // Seed, then rotate: the second write goes through the rotation lever
     // rather than a second mint, so what proves the record mutable is the
     // operation that actually depends on it being mutable.
     final first = await ring.mintAndPublish(ns);
-    // A second past the ttl: the atServer starts counting when it stores the
-    // record, after this client sent it.
-    await Future.delayed(lockTtl + const Duration(milliseconds: 500));
+    await waitOutMintLock();
     final second = (await ring.rotate(ns)).rotated;
 
     expect(second.nskeyKid, isNot(first.nskeyKid),

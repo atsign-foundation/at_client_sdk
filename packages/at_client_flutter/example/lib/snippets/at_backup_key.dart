@@ -62,7 +62,7 @@ class BackupKeyWidget extends StatelessWidget {
     );
   }
 
-  _showAlertDialog(BuildContext context) {
+  void _showAlertDialog(BuildContext context) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -94,7 +94,7 @@ class BackupKeyWidget extends StatelessWidget {
     );
   }
 
-  onBackup(BuildContext context) async {
+  Future<bool?> onBackup(BuildContext context) async {
     try {
       var atKeys = await KeychainAtKeysIo().read(atsign);
       // A backup file is a `.atKeys` document, so the keyfile store writes
@@ -215,7 +215,7 @@ class BackupKeyWidget extends StatelessWidget {
         final path = await FilePicker.saveFile(
           fileName: '$atsign${Strings.keyFileName}',
         );
-        if (path == null) return;
+        if (path == null) return null;
         final file = XFile(tempFilePath);
         await file.saveTo(path);
         if (context.mounted) {
@@ -227,6 +227,7 @@ class BackupKeyWidget extends StatelessWidget {
     } on Error catch (err, s) {
       _logger.severe('BackingUp keys throws $err error \n ST: $s\n');
     }
+    return null;
   }
 
   Future<String> _generateFile(String document) async {

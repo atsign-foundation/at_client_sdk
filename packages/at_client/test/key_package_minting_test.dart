@@ -13,13 +13,14 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart'
     show EnrollmentUpdateRequest, EnrollmentUpdater;
+import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
+    show EnrollmentDirectory, KeyPackageStatus, NamespaceMember;
 import 'package:at_client/src/secret_sharing/key_package.dart'
     show KeyPackage, PackageKey;
 import 'package:at_client/src/secret_sharing/key_package_minting.dart'
     show KeyPackageMinting;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope, verifyEnvelope;
-import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -28,6 +29,24 @@ import 'test_utils/test_keypairs.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 
 class MockAtClient extends Mock implements AtClient {}
+
+/// Answers `listForNamespace` from [members], or throws [failure].
+class _Directory implements EnrollmentDirectory {
+  List<NamespaceMember> members = [];
+  Object? failure;
+  final asked = <String>[];
+
+  @override
+  Future<List<NamespaceMember>> listForNamespace(String namespace,
+      {Set<String> excludeEnrollmentIds = const {}}) async {
+    asked.add(namespace);
+    if (failure != null) throw failure!;
+    return members;
+  }
+
+  @override
+  Future<DateTime?> lastRevokedAt(String namespace) async => null;
+}
 
 class MockEnrollmentUpdater extends Mock implements EnrollmentUpdater {}
 
@@ -404,6 +423,133 @@ void main() {
               'strand what was already sealed to the key it replaces');
       expect(package.keys.firstWhere((k) => k.kid == outgoing).status,
           KeyEntryStatus.retired);
+    });
+  });
+
+  group('a published package that no longer verifies', () {
+    late _Directory directory;
+
+    KeyPackageMinting checking() =>
+        KeyPackageMinting(atClient, updater: enrollment, directory: directory);
+
+    NamespaceMember member(String id, KeyPackageStatus status) =>
+        NamespaceMember(
+            enrollmentId: id, access: 'rw', keyPackageStatus: status);
+
+    setUp(() {
+      directory = _Directory();
+      when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing])
+        ..namespace = 'buzz');
+    });
+
+    test('is signed again with the same keys, under the key _apsk names',
+        () async {
+      final kpid = await fileHeldKey(SecretSharingAlgos.xWing);
+      directory.members = [member(enrollmentId, KeyPackageStatus.rejected)];
+
+      final reconciled = await checking().reconcileKeyPackage();
+
+      expect(directory.asked, ['buzz'],
+          reason: 'read through the client\'s own namespace, where its '
+              'package is registered');
+      expect(updates, hasLength(1),
+          reason: 'a package every peer refuses leaves the enrollment '
+              'unreachable, so it is republished rather than left');
+      expect((await advertised()).keys.map((k) => k.kid), [kpid],
+          reason: 'the same key, now under a signature that verifies — '
+              'advertised() throws unless it does');
+      expect(await heldKpids(), {kpid}, reason: 'nothing is minted');
+      expect(reconciled.minted, isEmpty);
+      expect(reconciled.retired, isEmpty);
+    });
+
+    test('control: a package that verifies is left alone', () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      directory.members = [member(enrollmentId, KeyPackageStatus.present)];
+
+      await checking().reconcileKeyPackage();
+
+      expect(directory.asked, ['buzz']);
+      expect(updates, isEmpty);
+    });
+
+    test('a package that could not be checked is left alone', () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      directory.members = [member(enrollmentId, KeyPackageStatus.unverified)];
+
+      await checking().reconcileKeyPackage();
+
+      expect(updates, isEmpty,
+          reason: 'unverified means its _apsk could not be fetched, which '
+              'says nothing about the signature');
+    });
+
+    test('another enrollment\'s rejected package is not this one\'s to sign',
+        () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      directory.members = [
+        member('someone-else', KeyPackageStatus.rejected),
+        member(enrollmentId, KeyPackageStatus.present),
+      ];
+
+      await checking().reconcileKeyPackage();
+
+      expect(updates, isEmpty);
+    });
+
+    test('a failed read does not fail the reconcile', () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      directory.failure = StateError('the atServer did not answer');
+
+      final reconciled = await checking().reconcileKeyPackage();
+
+      expect(updates, isEmpty);
+      expect(reconciled.minted, isEmpty);
+    });
+
+    test(
+        'a client naming no namespace checks through one its enrollment is '
+        'granted', () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      configure(const [SecretSharingAlgos.xWing]);
+      final enrollments = MockEnrollmentService();
+      when(() => atClient.enrollmentService).thenReturn(enrollments);
+      when(() => enrollments.fetchEnrollmentRequests(
+              enrollmentListParams: any(named: 'enrollmentListParams')))
+          .thenAnswer((_) async => [
+                Enrollment()
+                  ..enrollmentId = enrollmentId
+                  ..namespace = {'__manage': 'rw', 'wavi': 'rw'}
+              ]);
+      directory.members = [member(enrollmentId, KeyPackageStatus.rejected)];
+
+      await checking().reconcileKeyPackage();
+
+      expect(directory.asked, ['wavi'],
+          reason: 'a package is listed under every namespace its enrollment '
+              'may read, and `__manage` is not a namespace data lives in');
+      expect(updates, hasLength(1));
+    });
+
+    test('a client with no namespace anywhere does not check', () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      configure(const [SecretSharingAlgos.xWing]);
+      final enrollments = MockEnrollmentService();
+      when(() => atClient.enrollmentService).thenReturn(enrollments);
+      when(() => enrollments.fetchEnrollmentRequests(
+              enrollmentListParams: any(named: 'enrollmentListParams')))
+          .thenAnswer((_) async => [
+                Enrollment()
+                  ..enrollmentId = enrollmentId
+                  ..namespace = {'__manage': 'rw'}
+              ]);
+      directory.members = [member(enrollmentId, KeyPackageStatus.rejected)];
+
+      await checking().reconcileKeyPackage();
+
+      expect(directory.asked, isEmpty);
+      expect(updates, isEmpty);
     });
   });
 }

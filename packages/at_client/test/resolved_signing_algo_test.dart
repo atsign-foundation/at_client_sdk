@@ -1,4 +1,3 @@
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart';
 import 'package:mocktail/mocktail.dart';

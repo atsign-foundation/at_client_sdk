@@ -9,13 +9,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/at_auth_io.dart';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
-import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart';
-import 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/enrollment_approval.dart';

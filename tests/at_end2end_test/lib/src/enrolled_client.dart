@@ -5,8 +5,6 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
 import 'package:at_end2end_test/src/enrollment_approval.dart';
 import 'package:uuid/uuid.dart';
 

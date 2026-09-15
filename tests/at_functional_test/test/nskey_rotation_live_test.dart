@@ -10,10 +10,8 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show ckConveyanceKey;
-import 'package:at_client/src/crypto/nskey/nskey_rotation.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
@@ -52,28 +50,6 @@ void main() {
   // an (appName, deviceName) pair that already has one approved, so fixed
   // names collide on the second run against the same virtualenv.
   final runId = DateTime.now().microsecondsSinceEpoch;
-
-  /// The mint lock's ttl for these tests, and it is not a speed-up.
-  ///
-  /// Nothing releases a mint lock but expiry, so the ttl is a **cooldown**:
-  /// after a cold-start mint takes the lock, a rotation of the same namespace
-  /// is refused until it lapses — long enough that no mint here races its own
-  /// expiry, short enough to wait out.
-  ///
-  /// The floor is the winner's own budget: a holder carries the matching
-  /// `MintLease` and abandons rather than publishing once the ttl has elapsed,
-  /// so this must outlast a mint. A mint or rotation against a local
-  /// virtualenv measured at most 35ms, which this leaves ample room over.
-  const shortLockTtl = Duration(seconds: 1);
-
-  /// Waits until the lock a mint just took has expired.
-  ///
-  /// Past the ttl rather than exactly it, because the atServer starts counting
-  /// when it stores the record — after this client sent it — so waiting the
-  /// ttl alone can land a moment early. That gap measured at most ~100ms
-  /// against a local virtualenv.
-  Future<void> pastTheCooldown() =>
-      Future.delayed(shortLockTtl + const Duration(milliseconds: 500));
 
   Future<EnrolledClient> enrol(String device,
           {AtKeysIo? atKeysIo, Map<String, String>? namespaces}) =>
@@ -118,7 +94,7 @@ void main() {
       sharing: sharing,
       filing: filing,
       ring: PublishedNskeyKeyRing(enrolled.client,
-          privateFiling: filing, lockTtl: shortLockTtl),
+          privateFiling: filing, lockTtl: liveMintLockTtl),
     );
   }
 
@@ -197,7 +173,7 @@ void main() {
       sharing: rotator.sharing,
     );
 
-    await pastTheCooldown();
+    await waitOutMintLock();
 
     final outcome = await rotation.rotateNamespaceKey(namespace,
         excludeEnrollmentIds: {excluded.enrolled.enrollmentId});
@@ -304,7 +280,7 @@ void main() {
 
     // The control: the same call is accepted once the cooldown has lapsed, so
     // the refusal above is the lock and not an enrollment that cannot rotate.
-    await pastTheCooldown();
+    await waitOutMintLock();
     final rotated = (await owner.ring.rotate(ns)).rotated;
     expect(rotated.nskeyKid, isNot(minted.nskeyKid));
   });
@@ -544,7 +520,7 @@ void main() {
     // NOTE: revokeEnrollmentAndRotate revokes FIRST, so a rotation refused by
     // the cooldown would leave the enrollment cut off but still holding the
     // live generation.
-    await pastTheCooldown();
+    await waitOutMintLock();
 
     final outcomes = await NskeyRotation(
       atClient: owner.enrolled.client,
@@ -591,7 +567,7 @@ void main() {
     final target = await holder('bck-target', namespaces: {ns: 'rw'});
 
     final before = await owner.ring.mintAndPublish(ns);
-    await pastTheCooldown();
+    await waitOutMintLock();
 
     // Revoked and NOT rotated: the half-finished state, produced by driving the
     // revoke alone rather than through the lever that composes the two.
@@ -617,7 +593,7 @@ void main() {
 
     // The control: the rotation took a fresh server stamp, so the same
     // revocation is no longer later than it and the next start rotates nothing.
-    await pastTheCooldown();
+    await waitOutMintLock();
     expect(await seeding.rotateIfRevoked(atSign, ns), isFalse);
     expect((await owner.ring.publishedAdvertisement(atSign, ns))?.nskeyKid,
         after?.nskeyKid);

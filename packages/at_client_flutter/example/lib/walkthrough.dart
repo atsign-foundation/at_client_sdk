@@ -78,7 +78,8 @@ Future<void> onboard(BuildContext context) async {
     }
 
     _logger.info('Step 4: Making the client current');
-    await _adopt(context, client);
+    _adopt(client);
+    if (context.mounted) _goHome(context);
   });
 }
 
@@ -103,6 +104,7 @@ Future<void> authenticateWithKeychain(BuildContext context) async {
       return;
     }
 
+    if (!context.mounted) return;
     _logger.info('Step 2: Showing AtSignSelectionDialog with existing atSigns');
     final selection = await AtSignSelectionDialog.show(
       context,
@@ -131,7 +133,8 @@ Future<void> authenticateWithKeychain(BuildContext context) async {
     }
 
     _logger.info('Step 4: Making the client current');
-    await _adopt(context, client);
+    _adopt(client);
+    if (context.mounted) _goHome(context);
   });
 }
 
@@ -170,7 +173,8 @@ Future<void> authenticateWithFile(BuildContext context) async {
     }
 
     _logger.info('Step 4: Making the client current');
-    await _adopt(context, client);
+    _adopt(client);
+    if (context.mounted) _goHome(context);
   });
 }
 
@@ -210,7 +214,8 @@ Future<void> authenticateWithApkam(BuildContext context) async {
     }
 
     _logger.info('Step 3: Making the client current');
-    await _adopt(context, client);
+    _adopt(client);
+    if (context.mounted) _goHome(context);
   });
 }
 
@@ -307,21 +312,19 @@ Future<HiveAtClientStorage> _storage(String atSign) async {
 }
 
 /// Every dialog hands back a client the app owns. This app keeps one current
-/// client in [AtClientManager], since its pages read it from there, then
-/// navigates to the home page.
-Future<void> _adopt(BuildContext context, AtClient client) async {
+/// client in [AtClientManager], since its pages read it from there, whether or
+/// not the page that asked for it is still showing.
+void _adopt(AtClient client) {
   _logger.info('Making the client for ${client.getCurrentAtSign()} current');
   AtClientManager.getInstance().use(client);
+}
 
-  if (context.mounted) {
-    _logger.info('Navigating to HomePage');
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const HomePage()),
-    );
-  } else {
-    _logger.warning('Context not mounted, skipping navigation');
-  }
+void _goHome(BuildContext context) {
+  _logger.info('Navigating to HomePage');
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(builder: (context) => const HomePage()),
+  );
 }
 
 /// remove all atsigns from the keychain
@@ -350,6 +353,7 @@ Future<void> removeAtsign(BuildContext context) async {
       return;
     }
 
+    if (!context.mounted) return;
     String? atsign = await showDialog<String>(
       context: context,
       builder: (BuildContext context) {

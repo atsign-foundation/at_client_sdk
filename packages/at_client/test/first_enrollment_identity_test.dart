@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/enroll/pq_native_onboard.dart'
     show firstEnrollmentAppName, firstEnrollmentDeviceName;
 import 'package:at_auth/src/auth/models/at_auth_requests.dart'

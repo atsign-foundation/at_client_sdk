@@ -154,7 +154,7 @@ void main() {
 
     // Reaching here is itself an assertion: servedPackage throws if the
     // amended package no longer verifies against this enrollment's _apsk.
-  });
+  }, timeout: Timeout(Duration(minutes: 4)));
 
   test('UC-A2.6 · only the enrollment itself may amend its metadata', () async {
     final mine = await enrol('a26-mine', const [SecretSharingAlgos.xWing]);
@@ -213,7 +213,7 @@ void main() {
             enrollmentId: mine.enrollmentId, metadata: amendment()),
         lookupOf(mine));
     expect(ok.enrollmentId, mine.enrollmentId);
-  });
+  }, timeout: Timeout(Duration(minutes: 4)));
 
   test('UC-A2.5 · setting keyPackage leaves a sibling metadata key alone',
       () async {
@@ -267,7 +267,7 @@ void main() {
     expect(metadata['keyPackage'], isNotNull,
         reason: 'and the key it DID name must have landed, or this row would '
             'pass for a write that did nothing at all');
-  });
+  }, timeout: Timeout(Duration(minutes: 4)));
 
   /// Re-opens [enrollmentId] as a fresh client whose preference advertises
   /// [algorithms], which is how an existing enrollment amends its package: the

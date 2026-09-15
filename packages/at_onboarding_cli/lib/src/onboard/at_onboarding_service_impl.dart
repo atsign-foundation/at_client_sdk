@@ -1,4 +1,3 @@
-import 'package:at_auth/at_auth_io.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';

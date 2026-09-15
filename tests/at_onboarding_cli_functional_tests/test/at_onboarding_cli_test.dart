@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/at_auth_io.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup.dart';
@@ -25,7 +24,7 @@ void main() {
 
   // These group of tests run on docker container with only cram key available on secondary
   // Perform cram auth and update keys manually.
-  Future<void> _createKeys(String atSign) async {
+  Future<void> createKeys(String atSign) async {
     if (keysCreatedMap.containsKey(atSign)) {
       return;
     }
@@ -40,7 +39,7 @@ void main() {
     var response = await atLookup.executeCommand(command, auth: true);
     expect(response, 'data:-1');
     command =
-        'update:public:publickey${atSign} ${at_demos.encryptionPublicKeyMap[atSign]}\n';
+        'update:public:publickey$atSign ${at_demos.encryptionPublicKeyMap[atSign]}\n';
     await atLookup.executeCommand(command, auth: true);
     keysCreatedMap[atSign] = true;
     await atLookup.close();
@@ -57,7 +56,7 @@ void main() {
     test('A test to verify authentication is successful with .atKeys file',
         () async {
       String atSign = '@alice🛠';
-      await _createKeys(atSign);
+      await createKeys(atSign);
       AtOnboardingPreference preference =
           getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
@@ -71,7 +70,7 @@ void main() {
         'A test to verify update and llookup verbs with authenticated atLookup instance',
         () async {
       String atSign = '@alice🛠';
-      await _createKeys(atSign);
+      await createKeys(atSign);
       AtOnboardingPreference preference =
           getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
@@ -91,14 +90,14 @@ void main() {
         'A test to authenticate and atSign and invoke AtClient put and get methods',
         () async {
       String atSign = '@eve🛠';
-      await _createKeys(atSign);
+      await createKeys(atSign);
       AtOnboardingPreference preference =
           getPreferences(atSign, posture: PqPosture.legacy);
       await generateAtKeysFile(atSign, preference.atKeysFilePath!);
       AtOnboardingService onboardingService =
           AtOnboardingServiceImpl(atSign, preference);
       await onboardingService.authenticate();
-      AtClient? atClient = await onboardingService.atClient;
+      AtClient? atClient = onboardingService.atClient;
       AtKey key = AtKey();
       key.key = 'testKey3';
       key.namespace = 'wavi';
@@ -136,9 +135,9 @@ void main() {
         'A test to authenticate atSign and verify the PKAM keys and encryption keys the client answers are the keyfile\'s',
         () async {
       await generateAtKeysFile(atSign, atOnboardingPreference.atKeysFilePath!);
-      await _createKeys(atSign);
+      await createKeys(atSign);
       bool status = await atOnboardingService.authenticate();
-      atClient = await atOnboardingService.atClient;
+      atClient = atOnboardingService.atClient;
       expect(true, status);
 
       expect(at_demos.pkamPrivateKeyMap[atSign],
