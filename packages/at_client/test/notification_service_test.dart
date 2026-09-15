@@ -1756,6 +1756,34 @@ void main() {
               'watermark write would land on a store the stop has closed');
     });
 
+    test('is written only after the notification reaches its subscriber',
+        () async {
+      final events = <String>[];
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async {
+        // NOTE: a subscriber's stream delivers on a later microtask, so this
+        // yields a turn first: what it then records is whether the
+        // notification had been handed to the subscriber before this write.
+        await Future.delayed(Duration.zero);
+        events.add('watermark');
+        return true;
+      });
+      final live = await NotificationServiceImpl.create(mockAtClientImpl,
+          monitor: fakeMonitor) as NotificationServiceImpl;
+      live.subscribe(regex: '.*').listen((n) => events.add('delivered'));
+
+      await live.handleNotificationReceipt('notification: '
+          '{"id":"n1","from":"@alice","to":"@alice","key":"n1.wavi@alice",'
+          '"value":null,"operation":"update","epochMillis":1,'
+          '"messageType":"MessageType.key","isEncrypted":false}');
+      await Future.delayed(Duration.zero);
+
+      expect(events, ['delivered', 'watermark'],
+          reason: 'a watermark saved first moves past a notification a stop '
+              'can then keep from every subscriber, and nothing replays it');
+    });
+
     test('is written unencrypted, without the payload or the metadata',
         () async {
       when(() => mockAtClientImpl.get(service.lastReceivedNotificationAtKey))

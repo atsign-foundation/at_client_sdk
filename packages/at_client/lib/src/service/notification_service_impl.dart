@@ -80,8 +80,9 @@ class NotificationServiceImpl extends NotificationService {
   ///
   /// A conveyed private is filed asynchronously, so a value sealed to it can
   /// arrive first, and dropping it would be data loss: nothing re-delivers a
-  /// notification once discarded. In memory, so a restart loses the park and
-  /// re-drives from the watermark instead.
+  /// notification once discarded. In memory, and the watermark has already
+  /// moved past a parked notification, so a stop or restart loses what is
+  /// parked; the stop says how many at `warning`.
   final Map<FiledNskeyPrivate, List<_ParkedNotification>> _parked = {};
 
   /// The most notifications the park may hold; the oldest is dropped, at
@@ -641,29 +642,6 @@ class NotificationServiceImpl extends NotificationService {
         } else {
           logger.finer('Received ${n.key}');
         }
-        // Records the latest notification's time, and saves it to the keys, if
-        // it is not a stats notification.
-        if (n.id != '-1') {
-          if (n.epochMillis > (_lastReceivedMillis ?? 0)) {
-            _lastReceivedMillis = n.epochMillis;
-          }
-          // NOTE: stop() may have landed during the previous write and closed
-          // the store this one goes to.
-          if (isStopped) return;
-          try {
-            await atClient.put(
-                lastReceivedNotificationAtKey, _watermarkValue(n),
-                putRequestOptions: _watermarkPutOptions);
-          } catch (e) {
-            if (isStopped) {
-              logger.finer('Not saving the last received notification ID: '
-                  'the service was stopped during the write ($e)');
-            } else {
-              logSwallowed(logger, e,
-                  'Failed to save last received notification ID: $e');
-            }
-          }
-        }
         // NOTE: a `for` loop, not `_streamListeners.forEach` — `Map.forEach`
         // takes a void callback and discards the Future an `async` one
         // returns, so every await below would run detached and delivery would
@@ -689,6 +667,28 @@ class NotificationServiceImpl extends NotificationService {
                 n.key,
                 'Dropping notification ${n.key} for subscriber '
                 '(regex "${notificationConfig.regex}"): $e');
+          }
+        }
+        // NOTE: after delivery, never before. A stop between the two then
+        // leaves the watermark behind a notification no subscriber saw, and
+        // the next connection replays it: at least once rather than lost.
+        if (n.id != '-1') {
+          if (n.epochMillis > (_lastReceivedMillis ?? 0)) {
+            _lastReceivedMillis = n.epochMillis;
+          }
+          if (isStopped) return;
+          try {
+            await atClient.put(
+                lastReceivedNotificationAtKey, _watermarkValue(n),
+                putRequestOptions: _watermarkPutOptions);
+          } catch (e) {
+            if (isStopped) {
+              logger.finer('Not saving the last received notification ID: '
+                  'the service was stopped during the write ($e)');
+            } else {
+              logSwallowed(logger, e,
+                  'Failed to save last received notification ID: $e');
+            }
           }
         }
       }

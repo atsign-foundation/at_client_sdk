@@ -1,5 +1,10 @@
 ## 3.15.0-rc1
 
+- fix: the last-received-notification watermark is saved after a
+  notification is handed to its subscribers, not before. A stop between the
+  two used to move the watermark past a notification no subscriber saw;
+  now the next connection replays it, so a subscriber may see a
+  notification twice but does not lose one.
 - fix: a stop is no longer taken for an ordinary failure. Where a failed
   read chose a fallback it now lets `StoppedException` through: reading an
   advertisement as unpublished (which invited a mint), a missing published
