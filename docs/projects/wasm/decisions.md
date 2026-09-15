@@ -1,7 +1,7 @@
 # decisions.md — Rulings, measured findings & open questions
 
 **Status:** decision record (binding).
-**Scope:** the rulings D-1..D-23 that govern the implementation-neutral `AtClient`
+**Scope:** the rulings D-1..D-24 that govern the implementation-neutral `AtClient`
 work, the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
@@ -771,6 +771,49 @@ test — a bare `await` cannot distinguish a hang from slowness.
 
 This pairs with D-20: the async-only surface is what the generated `.d.ts` must express.
 
+### D-24 — Where notification replay starts is a **policy**, not a side effect of storage (2026-09-15)
+
+The client chooses where its monitor replays from, when its notification service starts:
+
+| Policy | Replays from | Reads the checkpoint |
+| --- | --- | --- |
+| **connect** | the notification service's creation | no |
+| **resume** | the last notification received (the checkpoint) | yes |
+| **window(d)**, `d` defaulting to **1 hour** | `max(checkpoint, now − d)`; `now − d` when there is no checkpoint | when there is one |
+| **full** | everything the atServer still holds | no |
+
+**Defaults.** Native keeps **resume**, today's `fetchOfflineNotifications = true`. The
+**browser bundle sets `window(1h)`** when it builds the client's preferences; per D-17/D-18
+the bundle owns lane behaviour, so at_client's shared default does not move.
+
+**Why a window on the web.** It is the one replay policy that is correct with no
+checkpoint store: a reload replays a bounded hour rather than everything the server
+holds. That turns OQ-13's silent unbounded replay into a stated, bounded one.
+
+**Bound — four properties every policy keeps.**
+
+- **A reconnect never re-applies the policy.** Within one service, every reconnect resumes
+  from the later of the policy's start and the last notification received. The start is
+  resolved once, so a long outage does not slide `now − d` past notifications nobody has
+  seen.
+- **connect is anchored at service creation, not at the monitor's connect.** A monitor
+  started with no time is sent nothing from before `monitor:` went out, so anchoring later
+  loses what arrived in between.
+- **full is bounded by server retention.** The atServer's monitor handler drops expired
+  notifications before replaying, so *full* is everything retained — not a durability
+  promise.
+- **The since filter is exclusive.** The handler drops notifications at or before the time
+  it is given, so resuming from a checkpoint does not re-deliver the checkpoint's own
+  notification. This is not an off-by-one to correct.
+
+**What it narrows.** OQ-13's IndexedDB checkpoint record is no longer a precondition for the
+browser lane shipping notifications; it is required only for a browser client that opts
+into **resume**.
+
+**Not yet implemented.** at_client exposes only the `fetchOfflineNotifications` bool, which
+is *connect* (false) or *resume* (true). The policy preference, *window* and *full*, and
+the bool's deprecation are a follow-up at_client change.
+
 ---
 
 ## 2. Measured findings
@@ -1060,16 +1103,20 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | **OQ-12** — process-global factory registry | **Resolved by D-22** — instance-per-client |
 | **Argon2id / WebCrypto** | **Settled statically** — `cryptography` 2.9.0 has no Argon2id override and Argon2id is absent from the WebCrypto spec, so it always resolves to `DartArgon2id`. The deferred Argon2id UX work stands. See [`design.md`](design.md) §C1 |
 
-### OQ-13 — Where does the monitor resume checkpoint live in remote-only?
+### OQ-13 — Where does the monitor resume checkpoint live in remote-only? **RESOLVED 2026-09-15 by D-24**
 
-`notification_service_impl.dart:407` reads `lastReceivedNotificationAtKey` from
-`getLocalSecondary()!.keyStore!`. Under D-18 that call **silently succeeds and returns
-nothing** after every reload, replaying all notifications with no error — a correctness bug
-rather than a crash, which is worse.
+`notification_service_impl.dart:434` (`_migrateLegacyLastReceivedNotificationKeys`) reads
+`lastReceivedNotificationAtKey` from `getLocalSecondary()!.keyStore!`. Under D-18 that call
+**silently succeeds and returns nothing** after every reload, replaying all notifications
+with no error — a correctness bug rather than a crash, which is worse.
 
 Options: accept the replay (in-memory), or give it a small IndexedDB record beside the key
 envelope. **Recommend the latter**; it reuses the browser-storage layer the key store
 already builds. Must be decided before the browser lane ships notifications.
+
+**Resolution.** Neither option as posed: replay becomes a policy (D-24). The browser bundle
+defaults to *window(1h)*, which bounds the replay with no checkpoint store at all. The
+IndexedDB record stands, but only for a browser client that opts into *resume*.
 
 ### OQ-14 — Do the registrar asks land?
 
@@ -1118,3 +1165,4 @@ invent a number.
 | 2026-09-13 | **D-16 ruled.** The browser lane must not foreclose enterprise identity. `enterprise-identity.md` added: the IdP lifecycle mapping, the atServer and registrar gaps, and the constraints E1–E7. |
 | 2026-09-14 | **at_auth 4.0.0-rc2 builds no connection of its own.** Its lookup fallbacks, `atServerStatus ??=` and the reachability probes go; callers hand it an `AtLookupMuxable`, and its atServer check is at_lookup's neutral `checkAtSignServer`. The `probe_default.dart` conditional export goes with them, so D-1's one exception is gone; T0.3's ban is not re-ruled. `at_auth.dart` then reaches `dart:io` only through `at_lookup.dart` and `at_logger.dart`. |
 | 2026-09-14 | **The browser-lane rulings restored.** Merge `b995e9cd7` (2026-09-13) resolved a D-13/D-14 number collision by taking trunk's side, and dropped the 2026-08-30 and 2026-09-06 rulings above from `decisions.md`, `roadmap.md`, `implementation-plan.md`, `acceptance.md`, `design.md` and `js-api.md`. Re-filed under the next free numbers: D-13 → **D-17** (V1 ships remote-only), D-14 → **D-18** (remote-only is an `AtClientStorage`), D-15 → **D-19** (main thread), D-16 → **D-20** (`Promise`-only), D-18 → **D-21** (VFS), D-19 → **D-22** (one client per atSign), D-20 → **D-23** (TypeScript-authored facade). Redirect-only OIDC (D-17 of 2026-09-06) is not re-filed: D-16's E3 already rules it. The rows above keep the numbers they were written with. Added in restoring: D-17 names its dependency on [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754); OQ-5 and OQ-6 restated against D-17/D-21; D-22 composes with D-13; the source lines D-12's amendment, D-18 and OQ-13 cite re-pointed at trunk `559e15bc9`; D-15 amended so `at_client_web`'s V1 storage leg is remote-only, SQLite-wasm V2. |
+| 2026-09-15 | **D-24 ruled; OQ-13 resolved.** Notification replay is a policy — connect, resume, window (default 1h) or full — resolved once per notification service, with every reconnect resuming from the last notification received. Native keeps resume; the browser bundle defaults to `window(1h)`, so the IndexedDB checkpoint is needed only to opt into resume. `acceptance.md` X-R4 split into X-R4a–d, one per policy, and X-R4e for reconnects. OQ-13's source line re-pointed at trunk `688486e44`. |

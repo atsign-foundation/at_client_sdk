@@ -432,14 +432,18 @@ wall-clock. Nothing tests the property the concern is named for.
 | X-K3 | "Ciphertext present, wrapping key missing" raises a **distinct documented error code**, not a generic decrypt failure | the eviction case is handled, not merely survived |
 | X-K4 | Generate → store → reload → retrieve → decrypt round-trips in **Chrome *and* Safari** | Safari's storage policy is the risk; this gate blocks the key-storage design from being treated as approved |
 
-### 9a.2 Remote-only correctness *(new — D-17, D-18)*
+### 9a.2 Remote-only correctness *(new — D-17, D-18, D-24)*
 
 | # | Gate | Proves |
 | --- | --- | --- |
 | X-R1 | A client built on the **remote-only bundle** constructs with **no Hive box and no SQLite** in the process — including on the **write** path | the bundle supplies a no-op sync queue, so `LocalSecondary`'s lazily-opened Hive path is never entered. This is the D-18 regression. The gate is on *this bundle*, not on the process: a consumer who injects a SQLite bundle is expected to open one |
 | X-R2 | A remote-only client **reads data written by a local-storage client** | unstamped keys route to the legacy provider on read; without this the client writes fine and fails on pre-existing data |
 | X-R3 | A write is not acknowledged until the atServer accepts it | write-through, not write-back — no reintroduced durability question |
-| X-R4 | Notification resume across two sequential clients does not replay | under D-18 the checkpoint read **silently succeeds and returns nothing**, so this is a correctness bug rather than a crash. If in-memory is chosen instead, the gate is an explicit test *documenting* the replay |
+| X-R4a | **connect** — across two sequential clients, the second is delivered nothing sent before its notification service was created | the policy is anchored at service creation, so nothing between creation and `monitor:` is lost either (D-24) |
+| X-R4b | **window(1h)**, the browser bundle's default — the second client is delivered only notifications newer than `max(checkpoint, now − 1h)`, and newer than `now − 1h` with no checkpoint store | under D-18 the checkpoint read **silently succeeds and returns nothing**; the window bounds the replay instead of leaving it unbounded |
+| X-R4c | **resume** — the second client re-delivers nothing at or before the first client's last notification | the IndexedDB checkpoint record works; required only for a browser client that opts into resume |
+| X-R4d | **full** — the second client is delivered every unexpired notification the atServer holds, each once | *full* is bounded by server retention, not a durability promise |
+| X-R4e | For every policy, a monitor reconnect within one client delivers every notification sent while it was disconnected, and none twice | the policy decides only where the service starts; a reconnect resumes from the last notification received |
 | X-R5 | Two clients for two different atSigns coexist in one process with independent caches | D-22 multi-tenancy, demonstrated rather than promised |
 
 ### 9a.3 Deployment contract *(new — the environment the other gates assume)*
