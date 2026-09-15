@@ -53,8 +53,9 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 ///
 /// **Inert unless something changed.** An enrollment created under the current
 /// list already holds every algorithm it names and finds nothing to do —
-/// unless its published package no longer verifies against the `_apsk` it
-/// advertises now, in which case the same keys are signed again.
+/// unless the package it publishes no longer matches: refused against the
+/// `_apsk` it advertises now, missing, or naming other keys than the keyfile
+/// holds. The same keys are then signed and published again.
 @experimental
 class KeyPackageMinting with ApkamSigning {
   /// [directory] reads back the published package the way a peer does; a
@@ -128,11 +129,10 @@ class KeyPackageMinting with ApkamSigning {
         if (!wanted.contains(key.alg)) key
     ];
     if (missing.isEmpty && superseded.isEmpty) {
-      if (await _publishedPackageRejected(enrolment)) {
+      final stale = await _publishedPackageStale(enrolment, held);
+      if (stale != null) {
         await _publish(enrolment, atLookUp!, held);
-        logger.info('Signed the key package for $enrolment again: the '
-            'published one no longer verified against its _apsk, so no peer '
-            'would seal to this enrollment');
+        logger.info('Published the key package for $enrolment again: $stale');
       }
       return nothing;
     }
@@ -218,35 +218,72 @@ class KeyPackageMinting with ApkamSigning {
     return (minted: missing, retired: [for (final key in superseded) key.alg]);
   }
 
-  /// Whether a peer reading [enrolment]'s published key package refuses it
-  /// for a signature that does not verify against its current `_apsk`.
+  /// Why the key package [enrolment] publishes has to be published again, or
+  /// null when it already advertises [held]: peers refuse it, it is absent, or
+  /// it names other keys, or other statuses, than the keyfile does.
   ///
-  /// That happens when `_apsk` stops naming the key the package was signed
-  /// with: the authentication key leaves the advertisement once the enrollment
-  /// holds signing keys of its own. Read through the client's own namespace
-  /// when it names one, else through a namespace its enrollment is granted —
-  /// a package is listed under every namespace its enrollment may read. False
-  /// when there is none, when the package is absent or could not be checked,
-  /// and when a read fails, so a start is never failed by the check.
-  Future<bool> _publishedPackageRejected(String enrolment) async {
+  /// The last two are what a stop between filing a minted key and publishing
+  /// it leaves behind, and nothing else would notice: the next reconcile finds
+  /// the key already held and has nothing to mint.
+  ///
+  /// Read through the client's own namespace when it names one, else through a
+  /// namespace its enrollment is granted — a package is listed under every
+  /// namespace its enrollment may read. Null when there is none, when the
+  /// package could not be checked, and when a read fails, so a start is never
+  /// failed by the check.
+  Future<String?> _publishedPackageStale(
+      String enrolment, List<PackageKey> held) async {
     try {
       final own = atClient.getPreferences()?.namespace;
       final namespace = (own != null && own.isNotEmpty)
           ? own
           : ((await authorisedNamespacesOf(atClient)).toList()..sort())
               .firstOrNull;
-      if (namespace == null) return false;
+      if (namespace == null) return null;
       final members = await (_directory ?? VerbEnrollmentDirectory(atClient))
           .listForNamespace(namespace);
-      return members.any((m) =>
-          m.enrollmentId == enrolment &&
-          m.keyPackageStatus == KeyPackageStatus.rejected);
+      final member =
+          members.where((m) => m.enrollmentId == enrolment).firstOrNull;
+      if (member == null) return null;
+      switch (member.keyPackageStatus) {
+        case KeyPackageStatus.rejected:
+          return 'the published one no longer verified against its _apsk, so '
+              'no peer would seal to this enrollment';
+        case KeyPackageStatus.absent:
+          return held.isEmpty
+              ? null
+              : 'none was published for the keys this enrollment holds';
+        case KeyPackageStatus.present:
+          final served = member.keyPackage;
+          if (served == null || _sameEntries(served.keys, held)) return null;
+          return 'the published one did not name the keys, or the statuses, '
+              'this enrollment holds';
+        case KeyPackageStatus.unsupported:
+        case KeyPackageStatus.unverified:
+          return null;
+      }
     } catch (e) {
       if (e is StoppedException) rethrow;
       logger.warning('Could not check whether the key package published for '
-          '$enrolment still verifies; the next start checks again: $e');
-      return false;
+          '$enrolment still matches what it holds; the next start checks '
+          'again: $e');
+      return null;
     }
+  }
+
+  /// Whether [served] and [held] name the same encapsulation keys with the
+  /// same statuses, counting only entries this build implements, as [held]
+  /// does.
+  static bool _sameEntries(List<PackageKey> served, List<PackageKey> held) {
+    Set<String> entries(Iterable<PackageKey> keys) => {
+          for (final key in keys)
+            if (key.use == SecretSharingAlgos.useEnc &&
+                SecretSharingAlgos.keyAlgos.contains(key.alg))
+              '${key.kid} ${key.status}'
+        };
+    final a = entries(served);
+    final b = entries(held);
+    return a.length == b.length && a.containsAll(b);
   }
 
   /// Every encapsulation key [enrolment] advertises in [keys] — active and

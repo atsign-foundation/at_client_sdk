@@ -1,5 +1,11 @@
 ## 3.15.0-rc1
 
+- fix: each start republishes the enrollment's key package when the one the
+  atServer serves does not name the keys and statuses the keyfile holds, or
+  none is published, not only when it no longer verifies. A stop between
+  filing a minted key and publishing it used to leave the advertisement
+  behind the keyfile for good, since the next start found the key already
+  held and had nothing to mint.
 - fix: a conveyed nskey or signing-root private is filed into the keyfile
   before the envelope that carried it is deleted, on every envelope sweep
   rather than only the one at start. A sweep used to delete the envelope
