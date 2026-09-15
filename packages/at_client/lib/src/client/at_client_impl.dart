@@ -226,7 +226,12 @@ class AtClientImpl implements AtClient {
           .seedNamespace(atSign, namespace, askRotationPolicy: false);
       return const AtReachabilityResult(AtReachability.published);
     } catch (e) {
-      _logger.warning('Could not make $atSign reachable for $namespace: $e');
+      if (e is StoppedException) {
+        _logger.warning('Stopped making $atSign reachable for $namespace: the '
+            'client stopped');
+      } else {
+        _logger.warning('Could not make $atSign reachable for $namespace: $e');
+      }
       return AtReachabilityResult(AtReachability.failed, error: e);
     }
   }
@@ -295,8 +300,28 @@ class AtClientImpl implements AtClient {
 
   SyncService? _syncService;
 
+  /// The stops of services a setter replaced, so [stop] waits for them too.
+  final List<Future<void>> _replacedServiceStops = [];
+
+  /// Stops [previous], which [replacement] has just taken the place of.
+  void _retire(Object? previous, Object replacement) {
+    if (previous == null || identical(previous, replacement)) return;
+    final Future<void> Function()? close = switch (previous) {
+      SyncServiceImpl() => previous.close,
+      NotificationServiceImpl() => previous.stop,
+      _ => null,
+    };
+    if (close == null) return;
+    _replacedServiceStops.add(close().catchError((Object e) {
+      _logger.warning('Error while stopping a replaced '
+          '${previous.runtimeType}: $e');
+    }));
+    _pqBootstrap?.sharing.detachFromServices();
+  }
+
   @override
   set syncService(SyncService syncService) {
+    _retire(_syncService, syncService);
     _syncService = syncService;
     _finalizer.attach(_syncService!, 'SyncService for $_atSign');
 
@@ -325,6 +350,7 @@ class AtClientImpl implements AtClient {
 
   @override
   set notificationService(NotificationService notificationService) {
+    _retire(_notificationService, notificationService);
     _notificationService = notificationService;
     _finalizer.attach(
       _notificationService!,
@@ -637,6 +663,7 @@ class AtClientImpl implements AtClient {
       try {
         await c.cleanupOrphans();
       } catch (e, st) {
+        if (e is StoppedException) rethrow;
         _logger.warning('cleanupOrphans on $namespace failed: $e\n$st');
       }
     }
@@ -771,12 +798,13 @@ class AtClientImpl implements AtClient {
       try {
         await atClientImpl._init(atLookUp: atLookUp);
       } catch (_) {
-        // A client that failed to build holds nothing: its claim on the storage
-
-        // would otherwise outlive it and refuse every later client.
-
+        // NOTE: a client that failed to build holds nothing — not the timers
+        // and connections _init got as far as starting, and not its claim on
+        // the storage, which would otherwise refuse every later client.
+        atClientImpl._isStopped = true;
+        await atClientImpl._stopBackgroundProcesses();
         await atClientImpl._releaseStorage();
-
+        atClientImpl.localSecondary?.release();
         rethrow;
       }
     }
@@ -1117,8 +1145,16 @@ class AtClientImpl implements AtClient {
     _expiryTimer?.cancel();
     _expiryTimer = null;
     final ls = localSecondary;
-    if (ls == null) return;
-    final when = await ls.nextExpiryAt();
+    if (ls == null || _isStopped) return;
+    final DateTime? when;
+    try {
+      when = await ls.nextExpiryAt();
+    } catch (_) {
+      // NOTE: a stop landing during the await closes the store under it, and
+      // there is nobody left to hand that failure to.
+      if (_isStopped) return;
+      rethrow;
+    }
     // Bail if a newer arm superseded us across the await, or we stopped.
     if (gen != _expiryArmGen || _isStopped) return;
     if (when == null) return;
@@ -1149,6 +1185,22 @@ class AtClientImpl implements AtClient {
   /// picks up the post-sweep state, including any mid-sweep writes
   /// (the keystore's in-memory cache is updated synchronously inside
   /// each put before the corresponding [DataEvent] microtask runs).
+  /// Runs [_armExpiryTimer], as a keystore mutation would.
+  @visibleForTesting
+  Future<void> armExpiryTimerForTest() => _armExpiryTimer();
+
+  /// Runs [_armAvailableTimer], as a keystore mutation would.
+  @visibleForTesting
+  Future<void> armAvailableTimerForTest() => _armAvailableTimer();
+
+  /// Runs [_onExpiryFire], as a sweep that the timer started would.
+  @visibleForTesting
+  Future<void> expirySweepForTest() => _onExpiryFire();
+
+  /// Runs [_onAvailableFire], as a sweep that the timer started would.
+  @visibleForTesting
+  Future<void> availabilitySweepForTest() => _onAvailableFire();
+
   Future<void> _onExpiryFire() async {
     _expirySweepInFlight = true;
     // NOTE: a throwing sweep counts as fruitless too — it cannot have moved
@@ -1156,6 +1208,8 @@ class AtClientImpl implements AtClient {
     var removed = 0;
     try {
       removed = await localSecondary?.deleteExpiredKeys() ?? 0;
+    } on StoppedException {
+      _logger.warning('Abandoned the expiry sweep: the client stopped');
     } catch (e, st) {
       _logger.warning('Expiry sweep failed: $e\n$st');
     } finally {
@@ -1177,8 +1231,14 @@ class AtClientImpl implements AtClient {
     _availableTimer?.cancel();
     _availableTimer = null;
     final ls = localSecondary;
-    if (ls == null) return;
-    final when = await ls.nextAvailableAt();
+    if (ls == null || _isStopped) return;
+    final DateTime? when;
+    try {
+      when = await ls.nextAvailableAt();
+    } catch (_) {
+      if (_isStopped) return;
+      rethrow;
+    }
     // Bail if a newer arm superseded us across the await, or we stopped.
     if (gen != _availableArmGen || _isStopped) return;
     if (when == null) return;
@@ -1205,6 +1265,8 @@ class AtClientImpl implements AtClient {
           AtMetaData? meta;
           try {
             meta = await ls.keyStore!.getMeta(keyStr);
+          } on StoppedException {
+            rethrow;
           } on Exception {
             meta = null;
           }
@@ -1212,10 +1274,14 @@ class AtClientImpl implements AtClient {
           emitDataEvent(DataUpdated(atKey, metadata: meta));
           // Drop from the availability cache so it won't fire again.
           await ls.dropAvailabilityCacheEntry(keyStr);
+        } on StoppedException {
+          rethrow;
         } on Exception catch (e) {
           _logger.warning('availability sweep failed for $keyStr: $e');
         }
       }
+    } on StoppedException {
+      _logger.warning('Abandoned the availability sweep: the client stopped');
     } catch (e, st) {
       _logger.warning('Availability sweep failed: $e\n$st');
     } finally {
@@ -1267,6 +1333,7 @@ class AtClientImpl implements AtClient {
     // map for the next caller to find.
     final serviceDefect = await _stopBackgroundProcesses();
     final storageDefect = await _releaseStorage(keepOpen: keepStorageOpen);
+    localSecondary?.release();
     // NOTE: by identity, not by key — the map is keyed (atSign, enrollmentId),
     // so a client filed under an enrollment is not found under the bare atSign
     // and would be left in the map, stopped, for the next caller to restart.
@@ -1359,7 +1426,7 @@ class AtClientImpl implements AtClient {
     // that is not one.
     final sync = _syncService;
     if (sync is SyncServiceImpl) {
-      await attempt('closing sync service', () async => sync.stop());
+      await attempt('closing sync service', sync.close);
     } else if (sync != null) {
       _logger.info('Nothing to stop for the sync service: '
           '${sync.runtimeType} implements SyncService but has no concrete '
@@ -1375,6 +1442,19 @@ class AtClientImpl implements AtClient {
           '${notifications.runtimeType} implements NotificationService but '
           'has no concrete stop()');
     }
+
+    await attempt(
+        'stopping replaced services', () => Future.wait(_replacedServiceStops));
+
+    await attempt('closing stream transfers', () async {
+      for (final receiver in List.of(_streamReceivers)) {
+        receiver.cancel();
+      }
+      await Future.wait([
+        for (final connection in List.of(_streamConnections))
+          connection.closeConnection()
+      ]);
+    });
 
     if (_remoteSecondary != null) {
       await attempt('closing remote secondary connection',
@@ -2371,33 +2451,44 @@ class AtClientImpl implements AtClient {
     // closes it; built the same way as the client's, so it authenticates as
     // the same enrollment with the same routine.
     var remoteSecondary = buildRemoteSecondary();
-    var result = await remoteSecondary.executeCommand(command, auth: true);
-    _logger.finer('ack message:$result');
-    if (result != null && result.startsWith('stream:ack')) {
-      result = result.replaceAll('stream:ack ', '');
-      result = result.trim();
-      _logger.finer('ack received for streamId:$streamId');
-      remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
-      // `readResponse` rather than reaching through to the listener: this
-      // path has already written the bytes to the socket itself, so it needs
-      // the read half alone. The listener is not in at_lookup's barrel.
-      var streamResult = await (remoteSecondary.atLookUp as AtLookupMuxable)
-          .readResponse(
-              maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
-      if (streamResult.startsWith('stream:done')) {
-        await remoteSecondary.atLookUp.connection!.close();
-        streamResponse.status = AtStreamStatus.complete;
+    _streamConnections.add(remoteSecondary);
+    try {
+      var result = await remoteSecondary.executeCommand(command, auth: true);
+      _logger.finer('ack message:$result');
+      if (result != null && result.startsWith('stream:ack')) {
+        result = result.replaceAll('stream:ack ', '');
+        result = result.trim();
+        _logger.finer('ack received for streamId:$streamId');
+        remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
+        // `readResponse` rather than reaching through to the listener: this
+        // path has already written the bytes to the socket itself, so it needs
+        // the read half alone. The listener is not in at_lookup's barrel.
+        var streamResult = await (remoteSecondary.atLookUp as AtLookupMuxable)
+            .readResponse(
+                maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
+        if (streamResult.startsWith('stream:done')) {
+          streamResponse.status = AtStreamStatus.complete;
+        }
+      } else if (result != null && result.startsWith('error:')) {
+        result = result.replaceFirst(RegExp('^error:'), '');
+        streamResponse.errorCode = result.split('-')[0];
+        streamResponse.errorMessage = result.split('-')[1];
+        streamResponse.status = AtStreamStatus.error;
+      } else {
+        streamResponse.status = AtStreamStatus.noAck;
       }
-    } else if (result != null && result.startsWith('error:')) {
-      result = result.replaceFirst(RegExp('^error:'), '');
-      streamResponse.errorCode = result.split('-')[0];
-      streamResponse.errorMessage = result.split('-')[1];
-      streamResponse.status = AtStreamStatus.error;
-    } else {
-      streamResponse.status = AtStreamStatus.noAck;
+    } finally {
+      _streamConnections.remove(remoteSecondary);
+      await remoteSecondary.closeConnection();
     }
     return streamResponse;
   }
+
+  /// The connections [stream] calls have open, so [stop] closes them.
+  final Set<RemoteSecondary> _streamConnections = {};
+
+  /// The transfers [sendStreamAck] calls are receiving, so [stop] ends them.
+  final Set<StreamNotificationHandler> _streamReceivers = {};
 
   @override
   @Deprecated("Obsolete, will be removed in v4")
@@ -2410,6 +2501,9 @@ class AtClientImpl implements AtClient {
     Function streamReceiveCallBack,
   ) async {
     var handler = StreamNotificationHandler();
+    _streamReceivers.add(handler);
+    unawaited(
+        handler.done.whenComplete(() => _streamReceivers.remove(handler)));
     handler.remoteSecondary = getRemoteSecondary();
     handler.localSecondary = getLocalSecondary();
     handler.preference = _preference;
@@ -2489,6 +2583,8 @@ class AtClientImpl implements AtClient {
         } else {
           fileTransferObject.sharedStatus = false;
         }
+      } on StoppedException {
+        rethrow;
       } on Exception catch (e) {
         fileTransferObject.sharedStatus = false;
         fileTransferObject.error = e.toString();

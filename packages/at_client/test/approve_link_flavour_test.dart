@@ -191,8 +191,9 @@ void main() {
     final approver = buildMockClient('approver-1');
     await AtClientSecretSharing.forClient(approver).register();
 
-    final status = await conveyanceFor(approver, privileged: true)
-        .conveySecretsTo(enrollment, mintedApkamSymmetricKey: 'MINTED');
+    final conveyance = conveyanceFor(approver, privileged: true);
+    await conveyance.conveyMintedApkamSymmetricKey(enrollment, 'MINTED');
+    final status = await conveyance.conveySecretsTo(enrollment);
     expect(status, KeyPackageStatus.present);
 
     expect(await enrollee.sweepOnce(), greaterThan(0));
@@ -222,8 +223,9 @@ void main() {
     await giveSigningKey(approver, 'approver-1');
     await AtClientSecretSharing.forClient(approver).register();
 
-    final status = await conveyanceFor(approver, privileged: true)
-        .conveySecretsTo(enrollment, mintedApkamSymmetricKey: 'MINTED');
+    final conveyance = conveyanceFor(approver, privileged: true);
+    await conveyance.conveyMintedApkamSymmetricKey(enrollment, 'MINTED');
+    final status = await conveyance.conveySecretsTo(enrollment);
     expect(status, KeyPackageStatus.present);
 
     expect(await enrollee.sweepOnce(), greaterThan(0));

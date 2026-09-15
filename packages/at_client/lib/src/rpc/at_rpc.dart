@@ -53,9 +53,27 @@ class AtRpcClient implements AtRpcCallbacks {
       isServer: false,
     );
     rpc.start();
+    unawaited(rpc.responsesEnded.then((_) {
+      for (final completer in completerMap.values) {
+        if (!completer.isCompleted) {
+          completer.completeError(StoppedException('the client for '
+              '${atClient.getCurrentAtSign()} stopped before a response '
+              'arrived'));
+        }
+      }
+      completerMap.clear();
+    }));
   }
 
+  /// Sends [payload] to the server atSign and completes with its response.
+  ///
+  /// Throws [StoppedException] when the client is stopped, or stops before the
+  /// response arrives.
   Future<Map<String, dynamic>> call(Map<String, dynamic> payload) async {
+    if (rpc.atClient.isStopped) {
+      throw StoppedException('the client for '
+          '${rpc.atClient.getCurrentAtSign()} has stopped');
+    }
     AtRpcReq request = AtRpcReq.create(payload);
     completerMap[request.reqId] = Completer();
     logger.info('Sending request to $serverAtsign : $request');
@@ -157,6 +175,12 @@ class AtRpc {
   /// The stream of response notifications
   Stream<AtNotification>? get responseStream => _responseStream;
 
+  final Completer<void> _responsesEnded = Completer<void>();
+
+  /// Completes when the response listener [start] subscribed has ended, which
+  /// is what the client stopping does to it.
+  Future<void> get responsesEnded => _responsesEnded.future;
+
   /// When sending requests and responses, sometimes network is down,
   /// the socket connection is broken, or so on, and a retry is required.
   /// [sendRequest] and [sendResponse] will try to send the notification up to
@@ -245,7 +269,7 @@ class AtRpc {
           .subscribe(regex: requestsRegex, shouldDecrypt: true);
 
       _requestStream!.listen(handleRequestNotification,
-          onError: (e) => logger.severe('Notification Failed: $e'),
+          onError: _onNotificationError,
           onDone: () => logger.info('RPC request listener stopped'));
     }
 
@@ -259,9 +283,19 @@ class AtRpc {
           .subscribe(regex: responsesRegex, shouldDecrypt: true);
 
       _responseStream!.listen(handleResponseNotification,
-          onError: (e) => logger.severe('Notification Failed: $e'),
-          onDone: () => logger.info('RPC response listener stopped'));
+          onError: _onNotificationError, onDone: () {
+        logger.info('RPC response listener stopped');
+        if (!_responsesEnded.isCompleted) _responsesEnded.complete();
+      });
     }
+  }
+
+  void _onNotificationError(Object e) {
+    if (e is StoppedException) {
+      logger.info('RPC listener ended by the stop');
+      return;
+    }
+    logger.severe('Notification Failed: $e');
   }
 
   /// How long [ready] waits for the notification listener before giving up.
@@ -286,6 +320,11 @@ class AtRpc {
       }
     }, onError: (Object e) {
       if (!up.isCompleted) up.completeError(e);
+    }, onDone: () {
+      if (!up.isCompleted) {
+        up.completeError(StoppedException('the notification listener for '
+            '${atClient.getCurrentAtSign()} stopped'));
+      }
     });
     try {
       if (ns.currentListenerState == NotificationListenerState.listening &&
@@ -341,6 +380,12 @@ class AtRpc {
         sent = true;
         logger.info('Notification ${requestRecordID.toString()} sent');
       } catch (e) {
+        if (atClient.isStopped) {
+          logger.warning('Not sending request $request: the client stopped');
+          throw StoppedException('the client for '
+              '${atClient.getCurrentAtSign()} stopped before request '
+              '${request.reqId} was sent');
+        }
         if (attemptNumber < maxSendAttempts) {
           logger.warning(
               'Exception $e sending request $request on attempt $attemptNumber - will retry in $delayMillis ms');
@@ -452,6 +497,10 @@ class AtRpc {
       response = await callbacks.handleRequest(request, notification.from);
       await sendResponse(notification, request, response);
     } catch (e, st) {
+      if (e is StoppedException || atClient.isStopped) {
+        logger.warning('Abandoned request $request: the client stopped');
+        return;
+      }
       var message =
           'Exception $e from callbacks.handleRequest for request $request';
       logger.warning(message);
@@ -478,6 +527,10 @@ class AtRpc {
           '😎 Will handle request from $atsign; acquired mutex $mutexKey');
       return true;
     } catch (err) {
+      if (err is StoppedException || atClient.isStopped) {
+        logger.warning('Not handling request from $atsign: the client stopped');
+        return false;
+      }
       if (err.toString().toLowerCase().contains('immutable')) {
         logger.shout('Will not handle request from $atsign'
             '; could not acquire mutex $mutexKey');
@@ -553,6 +606,10 @@ class AtRpc {
     try {
       await callbacks.handleResponse(response);
     } catch (e, st) {
+      if (e is StoppedException) {
+        logger.warning('Abandoned response $response: the client stopped');
+        return;
+      }
       logger.warning(
           'Exception $e from callbacks.handleResponse for response $response');
       logger.warning(st);
@@ -593,6 +650,10 @@ class AtRpc {
             waitForFinalDeliveryStatus: false);
         sent = true;
       } catch (e) {
+        if (atClient.isStopped) {
+          logger.warning('Not sending response $response: the client stopped');
+          return;
+        }
         if (attemptNumber < maxSendAttempts) {
           logger.warning(
               'Exception $e sending response $response on attempt $attemptNumber - will retry in $delayMillis ms');

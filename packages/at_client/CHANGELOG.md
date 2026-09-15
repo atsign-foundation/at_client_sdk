@@ -1,5 +1,118 @@
 ## 3.15.0-rc1
 
+- fix: `stop()` returns, and the process can exit, when the client's
+  connections are waiting on an atServer or atDirectory that accepted them
+  and never answered, not even the TLS handshake. It used to wait for ever.
+- fix: approving an enrollment that asks its approver to mint the symmetric
+  key conveys that key before `enroll:approve`, not after. A stop between
+  the two used to leave the enrollment approved with its keys encrypted under
+  a key nothing held, and the atServer refuses a second approval. The key is
+  sealed without checking the advertised package against `_apsk`, which the
+  atServer publishes only at approval. `enrollmentApkamSymmetricKeyResolver`
+  now offers every conveyed key, and the enrollee keeps the one that decrypts
+  its keys, since a retried or raced approval leaves more than one.
+  `EnrollmentConveyance` gains `conveyMintedApkamSymmetricKey`, and
+  `conveySecretsTo` no longer takes `mintedApkamSymmetricKey`.
+- fix: each start of a fully privileged client publishes a signing root it
+  filed and a stop kept from publishing, and a root the record does not
+  publish signs nothing until it is. Only activation and a self-retrofit
+  used to finish that publish, so the root stayed unpublished, and links
+  signed with it verified against nothing. A start mints no root where
+  none was filed.
+- fix: a cold-start namespace-key mint publishes the generation this
+  enrollment already filed and never published, rather than minting another.
+  A stop between filing a minted nskey private and publishing its public
+  half used to leave that private orphaned and a second generation minted
+  beside it at the next start.
+- fix: a minted signing key is filed before it is advertised, so a stop
+  between the two leaves a key the next start republishes from the keyfile
+  rather than a key advertised that nothing holds. A signer in between signs
+  under the new key before `_apsk` names it; its envelopes verify once the
+  publish lands.
+- fix: each start republishes the enrollment's key package when the one the
+  atServer serves does not name the keys and statuses the keyfile holds, or
+  none is published, not only when it no longer verifies. A stop between
+  filing a minted key and publishing it used to leave the advertisement
+  behind the keyfile for good, since the next start found the key already
+  held and had nothing to mint.
+- fix: a conveyed nskey or signing-root private is filed into the keyfile
+  before the envelope that carried it is deleted, on every envelope sweep
+  rather than only the one at start. A sweep used to delete the envelope
+  once the secret was in memory, so a stop before the next start's filing
+  lost it; a filing that fails now keeps the envelope for the next sweep.
+  `PairwiseSecretSharing.fileReceivedSecret` is the hook.
+- fix: a client missing nskey privates asks for every generation its
+  namespace advertises and it lacks, not only the one a sender would pick.
+  A key added under a second algorithm, a rotation's successor, or a mint
+  whose conveyance a stop cut short was otherwise never asked for.
+- fix: the last-received-notification watermark is saved after a
+  notification is handed to its subscribers, not before. A stop between the
+  two used to move the watermark past a notification no subscriber saw;
+  now the next connection replays it, so a subscriber may see a
+  notification twice but does not lose one.
+- fix: a stop is no longer taken for an ordinary failure. Where a failed
+  read chose a fallback it now lets `StoppedException` through: reading an
+  advertisement as unpublished (which invited a mint), a missing published
+  nskey (which filed a private unchecked, or fell back to a legacy write), an
+  unreadable current-content-key pointer (which cut a fresh key), a missing
+  collection ancestor (which deleted a live item), and a failed watermark
+  seed (which deleted the legacy copy). Sync rounds, PQ startup steps,
+  expiry and availability sweeps, envelope sweeps, collection event
+  handlers, key streams and `AtRpc` handlers report a stop once, at
+  `warning` and without a stack trace, rather than logging each failure it
+  caused at `warning`, `severe` or `shout`.
+- fix: an expiry or availability sweep running when the client stops no
+  longer raises an unhandled error from its timer.
+- fix: `rotateContentKey(deleteSuperseded: true)` deletes the superseded
+  conveyance before cutting the successor, and throws when the delete fails.
+  A stop between the two used to leave the superseded record readable for
+  good, and a failed delete was logged while the rotation reported success.
+  With no current key, the next write cuts one.
+- fix: `stop()` ends what the client started and used to leave running: a
+  wait of up to five minutes for a conveyed nskey private, which now fails
+  with `StoppedException`; the pause before answering a secret request; an
+  envelope sweep in flight; a collection's `availableEvents` scheduler; the
+  sync and notification services a setter replaced on a cached client; and
+  the connections of deprecated `stream` transfers. A `stream` call closes
+  its own connection however it ends, not only on `stream:done`.
+- fix: an `AtCollection` ends when its client stops: `watch()` and every
+  stream built on it are done.
+- fix: the envelope signer's public-key cache holds no timers; an entry
+  expires when a lookup finds it stale.
+- fix: `AtRpc.ready()`, `AtRpcClient.call()` and a request send end with
+  `StoppedException` when the client stops, rather than waiting out a
+  timeout, waiting for ever, or retrying.
+- fix: `AtClient.stop()` closes every connection the client opened before it
+  returns, the monitor's and sync's included; the monitor's used to be closed
+  some time after, and sync's never. A connection handed to `Atsign.open`,
+  `activate`, `enroll` or `resumeEnrollment` belongs to the client, which
+  closes it for good when it stops. A remote operation the stop cuts short
+  fails with `StoppedException`, and `notify` throws it rather than returning
+  an undelivered `NotificationResult`.
+- fix: after `stop()`, a read or write of local storage throws
+  `StoppedException` rather than failing on a closed storage box.
+  `subscribe`, `subscribeFiltered` and `startListening` on a stopped
+  notification service throw it too, and `waitUntilCaughtUp` completes with
+  it rather than waiting for ever.
+- fix: on a stopped client, `AtConnection.attempt()` and `awaitOnline()`
+  answer offline with `AtConnectionCause.stopped` at once, and a stop ends an
+  `awaitOnline` wait rather than letting it run out its budget. A
+  notification's status poll ends when the service stops, not at its next
+  two-second turn.
+- fix: a client whose initialisation fails stops the timers and connections
+  the initialisation had started, as well as releasing its storage.
+- feat: `SyncServiceImpl.close()` and `Monitor.close()` stop for good and
+  close the connection each opened for itself; `SyncProgress.stopped` marks
+  the last event a stopping sync service sends.
+- fix: a sync round stopped while it applies a push batch's response
+  abandons the rest of the batch, rather than logging each remaining entry
+  at severe and carrying on against storage the stop may be closing. A
+  pulled entry that fails with `StoppedException` abandons the round the
+  same way, even when only a connection it needed was closed, rather than
+  being skipped while the round reports success.
+- fix: a `sync()` request that carries `onDone` and fails is answered once;
+  it used to stay queued, and the same round was run again for it on every
+  microtask, firing `onError` each time.
 - feat: `at_client_mixins.dart` exports `SignedEnvelope`, the type
   `EnvelopeSigning.wrapAndSign` returns, so a caller can name it without
   importing `src/`.

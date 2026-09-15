@@ -68,7 +68,8 @@ extension AtsignLifecycle on Atsign {
   /// sync's, its monitor's - and is how an application chooses the transport
   /// or a proxy convention; with none, TLS on TCP from the preference.
   /// [atLookUp] is a connection to use instead of one built, for a caller
-  /// that already holds one. [serviceFactory] supplies the client's
+  /// that already holds one; the client takes it over, and stopping the client
+  /// closes it for good. [serviceFactory] supplies the client's
   /// notification, sync and enrollment services in place of the defaults; a
   /// process that must not sync hands in a factory whose sync service does
   /// nothing.
@@ -264,8 +265,9 @@ extension AtsignLifecycle on Atsign {
   /// enrollment's keys after that long. [lookUps] builds the connection the
   /// request goes out on and every one the enrollment opens after it;
   /// [atLookUp] is one to submit on instead, for a caller that already holds
-  /// one. The request itself travels unauthenticated, since this device
-  /// holds no credential yet.
+  /// one, and the client the enrollment opens takes it over as [open] does.
+  /// The request itself travels unauthenticated, since this device holds no
+  /// credential yet.
   Future<PendingEnrollment> enroll({
     required String otp,
     required String app,
@@ -359,7 +361,8 @@ extension AtsignLifecycle on Atsign {
   ///
   /// [preference] supplies the root domain; [lookUps] builds the connections
   /// the enrollment opens, and [atLookUp] is one for the approval handshake,
-  /// for a caller that already holds one.
+  /// for a caller that already holds one, which the client the enrollment
+  /// opens takes over as [open] does.
   Future<PendingEnrollment?> resumeEnrollment({
     required String app,
     required String device,

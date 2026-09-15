@@ -1,4 +1,4 @@
-import 'dart:async' show FutureOr, Timer;
+import 'dart:async' show FutureOr;
 import 'dart:convert' show jsonEncode;
 
 import 'package:at_client/src/client/request_options.dart'
@@ -158,37 +158,37 @@ mixin EnvelopeSigning on ApkamSigning {
 
   // In memory caching of public keys (to reduce latency)
 
+  /// Cached public keys and when each expires. An entry is dropped when a
+  /// lookup finds it expired, so nothing here holds a timer.
   @visibleForTesting
-  final Map<String, (String, Timer)> pubKeyCache = {};
+  final Map<String, (String, DateTime)> pubKeyCache = {};
 
   String _cacheKey(String atSign, String enrollmentId) =>
       '$atSign#$enrollmentId';
 
+  DateTime get _expiry =>
+      DateTime.now().add(publicKeyCacheSettings!.cacheExpiry);
+
   @visibleForTesting
   void cachePubKey(String atSign, String enrollmentId, String pubKey) {
     if (publicKeyCacheSettings == null) return;
-
-    // Create a timer to auto purge the cache
-    final timer = Timer(publicKeyCacheSettings!.cacheExpiry, () {
-      pubKeyCache.remove(_cacheKey(atSign, enrollmentId));
-    });
-    pubKeyCache[_cacheKey(atSign, enrollmentId)] = (pubKey, timer);
+    pubKeyCache[_cacheKey(atSign, enrollmentId)] = (pubKey, _expiry);
   }
 
   @visibleForTesting
   String? lookupPubKey(String atSign, String enrollmentId) {
     if (publicKeyCacheSettings == null) return null;
 
-    final cacheValue = pubKeyCache[_cacheKey(atSign, enrollmentId)];
+    final key = _cacheKey(atSign, enrollmentId);
+    final cacheValue = pubKeyCache[key];
     if (cacheValue == null) return null;
+    if (!DateTime.now().isBefore(cacheValue.$2)) {
+      pubKeyCache.remove(key);
+      return null;
+    }
 
     if (publicKeyCacheSettings!.resetOnLookup) {
-      // Cancel the existing timer and create a new one
-      cacheValue.$2.cancel();
-      final timer = Timer(publicKeyCacheSettings!.cacheExpiry, () {
-        pubKeyCache.remove(_cacheKey(atSign, enrollmentId));
-      });
-      pubKeyCache[_cacheKey(atSign, enrollmentId)] = (cacheValue.$1, timer);
+      pubKeyCache[key] = (cacheValue.$1, _expiry);
     }
     return cacheValue.$1;
   }

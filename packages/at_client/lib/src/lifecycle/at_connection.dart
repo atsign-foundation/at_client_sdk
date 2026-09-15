@@ -133,8 +133,14 @@ class AtConnection {
 
   /// One bounded attempt to reach the atServer and authenticate, reported
   /// here and returned once the report, and whatever it records, is done.
+  ///
+  /// Once the client has stopped this answers offline with
+  /// [AtConnectionCause.stopped] at once, and so does an attempt the stop
+  /// lands in the middle of.
   Future<AtConnectionState> attempt({Duration budget = defaultBudget}) async {
+    if (_closed) return _stoppedState;
     final state = await _attempt(budget);
+    if (_closed) return _stoppedState;
     await report(state);
     return state;
   }
@@ -142,13 +148,14 @@ class AtConnection {
   /// Attempts until the connection is online, or refused, or [budget] is
   /// spent, pausing [retryInterval] between attempts, and returns where it
   /// ended. A refusal, and an atDirectory with no record of the atSign, are
-  /// answers that waiting does not change, so they end the wait at once.
+  /// answers that waiting does not change, so they end the wait at once, and
+  /// so does the client stopping.
   Future<AtConnectionState> awaitOnline({
     Duration budget = defaultBudget,
     Duration retryInterval = const Duration(seconds: 3),
   }) async {
     final deadline = DateTime.now().add(budget);
-    var state = _current;
+    var state = _closed ? _stoppedState : _current;
     while (!_settled(state)) {
       final remaining = deadline.difference(DateTime.now());
       if (remaining <= Duration.zero) break;
@@ -156,7 +163,12 @@ class AtConnection {
       if (_settled(state)) break;
       final left = deadline.difference(DateTime.now());
       if (left <= Duration.zero) break;
-      await Future<void>.delayed(retryInterval < left ? retryInterval : left);
+      final pause = Completer<void>();
+      final timer =
+          Timer(retryInterval < left ? retryInterval : left, pause.complete);
+      await Future.any([pause.future, _closing.future]);
+      timer.cancel();
+      if (_closed) return _stoppedState;
     }
     return state;
   }
@@ -164,7 +176,13 @@ class AtConnection {
   static bool _settled(AtConnectionState state) =>
       state.isOnline ||
       state.isRefused ||
-      state.cause == AtConnectionCause.noAtServer;
+      state.cause == AtConnectionCause.noAtServer ||
+      state.cause == AtConnectionCause.stopped;
+
+  static AtConnectionState get _stoppedState =>
+      AtConnectionState.offline(AtConnectionCause.stopped);
+
+  final Completer<void> _closing = Completer<void>();
 
   /// Records [state] as what the connection is now.
   ///
@@ -198,8 +216,11 @@ class AtConnection {
   /// offline with [AtConnectionCause.stopped], emitted as the last change,
   /// and [changes] is done.
   Future<void> close() async {
-    await report(AtConnectionState.offline(AtConnectionCause.stopped));
+    if (_closed) return;
+    final reported = report(_stoppedState);
     _closed = true;
+    _closing.complete();
+    await reported;
     await _changes.close();
   }
 }

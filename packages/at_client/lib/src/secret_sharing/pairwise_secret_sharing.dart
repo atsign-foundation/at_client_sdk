@@ -14,7 +14,8 @@ import 'package:at_client/src/service/notification_service.dart'
     show NotificationParams;
 import 'package:at_client/src/service/sync_service.dart'
     show SyncDirection, SyncProgress, SyncProgressListener, SyncService;
-import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
+import 'package:at_commons/at_commons.dart'
+    show AtKey, AtValue, StoppedException;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
     show NamespaceMember;
@@ -164,6 +165,10 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// for the namespace clears it.
   Future<bool> Function(String requesterEnrollmentId)?
       perEnrollmentSecretRequestGate;
+
+  /// Files a secret that just arrived durably, before the envelope carrying
+  /// it is deleted; a throw keeps the envelope for the next sweep.
+  Future<void> Function(Secret secret)? fileReceivedSecret;
 
   /// Anti-storm floor: the same (requester, secret-name) is answered at most
   /// once per this interval. A burst of duplicate requests collapses to one
@@ -326,6 +331,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         encryptValue: false,
       );
     } catch (e) {
+      if (e is StoppedException) rethrow;
+      _throwIfStopped();
       logSwallowed(
           logger,
           e,
@@ -341,7 +348,10 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// The initial and periodic sweeps read wherever [clientRunsSync] says
   /// envelopes arrive — the local store when sync is running, the atServer
   /// when it is not. Requires [register] to have completed.
+  ///
+  /// Throws [StoppedException] after [stop].
   Future<void> startListening() async {
+    _throwIfStopped();
     if (_sweepTimer != null) {
       return;
     }
@@ -371,6 +381,26 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     await sweepOnce(fromRemote: sweepRemote);
   }
 
+  bool _stopped = false;
+  final Completer<void> _stopping = Completer<void>();
+
+  /// Stops for good, when the client does: listening ends, a [waitForSecret]
+  /// still waiting fails with [StoppedException], and a sweep in flight ends
+  /// at its next envelope.
+  void stop() {
+    if (_stopped) return;
+    _stopped = true;
+    stopListening();
+    _stopping.complete();
+  }
+
+  void _throwIfStopped() {
+    if (_stopped) {
+      throw StoppedException('secret sharing for '
+          '${atClient.getCurrentAtSign()} has stopped');
+    }
+  }
+
   /// Stops watching. The [receivedEnvelopes] stream stays open; a later
   /// [startListening] resumes.
   void stopListening() {
@@ -384,6 +414,16 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     unawaited(_wakeUpSubscription?.cancel());
     _wakeUpSubscription = null;
     _listeningFor = null;
+  }
+
+  /// Unhooks the running listener from the services it is attached to, so the
+  /// next [attachToServices] hooks it onto the client's current ones.
+  void detachFromServices() {
+    final listener = _syncListener;
+    if (listener != null) _listeningTo?.removeProgressListener(listener);
+    _listeningTo = null;
+    unawaited(_wakeUpSubscription?.cancel());
+    _wakeUpSubscription = null;
   }
 
   /// Hooks the running listener onto whichever of the client's sync and
@@ -458,6 +498,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// next trigger sweeps the same addresses again.
   void _sweepInBackground({bool fromRemote = false}) {
     unawaited(sweepOnce(fromRemote: fromRemote).catchError((Object e) {
+      if (e is StoppedException) return 0;
       logger.warning(
           'Background envelope sweep failed for ${atClient.getCurrentAtSign()}'
           '${atClient.enrollmentId == null ? '' : ' (enrollment '
@@ -477,11 +518,18 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// local store; the wake-up path uses it so a sync-less client — which has
   /// no synced local copy — can still receive envelopes.
   Future<int> sweepOnce({bool fromRemote = false}) async {
+    _throwIfStopped();
     final List<AtKey> envelopeKeys = await atClient.getAtKeys(
         regex: EnvelopeAddressing.sweepRegexForAny(heldKpids),
         useRemoteAtServer: fromRemote);
     int consumed = 0;
     for (final envelopeKey in envelopeKeys) {
+      if (_stopped) {
+        logger.warning('Stopped sweeping envelopes for '
+            '${atClient.getCurrentAtSign()}: the client stopped, so the rest '
+            'wait for the next start');
+        break;
+      }
       final keyString = envelopeKey.toString();
       // Claim the key synchronously: Set.add is false if a concurrent sweep
       // already claimed it. This closes the check-then-consume window — the
@@ -498,6 +546,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         // — never delete on failure; release the claim so the next sweep
         // retries. Nothing has been emitted yet, so a retry repeats nothing.
         _consumedEnvelopeKeys.remove(keyString);
+        if (e is StoppedException) rethrow;
+        _throwIfStopped();
         logger.warning('Failed to process envelope $envelopeKey: $e');
         continue;
       }
@@ -515,6 +565,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         // NOTE: the envelope has been EMITTED — releasing the claim here would
         // hand it to the next sweep for a second emission. The claim and the
         // envelope are both kept; a fresh process retries the whole thing.
+        if (e is StoppedException) rethrow;
+        _throwIfStopped();
         logger.warning('Envelope $envelopeKey was received but its payload '
             'handler failed; it is kept for a retry at the next start: $e');
         continue;
@@ -525,6 +577,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
             deleteRequestOptions: DeleteRequestOptions()
               ..useRemoteAtServer = fromRemote);
       } catch (e) {
+        if (e is StoppedException) rethrow;
+        _throwIfStopped();
         logSwallowed(
             logger, e, 'Failed to delete consumed envelope $envelopeKey: $e');
       }
@@ -669,6 +723,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               inReplyTo: EnvelopeAddressing.unsolicited);
           sent++;
         } catch (e) {
+          if (e is StoppedException) rethrow;
+          _throwIfStopped();
           // Warning, not finer: a request that never went out is
           // indistinguishable from one nobody answered.
           logger.warning('Could not request secrets from enrollment '
@@ -740,9 +796,20 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
 
     if (requestAnswerJitter > Duration.zero) {
-      await Future.delayed(Duration(
-          microseconds:
-              requestAnswerRandom.nextInt(requestAnswerJitter.inMicroseconds)));
+      final jitter = Completer<void>();
+      final timer = Timer(
+          Duration(
+              microseconds: requestAnswerRandom
+                  .nextInt(requestAnswerJitter.inMicroseconds)),
+          jitter.complete);
+      await Future.any([jitter.future, _stopping.future]);
+      timer.cancel();
+    }
+    if (_stopped) {
+      logger.warning('Not answering the secret request from kpid '
+          '${received.fromKpid} in ${received.appNamespace}: the client '
+          'stopped');
+      return;
     }
 
     // Read from the SEALED payload, never from the key name: the name is
@@ -840,6 +907,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               requestId, kpid, appNamespace),
           useRemoteAtServer: true);
       return keys.map((k) => k.toString()).toSet();
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       // Fail open: a duplicate the requester merges away costs less than
       // withholding the secret entirely.
@@ -867,15 +936,21 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// *before* the store check, so an arrival between the two cannot be
   /// missed. [startListening] must be active for arrivals to be observed.
   ///
-  /// Throws [TimeoutException] when [timeout] elapses first. Intended for
-  /// decrypt-style paths that race key distribution (e.g. a crypto provider
-  /// waiting for an epoch key another client is sharing).
+  /// Throws [TimeoutException] when [timeout] elapses first, and
+  /// [StoppedException] when [stop] lands first. Intended for decrypt-style
+  /// paths that race key distribution (e.g. a crypto provider waiting for an
+  /// epoch key another client is sharing).
   Future<Secret> waitForSecret(
     String namespace,
     String name, {
     Duration timeout = const Duration(seconds: 30),
   }) async {
+    _throwIfStopped();
     final completer = Completer<Secret>();
+    // NOTE: a wait that returns the secret already held never listens to
+    // [completer], so a stop after it must not complete it with an error that
+    // nothing handles.
+    completer.future.ignore();
     final subscription = receivedSecrets.listen((received) {
       if (received.secret.namespace == namespace &&
           received.secret.name == name &&
@@ -883,19 +958,34 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         completer.complete(received.secret);
       }
     });
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(TimeoutException(
+            'no holder conveyed $namespace:$name within $timeout', timeout));
+      }
+    });
+    unawaited(_stopping.future.then((_) {
+      if (!completer.isCompleted) {
+        completer.completeError(StoppedException('stopped waiting for '
+            '$namespace:$name: secret sharing for '
+            '${atClient.getCurrentAtSign()} has stopped'));
+      }
+    }));
     try {
       final existing = secretStore.getSecret(namespace, name);
       if (existing != null) {
         return existing;
       }
-      return await completer.future.timeout(timeout);
+      return await completer.future;
     } finally {
+      timer.cancel();
       await subscription.cancel();
     }
   }
 
   /// If [received] carries a secret, stores it in [secretStore]
-  /// (newest wins) and emits it on [receivedSecrets].
+  /// (newest wins), files it through [fileReceivedSecret] and emits it on
+  /// [receivedSecrets].
   Future<void> _handleSecretPayload(ReceivedEnvelope received) async {
     if (received.payload['kind'] != secretPayloadKind) {
       return;
@@ -919,6 +1009,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           'kpid ${received.fromKpid}: already hold a same-or-newer one');
       return;
     }
+    // NOTE: before the sweep deletes the envelope, so the envelope is the copy
+    // that survives a filing that fails or a stop that lands first.
+    await fileReceivedSecret?.call(secret);
     _receivedSecretsController.add(ReceivedSecret(
       secret: secret,
       fromKpid: received.fromKpid,
@@ -1021,6 +1114,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               inReplyTo: EnvelopeAddressing.unsolicited);
           pushed++;
         } catch (e) {
+          if (e is StoppedException) rethrow;
+          _throwIfStopped();
           logger.warning('Could not push "${secret.name}" to enrollment '
               '${member.enrollmentId} (kpid ${to.kpid}) in '
               '${secret.namespace}: $e. The remaining members are still '

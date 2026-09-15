@@ -76,7 +76,7 @@ void main() {
     // Destroying the socket is what a far end going away looks like from here,
     // and the muxable owns the reconnect that follows.
     logger.info('closing the notification connection');
-    await monitor.lookUp.close();
+    await monitor.lookUp.dropConnection();
 
     // Sent while the notification connection is down.
     final key = AtKey()

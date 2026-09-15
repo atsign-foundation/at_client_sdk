@@ -1,5 +1,23 @@
 ## 3.7.0-rc2
 
+- fix: a TLS connect is bounded from the TCP connect to the end of the
+  handshake. `SecureSocket.connect(timeout:)` bounds only the TCP part, so a
+  peer that accepted the connection and never answered the handshake left
+  the connect waiting for ever, and its socket held the process open.
+- feat: `AtLookUp.close()` ends the lookup. Work in flight fails with
+  `StoppedException` at once, without waiting for it, every socket still
+  being opened for the lookup is closed (the atDirectory lookup's included,
+  mid-handshake or not), notifications stop with their reconnect loop and
+  heartbeat, and every later call throws `StoppedException` without touching
+  the network.
+  `AtLookupMuxable.dropConnection()` closes only the current connection and
+  leaves the lookup usable, which is what `close()` did before; a caller that
+  closed a lookup and went on using it calls that instead.
+- fix: a stop that lands while `startNotifications` is opening its connection
+  leaves notifications stopped and that connection closed. It used to send
+  `monitor:` anyway and start a heartbeat that nothing cancelled. A heartbeat
+  or reconnect attempt that a stop cuts short now ends quietly, rather than
+  logging a failure and closing the connection.
 - feat: `checkAtSignServer(lookUp, atSign)` reports whether an atSign is in
   the atDirectory, whether its atServer answers and whether it is activated,
   as an `AtSignServerState` with the cause of any failure. It asks over the
