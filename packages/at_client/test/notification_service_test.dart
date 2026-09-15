@@ -64,6 +64,9 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
 
 class FakeMonitor extends Fake implements Monitor {
   @override
+  Future<void> close() async {}
+
+  @override
   NotificationListenerState currentState =
       NotificationListenerState.notConnected;
 

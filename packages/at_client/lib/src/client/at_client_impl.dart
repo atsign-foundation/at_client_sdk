@@ -771,12 +771,13 @@ class AtClientImpl implements AtClient {
       try {
         await atClientImpl._init(atLookUp: atLookUp);
       } catch (_) {
-        // A client that failed to build holds nothing: its claim on the storage
-
-        // would otherwise outlive it and refuse every later client.
-
+        // NOTE: a client that failed to build holds nothing — not the timers
+        // and connections _init got as far as starting, and not its claim on
+        // the storage, which would otherwise refuse every later client.
+        atClientImpl._isStopped = true;
+        await atClientImpl._stopBackgroundProcesses();
         await atClientImpl._releaseStorage();
-
+        atClientImpl.localSecondary?.release();
         rethrow;
       }
     }
@@ -1267,6 +1268,7 @@ class AtClientImpl implements AtClient {
     // map for the next caller to find.
     final serviceDefect = await _stopBackgroundProcesses();
     final storageDefect = await _releaseStorage(keepOpen: keepStorageOpen);
+    localSecondary?.release();
     // NOTE: by identity, not by key — the map is keyed (atSign, enrollmentId),
     // so a client filed under an enrollment is not found under the bare atSign
     // and would be left in the map, stopped, for the next caller to restart.
@@ -1359,7 +1361,7 @@ class AtClientImpl implements AtClient {
     // that is not one.
     final sync = _syncService;
     if (sync is SyncServiceImpl) {
-      await attempt('closing sync service', () async => sync.stop());
+      await attempt('closing sync service', sync.close);
     } else if (sync != null) {
       _logger.info('Nothing to stop for the sync service: '
           '${sync.runtimeType} implements SyncService but has no concrete '

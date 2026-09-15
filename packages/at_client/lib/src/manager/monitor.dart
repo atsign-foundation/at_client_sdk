@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -159,7 +160,12 @@ class Monitor {
   ///
   /// Reconnection is [lookUp]'s, so this does not loop: it subscribes once and
   /// the connection state arrives as events.
+  ///
+  /// Throws [StoppedException] once [close] has been called.
   void start() {
+    if (_closed) {
+      throw StoppedException('the notification monitor for $atSign is closed');
+    }
     if (targetState == NotificationListenerState.listening) {
       logger.shout('start() called, but targetState is already "listening"');
       return;
@@ -225,6 +231,10 @@ class Monitor {
       _armSilenceTimer();
       logger.info('monitor started');
     } catch (e) {
+      if (_targetState != NotificationListenerState.listening) {
+        logger.info('stop() arrived while starting, which ended the start');
+        return;
+      }
       logger.warning('Failed to start notifications: $e');
       _scheduleStartRetry();
     }
@@ -333,6 +343,19 @@ class Monitor {
   }
 
   Future<void> _stop() => _teardown();
+
+  bool _closed = false;
+
+  /// Stops the monitor for good: ends [lookUp], so a start in flight fails at
+  /// once, and returns when the teardown has run.
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    stop();
+    await lookUp.close();
+    await _lifecycle;
+    await currentStateStreamController.close();
+  }
 
   Future<void> _teardown() async {
     // Stop first, then cancel. `stopNotifications` closes the notification

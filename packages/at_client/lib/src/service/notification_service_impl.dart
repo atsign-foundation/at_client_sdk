@@ -549,8 +549,28 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   bool isStopped = false;
 
+  /// Stops this service for good: every subscription ends, and the monitor's
+  /// connection is closed before this returns.
   Future<void> stop() async {
     stopAllSubscriptions();
+    await monitor.close();
+  }
+
+  final Completer<void> _stopping = Completer<void>();
+
+  void _throwIfStopped() {
+    if (isStopped) {
+      throw StoppedException('the notification service for '
+          '${atClient.getCurrentAtSign()} has stopped');
+    }
+  }
+
+  /// Waits [duration], or until this service stops, whichever is sooner.
+  Future<void> _pause(Duration duration) async {
+    final elapsed = Completer<void>();
+    final timer = Timer(duration, elapsed.complete);
+    await Future.any([elapsed.future, _stopping.future]);
+    timer.cancel();
   }
 
   @override
@@ -561,6 +581,7 @@ class NotificationServiceImpl extends NotificationService {
       return;
     }
     isStopped = true;
+    _stopping.complete();
 
     if (stopNotificationsListener) {
       stopListening();
@@ -791,6 +812,7 @@ class NotificationServiceImpl extends NotificationService {
     Set<Atsign>? acceptedSenders,
     required String namespace,
   }) {
+    _throwIfStopped();
     String r = '^$atSign:([^.]+\\.)?$namespace@';
     // Single-subscription controller. Its onPause/onResume hooks are
     // deliberately NOT wired to pause the upstream subscription:
@@ -805,6 +827,12 @@ class NotificationServiceImpl extends NotificationService {
     StreamController<AtNotification> sc = StreamController<AtNotification>();
     StreamSubscription<AtNotification>? notifStreamSubscription;
     sc.onListen = () {
+      if (isStopped) {
+        sc.addError(StoppedException('the notification service for $atSign '
+            'stopped before this subscription was listened to'));
+        unawaited(sc.close());
+        return;
+      }
       Stream<AtNotification> notifStream = subscribe(
         regex: r,
         shouldDecrypt: true,
@@ -1013,11 +1041,12 @@ class NotificationServiceImpl extends NotificationService {
             'status');
       }
       if (firstCheck) {
-        await Future.delayed(Duration(milliseconds: 500));
+        await _pause(Duration(milliseconds: 500));
         firstCheck = false;
       } else {
-        await Future.delayed(Duration(seconds: 2));
+        await _pause(Duration(seconds: 2));
       }
+      if (isStopped) continue;
       status = await atClient.notifyStatus(notificationId);
     }
     return status;
@@ -1029,9 +1058,11 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   Duration? delayedStartListeningTimerDuration;
 
+  /// Throws [StoppedException] once this service has stopped.
   @override
   Stream<AtNotification> subscribe(
       {String? regex, bool shouldDecrypt = false}) {
+    _throwIfStopped();
     logger.finer('subscribe(regex: $regex, shouldDecrypt: $shouldDecrypt');
     regex ??= emptyRegex;
     var notificationConfig = NotificationConfig()
@@ -1072,8 +1103,11 @@ class NotificationServiceImpl extends NotificationService {
     if (atClient.getPreferences()?.monitorAutoStart == true) {
       if (regex == 'statsNotification') {
         delayedStartListeningTimerDuration ??= Duration(seconds: 30);
+        delayedStartListeningTimer?.cancel();
         delayedStartListeningTimer =
-            Timer(delayedStartListeningTimerDuration!, startListening);
+            Timer(delayedStartListeningTimerDuration!, () {
+          if (!isStopped) startListening();
+        });
       } else {
         startListening();
       }
@@ -1176,8 +1210,10 @@ class NotificationServiceImpl extends NotificationService {
           DateTime.parse(atNotificationMap['expiresAt']).millisecondsSinceEpoch;
   }
 
+  /// Throws [StoppedException] once this service has stopped.
   @override
   void startListening() {
+    _throwIfStopped();
     if (monitor.targetState == NotificationListenerState.listening) {
       logger.info('startListening() called, but already targeting listening');
       return;

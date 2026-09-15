@@ -127,6 +127,7 @@ class LocalSecondary implements Secondary {
   /// run after the keystore's initialisation has called `Hive.init(...)`; we
   /// never call it here ourselves.
   Future<AtSyncQueue> _ensureSyncQueueOpen() {
+    if (_released) return Future.error(_stopped());
     final existing = _syncQueue;
     if (existing != null) return Future.value(existing);
     return _syncQueueOpenInflight ??= () async {
@@ -147,6 +148,19 @@ class LocalSecondary implements Secondary {
       _syncQueue = q;
       return q;
     }();
+  }
+
+  bool _released = false;
+
+  StoppedException _stopped() => StoppedException('the client for '
+      '${_atClient.getCurrentAtSign()} has stopped and released its storage');
+
+  /// Ends this local secondary's use of its storage, when its client stops:
+  /// from here every keystore and sync-queue operation throws
+  /// [StoppedException].
+  void release() {
+    _released = true;
+    keyStore = _ReleasedKeyStore(_stopped);
   }
 
   /// Number of atKeys with pending client→server writes. Reads the
@@ -1118,4 +1132,16 @@ class LocalSecondary implements Secondary {
         keyType == KeyType.cachedPublicKey ||
         keyType == KeyType.localKey);
   }
+}
+
+/// The keystore a stopped client's [LocalSecondary] holds in place of the one
+/// it released.
+class _ReleasedKeyStore
+    implements AtKeyValueStore<String, AtData, AtMetaData?> {
+  final StoppedException Function() _stopped;
+
+  _ReleasedKeyStore(this._stopped);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw _stopped();
 }

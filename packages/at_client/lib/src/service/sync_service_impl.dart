@@ -36,6 +36,9 @@ class SyncServiceImpl implements SyncService {
   static int queueSize = 10;
   final AtClient _atClient;
   final RemoteSecondary _remoteSecondary;
+
+  /// Whether [create] built [_remoteSecondary], and so [close] closes it.
+  final bool _ownsRemoteSecondary;
   StreamSubscription<AtNotification>? _statsNotificationSubscription;
 
   /// utility method to reduce code verbosity in this file
@@ -163,8 +166,10 @@ class SyncServiceImpl implements SyncService {
       AtClientManager? atClientManager,
       RemoteSecondary? remoteSecondary,
       bool warmStartSync = true}) async {
+    final ownsRemoteSecondary = remoteSecondary == null;
     remoteSecondary ??= remoteSecondaryFor(atClient);
-    final syncService = SyncServiceImpl._(atClient, remoteSecondary);
+    final syncService = SyncServiceImpl._(atClient, remoteSecondary,
+        ownsRemoteSecondary: ownsRemoteSecondary);
     await syncService.statsServiceListener();
     syncService._startPeriodicSyncTimer();
     if (warmStartSync) {
@@ -205,7 +210,9 @@ class SyncServiceImpl implements SyncService {
               atClient is AtClientImpl ? atClient.secondaryAddressFinder : null,
           lookUps: atClient is AtClientImpl ? atClient.lookUps : null);
 
-  SyncServiceImpl._(this._atClient, this._remoteSecondary) {
+  SyncServiceImpl._(this._atClient, this._remoteSecondary,
+      {required bool ownsRemoteSecondary})
+      : _ownsRemoteSecondary = ownsRemoteSecondary {
     _logger = AtSignLogger('SyncService'
         ' (${_atClient.getCurrentAtSign()}:${_atClient.enrollmentId})');
     // _logger.level = 'info';
@@ -1650,7 +1657,12 @@ class SyncServiceImpl implements SyncService {
   /// [addProgressListener]. The sync queue starts empty after restart
   /// (it was drained on [stop]). Idempotent — calling [restart] when
   /// not stopped is a no-op.
+  ///
+  /// Throws [StoppedException] after [close].
   Future<void> start() async {
+    if (_closed) {
+      throw StoppedException('the sync service for $currentAtSign is closed');
+    }
     if (!isStopped) {
       _logger.finer('restart() called, but service is not stopped. Ignoring.');
       return;
@@ -1662,6 +1674,16 @@ class SyncServiceImpl implements SyncService {
     await statsServiceListener();
     _startPeriodicSyncTimer();
     sync();
+  }
+
+  bool _closed = false;
+
+  /// Stops this service for good, and closes the connection it opened for
+  /// itself before returning.
+  Future<void> close() async {
+    _closed = true;
+    await stop();
+    if (_ownsRemoteSecondary) await _remoteSecondary.closeConnection();
   }
 
   void _drainSyncQueue() {
@@ -1683,7 +1705,8 @@ class SyncServiceImpl implements SyncService {
       ..atSign = currentAtSign
       ..syncStatus = SyncStatus.failure
       ..atClientException = exception
-      ..message = 'SyncService stopped';
+      ..message = 'SyncService stopped'
+      ..stopped = true;
 
     for (var listener in _syncProgressListeners) {
       try {

@@ -1,5 +1,25 @@
 ## 3.15.0-rc1
 
+- fix: `AtClient.stop()` closes every connection the client opened before it
+  returns, the monitor's and sync's included; the monitor's used to be closed
+  some time after, and sync's never. A connection handed to `Atsign.open`,
+  `activate`, `enroll` or `resumeEnrollment` belongs to the client, which
+  closes it for good when it stops.
+- fix: after `stop()`, a read or write of local storage throws
+  `StoppedException` rather than failing on a closed storage box.
+  `subscribe`, `subscribeFiltered` and `startListening` on a stopped
+  notification service throw it too, and `waitUntilCaughtUp` completes with
+  it rather than waiting for ever.
+- fix: on a stopped client, `AtConnection.attempt()` and `awaitOnline()`
+  answer offline with `AtConnectionCause.stopped` at once, and a stop ends an
+  `awaitOnline` wait rather than letting it run out its budget. A
+  notification's status poll ends when the service stops, not at its next
+  two-second turn.
+- fix: a client whose initialisation fails stops the timers and connections
+  the initialisation had started, as well as releasing its storage.
+- feat: `SyncServiceImpl.close()` and `Monitor.close()` stop for good and
+  close the connection each opened for itself; `SyncProgress.stopped` marks
+  the last event a stopping sync service sends.
 - fix: a sync round stopped while it applies a push batch's response
   abandons the rest of the batch, rather than logging each remaining entry
   at severe and carrying on against storage the stop may be closing.
