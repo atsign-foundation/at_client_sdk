@@ -72,7 +72,7 @@ void main() {
           .subscribe(regex: '.$namespace')
           .listen(receivedNotifications.add);
 
-      atClient.notificationService.notify(
+      final sent = atClient.notificationService.notify(
         NotificationParams.forUpdate(
             AtKey()
               ..key = 'testnotif'
@@ -81,6 +81,12 @@ void main() {
       );
 
       await (atClient as AtClientImpl).stop();
+
+      try {
+        await sent;
+      } on StoppedException {
+        // A notify the stop cut short says so; one that got out first is fine.
+      }
     });
   });
 

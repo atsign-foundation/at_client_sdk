@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/config_util.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookupMuxable;
 import 'package:at_functional_test/src/enrolled_client.dart'
     show EnrolledClient, enrolAndAuthenticate;
 import 'package:test/test.dart';
@@ -265,7 +266,11 @@ void main() {
 
     // Drop everything the process holds for this atSign, so the client below
     // is built the way a later run builds one: from the keyfile.
-    await enrolled.client.getRemoteSecondary()?.atLookUp.close();
+    // NOTE: dropped rather than closed. A closed lookup is ended for good,
+    // and this client stays live until teardown, so its sync would go on
+    // reaching for a connection that can never be used again.
+    await (enrolled.client.getRemoteSecondary()?.atLookUp as AtLookupMuxable?)
+        ?.dropConnection();
     for (final dropped in List.of(AtClientImpl.atClientInstanceMap.values)) {
       addTearDown(dropped.stop);
     }
