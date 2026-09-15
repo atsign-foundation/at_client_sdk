@@ -379,7 +379,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   Future<NskeyAdvertisement> _mintUnlessPublished(String owner,
       String namespace, MintLease lease, _PreparedMint prepared) async {
     final published = await publishedAdvertisement(owner, namespace);
-    if (published == null) return _mint(owner, namespace, lease, prepared);
+    if (published == null) {
+      final filed = await _filedUnpublished(owner, namespace);
+      return _mint(owner, namespace, lease, filed ?? prepared);
+    }
     _logger.info(
         'Not minting an nskey for $owner:$namespace: ${published.nskeyKid} was '
         'published between the decision to mint and this client taking the '
@@ -530,7 +533,54 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         secretKey: pair.secretKey,
       ));
     }
+    return _preparedFrom(minted, retaining: retaining, createdAt: createdAt);
+  }
 
+  /// The generation this client filed for `(owner, namespace)` and did not
+  /// publish, prepared for publishing, or null when it holds none.
+  ///
+  /// Asked only when nothing is published there, which is what a stop between
+  /// a mint's filing and its publish leaves: minting again would orphan the
+  /// filed private. For each algorithm the mint wants, the private filed most
+  /// recently under it is taken; a filing missing one of them is minted afresh
+  /// rather than published short.
+  Future<_PreparedMint?> _filedUnpublished(
+      String owner, String namespace) async {
+    final filing = privateFiling;
+    if (filing == null) return null;
+    final filed = await filing.filedFor(namespace);
+    if (filed.isEmpty) return null;
+
+    final minted = <_MintedKey>[];
+    for (final keyAlgo in wantedKeyAlgorithms()) {
+      final newest = filed
+          .where((f) => f.keyAlgo == keyAlgo)
+          .fold<FiledNskeySeed?>(
+              null,
+              (best, f) => best == null || f.createdAt.isAfter(best.createdAt)
+                  ? f
+                  : best);
+      if (newest == null) return null;
+      final pair = await SecretSharingAlgos.kemFor(keyAlgo)!
+          .keyPairFromSeed(newest.seed.bytes);
+      if (nskeyKidOf(pair.publicKey) != newest.nskeyKid) return null;
+      minted.add((
+        keyAlgo: keyAlgo,
+        seed: newest.seed,
+        publicKey: pair.publicKey,
+        secretKey: pair.secretKey,
+      ));
+    }
+    _logger.info('Publishing the nskey generation '
+        '${minted.map((k) => nskeyKidOf(k.publicKey)).join(', ')} this client '
+        'filed for $owner:$namespace and never published, rather than minting '
+        'another');
+    return _preparedFrom(minted);
+  }
+
+  /// The advertisement for [minted] and this enrollment's signature over it.
+  Future<_PreparedMint> _preparedFrom(List<_MintedKey> minted,
+      {List<PackageKey> retaining = const [], DateTime? createdAt}) async {
     final advertisement = NskeyAdvertisement(
       v: nskeyAdvertisementVersion,
       // NOTE: carried across for an add, which joins the current generation in
@@ -604,6 +654,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final filing = privateFiling;
     if (filing != null) {
       for (final key in prepared.minted) {
+        // NOTE: a generation resumed from the keyfile is already filed, and a
+        // second store of it reports nothing stored.
+        if (await filing.readSeed(namespace, nskeyKidOf(key.publicKey)) !=
+            null) {
+          continue;
+        }
         final stored = await filing.store(
           namespace: namespace,
           nskeyKid: nskeyKidOf(key.publicKey),

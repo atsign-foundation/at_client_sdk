@@ -28,6 +28,15 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 final _logger = AtSignLogger('NskeyPrivateFiling');
 
+/// One private filed for a namespace: the generation it opens, its seed, the
+/// algorithm it was filed under, and when it was filed.
+typedef FiledNskeySeed = ({
+  String nskeyKid,
+  NskeySeed seed,
+  String keyAlgo,
+  DateTime createdAt,
+});
+
 /// Moves an arriving nskey private out of the secret-sharing transit buffer
 /// and into [AtKeys], where key material that must survive a restart belongs.
 ///
@@ -319,6 +328,29 @@ class NskeyPrivateFiling {
       _logger.finer('No nskey private for $namespace:$nskeyKid ($e)');
       return null;
     }
+  }
+
+  /// Every private filed for [namespace], with the algorithm it was filed
+  /// under and when; an entry under an algorithm this build cannot expand is
+  /// left out.
+  Future<List<FiledNskeySeed>> filedFor(String namespace) async {
+    final keys = await _readSourceOrNull('every private for $namespace');
+    if (keys == null) return const [];
+    final prefix = '$nskeyKeyfileIdPrefix$namespace.';
+    return [
+      for (final material in keys.atSignKeys)
+        if (material.role == CryptographicMaterialRole.privateDecapsulation &&
+            material.keyId.startsWith(prefix) &&
+            !material.keyId.substring(prefix.length).contains('.'))
+          if (SecretSharingAlgos.keyAlgoForMaterial(material.algorithm)
+              case final keyAlgo?)
+            (
+              nskeyKid: material.keyId.substring(prefix.length),
+              seed: NskeySeed(Uint8List.fromList(material.bytes.bytes)),
+              keyAlgo: keyAlgo,
+              createdAt: material.createdAt,
+            )
+    ];
   }
 
   /// Every private this keyfile holds, grouped by namespace: `{namespace:

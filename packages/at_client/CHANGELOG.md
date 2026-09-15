@@ -1,5 +1,10 @@
 ## 3.15.0-rc1
 
+- fix: a cold-start namespace-key mint publishes the generation this
+  enrollment already filed and never published, rather than minting another.
+  A stop between filing a minted nskey private and publishing its public
+  half used to leave that private orphaned and a second generation minted
+  beside it at the next start.
 - fix: a minted signing key is filed before it is advertised, so a stop
   between the two leaves a key the next start republishes from the keyfile
   rather than a key advertised that nothing holds. A signer in between signs
