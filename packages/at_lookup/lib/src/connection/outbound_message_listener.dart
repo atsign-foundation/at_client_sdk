@@ -209,16 +209,25 @@ class OutboundMessageListener {
     }
   }
 
-  /// Surface the buffer if it holds a complete notification.
+  /// Surface the line the buffer just completed, if it is a notification.
   ///
-  /// Called only when the buffer just gained a newline. A verb response whose
-  /// VALUE contains newlines is left alone, because the test is on the
-  /// buffer's prefix: a multi-line value still begins `data:` or `error:`,
-  /// never `notification:`.
+  /// Called only when the buffer just gained a newline, and it reads THAT
+  /// LINE rather than the whole buffer: anything already sitting in front of
+  /// it — a line the atServer sent that is not a notification and carries no
+  /// prompt to complete it — would otherwise prefix every notification after
+  /// it, so none of them would be recognised and each would be swallowed into
+  /// whatever response the next prompt completes. The connection stays up
+  /// throughout, so the caller goes deaf with nothing to see.
+  ///
+  /// A verb response whose VALUE contains newlines is still left alone: its
+  /// lines begin `data:` or `error:`, never `notification:`. A value carrying
+  /// a line that does begin `notification:` would be routed as one — nothing
+  /// on a monitor connection sends such a value, and being deaf is worse.
   void _routeIfNotification() {
     final bytes = _buffer.getData();
     if (bytes.isEmpty || bytes.last != newLineCodeUnit) return;
-    final body = bytes.sublist(0, bytes.length - 1);
+    final lineStart = bytes.lastIndexOf(newLineCodeUnit, bytes.length - 2) + 1;
+    final body = bytes.sublist(lineStart, bytes.length - 1);
     if (body.isEmpty) return;
     final String stripped;
     try {
@@ -230,7 +239,11 @@ class OutboundMessageListener {
     if (!stripped.startsWith('notification:')) return;
 
     logger.finer('NOTIFICATION $stripped');
+    // Only the notification goes: what came before it stays for the reader
+    // that response belongs to.
+    final kept = bytes.sublist(0, lineStart);
     _buffer.clear();
+    if (kept.isNotEmpty) _buffer.append(kept);
     try {
       onNotification!(stripped);
     } catch (e, st) {

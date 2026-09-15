@@ -12,16 +12,17 @@
 /// adjacent ones, so two whole frames can reach the client in one chunk, or
 /// one frame across several - which is what these cover.
 ///
-/// ⛔ NOT covered, and known broken: a complete reply followed by a
-/// notification in ONE chunk loses both. The scan over everything before a
-/// chunk's last newline looks only for notifications, never for the `\n@`
-/// reply terminator - deliberately, because a `data:` value may contain
-/// `\n@` and inspecting those bytes would truncate it (the last test here is
-/// that control). Disambiguating the two needs a delimiter the protocol does
-/// not have yet - an atServer that terminated every notification the way it
-/// terminates a reply would supply one. Measured shape, for whoever picks it
-/// up: `data:ok\n@alice@notification: {...}\n` in a single chunk yields no
-/// reply and no notification.
+/// ⛔ Still known broken, and covered below: a complete reply followed by a
+/// notification in ONE chunk loses the REPLY. The notification does arrive -
+/// it is read as the line it is, whatever sits in front of it. The scan over
+/// everything before a chunk's last newline looks only for notifications,
+/// never for the `\n@` reply terminator - deliberately, because a `data:`
+/// value may contain `\n@` and inspecting those bytes would truncate it (the
+/// last test here is that control). Disambiguating the two needs a delimiter
+/// the protocol does not have yet - an atServer that terminated every
+/// notification the way it terminates a reply would supply one. On a monitor
+/// connection the lost reply is a heartbeat answer, and an unanswered probe
+/// rebuilds the connection.
 library;
 
 import 'dart:async';
@@ -82,6 +83,47 @@ void main() {
 
       expect(out.notifications, [notif]);
       expect(out.reply, reply);
+    });
+
+    test('a reply the atServer never terminated does not hide what follows',
+        () async {
+      // The shape this is about: anything the atServer says on a monitor
+      // connection that is not a notification and never gets its prompt - an
+      // error line, a banner, half a reply. It used to sit in front of every
+      // notification after it, so none of them were recognised: the caller
+      // went deaf on a connection that stayed up, until some later prompt
+      // cleared the buffer.
+      final out =
+          await drive(['error:AT0011-Internal server error\n', '$notif\n']);
+
+      expect(out.notifications, [notif],
+          reason: 'the notification is a line of its own, whatever is stuck '
+              'in front of it');
+    });
+
+    test('and that line is still there for the reply it belongs to', () async {
+      final out = await drive(
+          ['error:AT0011-Internal server error\n', '$notif\n', '@alice@']);
+
+      expect(out.notifications, [notif]);
+      expect(out.reply, contains('AT0011'),
+          reason: 'the notification is taken out of the buffer, not the line '
+              'in front of it: that one belongs to whatever reply the next '
+              'prompt completes');
+    });
+
+    test('a reply coalesced in front of a notification loses only the reply',
+        () async {
+      final out = await drive(['$reply\n@alice@$notif\n']);
+
+      expect(out.notifications, [notif],
+          reason: 'the notification is the last line of the chunk, and it is '
+              'read as a line: what precedes it cannot hide it');
+      expect(out.reply, isNull,
+          reason: 'the reply is still lost - its terminator was consumed as '
+              'part of the notification line. This is the known gap the '
+              'header describes, and on a monitor connection it costs one '
+              'heartbeat answer, which rebuilds the connection');
     });
 
     test('a multi-line reply value containing a prompt is NOT truncated',

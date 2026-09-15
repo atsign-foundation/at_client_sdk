@@ -1,5 +1,8 @@
 ## 3.15.0-rc1
 
+- fix: a notification is no longer lost when the atServer has said anything
+  else on the monitor connection first; the connection stayed up and the
+  client stopped receiving. Fixed in at_lookup's framing.
 - fix: `stop()` returns, and the process can exit, when the client's
   connections are waiting on an atServer or atDirectory that accepted them
   and never answered, not even the TLS handshake. It used to wait for ever.

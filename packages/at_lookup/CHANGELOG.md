@@ -1,5 +1,15 @@
 ## 3.7.0-rc2
 
+- fix: a notification is routed by the line it is, not by where it sits in
+  the read buffer. Anything the atServer said first and did not terminate -
+  an error line, a banner, half a reply - used to sit in front of every
+  notification after it, so none were recognised and each was swallowed into
+  whatever reply the next prompt completed. The connection stayed up
+  throughout, so a client went deaf with nothing to see until some later
+  reply cleared the buffer. A reply coalesced in front of a notification now
+  costs only the reply, where it used to cost both.
+- `AtLookupImpl.notificationReconnectDelays` is settable, so a test of what
+  happens across several outages does not spend a second on each.
 - fix: a TLS connect is bounded from the TCP connect to the end of the
   handshake. `SecureSocket.connect(timeout:)` bounds only the TCP part, so a
   peer that accepted the connection and never answered the handshake left
