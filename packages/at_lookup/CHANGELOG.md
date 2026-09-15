@@ -1,9 +1,15 @@
 ## 3.7.0-rc2
 
+- fix: a TLS connect is bounded from the TCP connect to the end of the
+  handshake. `SecureSocket.connect(timeout:)` bounds only the TCP part, so a
+  peer that accepted the connection and never answered the handshake left
+  the connect waiting for ever, and its socket held the process open.
 - feat: `AtLookUp.close()` ends the lookup. Work in flight fails with
-  `StoppedException`, a connection still being opened is destroyed when it
-  arrives, notifications stop with their reconnect loop and heartbeat, and
-  every later call throws `StoppedException` without touching the network.
+  `StoppedException` at once, without waiting for it, every socket still
+  being opened for the lookup is closed (the atDirectory lookup's included,
+  mid-handshake or not), notifications stop with their reconnect loop and
+  heartbeat, and every later call throws `StoppedException` without touching
+  the network.
   `AtLookupMuxable.dropConnection()` closes only the current connection and
   leaves the lookup usable, which is what `close()` did before; a caller that
   closed a lookup and went on using it calls that instead.

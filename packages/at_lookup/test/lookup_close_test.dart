@@ -146,6 +146,24 @@ void main() {
       expect(sockets.single.written, isEmpty);
     });
 
+    test('fails a connect in flight at once, without waiting for it', () async {
+      final atLookup = build();
+      connectGate = Completer<void>();
+      final pending = atLookup.executeCommand('noop:0\n');
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(sockets, hasLength(1), reason: 'the connect must be in flight');
+
+      final closing = atLookup.close();
+
+      await expectLater(
+          pending.timeout(const Duration(seconds: 2),
+              onTimeout: () => fail('the request waited for its connect, '
+                  'which a silent peer never completes')),
+          throwsA(isA<StoppedException>()));
+      await closing;
+      connectGate!.complete();
+    });
+
     test('ends a reconnect loop sleeping on its backoff', () async {
       final atLookup = build()..heartbeatInterval = const Duration(hours: 1);
       await atLookup.startNotifications();

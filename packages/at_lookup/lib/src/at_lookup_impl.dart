@@ -10,6 +10,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
+import 'package:at_lookup/src/util/tls_connect.dart' show Abandonment;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
 import 'package:mutex/mutex.dart';
@@ -927,11 +928,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   bool _closed = false;
   Future<void>? _closing;
 
+  /// Abandoned by [close], ending the work in flight and every socket still
+  /// being opened for this lookup, the atDirectory's included.
+  final Abandonment _abandonment = Abandonment();
+
   @override
   Future<void> close() => _closing ??= _close();
 
   Future<void> _close() async {
     _closed = true;
+    _abandonment.abandon();
     await stopNotifications();
   }
 
@@ -945,16 +951,25 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     if (_closed) throw _stopped();
   }
 
-  /// Runs [work] unless [close] has been called, and reports a failure that
-  /// arrives after the close - a read it aborted, a write to the socket it
-  /// destroyed - as the [StoppedException] it is.
+  /// Runs [work] unless [close] has been called, and fails it with a
+  /// [StoppedException] as soon as [close] is called, without waiting for it.
+  ///
+  /// A failure that arrives after the close - a read it aborted, a write to
+  /// the socket it destroyed - is reported as the [StoppedException] it is.
   Future<T> _whileOpen<T>(Future<T> Function() work) async {
     _throwIfClosed();
+    final closed = Completer<T>();
+    final unregister =
+        _abandonment.onAbandon(() => closed.completeError(_stopped()));
+    final running = _abandonment.run(work);
     try {
-      return await work();
+      return await Future.any([running, closed.future]);
     } on Exception catch (e) {
       if (_closed && e is! StoppedException) throw _stopped();
       rethrow;
+    } finally {
+      unregister();
+      running.ignore();
     }
   }
 

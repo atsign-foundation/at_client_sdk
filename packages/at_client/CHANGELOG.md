@@ -1,5 +1,8 @@
 ## 3.15.0-rc1
 
+- fix: `stop()` returns, and the process can exit, when the client's
+  connections are waiting on an atServer or atDirectory that accepted them
+  and never answered, not even the TLS handshake. It used to wait for ever.
 - fix: approving an enrollment that asks its approver to mint the symmetric
   key conveys that key before `enroll:approve`, not after. A stop between
   the two used to leave the enrollment approved with its keys encrypted under
