@@ -844,6 +844,8 @@ class SyncServiceImpl implements SyncService {
             SyncDirection.localToRemote,
             _syncQueueOpToCommitOp(source.op),
           ));
+        } on _SyncAbandoned {
+          rethrow;
         } on Exception catch (e) {
           final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
           _logger.severe(
