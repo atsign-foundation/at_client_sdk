@@ -10,6 +10,7 @@ description: >
   typed predicates, or watchWithTree deep hierarchies. Also use when the
   developer asks how to send or receive notifications via NotificationService,
   how to confirm a notification was delivered (getStatus / fetch),
+  how to wait until sync has settled (waitUntilCaughtUp),
   how to do request/response RPC between atsigns (AtRpc), how to run headless
   agents or CLIs (CLIBase) or coordinate multiple agent instances, how to read
   or write directly against the remote atServer (useRemoteAtServer), how to
@@ -24,7 +25,7 @@ compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
   version: "1.4.0"
-  last_modified: "Fri, 11 Sep 2026"
+  last_modified: "Tue, 15 Sep 2026"
 ---
 
 # atsign-dart-sdk Skill
@@ -363,6 +364,14 @@ sides of the flow.
 > without it, sync covers the atsign's whole keystore and can wedge, so shares
 > and updates never propagate. Reads are local; writes sync in the background.
 > See [references/11-sync.md](references/11-sync.md).
+
+To hold an operation until sync has settled, `await`
+`syncService.waitUntilCaughtUp(timeout: ...)` — an extension on `SyncService`,
+so it needs no cast or opt-in. Polling `isSyncInProgress` or `isInSync()`
+instead is a check-then-act race. Always pass `timeout`: it has no default,
+transient sync failures do not reject the future, and without one a stalled
+sync waits forever. It throws `TimeoutException`, which is **not** an
+`AtException` (§17).
 
 ---
 

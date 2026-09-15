@@ -14,6 +14,9 @@
 - Document error handling — the three exception families, `getTraceMessage()`
   over `toString()`, `CollectionOpException` partial failures, and what each
   operation throws (`references/17-error-handling.md`).
+- Document waiting for sync to settle — `waitUntilCaughtUp`, its snapshot
+  semantics, the mandatory `timeout`, and why polling `isSyncInProgress` is a
+  check-then-act race (`references/11-sync.md`).
 
 ## 1.3.0 — 2026-07-31
 

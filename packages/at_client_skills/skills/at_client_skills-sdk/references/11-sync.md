@@ -86,7 +86,72 @@ sync.removeProgressListener(listener);
 
 ---
 
-## 4. Read receipts are eventually consistent
+## 4. Wait for sync to settle with `waitUntilCaughtUp`
+
+When the requirement is "don't do X until sync has settled", do **not** poll
+`isSyncInProgress` or `isInSync()`. Both are point-in-time reads, so acting on
+one is a check-then-act race: the answer can change between the check and the
+next line, and neither tells you *when* it becomes true.
+
+`waitUntilCaughtUp` is the primitive for this. It is an extension on
+`SyncService`, so it is available on any `SyncService` reference with no cast,
+no opt-in, and no change to third-party implementers:
+
+```dart
+final sync = AtClientManager.getInstance().syncService;
+
+// Always bound the wait — see below.
+await sync.waitUntilCaughtUp(timeout: const Duration(seconds: 30));
+```
+
+You do not need to call `sync()` first — it triggers an iteration itself, so a
+progress event is guaranteed even when nothing else is driving sync. If local
+is already caught up, the future completes immediately.
+
+**It answers a snapshot question.** The future completes once `localCommitId`
+reaches the server commit id **as it stood when you called** — remote changes
+arriving afterwards do not extend the wait. So it means "I have what the server
+had when I asked", not "the world is now quiet". Completion also requires the
+local push queue to be empty (`pendingPushCount`), because commit-id equality
+alone is not enough: writes queued after a round started have not been pushed
+by the round you are watching.
+
+**Always pass `timeout`.** It is nullable with no default, and transient
+failures while waiting are deliberately tolerated — a `SyncStatus.failure`
+event does *not* reject the future. The timeout is therefore the only bound
+you get, and without one a stalled sync (network loss, wedged sync) hangs
+forever:
+
+```dart
+try {
+  await sync.waitUntilCaughtUp(timeout: const Duration(seconds: 30));
+} on TimeoutException {
+  // dart:async, NOT an AtException — `on AtException` will not catch it.
+  // See references/17-error-handling.md.
+}
+```
+
+For progress UI, `onProgress` fires on every `SyncProgress` event observed
+while waiting, including the per-batch `inProgress` events, and runs before the
+completion check so you see the same final event the future completes on.
+Exceptions it throws are swallowed and logged, so a broken callback cannot
+derail the wait:
+
+```dart
+await sync.waitUntilCaughtUp(
+  timeout: const Duration(seconds: 30),
+  onProgress: (p) =>
+      setState(() => _status = 'syncing ${p.localCommitId} / ${p.serverCommitId}'),
+);
+```
+
+Use `SyncProgressListener` (§3) when you want to observe sync for the life of
+the app; use `waitUntilCaughtUp` when you want to block one operation until
+the data is there.
+
+---
+
+## 5. Read receipts are eventually consistent
 
 `markReadByMe` / `readBy` / `readReceipts` are **shared-key writes** that ride
 the same sync + notification pipeline as any other item. So `readBy` is an
