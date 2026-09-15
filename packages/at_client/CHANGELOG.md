@@ -3,6 +3,9 @@
 - fix: a sync round stopped while it applies a push batch's response
   abandons the rest of the batch, rather than logging each remaining entry
   at severe and carrying on against storage the stop may be closing.
+- fix: a `sync()` request that carries `onDone` and fails is answered once;
+  it used to stay queued, and the same round was run again for it on every
+  microtask, firing `onError` each time.
 - feat: `at_client_mixins.dart` exports `SignedEnvelope`, the type
   `EnvelopeSigning.wrapAndSign` returns, so a caller can name it without
   importing `src/`.
