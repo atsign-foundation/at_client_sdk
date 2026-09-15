@@ -1,25 +1,42 @@
 # at_auth
 
-Platform-neutral core of **onboarding**, **authentication**, and **APKAM
-enrollment** for the Atsign Protocol. Used by both
-[`at_onboarding_cli`](../at_onboarding_cli) (CLI / server apps) and
-[`at_client_flutter`](../at_client_flutter) (Flutter apps) — most
-application developers will pick up one of those higher-level packages
-rather than consuming `at_auth` directly.
+> **Important: applications are not meant to use `at_auth` directly.**
+> Everything an app needs — onboarding, login, enrollment, the connection
+> state — is on [`at_client`](../at_client)'s `Atsign` verbs (`open`,
+> `activate`, `enroll`), behind [`at_client_flutter`](../at_client_flutter)'s
+> dialogs for Flutter apps and [`at_onboarding_cli`](../at_onboarding_cli)'s
+> commands for CLI and server apps. `at_auth` is the protocol layer those
+> build on: its API changes with the protocol and carries no compatibility
+> promise to applications, and a 4.0 removed every type an app once held.
+> Add `at_client` or `at_client_flutter` to your `pubspec.yaml`, not this.
+
+Platform-neutral core of **activation**, **authentication** and **APKAM
+enrollment** for the Atsign Protocol: the key material, the `.atKeys` store
+and the handshakes. Applications reach it through
+[`at_client`](../at_client)'s `Atsign` verbs — `activate`, `open`, `enroll` —
+and through [`at_onboarding_cli`](../at_onboarding_cli) (CLI / server apps)
+and [`at_client_flutter`](../at_client_flutter) (Flutter apps), which build
+on those, rather than consuming `at_auth` directly.
 
 ## What `at_auth` does
 
-| Capability                      | Entry point                                            |
-| ------------------------------- | ------------------------------------------------------ |
-| CRAM-based initial onboarding   | `AtAuth.onboard(AtOnboardingRequest, cramSecret)`      |
-| PKAM authentication             | `AtAuth.authenticate(AtAuthRequest)`                   |
-| APKAM enrollment (request side) | `AtEnrollment.submit(...)`                             |
-| APKAM enrollment (approve side) | `AtEnrollment.approve(...)` / `AtEnrollment.deny(...)` |
-| APKAM enrollment (self side)    | `AtEnrollment.update(...)` — an approved enrollment amending its own record |
-| Free atSign registration        | `RegistrarService` (fetches CRAM key by email)         |
+| Capability                      | Entry point                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| CRAM activation of a new atSign | `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ..., atLookUp: ...)` |
+| APKAM enrollment (request side) | `AtEnrollment.submit(...)`, then `AtEnrollment.waitForApproval(...)`                       |
+| APKAM enrollment (approve side) | `AtEnrollment.approve(...)`                                                                |
+| The `.atKeys` store             | `AtKeys`, `AtKeysIo` and its file, in-memory and keychain implementations                  |
+| Free atSign registration        | `RegistrarService` (fetches CRAM key by email)                                             |
 
-See [`example/onboard.dart`](example/onboard.dart),
-[`example/authenticate.dart`](example/authenticate.dart), and
+Logging in is at_client's: `Atsign('@alice').open(keys: ..., preference: ...)`
+builds the client and authenticates on the client's own connection, and
+`Atsign('@alice').authenticatesAs(keys: ...)` checks which enrollment a key
+source authenticates as without building one. So are denying and revoking an
+enrollment (`client.enrollments.deny(...)` / `.revoke(...)`) and an approved
+enrollment amending its own record (`EnrollmentUpdater`, from
+`package:at_client/at_client_mixins.dart`).
+
+See [`example/onboard.dart`](example/onboard.dart) and
 [`example/enrollment_request.dart`](example/enrollment_request.dart) for
 end-to-end usage.
 
@@ -79,25 +96,27 @@ through it end-to-end.
 
 #### Post-quantum onboarding (opt-in)
 
-Set `AtOnboardingRequest.signingAlgoType` to `mldsa65` and step 2 mints an
-**ML-DSA-65** PKAM keypair instead of an RSA one. Two consequences are worth
+Pass `signingAlgo: SigningAlgoType.mldsa65` to `activateAtSign` and step 2
+mints an **ML-DSA-65** PKAM keypair instead of an RSA one. Two consequences are worth
 knowing before turning it on:
 
 - The APKAM is filed as **typed material** under the enrollment id, and the
   `.atKeys` flat `apkamPublicKey`/`apkamPrivateKey` fields are left **empty**.
-  That is deliberate: `AtKeys.toAtChops()` reads only the flat fields, so a
-  tool that has not been taught about PQ enrollments fails outright instead of
-  signing an ML-DSA key with the RSA routine. `AtAuth.authenticate` resolves
-  such an enrollment on its own, via `signingAlgorithmForEnrollment` and
-  `toAtChopsForEnrollment`.
-- `AtOnboardingRequest.mintLegacyMaterial` governs the RSA encryption keypair,
+  That is deliberate: a reader of the flat fields alone —
+  `AtKeys.authenticationKeyPairFor(null)`, or a tool that predates typed
+  material — finds no APKAM and fails outright instead of signing an ML-DSA
+  key with the RSA routine. The authenticator at_auth
+  builds resolves such an enrollment on its own:
+  `AtKeys.enrollmentToAuthenticateAs()` names it and
+  `signingAlgorithmForEnrollment` picks the routine.
+- `activateAtSign`'s `mintLegacyMaterial` governs the RSA encryption keypair,
   the self-encryption key, and whether `public:publickey` is published. It is
   an **opt-out**: leave it null and all three are still produced, because
   whether this atSign will ever need to talk to a pre-quantum peer is decided
   by the apps that adopt it rather than at activation. Set it false and a
   pre-quantum peer cannot send to the atSign at all.
 
-`AtOnboardingRequest.metadataBuilder` attaches metadata to the first
+`activateAtSign`'s `metadataBuilder` attaches metadata to the first
 enrollment's record. It runs on the request that creates that record, whose
 metadata is never rewritten — so it is the only opportunity there will be.
 
@@ -142,7 +161,9 @@ for the submitting side; the approve/deny side is demonstrated in
 ## The `.atKeys` file format
 
 `FileAtKeysIo` reads and writes `.atKeys` files
-(default path `~/.atsign/keys/<atsign>_key.atKeys`). A file has up to
+(default path `~/.atsign/keys/<atsign>_key.atKeys`). It lives behind the
+`dart:io` barrel, `package:at_auth/at_auth_io.dart`; `package:at_auth/at_auth.dart`
+stays platform-neutral. A file has up to
 three layers, outermost first:
 
 1. **Optional passphrase envelope** — when a `passPhrase` is configured,
@@ -160,7 +181,8 @@ three layers, outermost first:
    - **Legacy flat** (no `version` field): a flat JSON object of the
      fields above plus `selfEncryptionKey`, `apkamSymmetricKey`, and
      `enrollmentId`.
-   - **Typed-keys** (`"version": 1`): adds `atsign` and two containers
+   - **Typed-keys** (`"version": 1`): adds `atsign`, an empty top-level
+     `keys` array, and two containers
      of typed key materials, while the legacy fields stay flat at the
      top level — a typed-keys file's legacy portion is byte-identical to
      a legacy-only file, so legacy readers can still use it.
@@ -183,9 +205,11 @@ three layers, outermost first:
      kid — a key package's, whose id is a digest of the key itself —
      keeps that kid.
 
-     ⚠️ A `"version": 1` document carrying a top-level `keys` array is an
-     older shape and is **refused**, naming itself, rather than read as a
-     legacy-only file. Nothing released ever wrote one.
+     ⚠️ The top-level `keys` array is always written empty, because readers
+     in the field may expect it wherever there is a `version`; typed material
+     never goes there. A `"version": 1` document whose top-level `keys` is
+     **populated** is an older shape and is **refused**, naming itself,
+     rather than read as a legacy-only file.
 
 In memory, `AtKeys` always holds plaintext; all three layers are applied
 and peeled exclusively by `FileAtKeysIo`.
@@ -241,6 +265,139 @@ lock is not reentrant.
 All three verbs write atomically (write-to-temp + rename), so a crash
 mid-write can never truncate the keyfile, and a rewrite over an existing
 file first preserves the previous state as `<file>.bak` alongside it.
+
+## Migrating from 3.x
+
+4.0 keeps the key material, the `.atKeys` stores and the enrollment
+handshakes, and hands everything an application used to call to
+[`at_client`](../at_client)'s `Atsign` verbs. An app on `at_client_flutter`
+or `at_onboarding_cli` follows those packages' own migration notes and never
+sees this table; it is for code that imported `package:at_auth/at_auth.dart`
+directly.
+
+| 3.x                                                                                              | 4.0                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AtAuth.create().onboard(AtOnboardingRequest(atSign)..rootDomain = ..., cramSecret)`             | `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ..., rootDomain: ..., atLookUp: ...)` here, or `Atsign(atSign).activate(...)` in at_client, which opens the client as well |
+| `AtAuth.create().authenticate(AtAuthRequest(atSign, atKeysIo: ...))`                             | `Atsign(atSign).open(keys: ..., preference: ...)`; `Atsign(atSign).authenticatesAs(keys: ..., rootDomain: ...)` for the check that builds no client                                           |
+| `AtAuthResponse.atChops`, `.atLookUp`, `.atAuthKeys`; `AtAuthSession.atLookUp`                   | the `AtClient` `open` hands back; its keys are read from the store it opened on (`keys.read(atSign)`), and the connection is its own                                                            |
+| `AtAuth.atChops`, `AtAuth.atLookUp`, `AtAuth.completeActivation()`                               | gone; `activateAtSign` completes the activation itself                                                                                                                                          |
+| `AtEnrollment.submit(request, atLookUp)` / `.waitForApproval(response)`                          | `waitForApproval(response, atLookup: ...)` takes the connection it runs on and leaves it open; or `Atsign(atSign).enroll(...)` and `PendingEnrollment.client(...)`, which file the request in the keys store and resume it after a restart |
+| `AtEnrollment.approve(decision, atLookUp)`                                                       | `client.enrollments.approve(enrollmentId)`; here, `approve(decision, atLookUp, approverKeys: ...)` requires the approver's encryption private key and self-encryption key                        |
+| `AtEnrollment.deny(...)` / `.revoke(...)`                                                        | `client.enrollments.deny(id)` / `.revoke(id)`                                                                                                                                                   |
+| `AtEnrollment.list(statuses, atLookUp)`                                                          | `client.enrollments.list(statuses: ...)`, `.pending()`, `.fetch(id)`                                                                                                                            |
+| `AtEnrollment.generateOtp(...)` / `.setSpp(...)`, answering an `Otp`                             | `client.enrollments.otp()` / `.spp(value)`, answering a `Passcode`                                                                                                                              |
+| `AtEnrollment.update(EnrollmentUpdateRequest, atLookUp)`                                         | `EnrollmentUpdater().update(request, atLookUp)` from `package:at_client/at_client_mixins.dart`                                                                                                  |
+| `AtAuthRequest.enrollmentId`, or any caller naming the enrollment to authenticate as             | the keys decide: `AtKeys.enrollmentToAuthenticateAs()` — the enrollment holding active typed authentication material, else the flat stored id, else `primary`                                    |
+| `AtKeys.toAtChops()` / `.toAtChopsForEnrollment(id)`                                             | `AtKeys.authenticationFor(id)` for the `AtChops` and its algorithm; `authenticationKeyPairFor(id)`, `encryptionKeyPair` and `selfEncryptionKey` for the material alone                          |
+| `KeyIOMixin`'s `decryptAtKeysWithSelfEncKey`, `encryptAtKeysWithSelfEncKey`, `generateKeyPairs`, `decodeAtKeys` | `FileAtKeysIo.read` / `.write`, which apply the passphrase envelope and the self-encryption themselves                                                                            |
+| `AtKeys.copyWith(...)`                                                                           | `AtKeys.addKey(...)`                                                                                                                                                                            |
+| `AtKeys.apkamPublicKey`, `.apkamPrivateKey`, `.apkamSymmetricKey`, `.defaultEncryptionPublicKey`, `.defaultEncryptionPrivateKey`, `.defaultSelfEncryptionKey`, `.enrollmentId` | still present, deprecated: write a legacy document with `AtKeys.legacy(...)` or `fileLegacyMaterial(...)`, and read it through `authenticationKeyPairFor`, `encryptionKeyPair`, `selfEncryptionKey`, `enrollmentSymmetricKey` and `storedEnrollmentId` |
+| `import 'package:at_auth/at_auth.dart'` for `FileAtKeysIo`                                       | `import 'package:at_auth/at_auth_io.dart'`, the `dart:io` barrel; at_client re-exports it                                                                                                       |
+| `ActivateApiEndpoint`, `RegistrarApiEndpoint.login` / `.validate`                                | `RegistrarApiEndpoint.requestOtp` / `.validateOtp`                                                                                                                                              |
+| `AtEnrollmentRequest(atSign: ..., rootDomain: ..., apkamPublicKey: ..., encryptedAPKAMSymmetricKey: ...)` | still accepted, deprecated: pass `session: AtAuthSession(...)`, which names the atSign, the root domain and the key destination                                                       |
+| `AtEnrollmentResponse.atSign`, `.rootDomain`, `.atAuthKeys`                                      | still present, deprecated: read `session.atSign`, `session.rootDomain` and the keys from `session.atKeysIo`                                                                                     |
+
+Behaviour that changed with no signature to catch it: a self-enrollment no
+longer approves its own request, since the atServer approves a retrofit
+outright; `waitForApproval` no longer pauses 500 ms before each attempt;
+and the first write that gives a flat keyfile typed material leaves a
+one-off `<keyfile>.pre-v1` copy of the flat document beside it, announced
+at `shout`.
+
+### Before and after
+
+What code that imported `at_auth` directly commonly did, each as it was and
+as it is now. In every case the 4.0 side is an `at_client` verb: the thing a
+3.x caller went on to build from the response — an `AtClient` — is what the
+verb hands back.
+
+**Authenticate from a keyfile**
+
+```dart
+// 3.x: a response carrying an authenticated connection and key material
+final atAuth = AtAuth.create();
+final response = await atAuth.authenticate(AtAuthRequest(atSign,
+    atKeysIo: FileAtKeysIo(filePath: (_) => keysPath),
+    rootDomain: AtRootDomain('root.atsign.org', 64)));
+final AtLookUp lookUp = response.atLookUp!;
+final AtChops chops = response.atChops!;
+
+// 4.0: the client, whose connection and keys those were
+final client = await Atsign(atSign).open(
+    keys: FileAtKeysIo(filePath: (_) => keysPath),
+    preference: AtClientPreference()..namespace = 'my_app');
+client.connection.current;                       // did the atServer accept the keys
+final keys = await client.atKeysIo!.read(atSign); // the material, from the store
+// Which enrollment the keyfile authenticates as, with no client built:
+final principal = await Atsign(atSign).authenticatesAs(
+    keys: FileAtKeysIo(filePath: (_) => keysPath),
+    rootDomain: AtRootDomain.atsignDomain);
+```
+
+**Onboard with a CRAM secret**
+
+```dart
+// 3.x
+final response = await AtAuth.create().onboard(
+    AtOnboardingRequest(atSign)..rootDomain = 'root.atsign.org', cramSecret);
+
+// 4.0, here: the activation alone, writing the keys to `keys`, over a
+// connection the app builds with its lookUps factory and closes itself
+final lookUp = secureSocketLookUps()(
+    atSign: atSign, rootDomain: AtRootDomain.atsignDomain, authenticator: null);
+final enrollmentId = await activateAtSign(
+    atSign: atSign, cramSecret: cramSecret,
+    keys: FileAtKeysIo(filePath: (_) => keysPath),
+    signingAlgo: SigningAlgoType.mldsa65,
+    atLookUp: lookUp, awaitProvisioning: true);
+await lookUp.close();
+// 4.0, in at_client: the activation and the client it opens
+final client = await Atsign(atSign).activate(
+    cramSecret: cramSecret, keys: keys, preference: preference);
+```
+
+**Request an enrollment and wait for its approval**
+
+```dart
+// 3.x: the app opened a connection itself and handed it in
+final AtLookUp lookUp = openConnection(atSign);   // however the app built one
+final enrollment = AtEnrollment.create();
+final submitted = await enrollment.submit(
+    AtEnrollmentRequest(
+        session: AtAuthSession(atSign: atSign, rootDomain: rootDomain, atKeysIo: keys),
+        appName: 'my_app', deviceName: 'laptop',
+        namespaces: {'my_app': 'rw'}, otp: otp),
+    lookUp);
+final approved = await enrollment.waitForApproval(submitted);
+
+// 4.0: the same handshake, filed in `keys` so a restart resumes it
+final pending = await Atsign(atSign).enroll(
+    otp: otp, app: 'my_app', device: 'laptop',
+    namespaces: {'my_app': 'rw'}, keys: keys, preference: preference);
+final client = await pending.client(preference);   // throws AtEnrollmentException on a denial
+```
+
+**Approve, deny, revoke; passcodes**
+
+```dart
+// 3.x: a decision object and a connection of the approver's
+await AtEnrollment.create().approve(
+    EnrollmentRequestDecision.approved(
+        enrollmentId: id, apkamSymmetricKey: symmetricKey, atSign: atSign),
+    approverLookUp);
+final Otp otp = await AtEnrollment.create().generateOtp(approverLookUp);
+
+// 4.0: the approver's client
+await client.enrollments.approve(id);              // or deny(id), revoke(id)
+final Passcode otp = await client.enrollments.otp();
+final requests = await client.enrollments.pending();
+client.enrollments.requests.listen((request) => ...);
+```
+
+`AtEnrollment.approve(decision, atLookUp, approverKeys: ...)` is still here for
+code that holds the approver's key material itself; `approverKeys` is required,
+because the approval seals the approver's encryption private key and
+self-encryption key for the enrollee.
 
 ## Where to go next
 

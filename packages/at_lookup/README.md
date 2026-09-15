@@ -56,6 +56,31 @@ final AtLookupMuxable atLookUp = AtLookUp.withSecureSocket(
 `withSecureSocket` returns an [`AtLookupMuxable`], which is an `AtLookUp` that
 also carries the atServer's notification stream, so one connection and one
 parser handle both of the atServer's framings.
+
+### A factory, for a client that opens many connections
+
+`AtLookUpFactory` is the function type an application hands at_client, so that
+every connection a client opens travels the way the application chose;
+`secureSocketLookUps` in `package:at_lookup/at_lookup_io.dart` is the default,
+TLS on TCP:
+
+```dart
+import 'package:at_lookup/at_lookup_io.dart';
+
+// TLS with your own settings.
+final lookUps = secureSocketLookUps(
+    config: SecureSocketConfig()..pathToCerts = '/certs');
+
+// Behind a proxy that routes on the atSign: `onConnect` runs once on each new
+// connection, before anything else is sent on it.
+final viaProxy = secureSocketLookUps(
+    onConnect: (connection) => connection.sendSync('from:@alice\n'));
+```
+
+A factory of your own returns any `AtLookupMuxable`. Each call names what the
+connection is for: the atSign, the root domain, the authenticator (null for a
+connection that never authenticates), an optional address finder and the
+client config. The factory captures how bytes travel.
 Please refer to [examples](https://github.com/atsign-foundation/at_libraries/blob/doc_at_lookup/at_lookup/example/bin/example.dart) for more details.
 
 ## Open source usage and contributions

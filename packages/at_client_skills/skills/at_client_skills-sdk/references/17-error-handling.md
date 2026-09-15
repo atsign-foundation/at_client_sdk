@@ -8,7 +8,7 @@ bad error handling here comes from catching the wrong one.
 | ------ | -------- | ----- | -- |
 | Dart core errors | `ArgumentError`, `StateError`, `LateInitializationError` | **Your bug** — the call was invalid | Fix the call; don't catch |
 | `AtException` + subtypes | `AtKeyException`, `AtConnectException`, `AtDecryptionException` | Runtime or environmental | Catch and handle |
-| Outside the `AtException` tree | `CollectionOpException`, `TimeoutException` (`dart:async`), `AtAuthenticationException` (`at_auth`) | Real runtime failures that `on AtException` will **not** catch | Catch explicitly |
+| Outside the `AtException` tree | `CollectionOpException`, `TimeoutException` (`dart:async`) | Real runtime failures that `on AtException` will **not** catch | Catch explicitly |
 
 `AtException` is the root of everything the protocol layer throws, so it is the
 catch-all worth writing — but it is not sufficient on its own. `ArgumentError`
@@ -21,9 +21,11 @@ them.
 `AtException` type is already available from
 `import 'package:at_client/at_client.dart'` — and the deprecated `at_client`
 copies of `AtClientException` / `AtKeyException` are *not* exported, so the
-normal import gives you the right ones. Auth is the exception:
-`AtAuthenticationException` lives in `at_auth`, which `at_client` does **not**
-re-export, so catching it means importing `at_auth` yourself.
+normal import gives you the right ones. A few types are named by `at_auth`
+rather than re-exported (`AtAuthenticationException` among them); they still
+extend `AtException`, so `on AtException` catches them — you just cannot name
+one in an `on` clause without importing `at_auth`, which an app should not
+need to do.
 
 ---
 
@@ -161,11 +163,15 @@ keys, a null `notifier` under `StrategyEnum.latest`, or a failed connection.
 Also `LateInitializationError` when `NotificationParams.atKey` was never set —
 a bug, not a runtime condition. `fetch(id)` throws `AtClientException` when the
 atServer is unreachable or times out — see
-[15-notifications.md](15-notifications.md).
+[16-notifications.md](16-notifications.md).
 
-**Enrolment** — `AtEnrollmentException`, plus `AtInvalidEnrollmentException`
-and `AtEnrollmentRevokeException`. See
-[16-apkam-enrolment.md](16-apkam-enrolment.md).
+**Opening and enrolling a client** — `AtOpenRefusedException` when the
+atServer refuses the keys on their first open, `AtEnrollmentPendingException`
+when the keys hold only a request still awaiting approval (resume it rather
+than re-enrolling), and `AtEnrollmentException` when a request was denied.
+All three extend `AtException`. A `StateError` "already live" means a client
+for that atSign is open in this process — `stop()` it first. See
+[15-client-lifecycle.md](15-client-lifecycle.md).
 
 **Sync catch-up** — `TimeoutException` from `dart:async`, which is **not** an
 `AtException`, so `on AtException` will not catch it.

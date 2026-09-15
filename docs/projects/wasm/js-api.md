@@ -637,8 +637,12 @@ achievable unilaterally in the facade. **Resolve on upstream's answer to the add
 change; document the gap and ship read-compatibility in the meantime.**
 
 **JS-8 — `AtClientManager`'s singleton blocks multi-instance JS clients.**
-`packages/at_client/lib/src/manager/at_client_manager.dart:48` holds a
-`static final AtClientManager _singleton` driven by `setCurrentAtSign(...)`. A JS
+`packages/at_client/lib/src/manager/at_client_manager.dart` holds a
+`static final AtClientManager _singleton`, historically driven by `setCurrentAtSign(...)`
+(now deprecated). A caller can build clients that register nowhere — `buildAtClient`
+and `Atsign.open` hand back a client the caller owns — so multi-instance is expressible
+in Dart today; what remains single is the *current* atSign the manager and its
+`AtSignChangeListener`s track. A JS
 consumer calling `AtClient.create({atSign: '@alice'})` then `AtClient.create({atSign:
 '@bob'})` expects two independent clients — every reference SDK in Axis C
 (`plans/wasm/api-designing.md` §1) is multi-instance by construction — but today the

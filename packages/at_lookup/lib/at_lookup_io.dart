@@ -17,9 +17,17 @@
 /// rather than the change also having to remove a default.
 library;
 
-import 'package:at_commons/at_commons.dart' show SecureSocketConfig;
+import 'package:at_commons/at_commons.dart'
+    show AtRootDomain, SecureSocketConfig;
 
-import 'src/at_lookup.dart' show AtLookupTransport;
+import 'src/at_lookup.dart'
+    show
+        AtAuthenticator,
+        AtCommandExecutor,
+        AtLookUp,
+        AtLookUpFactory,
+        AtLookupTransport;
+import 'src/cache/secondary_address_finder.dart' show SecondaryAddressFinder;
 
 export 'at_lookup.dart';
 
@@ -30,5 +38,35 @@ export 'at_lookup.dart';
 /// transport, and a caller has to state it: `secureSocketTransport(
 /// SecureSocketConfig())` says "the TLS defaults", where a constant would let
 /// a site inherit settings its neighbour set deliberately.
-AtLookupTransport secureSocketTransport(SecureSocketConfig secureSocketConfig) =>
+AtLookupTransport secureSocketTransport(
+        SecureSocketConfig secureSocketConfig) =>
     AtLookupTransport(secureSocketConfig: secureSocketConfig);
+
+/// The default [AtLookUpFactory]: every connection over TLS on TCP, under
+/// [config] (the TLS defaults with none), through `AtLookUp.withSecureSocket`.
+///
+/// [onConnect] runs on each connection once it is up and before anything else
+/// is sent on it, which is how a deployment behind a proxy sends the `from:`
+/// the proxy needs first.
+AtLookUpFactory secureSocketLookUps({
+  SecureSocketConfig? config,
+  Future<void> Function(AtCommandExecutor connection)? onConnect,
+}) {
+  final transport = secureSocketTransport(config ?? SecureSocketConfig());
+  return ({
+    required String atSign,
+    required AtRootDomain rootDomain,
+    required AtAuthenticator? authenticator,
+    SecondaryAddressFinder? secondaryAddressFinder,
+    Map<String, dynamic> clientConfig = const {},
+  }) =>
+      AtLookUp.withSecureSocket(
+        atSign: atSign,
+        rootDomain: rootDomain,
+        authenticator: authenticator,
+        transport: transport,
+        secondaryAddressFinder: secondaryAddressFinder,
+        clientConfig: clientConfig,
+        onConnect: onConnect,
+      );
+}

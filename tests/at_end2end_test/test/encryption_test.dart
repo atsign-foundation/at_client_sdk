@@ -20,10 +20,12 @@ void main() {
     atSign_2 = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     String authType = ConfigUtil.getYaml()['authType'];
 
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(atSign_1, namespace, authType);
-    await TestSuiteInitializer.getInstance()
-        .testInitializer(atSign_2, namespace, authType);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        atSign_1, namespace, authType,
+        posture: PqPosture.legacy);
+    await TestSuiteInitializer.getInstance().testInitializer(
+        atSign_2, namespace, authType,
+        posture: PqPosture.legacy);
   });
 
   tearDownAll(() {});
@@ -32,7 +34,8 @@ void main() {
     String atSign, {
     String? testProviderId,
   }) async {
-    final preference = TestPreferences.getInstance().getPreference(atSign);
+    final preference = TestPreferences.getInstance()
+        .getPreference(atSign, posture: PqPosture.legacy);
     if (testProviderId != null) {
       preference.crypto = CryptoConfig(
         defaultProviderId: legacyCryptoProviderId,
@@ -59,7 +62,8 @@ void main() {
     List<CryptoProvider> providers, {
     String defaultProviderId = legacyCryptoProviderId,
   }) async {
-    final preference = TestPreferences.getInstance().getPreference(atSign)
+    final preference = TestPreferences.getInstance()
+        .getPreference(atSign, posture: PqPosture.legacy)
       ..crypto = CryptoConfig(
         defaultProviderId: defaultProviderId,
         providers: providers,
@@ -248,17 +252,17 @@ void main() {
 
       // Notify first, THEN switch to the receiver and subscribe. A live
       // listener on atSign_2 cannot survive the getAtClient(atSign_1) switch:
-      // AtClientManager is a singleton and setCurrentAtSign stops the previous
+      // AtClientManager is a singleton and a switch stops the previous
       // current AtClient, tearing down its monitor. Subscribing after the
       // notify relies on the receiver's catch-up to replay the stored
       // notification through the provider's decrypt path (decrypt() -> 'twin').
       //
-      // Quirk: getLastNotificationTime() returns null on its FIRST call for a
-      // given keystore, and a monitor started with null asks the atServer for
-      // no replay at all — so the notification above is never seen. Burn that
-      // first call here. Without it this test only passes when some other test
-      // file happened to start atSign_2's monitor first, which is what made it
-      // flake.
+      // The first watermark read seeds atSign_2's store with a time from before
+      // the notify below, so whichever monitor the later switch back to
+      // atSign_2 starts resumes from before it. Without that seed the replay
+      // could start after the notify. Without this read the test only passed
+      // when some other test file happened to start atSign_2's monitor first,
+      // which is what made it flake.
       final receiverNotifications =
           (await getAtClient(atSign_2, testProviderId: providerId))
               .notificationService as NotificationServiceImpl;

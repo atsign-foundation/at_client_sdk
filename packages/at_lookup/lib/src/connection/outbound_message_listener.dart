@@ -29,6 +29,7 @@ class OutboundMessageListener {
   /// with every connection, so a listener whose socket has died is never
   /// reused for a live one.
   bool _connectionGone = false;
+  bool _closedLocally = false;
 
   final AtConnection _connection;
   Function? syncCallback;
@@ -298,16 +299,22 @@ class OutboundMessageListener {
   ///
   /// A response already parsed and queued is still returned - those bytes
   /// arrived while the connection was alive and the caller is owed them.
-  void abortPendingRequests() {
+  ///
+  /// [closedLocally] says this side closed the connection on purpose, and the
+  /// failure the reader raises says so, because a caller told the connection
+  /// went away goes looking at the network for something it did itself.
+  void abortPendingRequests({bool closedLocally = false}) {
     _connectionGone = true;
+    _closedLocally = _closedLocally || closedLocally;
     final waiter = _responseQueued;
     _responseQueued = null;
     if (waiter != null && !waiter.isCompleted) {
       // Logged because it is otherwise invisible: the request simply fails, and
       // a failure attributed to the atServer rather than to the connection
       // being closed underneath it sends the reader to the wrong end.
-      logger.info('Connection closed with a request in flight - failing it now '
-          'rather than waiting out its response budget');
+      logger.info('Connection closed${closedLocally ? ' by this client' : ''} '
+          'with a request in flight - failing it now rather than waiting out '
+          'its response budget');
       waiter.complete();
     }
   }
@@ -360,8 +367,10 @@ class OutboundMessageListener {
       // connection that has gone will never produce another one.
       if (_connectionGone) {
         _buffer.clear();
-        throw ConnectionInvalidException(
-            'The connection went away before a response arrived');
+        throw ConnectionInvalidException(_closedLocally
+            ? 'The connection was closed by this client before a response '
+                'arrived'
+            : 'The connection went away before a response arrived');
       }
 
       // if currentTime - startTime  is greater than maxWait throw AtTimeoutException

@@ -1,10 +1,12 @@
 /// Guards the burn-down itself.
 ///
-/// Every other test here is a skipped placeholder, so a green build says nothing
-/// about whether this directory still mirrors the catalogue. These checks are
-/// **not** skipped: they fail when a use case loses its scenario, when a blocker
-/// constant stops guarding anything, or when the README's counts drift from the
-/// scenarios they describe.
+/// These checks are **not** skipped: they fail when a use case loses its
+/// scenario, when a `skip:` and the blocker declaring it fall out of step in
+/// either direction, or when the README's counts drift from the scenarios they
+/// describe.
+///
+/// What each guard reads is declared in `manifest.dart` rather than inferred
+/// from prose or from a directory listing.
 ///
 /// Catalogue: `docs/projects/pq/acceptance.md`.
 library;
@@ -13,57 +15,49 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-/// A use-case id as written in both the catalogue and a scenario's name.
-final _ucId = RegExp(r'UC-[AB]\d+\.\d+');
-
-/// The same id at the start of a `test('UC-…')` name — the quote is what keeps
-/// this to scenario names and out of the Given/When/Then prose.
-final _scenarioName = RegExp(r"'(UC-[AB]\d+\.\d+)");
+import 'manifest.dart';
 
 void main() {
-  final root = _repoRoot();
-  final catalogue = File('${root.path}/docs/projects/pq/acceptance.md');
-  final dir = Directory('${root.path}/packages/at_client/test/acceptance');
-  final readme = File('${dir.path}/README.md');
-  final blockers = File('${dir.path}/blockers.dart');
-
-  /// Every scenario file — this guard excluded, since it holds no scenarios.
-  final scenarios = dir
-      .listSync()
-      .whereType<File>()
-      .where((f) => f.path.endsWith('_test.dart'))
-      .where((f) => !f.path.endsWith('catalogue_test.dart'))
-      .toList()
-    ..sort((a, b) => a.path.compareTo(b.path));
-
-  String allScenarioSource() =>
-      scenarios.map((f) => f.readAsStringSync()).join('\n');
-
   test('every use case in the catalogue has a scenario, and vice versa', () {
-    final inCatalogue = _ucId
-        .allMatches(catalogue.readAsStringSync())
-        .map((m) => m[0]!)
-        .toSet();
-    final inTests =
-        _scenarioName.allMatches(allScenarioSource()).map((m) => m[1]!).toSet();
+    final all = catalogueUseCases();
+    final owed = all.where((u) => !u.isWithdrawn).map((u) => u.id).toSet();
+    final withdrawn = all.where((u) => u.isWithdrawn).map((u) => u.id).toSet();
+    final claimed = scenarioUseCaseIds();
 
-    expect(inCatalogue.difference(inTests), isEmpty,
+    expect(owed.difference(claimed), isEmpty,
         reason: 'catalogue use cases with no scenario in this directory — add '
             'one, or the burn-down under-counts what D1 owes');
-    expect(inTests.difference(inCatalogue), isEmpty,
+    expect(claimed.difference(owed), isEmpty,
         reason: 'scenarios naming a use case the catalogue does not define');
+    expect(claimed.intersection(withdrawn), isEmpty,
+        reason: 'a scenario is still proving a row the catalogue withdrew. '
+            'The catalogue is the authority on what is owed, so either the '
+            'withdrawal is wrong or the scenario is testing a mechanism that '
+            'no longer exists');
+  });
+
+  test('every use case the catalogue mentions is one it defines', () {
+    // NOTE: a use case is defined by its heading. Counting every UC-shaped
+    // string instead would make a cross-reference in one row's prose a
+    // catalogue entry, and a typo in one an entry no scenario could satisfy.
+    final defined = catalogueUseCases().map((u) => u.id).toSet();
+    expect(catalogueMentions().difference(defined), isEmpty,
+        reason: 'acceptance.md refers to a use case it never defines with a '
+            'heading. Either it is a typo in a cross-reference, or a row was '
+            'removed and something still points at it');
   });
 
   test('every blocker constant guards at least one scenario', () {
-    final declared = RegExp(r'^const (\w+) =', multiLine: true)
-        .allMatches(blockers.readAsStringSync())
-        .map((m) => m[1]!)
-        .where((name) => !name.startsWith('_'))
-        .toSet();
-    final used = RegExp(r'skip: (\w+)\)')
-        .allMatches(allScenarioSource())
-        .map((m) => m[1]!)
-        .toSet();
+    // NOTE: a bare `skip:` with nothing declaring it hides a row from the
+    // count with nobody recorded as owing it.
+    final blockers = File('${acceptanceDir().path}/blockers.dart');
+    expect(blockers.existsSync(), isTrue,
+        reason: 'a scenario skipped against a named blocker needs '
+            'blockers.dart to declare it; if nothing is blocked any more, '
+            'delete the file and restore the stays-retired guard with it');
+
+    final declared = declaredBlockers();
+    final used = usedBlockers();
 
     expect(declared.difference(used), isEmpty,
         reason: 'a blocker that guards nothing tells whoever greps it that the '
@@ -72,12 +66,42 @@ void main() {
         reason: 'skip: refers to a constant blockers.dart does not declare');
   });
 
+  test('no use-case heading is invisible to the id pattern', () {
+    // NOTE: narrowing `ucIdPattern` does not turn this suite red — it turns it
+    // silently green, because the rows it stops admitting leave the
+    // catalogue's view along with the scenarios that cite them, and the row
+    // counts still reconcile, being counted per file rather than per id. So
+    // the headings are read with a deliberately permissive pattern and the
+    // real one asserted to admit each: a cluster can only leave the catalogue
+    // on purpose, by deleting its rows.
+    final permissive = RegExp(
+        r'^#{2,4} +(?:[\d.]+ +)?(UC-[A-Z]+\d+\.\d+[a-z]?) +— ',
+        multiLine: true);
+    final admitted = RegExp('^$ucIdPattern\$');
+
+    final headings = permissive
+        .allMatches(catalogueFile().readAsStringSync())
+        .map((m) => m.group(1)!)
+        .toSet();
+
+    expect(headings, isNotEmpty,
+        reason: 'the permissive pattern found no use-case headings at all, so '
+            'this guard is checking nothing — it has stopped matching the '
+            'catalogue rather than the catalogue having emptied');
+
+    final invisible = headings.where((id) => !admitted.hasMatch(id)).toSet();
+    expect(invisible, isEmpty,
+        reason: 'these use cases have headings the catalogue guards cannot '
+            'see, because ucIdPattern does not admit them. Nothing else goes '
+            'red for this: they simply stop being checked, and their rows are '
+            'then free to drift from the tree. Widen ucIdPattern, or delete '
+            'the rows deliberately');
+  });
+
   test('the README row counts match the scenarios', () {
-    final source = allScenarioSource();
-    final rows = RegExp(r'\btest\(').allMatches(source).length;
-    final gatedOnB1 =
-        RegExp(r'skip: b1(CrossAtSign)?\)').allMatches(source).length;
-    final text = readme.readAsStringSync();
+    final rows = scenarioCount();
+    final skipped = skippedCount();
+    final text = File('${acceptanceDir().path}/README.md').readAsStringSync();
 
     final total = RegExp(r'\*\*(\d+) rows\*\*').firstMatch(text);
     expect(total, isNotNull,
@@ -85,28 +109,221 @@ void main() {
     expect(int.parse(total![1]!), rows,
         reason: 'README.md says ${total[1]} rows; there are $rows');
 
-    final b1 =
-        RegExp(r'B-1 alone gates \*\*(\d+) of the (\d+)\*\*').firstMatch(text);
-    expect(b1, isNotNull,
-        reason: 'README.md must state B-1\'s share as '
-            '"B-1 alone gates **N of the M**"');
-    expect(int.parse(b1![1]!), gatedOnB1,
-        reason: 'README.md says B-1 gates ${b1[1]} rows; it gates $gatedOnB1. '
-            'A scenario going green changes this — update the README with it');
-    expect(int.parse(b1[2]!), rows);
+    // `is` as well as `are`: forcing "1 rows are skipped" would hold the prose
+    // to the regex rather than the other way round.
+    final skippedStated =
+        RegExp(r'\*\*(\d+) of the (\d+)\*\* rows? (?:are|is) skipped')
+            .firstMatch(text);
+    expect(skippedStated, isNotNull,
+        reason: 'README.md must state the skipped share as '
+            '"**N of the M** rows are skipped"');
+    expect(int.parse(skippedStated![1]!), skipped,
+        reason: 'README.md says ${skippedStated[1]} skipped rows; there are '
+            '$skipped. Landing a project changes this — update the README '
+            'with it');
+    expect(int.parse(skippedStated[2]!), rows);
   });
-}
 
-/// Walk up from the working directory until the catalogue is in reach, so this
-/// runs the same from the package root, the workspace root, or an IDE.
-Directory _repoRoot() {
-  for (var dir = Directory.current;; dir = dir.parent) {
-    if (File('${dir.path}/docs/projects/pq/acceptance.md').existsSync()) {
-      return dir;
-    }
-    if (dir.path == dir.parent.path) {
-      throw StateError(
-          'could not locate the repo root from ${Directory.current}');
-    }
-  }
+  group('every row has live evidence, or a written reason it cannot', () {
+    // The rule: a proof by mock is acceptable only where a live test would be
+    // prohibitively costly or impossible. Without a rail, a row proven
+    // entirely in-process is indistinguishable from one proven against a real
+    // atServer.
+
+    test('no row rests on an in-process proof without a declared reason', () {
+      final undeclared = (useCasesWithoutLiveProof()
+            ..removeAll(liveProofExempt.keys)
+            ..removeAll(liveProofOwed.keys))
+          .toList()
+        ..sort();
+
+      expect(undeclared, isEmpty,
+          reason: 'these rows cite no test in a live pack, and manifest.dart '
+              'says nothing about why: ${undeclared.join(', ')}.\n'
+              'Every row needs one of three things — a citation to a test in '
+              '${livePackPaths.join(', ')}; an entry in liveProofExempt '
+              'saying why a live test could add nothing; or an entry in '
+              'liveProofOwed naming what owes it. Picking one is the point: '
+              'the row that quietly stays on a mock is the one this catches');
+    });
+
+    test('a row does not claim both an exemption and a debt', () {
+      final both = liveProofExempt.keys
+          .where(liveProofOwed.containsKey)
+          .toList()
+        ..sort();
+
+      expect(both, isEmpty,
+          reason: 'a row cannot both be permanently exempt and owe a live '
+              'test: ${both.join(', ')}. The two maps decay in opposite '
+              'directions, so a row in both is a decision nobody has made');
+    });
+
+    test('a declared row is one the catalogue defines', () {
+      final defined = catalogueUseCases().map((u) => u.id).toSet();
+      final unknown = {...liveProofExempt.keys, ...liveProofOwed.keys}
+          .difference(defined)
+          .toList()
+        ..sort();
+
+      expect(unknown, isEmpty,
+          reason: 'these are declared here but are not use cases the '
+              'catalogue defines: ${unknown.join(', ')}. A typo\'d id is a '
+              'waiver that can never be reviewed, because the row it names '
+              'does not exist');
+    });
+
+    test('a row that has since been proven live loses its entry', () {
+      // NOTE: a stale waiver reads exactly like a considered one, so the maps
+      // have to shrink when the tree improves, not only grow when it does not.
+      final withoutLive = useCasesWithoutLiveProof();
+      final stale = {...liveProofExempt.keys, ...liveProofOwed.keys}
+          .where((id) => !withoutLive.contains(id))
+          .toList()
+        ..sort();
+
+      expect(stale, isEmpty,
+          reason: 'these rows now cite a live test, so their entry in '
+              'liveProofExempt / liveProofOwed is spent and must be deleted: '
+              '${stale.join(', ')}');
+    });
+
+    test('every declared reason says something a reviewer can judge', () {
+      final thin = <String>[];
+      for (final entry in {...liveProofExempt, ...liveProofOwed}.entries) {
+        if (entry.value.trim().length < 40) thin.add(entry.key);
+      }
+      thin.sort();
+
+      expect(thin, isEmpty,
+          reason: 'these reasons are too short to carry a judgement: '
+              '${thin.join(', ')}. The reason is the whole value of the '
+              'entry — "unit only" or "TODO" waives the rule without stating '
+              'anything anybody can disagree with');
+    });
+  });
+
+  group('the clause burn-down', () {
+    // "Done" has two columns: every THEN clause proven by something, and as
+    // many as feasible proven against a real atServer. Row-level PROVEN
+    // expresses neither — a row reads proven on one citation however many
+    // separate things its THEN states.
+
+    test('the recorded counts are what the tree produces', () {
+      var clauses = 0, proven = 0, server = 0;
+      for (final u in catalogueUseCases().where((u) => !u.isWithdrawn)) {
+        clauses += clausesOf(u.id).length;
+        final cov = clauseCoverageOf(u.id);
+        proven += cov.proven.length;
+        server += cov.serverProven.length;
+      }
+
+      // Printed on every run, pass or fail: a number only visible when
+      // something breaks is a number nobody watches.
+      // ignore: avoid_print
+      print('BURN-DOWN  clauses proven: $proven of $clauses   '
+          'server-proven: $server of $clauses');
+
+      expect(proven, provenClauseCount,
+          reason: 'the tree pins $proven of $clauses clauses and '
+              'manifest.dart records $provenClauseCount.\n'
+              'If you just landed a pin, raise provenClauseCount to $proven '
+              'in the same commit — the count and the thing it counts move '
+              'together, or the count becomes one more stale figure.\n'
+              'If you did not, a pin stopped resolving: a clause was reworded '
+              'and its fragment no longer matches');
+
+      expect(server, serverProvenClauseCount,
+          reason: 'the tree pins $server of $clauses clauses from a live '
+              'pack and manifest.dart records $serverProvenClauseCount. '
+              'Same rule: move them together');
+    });
+
+    test('every clause called unprovable is real, and still unproven', () {
+      // The target is every PROVABLE THEN clause proven, which means something
+      // only if the exceptions are enumerated where a rail can see them and an
+      // entry dies the moment it stops being true.
+      final byId = {for (final u in catalogueUseCases()) u.id: u};
+      final problems = <String>[];
+
+      for (final entry in unprovableClauses.entries) {
+        final parts = entry.key.split(' c');
+        if (parts.length != 2 || int.tryParse(parts[1]) == null) {
+          problems.add('${entry.key}: not in "<use case> c<n>" form');
+          continue;
+        }
+        final useCase = byId[parts[0]];
+        if (useCase == null) {
+          problems.add('${entry.key}: names a use case the catalogue does '
+              'not define');
+          continue;
+        }
+        final index = int.parse(parts[1]);
+        final clauses = clausesOf(useCase.id);
+        if (!clauses.any((c) => c.index == index)) {
+          problems.add('${entry.key}: that row has ${clauses.length} clauses, '
+              'so there is no c$index — a withdrawal earlier in the row '
+              'renumbers everything after it');
+          continue;
+        }
+        if (clauseCoverageOf(useCase.id).proven.contains(index)) {
+          problems.add('${entry.key}: is PROVEN, so calling it unprovable is '
+              'spent and the entry must be deleted');
+        }
+        if (entry.value.trim().length < 40) {
+          problems.add('${entry.key}: the reason is too short to judge');
+        }
+      }
+
+      expect(problems, isEmpty,
+          reason: 'the unprovable list has rotted:\n${problems.join('\n')}');
+    });
+
+    test('the reachable target is what objective 1 measures', () {
+      var clauses = 0, proven = 0;
+      for (final u in catalogueUseCases().where((u) => !u.isWithdrawn)) {
+        clauses += clausesOf(u.id).length;
+        proven += clauseCoverageOf(u.id).proven.length;
+      }
+      final reachable = clauses - unprovableClauses.length;
+
+      // Printed beside the burn-down rather than folded into it: a figure with
+      // two homes is a figure that drifts. This one says what "done" is.
+      // ignore: avoid_print
+      print('REACHABLE  provable clauses: $reachable of $clauses   '
+          'proven: $proven   still to prove: ${reachable - proven}');
+
+      // The other side of that subtraction, named rather than left to be
+      // asked. Printed from the same map the denominator is computed from, so
+      // the names and the count cannot drift apart.
+      // ignore: avoid_print
+      print('UNPROVABLE ${unprovableClauses.length}, and why is in '
+          'manifest.dart: ${(unprovableClauses.keys.toList()..sort()).join(', ')}');
+
+      expect(proven <= reachable, isTrue,
+          reason: 'more clauses are proven than are reachable, which means '
+              'something in unprovableClauses is pinned after all');
+    });
+
+    test('every pin resolves to exactly one clause', () {
+      // provenIn enforces this while a scenario RUNS; this says the same thing
+      // about the sources, so a pin cannot be counted here and rejected there.
+      final broken = <String>[];
+      citationDetailsByUseCase().forEach((useCase, citations) {
+        for (final citation in citations) {
+          for (final pin in citation.pins) {
+            final hits = resolvePin(useCase, pin);
+            if (hits.length != 1) {
+              broken.add('$useCase pin "$pin" -> ${hits.length} clauses');
+            }
+          }
+        }
+      });
+
+      expect(broken, isEmpty,
+          reason: 'a pin must name exactly one clause. Nothing matched means '
+              'the citation claims nothing while reading as coverage; two '
+              'means nobody can tell which:\n${broken.join('\n')}');
+    });
+  });
 }

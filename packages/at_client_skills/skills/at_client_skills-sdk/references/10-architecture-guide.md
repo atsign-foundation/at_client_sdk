@@ -78,7 +78,7 @@ await atClient.notificationService.send(
 Fire-and-forget is the deliberate choice here: confirming each sample would
 cost a remote round trip per sample, and a sample that arrives late is
 worthless. Notifications carrying an *action* are the opposite case — confirm
-those, see [15-notifications.md](15-notifications.md).
+those, see [16-notifications.md](16-notifications.md).
 
 ### Subscriber side
 

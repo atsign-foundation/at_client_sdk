@@ -23,7 +23,7 @@ class _StubProvider extends CryptoProvider {
 }
 
 void main() {
-  // Regression for the pluggable-crypto e2e flake (xl-pluggable / PR #1930):
+  // Regression for the pluggable-crypto e2e flake:
   // setCurrentAtSign's idempotency short-circuit (same atSign, no atChops/
   // atLookUp/enrollmentId override) returns the cached AtClient WITHOUT going
   // through AtClientImpl.create(), which is the only place the new preference's
@@ -47,8 +47,7 @@ void main() {
       // First set: create() configures providerA during _init.
       await manager.setCurrentAtSign(atSign, 'wavi', prefWith('providerA'));
       final firstClient = manager.atClient as AtClientImpl;
-      expect(
-          firstClient.getPreferences()?.crypto.lookup('providerA'), isNotNull,
+      expect(CryptoConfig.forClient(firstClient).lookup('providerA'), isNotNull,
           reason: 'first create() must adopt the preference provider');
 
       // Second set: SAME atSign, no override -> idempotency short-circuit.
@@ -58,8 +57,7 @@ void main() {
       // adopt the new crypto config onto it.
       expect(identical(manager.atClient, firstClient), isTrue,
           reason: 'short-circuit should reuse the cached client');
-      expect(
-          firstClient.getPreferences()?.crypto.lookup('providerB'), isNotNull,
+      expect(CryptoConfig.forClient(firstClient).lookup('providerB'), isNotNull,
           reason: 'short-circuit must adopt the new preference crypto config');
     });
   });

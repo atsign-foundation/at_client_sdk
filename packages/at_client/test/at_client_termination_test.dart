@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/listener/at_sign_change_listener.dart';
-import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -94,7 +92,7 @@ void main() {
       );
 
       test('close() should close RemoteSecondary connection', () async {
-        final mockAtLookup = MockAtLookup();
+        final mockAtLookup = MockAtLookUp();
         bool calledFlag = false;
         when(() => mockAtLookup.close()).thenAnswer((_) async {
           calledFlag = true;
@@ -113,11 +111,11 @@ void main() {
 
     group('Monitor lifecycle tests', () {
       late Monitor monitor;
-      late MockAtLookup mockAtLookup;
+      late MockAtLookUp mockAtLookup;
       late _StubMuxable stubMuxable;
 
       setUp(() {
-        mockAtLookup = MockAtLookup();
+        mockAtLookup = MockAtLookUp();
         stubMuxable = _StubMuxable();
         when(() => mockAtLookup.close()).thenAnswer((_) async => {});
 

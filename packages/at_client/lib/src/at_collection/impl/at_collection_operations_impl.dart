@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/at_collection/collections.dart';
+import 'package:at_client/src/at_collection/at_collection_model.dart';
 import 'package:at_client/src/at_collection/collection_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'collection_methods_impl.dart';

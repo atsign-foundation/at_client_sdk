@@ -12,11 +12,11 @@ import 'package:test/test.dart';
 /// status value a breaking at-rest change forever — which is how it was
 /// discovered, costing a rollout design that could not ship.
 ///
-/// `pending` is used throughout as the unknown token because it is the value
-/// this change exists to make shippable. Nothing here knows what it means, and
-/// that is the point.
+/// `provisional` is used throughout as the unknown token. It was `pending`
+/// until that became a status this build knows; the token has to be one no
+/// build has given a meaning, and that is the point.
 void main() {
-  const unknown = 'pending';
+  const unknown = 'provisional';
 
   Map<String, dynamic> documentWith(String status) => {
         'version': AtKeys.supportedVersion,

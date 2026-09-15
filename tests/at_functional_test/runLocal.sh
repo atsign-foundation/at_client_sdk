@@ -27,15 +27,67 @@ fi
 
 echo "*** Getting dependencies" && dart pub get
 
+# The virtualenv image, read by docker-compose.yaml. Defaults to the locally
+# built PQ-capable image; set VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip (or
+# a pinned tag) to run against a registry image instead.
+export VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"
+
 cd test
 echo "*** docker compose down" && docker compose down
-echo "*** docker compose pull" && docker compose pull
+# A locally built image is on no registry, so pulling it fails the run.
+if [[ "$VIRTUALENV_IMAGE" == *"/"* ]]; then
+  echo "*** docker compose pull (${VIRTUALENV_IMAGE})" && docker compose pull
+else
+  echo "*** docker compose pull SKIPPED (local image ${VIRTUALENV_IMAGE})"
+fi
 echo "*** docker compose up" && docker compose up -d
 cd ..
 
 echo "*** Checking docker readiness" && dart run test/check_docker_readiness.dart
 
 echo "*** Executing pkamLoad" && docker exec test-virtualenv-1 supervisorctl start pkamLoad
+
+# Wait for pkamLoad to have actually installed the PKAM public keys.
+#
+# `supervisorctl start` returns as soon as the program is running, and the
+# program sleeps 25 seconds before installing anything; check_test_env below
+# proves only that ONE atSign (@sitaram🛠) has ONE record. Starting the suite
+# before the keys are in fails every authentication with
+# "privatekey:at_pkam_publickey does not exist in keystore", presenting as
+# failures in whichever unrelated tests happened to run rather than as a setup
+# problem.
+#
+# @srie and @sachin are deliberately NOT in this list: they are the
+# CRAM-onboardable atSigns, whose onboarding tests require them to have no PKAM
+# key yet.
+echo "*** Waiting for pkamLoad to install PKAM keys"
+for attempt in $(seq 1 60); do
+  # A failed exec yields a non-empty result on purpose, so a container that
+  # went away keeps us waiting and then fails loudly rather than reading as
+  # "nothing missing".
+  if ! missing=$(docker exec test-virtualenv-1 sh -c '
+      for a in "@alice🛠" "@bob🛠" "@sitaram🛠" "@eve🛠" "@denise"; do
+        grep -q "cramAndPkamAuth successful for $a" /apps/logs/pkam.log \
+          2>/dev/null || printf "%s " "$a"
+      done'); then
+    missing="(could not read /apps/logs/pkam.log)"
+  fi
+
+  if [[ -z "${missing// /}" ]]; then
+    echo "*** PKAM keys installed"
+    break
+  fi
+
+  if [[ "$attempt" -eq 60 ]]; then
+    echo "!!! pkamLoad has not installed PKAM keys for: $missing"
+    echo "!!! Refusing to run the suite: every test authenticating as one of"
+    echo "!!! those would fail with 'at_pkam_publickey does not exist in"
+    echo "!!! keystore', in tests that have nothing to do with the cause."
+    docker exec test-virtualenv-1 tail -20 /apps/logs/pkam.log || true
+    exit 1
+  fi
+  sleep 2
+done
 
 echo "*** Checking test environment" && dart run test/check_test_env.dart
 
@@ -46,10 +98,25 @@ echo "*** Running tests"
 # Let the test run fail through to cleanup (so a flake doesn't leave the
 # container up), then propagate its exit code.
 set +e
-dart test --concurrency=1 -r expanded
+# Opt-in machine-readable report: with ACCEPTANCE_REPORT set, the runner also
+# writes a JSON stream that `packages/at_client/tool/acceptance_ledger.dart`
+# joins against the acceptance catalogue's citations to say which rows a run
+# exercised.
+REPORT_ARG=""
+if [[ -n "${ACCEPTANCE_REPORT:-}" ]]; then
+  REPORT_ARG="--file-reporter json:${ACCEPTANCE_REPORT}"
+  echo "*** Writing acceptance report to ${ACCEPTANCE_REPORT}"
+fi
+dart test --concurrency=1 -r expanded ${REPORT_ARG}
 TEST_EXIT=$?
 set -e
 
+# This can block: a virtualenv container that refuses to stop ("Error while
+# Stopping") makes compose wait on it indefinitely, so a run under an outer
+# wall-clock bound is killed HERE, after the suite has already finished and
+# reported, and the exit code returned is the timeout's rather than the
+# suite's. Read the test output before concluding a bounded run failed, and
+# clear a stuck container with `docker rm -f test-virtualenv-1`.
 echo "*** docker compose down" && (cd test && docker compose down)
 
 exit "$TEST_EXIT"

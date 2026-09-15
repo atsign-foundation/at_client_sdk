@@ -188,9 +188,9 @@ class EnrollmentSubmitter {
       switch (algorithm) {
         SigningAlgoType.mldsa65 => CryptographicMaterialAlgorithm.mlDsa65,
         SigningAlgoType.rsa2048 => CryptographicMaterialAlgorithm.rsa2048,
-        _ => throw AtEnrollmentException(
-            'an enrollment mints rsa2048 or mldsa65; '
-            '${algorithm.name} has no keyfile material spelling here'),
+        _ =>
+          throw AtEnrollmentException('an enrollment mints rsa2048 or mldsa65; '
+              '${algorithm.name} has no keyfile material spelling here'),
       };
 
   /// Runs [AtEnrollmentRequest.metadataBuilder], if the caller supplied one,
@@ -238,13 +238,11 @@ class EnrollmentSubmitter {
   /// Handles the subsequent enrollment requests.
   Future<AtEnrollmentResponse> _handleAtEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest, AtLookUp atLookUp) async {
-    // Generate required keys, under the algorithm the CALLER named. This used
-    // to be `AtChopsUtil.generateAtPkamKeyPair()` — RSA-2048 with no argument
-    // — so an app enrolling over OTP could not ask for anything else. On an
-    // atSign whose deployment had moved to post-quantum, every install then
-    // created an RSA-authenticating enrollment that the client retrofitted
-    // away on its first start, leaving a discarded enrollment behind and an
-    // RSA credential live for the atServer's grace window.
+    // NOTE: under the algorithm the CALLER named. Minting RSA-2048 regardless
+    // hands an atSign whose deployment has moved to post-quantum an
+    // RSA-authenticating enrollment, which the client retrofits away on its
+    // first start — leaving a discarded enrollment behind and an RSA
+    // credential live for the atServer's grace window.
     final apkam = await mintApkamKeyPair(atEnrollmentRequest.signingAlgo);
 
     //Fetch required keys from atServer
@@ -316,7 +314,7 @@ class EnrollmentSubmitter {
     String? encryptedAPKAMSymmetricKey;
     if (!isPq) {
       final SymmetricKey apkamSymmetricKey =
-          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
+          AESKey.generate(32);
       atAuthKeys.apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey.key);
       // encrypting the following APKAM keys:
       // apkamSymmetricKey for the enroll verb
@@ -375,7 +373,7 @@ class EnrollmentSubmitter {
     // and this is not that: one enrollment, and `enrollmentId` above names it,
     // so every reader resolves to the same keypair whichever way it looks.
     // Clearing them instead breaks the approval handshake, which needs the
-    // symmetric key and the keypair from one `toAtChops`.
+    // symmetric key and the keypair from one assembled `AtChops`.
     if (atEnrollmentRequest.signingAlgo != SigningAlgoType.rsa2048) {
       atAuthKeys.fileApkamMaterial(
           enrollmentId: enrollmentIdFromServer,
@@ -513,7 +511,7 @@ class EnrollmentSubmitter {
         apkamPublic = pair.atPublicKey.publicKey;
         apkamPrivate = pair.atPrivateKey.privateKey;
       } else {
-        final pair = AtChopsUtil.generateAtPkamKeyPair();
+        final pair = RsaKeyPair.generate();
         apkamPublic = pair.atPublicKey.publicKey;
         apkamPrivate = pair.atPrivateKey.privateKey;
       }
@@ -529,54 +527,9 @@ class EnrollmentSubmitter {
       final metadata = await _buildMetadata(
           request.metadataBuilder, request.atSign, constructionKeys);
 
-      // Whether this connection will have to approve its own request.
-      //
-      // A PRE-ENROLLMENT atSign authenticates with the flat
-      // `at_pkam_publickey`, so the atServer marks the connection
-      // `pkamLegacy` and leaves its enrollment id null. The self-enrolment
-      // auto-approve is gated on an APKAM-authenticated connection, so such a
-      // request lands `pending` — and it is approvable on this same
-      // connection, because the atServer grants a connection carrying no
-      // enrollment id full access. The client is therefore its own approver.
-      //
-      // ⚠️ **Read off the SESSION, not off `atLookUp.enrollmentId`, and the
-      // difference is not cosmetic.** `pending` has two causes, and only one
-      // of them may be approved here: this one, and an APKAM self-enrolment
-      // against an atServer too old to auto-approve it. The second keeps the
-      // deny-and-throw below, which is a deliberate ruling about old servers
-      // — so the discriminator has to be which identity is being retrofitted,
-      // which is what the session states, rather than a connection field a
-      // caller may not have set.
-      final selfApproves = request.session.enrollmentId == null;
-
-      // No otp: the connection's own authentication is the whole authority.
-      //
-      // An APKAM-authenticated retrofit also sends no
-      // `encryptedAPKAMSymmetricKey` — the keyfile already holds every secret
-      // an approver would otherwise convey. A self-approving one must send
-      // one, because `enroll:approve` requires the encryption private key and
-      // the self-encryption key wrapped under a symmetric key, and there has
-      // to be a symmetric key for that. It is wrapped to the atSign's own
-      // encryption public key, exactly as an ordinary legacy-mode request
-      // wraps it, so the record keeps a copy the atSign's own encryption
-      // private key can recover — nothing here is stranded by being minted in
-      // a process that then forgets it.
-      String? encryptedAPKAMSymmetricKey;
-      if (selfApproves) {
-        final encryptionPublicKey = existing.defaultEncryptionPublicKey;
-        if (encryptionPublicKey == null) {
-          throw AtEnrollmentException(
-              'a self-approving enrollment wraps its symmetric key to the '
-              'atSign\'s encryption public key, and this keyfile carries '
-              'none');
-        }
-        final symmetric =
-            AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-        encryptedAPKAMSymmetricKey = base64Encode((RsaEncryptionAlgo()
-              ..atPublicKey =
-                  AtPublicKey.fromString(encryptionPublicKey.toString()))
-            .encrypt(utf8.encode(symmetric.key)));
-      }
+      // NOTE: no otp, so no `encryptedAPKAMSymmetricKey` — the atServer
+      // requires the symmetric key only for a request carrying an otp, and
+      // here the connection's own authentication is the whole authority.
 
       final enrollVerbBuilder = EnrollVerbBuilder()
         ..appName = request.appName
@@ -585,7 +538,6 @@ class EnrollmentSubmitter {
         ..signingAlgo = request.signingAlgo.name
         ..namespaces = request.namespaces
         ..apkamKeysExpiryDuration = request.apkamKeysExpiryDuration
-        ..encryptedAPKAMSymmetricKey = encryptedAPKAMSymmetricKey
         ..metadata = metadata;
       // The retrofitted enrollment publishes the key it just minted, not the
       // one the keyfile arrived with: `_apsk` is per enrollment, and this is a
@@ -606,27 +558,7 @@ class EnrollmentSubmitter {
           await _executeEnrollCommand(enrollVerbBuilder, atLookUp, auth: true);
       final enrollJson = jsonDecode(serverResponse);
       final String newEnrollmentId = enrollJson[AtConstants.enrollmentId];
-      var enrollStatus = getEnrollStatusFromString(enrollJson['status']);
-
-      if (enrollStatus == EnrollmentStatus.pending && selfApproves) {
-        // The ordinary approver, on its ordinary path: it unwraps the
-        // symmetric key sent above with this connection's encryption private
-        // key, then wraps the encryption private key and the self-encryption
-        // key under it. Nothing about this approval is special-cased — what
-        // is unusual is only that the approver and the enrollee are one
-        // process.
-        _logger.info('Enrollment $newEnrollmentId is pending on a connection '
-            'holding no enrollment id, so this client approves its own '
-            'request');
-        enrollStatus = (await _approver.approve(
-                EnrollmentRequestDecision.approved(
-                    enrollmentId: newEnrollmentId,
-                    apkamSymmetricKey:
-                        AtBytes.fromString(encryptedAPKAMSymmetricKey!),
-                    atSign: request.atSign),
-                atLookUp))
-            .enrollStatus;
-      }
+      final enrollStatus = getEnrollStatusFromString(enrollJson['status']);
 
       if (enrollStatus != EnrollmentStatus.approved) {
         // Deny the record this call just created, before giving up on it.

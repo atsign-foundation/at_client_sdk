@@ -33,6 +33,12 @@ class AtKeysFileLock {
   /// How long to keep retrying before giving up with a [FileSystemException].
   /// Bounded, because an unbreakable wait inside key-material code turns a
   /// stuck sibling process into a hung app with no diagnosis.
+  ///
+  /// Must stay below [staleAfter]: a waiter that outlasts the staleness window
+  /// breaks the lock of a holder that is still alive, putting two writers in
+  /// the critical section. The cost of that ordering is that an abandoned lock
+  /// fails every acquire for the whole staleness window rather than being
+  /// waited out.
   final Duration timeout;
 
   /// The age past which a held lock is presumed abandoned and broken.

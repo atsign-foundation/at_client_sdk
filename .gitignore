@@ -13,6 +13,13 @@ build/
 pubspec.lock
 pubspec_overrides.yaml
 
+# ...with one exception. The rollout matrix's control arm pins the last
+# released at_client, and a control that re-resolves its transitive set on
+# every machine is not a control: a changed result could be a finding or a
+# different at_commons, with no way to tell which. Its lockfile is the pin.
+# See docs/projects/pq/decisions.md 96 ruling 2.
+!/tests/pq_matrix/published/pubspec.lock
+
 # Avoid committing generated Javascript files:
 *.dart.js
 *.info.json      # Produced by the --dump-info flag.
@@ -105,3 +112,28 @@ poetry.lock
 # Claude/AI coding stuff
 .serena
 .claude
+
+# Working/scaffolding docs — audits, migration plans, drafts.
+# packages/at_client/CLAUDE.md documents this directory as gitignored; this is the rule
+# that makes that true.
+/untracked/
+
+# gkc's own PQ working draft. It was committed by accident on 2026-08-22 — a
+# `git add` of the directory swept up a file that was untracked on purpose — and
+# untracked again in the same session. It stays on disk; only git stops seeing it.
+#
+# ⚠️ This line matches ONE path and nothing else, so a second draft dropped
+# beside it is not covered. New drafts belong in /untracked/ above, which is the
+# convention this file already carries for exactly this.
+/docs/projects/pq/post-quantum-cryptography.md
+
+# Acceptance-ledger inputs, written by `--file-reporter json:` and by
+# `ACCEPTANCE_LEDGER=`. Per-run artefacts: CI uploads them, and rendering the
+# ledger from them is a local step. A committed one would be stale the moment
+# any suite ran again.
+acceptance-report.json
+citations.jsonl
+
+# Rendered by tools/acceptance_ledger.sh from a run's own reports — a
+# measurement of one set of runs, never a committed artefact.
+acceptance-ledger.md

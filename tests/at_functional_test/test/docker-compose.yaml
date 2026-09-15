@@ -6,7 +6,9 @@
 # alongside another virtualenv (e.g. the e2e suite) on a different base port.
 services:
   virtualenv:
-    image: atsigncompany/virtualenv:vip
+    # Overridable so a local run can drive a PQ-capable build; the default is a
+    # published image a clean checkout or CI can pull.
+    image: ${VIRTUALENV_IMAGE:-atsigncompany/virtualenv:vip}
     # Run the base-port entrypoint explicitly. The published image's CMD runs
     # supervisord directly and would ignore VIRTUALENV_BASE_PORT; entrypoint.sh
     # does the port shift. With the var unset it just execs supervisord, so this

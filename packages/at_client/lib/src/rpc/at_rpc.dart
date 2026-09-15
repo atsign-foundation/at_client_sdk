@@ -1,7 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/response/at_notification.dart';
+import 'package:at_client/src/rpc/at_rpc_types.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 
@@ -259,12 +264,52 @@ class AtRpc {
     }
   }
 
+  /// How long [ready] waits for the notification listener before giving up.
+  Duration listenerReadyTimeout = const Duration(seconds: 30);
+
+  /// Completes once this atSign's notification listener is up.
+  ///
+  /// [start] subscribes and returns before the listener's socket has written
+  /// its `monitor:` command, and nothing replays what the far side sends in
+  /// that window, so anything expecting to be sent to must await this; throws
+  /// [TimeoutException] past [listenerReadyTimeout].
+  Future<void> ready({Duration? timeout}) async {
+    final NotificationService ns = atClient.notificationService;
+    final Completer<void> up = Completer<void>();
+    // NOTE: subscribe before reading the current state — the stream is
+    // broadcast and does not replay, so a transition landing in between would
+    // be lost and this would wait for the next one.
+    final StreamSubscription<NotificationListenerState> sub =
+        ns.currentListenerStateStream.listen((NotificationListenerState s) {
+      if (s == NotificationListenerState.listening && !up.isCompleted) {
+        up.complete();
+      }
+    }, onError: (Object e) {
+      if (!up.isCompleted) up.completeError(e);
+    });
+    try {
+      if (ns.currentListenerState == NotificationListenerState.listening &&
+          !up.isCompleted) {
+        up.complete();
+      }
+      await up.future.timeout(timeout ?? listenerReadyTimeout);
+    } finally {
+      await sub.cancel();
+    }
+  }
+
   /// Sends a request by sending a notification with 'key' of
   /// `request.${request.reqId}.$domainNameSpace.$rpcsNameSpace.$baseNameSpace`
   /// with payload of `jsonEncode([request].toJson())`
   /// to [toAtSign]
+  ///
+  /// Waits for [ready] first when [isClient], so the response cannot arrive
+  /// before there is anything subscribed to receive it.
   Future<void> sendRequest(
       {required String toAtSign, required AtRpcReq request}) async {
+    if (isClient) {
+      await ready();
+    }
     toAtSign = AtUtils.fixAtSign(toAtSign);
     String requestRecordIDName =
         'request.${request.reqId}.$domainNameSpace.$rpcsNameSpace';

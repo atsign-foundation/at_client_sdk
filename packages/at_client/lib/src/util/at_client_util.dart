@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -12,13 +13,10 @@ class AtClientUtil {
   @Deprecated('use RemoteSecondary.findSecondaryUrl')
   static Future<String> findSecondary(
       String toAtSign, String rootDomain, int rootPort) async {
-    var secondaryUrl =
-        await AtLookupImpl.findSecondary(toAtSign, rootDomain, rootPort);
-    if (secondaryUrl == null) {
-      throw SecondaryNotFoundException(
-          'No secondary url found for atsign: $toAtSign');
-    }
-    return secondaryUrl;
+    final secondaryAddress =
+        await CacheableSecondaryAddressFinder(rootDomain, rootPort)
+            .findSecondary(toAtSign);
+    return secondaryAddress.toString();
   }
 
   static List<String> getSecondaryInfo(String? url) {
@@ -109,6 +107,7 @@ class AtClientUtil {
         metadataMap[AtConstants.sharedWithPublicKeyHash]);
     metadata.appMetadata =
         Metadata.decodeAppMetadata(metadataMap[AtConstants.appMetadata]);
+    metadata.immutable = metadataMap[AtConstants.immutable] ?? false;
 
     return metadata;
   }
@@ -122,9 +121,10 @@ class AtClientUtil {
     if (!(atKey.metadata.namespaceAware)) {
       return atKey.key;
     }
-    //Do not append namespace if already appended
-    if (atKey.key.substring(atKey.key.lastIndexOf('.') + 1) ==
-        atClientPreference.namespace) {
+    // Do not append the namespace if the key already ends in it. The check
+    // wants the dot: a key NAMED like the namespace has not got it yet.
+    final namespace = atClientPreference.namespace;
+    if (namespace != null && atKey.key.endsWith('.$namespace')) {
       return atKey.key;
     }
     // If key does not have any namespace, append the namespace to the key.

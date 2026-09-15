@@ -1,3 +1,8 @@
+// The bridge that builds a client's AtChops from a keyfile insists on a
+// credential, so this fixture hands the client a placeholder signer; nothing
+// here signs, and the key source carries the material that is read.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
@@ -8,6 +13,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 void main() {
   String currentAtSign = '@alice';
@@ -15,7 +21,7 @@ void main() {
 
   MockRemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
 
-  late AtChops atChops;
+  late RsaKeyPair encryptionKeyPair;
   late AtClient atClient;
 
   setUp(() async {
@@ -23,24 +29,24 @@ void main() {
       ..hiveStoragePath = 'test/unit_test_storage/hive'
       ..commitLogPath = 'test/unit_test_storage/commit';
 
-    AtEncryptionKeyPair atEncryptionKeyPair =
-        AtChopsUtil.generateAtEncryptionKeyPair();
-    AtPkamKeyPair atPkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
-    AtChopsKeys atChopsKeys =
-        AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    atChopsKeys.selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-    atChops = AtChopsImpl(atChopsKeys);
+    encryptionKeyPair = RsaKeyPair.generate();
 
     atClient = await AtClientImpl.create(
         currentAtSign, namespace, atClientPreference,
-        remoteSecondary: mockRemoteSecondary, atChops: atChops);
+        remoteSecondary: mockRemoteSecondary,
+        // NOTE: a signer object the client insists on holding; nothing here
+        // signs, and the key source carries the material that is read.
+        atChops: AtChopsImpl(AtChopsKeys.create(null, null)),
+        atKeysIo: await keyfileHolding(currentAtSign,
+            encryptionKeyPair: encryptionKeyPair,
+            selfEncryptionKey: AESKey.generate(32).key));
+    atClient.syncService = MockSyncService();
 
     // During decryption, fetches the encryption public key from local keystore.
     // So, store the encryption public key into local secondary keystore.
     await atClient.getLocalSecondary()?.putValue(
         'public:publickey$currentAtSign',
-        atEncryptionKeyPair.atPublicKey.publicKey);
+        encryptionKeyPair.atPublicKey.publicKey);
   });
 
   tearDownAll(() {
@@ -67,8 +73,8 @@ void main() {
       // For unit test, reusing the current AtSign encryptionPublicKey.
       when(() => mockRemoteSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
-          .thenAnswer((_) => Future.value(
-              atChops.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey));
+          .thenAnswer(
+              (_) => Future.value(encryptionKeyPair.atPublicKey.publicKey));
 
       // Encryption
       SharedKeyEncryption sharedKeyEncryption = SharedKeyEncryption(atClient);
@@ -109,8 +115,8 @@ void main() {
       // For unit test, reusing the current AtSign encryptionPublicKey.
       when(() => mockRemoteSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
-          .thenAnswer((_) => Future.value(
-              atChops.atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey));
+          .thenAnswer(
+              (_) => Future.value(encryptionKeyPair.atPublicKey.publicKey));
 
       // Encryption
       SharedKeyEncryption sharedKeyEncryption = SharedKeyEncryption(atClient);

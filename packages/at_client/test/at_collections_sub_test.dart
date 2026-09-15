@@ -16,8 +16,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
-class FakeAtKey extends Fake implements AtKey {}
-
 class _Collections {
   final AtCollection parent;
   final MockAtClient atClient;

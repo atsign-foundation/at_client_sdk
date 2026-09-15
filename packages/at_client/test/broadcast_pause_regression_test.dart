@@ -27,8 +27,6 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 // ignore: implementation_imports
-import 'package:at_client/src/listener/at_sign_change_listener.dart'
-    show AtSignChangeListener;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 

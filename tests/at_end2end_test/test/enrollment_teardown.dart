@@ -35,7 +35,7 @@ void main() {
       try {
         await TestSuiteInitializer.getInstance().testInitializer(
             currentAtSign, namespace, 'pkam',
-            enableInitialSync: false);
+            enableInitialSync: false, posture: PqPosture.legacy);
 
         List<Enrollment>? pendingEnrollments =
             await AtClientManager.getInstance()
@@ -100,7 +100,6 @@ void main() {
         .atClient
         .notificationService
         .stopAllSubscriptions();
-    await AtClientManager.getInstance().atClient.stopCompactionJob();
     // Forced, because the e2e client leaves the isolate alive; the code has to
     // reflect the run or the CI step passes no matter what happened.
     if (failures.isNotEmpty) {

@@ -6,6 +6,7 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'test_utils/mocks.dart';
 
 // NOTE: this file previously also held four mock-driven tests for the
 // server→client pull path, server-timeout error chaining, invalid-batch
@@ -16,8 +17,6 @@ import 'package:test/test.dart';
 // `atclient_sync_conflict_test.dart`. The queue-based push path has unit
 // coverage in `local_secondary_sync_queue_test.dart`.
 
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
 class MockAtClient extends Mock implements AtClient {
   @override
   String? getCurrentAtSign() => '@alice';
@@ -25,8 +24,6 @@ class MockAtClient extends Mock implements AtClient {
   @override
   AtClientPreference getPreferences() => AtClientPreference();
 }
-
-class MockAtClientManager extends Mock implements AtClientManager {}
 
 class MockNotificationServiceImpl extends Mock
     implements NotificationServiceImpl {
@@ -121,10 +118,40 @@ void main() async {
   group('setAndGetSkipDeletesUntil (initial-sync delete guard)', () {
     test('localCommitId == -1: persists and returns the server commit id',
         () async {
-      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any()))
+      // NOTE: the putRequestOptions matcher must stay. Without it the stub
+      // does not match, the write fails, and the guard inside
+      // setAndGetSkipDeletesUntil swallows it — so this test would report 100
+      // and pass while persisting nothing. Hence the verify.
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
+
       final result = await syncServiceImpl.setAndGetSkipDeletesUntil(-1, 100);
+
       expect(result, 100);
+      final captured = verify(() => mockAtClient.put(
+          any(that: SkipDeletesUntilMatcher()), captureAny(),
+          putRequestOptions: captureAny(named: 'putRequestOptions'))).captured;
+      expect(captured[0], '100',
+          reason: 'the value returned must be the value written, or a caller '
+              'proceeds believing a window it never persisted');
+      expect((captured[1] as PutRequestOptions).shouldEncrypt, isFalse,
+          reason: 'a local: watermark is never synced and the keystore already '
+              'encrypts at rest; routing it through the shared-data crypto '
+              'path is what made it refusable in the first place');
+    });
+
+    test('a write that fails does not stop the first sync', () async {
+      when(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenThrow(AtKeyException('keystore unavailable'));
+
+      await expectLater(
+          syncServiceImpl.setAndGetSkipDeletesUntil(-1, 100), completion(100),
+          reason: 'an unwritable watermark must not be able to stop a new '
+              'client syncing for the first time');
+      verify(() => mockAtClient.put(any(that: SkipDeletesUntilMatcher()), any(),
+          putRequestOptions: any(named: 'putRequestOptions'))).called(1);
     });
 
     test('localCommitId > -1: returns the stored value', () async {
@@ -139,6 +166,37 @@ void main() async {
           .thenThrow(AtKeyNotFoundException('not found'));
       final result = await syncServiceImpl.setAndGetSkipDeletesUntil(25, 100);
       expect(result, null);
+    });
+  });
+
+  group('persistPullCursor (never throws, so it can never mask)', () {
+    AtKey pullCursor() =>
+        AtKey.local('lastreceivedservercommitid', '@alice').build();
+
+    test('writes the cursor unencrypted', () async {
+      when(() => mockAtClient.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+
+      await syncServiceImpl.persistPullCursor(42);
+
+      final captured = verify(() => mockAtClient.put(captureAny(), captureAny(),
+          putRequestOptions: captureAny(named: 'putRequestOptions'))).captured;
+      expect((captured[0] as AtKey).toString(), pullCursor().toString());
+      expect(captured[1], '42');
+      expect((captured[2] as PutRequestOptions).shouldEncrypt, isFalse);
+    });
+
+    test('swallows a write failure instead of replacing the sync error',
+        () async {
+      when(() => mockAtClient.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenThrow(AtKeyException('keystore unavailable'));
+
+      await expectLater(syncServiceImpl.persistPullCursor(42), completes,
+          reason: 'a throw here runs in a finally and would replace the '
+              'in-flight exception, reporting a cursor-write failure as the '
+              'reason a sync failed and losing the real cause');
     });
   });
 }

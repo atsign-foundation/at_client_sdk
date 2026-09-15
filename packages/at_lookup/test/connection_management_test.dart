@@ -47,6 +47,33 @@ void main() {
           throwsA(predicate((dynamic e) => e is SecondaryConnectException)));
     });
 
+    test('two callers racing through createConnection share one socket',
+        () async {
+      // The atDirectory answers slowly enough that both callers have found
+      // no connection before either has opened one.
+      when(() => finder.findSecondary(any())).thenAnswer((_) async {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        return SecondaryAddress('test.test.test', 12345);
+      });
+      AtLookupImpl atLookup = AtLookupImpl('@alice', 'test.test.test', 64,
+          secondaryAddressFinder: finder,
+          secureSocketFactory: mockSocketFactory);
+
+      await Future.wait([
+        atLookup.createConnection(),
+        atLookup.createConnection(),
+      ]);
+
+      verify(() =>
+              mockSocketFactory.createSocket('test.test.test', '12345', any()))
+          .called(1);
+      expect(
+          (atLookup.connection!.getSocket() as MockSecureSocket).mockNumber, 1,
+          reason: 'the connection the lookup holds is the one socket opened; '
+              'a second would have replaced it while the first was the one '
+              'being authenticated');
+    });
+
     test(
         'test AtLookupImpl closes invalid connections before creating new ones',
         () async {

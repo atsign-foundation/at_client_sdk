@@ -1,10 +1,17 @@
 import 'dart:async';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/response/at_notification.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 
-/// Class is responsible for decrypting the notification value/text-message data
+/// Decrypts a notification's value or text message.
+///
+/// The notification passed in is left unchanged and a transformed copy is
+/// returned, so the notification can still be handed on as it arrived.
 class NotificationResponseTransformer
     implements
         Transformer<Tuple<AtNotification, NotificationConfig>, AtNotification> {
@@ -16,7 +23,7 @@ class NotificationResponseTransformer
   Future<AtNotification> transform(
       Tuple<AtNotification, NotificationConfig> tuple) async {
     // prepare the atKey from the atNotification object.
-    AtNotification atNotification = tuple.one;
+    final atNotification = copyOf(tuple.one);
     NotificationConfig notificationConfig = tuple.two;
     String sharedBy = atNotification.from;
     String sharedWith = atNotification.to;
@@ -46,13 +53,23 @@ class NotificationResponseTransformer
       ..key = key
       ..sharedWith = atNotification.to
       ..sharedBy = atNotification.from;
+
+    // NOTE: the key string still carries its namespace suffix. Crypto routing
+    // is `(owner, namespace)` scoped and the nskey providers refuse a value
+    // without a namespace, so leaving it null makes such a notification
+    // unreadable. Splitting at the last dot matches AtKey.fromString, and
+    // toString() recomposes the key unchanged.
+    final namespaceIndex = atKey.key.lastIndexOf('.');
+    if (namespaceIndex > -1) {
+      atKey.namespace = atKey.key.substring(namespaceIndex + 1);
+      atKey.key = atKey.key.substring(0, namespaceIndex);
+    }
+
     if (atNotification.metadata != null) {
       atKey.metadata = atNotification.metadata!;
     }
 
-    if (atNotification.messageType.isNotNull &&
-        atNotification.messageType!.toLowerCase().contains('text') &&
-        (atNotification.isEncrypted != null && atNotification.isEncrypted!)) {
+    if (decryptsKey(atNotification)) {
       // decrypt the text message;
       var decryptedValue = await _getDecryptedValue(atKey, atKey.key);
       atNotification.key = '${atNotification.to}:$decryptedValue';
@@ -74,6 +91,22 @@ class NotificationResponseTransformer
     }
     return atNotification;
   }
+
+  /// Whether [n] is an encrypted text message, whose key is the ciphertext
+  /// and is decrypted whatever the subscriber asked for.
+  static bool decryptsKey(AtNotification n) =>
+      n.messageType.isNotNull &&
+      n.messageType!.toLowerCase().contains('text') &&
+      n.isEncrypted == true;
+
+  /// A copy of [n]. Its [AtNotification.metadata] is the same instance.
+  static AtNotification copyOf(AtNotification n) => AtNotification(
+      n.id, n.key, n.from, n.to, n.epochMillis, n.messageType, n.isEncrypted,
+      value: n.value,
+      operation: n.operation,
+      expiresAtInEpochMillis: n.expiresAtInEpochMillis,
+      metadata: n.metadata)
+    ..status = n.status;
 
   Future<String> _getDecryptedValue(AtKey atKey, String? encryptedValue) async {
     final decrypted = await CryptoRuntime(_atClient)

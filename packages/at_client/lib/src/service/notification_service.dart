@@ -67,8 +67,16 @@ abstract class NotificationService {
 
   static const Duration defaultExpiration = Duration(minutes: 15);
 
-  /// Send a notification to [to] on [namespace] with body (payload) [body].
-  /// Will encrypt [body] before sending if [shouldEncrypt] is true (default).
+  /// Send a notification to [to] named [idAndNamespace], with body (payload)
+  /// [body]. Will encrypt [body] before sending if [shouldEncrypt] is true
+  /// (default).
+  ///
+  /// [idAndNamespace] is the record's whole name below the owner: an id and
+  /// the namespace it belongs to, joined by a dot. `'order42.orders.my_app'`
+  /// is the id `order42` in the namespace `orders.my_app`, and lands on the
+  /// wire as `@recipient:order42.orders.my_app@sender`. The split is at the
+  /// **first** dot, and the namespace is what scopes the encryption key, so at
+  /// least one dot is required — a value with none throws [ArgumentError].
   ///
   /// Returns the id of the notification, which can then be used when calling
   /// the [getStatus] and [fetch] functions.
@@ -78,9 +86,18 @@ abstract class NotificationService {
   /// lifetime of seconds or minutes.
   ///
   /// [body] is most usually some json encoded as a String.
+  ///
+  /// Exactly one of [idAndNamespace] and the deprecated [namespace] must be
+  /// given; supplying both, or neither, throws [ArgumentError].
   Future<String> send({
     required Atsign to,
-    required String namespace,
+    String? idAndNamespace,
+    @Deprecated('Renamed to idAndNamespace, which says what the value is. The '
+        'value never was a namespace on its own: it is an id and a namespace '
+        'joined by a dot, and reading it as a bare namespace is what left a '
+        'dot-free value with no namespace to encrypt under. Same value, same '
+        'wire format — pass it as idAndNamespace instead.')
+    String? namespace,
     String body = '',
     bool shouldEncrypt = true,
     String? cryptoProviderId,

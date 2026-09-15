@@ -9,5 +9,20 @@ atSign:
   secondAtSign: "@bob🛠"
   apkamFirstAtSign: '@srie'
   apkamSecondAtSign: '@sachin'
+  # CRAM activation is one-shot per atSign per virtualenv, so a test that
+  # onboards needs an atSign no other test onboards; the two above are taken by
+  # enrollment_test.dart.
+  apkamThirdAtSign: '@colin'
+  # The three below are spent by pq_legacy_interop_live_test.dart alone, and
+  # are named for the role each is onboarded AS rather than by position.
+  #
+  # Pre-PQ: the default RSA signing algorithm, so no signing root, no key
+  # package and no namespace key — the legacy peer of UC-B4.2.
+  legacyPeerAtSign: '@chris'
+  # PQ-native, keeping legacy material by default.
+  pqNativeAtSign: '@xavier'
+  # PQ-native with mintLegacyMaterial:false — the legacy-interop opt-out, set
+  # once at activation and never taken back.
+  pqNativeOptOutAtSign: '@jeremy'
 
 

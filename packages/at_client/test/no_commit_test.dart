@@ -1,0 +1,186 @@
+/// Pins that the "do not record a commit" request reaches the wire.
+///
+/// The flag travels as `:nc` in the built command, and what the atServer sees
+/// is whatever the *builder* copied into it, so every assertion here is over
+/// `buildCommand()`, as a raw literal, with and without the flag.
+library;
+
+import 'package:at_client/at_client.dart';
+import 'package:at_client/src/crypto/nskey/mint_lock.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show nskeyMintLockKey;
+import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
+import 'package:at_commons/at_builders.dart';
+import 'package:at_utils/at_logger.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:test/test.dart';
+
+import 'test_utils/mocks.dart';
+
+void main() {
+  AtSignLogger.root_level = 'shout';
+
+  setUpAll(() => registerFallbackValue(UpdateVerbBuilder()));
+
+  AtKey selfKey() => AtKey()
+    ..key = 'ordinary'
+    ..namespace = 'testing'
+    ..sharedBy = '@alice'
+    ..metadata = (Metadata()..namespaceAware = true);
+
+  Future<String> putCommandFor({required bool noCommit}) async {
+    final builder = await PutRequestTransformer().transform(
+        Tuple<AtKey, dynamic>()
+          ..one = selfKey()
+          ..two = 'a value',
+        requestOptions: PutRequestOptions()
+          ..shouldEncrypt = false
+          ..noCommit = noCommit);
+    return builder.buildCommand();
+  }
+
+  group('the put path carries the flag', () {
+    test('a put that asks for no commit builds "update:nc:"', () async {
+      expect(await putCommandFor(noCommit: true),
+          'update:nc:isEncrypted:false:ordinary.testing@alice a value\n');
+    });
+
+    test('and a put that does not ask is byte-identical but for that',
+        () async {
+      expect(await putCommandFor(noCommit: false),
+          'update:isEncrypted:false:ordinary.testing@alice a value\n');
+    });
+
+    test('the flag is off unless asked for', () {
+      expect(PutRequestOptions().noCommit, isFalse);
+      expect(DeleteRequestOptions().noCommit, isFalse);
+    });
+  });
+
+  group('the delete path carries the flag', () {
+    // NOTE: a distinct atSign per call — AtClientImpl.create caches one client
+    // per atSign, so reusing one hands the second call the FIRST client, still
+    // holding the first mock, and its recorder stays empty.
+    Future<String> deleteCommandFor(
+        {required bool noCommit, required String atSign}) async {
+      final commands = <String>[];
+      final remote = MockRemoteSecondary();
+      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((inv) async {
+        commands.add(
+            (inv.positionalArguments[0] as DeleteVerbBuilder).buildCommand());
+        return 'data:-1';
+      });
+      final atClient = await AtClientImpl.create(
+          atSign,
+          'testing',
+          AtClientPreference()
+            ..hiveStoragePath = 'test/hive/no_commit'
+            ..commitLogPath = 'test/hive/no_commit/commit'
+            ..isLocalStoreRequired = false,
+          remoteSecondary: remote);
+      await atClient.delete(
+          AtKey()
+            ..key = 'ordinary'
+            ..namespace = 'testing'
+            ..sharedBy = atSign
+            ..metadata = (Metadata()..namespaceAware = true),
+          deleteRequestOptions: DeleteRequestOptions()
+            ..useRemoteAtServer = true
+            ..noCommit = noCommit);
+      expect(commands, hasLength(1));
+      return commands.single;
+    }
+
+    test('a delete that asks for no commit builds "delete:nc:"', () async {
+      expect(await deleteCommandFor(noCommit: true, atSign: '@ncyes'),
+          'delete:nc:ordinary.testing@ncyes\n');
+    });
+
+    test('and a delete that does not ask is identical but for that', () async {
+      expect(await deleteCommandFor(noCommit: false, atSign: '@ncno'),
+          'delete:ordinary.testing@ncno\n');
+    });
+  });
+
+  group('asking for no commit without going remote is refused', () {
+    Future<AtClient> clientFor(String atSign) async {
+      final remote = MockRemoteSecondary();
+      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((_) async => 'data:-1');
+      return AtClientImpl.create(
+          atSign,
+          'testing',
+          AtClientPreference()
+            ..hiveStoragePath = 'test/hive/no_commit'
+            ..commitLogPath = 'test/hive/no_commit/commit'
+            ..isLocalStoreRequired = false,
+          remoteSecondary: remote);
+    }
+
+    AtKey keyFor(String atSign) => AtKey()
+      ..key = 'ordinary'
+      ..namespace = 'testing'
+      ..sharedBy = atSign
+      ..metadata = (Metadata()..namespaceAware = true);
+
+    final namesTheFix = predicate<Object>(
+        (e) => e.toString().contains('Set useRemoteAtServer as well'),
+        'names the fix');
+
+    test('a put refuses', () async {
+      final atClient = await clientFor('@ncputlocal');
+      await expectLater(
+          atClient.put(keyFor('@ncputlocal'), 'a value',
+              putRequestOptions: PutRequestOptions()..noCommit = true),
+          // NOTE: put wraps what it throws in AtClientException; delete
+          // does not.
+          throwsA(allOf(isA<AtClientException>(), namesTheFix)));
+    });
+
+    test('a delete refuses', () async {
+      final atClient = await clientFor('@ncdellocal');
+      await expectLater(
+          atClient.delete(keyFor('@ncdellocal'),
+              deleteRequestOptions: DeleteRequestOptions()..noCommit = true),
+          throwsA(allOf(isA<IllegalArgumentException>(), namesTheFix)));
+    });
+
+    test('and the same call going remote is accepted', () async {
+      final atClient = await clientFor('@ncremoteok');
+      await expectLater(
+          atClient.delete(keyFor('@ncremoteok'),
+              deleteRequestOptions: DeleteRequestOptions()
+                ..useRemoteAtServer = true
+                ..noCommit = true),
+          completion(isTrue));
+    });
+  });
+
+  group('the mint lock asks for no commit', () {
+    test('taking a lock writes a command carrying ":nc"', () async {
+      final commands = <String>[];
+      final atClient = MockAtClient();
+      final remote = MockRemoteSecondary();
+      when(() => atClient.getRemoteSecondary()).thenReturn(remote);
+      when(() => atClient.enrollmentId).thenReturn('e-1');
+      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((inv) async {
+        commands.add(
+            (inv.positionalArguments[0] as UpdateVerbBuilder).buildCommand());
+        return 'data:-1';
+      });
+
+      final lockKey = nskeyMintLockKey('@alice', 'testing',
+          ttl: const Duration(seconds: 5));
+      final held = await MintLock(atClient)
+          .withLock<String>(lockKey, (lease) async => 'minted');
+
+      expect(held, 'minted', reason: 'the lock was taken, so mint ran');
+      expect(commands, hasLength(1));
+      expect(commands.single, startsWith('update:nc:'),
+          reason: 'a lock record must not cost a commit entry on every '
+              'device that syncs this atSign');
+    });
+  });
+}

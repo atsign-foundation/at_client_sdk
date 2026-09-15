@@ -3,19 +3,23 @@
 ///
 /// The seal family (version bytes, envelope framing, key schedules) is
 /// already pinned hard — byte-exact golden envelopes in pq_hpke_test.dart,
-/// and third-party IETF WG vectors in rfc9180_hpke_test.dart. What this file
-/// pins is the
-/// residue those leave open: values every test elsewhere asserts through the
-/// very enum members and constants a refactor would rename, so a changed
-/// VALUE keeps the whole suite green while changing the wire.
+/// and third-party IETF WG vectors in rfc9180_hpke_test.dart. We also pin the
+/// AES-CTR wire format directly here since it lacks a separate golden test.
+/// What this file pins is the residue those leave open: values every test
+/// elsewhere asserts through the very enum members and constants a refactor
+/// would rename, so a changed VALUE keeps the whole suite green while changing
+/// the wire.
 ///
 /// Everything here is FROZEN: records, verb commands and keyfiles already in
 /// the world carry these values.
 library;
 
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
+// The FFI barrel, not the default one: the AES-CTR pin asserts that both
+// backends agree, so it needs AesCtrFfiAlgo in scope.
+import 'package:at_chops/at_chops_ffi.dart';
 // HpkeSuite is package-internal; its wire identities stay pinned here.
 import 'package:at_chops/src/algorithm/encryption/rfc9180_hpke.dart'
     show HpkeSuite;
@@ -124,6 +128,33 @@ void main() {
           .toJson();
       expect(jsonEncode(json),
           '{"content":"Y3Q=","iv":"aXY=","hashingAlgoType":"argon2id"}');
+    });
+  });
+
+  group('AES-CTR wire format pin', () {
+    test('AES-CTR wire format with FFI and pure-Dart', () async {
+      final key =
+          AESKey(base64Encode(Uint8List.fromList(List.generate(32, (i) => i))));
+      final iv = InitialisationVector(
+          Uint8List.fromList(List.generate(16, (i) => 15 - i)));
+      final plain = Uint8List.fromList(utf8.encode('wire pin'));
+
+      final pureAlgo = AESEncryptionAlgo(key);
+      final pureEncrypted = await pureAlgo.encrypt(plain, iv: iv);
+      final pureHex =
+          pureEncrypted.map((e) => e.toRadixString(16).padLeft(2, '0')).join();
+
+      expect(pureHex, '05d8915d6c0326457ba2ccc2824a8da9');
+
+      // Also test FFI implementation to ensure it exactly matches pure-Dart
+      final ffiLib = tryLoadLibCrypto();
+      if (ffiLib != null) {
+        final ffiAlgo = AesCtrFfiAlgo.fromLib(ffiLib, key);
+        final ffiEncrypted = await ffiAlgo.encrypt(plain, iv: iv);
+        final ffiHex =
+            ffiEncrypted.map((e) => e.toRadixString(16).padLeft(2, '0')).join();
+        expect(ffiHex, '05d8915d6c0326457ba2ccc2824a8da9');
+      }
     });
   });
 }

@@ -1,2 +1,4 @@
 atKeys
 config/config.yaml
+# Per-run legacy keyfiles minted by the retrofit rows (run-unique names).
+test/testData

@@ -23,7 +23,8 @@ void main() {
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
     // Note: pre-commit cron-era code had a fire-and-forget
     // `syncService.sync()` here. With on-demand triggering that
     // races with the first test's setup; tests now manage their
@@ -104,7 +105,8 @@ void main() {
 
   test('A test to verify sync with regex when local is ahead', () async {
     // Specifying preference in order to set syncRegex
-    TestUtils.getPreference(atSign).syncRegex = namespace;
+    TestUtils.getPreference(atSign, posture: PqPosture.legacy).syncRegex =
+        namespace;
     var atClient = atClientManager.atClient;
     // Get server commit id before put operation
     var serverCommitId = await SyncUtil()

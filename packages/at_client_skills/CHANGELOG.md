@@ -2,21 +2,41 @@
 
 ## 1.4.0 — unreleased
 
+- The auth flows follow at_client_flutter 2.0: every dialog hands back the
+  `AtClient` it opened, the app owns it, and nothing imports `at_auth`.
+  `AtAuthRequest`, `AuthResponse`, `_setupAtClient` and
+  `AtClientManager.setCurrentAtSign` are gone from the skill (rewritten
+  `references/05-flutter-auth.md`; `SKILL.md` §10).
+- New: AtClient lifecycle — the `Atsign` verbs (`open`, `activate`, `enroll`,
+  `resumeEnrollment`), the platform bundle a client is built from (`keys:`,
+  `storage:` and `lookUps:`, the `AtLookUpFactory` that builds every
+  connection the client opens), the connection state (`client.connection`:
+  online / offline / refused, the causes, `awaitOnline`), the sync and
+  notification services' start and stop, `AtClientManager.use`, and what
+  `stop()` does and does not do (new `references/15-client-lifecycle.md`;
+  `SKILL.md` §11; later sections renumbered).
+- The package map, the headless-agent and sync references and the
+  deprecation guide drop `at_auth` and `setCurrentAtSign`, and name
+  `hiveStoragePath` / `commitLogPath` as deprecated in favour of a storage
+  object.
 - Document public keys — `AtKey.public`, signed-not-encrypted values, and the
   always-remote `plookup` read path (`references/12-remote-atserver.md`).
 - Document notification delivery confirmation — `send()` → `getStatus(id)` /
   `fetch(id)`, the two-value status enum, and the expiration window
-  (`references/15-notifications.md`).
-- Document programmatic APKAM enrolment for headless clients —
-  `AtOnboardingService.enroll` and the `enrollmentService` approver side
-  (`references/16-apkam-enrolment.md`). Adds `at_onboarding_cli` to the
-  package map.
+  (new `references/16-notifications.md`).
+- Document headless enrolment — where the passcode comes from
+  (`client.enrollments.otp` / `.spp`), that only a `__manage` holder can
+  approve, and least-privilege namespaces
+  (`references/15-client-lifecycle.md`).
 - Document error handling — the three exception families, `getTraceMessage()`
   over `toString()`, `CollectionOpException` partial failures, and what each
-  operation throws (`references/17-error-handling.md`).
+  operation throws (new `references/17-error-handling.md`).
 - Document waiting for sync to settle — `waitUntilCaughtUp`, its snapshot
   semantics, the mandatory `timeout`, and why polling `isSyncInProgress` is a
   check-then-act race (`references/11-sync.md`).
+- Evals: the two auth evals follow the new flows; new evals cover logout /
+  switching, the connection state, public keys, notification confirmation,
+  headless enrolment, error handling and waiting for sync.
 
 ## 1.3.0 — 2026-07-31
 

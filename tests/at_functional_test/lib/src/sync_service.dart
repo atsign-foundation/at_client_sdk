@@ -34,7 +34,6 @@ class FunctionalTestSyncService {
     SyncServiceImpl syncImpl = syncSvc as SyncServiceImpl;
 
     isSyncInProgress = true;
-    Completer syncOutcome = Completer();
     late TestSyncProgressListener testSyncProgressListener;
     try {
       _logger.info('syncData starting for $atSign ($logLabel)');
@@ -44,52 +43,62 @@ class FunctionalTestSyncService {
       testSyncProgressListener = TestSyncProgressListener(logLabel);
       syncSvc.addProgressListener(testSyncProgressListener);
 
-      final int maxSyncCount = 5;
+      // NOTE: a budget in time, not in rounds. The service coalesces
+      // requests and answers a system request from its cache, so a burst of
+      // terminal events can arrive within a hundred milliseconds of each
+      // other while the commit the fresh check saw is still only in a stats
+      // notification on its way; five of those in a row proved nothing about
+      // whether the next round would pull it.
+      final deadline = DateTime.now().add(const Duration(seconds: 15));
       int syncCount = 1;
-      testSyncProgressListener.streamController.stream
-          .listen((SyncProgress syncProgress) async {
-        for (final KeyInfo ki in syncProgress.keyInfoList ?? []) {
-          _logger.finer('${ki.syncDirection} ${ki.key}');
-        }
-        if (syncProgress.syncStatus == SyncStatus.success &&
-            syncProgress.localCommitId != syncProgress.serverCommitId) {
-          if (syncCount >= maxSyncCount) {
-            isSyncInProgress = false;
-            _logger.shout('SyncProgress $logLabel: ${syncProgress.syncStatus}'
-                ' local ${syncProgress.localCommitId}'
-                ' remote ${syncProgress.serverCommitId}');
-            syncOutcome.completeError(
-                'Have synced $syncCount times but still not in sync');
-          }
-          if (syncCount > 1) {
-            _logger.shout('SyncProgress $logLabel: ${syncProgress.syncStatus}'
-                ' local ${syncProgress.localCommitId}'
-                ' remote ${syncProgress.serverCommitId}');
-            _logger.shout('Syncing again');
-          } else {
-            _logger.info('SyncProgress $logLabel: ${syncProgress.syncStatus}'
-                ' local ${syncProgress.localCommitId}'
-                ' remote ${syncProgress.serverCommitId}');
-            _logger.info('Syncing again');
-          }
-          syncCount++;
-          // Call to syncService.sync to expedite the sync progress
-          syncImpl.sync();
-          // ignore: invalid_use_of_visible_for_testing_member
-          unawaited(syncImpl.processSyncRequests());
-        } else if (syncProgress.syncStatus == SyncStatus.success ||
-            syncProgress.syncStatus == SyncStatus.failure) {
-          isSyncInProgress = false;
-          syncOutcome.complete();
-        }
-      });
 
       // Call to syncService.sync to expedite the sync progress
       syncImpl.sync();
       // ignore: invalid_use_of_visible_for_testing_member
       unawaited(syncImpl.processSyncRequests());
 
-      await syncOutcome.future;
+      await for (final SyncProgress syncProgress
+          in testSyncProgressListener.streamController.stream) {
+        for (final KeyInfo ki in syncProgress.keyInfoList ?? []) {
+          _logger.finer('${ki.syncDirection} ${ki.key}');
+        }
+        if (syncProgress.syncStatus != SyncStatus.success &&
+            syncProgress.syncStatus != SyncStatus.failure) {
+          continue;
+        }
+        // NOTE: a terminal event says a run finished, not that THIS call's
+        // work is done. It can belong to an earlier run, and a failure event
+        // must mean try again, never "done" — returning on one strands this
+        // call's own request mid-flight. Only the service's own fresh answer
+        // settles it.
+        if (await syncImpl.isInSync()) {
+          _logger.info('SyncProgress $logLabel: ${syncProgress.syncStatus};'
+              ' isInSync() confirms server and local are in sync');
+          break;
+        }
+        if (DateTime.now().isAfter(deadline)) {
+          _logger.shout('SyncProgress $logLabel: ${syncProgress.syncStatus}'
+              ' local ${syncProgress.localCommitId}'
+              ' remote ${syncProgress.serverCommitId}');
+          throw StateError(
+              'Have synced $syncCount times over 15s but still not in sync');
+        }
+        if (syncCount > 1) {
+          _logger.shout('SyncProgress $logLabel: ${syncProgress.syncStatus}'
+              ' but not in sync; syncing again');
+        } else {
+          _logger.info('SyncProgress $logLabel: ${syncProgress.syncStatus}'
+              ' but not in sync; syncing again');
+        }
+        syncCount++;
+        // Let the round the last trigger started finish, and a pending stats
+        // notification land, before asking again.
+        await Future.delayed(const Duration(milliseconds: 250));
+        // Call to syncService.sync to expedite the sync progress
+        syncImpl.sync();
+        // ignore: invalid_use_of_visible_for_testing_member
+        unawaited(syncImpl.processSyncRequests());
+      }
 
       _logger.info('syncData complete for $atSign $logLabel');
     } finally {

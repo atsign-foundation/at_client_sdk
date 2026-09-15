@@ -1,4 +1,3 @@
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_utils/at_logger.dart';
@@ -72,13 +71,18 @@ class AtEncryptionKeysLoader {
     }
   }
 
-  AtChops createAtChopsFromDemoKeys(String atSign) {
-    var atEncryptionKeyPair = AtEncryptionKeyPair.create(
-        encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!);
-    var atPkamKeyPair = AtPkamKeyPair.create(
-        pkamPublicKeyMap[atSign]!, pkamPrivateKeyMap[atSign]!);
-    final atChopsKeys = AtChopsKeys.create(atEncryptionKeyPair, atPkamKeyPair);
-    atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
-    return AtChopsImpl(atChopsKeys);
-  }
+  /// The demo atSign's credentials as a legacy keyfile: the flat fields,
+  /// naming no enrollment, which is what the virtualenv's `pkamLoad`
+  /// installed and what a keyfile from before enrollments holds.
+  ///
+  /// NOTE: flat, never typed. Active typed rsa2048 authentication material
+  /// reads as a retrofit already done, so a client under a PQ posture would
+  /// refuse to upgrade from it.
+  AtKeys createAtKeysFromDemoKeys(String atSign) => AtKeys.legacy(
+        apkamPublicKey: pkamPublicKeyMap[atSign]!,
+        apkamPrivateKey: pkamPrivateKeyMap[atSign]!,
+        encryptionPublicKey: encryptionPublicKeyMap[atSign]!,
+        encryptionPrivateKey: encryptionPrivateKeyMap[atSign]!,
+        selfEncryptionKey: aesKeyMap[atSign]!,
+      );
 }

@@ -10,7 +10,7 @@ dependencies:
   at_client: ^3.11.0
   at_cli_commons: ^3.1.0
   at_commons: ^5.8.0
-  at_onboarding_cli: ^2.0.0
+  at_onboarding_cli: ^2.0.0-rc1
   at_utils: ^3.4.0
   args: ^2.5.0
   nocterm: ^0.6.0

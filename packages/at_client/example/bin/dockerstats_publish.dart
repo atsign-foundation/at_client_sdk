@@ -208,7 +208,7 @@ Future<void> _publishSample(
     try {
       await atClient.notificationService.send(
         to: to,
-        namespace: ns,
+        idAndNamespace: ns,
         body: body,
         expiration: sampleExpiration,
       );

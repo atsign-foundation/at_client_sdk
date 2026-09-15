@@ -14,7 +14,8 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
   });
 
   test('sequence of put and get results', () async {
@@ -72,8 +73,8 @@ void main() {
     final locationFuture = atClientManager.atClient
         .getRemoteSecondary()!
         .executeVerb(locationLookupVerbBuilder);
-    phoneFuture.then((value) => expect(value, 'data:+1 1111'));
-    emailFuture.then((value) => expect(value, 'data:alice@gmail.com'));
-    locationFuture.then((value) => expect(value, 'data:newyork'));
+    expect(await phoneFuture, 'data:+1 1111');
+    expect(await emailFuture, 'data:alice@gmail.com');
+    expect(await locationFuture, 'data:newyork');
   });
 }

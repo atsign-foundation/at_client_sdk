@@ -6,7 +6,7 @@ import 'package:mocktail/mocktail.dart';
 import 'test_utils/mocks.dart';
 
 void main() {
-  AtLookupImpl mockAtLookUp = MockAtLookUpImpl();
+  AtLookupImpl mockAtLookUp = MockAtLookupImpl();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
   SecondaryAddress fakeSecondaryAddress =
@@ -40,7 +40,7 @@ void main() {
               'still works and so hides the regression from every live pack');
     });
 
-    test('an injected lookup that is not a muxable is left alone', () async {
+    test('an injected lookup is used as given', () async {
       final remoteSecondary =
           RemoteSecondary(atsign, atClientPreference, atLookUp: mockAtLookUp);
 

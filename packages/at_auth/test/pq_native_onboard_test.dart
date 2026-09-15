@@ -3,13 +3,13 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
+import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_server_status/at_server_status.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -19,16 +19,13 @@ class MockAtEnrollment extends Mock implements AtEnrollment {}
 
 class MockPkamAuthenticator extends Mock implements PkamAuthenticator {}
 
-class MockAtServerStatus extends Mock implements AtServerStatus {}
-
 class FakeVerbBuilder extends Fake implements VerbBuilder {}
 
 class FakeAtLookUp extends Fake implements AtLookupImpl {}
 
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 
-class FakeSecondaryAddressFinder extends Fake
-    implements CacheableSecondaryAddressFinder {
+class FakeSecondaryAddressFinder implements SecondaryAddressFinder {
   @override
   Future<SecondaryAddress> findSecondary(String atSign,
           {Duration? timeout}) async =>
@@ -66,12 +63,13 @@ void main() {
     mockAtLookUp = MockAtLookUp();
     mockAtEnrollment = MockAtEnrollment();
     final mockPkam = MockPkamAuthenticator();
-    final mockStatus = MockAtServerStatus();
 
-    when(() => mockStatus.get(any())).thenAnswer((_) async => AtStatus(
-        serverStatus: ServerStatus.teapot,
-        rootStatus: RootStatus.found,
-        atSignStatus: AtSignStatus.teapot));
+    when(() => mockAtLookUp.secondaryAddressFinder)
+        .thenReturn(FakeSecondaryAddressFinder());
+    when(() =>
+        mockAtLookUp.executeCommand(any(that: startsWith('lookup:publickey')),
+            auth: any(named: 'auth'))).thenAnswer(
+        (_) async => throw AtLookUpException('AT0015', 'key not found'));
     when(() => mockAtLookUp.cramAuthenticate(cramSecret))
         .thenAnswer((_) async => true);
     when(() => mockAtLookUp.executeVerb(any()))
@@ -86,10 +84,7 @@ void main() {
     atAuth = AtAuthImpl(
         atLookUp: mockAtLookUp,
         pkamAuthenticator: mockPkam,
-        atEnrollment: mockAtEnrollment,
-        atServerStatus: mockStatus)
-      ..secondaryAddressFinder = FakeSecondaryAddressFinder()
-      ..probeSocket = ((host, port) async {});
+        atEnrollment: mockAtEnrollment);
   });
 
   tearDown(() => tempDir.deleteSync(recursive: true));
@@ -102,13 +97,13 @@ void main() {
             String publicKey,
             String privateKey
           })? advertisedSigningKey}) =>
-      AtOnboardingRequest(atSign)
+      AtOnboardingRequest(atSign,
+          signingAlgoType: signingAlgo ?? SigningAlgoType.rsa2048)
         ..atKeysIo = keysIo
         ..appName = 'wavi'
         ..deviceName = 'iphone'
         ..mintLegacyMaterial = mintLegacyMaterial
-        ..advertisedSigningKey = advertisedSigningKey
-        ..signingAlgoType = signingAlgo ?? SigningAlgoType.rsa2048;
+        ..advertisedSigningKey = advertisedSigningKey;
 
   /// The request the onboard actually submitted.
   FirstEnrollmentRequest submittedRequest() =>
@@ -194,10 +189,10 @@ void main() {
   /// UC-G3.1's third door.
   ///
   /// Three paths create an enrollment holding a data signing keypair, and
-  /// at_auth files the private half at three separate points. Two were pinned
-  /// — `enrollment_test.dart` and `at_self_enrollment_test.dart` each carry
-  /// "the signing key is FILED, not merely advertised". This one, the
-  /// activation, was driven by no test in any pack until 2026-08-31.
+  /// at_auth files the private half at three separate points.
+  /// `enrollment_test.dart` and `at_self_enrollment_test.dart` each carry "the
+  /// signing key is FILED, not merely advertised"; this one covers the third,
+  /// the activation.
   ///
   /// ⚠️ **`packages/at_client/test/pq_native_onboard_test.dart` looks like
   /// coverage and is not**: it asserts the activation REQUEST carries the key,

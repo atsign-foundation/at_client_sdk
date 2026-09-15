@@ -9,5 +9,33 @@ build/
 # https://dart.dev/guides/libraries/private-files#pubspeclock.
 pubspec.lock
 
+# Minted by the CRAM-onboarding tests, one atSign each — activation is
+# one-shot per virtualenv, so two tests must never share one.
 test/testData/@srie.atKeys
 test/testData/@sachin.atKeys
+test/testData/@colin.atKeys
+test/testData/@chris.atKeys
+test/testData/@xavier.atKeys
+test/testData/@jeremy.atKeys
+test/testData/rf2b-legacy@*.atKeys
+# One per rsa2048 retrofit arm — a keyfile takes exactly one retrofit, so the
+# arms that ask for RSA cannot share the file the ML-DSA arms chain through.
+test/testData/rf2b-t1@*.atKeys
+test/testData/rf2b-rerun@*.atKeys
+test/testData/rf2c@*.atKeys
+test/testData/rf2b-t5@*.atKeys
+test/testData/rf2d-posture@*.atKeys
+# FileAtKeysIo.flush keeps the previous state recoverable beside the keyfile.
+test/testData/*.atKeys.bak
+# The copy FileAtKeysIo keeps when a keyfile stops being the flat shape a
+# published build reads. Unlike the rolling .bak it is written once and never
+# overwritten, so a run leaves one per keyfile it upgraded.
+test/testData/*.atKeys.pre-v1
+
+# AtKeysFileLock leaves these beside a keyfile during a run. Untracked and
+# unignored, they are one `git add -A` away from being committed - which is
+# how machine-local lock state ends up in the repo.
+*.atKeys.lock
+# The cold-start retrofit arm: one keyfile, written by an enrolment and
+# re-read by a client built from it alone.
+test/testData/rs-cold@*.atKeys

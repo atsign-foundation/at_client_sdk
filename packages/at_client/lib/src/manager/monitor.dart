@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -136,12 +137,20 @@ class Monitor {
     });
   }
 
+  /// The client's connection state, told `online` each time this monitor
+  /// reaches `listening`: a monitor that is receiving is an authenticated
+  /// connection to the atServer, and it is the one connection a passive
+  /// client keeps open, so it is how the network's return gets noticed. A
+  /// monitor built without one tells nobody.
+  final AtConnection? connection;
+
   Monitor({
     required this.atSign,
     required this.atClientPreference,
     required this.lookUp,
     required this.handleNotification,
     required this.getLastNotificationTime,
+    this.connection,
   }) {
     logger = AtSignLogger('Monitor ($atSign)');
   }
@@ -182,6 +191,14 @@ class Monitor {
     // and passing the number would pin every later reconnect to the position
     // held at start, re-requesting the whole retained backlog each time.
     Future<int?> currentWatermark() async {
+      // NOTE: the muxable calls this after it authenticates and on every
+      // reconnect, by when a stop() may have closed the store the watermark
+      // lives in.
+      if (_targetState != NotificationListenerState.listening) {
+        logger.finer('Not reading the last-notification watermark: the '
+            'monitor has been stopped');
+        return null;
+      }
       try {
         return await getLastNotificationTime();
       } catch (e) {
@@ -294,6 +311,12 @@ class Monitor {
     _currentState = state;
     if (!currentStateStreamController.isClosed) {
       currentStateStreamController.add(_currentState);
+    }
+    // NOTE: only the transition to listening is reported. Losing this
+    // connection says nothing about whether the atServer is reachable, and
+    // the verb that next fails is what says so.
+    if (state == NotificationListenerState.listening) {
+      connection?.report(AtConnectionState.online());
     }
   }
 

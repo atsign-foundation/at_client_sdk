@@ -1,12 +1,23 @@
-version: '2'
+# The image defaults to the published one, so CI needs no setting. A local run
+# that needs a build the registry does not carry opts in with
+# VIRTUALENV_IMAGE=at_virtual_env:local — the post-quantum activation test needs
+# an atServer that verifies ML-DSA PKAM.
+# A distinct project and container name, plus base-port templating, let this run
+# alongside the functional and e2e virtualenvs. Unset, the legacy ports stand.
+name: at_onboarding_cli_functional_tests
 services:
   virtualenv:
-    image: atsigncompany/virtualenv:vip
+    container_name: cli_virtualenv
+    image: ${VIRTUALENV_IMAGE:-atsigncompany/virtualenv:vip}
+    # The image's CMD ignores VIRTUALENV_BASE_PORT; entrypoint.sh does the shift.
+    entrypoint: ["/atsign/entrypoint.sh"]
     ports:
-      - "127.0.0.1:6379:6379"
-      - "64:64"
-      - "443:443"
-      - "127.0.0.1:9001:9001"
-      - "25000-25999:25000-25999"
+      # 443 and 9001 are deliberately not bound: unused here, and no base port
+      # shifts them.
+      - "127.0.0.1:${VE_REDIS_PORT:-6379}:${VE_REDIS_PORT:-6379}"
+      - "${VE_ROOT_PORT:-64}:${VE_ROOT_PORT:-64}"
+      - "${VE_SECONDARY_LOW:-25000}-${VE_SECONDARY_HIGH:-25999}:${VE_SECONDARY_LOW:-25000}-${VE_SECONDARY_HIGH:-25999}"
     extra_hosts:
       - "vip.ve.atsign.zone:127.0.0.1"
+    environment:
+      - VIRTUALENV_BASE_PORT

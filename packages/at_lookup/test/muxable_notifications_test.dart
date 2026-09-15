@@ -3,11 +3,27 @@ import 'dart:io';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'at_lookup_test_utils.dart';
 import 'fake_at_server_socket.dart';
+
+/// Captures what at_lookup logs, so a claim about a level is asserted.
+///
+/// Installed from `setUpAll`, before any lookup is built: each instance binds
+/// the default handler as it stands when its logger is constructed.
+class _RecordedLogs implements LoggingHandler {
+  final List<({String level, String message})> records = [];
+
+  @override
+  void call(dynamic record) => records
+      .add((level: '${record.level.name}', message: '${record.message}'));
+
+  Iterable<String> at(String level) =>
+      records.where((r) => r.level == level).map((r) => r.message);
+}
 
 /// [AtLookupMuxable] - the notification stream, over a REAL listener.
 ///
@@ -19,6 +35,11 @@ import 'fake_at_server_socket.dart';
 void main() {
   const host = '127.0.0.1';
   const port = 12345;
+  final recorded = _RecordedLogs();
+
+  setUpAll(() {
+    AtSignLogger.defaultLoggingHandler = recorded;
+  });
 
   /// Every socket the factory has handed out, in order.
   ///
@@ -213,7 +234,8 @@ void main() {
   });
 
   group('reconnect, reauth and heartbeat', () {
-    test('losing the connection reconnects, reauthenticates, and re-issues '
+    test(
+        'losing the connection reconnects, reauthenticates, and re-issues '
         'monitor: with the same regex', () async {
       var authCount = 0;
       final atLookup = build(authenticator: (_) async {
@@ -224,12 +246,12 @@ void main() {
         ..heartbeatInterval = const Duration(hours: 1);
 
       await atLookup.startNotifications(
-          regex: '.wavi',
-          getLastNotificationTime: () async => 1755600000000);
+          regex: '.wavi', getLastNotificationTime: () async => 1755600000000);
       expect(sockets, hasLength(1));
       expect(authCount, 1);
       final first = socket;
-      expect(first.written, ['monitor:selfNotifications:1755600000000 .wavi\n']);
+      expect(
+          first.written, ['monitor:selfNotifications:1755600000000 .wavi\n']);
 
       // The far end goes away.
       await first.serverCloses();
@@ -247,7 +269,8 @@ void main() {
           reason: 'the new connection is unauthenticated, so the authenticator '
               'must run again - reconnecting without reauthenticating gives a '
               'socket the atServer will not send notifications on');
-      expect(socket.written, ['monitor:selfNotifications:1755600000000 .wavi\n'],
+      expect(
+          socket.written, ['monitor:selfNotifications:1755600000000 .wavi\n'],
           reason: 'the regex is REMEMBERED across a reconnect - dropping it '
               'would start delivering everything. The watermark beside it is '
               'not remembered but re-asked, and this callback returns a '
@@ -437,8 +460,7 @@ void main() {
       expect(sockets, hasLength(2),
           reason: 'the attempt must have reached the point of opening a '
               'socket, or this proves nothing about what follows the connect');
-      expect(sockets.last.written,
-          ['monitor:selfNotifications\n'],
+      expect(sockets.last.written, ['monitor:selfNotifications\n'],
           reason: 'a failed watermark read must still send monitor: - without '
               'one the atServer replays a window, which is recoverable, where '
               'sending nothing is a connection that can never deliver');
@@ -451,8 +473,8 @@ void main() {
       boom = false;
       await sockets.last.serverCloses();
       await Future.delayed(const Duration(milliseconds: 1400));
-      expect(sockets.last.written,
-          ['monitor:selfNotifications:1755600000000\n'],
+      expect(
+          sockets.last.written, ['monitor:selfNotifications:1755600000000\n'],
           reason: 'a transient watermark failure is not terminal');
     });
 
@@ -478,8 +500,8 @@ void main() {
 
       expect(sockets, hasLength(2),
           reason: 'the test needs an actual reconnect to have happened');
-      expect(sockets.last.written,
-          ['monitor:selfNotifications:1755600009999\n'],
+      expect(
+          sockets.last.written, ['monitor:selfNotifications:1755600009999\n'],
           reason: 'the reconnect must carry where the caller has got to, not '
               'where it was when notifications started');
 
@@ -541,12 +563,13 @@ void main() {
       await atLookup.startNotifications();
       final sub = atLookup.notifications.listen((_) {});
       sub.pause();
+      recorded.records.clear();
 
       Object? thrown;
       final pending = atLookup.executeCommand('noop:0\n').then<void>(
-        (_) {},
-        onError: (Object e) => thrown = e,
-      );
+            (_) {},
+            onError: (Object e) => thrown = e,
+          );
       await Future.delayed(const Duration(milliseconds: 50));
 
       await atLookup.close();
@@ -559,6 +582,23 @@ void main() {
       expect(thrown, isNotNull,
           reason: 'closing must fail the request in flight, and while paused '
               'only the abort inside _closeConnection can do it');
+      expect(
+          thrown,
+          isA<ConnectionInvalidException>().having(
+              (e) => e.message,
+              'message',
+              'The connection was closed by this client before a response '
+                  'arrived'),
+          reason: 'this side closed it on purpose, and the failure says so '
+              'rather than sending the caller to look at the network');
+      expect(
+          recorded.at('INFO'),
+          contains(contains(
+              'Connection closed by this client with a request in flight')),
+          reason: 'the abort is logged once, where it is decided');
+      expect(recorded.at('SEVERE'), isEmpty,
+          reason: 'a close this client asked for is not an error in sending '
+              'to the server, and at_lookup used to log it as one twice');
 
       sub.resume();
     });

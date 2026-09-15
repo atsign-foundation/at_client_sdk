@@ -250,7 +250,7 @@ void main() {
   test('a closedByClient bundle is closed when the client stops', () async {
     final storage = HiveAtClientStorage(
         atSign: '@closedbyclient', storagePath: dir.path, closedByClient: true);
-    final client = await AtClient.create(
+    final client = await buildAtClient(
         atSign: '@closedbyclient',
         namespace: 'wavi',
         preference: pref(),
@@ -278,7 +278,7 @@ void main() {
       'closes it', () async {
     final storage =
         HiveAtClientStorage(atSign: '@borrowedopen', storagePath: dir.path);
-    final client = await AtClient.create(
+    final client = await buildAtClient(
         atSign: '@borrowedopen',
         namespace: 'wavi',
         preference: pref(),
@@ -306,14 +306,21 @@ void main() {
 /// Records whether [_storage] was already attached when the client asked this
 /// source for key material, then refuses: attachment happens in `_init`, so
 /// reading `true` here proves the storage reached the client.
+/// The first read answers the construction-time identity lookup; the AtChops
+/// read that follows is the one refused.
 class _AttachWatchingKeysIo extends WrittenAtKeysIo {
   _AttachWatchingKeysIo(this._storage);
 
   final AtClientStorageBase _storage;
   bool storageWasAttached = false;
+  bool _identityRead = false;
 
   @override
-  Future<AtKeys> read(String atSign) {
+  Future<AtKeys> read(String atSign) async {
+    if (!_identityRead) {
+      _identityRead = true;
+      return AtKeys();
+    }
     storageWasAttached = _storage.isAttached;
     throw UnimplementedError();
   }

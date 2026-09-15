@@ -1,19 +1,14 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
-import 'package:at_commons/at_builders.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'test_utils/mocks.dart';
 
-class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
-
-class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
-
 void main() {
   AtClient mockAtClient = MockAtClientImpl();
-  AtLookUp mockAtLookUp = MockAtLookUpImpl();
+  AtLookUp mockAtLookUp = MockAtLookupImpl();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   setUp(() {
     reset(mockAtLookUp);
@@ -58,14 +53,7 @@ void main() {
 
   test('test to check self encryption key decrypt method without IV', () async {
     SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
-    SymmetricKey selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-
-    AtChops atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
+    SymmetricKey selfEncryptionKey = AESKey.generate(32);
 
     var location = 'san francisco';
     var encryptedLocation =
@@ -84,15 +72,7 @@ void main() {
 
   test('test to check self encryption key decrypt method with IV', () async {
     SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
-    SymmetricKey selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-
-    AtChops atChopsImpl = AtChopsImpl(atChopsKeys);
-
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
+    SymmetricKey selfEncryptionKey = AESKey.generate(32);
 
     var location = 'new york';
     var ivBase64String = 'YmFzZTY0IGVuY29kaW5n';
