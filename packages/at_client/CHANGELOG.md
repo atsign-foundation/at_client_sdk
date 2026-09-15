@@ -1,5 +1,9 @@
 ## 3.15.0-rc1
 
+- fix: a client missing nskey privates asks for every generation its
+  namespace advertises and it lacks, not only the one a sender would pick.
+  A key added under a second algorithm, a rotation's successor, or a mint
+  whose conveyance a stop cut short was otherwise never asked for.
 - fix: the last-received-notification watermark is saved after a
   notification is handed to its subscribers, not before. A stop between the
   two used to move the watermark past a notification no subscriber saw;

@@ -13,6 +13,8 @@ import 'package:at_client/src/crypto/nskey/rotation_policy.dart';
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
+import 'package:at_client/src/secret_sharing/algo_ids.dart'
+    show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
     show EnvelopeAddressing;
 import 'package:at_client/src/secret_sharing/key_package.dart' show KeyPackage;
@@ -376,15 +378,25 @@ class NskeySeeding {
       try {
         final advertised = await ring.currentPublic(owner, namespace);
         if (advertised == null) continue;
-        if (await ring.privateHalf(owner, namespace, advertised.nskeyKid) !=
-            null) {
-          continue;
+        // NOTE: every entry the advertisement carries, not only the one a
+        // sender would pick: a key added under a second algorithm, or a
+        // generation a rotation retired, opens values this enrollment is owed
+        // too, and nothing else asks for its private.
+        final names = <String>[];
+        for (final entry in advertised.keys) {
+          if (entry.use != SecretSharingAlgos.useEnc ||
+              !SecretSharingAlgos.keyAlgos.contains(entry.alg)) {
+            continue;
+          }
+          if (await ring.privateHalf(owner, namespace, entry.kid) != null) {
+            continue;
+          }
+          names.add('${NskeyPrivateFiling.secretNamePrefix}${entry.kid}');
         }
+        if (names.isEmpty) continue;
 
-        final name =
-            '${NskeyPrivateFiling.secretNamePrefix}${advertised.nskeyKid}';
         final sent =
-            await sharing.requestSecretsFromNamespace(namespace, names: [name]);
+            await sharing.requestSecretsFromNamespace(namespace, names: names);
         if (sent == 0) {
           _logger.info('Wanted the nskey private for $owner:$namespace but '
               'found no other key package to ask; the next start retries');
@@ -394,26 +406,28 @@ class NskeySeeding {
 
         // NOTE: unawaited on purpose — a holder may be offline for days, and
         // neither this sweep nor the client's start may wait on one.
-        unawaited(sharing
-            .waitForSecret(namespace, name,
-                timeout: NskeyPrivateFiling.conveyanceWait)
-            .then((secret) => filing.file(secret))
-            .then((filed) {
-          if (filed) {
-            _logger.info(
-                'Healed the nskey private for $owner:$namespace from another '
-                'enrollment');
-          }
-        }).catchError((Object e) {
-          if (e is StoppedException) {
-            _logger.warning('Stopped waiting for the nskey private for '
-                '$owner:$namespace: the client stopped, and the next start '
-                'asks again');
-            return;
-          }
-          _logger.info('No holder answered for $owner:$namespace within the '
-              'wait; a later answer is filed at the next start ($e)');
-        }));
+        for (final name in names) {
+          unawaited(sharing
+              .waitForSecret(namespace, name,
+                  timeout: NskeyPrivateFiling.conveyanceWait)
+              .then((secret) => filing.file(secret))
+              .then((filed) {
+            if (filed) {
+              _logger.info('Healed the nskey private $name for '
+                  '$owner:$namespace from another enrollment');
+            }
+          }).catchError((Object e) {
+            if (e is StoppedException) {
+              _logger.warning('Stopped waiting for the nskey private $name for '
+                  '$owner:$namespace: the client stopped, and the next start '
+                  'asks again');
+              return;
+            }
+            _logger.info('No holder answered for $name in $owner:$namespace '
+                'within the wait; a later answer is filed at the next start '
+                '($e)');
+          }));
+        }
       } catch (e) {
         if (e is StoppedException) rethrow;
         _logger.warning(
