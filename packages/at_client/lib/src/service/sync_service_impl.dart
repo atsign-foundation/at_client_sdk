@@ -457,12 +457,22 @@ class SyncServiceImpl implements SyncService {
 
   /// Fetches the first app request from the queue. If there are no app requests, the first element of the
   /// queue is returned.
+  /// Dequeues the request this round answers: an app's request that carries
+  /// its own callback, else the oldest.
+  ///
+  /// Removed, whichever it is. A failed round answers only the request it
+  /// dequeued, so one left in the queue would be run again on the next
+  /// microtask, and again on the one after, for as long as the failure
+  /// lasted.
   SyncRequest _getSyncRequest() {
-    return syncRequests.firstWhere(
-        (syncRequest) =>
-            syncRequest.requestSource == SyncRequestSource.app &&
-            syncRequest.onDone != null,
-        orElse: () => syncRequests.removeFirst());
+    for (final syncRequest in syncRequests) {
+      if (syncRequest.requestSource == SyncRequestSource.app &&
+          syncRequest.onDone != null) {
+        syncRequests.remove(syncRequest);
+        return syncRequest;
+      }
+    }
+    return syncRequests.removeFirst();
   }
 
   void _syncError(SyncRequest syncRequest) {

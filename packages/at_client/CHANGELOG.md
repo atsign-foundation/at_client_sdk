@@ -8,6 +8,9 @@
   root-link sweep or a fan-out to a namespace's members ends there.
   `isInSync()` on a stopped sync service throws rather than asking the
   atServer.
+- fix: a `sync()` request that carries `onDone` and fails is answered once;
+  it used to stay queued, and the same round was run again for it on every
+  microtask, firing `onError` each time.
 - fix: a client whose credentials the atServer refuses - the enrollment
   revoked, expired, denied or not yet approved, or the authentication
   rejected - stops retrying. The notification listener neither restarts nor
