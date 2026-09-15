@@ -412,6 +412,12 @@ interface class AtCollection<T> {
   // Internal event controller and derived streams.
   final StreamController<CEvent> _events = StreamController.broadcast();
 
+  /// Emits [event], unless this collection has ended: a handler still running
+  /// when the sources ended has nobody left to tell.
+  void _emit(CEvent event) {
+    if (!_events.isClosed) _events.add(event);
+  }
+
   // Notification regex patterns, built in the constructor from [namespace].
   // Matches any key at any depth (L0 or any sub-collection) whose tail
   // is `.<namespace>@<anyone>`. Dispatch by depth is done in
@@ -648,7 +654,8 @@ interface class AtCollection<T> {
       final dataEventStream = injectedDataEvents ??
           atClient.dataEvents
               .where((e) => _regexObjAny.hasMatch(e.key.toString()));
-      _dataEventSubscription = dataEventStream.listen(_enqueueDataEvent);
+      _dataEventSubscription = dataEventStream.listen(_enqueueDataEvent,
+          onDone: () => _sourceDone(data: true));
     }
     if (_consumesNotifs) {
       final notifStream = notifications ??
@@ -656,8 +663,40 @@ interface class AtCollection<T> {
             regex: _regexAllStr,
             shouldDecrypt: true,
           );
-      _notificationSubscription = notifStream.listen(_enqueueNotification);
+      _notificationSubscription = notifStream.listen(_enqueueNotification,
+          onDone: () => _sourceDone(data: false));
     }
+  }
+
+  bool _dataDone = false;
+  bool _notifsDone = false;
+  bool _ended = false;
+
+  /// Whether every source this collection reads has ended — which is what a
+  /// client stopping does to them — and its schedulers with them.
+  @visibleForTesting
+  bool get hasEnded => _ended;
+
+  /// Whether the [availableEvents] scheduler has stopped, or never started.
+  @visibleForTesting
+  bool get availableSchedulerStopped => _availableScheduler?._disposed ?? true;
+
+  /// Ends this collection once every source it reads has ended: nothing can
+  /// reach it again, so its event streams are closed, and every scheduler
+  /// listening to them cancels its timer when they do.
+  void _sourceDone({required bool data}) {
+    if (data) {
+      _dataDone = true;
+    } else {
+      _notifsDone = true;
+    }
+    if ((_consumesData && !_dataDone) || (_consumesNotifs && !_notifsDone)) {
+      return;
+    }
+    if (_ended) return;
+    _ended = true;
+    unawaited(_parentDeleteSub?.cancel());
+    unawaited(_events.close());
   }
 
   // ---------------------------------------------------------------------------
@@ -2386,9 +2425,9 @@ interface class AtCollection<T> {
       {bool wasExpired = false}) async {
     switch (operation) {
       case 'update':
-        _events.add(CItemUpdated(owner: parts.from, id: parts.id));
+        _emit(CItemUpdated(owner: parts.from, id: parts.id));
       case 'delete':
-        _events.add(CItemDeleted(
+        _emit(CItemDeleted(
             owner: parts.from, id: parts.id, wasExpired: wasExpired));
       default:
         _logger.shout('No handler for L0 operation $operation');
@@ -2430,7 +2469,7 @@ interface class AtCollection<T> {
             );
           }
         }
-        _events.add(CSubItemUpdated(
+        _emit(CSubItemUpdated(
           owner: parts.from,
           id: parts.id,
           ancestry: _zipAncestryOwners(parts.ancestry, parentOwners),
@@ -2444,7 +2483,7 @@ interface class AtCollection<T> {
           // (`@owner:r.__rr.id.<ns>@self`, from=self) re-enters here and
           // would otherwise fire a phantom CReadReceipt(owner: self,
           // from: self) that the notification path never produces.
-          _events.add(CReadReceipt(
+          _emit(CReadReceipt(
             owner: self,
             id: directParent.id,
             from: parts.from,
@@ -2452,7 +2491,7 @@ interface class AtCollection<T> {
           ));
         }
       case 'delete':
-        _events.add(CSubItemDeleted(
+        _emit(CSubItemDeleted(
           owner: parts.from,
           id: parts.id,
           ancestry: parts.ancestry,
@@ -2644,7 +2683,7 @@ interface class AtCollection<T> {
     ];
     AtCollection<dynamic>? cursor = _parentCollection;
     while (cursor != null) {
-      cursor._events.add(CSubItemUpdated(
+      cursor._emit(CSubItemUpdated(
         owner: item.owner,
         id: item.id,
         ancestry: links.reversed.toList(),
@@ -2679,7 +2718,7 @@ interface class AtCollection<T> {
     ];
     AtCollection<dynamic>? cursor = _parentCollection;
     while (cursor != null) {
-      cursor._events.add(CSubItemDeleted(
+      cursor._emit(CSubItemDeleted(
         owner: item.owner,
         id: item.id,
         ancestry: links.reversed.toList(),
@@ -2806,7 +2845,7 @@ interface class AtCollection<T> {
         id: item.id,
         availableAt: item.availableAt!,
       ),
-      emit: _events.add,
+      emit: _emit,
       label: 'availableAt',
     )..start();
     return watch().where((e) => e is CItemAvailable).cast<CItemAvailable>();
@@ -3114,7 +3153,7 @@ interface class AtCollection<T> {
       // so UIs redraw once. Hand-listened streams see two
       // callbacks; consumers that care can dedupe by (op, owner,
       // id) over a small window.
-      _events.add(CItemUpdated(owner: item.owner, id: item.id));
+      _emit(CItemUpdated(owner: item.owner, id: item.id));
       _emitAncestorSubUpdated(item);
     } catch (e) {
       results.add(OpFailure(selfKey, CollectionOp.put, e));
@@ -3189,7 +3228,7 @@ interface class AtCollection<T> {
       }
     }
     if (results.any((r) => r is OpSuccess)) {
-      _events.add(CItemUpdated(owner: item.owner, id: item.id));
+      _emit(CItemUpdated(owner: item.owner, id: item.id));
       _emitAncestorSubUpdated(item);
     }
     return results;
@@ -3247,7 +3286,7 @@ interface class AtCollection<T> {
         // local CEvent emission — see [_put] for the rationale.
         if (k.sharedWith == null) {
           _seenSelfIds.remove(item.id);
-          _events.add(CItemDeleted(owner: item.owner, id: item.id));
+          _emit(CItemDeleted(owner: item.owner, id: item.id));
           _emitAncestorSubDeleted(item);
         }
       } catch (e) {
@@ -4536,13 +4575,13 @@ final class _CItemTimerScheduler<E extends CEvent, T> {
   /// `availableEvents` getter can call it on every access without
   /// caring whether a previous call already started it.
   void start() {
-    if (_started || _disposed) return;
+    if (_started || _disposed || collection._ended) return;
     _started = true;
     // Listen BEFORE the initial fetch so an event arriving during
     // the scan is still captured and applied afterwards.
     _updSub = collection.updates.listen((e) {
       unawaited(_onUpdate(e.owner, e.id));
-    });
+    }, onDone: () => unawaited(dispose()));
     _delSub = collection.deletes.listen((e) {
       _onDelete(e.owner, e.id);
     });

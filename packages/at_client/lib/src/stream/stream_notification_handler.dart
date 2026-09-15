@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client/src/client/local_secondary.dart';
@@ -19,7 +20,31 @@ class StreamNotificationHandler {
 
   var logger = AtSignLogger('StreamNotificationHandler');
 
+  SecureSocket? _socket;
+  final Completer<void> _done = Completer<void>();
+
+  /// Completes when the transfer's socket has closed, or the transfer never
+  /// got as far as opening one.
+  Future<void> get done => _done.future;
+
+  /// Ends the transfer by destroying its socket.
+  void cancel() {
+    _socket?.destroy();
+    if (_socket == null && !_done.isCompleted) _done.complete();
+  }
+
   Future<void> streamAck(AtStreamNotification streamNotification,
+      Function streamCompletionCallBack, streamReceiveCallBack) async {
+    try {
+      await _streamAck(
+          streamNotification, streamCompletionCallBack, streamReceiveCallBack);
+    } catch (_) {
+      if (!_done.isCompleted) _done.complete();
+      rethrow;
+    }
+  }
+
+  Future<void> _streamAck(AtStreamNotification streamNotification,
       Function streamCompletionCallBack, streamReceiveCallBack) async {
     var streamId = streamNotification.streamId;
     final secondaryAddress = await AtClientManager.getInstance()
@@ -28,6 +53,11 @@ class StreamNotificationHandler {
     var host = secondaryAddress.host;
     var port = secondaryAddress.port;
     var socket = await SecureSocket.connect(host, port);
+    if (_done.isCompleted) {
+      socket.destroy();
+      return;
+    }
+    _socket = socket;
     // ignore: prefer_interpolation_to_compose_strings
     var f = File('${preference!.downloadPath ?? ''}'
         '${Platform.pathSeparator}'
@@ -72,6 +102,7 @@ class StreamNotificationHandler {
       }
     }, onDone: () {
       socket.destroy();
+      if (!_done.isCompleted) _done.complete();
     });
   }
 }

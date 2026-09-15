@@ -17,6 +17,7 @@ import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
     show EnvelopeAddressing;
 import 'package:at_client/src/secret_sharing/key_package.dart' show KeyPackage;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
+import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
@@ -395,6 +396,12 @@ class NskeySeeding {
                 'enrollment');
           }
         }).catchError((Object e) {
+          if (e is StoppedException) {
+            _logger.warning('Stopped waiting for the nskey private for '
+                '$owner:$namespace: the client stopped, and the next start '
+                'asks again');
+            return;
+          }
           _logger.info('No holder answered for $owner:$namespace within the '
               'wait; a later answer is filed at the next start ($e)');
         }));

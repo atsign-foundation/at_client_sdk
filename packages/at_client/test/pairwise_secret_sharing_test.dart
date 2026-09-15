@@ -914,6 +914,24 @@ void main() {
               timeout: Duration(milliseconds: 100)),
           throwsA(isA<TimeoutException>()));
     });
+
+    test('a stop ends a long wait at once', () async {
+      final waited = Stopwatch()..start();
+      final wait = expectLater(
+          sharerB.waitForSecret('myapp', 'never',
+              timeout: Duration(minutes: 5)),
+          throwsA(isA<StoppedException>()),
+          reason: 'a stopped client has nothing left to wait with, and a '
+              'five-minute timer would keep its process alive');
+      await Future.delayed(Duration(milliseconds: 20));
+
+      sharerB.stop();
+      await wait;
+
+      expect(waited.elapsed, lessThan(Duration(seconds: 2)));
+      await expectLater(sharerB.waitForSecret('myapp', 'never'),
+          throwsA(isA<StoppedException>()));
+    });
   });
 
   group('a member with no mutually-supported key is skipped, not fatal', () {
@@ -1055,6 +1073,28 @@ void main() {
       expect(await sharerA.sweepOnce(), 1);
       expect(sharerA.secretStore.getSecret('myapp', '__rk.1.deadbeef')!.value,
           'KEYBYTES');
+    });
+
+    test('a holder stopped during its answer jitter does not answer', () async {
+      await sharerB.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.1.jitter', value: 'KEYBYTES'),
+          allowReservedName: true);
+      sharerB.requestAnswerJitter = Duration(seconds: 5);
+      await sharerA
+          .requestSecretsFromNamespace('myapp', names: ['__rk.1.jitter']);
+      final waited = Stopwatch()..start();
+      final sweeping = sharerB.sweepOnce();
+      await Future.delayed(Duration(milliseconds: 50));
+
+      sharerB.stop();
+      await sweeping.timeout(Duration(seconds: 2),
+          onTimeout: () => fail('the jitter was not cut short by the stop'));
+
+      expect(waited.elapsed, lessThan(Duration(seconds: 2)));
+      expect(
+          remoteData.keys.where((k) => k.contains('.${sharerA.kpid}.__ssenv.')),
+          isEmpty,
+          reason: 'a stopped client answers nothing');
     });
 
     test('a second holder stays quiet once another has answered', () async {

@@ -52,6 +52,12 @@ Future<void> requestAndFileNskeyPrivate(
           'holder conveyed on request');
     }
   }).catchError((Object e) {
+    if (e is StoppedException) {
+      logger.warning('Stopped waiting for the nskey private '
+          '$namespace:$secretName: the client stopped, and the next start '
+          'asks again');
+      return;
+    }
     logger.info('No holder conveyed $namespace:$secretName within the wait; '
         'the next start asks again: $e');
   }));

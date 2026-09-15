@@ -293,9 +293,8 @@ class PqClientBootstrap {
   void stop() {
     _stopped = true;
     // NOTE: without this a stopped client keeps a periodic timer, a sync
-    // listener and a notification subscription alive for the life of the
-    // process.
-    sharing.stopListening();
+    // listener, a notification subscription and every secret wait alive.
+    sharing.stop();
   }
 
   /// Runs the ordered steps. Fired unawaited by the client's init;

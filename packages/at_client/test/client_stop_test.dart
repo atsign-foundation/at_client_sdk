@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
+import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
@@ -237,6 +238,32 @@ void main() {
     });
   });
 
+  group('AtCollection', () {
+    test('ends when every source it reads has ended, and its scheduler with it',
+        () async {
+      final notifications = StreamController<AtNotification>.broadcast();
+      final dataEvents = StreamController<DataEvent>.broadcast();
+      final atClient = MockAtClientImpl();
+      when(() => atClient.atSign).thenReturn(Atsign('@alice'));
+      final collection = collectionWithInjectedBoth<Map<String, dynamic>>(
+          atClient, 'things.wavi', const Duration(days: 1),
+          notifications: notifications.stream, dataEvents: dataEvents.stream);
+      collection.availableEvents;
+      final watched = expectLater(collection.watch(), emitsDone);
+
+      await notifications.close();
+      await Future.delayed(Duration.zero);
+      expect(collection.hasEnded, isFalse,
+          reason: 'its data events can still reach it');
+      await dataEvents.close();
+      await watched;
+
+      expect(collection.hasEnded, isTrue);
+      expect(collection.availableSchedulerStopped, isTrue,
+          reason: 'its timer would otherwise outlive the client');
+    });
+  });
+
   group('AtClientImpl.stop', () {
     late Directory dir;
     late List<MockAtLookupImpl> built;
@@ -295,6 +322,52 @@ void main() {
       for (final lookUp in built) {
         verify(() => lookUp.close()).called(1);
       }
+    });
+
+    test('closes services a setter replaced, and waits for them', () async {
+      final running = await client('@replaced');
+      running.syncService =
+          await SyncServiceImpl.create(running, warmStartSync: false);
+      running.notificationService = await NotificationServiceImpl.create(
+          running,
+          lookUps: running.lookUps,
+          secondaryAddressFinder: running.secondaryAddressFinder);
+      expect(built, hasLength(5));
+
+      await running.stop();
+
+      for (final lookUp in built) {
+        verify(() => lookUp.close()).called(1);
+      }
+    });
+
+    test('ends a collection it built, and the collection\'s scheduler',
+        () async {
+      final running = await client('@collects');
+      final collection = await running.collection<Map<String, dynamic>>(
+          'things.wavi', const Duration(days: 1));
+      collection.availableEvents;
+      expect(collection.availableSchedulerStopped, isFalse);
+
+      await running.stop();
+      await Future.delayed(Duration.zero);
+
+      expect(collection.hasEnded, isTrue);
+      expect(collection.availableSchedulerStopped, isTrue);
+    });
+
+    test('ends a secret wait still in flight', () async {
+      final running = await client('@waits');
+      final wait = expectLater(
+          AtClientSecretSharing.forClient(running).waitForSecret(
+              'wavi', 'never',
+              timeout: const Duration(minutes: 5)),
+          throwsA(isA<StoppedException>()));
+
+      await running.stop();
+
+      await wait.timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('the wait outlived the client'));
     });
 
     test('a local operation after stop is refused as stopped', () async {
