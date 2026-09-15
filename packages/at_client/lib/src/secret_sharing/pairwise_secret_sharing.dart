@@ -947,6 +947,10 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   }) async {
     _throwIfStopped();
     final completer = Completer<Secret>();
+    // NOTE: a wait that returns the secret already held never listens to
+    // [completer], so a stop after it must not complete it with an error that
+    // nothing handles.
+    completer.future.ignore();
     final subscription = receivedSecrets.listen((received) {
       if (received.secret.namespace == namespace &&
           received.secret.name == name &&

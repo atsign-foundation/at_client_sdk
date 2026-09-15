@@ -920,6 +920,16 @@ void main() {
       expect(secret.value, 'v1');
     });
 
+    test('a stop after a wait answered from the store raises nothing',
+        () async {
+      await sharerB.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      await sharerB.waitForSecret('myapp', 'token');
+
+      sharerB.stop();
+      await Future.delayed(Duration(milliseconds: 20));
+    });
+
     test('completes when the secret arrives after the wait starts', () async {
       final wait = sharerB.waitForSecret('myapp', '__rk.current',
           timeout: Duration(seconds: 5));
