@@ -36,7 +36,13 @@ import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
 import 'package:at_commons/at_commons.dart'
-    show AtBytes, AtKey, AtKeyNotFoundException, AtValue, KeyNotFoundException;
+    show
+        AtBytes,
+        AtKey,
+        AtKeyNotFoundException,
+        AtValue,
+        KeyNotFoundException,
+        StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -328,6 +334,10 @@ class PqSigningRoot {
           ApskSigningKey.forPublicKey(
               alg: rootKeyAlgo, pub: base64Encode(publicKey))
         ])));
+    } on StoppedException {
+      // NOTE: kept, not retired — only the record could say whether the write
+      // landed, and a later start reconciles the pair against it.
+      rethrow;
     } catch (e) {
       // NOTE: a throw says the call failed, not what the atServer did, so only
       // the record can say whether the write landed — and it is judged against
@@ -337,6 +347,7 @@ class PqSigningRoot {
       try {
         published = await publishedPublicKeys(atClient, atSign);
       } catch (e2) {
+        if (e2 is StoppedException) rethrow;
         _logger.severe('Could not publish the signing root for $atSign and '
             'cannot read the record to find out whether the write landed, so '
             'the minted pair is KEPT: retiring it would brick the atSign if '
@@ -384,6 +395,7 @@ class PqSigningRoot {
       await PqSigningChain(atClient).publishOwnRootLink(
           isFullyPrivileged: () async => true, keysIo: keysIo);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('Minted the signing root for $atSign but could not '
           'anchor this enrollment to it; the next start retries: $e');
     }
@@ -526,6 +538,7 @@ class PqSigningRoot {
     try {
       roots = await publishedRoots(atClient, atSign);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.info('Cannot read the published signing root for $atSign right '
           'now, so the arriving private is not filed; it is re-requested at '
           'a later start: $e');
@@ -637,6 +650,7 @@ class PqSigningRoot {
     try {
       roots = await publishedRoots(atClient, atSign);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.info('Cannot check the signing root private held for $atSign '
           'against the published record right now: $e');
       return false;
@@ -778,6 +792,7 @@ class PqSigningRoot {
     try {
       advertised = await publishedRoots(atClient, atSign);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('$atSign holds ${held.length} active signing root '
           'privates and the record cannot be read to say which one signs, so '
           'the first filed is used: $e');

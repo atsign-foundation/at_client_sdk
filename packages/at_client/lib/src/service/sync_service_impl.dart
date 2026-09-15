@@ -396,6 +396,15 @@ class SyncServiceImpl implements SyncService {
       _syncError(syncRequest);
       _syncInProgress = false;
     } catch (e) {
+      if (e is StoppedException || isStopped) {
+        _logger
+            .finer('sync ${syncRequest.id} abandoned: the service was stopped');
+        syncRequest.result!.atClientException = AtClientException(
+            error_codes['AtClientException'], 'SyncService has been stopped');
+        _syncError(syncRequest);
+        _syncInProgress = false;
+        return;
+      }
       // Catch-all: with on-demand triggering, an unhandled exception
       // from the sync path would become an unhandled async error and
       // fail tests / propagate noise. Surface it as a failure
@@ -807,6 +816,7 @@ class SyncServiceImpl implements SyncService {
       } on _SyncAbandoned {
         rethrow;
       } on Exception catch (e) {
+        if (e is StoppedException || isStopped) throw const _SyncAbandoned();
         // Network or auth failure for the whole batch. Leave queue
         // entries in place — next round retries.
         final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
@@ -862,6 +872,7 @@ class SyncServiceImpl implements SyncService {
         } on _SyncAbandoned {
           rethrow;
         } on Exception catch (e) {
+          if (e is StoppedException || isStopped) throw const _SyncAbandoned();
           final cause = (e is AtException) ? e.getTraceMessage() : e.toString();
           _logger.severe(
               'exception processing batch response entry $entry: $cause');
@@ -1124,6 +1135,8 @@ class SyncServiceImpl implements SyncService {
       await _atClient.put(_lastReceivedServerCommitIdAtKey,
           lastReceivedServerCommitId.toString(),
           putRequestOptions: _watermarkPutOptions);
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       _logger.warning('Failed to persist the pull cursor at '
           '$lastReceivedServerCommitId; the next sync re-reads from the '
@@ -1206,6 +1219,8 @@ class SyncServiceImpl implements SyncService {
         await _atClient.put(
             _skipDeletesUntilCommitId, serverCommitId.toString(),
             putRequestOptions: _watermarkPutOptions);
+      } on StoppedException {
+        rethrow;
       } catch (e) {
         _logger.warning('Failed to persist skipDeletesUntil at '
             '$serverCommitId; this sync still skips deletes, but if it is '
@@ -1284,6 +1299,8 @@ class SyncServiceImpl implements SyncService {
         }
       }
       return conflictInfo;
+    } on StoppedException {
+      rethrow;
     } catch (e, st) {
       conflictInfo.errorOrExceptionMessage =
           'Exception occurred when setting conflict info for $clientAtKey | $e';
@@ -1325,6 +1342,8 @@ class SyncServiceImpl implements SyncService {
       // same answer the round-decision sees.
       return pendingPushCount == 0 &&
           lastReceivedServerCommitId == serverCommitId;
+    } on StoppedException {
+      rethrow;
     } on Exception catch (e) {
       var cause = (e is AtException) ? e.getTraceMessage() : e.toString();
       _logger.severe('exception in isInSync $cause');

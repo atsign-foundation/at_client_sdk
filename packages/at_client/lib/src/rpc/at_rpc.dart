@@ -269,7 +269,7 @@ class AtRpc {
           .subscribe(regex: requestsRegex, shouldDecrypt: true);
 
       _requestStream!.listen(handleRequestNotification,
-          onError: (e) => logger.severe('Notification Failed: $e'),
+          onError: _onNotificationError,
           onDone: () => logger.info('RPC request listener stopped'));
     }
 
@@ -283,12 +283,19 @@ class AtRpc {
           .subscribe(regex: responsesRegex, shouldDecrypt: true);
 
       _responseStream!.listen(handleResponseNotification,
-          onError: (e) => logger.severe('Notification Failed: $e'),
-          onDone: () {
-            logger.info('RPC response listener stopped');
-            if (!_responsesEnded.isCompleted) _responsesEnded.complete();
-          });
+          onError: _onNotificationError, onDone: () {
+        logger.info('RPC response listener stopped');
+        if (!_responsesEnded.isCompleted) _responsesEnded.complete();
+      });
     }
+  }
+
+  void _onNotificationError(Object e) {
+    if (e is StoppedException) {
+      logger.info('RPC listener ended by the stop');
+      return;
+    }
+    logger.severe('Notification Failed: $e');
   }
 
   /// How long [ready] waits for the notification listener before giving up.
@@ -490,6 +497,10 @@ class AtRpc {
       response = await callbacks.handleRequest(request, notification.from);
       await sendResponse(notification, request, response);
     } catch (e, st) {
+      if (e is StoppedException || atClient.isStopped) {
+        logger.warning('Abandoned request $request: the client stopped');
+        return;
+      }
       var message =
           'Exception $e from callbacks.handleRequest for request $request';
       logger.warning(message);
@@ -516,6 +527,10 @@ class AtRpc {
           '😎 Will handle request from $atsign; acquired mutex $mutexKey');
       return true;
     } catch (err) {
+      if (err is StoppedException || atClient.isStopped) {
+        logger.warning('Not handling request from $atsign: the client stopped');
+        return false;
+      }
       if (err.toString().toLowerCase().contains('immutable')) {
         logger.shout('Will not handle request from $atsign'
             '; could not acquire mutex $mutexKey');
@@ -591,6 +606,10 @@ class AtRpc {
     try {
       await callbacks.handleResponse(response);
     } catch (e, st) {
+      if (e is StoppedException) {
+        logger.warning('Abandoned response $response: the client stopped');
+        return;
+      }
       logger.warning(
           'Exception $e from callbacks.handleResponse for response $response');
       logger.warning(st);

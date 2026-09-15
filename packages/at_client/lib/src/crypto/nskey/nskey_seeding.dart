@@ -61,6 +61,7 @@ class NskeySeeding {
     try {
       return await authorisedNamespacesOf(atClient);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.info('Could not read this enrollment to find its namespaces, so '
           'nothing is seeded this start: $e');
       return const {};
@@ -90,6 +91,7 @@ class NskeySeeding {
         }
         if (await seedNamespace(owner, namespace)) minted.add(namespace);
       } catch (e) {
+        if (e is StoppedException) rethrow;
         _logger.warning('Could not seed $owner:$namespace this start: $e');
       }
     }
@@ -140,6 +142,7 @@ class NskeySeeding {
         await _convey(namespace, key.kid);
       }
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning(
           'Published the nskey for $owner:$namespace, but could not convey '
           'its private to this atSign\'s other enrollments — they will pull '
@@ -161,6 +164,7 @@ class NskeySeeding {
     try {
       widened = await ring.add(namespace);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('Could not add this client\'s missing key material to '
           'the nskey for $owner:$namespace; the generation already published '
           'is unchanged and the next start tries again: $e');
@@ -175,6 +179,7 @@ class NskeySeeding {
       try {
         await _convey(namespace, key.kid);
       } catch (e) {
+        if (e is StoppedException) rethrow;
         _logger.warning('Added ${key.alg} to the nskey for $owner:$namespace '
             'but could not convey its private to this atSign\'s other '
             'enrollments — they will pull it at their next start. Peers can '
@@ -237,6 +242,7 @@ class NskeySeeding {
       ).rotateNamespaceKey(namespace);
       return true;
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('The rotation policy asked for a fresh namespace key for '
           '$owner:$namespace and it did not happen; the published generation '
           'is unchanged and the next start will ask again: $e');
@@ -270,6 +276,7 @@ class NskeySeeding {
     try {
       revokedAt = await substrate.directory.lastRevokedAt(namespace);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('Could not read whether a revocation has touched '
           '$owner:$namespace, so nothing is rotated for it this start — a '
           'revoked enrollment that still holds this generation goes on '
@@ -282,6 +289,7 @@ class NskeySeeding {
     try {
       record = await ring.publishedRecord(owner, namespace);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('A revocation touched $owner:$namespace at $revokedAt, '
           'and what it published could not be read, so nothing is rotated '
           'this start: $e');
@@ -304,6 +312,7 @@ class NskeySeeding {
       ).rotateNamespaceKey(namespace);
       return true;
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('A revocation touched $owner:$namespace at $revokedAt '
           'and the rotation it owes did not happen; the published generation '
           'is unchanged and the next start asks again: $e');
@@ -406,6 +415,7 @@ class NskeySeeding {
               'wait; a later answer is filed at the next start ($e)');
         }));
       } catch (e) {
+        if (e is StoppedException) rethrow;
         _logger.warning(
             'Could not request the nskey private for $owner:$namespace: $e');
       }

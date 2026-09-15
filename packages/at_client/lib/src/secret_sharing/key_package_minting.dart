@@ -25,7 +25,7 @@ import 'package:at_client/src/secret_sharing/key_package.dart'
     show KeyPackage, PackageKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, signEnvelope;
-import 'package:at_commons/at_commons.dart' show AtBytes;
+import 'package:at_commons/at_commons.dart' show AtBytes, StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_utils/at_utils.dart' show AtSignLogger, AtUtils;
@@ -242,6 +242,7 @@ class KeyPackageMinting with ApkamSigning {
           m.enrollmentId == enrolment &&
           m.keyPackageStatus == KeyPackageStatus.rejected);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       logger.warning('Could not check whether the key package published for '
           '$enrolment still verifies; the next start checks again: $e');
       return false;

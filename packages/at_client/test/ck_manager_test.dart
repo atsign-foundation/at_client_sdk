@@ -896,6 +896,49 @@ void main() {
               'the FS it was asked for silently not done');
     });
 
+    test('a stop while reading or recording the pointer is not swallowed',
+        () async {
+      final atClient = MockAtClient();
+      final stopped = StoppedException('the client has stopped');
+      when(() => atClient.getCurrentAtSign()).thenReturn(owner);
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenThrow(stopped);
+      when(() => atClient.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenThrow(stopped);
+      when(() => atClient.put(any(), any())).thenThrow(stopped);
+
+      await expectLater(
+          const CurrentCkPointer().read(atClient, owner, namespace),
+          throwsA(isA<StoppedException>()),
+          reason: 'an unreadable pointer reads as nothing to resume, and '
+              'cutting a fresh key over a stop conveys a record for nobody');
+      await expectLater(
+          const CurrentCkPointer()
+              .write(atClient, owner, namespace, 'ck-1', 'nskey-1'),
+          throwsA(isA<StoppedException>()));
+    });
+
+    test('a stop while reading the remembered conveyance cuts no fresh key',
+        () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final conveyed = c.written.length;
+      final cold = c.coldManager(ContentKeyCache());
+      // NOTE: this rig keeps the pointer in memory, so the only read that
+      // meets the stop is the resume reading the remembered record.
+      when(() => c.context.atClient.get(any()))
+          .thenThrow(StoppedException('the client has stopped'));
+
+      await expectLater(cold.ensureCurrent(c.context, selfValue('treaty')),
+          throwsA(isA<StoppedException>()));
+      expect(c.written, hasLength(conveyed));
+    });
+
     test('a resumed content key takes its age from the record, not this clock',
         () async {
       final c = client();

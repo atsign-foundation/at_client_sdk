@@ -685,6 +685,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
           await _getLocalThenRemote(nskeyAdvertisementKey(owner, namespace));
       if (value == null) return _staleOrNothing(cached);
       payload = value;
+    } on StoppedException {
+      rethrow;
     } catch (_) {
       return _staleOrNothing(cached);
     }
@@ -740,6 +742,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
             ..atKey = atKey
             ..value = value,
           cameFromServer: true);
+    } on StoppedException {
+      rethrow;
     } on Object catch (e) {
       _logger.finer('could not file the fetched $atKey locally: $e');
     }
@@ -797,7 +801,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     try {
       advertisement = await verifier.verify(owner, value.value as String);
     } on Object catch (e) {
-      if (owner != _atClient.getCurrentAtSign()) rethrow;
+      if (e is StoppedException || owner != _atClient.getCurrentAtSign()) {
+        rethrow;
+      }
       _logger.warning(
           'Our own advertisement at ${nskeyAdvertisementKey(owner, namespace)} '
           'does not verify ($e) — treating it as unpublished so a mint can '

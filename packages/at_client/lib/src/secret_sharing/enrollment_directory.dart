@@ -6,7 +6,7 @@ import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_commons/at_commons.dart'
-    show AtSigningVerificationException, AtValueException;
+    show AtSigningVerificationException, AtValueException, StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
@@ -229,9 +229,10 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
 /// Verifies an advertised key package against the `_apsk` of the enrollment
 /// whose record carries it, and says why if it is unusable.
 ///
-/// Never throws: a rejection concerns **this advertisement only**, so a caller
-/// listing a roster can drop one member and keep the rest rather than let a
-/// single bad record deny every other enrollment its secrets.
+/// Throws nothing but [StoppedException]: a rejection concerns **this
+/// advertisement only**, so a caller listing a roster can drop one member and
+/// keep the rest rather than let a single bad record deny every other
+/// enrollment its secrets.
 @experimental
 Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
   Object? advertised, {
@@ -277,6 +278,7 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
         'trustworthy as whatever served it; not sealing to it: $e');
     return (null, KeyPackageStatus.rejected);
   } catch (e) {
+    if (e is StoppedException) rethrow;
     _logger.warning('the key package advertised by enrollment $enrollmentId '
         'could not be checked against its _apsk, which could not be fetched; '
         'not sealing to it now: $e');

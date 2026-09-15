@@ -663,6 +663,7 @@ class AtClientImpl implements AtClient {
       try {
         await c.cleanupOrphans();
       } catch (e, st) {
+        if (e is StoppedException) rethrow;
         _logger.warning('cleanupOrphans on $namespace failed: $e\n$st');
       }
     }
@@ -1144,8 +1145,16 @@ class AtClientImpl implements AtClient {
     _expiryTimer?.cancel();
     _expiryTimer = null;
     final ls = localSecondary;
-    if (ls == null) return;
-    final when = await ls.nextExpiryAt();
+    if (ls == null || _isStopped) return;
+    final DateTime? when;
+    try {
+      when = await ls.nextExpiryAt();
+    } catch (_) {
+      // NOTE: a stop landing during the await closes the store under it, and
+      // there is nobody left to hand that failure to.
+      if (_isStopped) return;
+      rethrow;
+    }
     // Bail if a newer arm superseded us across the await, or we stopped.
     if (gen != _expiryArmGen || _isStopped) return;
     if (when == null) return;
@@ -1176,6 +1185,22 @@ class AtClientImpl implements AtClient {
   /// picks up the post-sweep state, including any mid-sweep writes
   /// (the keystore's in-memory cache is updated synchronously inside
   /// each put before the corresponding [DataEvent] microtask runs).
+  /// Runs [_armExpiryTimer], as a keystore mutation would.
+  @visibleForTesting
+  Future<void> armExpiryTimerForTest() => _armExpiryTimer();
+
+  /// Runs [_armAvailableTimer], as a keystore mutation would.
+  @visibleForTesting
+  Future<void> armAvailableTimerForTest() => _armAvailableTimer();
+
+  /// Runs [_onExpiryFire], as a sweep that the timer started would.
+  @visibleForTesting
+  Future<void> expirySweepForTest() => _onExpiryFire();
+
+  /// Runs [_onAvailableFire], as a sweep that the timer started would.
+  @visibleForTesting
+  Future<void> availabilitySweepForTest() => _onAvailableFire();
+
   Future<void> _onExpiryFire() async {
     _expirySweepInFlight = true;
     // NOTE: a throwing sweep counts as fruitless too — it cannot have moved
@@ -1183,6 +1208,8 @@ class AtClientImpl implements AtClient {
     var removed = 0;
     try {
       removed = await localSecondary?.deleteExpiredKeys() ?? 0;
+    } on StoppedException {
+      _logger.warning('Abandoned the expiry sweep: the client stopped');
     } catch (e, st) {
       _logger.warning('Expiry sweep failed: $e\n$st');
     } finally {
@@ -1204,8 +1231,14 @@ class AtClientImpl implements AtClient {
     _availableTimer?.cancel();
     _availableTimer = null;
     final ls = localSecondary;
-    if (ls == null) return;
-    final when = await ls.nextAvailableAt();
+    if (ls == null || _isStopped) return;
+    final DateTime? when;
+    try {
+      when = await ls.nextAvailableAt();
+    } catch (_) {
+      if (_isStopped) return;
+      rethrow;
+    }
     // Bail if a newer arm superseded us across the await, or we stopped.
     if (gen != _availableArmGen || _isStopped) return;
     if (when == null) return;
@@ -1232,6 +1265,8 @@ class AtClientImpl implements AtClient {
           AtMetaData? meta;
           try {
             meta = await ls.keyStore!.getMeta(keyStr);
+          } on StoppedException {
+            rethrow;
           } on Exception {
             meta = null;
           }
@@ -1239,10 +1274,14 @@ class AtClientImpl implements AtClient {
           emitDataEvent(DataUpdated(atKey, metadata: meta));
           // Drop from the availability cache so it won't fire again.
           await ls.dropAvailabilityCacheEntry(keyStr);
+        } on StoppedException {
+          rethrow;
         } on Exception catch (e) {
           _logger.warning('availability sweep failed for $keyStr: $e');
         }
       }
+    } on StoppedException {
+      _logger.warning('Abandoned the availability sweep: the client stopped');
     } catch (e, st) {
       _logger.warning('Availability sweep failed: $e\n$st');
     } finally {
@@ -2544,6 +2583,8 @@ class AtClientImpl implements AtClient {
         } else {
           fileTransferObject.sharedStatus = false;
         }
+      } on StoppedException {
+        rethrow;
       } on Exception catch (e) {
         fileTransferObject.sharedStatus = false;
         fileTransferObject.error = e.toString();

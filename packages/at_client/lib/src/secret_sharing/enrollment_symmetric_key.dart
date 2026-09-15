@@ -6,7 +6,8 @@ import 'package:at_chops/at_chops.dart' show AtKemAlgorithm;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
     show pqOpenFromBase64;
 import 'package:at_commons/at_builders.dart' show ScanVerbBuilder;
-import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
+import 'package:at_commons/at_commons.dart'
+    show AtSigningVerificationException, StoppedException;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/key_package_persistence.dart'
@@ -137,6 +138,7 @@ Future<List<String>> _envelopeKeys(AtLookUp atLookUp, String kpid) async {
         jsonDecode(response.replaceFirst(RegExp('^data:'), '')) as List;
     return decoded.cast<String>();
   } catch (e) {
+    if (e is StoppedException) rethrow;
     // NOTE: a scan that fails is indistinguishable from one that finds nothing,
     // and the caller polls either way; failing the enrollment on a transient
     // atServer error would be the worse outcome.
@@ -167,6 +169,7 @@ Future<String?> _openIfSymmetricKey(
     signedEnvelope = SignedEnvelope.fromJson(
         jsonDecode(raw.replaceFirst(RegExp('^data:'), '')) as Map);
   } catch (e) {
+    if (e is StoppedException) rethrow;
     _logger.info('Could not read envelope $envelopeKey: $e');
     return null;
   }
@@ -176,6 +179,7 @@ Future<String?> _openIfSymmetricKey(
   try {
     await _verifyAgainstApsk(atLookUp, signedEnvelope, atSign);
   } catch (e) {
+    if (e is StoppedException) rethrow;
     // NOTE: every way this can fail is a reason to skip THIS envelope, not to
     // fail the enrollment, and the typed refusal is only one of them: an absent
     // `_apsk` arrives as a thrown AT0015 and a malformed one as a

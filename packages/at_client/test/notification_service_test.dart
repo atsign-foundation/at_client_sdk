@@ -1958,6 +1958,29 @@ void main() {
       expect(deleteCalls, containsAll([intermediateStr, legacyV2Str]));
     });
 
+    test('a stop while seeding keeps the legacy form it could not copy',
+        () async {
+      final putCalls = <MapEntry<String, String?>>[];
+      final deleteCalls = <String>[];
+      final service = await setupMigrationMocks(
+        presentKeys: {intermediateStr},
+        values: {intermediateStr: '{"epochMillis":111}'},
+        putCalls: putCalls,
+        deleteCalls: deleteCalls,
+      );
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenThrow(StoppedException('the client has stopped'));
+
+      await expectLater(
+          service.migrateLegacyLastReceivedNotificationKeysForTest(),
+          throwsA(isA<StoppedException>()),
+          reason: 'a seed that failed falls through to deleting the legacy '
+              'form, so a stop taken for a failed seed deletes the only copy '
+              'of the watermark');
+      expect(deleteCalls, isEmpty);
+    });
+
     test('seeds canonical from _latestNotificationIdv2 when bare absent',
         () async {
       final putCalls = <MapEntry<String, String?>>[];

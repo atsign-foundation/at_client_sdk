@@ -8,10 +8,13 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
+    show AtData, AtKeyValueStore, AtMetaData;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -60,10 +63,34 @@ class _GatedMuxable extends Fake implements AtLookupMuxable {
   }
 }
 
+/// A keystore whose next-expiry answer waits for [_gate] and then fails the
+/// way a store closed underneath it does.
+class _GatedExpiryStore extends Fake
+    implements AtKeyValueStore<String, AtData, AtMetaData?> {
+  final Future<void> _gate;
+
+  _GatedExpiryStore(this._gate);
+
+  @override
+  Future<DateTime?> nextExpiresAt() async {
+    await _gate;
+    throw StateError('Box has already been closed.');
+  }
+
+  @override
+  Future<DateTime?> nextAvailableAt({DateTime? asOf}) async {
+    await _gate;
+    throw StateError('Box has already been closed.');
+  }
+}
+
 /// What `stop()` ends, and what a caller still holding a stopped client's
 /// parts is told.
 void main() {
+  final recorded = RecordedLogs();
+
   setUpAll(() {
+    recorded.installOn(level: 'finer');
     registerFallbackValue(_FakeVerbBuilder());
     registerFallbackValue(AtKey());
   });
@@ -368,6 +395,47 @@ void main() {
 
       await wait.timeout(const Duration(seconds: 5),
           onTimeout: () => fail('the wait outlived the client'));
+    });
+
+    test('a sweep that runs on past the stop ends quietly', () async {
+      final stopping = await client('@sweeps');
+      await stopping.stop();
+      recorded.records.clear();
+
+      await stopping.expirySweepForTest();
+      await stopping.availabilitySweepForTest();
+
+      expect(
+          recorded.at('WARNING'),
+          containsAll([
+            'Abandoned the expiry sweep: the client stopped',
+            'Abandoned the availability sweep: the client stopped',
+          ]),
+          reason: 'each abandoned sweep says so, once');
+      expect(recorded.at('WARNING'), isNot(contains(contains('failed'))),
+          reason: 'the store is gone because the client stopped; that is not '
+              'a failed sweep');
+      expect(recorded.records.map((r) => r.message),
+          isNot(contains(contains('#0'))),
+          reason: 'a stop is logged without a stack trace');
+    });
+
+    test('a stop landing while a keystore timer is re-armed ends the arm',
+        () async {
+      final stopping = await client('@rearms');
+      final gate = Completer<void>();
+      stopping.localSecondary!.keyStore = _GatedExpiryStore(gate.future);
+      final arming = Future.wait([
+        stopping.armExpiryTimerForTest(),
+        stopping.armAvailableTimerForTest(),
+      ]);
+
+      await stopping.stop();
+      gate.complete();
+
+      await expectLater(arming, completes,
+          reason: 'the store closed under the await because the client '
+              'stopped, and a timer callback has nobody to hand that to');
     });
 
     test('a local operation after stop is refused as stopped', () async {

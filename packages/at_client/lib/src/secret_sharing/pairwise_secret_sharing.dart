@@ -327,6 +327,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         encryptValue: false,
       );
     } catch (e) {
+      if (e is StoppedException) rethrow;
+      _throwIfStopped();
       logSwallowed(
           logger,
           e,
@@ -540,6 +542,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         // — never delete on failure; release the claim so the next sweep
         // retries. Nothing has been emitted yet, so a retry repeats nothing.
         _consumedEnvelopeKeys.remove(keyString);
+        if (e is StoppedException) rethrow;
+        _throwIfStopped();
         logger.warning('Failed to process envelope $envelopeKey: $e');
         continue;
       }
@@ -557,6 +561,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         // NOTE: the envelope has been EMITTED — releasing the claim here would
         // hand it to the next sweep for a second emission. The claim and the
         // envelope are both kept; a fresh process retries the whole thing.
+        if (e is StoppedException) rethrow;
+        _throwIfStopped();
         logger.warning('Envelope $envelopeKey was received but its payload '
             'handler failed; it is kept for a retry at the next start: $e');
         continue;
@@ -567,6 +573,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
             deleteRequestOptions: DeleteRequestOptions()
               ..useRemoteAtServer = fromRemote);
       } catch (e) {
+        if (e is StoppedException) rethrow;
+        _throwIfStopped();
         logSwallowed(
             logger, e, 'Failed to delete consumed envelope $envelopeKey: $e');
       }
@@ -711,6 +719,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               inReplyTo: EnvelopeAddressing.unsolicited);
           sent++;
         } catch (e) {
+          if (e is StoppedException) rethrow;
+          _throwIfStopped();
           // Warning, not finer: a request that never went out is
           // indistinguishable from one nobody answered.
           logger.warning('Could not request secrets from enrollment '
@@ -893,6 +903,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               requestId, kpid, appNamespace),
           useRemoteAtServer: true);
       return keys.map((k) => k.toString()).toSet();
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       // Fail open: a duplicate the requester merges away costs less than
       // withholding the secret entirely.
@@ -1090,6 +1102,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               inReplyTo: EnvelopeAddressing.unsolicited);
           pushed++;
         } catch (e) {
+          if (e is StoppedException) rethrow;
+          _throwIfStopped();
           logger.warning('Could not push "${secret.name}" to enrollment '
               '${member.enrollmentId} (kpid ${to.kpid}) in '
               '${secret.namespace}: $e. The remaining members are still '

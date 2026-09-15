@@ -1122,6 +1122,7 @@ interface class AtCollection<T> {
         await atClient.delete(k);
         results.add(OpSuccess(k, CollectionOp.delete));
       } catch (e) {
+        if (e is StoppedException) rethrow;
         results.add(OpFailure(k, CollectionOp.delete, e));
       }
     }
@@ -1132,6 +1133,7 @@ interface class AtCollection<T> {
         await atClient.put(k, jsonEncode(item.toJson()));
         results.add(OpSuccess(k, CollectionOp.put));
       } catch (e) {
+        if (e is StoppedException) rethrow;
         results.add(OpFailure(k, CollectionOp.put, e));
       }
     }
@@ -1265,7 +1267,8 @@ interface class AtCollection<T> {
       await atClient
           .get(AtKey.fromString('cached:$atSign:$id.$namespace$owner'));
       return true;
-    } catch (_) {
+    } catch (e) {
+      if (e is StoppedException) rethrow;
       return false;
     }
   }
@@ -1497,6 +1500,7 @@ interface class AtCollection<T> {
         );
         continue;
       } catch (e, st) {
+        if (e is StoppedException) rethrow;
         // Per-key decode failures are yielded as stream errors rather
         // than logged-and-skipped. The stream continues after an error
         // — subsequent iterations of this for-loop produce further
@@ -1990,10 +1994,16 @@ interface class AtCollection<T> {
             '_cascadeFromParentDelete: ${k.key} already gone (expiry race)',
           );
         } catch (e) {
+          if (e is StoppedException) rethrow;
           _logger.shout('_cascadeFromParentDelete: $e');
         }
       }));
     } catch (e) {
+      if (e is StoppedException) {
+        _logger.warning('Abandoned the cascade from a parent delete in '
+            '$namespace: the client stopped');
+        return;
+      }
       _logger.shout('_cascadeFromParentDelete scan: $e');
     }
   }
@@ -2057,6 +2067,7 @@ interface class AtCollection<T> {
         await atClient.delete(k);
         results.add(OpSuccess(k, CollectionOp.delete));
       } catch (e) {
+        if (e is StoppedException) rethrow;
         results.add(OpFailure(k, CollectionOp.delete, e));
       }
     }
@@ -2126,7 +2137,8 @@ interface class AtCollection<T> {
         final v = await atClient.get(k);
         final decoded = _decodeEnvelope(v.value!, k);
         ancestorOwners = _decodeParentOwners(decoded);
-      } catch (_) {
+      } catch (e) {
+        if (e is StoppedException) rethrow;
         // Unreadable envelope — fall through to legacy path.
       }
 
@@ -2160,6 +2172,7 @@ interface class AtCollection<T> {
           await atClient.delete(k);
           results.add(OpSuccess(k, CollectionOp.delete));
         } catch (e) {
+          if (e is StoppedException) rethrow;
           results.add(OpFailure(k, CollectionOp.delete, e));
         }
         continue;
@@ -2183,7 +2196,8 @@ interface class AtCollection<T> {
             : AtKey.fromString('cached:$self:$ancId.$composed$ancOwner');
         try {
           await atClient.get(ancKey);
-        } catch (_) {
+        } catch (e) {
+          if (e is StoppedException) rethrow;
           orphaned = true;
           break;
         }
@@ -2196,6 +2210,7 @@ interface class AtCollection<T> {
         await atClient.delete(k);
         results.add(OpSuccess(k, CollectionOp.delete));
       } catch (e) {
+        if (e is StoppedException) rethrow;
         results.add(OpFailure(k, CollectionOp.delete, e));
       }
     }
@@ -2271,6 +2286,11 @@ interface class AtCollection<T> {
         await _handleSubObjNotificationImpl(n);
       }
     } catch (e, st) {
+      if (e is StoppedException) {
+        _logger.warning('Abandoned handling a notification in $namespace: '
+            'the client stopped');
+        return;
+      }
       _logger.shout('handleNotification: $e\nStackTrace:\n$st');
     }
   }
@@ -2378,6 +2398,11 @@ interface class AtCollection<T> {
         await _handleSubObjEvent(operation, parts, event.key);
       }
     } catch (e, st) {
+      if (e is StoppedException) {
+        _logger.warning('Abandoned handling a data event in $namespace: the '
+            'client stopped');
+        return;
+      }
       _logger.shout('handleDataEvent: $e\nStackTrace:\n$st');
     }
   }
@@ -2461,6 +2486,7 @@ interface class AtCollection<T> {
               _decodeEnvelope(v.value!, atKeyForEnvelope),
             );
           } catch (e) {
+            if (e is StoppedException) rethrow;
             logSwallowed(
               _logger,
               e,
@@ -2998,7 +3024,8 @@ interface class AtCollection<T> {
       // this process skip the round-trip too.
       _seenSelfIds.add(id);
       return true;
-    } catch (_) {
+    } catch (e) {
+      if (e is StoppedException) rethrow;
       return false;
     }
   }
@@ -3156,6 +3183,7 @@ interface class AtCollection<T> {
       _emit(CItemUpdated(owner: item.owner, id: item.id));
       _emitAncestorSubUpdated(item);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       results.add(OpFailure(selfKey, CollectionOp.put, e));
     }
 
@@ -3170,6 +3198,7 @@ interface class AtCollection<T> {
           await atClient.delete(k);
           results.add(OpSuccess(k, CollectionOp.delete));
         } catch (e) {
+          if (e is StoppedException) rethrow;
           results.add(OpFailure(k, CollectionOp.delete, e));
         }
       }
@@ -3185,6 +3214,7 @@ interface class AtCollection<T> {
         await atClient.put(k, jsonEncode(item.toJson()));
         results.add(OpSuccess(k, CollectionOp.put));
       } catch (e) {
+        if (e is StoppedException) rethrow;
         results.add(OpFailure(k, CollectionOp.put, e));
       }
     }
@@ -3224,6 +3254,7 @@ interface class AtCollection<T> {
         await atClient.put(k, jsonEncode(item.toJson()));
         results.add(OpSuccess(k, CollectionOp.put));
       } catch (e) {
+        if (e is StoppedException) rethrow;
         results.add(OpFailure(k, CollectionOp.put, e));
       }
     }
@@ -3271,6 +3302,7 @@ interface class AtCollection<T> {
           await atClient.delete(k);
           results.add(OpSuccess(k, CollectionOp.delete));
         } catch (e) {
+          if (e is StoppedException) rethrow;
           results.add(OpFailure(k, CollectionOp.delete, e));
         }
       }
@@ -3290,6 +3322,7 @@ interface class AtCollection<T> {
           _emitAncestorSubDeleted(item);
         }
       } catch (e) {
+        if (e is StoppedException) rethrow;
         results.add(OpFailure(k, CollectionOp.delete, e));
       }
     }
@@ -3334,6 +3367,7 @@ interface class AtCollection<T> {
           keep.add(k);
         }
       } catch (e) {
+        if (e is StoppedException) rethrow;
         // Bad envelope / unreadable — err on the side of keeping the
         // candidate (so `prevent` fires rather than silently stranding
         // a malformed descendant). Cascade will try to delete it.
@@ -4681,7 +4715,8 @@ final class _CItemTimerScheduler<E extends CEvent, T> {
       if (fresh != null) {
         _registerForItem(fresh);
       }
-    } catch (_) {
+    } catch (e) {
+      if (e is StoppedException) return;
       // Read failure on a single id — surface the fact to logs but
       // don't tear the scheduler down. The next event will retry
       // implicitly.

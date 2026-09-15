@@ -309,6 +309,7 @@ class LocalSecondary implements Secondary {
       final q = await _ensureSyncQueueOpen();
       await q.enqueue(atKey, op);
     } catch (e, st) {
+      if (e is StoppedException) rethrow;
       // The write is not queued, so nothing will push it until the box
       // becomes accessible again and the periodic safety-net timer finds it.
       _logger.shout('failed to enqueue $atKey for sync: $e\n$st');
@@ -322,6 +323,7 @@ class LocalSecondary implements Secondary {
       // The sync service then peeks our queue and pushes batches.
       _atClient.syncService.sync();
     } catch (e, st) {
+      if (_atClient.isStopped) return;
       logSwallowed(
           _logger,
           e,
@@ -649,6 +651,8 @@ class LocalSecondary implements Secondary {
         // recipients' `cached:` evictions.
         await _delete(builder, localOnly: true, isExpiry: true);
         deleted++;
+      } on StoppedException {
+        rethrow;
       } on Exception catch (e) {
         _logger.warning('expiry sweep failed for $keyString: $e');
       }

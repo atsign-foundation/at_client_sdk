@@ -232,6 +232,8 @@ class CkManager {
           SymmetricAesGcmProvider.conveyanceKeyFor(
               valueKey, remembered.ckKid, ckNs));
       conveyedAt = record.metadata?.createdAt?.toUtc();
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       _logger.info('Could not resume content key ${remembered.ckKid} for '
           '$owner:$ckNs, so cutting a fresh one: $e');

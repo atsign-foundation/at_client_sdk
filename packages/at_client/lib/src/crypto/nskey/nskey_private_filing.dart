@@ -21,7 +21,7 @@ import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
-import 'package:at_commons/at_commons.dart' show AtBytes;
+import 'package:at_commons/at_commons.dart' show AtBytes, StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
@@ -187,6 +187,8 @@ class NskeyPrivateFiling {
     if (lookup == null) return null;
     try {
       return await lookup(namespace, nskeyKid);
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       _logger.info('Could not fetch the published nskey for '
           '$namespace:$nskeyKid: $e');

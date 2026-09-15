@@ -207,6 +207,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
               '${enrollment.enrollmentId}');
         }
       } catch (e) {
+        if (e is StoppedException) rethrow;
         _logger.warning('Could not convey held nskey privates to enrollment '
             '${enrollment.enrollmentId}; it can pull them at its next start: '
             '$e');
@@ -288,6 +289,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
             inReplyTo: EnvelopeAddressing.unsolicited);
         conveyed++;
       } catch (e) {
+        if (e is StoppedException) rethrow;
         _logger.warning('Could not sweep a root link for enrollment $id: $e');
       }
     }

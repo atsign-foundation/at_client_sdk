@@ -25,6 +25,7 @@ import 'package:at_client/src/secret_sharing/key_package_minting.dart'
     show KeyPackageMinting;
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
+import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
@@ -317,12 +318,26 @@ class PqClientBootstrap {
           _warnAbandoned(steps.sublist(i).map((step) => step.name).toList());
           break;
         }
-        await steps[i].run();
+        try {
+          await steps[i].run();
+        } catch (e) {
+          // NOTE: a step lets through only what a stop caused, so this is the
+          // one place a stopped startup is reported.
+          if (!_causedByStop(e)) rethrow;
+          _warnAbandoned(steps.sublist(i).map((step) => step.name).toList());
+          break;
+        }
       }
     } finally {
       _startupComplete.complete();
     }
   }
+
+  /// Whether [error] is what a stop did to a step: a [StoppedException], or
+  /// any other exception once this startup is stopped. An [Error] still names
+  /// a defect, stop or no stop.
+  bool _causedByStop(Object error) =>
+      error is StoppedException || (_stopped && error is Exception);
 
   /// Says what a stopped startup did not do, at **warning**.
   ///
@@ -392,6 +407,7 @@ class PqClientBootstrap {
       if (!await _privilege.isFullyPrivileged()) return;
       await root.hydrateStore(sharing, askIn);
     } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
       _logger.warning('Could not prime what $_atSign holds for answering '
           'other enrollments; their pulls go unanswered until the next '
           'start retries: $e, $st');
@@ -411,6 +427,7 @@ class PqClientBootstrap {
     try {
       await sharing.startListening();
     } catch (e) {
+      if (_causedByStop(e)) rethrow;
       logSwallowed(
           _logger,
           e,
@@ -431,6 +448,7 @@ class PqClientBootstrap {
       // rather than building a second, whose events nothing can hear.
       await collectConveyedKeyMaterial(_atClient, keysIo, ring: ring);
     } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
       logSwallowed(
           _logger,
           e,
@@ -454,6 +472,7 @@ class PqClientBootstrap {
       if (!_gates.mintInUseSigningKeys) return;
       await minting.reconcileSigningKeys();
     } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
       _logger.warning('Minting this enrollment\'s own signing keys failed for '
           '$_atSign; it keeps signing with the key it already advertises, and '
           'the next start retries: $e, $st');
@@ -473,6 +492,7 @@ class PqClientBootstrap {
     try {
       await keyPackageMinting.reconcileKeyPackage();
     } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
       _logger.warning('Reconciling the advertised key package failed for '
           '$_atSign; it goes on answering at the key it already advertises, '
           'and the next start retries: $e, $st');
@@ -494,6 +514,7 @@ class PqClientBootstrap {
     try {
       await seeding.seed();
     } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
       _logger.warning('Seeding namespace keys failed for $_atSign; the next '
           'start retries whatever is still missing: $e, $st');
     }
@@ -521,6 +542,7 @@ class PqClientBootstrap {
         namespace: askIn,
       );
     } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
       logSwallowed(
           _logger,
           e,
@@ -546,6 +568,7 @@ class PqClientBootstrap {
             '${asked.join(', ')}; answers are filed as they arrive');
       }
     } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
       _logger.warning('Could not request missing nskey privates for '
           '$_atSign; the affected namespaces stay unreadable until the next '
           'start retries: $e, $st');
@@ -560,6 +583,7 @@ class PqClientBootstrap {
       await chain.publishOwnRootLink(
           isFullyPrivileged: _privilege.isFullyPrivileged, keysIo: _keysIo);
     } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
       logSwallowed(
           _logger,
           e,
@@ -574,6 +598,7 @@ class PqClientBootstrap {
     try {
       await chain.publishPendingLink();
     } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
       logSwallowed(
           _logger,
           e,
@@ -595,6 +620,7 @@ class PqClientBootstrap {
         await _sweepUnanchored();
       }
     } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
       logSwallowed(
           _logger,
           e,
@@ -667,6 +693,7 @@ class PqClientBootstrap {
         return true;
       });
     } catch (e, st) {
+      if (_causedByStop(e)) rethrow;
       _logger.warning('Could not reconcile the enrollment snapshot for '
           '$_atSign; the keyfile keeps whatever it already recorded and the '
           'next start retries: $e, $st');

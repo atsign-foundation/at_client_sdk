@@ -1,5 +1,18 @@
 ## 3.15.0-rc1
 
+- fix: a stop is no longer taken for an ordinary failure. Where a failed
+  read chose a fallback it now lets `StoppedException` through: reading an
+  advertisement as unpublished (which invited a mint), a missing published
+  nskey (which filed a private unchecked, or fell back to a legacy write), an
+  unreadable current-content-key pointer (which cut a fresh key), a missing
+  collection ancestor (which deleted a live item), and a failed watermark
+  seed (which deleted the legacy copy). Sync rounds, PQ startup steps,
+  expiry and availability sweeps, envelope sweeps, collection event
+  handlers, key streams and `AtRpc` handlers report a stop once, at
+  `warning` and without a stack trace, rather than logging each failure it
+  caused at `warning`, `severe` or `shout`.
+- fix: an expiry or availability sweep running when the client stops no
+  longer raises an unhandled error from its timer.
 - fix: `stop()` ends what the client started and used to leave running: a
   wait of up to five minutes for a conveyed nskey private, which now fails
   with `StoppedException`; the pause before answering a secret request; an

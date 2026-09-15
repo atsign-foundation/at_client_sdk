@@ -114,6 +114,29 @@ void main() {
               'green run used to print for it');
     });
 
+    test('a batch push the closed connection refuses is abandoned, not failed',
+        () async {
+      stubFreshClient();
+      when(() => localSecondary.syncQueueSize).thenAnswer((_) async => 1);
+      when(() => localSecondary.peekSyncQueue(limit: any(named: 'limit')))
+          .thenAnswer((_) async => ['k1.wavi@abandon']);
+      when(() => localSecondary.readSyncQueueEntry(any())).thenAnswer(
+          (_) async => SyncQueueEntry(
+              atKey: 'k1.wavi@abandon', op: SyncQueueOp.delete, ts: 1, seq: 1));
+      when(() => localSecondary.keyStore).thenReturn(_MockKeyStore());
+      when(() => remote.executeCommand(any(), auth: any(named: 'auth')))
+          .thenThrow(StoppedException('the lookup for @abandon is closed'));
+
+      await expectLater(
+          sync.syncInternal(-1, SyncRequest()..result = SyncResult(),
+              localCommitIdBeforeSync: 1),
+          throwsA(isA<Exception>()));
+
+      expect(recorded.at('SEVERE'), isEmpty,
+          reason: 'the connection is closed because its owner stopped, which '
+              'is not a failed push');
+    });
+
     test(
         'a stop that lands while a batch response is being applied abandons '
         'the rest of the batch', () async {

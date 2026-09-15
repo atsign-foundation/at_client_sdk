@@ -305,6 +305,47 @@ void main() {
               'it sit unread beside every other startup line');
     });
 
+    test('a step a stop cuts short is reported as abandoned, not as failed',
+        () async {
+      final logs = RecordedLogs();
+      final previousHandler = AtSignLogger.defaultLoggingHandler;
+      final previousLevel = AtSignLogger.root_level;
+      AtSignLogger.defaultLoggingHandler = logs;
+      AtSignLogger.root_level = 'info';
+      addTearDown(() {
+        AtSignLogger.defaultLoggingHandler = previousHandler;
+        AtSignLogger.root_level = previousLevel;
+      });
+      final bootstrap = build(
+          gates: const PqStartupGates(
+        hydrateHeldSecrets: false,
+        collectConveyedKeys: false,
+        mintInUseSigningKeys: false,
+        reconcileKeyPackage: false,
+        seedNamespaceKeys: false,
+        requestRootPrivate: false,
+        requestMissingPrivates: false,
+        publishRootLink: false,
+        publishChainLink: false,
+        sweepUnanchoredEnrollments: false,
+        reconcileEnrollmentSnapshot: false,
+        askOnReadMiss: false,
+      ));
+      // NOTE: the sharing stops on its own, so the step meets the stop while
+      // the bootstrap has not yet heard of it.
+      bootstrap.sharing.stop();
+
+      await bootstrap.startup();
+
+      final warnings = logs.at('WARNING').toList();
+      expect(warnings.where((m) => m.contains('was stopped with')).single,
+          contains('startEnvelopeListener'),
+          reason: 'the step the stop cut short is among what did not happen');
+      expect(warnings.where((m) => m.contains('Could not start the envelope')),
+          isEmpty,
+          reason: 'a stop is not the step failing');
+    });
+
     test('a signer answers while a startup step is still parked', () async {
       // NOTE: the sweep is parked, so the startup is genuinely mid-flight and
       // has not reached the mint. Signing must not consult the startup in any

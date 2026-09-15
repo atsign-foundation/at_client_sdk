@@ -134,6 +134,10 @@ class Monitor {
   void _enqueue(Future<void> Function() step) {
     _lifecycle =
         _lifecycle.then((_) => step()).catchError((Object e, StackTrace st) {
+      if (e is StoppedException) {
+        logger.info('Monitor lifecycle step ended by the stop');
+        return;
+      }
       logger.shout('Monitor lifecycle step failed: $e\n$st');
     });
   }
@@ -208,6 +212,12 @@ class Monitor {
       try {
         return await getLastNotificationTime();
       } catch (e) {
+        if (e is StoppedException ||
+            _targetState != NotificationListenerState.listening) {
+          logger.finer('Not reading the last-notification watermark: the '
+              'monitor has been stopped');
+          return null;
+        }
         logger.warning('Could not read the last-notification watermark, so the '
             'monitor is (re)starting without one: $e');
         return null;

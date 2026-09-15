@@ -268,6 +268,7 @@ class NotificationServiceImpl extends NotificationService {
             transformsByNotification.putIfAbsent(
                 parked.notification, () => {}));
       } catch (e) {
+        if (isStopped) return;
         _drop(
             parked.notification.key,
             'Re-driving parked notification ${parked.notification.key} '
@@ -445,6 +446,8 @@ class NotificationServiceImpl extends NotificationService {
       try {
         canonicalValue = await atClient.get(lastReceivedNotificationAtKey);
         if (canonicalValue.value == null) canonicalValue = null;
+      } on StoppedException {
+        rethrow;
       } on Exception {
         // Treat read failures as "needs seeding" — the legacy
         // forms become the source of truth.
@@ -470,6 +473,8 @@ class NotificationServiceImpl extends NotificationService {
                 putRequestOptions: _watermarkPutOptions);
             canonicalValue = v;
           }
+        } on StoppedException {
+          rethrow;
         } on Exception catch (e) {
           logger.warning(
               'Migration: failed to seed canonical key from $legacyStr: $e');
@@ -481,6 +486,8 @@ class NotificationServiceImpl extends NotificationService {
       // exists, and pollute the local keystore (#1942).
       try {
         await atClient.delete(AtKey.fromString(legacyStr));
+      } on StoppedException {
+        rethrow;
       } on Exception catch (e) {
         logger.warning('Migration: failed to delete legacy key $legacyStr: $e');
       }
@@ -538,6 +545,8 @@ class NotificationServiceImpl extends NotificationService {
     try {
       await atClient.put(lastReceivedNotificationAtKey, _watermarkValue(n),
           putRequestOptions: _watermarkPutOptions);
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       logger.warning('Failed to seed the last-received-notification '
           'watermark; the next monitor connect will seed it again: $e');
@@ -672,6 +681,7 @@ class NotificationServiceImpl extends NotificationService {
           } on NskeyPrivateUnavailableException catch (e) {
             _park(e, n, notificationConfig, streamController);
           } catch (e) {
+            if (isStopped) return;
             // NOTE: `warning`, not `finer` — this notification is dropped here
             // and never retried, and a silent drop is indistinguishable to the
             // subscriber from one that was never sent.
