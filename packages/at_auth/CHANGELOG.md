@@ -134,6 +134,9 @@ at_client, and this release removes the surface those replace.
 - The enrolment handshake installs an authenticator on its lookup and never
   writes at_lookup's credential fields; both were written, and one was never
   read.
+- Activation drops its CRAM-authenticated connection with
+  `dropConnection()` before PKAM-authenticating on the same lookup. `close()`
+  now ends a lookup, so the PKAM after it would be refused.
 
 ## 4.0.0-rc1
 

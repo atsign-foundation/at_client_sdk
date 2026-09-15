@@ -164,8 +164,11 @@ abstract interface class AtLookUp {
   /// CRAM authentication to secondary server
   Future<bool> cramAuthenticate(String secret);
 
-  /// Terminates the underlying connection to the atServer
-  /// used by this instance of AtLookup
+  /// Ends this lookup: closes its connection and stops its notifications.
+  ///
+  /// Work in flight fails with [StoppedException], and so does every later
+  /// call, without touching the network; a closed lookup cannot be used
+  /// again. Calling this again waits for the first close.
   Future<void> close();
 
   /// set an instance of  [AtChops] for signing and verification operations.
@@ -313,6 +316,13 @@ abstract interface class AtLookupMuxable implements AtLookUp {
 
   /// Whether [startNotifications] is in force.
   bool get isNotifying;
+
+  /// Closes the current connection and fails what was waiting on it, leaving
+  /// this lookup usable: the next call opens a new connection.
+  ///
+  /// While notifying, this is a lost connection like any other and is
+  /// reconnected. [close] is what ends the lookup.
+  Future<void> dropConnection();
 
   // Where `AtLookupImpl` accepts more than `AtLookUp` does, restated here so
   // a caller can hold this interface without losing anything: two methods,
