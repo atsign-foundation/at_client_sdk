@@ -70,6 +70,17 @@ class _ThrowingConveyance implements EnrollmentConveyance {
   Future<int> sweepUnanchoredEnrollments() async => 0;
 }
 
+/// An [EnrollmentConveyance] whose client was stopped before it could seal.
+class _StoppedConveyance implements EnrollmentConveyance {
+  @override
+  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment,
+          {String? mintedApkamSymmetricKey}) =>
+      throw AtClientStoppedException('the client for @alice has been stopped');
+
+  @override
+  Future<int> sweepUnanchoredEnrollments() async => 0;
+}
+
 /// approve() consults the injected [EnrollmentConveyance] and owns the policy
 /// about what its answer means.
 ///
@@ -206,6 +217,19 @@ void main() {
         reason: 'losing the response on these paths and carrying it on the '
             'rejected one would make the no-lost-response contract depend on '
             'which way the conveyance refused');
+  });
+
+  test('a stop during the conveyance still reports the approval', () async {
+    await expectLater(
+        approveThrough(_StoppedConveyance()),
+        throwsA(isA<EnrollmentConveyanceException>()
+            .having((e) => e.response.enrollmentId, 'response.enrollmentId',
+                enrolleeId)
+            .having((e) => e.keyPackageStatus, 'keyPackageStatus',
+                KeyPackageStatus.unverified)
+            .having((e) => e.message, 'message', contains('stopped'))),
+        reason: 'the approval landed on the atServer before the stop, and a '
+            'caller told nothing of it would wait on a key that never comes');
   });
 
   test('an absent package approves quietly', () async {

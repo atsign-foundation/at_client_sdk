@@ -1318,7 +1318,6 @@ class AtClientImpl implements AtClient {
     // NOTE: first, so a stopped client publishes nothing further — the PQ
     // startup halts at its next step boundary.
     _pqBootstrap?.stop();
-    _remoteSecondary?.refuseNewWork();
 
     _HeldDefect? defect;
     Future<void> attempt(String what, Future<void> Function() body) async {
@@ -1333,6 +1332,11 @@ class AtClientImpl implements AtClient {
         defect ??= (error: e, stack: stack);
       }
     }
+
+    // NOTE: first among these, so work that resumes while the rest of the
+    // stop runs opens no new connection.
+    await attempt('refusing new remote work',
+        () async => _remoteSecondary?.refuseNewWork());
 
     // NOTE: before the services and the remote are closed, so the requests
     // those closes fail are not recorded as the atServer being unreachable.

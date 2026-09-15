@@ -4,6 +4,8 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show AESKey;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show AtClientStoppedException;
 import 'package:at_client/src/enroll/privilege_resolver.dart' as privilege;
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
@@ -172,9 +174,13 @@ class EnrollmentServiceImpl implements EnrollmentService {
     // NOTE: re-read after the approval, not before — the atServer publishes
     // the enrollment's _apsk at that point, and the advertised key package
     // cannot be verified until it exists.
-    final enrollment = await _enrollmentById(
-        enrollmentRequestDecision.enrollmentId,
-        const [EnrollmentStatus.approved]);
+    final Enrollment? enrollment;
+    try {
+      enrollment = await _enrollmentById(enrollmentRequestDecision.enrollmentId,
+          const [EnrollmentStatus.approved]);
+    } on AtClientStoppedException catch (e) {
+      throw _stoppedAfterApproval(response, e);
+    }
     if (enrollment != null) {
       final KeyPackageStatus status;
       try {
@@ -182,6 +188,8 @@ class EnrollmentServiceImpl implements EnrollmentService {
             mintedApkamSymmetricKey: mintedApkamSymmetricKey);
       } on EnrollmentConveyanceException {
         rethrow;
+      } on AtClientStoppedException catch (e) {
+        throw _stoppedAfterApproval(response, e);
       } on AtEnrollmentException catch (e) {
         throw EnrollmentConveyanceException(e.message,
             response: response, keyPackageStatus: KeyPackageStatus.present);
@@ -209,6 +217,18 @@ class EnrollmentServiceImpl implements EnrollmentService {
 
     return response;
   }
+
+  /// The approval landed and then this client was stopped, so nothing was
+  /// conveyed: the enrollment cannot complete until a running client conveys
+  /// to it, and the caller is told the approval happened.
+  EnrollmentConveyanceException _stoppedAfterApproval(
+          AtEnrollmentResponse response, AtClientStoppedException cause) =>
+      EnrollmentConveyanceException(
+          'Enrollment ${response.enrollmentId} is approved, but this client '
+          'was stopped before it could convey any secrets, so the enrollment '
+          'cannot complete until a running client conveys to it: $cause',
+          response: response,
+          keyPackageStatus: KeyPackageStatus.unverified);
 
   /// The enrollment with [enrollmentId], from an `enroll:list` narrowed to
   /// [statuses].

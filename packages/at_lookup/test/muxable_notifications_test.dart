@@ -834,6 +834,32 @@ void main() {
       await atLookup.close();
     });
 
+    test('a request that needs no authentication is refused before it connects',
+        () async {
+      final atLookup = authenticated();
+      atLookup.refuseNewConnections();
+
+      await expectLater(
+          atLookup.executeCommand('lookup:k@alice\n', auth: false),
+          throwsA(isA<ConnectionInvalidException>()));
+      expect(sockets, isEmpty);
+    });
+
+    test('a direct pkamAuthenticate is refused the same way', () async {
+      var authCount = 0;
+      final atLookup = build(authenticator: (_) async {
+        authCount++;
+        return true;
+      });
+      await (atLookup as AtLookupImpl).createConnection();
+      atLookup.refuseNewConnections();
+
+      await expectLater(atLookup.pkamAuthenticate(),
+          throwsA(isA<ConnectionInvalidException>()));
+      expect(authCount, 0);
+      await atLookup.close();
+    });
+
     test('control: without it the same request connects', () async {
       final atLookup = authenticated();
       unawaited(atLookup

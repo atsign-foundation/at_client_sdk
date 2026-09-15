@@ -489,6 +489,20 @@ void main() {
       expect(reconciled.retired, isEmpty);
     });
 
+    test('a stop that lands before the re-sign sends nothing', () async {
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      directory.members = [member(enrollmentId, KeyPackageStatus.rejected)];
+      final remoteSecondary = MockRemoteSecondary();
+      when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
+      when(() => remoteSecondary.atLookUp)
+          .thenThrow(AtClientStoppedException('stopped'));
+
+      await expectLater(checking().reconcileKeyPackage(),
+          throwsA(isA<AtClientStoppedException>()));
+
+      expect(updates, isEmpty);
+    });
+
     test('control: a package that verifies is left alone', () async {
       await fileHeldKey(SecretSharingAlgos.xWing);
       directory.members = [member(enrollmentId, KeyPackageStatus.present)];

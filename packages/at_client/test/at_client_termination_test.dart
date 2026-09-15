@@ -164,6 +164,76 @@ void main() {
         await expectLater(running, throwsA(isA<AtClientStoppedException>()));
       });
 
+      test(
+          'a verb that was waiting when the stop began ends as stopped, however '
+          'at_lookup wrapped the failure', () async {
+        final owned = _MockMuxable();
+        final gate = Completer<void>();
+        when(() => owned.executeVerb(any())).thenAnswer((_) async {
+          await gate.future;
+          // executeVerb wraps a refused connection with the code it gives
+          // any exception it has no code for.
+          throw AtLookUpException(
+              'AT0014',
+              'Exception: the connection to @waiting is closed, and this '
+                  'lookup opens no new one');
+        });
+        final remoteSecondary = RemoteSecondary(
+            '@waiting', AtClientPreference(),
+            lookUps: _lookUpsReturning(owned));
+
+        final running = remoteSecondary.executeVerb(StatsVerbBuilder());
+        remoteSecondary.refuseNewWork();
+        gate.complete();
+
+        await expectLater(running, throwsA(isA<AtClientStoppedException>()));
+      });
+
+      test(
+          'control: a verb the atServer answered keeps its answer after a stop',
+          () async {
+        final owned = _MockMuxable();
+        final gate = Completer<void>();
+        when(() => owned.executeVerb(any())).thenAnswer((_) async {
+          await gate.future;
+          throw AtLookUpException(
+              'AT0015', 'k@waiting does not exist in keystore');
+        });
+        final remoteSecondary = RemoteSecondary(
+            '@waiting', AtClientPreference(),
+            lookUps: _lookUpsReturning(owned));
+
+        final running = remoteSecondary.executeVerb(StatsVerbBuilder());
+        remoteSecondary.refuseNewWork();
+        gate.complete();
+
+        await expectLater(running, throwsA(isA<KeyNotFoundException>()),
+            reason: 'the atServer answered before the stop reached it, and '
+                'the answer is what the caller asked for');
+      });
+
+      test('a lookup that fails to refuse new work does not abort the stop',
+          () async {
+        final atSign = '@stop_refuse_throws';
+        final mockRemoteSecondary = MockRemoteSecondary();
+        when(() => mockRemoteSecondary.refuseNewWork())
+            .thenThrow(Exception('an implementation that cannot refuse'));
+
+        final atClient = await AtClientImpl.create(
+          atSign,
+          'test',
+          _createPreference('stop_refuse_throws'),
+          remoteSecondary: mockRemoteSecondary,
+        ) as AtClientImpl;
+        final storage = atClient.storage as AtClientStorageBase;
+        await atClient.stop();
+
+        expect(atClient.isStopped, true);
+        expect(AtClientImpl.atClientInstanceMap.containsKey(atSign), false);
+        expect(storage.isAttached, isFalse,
+            reason: 'the rest of the stop ran: the storage was released');
+      });
+
       test('control: the same failure without a stop is the connection failure',
           () async {
         final owned = _MockMuxable();

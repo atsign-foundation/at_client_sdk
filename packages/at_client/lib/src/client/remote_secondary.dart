@@ -33,9 +33,10 @@ class RemoteSecondary implements Secondary {
 
   late AtLookUp _atLookUp;
 
-  /// The lookup this secondary sends through. Once [closeConnection] has run
-  /// it throws [AtClientStoppedException], since a caller holding the lookup
-  /// would open a new connection for the stopped client itself.
+  /// The lookup this secondary sends through. Once [refuseNewWork] or
+  /// [closeConnection] has run it throws [AtClientStoppedException], since a
+  /// caller holding the lookup would open a new connection for the stopped
+  /// client itself.
   AtLookUp get atLookUp {
     _refuseIfClosed();
     return _atLookUp;
@@ -93,10 +94,14 @@ class RemoteSecondary implements Secondary {
 
   /// A request that was already waiting when the stop began fails for want of
   /// a connection; that is the stop, not the atServer being unreachable.
+  ///
+  /// Only an answer from the atServer keeps its own meaning. at_lookup's
+  /// `executeVerb` wraps a refused connection under AT0014, the code it gives
+  /// any exception it has no code for, which classifies as nothing at all.
   void _refuseIfClosedAfter(Object error) {
-    if (_closed && (classifyConnectionFailure(error)?.isOffline ?? false)) {
-      _refuseIfClosed();
-    }
+    if (!_closed) return;
+    final state = classifyConnectionFailure(error);
+    if (state == null || state.isOffline) _refuseIfClosed();
   }
 
   void _reportSuccess() => _connection?.report(AtConnectionState.online());

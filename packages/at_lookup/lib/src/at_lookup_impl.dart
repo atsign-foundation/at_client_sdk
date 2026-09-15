@@ -618,6 +618,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       if (_connection!.getMetaData()!.isAuthenticated) {
         return;
       }
+      _refuseNewAuthentication();
       if (!await authenticate(this)) {
         throw UnAuthenticatedException('Failed connecting to $_currentAtSign.'
             ' The authenticator reported failure');
@@ -643,6 +644,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     try {
       await _pkamAuthenticationMutex.acquire();
       if (!_connection!.getMetaData()!.isAuthenticated) {
+        _refuseNewAuthentication();
         await _sendCommand((FromVerbBuilder()
               ..atSign = _currentAtSign
               ..clientConfig = _clientConfig)
@@ -702,6 +704,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     try {
       await _pkamAuthenticationMutex.acquire();
       if (!_connection!.getMetaData()!.isAuthenticated) {
+        _refuseNewAuthentication();
         await _sendCommand((FromVerbBuilder()
               ..atSign = _currentAtSign
               ..clientConfig = _clientConfig)
@@ -756,6 +759,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     try {
       await _cramAuthenticationMutex.acquire();
       if (!_connection!.getMetaData()!.isAuthenticated) {
+        _refuseNewAuthentication();
         await _sendCommand((FromVerbBuilder()
               ..atSign = _currentAtSign
               ..clientConfig = _clientConfig)
@@ -828,10 +832,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     try {
       await requestResponseMutex.acquire();
 
-      if (auth && _isAuthRequired() && _refusingNewConnections) {
-        throw ConnectionInvalidException('the connection to $_currentAtSign '
-            'is not authenticated, and this lookup authenticates no new one');
-      }
       if (auth && _isAuthRequired()) {
         if (authenticator != null) {
           await _authenticateWith(authenticator!);
@@ -904,6 +904,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   @override
   void refuseNewConnections() => _refusingNewConnections = true;
+
+  void _refuseNewAuthentication() {
+    if (_refusingNewConnections) {
+      throw ConnectionInvalidException('the connection to $_currentAtSign '
+          'is not authenticated, and this lookup authenticates no new one');
+    }
+  }
 
   /// Closes the connection and fails whatever was waiting on it.
   ///

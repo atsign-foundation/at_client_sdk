@@ -7,7 +7,8 @@
   again, as does reading its `RemoteSecondary.atLookUp`, and a roster read, a
   root-link sweep or a fan-out to a namespace's members ends there.
   `isInSync()` on a stopped sync service throws rather than asking the
-  atServer.
+  atServer, and an approval the stop interrupts after it landed still throws
+  `EnrollmentConveyanceException` carrying the response.
 - fix: a `sync()` request that carries `onDone` and fails is answered once;
   it used to stay queued, and the same round was run again for it on every
   microtask, firing `onError` each time.
