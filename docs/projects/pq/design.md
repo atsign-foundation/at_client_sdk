@@ -2713,14 +2713,15 @@ The three rules are complementary, not redundant:
 
 #### 9.8.8 What is accepted rather than closed
 
-A mint publishes before it files, and `serialiseApskWrite` holds both writes,
-so no other **writer** composing from the keyfile can republish an
-advertisement the minted key is missing from. That does not close the window
-against a **reader**: a signer calling `ApkamSigning.signingKeys` between the
-two writes, on an enrollment holding no signing key of its own, takes the
-authentication-key fallback at the moment the advertisement stops naming that
-key, and the envelope verifies against nothing. A barrier used to make every
-such reader wait; ruling 126 deleted it, accepting the window because the state
-needs an enrollment that authenticates post-quantum and holds no data signing
-key, and nothing outside this tree carries post-quantum key material. The
-window is recorded on `signingKeys` so a reader meets it there.
+A mint files before it publishes, and `serialiseApskWrite` holds the filing,
+the publish and the retirement, so no other **writer** composing from the
+keyfile republishes part way. A stop between the filing and the publish leaves
+a key held that the advertisement does not name yet, which the next start's
+`_apsk` republish, composed from the keyfile, puts right; publishing first could
+leave a key advertised that nothing holds. The window left open is against a
+**reader**: a signer calling `ApkamSigning.signingKeys` between the two writes
+signs under the minted key before the advertisement names it, so the envelope
+verifies once the publish lands, or, after a failed publish or a stop, once the
+next start's republish does. A barrier used to make every such reader wait;
+ruling 126 deleted it, and the window is recorded on `signingKeys` so a reader
+meets it there.

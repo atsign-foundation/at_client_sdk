@@ -141,7 +141,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-G1.7   | The verifier takes the strongest and does not fall back                            | PROVEN    | `g1_wire_test.dart` |
 | UC-G1.8   | The rollout-1 signing key stays verifiable after rollout 2                         | PROVEN    | `g1_wire_test.dart` |
 | UC-G1.9   | A retired algorithm still verifies history                                         | PROVEN    | `g1_wire_test.dart` |
-| UC-G1.9a  | The client mints what the in-use set names, advertising first                      | PROVEN    | `g1_wire_test.dart` |
+| UC-G1.9a  | The client mints what the in-use set names, filing first                           | PROVEN    | `g1_wire_test.dart` |
 | UC-G1.10  | `enroll:update` rekey keeps the enrollment id                                      | PROVEN    | `g1_enroll_update_test.dart` |
 | UC-G1.11  | Proof of possession is required                                                    | PROVEN    | `g1_enroll_update_test.dart` |
 | UC-G1.12  | Namespaces stay out of reach                                                       | PROVEN    | `g1_enroll_update_test.dart` |
@@ -3066,30 +3066,25 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   The rollout matrix copies a fresh keyfile per cell, so every cell measures a
   client born at its stage and none moves between two.
 
-#### UC-G1.9a — the client mints what the in-use set names, advertising before filing
+#### UC-G1.9a — the client mints what the in-use set names, filing before advertising
   *Given* an enrollment holding no signing key of its own and a preference
   whose in-use set names one.
   *When* the client starts.
-  *Then* it mints that keypair, advertises it — by `enroll:update` where there
-  is an enrollment record and by publishing `_apsk` directly where there is
-  not — and **only then** files it, so no other writer composing from the
-  keyfile republishes an advertisement the minted key is missing from. A
+  *Then* it mints that keypair, files it, and **only then** advertises it — by
+  `enroll:update` where there is an enrollment record and by publishing `_apsk`
+  directly where there is not — so a stop between the two leaves a key held for
+  the next start's republish rather than a key advertised that nothing holds. A
   second start mints nothing, and an empty in-use set mints nothing at all.
   Covered by `packages/at_client/test/signing_key_minting_test.dart`.
 
-  ⚠️ **The window is closed against another WRITER, not against a READER.**
-  Publishing before filing, with `serialiseApskWrite` holding both writes,
-  closes it against a writer composing `_apsk` from a keyfile that does not yet
-  hold the key just advertised. It does not close it against a reader: a signer
-  calling `ApkamSigning.signingKeys` inside the window, on an enrollment
-  holding no signing key of its own, takes the authentication-key fallback at
-  the moment the advertisement stops naming that key, and the envelope it
-  produces verifies against nothing. There is no barrier making every such
-  reader wait for the mint: the window is accepted, on the grounds that no
-  enrollment outside this tree is in that
-  state, and recording it on `signingKeys` so a reader meets it there. The
-  citation below proves the writer half, which is the whole of what "publishes
-  BEFORE filing" asserts.
+  ⚠️ **The window is closed against a lost key, not against a READER.** A
+  signer calling `ApkamSigning.signingKeys` between the filing and the publish
+  signs under the minted key before the advertisement names it, and the
+  envelope verifies once the publish lands, or, after a failed publish or a
+  stop, once the next start's republish does. There is no barrier making every
+  such reader wait: the window is accepted, and recorded on `signingKeys` so a
+  reader meets it there. The citation below proves the ordering, which is the
+  whole of what "files BEFORE publishing" asserts.
 
 ### 16.4 `enroll:update` rows
 
@@ -4045,10 +4040,9 @@ which is the same mechanism stated once.
   begin until it returns — `at_activate approve` then does not exit within its
   two-minute bound, with nothing in the log to say why. ⛔ **The window a
   barrier would cover is accepted, not closed** — see
-  [UC-G1.9a](#uc-g19a--the-client-mints-what-the-in-use-set-names-advertising-before-filing)
-  and `design.md` 9.8.8: a reader calling `signingKeys` between a mint's publish
-  and its file, on an enrollment holding no signing key of its own, takes the
-  authentication fallback at the moment the advertisement stops naming it.
+  [UC-G1.9a](#uc-g19a--the-client-mints-what-the-in-use-set-names-filing-before-advertising)
+  and `design.md` 9.8.8: a reader calling `signingKeys` between a mint's filing
+  and its publish signs under a key the advertisement does not name yet.
 
 ### 18.4 What the preference refuses, and what a posture declines
 

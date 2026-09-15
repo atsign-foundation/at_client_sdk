@@ -1,5 +1,10 @@
 ## 3.15.0-rc1
 
+- fix: a minted signing key is filed before it is advertised, so a stop
+  between the two leaves a key the next start republishes from the keyfile
+  rather than a key advertised that nothing holds. A signer in between signs
+  under the new key before `_apsk` names it; its envelopes verify once the
+  publish lands.
 - fix: each start republishes the enrollment's key package when the one the
   atServer serves does not name the keys and statuses the keyfile holds, or
   none is published, not only when it no longer verifies. A stop between

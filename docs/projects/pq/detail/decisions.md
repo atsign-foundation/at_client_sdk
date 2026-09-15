@@ -13044,11 +13044,13 @@ Two things, and the second is why the first is safe:
    the mint *"never withdraws a key anything could have signed with"*. That is
    false in one state neither rule 2 nor enrolment-time minting removes: an
    enrollment that authenticates **post-quantum** and holds **no** data signing
-   key — the heal path. There the mint publishes a fresh key, the authentication
-   key stops being named, and a signer reading between the publish and the file
-   takes the authentication fallback and produces an envelope nothing can
-   verify. `serialiseApskWrite` does not close it: that lock serialises `_apsk`
-   **writers**, and this is a **reader**.
+   key — the heal path. A signer reading between the mint's two writes signs
+   under a key the advertisement does not name. `serialiseApskWrite` does not
+   close it: that lock serialises `_apsk` **writers**, and this is a
+   **reader**. Since 2026-09-15 a mint files before it publishes, so that signer
+   signs under the minted key and the envelope verifies once the publish lands.
+   This said the mint published first, and that the signer took the
+   authentication fallback and produced an envelope nothing could verify.
 
    **What the deletion actually rests on** (gkc, 2026-08-30): that state has no
    holder outside this tree. Nothing released carries post-quantum key material,
