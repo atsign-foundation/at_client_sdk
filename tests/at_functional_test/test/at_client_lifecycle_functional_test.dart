@@ -72,21 +72,25 @@ void main() {
           .subscribe(regex: '.$namespace')
           .listen(receivedNotifications.add);
 
-      final sent = atClient.notificationService.notify(
-        NotificationParams.forUpdate(
-            AtKey()
-              ..key = 'testnotif'
-              ..sharedWith = firstAtSign,
-            value: 'test value'),
-      );
+      // NOTE: the handler is attached before the stop, because the stop can
+      // fail the notify while nothing is listening to it yet.
+      Object? failure;
+      final sent = atClient.notificationService
+          .notify(
+            NotificationParams.forUpdate(
+                AtKey()
+                  ..key = 'testnotif'
+                  ..sharedWith = firstAtSign,
+                value: 'test value'),
+          )
+          .then<void>((_) {}, onError: (Object e) => failure = e);
 
       await (atClient as AtClientImpl).stop();
+      await sent;
 
-      try {
-        await sent;
-      } on StoppedException {
-        // A notify the stop cut short says so; one that got out first is fine.
-      }
+      expect(failure, anyOf(isNull, isA<StoppedException>()),
+          reason: 'a notify the stop cut short says so, and one that got out '
+              'first completes');
     });
   });
 
