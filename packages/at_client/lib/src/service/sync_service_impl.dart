@@ -1159,7 +1159,7 @@ class SyncServiceImpl implements SyncService {
         'errorOrExceptionMessage': keyInfo.conflictInfo?.errorOrExceptionMessage
       });
     } catch (e) {
-      if (isStopped) {
+      if (e is StoppedException || isStopped) {
         _logger.finer('Not syncing ${serverCommitEntry['atKey']} to local: '
             'the service was stopped ($e)');
         throw const _SyncAbandoned();

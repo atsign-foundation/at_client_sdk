@@ -216,6 +216,30 @@ void main() {
     });
 
     test(
+        'a server entry failing because a connection it needed was closed for '
+        'good abandons the round', () async {
+      stubFreshClient();
+      when(() => localSecondary.syncQueueSize).thenAnswer((_) async => 0);
+      when(() => remote.executeVerb(any())).thenAnswer((_) async =>
+          serverEntry('public:signing_publickey@abandon', operation: '+'));
+      when(() => localSecondary.executeVerb(any(),
+              cameFromServer: any(named: 'cameFromServer')))
+          .thenThrow(
+              StoppedException('the lookup for @abandon has been closed'));
+
+      await expectLater(
+          sync.syncInternal(5, SyncRequest()..result = SyncResult(),
+              localCommitIdBeforeSync: 1),
+          throwsA(isA<Exception>()),
+          reason: 'every later entry would fail the same way, and skipping '
+              'them lets the cursor move past what was never applied');
+
+      expect(sync.isStopped, isFalse,
+          reason: 'the service itself was not stopped; the connection was');
+      expect(recorded.at('SEVERE'), isEmpty);
+    });
+
+    test(
         'a delete the local store refuses is logged by its key, not as a '
         'type error', () async {
       stubFreshClient();

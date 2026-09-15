@@ -86,7 +86,9 @@
   returns, the monitor's and sync's included; the monitor's used to be closed
   some time after, and sync's never. A connection handed to `Atsign.open`,
   `activate`, `enroll` or `resumeEnrollment` belongs to the client, which
-  closes it for good when it stops.
+  closes it for good when it stops. A remote operation the stop cuts short
+  fails with `StoppedException`, and `notify` throws it rather than returning
+  an undelivered `NotificationResult`.
 - fix: after `stop()`, a read or write of local storage throws
   `StoppedException` rather than failing on a closed storage box.
   `subscribe`, `subscribeFiltered` and `startListening` on a stopped
@@ -104,7 +106,10 @@
   the last event a stopping sync service sends.
 - fix: a sync round stopped while it applies a push batch's response
   abandons the rest of the batch, rather than logging each remaining entry
-  at severe and carrying on against storage the stop may be closing.
+  at severe and carrying on against storage the stop may be closing. A
+  pulled entry that fails with `StoppedException` abandons the round the
+  same way, even when only a connection it needed was closed, rather than
+  being skipped while the round reports success.
 - fix: a `sync()` request that carries `onDone` and fails is answered once;
   it used to stay queued, and the same round was run again for it on every
   microtask, firing `onError` each time.
