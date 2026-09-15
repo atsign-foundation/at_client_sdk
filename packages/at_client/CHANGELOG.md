@@ -1,5 +1,11 @@
 ## 3.15.0-rc1
 
+- fix: a conveyed nskey or signing-root private is filed into the keyfile
+  before the envelope that carried it is deleted, on every envelope sweep
+  rather than only the one at start. A sweep used to delete the envelope
+  once the secret was in memory, so a stop before the next start's filing
+  lost it; a filing that fails now keeps the envelope for the next sweep.
+  `PairwiseSecretSharing.fileReceivedSecret` is the hook.
 - fix: a client missing nskey privates asks for every generation its
   namespace advertises and it lacks, not only the one a sender would pick.
   A key added under a second algorithm, a rotation's successor, or a mint

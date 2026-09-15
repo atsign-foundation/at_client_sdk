@@ -166,6 +166,10 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   Future<bool> Function(String requesterEnrollmentId)?
       perEnrollmentSecretRequestGate;
 
+  /// Files a secret that just arrived durably, before the envelope carrying
+  /// it is deleted; a throw keeps the envelope for the next sweep.
+  Future<void> Function(Secret secret)? fileReceivedSecret;
+
   /// Anti-storm floor: the same (requester, secret-name) is answered at most
   /// once per this interval. A burst of duplicate requests collapses to one
   /// share.
@@ -976,7 +980,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   }
 
   /// If [received] carries a secret, stores it in [secretStore]
-  /// (newest wins) and emits it on [receivedSecrets].
+  /// (newest wins), files it through [fileReceivedSecret] and emits it on
+  /// [receivedSecrets].
   Future<void> _handleSecretPayload(ReceivedEnvelope received) async {
     if (received.payload['kind'] != secretPayloadKind) {
       return;
@@ -1000,6 +1005,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           'kpid ${received.fromKpid}: already hold a same-or-newer one');
       return;
     }
+    // NOTE: before the sweep deletes the envelope, so the envelope is the copy
+    // that survives a filing that fails or a stop that lands first.
+    await fileReceivedSecret?.call(secret);
     _receivedSecretsController.add(ReceivedSecret(
       secret: secret,
       fromKpid: received.fromKpid,

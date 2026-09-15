@@ -477,6 +477,37 @@ void main() {
       await sub.cancel();
     });
 
+    test('a received secret is filed before its envelope is deleted', () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage);
+      final envelopesWhenFiled = <int>[];
+      sharerB.fileReceivedSecret = (secret) async => envelopesWhenFiled
+          .add(remoteData.keys.where((k) => k.contains('.__ssenv.')).length);
+
+      expect(await sharerB.sweepOnce(), 1);
+
+      expect(envelopesWhenFiled, [1],
+          reason: 'filed while the envelope still exists, so it is never the '
+              'only copy of the secret that is lost');
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty);
+    });
+
+    test('a secret that cannot be filed keeps its envelope', () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage);
+      sharerB.fileReceivedSecret =
+          (secret) async => throw Exception('the keyfile is not writable');
+
+      expect(await sharerB.sweepOnce(), 0);
+
+      expect(
+          remoteData.keys.where((k) => k.contains('.__ssenv.')), hasLength(1),
+          reason: 'deleting it would leave the secret only in memory, gone at '
+              'the next stop');
+    });
+
     test('a dotted application namespace survives the round trip intact',
         () async {
       // regression: AtKey.namespace is only the LAST dot segment, so the

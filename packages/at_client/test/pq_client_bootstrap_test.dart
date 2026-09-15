@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert' show base64Encode;
 
 import 'package:at_auth/at_auth.dart'
     show
@@ -7,7 +8,7 @@ import 'package:at_auth/at_auth.dart'
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         WrittenAtKeysIo;
-import 'package:at_chops/at_chops.dart' show RsaKeyPair;
+import 'package:at_chops/at_chops.dart' show RsaKeyPair, XWingKeyPair;
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -24,6 +25,7 @@ import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
+import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -344,6 +346,27 @@ void main() {
       expect(warnings.where((m) => m.contains('Could not start the envelope')),
           isEmpty,
           reason: 'a stop is not the step failing');
+    });
+
+    test('a secret an envelope delivers is filed into the keyfile', () async {
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write('@bootstrap🛠', AtKeys());
+      final bootstrap = PqClientBootstrap(
+        client,
+        keysIo: keysIo,
+        privilege: _FakePrivilege(true),
+        sweepUnanchoredEnrollments: () async => 0,
+      );
+      final pair = await XWingKeyPair.generate();
+
+      await bootstrap.sharing.fileReceivedSecret!(Secret(
+          namespace: 'wavi',
+          name: '${NskeyPrivateFiling.secretNamePrefix}kid-1',
+          value: base64Encode(pair.privateKeyBytes)));
+
+      expect(await bootstrap.filing!.read('wavi', 'kid-1'), isNotNull,
+          reason: 'a sweep deletes the envelope once handled, so what it '
+              'carried has to be on disk by then');
     });
 
     test('a signer answers while a startup step is still parked', () async {
