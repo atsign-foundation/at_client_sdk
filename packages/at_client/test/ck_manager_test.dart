@@ -833,9 +833,11 @@ void main() {
               'unwrapped, or the deletion closes off nobody');
     });
 
-    test('deletes only after the successor is durable', () async {
-      // Deleting first would strand the destination with no readable past and
-      // no key to write the next value under.
+    test('deletes before cutting the successor, and the next write cuts one',
+        () async {
+      // A stop or failure between the two then leaves no current key, which
+      // the next write repairs, where the other order could leave the
+      // superseded conveyance readable for good.
       final c = client();
       c.ring.seedKeypair(owner, namespace,
           publicKey: aliceNskey.publicKeyBytes,
@@ -849,13 +851,19 @@ void main() {
               deleteSuperseded: true),
           throwsA(isA<SecondaryConnectException>()));
 
-      expect(c.deleted, isEmpty);
-      expect(c.cache.current(owner, namespace)!.ckKid, superseded.ckKid,
-          reason: 'the destination keeps a working key');
+      expect(c.deleted.map((k) => k.key), ['${superseded.ckKid}.__ck'],
+          reason: 'the superseded conveyance goes before anything is cut');
+      expect(c.cache.current(owner, namespace), isNull);
+
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+
+      expect(c.cache.current(owner, namespace)!.ckKid, isNot(superseded.ckKid),
+          reason: 'the pointer still names the deleted key, whose record is '
+              'gone, so the next write cuts a fresh one rather than being '
+              'left with nothing to write under');
     });
 
-    test('a delete that fails is loud, and the successor still stands',
-        () async {
+    test('a delete that fails throws, and nothing is cut', () async {
       final c = client(failDeletes: true);
       c.ring.seedKeypair(owner, namespace,
           publicKey: aliceNskey.publicKeyBytes,
@@ -863,15 +871,16 @@ void main() {
       await c.manager.ensureCurrent(c.context, selfValue('treaty'));
       final superseded = c.cache.current(owner, namespace)!;
 
-      final rotated = await c.manager.rotateContentKey(
-          c.context, selfValue('treaty'),
-          deleteSuperseded: true);
+      await expectLater(
+          c.manager.rotateContentKey(c.context, selfValue('treaty'),
+              deleteSuperseded: true),
+          throwsA(isA<SecondaryConnectException>()),
+          reason: 'a caller that rotated for forward secrecy has to learn it '
+              'did not get it');
 
-      expect(rotated.ckKid, isNot(superseded.ckKid),
-          reason: 'writes are correct from here on; what was not achieved is '
-              'the forward secrecy, and that is a log, not an exception that '
-              'would roll back a good rotation');
-      expect(c.cache.current(owner, namespace)!.ckKid, rotated.ckKid);
+      expect(c.cache.current(owner, namespace)!.ckKid, superseded.ckKid,
+          reason: 'the rotation did not happen, so writes carry on under the '
+              'key they had');
     });
 
     test('supersedes the CK a previous process cut, read off the pointer',

@@ -122,7 +122,9 @@ class CkManager {
   /// unwrap it again and data written under it becomes undecryptable by design.
   /// It is off by default, because retaining that record is what lets a
   /// late-joining enrollment read history. A client that already decapsulated
-  /// the old CK keeps reading until it observes the deletion.
+  /// the old CK keeps reading until it observes the deletion. The delete comes
+  /// first and a failed one throws, so a rotation that did not deliver its
+  /// forward secrecy never reports success.
   ///
   /// Returns the CK new writes now use.
   Future<ContentKey> rotateContentKey(
@@ -150,16 +152,16 @@ class CkManager {
     final superseded = cache.current(owner, ckNs)?.ckKid ??
         (await pointer?.read(context.atClient, owner, ckNs))?.ckKid;
 
-    final ck = await _cutAndConvey(
-        context, valueKey, owner, ckNs, advertised.nskeyKid,
-        keyAlgo: advertised.alg, useRemoteAtServer: useRemoteAtServer);
-
-    if (deleteSuperseded && superseded != null && superseded != ck.ckKid) {
-      // NOTE: after the successor is durable, never before — a failure between
-      // the two would leave the old CK deleted and no new one to write under.
+    if (deleteSuperseded && superseded != null) {
+      // NOTE: before the successor is cut. A stop or failure between the two
+      // then leaves no current CK, which the next write repairs by cutting
+      // one; the other order could leave the superseded record readable for
+      // good.
       await _deleteConveyance(context, valueKey, owner, ckNs, superseded);
     }
-    return ck;
+
+    return _cutAndConvey(context, valueKey, owner, ckNs, advertised.nskeyKid,
+        keyAlgo: advertised.alg, useRemoteAtServer: useRemoteAtServer);
   }
 
   /// Cuts a fresh CK for `(owner, ckNs)`, conveys it sealed to [nskeyKid], and
@@ -202,16 +204,9 @@ class CkManager {
   /// CK again, the eviction stops this client using the copy it already has.
   Future<void> _deleteConveyance(CryptoContext context, AtKey valueKey,
       String owner, String ckNs, String ckKid) async {
-    try {
-      await context.atClient.delete(
-          SymmetricAesGcmProvider.conveyanceKeyFor(valueKey, ckKid, ckNs));
-      cache.evict(owner, ckNs, ckKid);
-    } catch (e) {
-      _logger.severe('Rotated the content key for $owner:$ckNs but could NOT '
-          'delete the superseded conveyance $ckKid, so data written under it '
-          'remains decryptable by anyone who can read that record — the '
-          'forward secrecy this rotation was for has not been achieved: $e');
-    }
+    await context.atClient.delete(
+        SymmetricAesGcmProvider.conveyanceKeyFor(valueKey, ckKid, ckNs));
+    cache.evict(owner, ckNs, ckKid);
   }
 
   /// Re-adopts the CK this sender was last writing under for `(owner, ckNs)`,

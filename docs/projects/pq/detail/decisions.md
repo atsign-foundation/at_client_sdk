@@ -4158,18 +4158,24 @@ the only operation in the system that makes already-written data unreadable:
 the nskey private cannot help once no sealed copy of that CK survives. O(1),
 one record, on ordinary sync rather than the substrate.
 
-Two orderings carry B5a's correctness, and both were red-proven. The delete
-happens **after** the successor is durable — deleting first and then failing the
-conveyance write would leave the destination with no readable past AND no key
-to write the next value under, the one state worse than not rotating. And the
-superseded `ckKid` is read from the **current-CK pointer** as well as the cache,
-because the process that cut it may not be this one; without that a rotation
-from a freshly started client supersedes nothing, leaves the old conveyance
-live, and reports a forward secrecy it did not deliver.
+Two orderings carry B5a's correctness. The delete happens **before** the
+successor is cut. This said the delete came after the successor was durable,
+because deleting first and then failing the conveyance write would leave the
+destination with no key to write the next value under. That was false: the next
+write resumes from the pointer, finds the record gone, and cuts a fresh key
+(`deletes before cutting the successor, and the next write cuts one` in
+`ck_manager_test.dart`), whereas cutting first let a stop between the cut and the
+delete leave the superseded record readable for good. Reordered on 2026-09-15 by
+the deterministic client stop work. And the superseded `ckKid` is read from the
+**current-CK pointer** as well as the cache, because the process that cut it may
+not be this one; without that a rotation from a freshly started client
+supersedes nothing, leaves the old conveyance live, and reports a forward secrecy
+it did not deliver.
 
-A delete that fails is `severe` and does not roll back the rotation. Writes are
-correct from there on; what was lost is the forward secrecy, and a caller that
-believes it rotated for FS has to hear that it did not.
+A delete that fails throws, before anything is cut, so a caller that rotated for
+forward secrecy hears that it did not get it. This said a failed delete was
+`severe` and did not roll back the rotation, which logged the loss while
+reporting success.
 
 ### 47.2 Deleting the record is half of it; eviction is the other half
 
@@ -4305,7 +4311,8 @@ revoke-before-rotate ordering, conveying without reading the durable copy back,
 revoking an unknown enrollment, abandoning the remaining namespaces after one
 fails, falling back to in-memory key storage, the `__manage` guard, deleting
 before the successor is durable, deleting without evicting, a failed delete
-rolling back the rotation, the missing pointer fallback, the eviction listener's
+rolling back the rotation (both orderings since reversed, see
+[47.1](#471-the-two-levers-kept-apart-on-purpose)), the missing pointer fallback, the eviction listener's
 direction and `commitOp` guards, the last-dot key split, the listener never
 being registered, and the narrow catch in the enrollment path.
 

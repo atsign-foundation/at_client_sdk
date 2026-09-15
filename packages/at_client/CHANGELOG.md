@@ -13,6 +13,11 @@
   caused at `warning`, `severe` or `shout`.
 - fix: an expiry or availability sweep running when the client stops no
   longer raises an unhandled error from its timer.
+- fix: `rotateContentKey(deleteSuperseded: true)` deletes the superseded
+  conveyance before cutting the successor, and throws when the delete fails.
+  A stop between the two used to leave the superseded record readable for
+  good, and a failed delete was logged while the rotation reported success.
+  With no current key, the next write cuts one.
 - fix: `stop()` ends what the client started and used to leave running: a
   wait of up to five minutes for a conveyed nskey private, which now fails
   with `StoppedException`; the pause before answering a secret request; an
