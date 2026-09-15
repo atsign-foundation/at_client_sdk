@@ -266,6 +266,9 @@ void main() {
     // Drop everything the process holds for this atSign, so the client below
     // is built the way a later run builds one: from the keyfile.
     await enrolled.client.getRemoteSecondary()?.atLookUp.close();
+    for (final dropped in List.of(AtClientImpl.atClientInstanceMap.values)) {
+      addTearDown(dropped.stop);
+    }
     AtClientImpl.atClientInstanceMap.clear();
 
     final client = await Atsign(atSign).open(
