@@ -242,8 +242,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
             .signingKey(atSign);
     if (rootSigner == null) {
       _logger.warning('Not sweeping root links: this client holds no '
-          'signing-root private yet; the pull at its next start heals '
-          'possession first');
+          'published signing-root private yet; its next start pulls or '
+          'publishes one first');
       return 0;
     }
 

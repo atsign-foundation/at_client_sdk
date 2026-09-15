@@ -1,5 +1,11 @@
 ## 3.15.0-rc1
 
+- fix: each start of a fully privileged client publishes a signing root it
+  filed and a stop kept from publishing, and a root the record does not
+  publish signs nothing until it is. Only activation and a self-retrofit
+  used to finish that publish, so the root stayed unpublished, and links
+  signed with it verified against nothing. A start mints no root where
+  none was filed.
 - fix: a cold-start namespace-key mint publishes the generation this
   enrollment already filed and never published, rather than minting another.
   A stop between filing a minted nskey private and publishing its public

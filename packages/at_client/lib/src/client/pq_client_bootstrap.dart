@@ -537,6 +537,10 @@ class PqClientBootstrap {
   Future<void> _requestRootPrivate() async {
     if (!_gates.requestRootPrivate) return;
     try {
+      // NOTE: first, because a root this client filed and never published is
+      // one it holds and nobody else does; asking for it would wait for ever.
+      await root.resumeUnpublished(
+          isFullyPrivileged: _privilege.isFullyPrivileged);
       // NOTE: the request rides the client's own namespace, because that is
       // where its key package is registered and so where holders can be
       // enumerated. A client with no namespace has nowhere to ask.

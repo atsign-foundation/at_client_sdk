@@ -247,10 +247,38 @@ class PqSigningRoot {
     return publicKey;
   }
 
+  /// Publishes a root this client filed and a stop kept from publishing, when
+  /// this enrollment is fully privileged and nothing is published; returns the
+  /// public half published, or null.
+  ///
+  /// Unlike [mintIfAbsent] it mints nothing: an atSign whose activation ended
+  /// before minting stays rootless until something that mints runs.
+  Future<Uint8List?> resumeUnpublished(
+      {required Future<bool> Function() isFullyPrivileged}) async {
+    final atSign = atClient.getCurrentAtSign()?.toAtsign();
+    if (atSign == null) return null;
+    final keys = await _readKeys(atSign);
+    if (keys == null || _activePrivates(keys).isEmpty) return null;
+    if (!await isFullyPrivileged()) return null;
+    if ((await publishedRoots(atClient, atSign)).isNotEmpty) return null;
+
+    final outcome = await mintLock.withLock(
+        pqSigningRootMintLockKey(atSign, ttl: lockTtl),
+        (lease) => _mintUnderLock(atSign, lease, mintFresh: false));
+    final publicKey = outcome?.publicKey;
+    if (publicKey == null) return null;
+    _logger.info('Published the signing root this client filed for $atSign '
+        'and had not published');
+    await _anchorSelf(atSign);
+    return publicKey;
+  }
+
   /// Mints, or finishes publishing a pair a crash left filed, with the mint
-  /// lock held. A null `publicKey` means this client published nothing.
+  /// lock held. A null `publicKey` means this client published nothing;
+  /// without [mintFresh] it only finishes publishing.
   Future<({Uint8List? publicKey})> _mintUnderLock(
-      String atSign, MintLease lease) async {
+      String atSign, MintLease lease,
+      {bool mintFresh = true}) async {
     // NOTE: this re-read is not redundant — [mintIfAbsent] checked absence
     // before the lock was taken, and with a mutable record, minting on a stale
     // absence overwrites a root published in that window.
@@ -276,9 +304,10 @@ class PqSigningRoot {
       }
       await _retireSlot(atSign, held.keyId);
       _logger.warning('Retired a signing root private held for $atSign with '
-          'no published record and no filed public half to republish; '
-          'minting a fresh root');
+          'no published record and no filed public half to republish'
+          '${mintFresh ? '; minting a fresh root' : ''}');
     }
+    if (!mintFresh) return (publicKey: null);
 
     final pair = await MlDsa65PureDartAlgo().generateKeyPair();
 
@@ -493,13 +522,21 @@ class PqSigningRoot {
         _activePrivates(keys).any((m) => _sameBytes(m.bytes.bytes, private));
   }
 
-  /// The root private this client signs with — the one key the record says may
-  /// sign, never merely the first filed — or null if it holds none.
-  Future<Uint8List?> privateHalf(String atSign) async =>
-      (await signingKey(atSign))?.private;
+  /// The root private this client holds and would sign with — the one key the
+  /// record says may sign, never merely the first filed — or null if it holds
+  /// none. Answers from the keyfile alone when it holds one, so asking whether
+  /// this client holds the root costs no round trip.
+  Future<Uint8List?> privateHalf(String atSign) async {
+    final AtKeys? keys = await _readKeys(atSign);
+    if (keys == null) return null;
+    final material = await _signingPrivate(atSign, keys);
+    return material == null ? null : Uint8List.fromList(material.bytes.bytes);
+  }
 
   /// The root private this client signs with, together with the `kid` naming
-  /// which advertised key it is — null when this client holds none.
+  /// which advertised key it is — null when this client holds none, and when
+  /// the record publishes no root: a link signed with an unpublished root
+  /// verifies against nothing.
   ///
   /// A null `kid` means no public half is filed beside the private, and a
   /// reader takes its absence as "try them all" rather than "reject".
@@ -508,6 +545,17 @@ class PqSigningRoot {
     if (keys == null) return null;
     final material = await _signingPrivate(atSign, keys);
     if (material == null) return null;
+    try {
+      if ((await publishedRoots(atClient, atSign)).isEmpty) {
+        _logger.info('$atSign holds a signing root private the record does '
+            'not publish yet, so nothing is signed with it until it is');
+        return null;
+      }
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.warning('Could not read whether the signing root $atSign holds '
+          'is published, so it signs as though it is: $e');
+    }
     final public = keys.getAtSignKey(
         material.keyId, CryptographicMaterialRole.publicVerification);
     return (

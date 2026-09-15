@@ -333,8 +333,15 @@ void main() {
     /// A client holding the root private, as a privileged enrollment does
     /// once it has been conveyed one.
     Future<MockAtClient> rootHolder(String enrollmentId, Uint8List secret,
-        {AtKeys? seedInto}) async {
+        {AtKeys? seedInto, Uint8List? published}) async {
       final c = client(enrollmentId);
+      if (published != null) {
+        remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+            jsonEncode(apskAdvertisement(keys: [
+          ApskSigningKey.forPublicKey(
+              alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(published))
+        ]));
+      }
       final io = InMemoryAtKeysIo();
       await io.write(atSign, seedInto ?? AtKeys());
       await PqSigningRoot(c, keysIo: io).store(atSign, secret);
@@ -345,7 +352,8 @@ void main() {
 
     test('a privileged holder anchors itself, and only once', () async {
       final pair = await MlDsa65PureDartAlgo().generateKeyPair();
-      final c = await rootHolder('priv-1', pair.secretKey);
+      final c =
+          await rootHolder('priv-1', pair.secretKey, published: pair.publicKey);
 
       expect(
           await PqSigningChain(c).publishOwnRootLink(
@@ -413,7 +421,8 @@ void main() {
 
     test('reads its own record exactly once while anchoring', () async {
       final pair = await MlDsa65PureDartAlgo().generateKeyPair();
-      final c = await rootHolder('priv-1', pair.secretKey);
+      final c =
+          await rootHolder('priv-1', pair.secretKey, published: pair.publicKey);
 
       clearInteractions(c);
       expect(
@@ -429,7 +438,8 @@ void main() {
 
     test('a root link and a chain link coexist on one record', () async {
       final pair = await MlDsa65PureDartAlgo().generateKeyPair();
-      final c = await rootHolder('priv-1', pair.secretKey);
+      final c =
+          await rootHolder('priv-1', pair.secretKey, published: pair.publicKey);
       final parentClient = client('parent-1');
       final parent = await registered(parentClient);
 

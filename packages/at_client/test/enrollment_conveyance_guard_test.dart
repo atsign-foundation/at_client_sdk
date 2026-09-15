@@ -302,10 +302,17 @@ void main() {
   });
 
   group('the signing root private', () {
-    /// An approver that genuinely holds a root private, so a test of the
-    /// privilege gate cannot pass merely because there was nothing to convey.
+    /// An approver that genuinely holds a published root's private, so a test
+    /// of the privilege gate cannot pass merely because there was nothing to
+    /// convey.
     Future<MockAtClient> rootHoldingApprover() async {
       final approver = buildMockClient('approver-1');
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+          jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo,
+            pub: base64Encode(List<int>.filled(32, 8)))
+      ]));
       final io = InMemoryAtKeysIo();
       await io.write(
           atSign,
