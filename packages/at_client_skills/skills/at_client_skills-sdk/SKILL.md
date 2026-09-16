@@ -1,30 +1,19 @@
 ---
 name: at_client_skills-sdk
 description: >
-  Use this skill when a developer is building a Dart or Flutter app that
-  depends on at_client or at_client_flutter from pub.dev, stores or shares
-  data via the Atsign Protocol, needs onboarding (CRAM new-atsign, atKeys
-  file, keychain, APKAM) or APKAM enrollment — including headless enrolment
-  on a device with no UI — asks how to open, own, stop or switch an AtClient
-  or read its connection state (online / offline / refused), how its sync and
-  notification services start and stop, or asks about AtCollection<T>,
-  CItem<T>, Query<T>, sub-collections, event streams, read receipts, wherePath
-  typed predicates, or watchWithTree deep hierarchies. Also use when the
-  developer asks how to send or receive notifications via NotificationService,
-  how to confirm a notification was delivered (getStatus / fetch),
-  how to wait until sync has settled (waitUntilCaughtUp),
-  how to do request/response RPC between atsigns (AtRpc), how to run headless
-  agents or CLIs (CLIBase) or coordinate multiple agent instances, how to read
-  or write directly against the remote atServer (useRemoteAtServer), how to
-  publish intentionally public data (AtKey.public / isPublic), what
-  exceptions to catch around an SDK call (AtException, getTraceMessage),
-  whether an AtClient method is deprecated (notify, startMonitor, uploadFile),
-  how to implement AtRpcCallbacks for a peer that both serves and calls, how
-  NoPorts decides which atsigns may reach a device, which
-  pub.dev packages to add, how to unit-test without a live atServer, or
-  whether to use AtCollection vs notifications+SQLite. Warns
-  against deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
-  at_invitation_flutter, at_sync_ui_flutter, and at_theme_flutter.
+  Use this skill when a developer is building a Dart or Flutter app on the
+  Atsign Platform with at_client or at_client_flutter. Covers AtCollection<T>
+  — CItem, Query, sub-collections, events, read receipts — and when
+  notifications+SQLite fits better; opening, owning, stopping and switching an
+  AtClient and reading its connection state; onboarding, login and APKAM
+  enrollment, including headless devices; sending, receiving and confirming
+  delivery of notifications; waiting for sync to settle; RPC between atsigns;
+  headless agents, CLIs and multi-instance coordination; remote-versus-local
+  atServer operations; publishing intentionally public data; which exceptions
+  to catch; NoPorts tunnels and who may reach a device; unit-testing without a
+  live atServer; and which pub.dev packages to add. Warns against deprecated
+  AtCollectionModel, deprecated AtClient methods, and retired Flutter packages
+  such as at_onboarding_flutter and at_common_flutter.
 license: BSD-3-Clause
 compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
