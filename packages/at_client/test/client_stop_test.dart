@@ -84,6 +84,16 @@ class _GatedExpiryStore extends Fake
   }
 }
 
+class _TestSyncProgressListener extends SyncProgressListener {
+  final void Function(SyncProgress) onEvent;
+  _TestSyncProgressListener(this.onEvent);
+
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) {
+    onEvent(syncProgress);
+  }
+}
+
 /// What `stop()` ends, and what a caller still holding a stopped client's
 /// parts is told.
 void main() {
@@ -237,8 +247,7 @@ void main() {
   });
 
   group('SyncServiceImpl.close', () {
-    test('leaves a remote it was handed open, and cannot be started again',
-        () async {
+    Future<(SyncServiceImpl, MockRemoteSecondary)> createMockSync() async {
       final atClient = MockAtClientImpl();
       final remote = MockRemoteSecondary();
       final notifications = MockNotificationService();
@@ -252,6 +261,12 @@ void main() {
           .thenAnswer((_) => const Stream.empty());
       final sync = await SyncServiceImpl.create(atClient,
           remoteSecondary: remote, warmStartSync: false) as SyncServiceImpl;
+      return (sync, remote);
+    }
+
+    test('leaves a remote it was handed open, and cannot be started again',
+        () async {
+      final (sync, remote) = await createMockSync();
       final caughtUp = expectLater(
           sync.waitUntilCaughtUp(), throwsA(isA<StoppedException>()),
           reason: 'a caller waiting to catch up is told the service stopped, '
@@ -262,6 +277,26 @@ void main() {
       verifyNever(() => remote.closeConnection());
       await caughtUp;
       await expectLater(sync.start(), throwsA(isA<StoppedException>()));
+    });
+
+    test('a wait begun after close is told the service stopped', () async {
+      final (sync, _) = await createMockSync();
+      await sync.close();
+      await expectLater(
+          sync.waitUntilCaughtUp().timeout(const Duration(milliseconds: 50)),
+          throwsA(isA<StoppedException>()));
+    });
+
+    test('a listener added after stop, which can be undone, hears nothing',
+        () async {
+      final (sync, _) = await createMockSync();
+      await sync.stop();
+      var eventReceived = false;
+      sync.addProgressListener(_TestSyncProgressListener((_) {
+        eventReceived = true;
+      }));
+      await Future.delayed(Duration.zero);
+      expect(eventReceived, isFalse);
     });
   });
 
