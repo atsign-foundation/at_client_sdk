@@ -1,5 +1,7 @@
 ## 3.7.0-rc2
 
+- chore: bump at_commons dependency to ^5.18.0.
+
 - fix: a TLS connect is bounded from the TCP connect to the end of the
   handshake. `SecureSocket.connect(timeout:)` bounds only the TCP part, so a
   peer that accepted the connection and never answered the handshake left

@@ -159,7 +159,7 @@ mixin EnvelopeSigning on ApkamSigning {
   // In memory caching of public keys (to reduce latency)
 
   /// Cached public keys and when each expires. An entry is dropped when a
-  /// lookup finds it expired, so nothing here holds a timer.
+  /// lookup finds it expired, and on each insert, so nothing here holds a timer.
   @visibleForTesting
   final Map<String, (String, DateTime)> pubKeyCache = {};
 
@@ -172,6 +172,8 @@ mixin EnvelopeSigning on ApkamSigning {
   @visibleForTesting
   void cachePubKey(String atSign, String enrollmentId, String pubKey) {
     if (publicKeyCacheSettings == null) return;
+    final now = DateTime.now();
+    pubKeyCache.removeWhere((_, value) => !value.$2.isAfter(now));
     pubKeyCache[_cacheKey(atSign, enrollmentId)] = (pubKey, _expiry);
   }
 
