@@ -45,6 +45,12 @@
   `--policy-manager` atsign running an `NPA`) — a pointer to `noports_core`
   and its docs, not a description of its internals
   (`references/06-package-map.md`).
+- Bring the skill within the Agent Skills spec. The `description` exceeded the
+  1024-character limit; it is rewritten around what a developer asks rather
+  than the API names they would only know after the answer. Sync setup and
+  `waitUntilCaughtUp` move out of §10 Flutter Auth into §11, where they apply
+  to any client — a headless daemon needs them just as much — and the
+  duplicated Flow 3 snippet drops in favour of `references/05-flutter-auth.md`.
 - Evals: the two auth evals follow the new flows; new evals cover logout /
   switching, the connection state, public keys, notification confirmation,
   headless enrolment, error handling, waiting for sync, the deprecated

@@ -319,23 +319,6 @@ if (client == null) return;
 _adopt(client);
 ```
 
-**Flow 3 (device keychain — returning user on same device):**
-
-```dart
-final atSigns   = await KeychainStorage().getAllAtsigns();
-final selection = await AtSignSelectionDialog.show(context, existingAtSigns: atSigns);
-if (selection == null) return;                                 // AtsignSelection: atSign, rootDomain
-final client = await PkamDialog.show(context,
-  atSign: selection.atSign,
-  rootDomain: selection.rootDomain,
-  keys: KeychainAtKeysIo(),
-  preference: AtClientPreference()..namespace = 'my_namespace',
-  storage: await _storage(selection.atSign),
-);
-if (client == null) return;
-_adopt(client);
-```
-
 **Storage and adoption (all flows):**
 
 ```dart
@@ -355,9 +338,10 @@ void _adopt(AtClient client) => AtClientManager.getInstance().use(client);
 await client.stop();
 ```
 
-Read [references/05-flutter-auth.md](references/05-flutter-auth.md) for all 4
-flows (including Flow 1: CRAM new-atsign and Flow 4: APKAM enrollment) with
-complete code, and what a `PkamDialog` that comes back **offline** means.
+Read [references/05-flutter-auth.md](references/05-flutter-auth.md) for the
+other three flows in full — Flow 1 CRAM new-atsign, Flow 3 device keychain,
+Flow 4 APKAM enrollment — and what a `PkamDialog` that comes back **offline**
+means.
 
 A **headless** client — CLI, daemon, agent on a box with no screen — has no
 dialog to drive Flow 4, and enrols through the lifecycle verbs instead:
@@ -368,18 +352,7 @@ enrols itself — the passcode comes from an already-enrolled device via
 Read [references/15-client-lifecycle.md](references/15-client-lifecycle.md)
 for both sides of the flow.
 
-> **Sync setup:** set `AtClientPreference.syncRegex = '<your namespace>'` —
-> without it, sync covers the atsign's whole keystore and can wedge, so shares
-> and updates never propagate. Reads are local; writes sync in the background.
-> See [references/11-sync.md](references/11-sync.md).
-
-To hold an operation until sync has settled, `await`
-`syncService.waitUntilCaughtUp(timeout: ...)` — an extension on `SyncService`,
-so it needs no cast or opt-in. Polling `isSyncInProgress` or `isInSync()`
-instead is a check-then-act race. Always pass `timeout`: it has no default,
-transient sync failures do not reject the future, and without one a stalled
-sync waits forever. It throws `TimeoutException`, which is **not** an
-`AtException` (§18).
+Every app, Flutter or headless, must also scope sync — see **Sync** in §11.
 
 ---
 
@@ -438,12 +411,27 @@ await client.connection.attempt();                  // try again now
   atServer and every `syncIntervalMins`. `sync()` expedites a round,
   `isInSync()` asks the atServer fresh, `addProgressListener` observes. The
   `AtClientManager` getters for these services are deprecated.
+
 - `client.notificationService.subscribe(regex:, shouldDecrypt:)` — the monitor
   starts on the first `subscribe` (or 30 s after creation) when
   `monitorAutoStart` is true. **`subscribe()` returns before the monitor is
   connected**: wait for `listening` (or `currentListenerStateStream`) before a
   notify you expect to receive, or the send reports `delivered` and nothing
   arrives.
+
+> **Sync setup** (every app — Flutter, CLI or daemon): set
+> `AtClientPreference.syncRegex = '<your namespace>'` — without it, sync covers
+> the atsign's whole keystore and can wedge, so shares and updates never
+> propagate. Reads are local; writes sync in the background.
+> See [references/11-sync.md](references/11-sync.md).
+
+To hold an operation until sync has settled, `await`
+`client.syncService.waitUntilCaughtUp(timeout: ...)` — an extension on
+`SyncService`, so it needs no cast or opt-in. Polling `isSyncInProgress` or
+`isInSync()` instead is a check-then-act race. Always pass `timeout`: it has no
+default, transient sync failures do not reject the future, and without one a
+stalled sync waits forever. It throws `TimeoutException`, which is **not** an
+`AtException` (§18).
 
 **Own it, then stop it:**
 
