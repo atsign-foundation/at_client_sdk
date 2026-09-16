@@ -38,8 +38,12 @@ abstract interface class EnrollmentConveyance {
   ///
   /// The package is not checked against `_apsk`, which the atServer publishes
   /// only at approval and which that same atServer would serve. Conveys
-  /// nothing when there is no package this version can read, and throws
-  /// [AtEnrollmentException] when this client has no key package to seal from.
+  /// nothing when the package is one a newer client wrote and this version
+  /// cannot read, and throws [AtEnrollmentException] when this client has no
+  /// key package to seal from, or when what the enrollment advertised is not
+  /// a key package at all — the approval is spent once it lands, so a device
+  /// that could never receive the key is refused while it is still
+  /// repairable.
   Future<void> conveyMintedApkamSymmetricKey(
       Enrollment pending, String apkamSymmetricKey);
 
