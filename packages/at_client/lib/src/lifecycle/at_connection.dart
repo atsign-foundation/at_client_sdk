@@ -221,7 +221,11 @@ class AtConnection {
     _closed = true;
     _closing.complete();
     await reported;
-    await _changes.close();
+    // NOTE: not awaited. `close()` on a broadcast controller completes only
+    // once every subscriber has taken the done event, and a PAUSED one never
+    // does - so awaiting it here would hang the stop this belongs to. The
+    // paused subscriber still gets `done`, when it resumes.
+    unawaited(_changes.close());
   }
 }
 
