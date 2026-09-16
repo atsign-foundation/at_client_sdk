@@ -294,7 +294,8 @@ void main() {
           secondaryAddressFinder: mockSecondaryAddressFinder,
           transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
+          outboundConnectionFactory: mockOutboundConnectionFactory)
+        ..authenticator = (executor) async => true;
 
       String appName = 'unit_test_2';
       String deviceName = 'test_device';
@@ -330,7 +331,8 @@ void main() {
           secondaryAddressFinder: mockSecondaryAddressFinder,
           transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
+          outboundConnectionFactory: mockOutboundConnectionFactory)
+        ..authenticator = (executor) async => true;
       String enrollmentId = '89213647826348';
 
       EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
@@ -360,7 +362,8 @@ void main() {
           secondaryAddressFinder: mockSecondaryAddressFinder,
           transportFactory: mockTransportFactory,
           socketListenerFactory: mockSecureSocketListenerFactory,
-          outboundConnectionFactory: mockOutboundConnectionFactory);
+          outboundConnectionFactory: mockOutboundConnectionFactory)
+        ..authenticator = (executor) async => true;
       String enrollmentId = '5754765754';
 
       EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
