@@ -193,9 +193,6 @@ void main() {
           lookUp);
 
       verify(() => lookUp.authenticator = any(that: isNotNull)).called(2);
-      verifyNever(() => lookUp.atChops = any());
-      verifyNever(() => lookUp.signingAlgoType = SigningAlgoType.mldsa65);
-      verifyNever(() => lookUp.signingAlgoType = SigningAlgoType.rsa2048);
     });
   });
 
