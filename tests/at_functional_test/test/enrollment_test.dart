@@ -12,6 +12,7 @@ import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
