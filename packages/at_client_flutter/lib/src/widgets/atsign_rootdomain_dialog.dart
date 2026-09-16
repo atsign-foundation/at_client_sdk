@@ -1,5 +1,5 @@
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/shared/typable_dropdown.dart';
 import 'package:flutter/material.dart';
 
@@ -20,18 +20,19 @@ class AtSignSelectionDialog extends StatefulWidget {
   @override
   State<AtSignSelectionDialog> createState() => _AtSignSelectionDialogState();
 
-  /// Displays the AtsignSelectionDialog and returns an AuthRequest based on user input.
+  /// Displays the AtsignSelectionDialog and returns the atSign and root
+  /// domain the user chose.
   /// - [context]: BuildContext to display the dialog.
   /// - [themeData]: ThemeData for styling the dialog.
   /// - [existingAtSigns]: Inject Atsigns via file or keychain storage so that user can select them from a dropdown.
   /// - [existingDomains]: Inject root domains for selection (default: root.atsign.org:64).
-  static Future<AuthRequest?> show(
+  static Future<AtsignSelection?> show(
     BuildContext context, {
     List<String>? existingAtSigns,
     Map<String, AtRootDomain>? existingDomains,
   }) {
     existingDomains ??= {'root.atsign.org': AtRootDomain.atsignDomain};
-    return showDialog<AuthRequest>(
+    return showDialog<AtsignSelection>(
       context: context,
       builder: (context) => AtSignSelectionDialog(
         existingAtSigns: existingAtSigns,
@@ -76,18 +77,10 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
   void _handleSubmit() {
     final normalizedAtSign = _normalizedAtSignForSubmit();
     if (normalizedAtSign != null) {
-      // NOTE: [AtOnboardingRequest] requires a crypto position and this dialog
-      // collects none, so it names rsa2048; the field stays settable, and a
-      // caller with its own sets it on the request returned here.
-      AtOnboardingRequest request = AtOnboardingRequest(
-        normalizedAtSign,
-        signingAlgoType: SigningAlgoType.rsa2048,
-      );
-      if (_selectedDomain != null && _selectedDomain!.isNotEmpty) {
-        AtRootDomain domain = AtRootDomain.parse(_selectedDomain!);
-        request.rootDomain = domain;
-      }
-      Navigator.of(context).pop(request);
+      final domain = _selectedDomain != null && _selectedDomain!.isNotEmpty
+          ? AtRootDomain.parse(_selectedDomain!)
+          : widget.existingDomains!.values.first;
+      Navigator.of(context).pop(AtsignSelection(normalizedAtSign, domain));
     }
   }
 

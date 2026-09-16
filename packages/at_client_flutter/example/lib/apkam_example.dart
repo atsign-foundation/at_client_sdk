@@ -1,9 +1,4 @@
-import 'dart:async';
-
-import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:flutter/material.dart';
 
@@ -107,8 +102,9 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
   /// Simulates the "Requester" side of the APKAM flow.
   ///
   /// This method:
-  /// 1. Uses [AtEnrollment.create()] to submit a new request.
-  /// 2. Starts a polling mechanism via [waitForApproval] to get status updates.
+  /// 1. Has the manager's client issue a passcode.
+  /// 2. Submits a request with it, as a new device would.
+  /// 3. Waits for the manager view above to decide.
   Future<void> _simulateNewRequest() async {
     final atClient = AtClientManager.getInstance().atClient;
     final currentAtSign = atClient.getCurrentAtSign()!;
@@ -131,43 +127,27 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
     try {
       _logger.info('Initiating simulated request for $appName');
 
-      final atLookup = AtLookUp.withSecureSocket(
-        atSign: currentAtSign,
-        rootDomain: AtRootDomain(
-          atClient.getPreferences()!.rootDomain,
-          atClient.getPreferences()!.rootPort,
-        ),
-        transport: secureSocketTransport(SecureSocketConfig()),
-        authenticator: null,
-      );
+      // STEP 1: a passcode from the manager's client, which is enrolled and
+      // may issue one.
+      final passcode = await atClient.enrollments.otp();
 
-      // STEP 1: Generate an OTP using the MANAGER client
-      final otpResponse = await atClient
-          .getRemoteSecondary()!
-          .atLookUp
-          .executeCommand('otp:get\n', auth: true);
-      final otp = otpResponse?.replaceFirst('data:', '').trim();
-
-      // STEP 2: Submit the enrollment request (The "Requester" side)
-      final enrollment = AtEnrollment.create();
-
-      // We generate a key pair for the simulation
-      final apkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
-
-      final request = AtEnrollmentRequest(
-        atSign: currentAtSign,
-        appName: appName,
-        deviceName: deviceName,
+      // STEP 2: the request, as a new device would submit it. The simulated
+      // device's keys live in memory: nothing opens a client on them.
+      final preferences = atClient.getPreferences()!;
+      final pending = await Atsign(currentAtSign).enroll(
+        otp: passcode.value,
+        app: appName,
+        device: deviceName,
         namespaces: {'public': 'rw'},
-        otp: otp!,
-        apkamPublicKey: apkamKeyPair.atPublicKey.publicKey,
+        keys: InMemoryAtKeysIo(),
+        preference: AtClientPreference()
+          ..rootDomain = preferences.rootDomain
+          ..rootPort = preferences.rootPort,
       );
+      _logger.info('Submitted request ID: ${pending.enrollmentId}');
 
-      final response = await enrollment.submit(request, atLookup);
-      _logger.info('Submitted request ID: ${response.enrollmentId}');
-
-      await enrollment.waitForApproval(
-        response,
+      // STEP 3: wait for the manager view above to decide.
+      await pending.awaitApproval(
         retryInterval: const Duration(seconds: 5),
         maxRetries: 12,
       );

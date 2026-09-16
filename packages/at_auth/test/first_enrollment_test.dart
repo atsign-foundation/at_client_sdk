@@ -193,7 +193,7 @@ void main() {
       final mock = approvingLookUp();
       // The later-enrollment path also reads the atSign's encryption public
       // key, which the first-enrollment path does not.
-      when(() => mock.executeVerb(any(), sync: any(named: 'sync'))).thenAnswer(
+      when(() => mock.executeVerb(any())).thenAnswer(
           (_) async => 'data:${demo.encryptionPublicKeyMap['@alice🛠']}');
 
       final response = await AtEnrollmentImpl().submit(

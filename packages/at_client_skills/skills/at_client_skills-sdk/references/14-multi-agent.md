@@ -33,17 +33,23 @@ same pattern the canonical TUI example uses
 
 ## One process, one storage path
 
-Every `at_client` process needs its **own** `hiveStoragePath` and
-`commitLogPath`. Two processes sharing a hive path collide on the hive boxes
-and throw.
+Every `at_client` process needs its **own** storage. One store is held by one
+live client: a second `open` on the same location in one process is refused,
+and two processes on one location corrupt it.
 
 ```dart
 final dir = Directory.systemTemp.createTempSync('agent_').path;
-final prefs = AtClientPreference()
-  ..hiveStoragePath = dir
-  ..commitLogPath   = dir
-  ..namespace       = 'my_app';
+final prefs = AtClientPreference()..namespace = 'my_app';
+final storage = HiveAtClientStorage(
+    atSign: atSign, storagePath: dir, closedByClient: true);
+final client = await Atsign(atSign).open(
+    keys: FileAtKeysIo(filePath: (_) => keysPath),
+    preference: prefs,
+    storage: storage);
 ```
+
+`AtClientPreference.hiveStoragePath` and `commitLogPath` are deprecated; the
+storage object is where the store lives.
 
 `CLIBase` handles this for typical single-instance CLIs; generate a unique temp
 directory per instance when launching several instances of the same agent on
@@ -109,13 +115,17 @@ client-wide preference.
 import 'package:at_cli_commons/at_cli_commons.dart';  // NOT in at_client
 
 final prefs = AtClientPreference()
-  ..remoteLocalPref = RemoteLocalPref.remoteOnly  // every op hits the atServer
-  /* ...storage paths etc... */;
+  ..namespace = 'my_app'
+  ..remoteLocalPref = RemoteLocalPref.remoteOnly;  // every op hits the atServer
 
-await AtClientManager.getInstance().setCurrentAtSign(
-  atSign, 'my_app', prefs,
+final client = await Atsign(atSign).open(
+  keys: FileAtKeysIo(filePath: (_) => keysPath),
+  preference: prefs,
+  storage: HiveAtClientStorage(
+      atSign: atSign, storagePath: tempDir.path, closedByClient: true),
   serviceFactory: ServiceFactoryWithNoOpSyncService(),
 );
+// ... and `await client.stop()` when the instance is done.
 ```
 
 > **Gotcha:** `ServiceFactoryWithNoOpSyncService` ships from **`at_cli_commons`**

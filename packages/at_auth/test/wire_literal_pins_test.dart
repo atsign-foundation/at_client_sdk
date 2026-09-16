@@ -29,19 +29,11 @@ class MockAtLookUp extends Mock implements AtLookupImpl {}
 void main() {
   const atSign = '@alice🛠';
 
-  /// A lookup whose atChops holds the demo keys, recording every command.
+  /// A lookup holding no key material, recording every command.
   ({MockAtLookUp lookUp, List<String> commands}) lookUp(
       {String response = 'data:{"status":"approved","enrollmentId":"id-1"}'}) {
     final mock = MockAtLookUp();
     final commands = <String>[];
-    final atChopsKeys = AtChopsKeys.create(
-        AtEncryptionKeyPair.create(
-            encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!),
-        AtPkamKeyPair.create(
-            pkamPublicKeyMap[atSign]!, pkamPrivateKeyMap[atSign]!));
-    atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKeyMap[atSign]!);
-    atChopsKeys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
-    when(() => mock.atChops).thenReturn(AtChopsImpl(atChopsKeys));
     when(() => mock.executeCommand(any(), auth: true)).thenAnswer((inv) async {
       commands.add(inv.positionalArguments[0] as String);
       return response;
@@ -63,7 +55,11 @@ void main() {
         atSign: atSign,
       );
 
-      await AtEnrollmentImpl().approve(decision, l.lookUp);
+      await AtEnrollmentImpl().approve(decision, l.lookUp,
+          approverKeys: (
+            encryptionPrivateKey: encryptionPrivateKeyMap[atSign]!,
+            selfEncryptionKey: aesKeyMap[atSign]!
+          ));
 
       final command = l.commands.single;
       expect(command, startsWith('enroll:approve:'));
@@ -86,49 +82,6 @@ void main() {
       ]);
       expect(json['enrollmentId'], 'id-1');
     });
-
-    test('enroll:deny is the builder form', () async {
-      final l =
-          lookUp(response: 'data:{"status":"denied","enrollmentId":"id-1"}');
-
-      await AtEnrollmentImpl()
-          .deny(EnrollmentRequestDecision.denied('id-1', atSign), l.lookUp);
-
-      expect(l.commands.single, 'enroll:deny:{"enrollmentId":"id-1"}\n');
-    });
-
-    test('enroll:revoke is the builder form', () async {
-      final l =
-          lookUp(response: 'data:{"status":"revoked","enrollmentId":"id-1"}');
-
-      await AtEnrollmentImpl()
-          .revoke(EnrollmentRequestDecision.denied('id-1', atSign), l.lookUp);
-
-      expect(l.commands.single, 'enroll:revoke:{"enrollmentId":"id-1"}\n');
-    });
-
-    test('enroll:list without filters is the bare verb', () async {
-      final l = lookUp(response: 'data:{}');
-
-      await AtEnrollmentImpl().list(null, l.lookUp);
-
-      expect(l.commands.single, 'enroll:list\n');
-    });
-
-    test('enroll:list joins all statuses into ONE array element', () async {
-      final l = lookUp(response: 'data:{}');
-
-      await AtEnrollmentImpl().list(
-          [EnrollmentStatus.approved, EnrollmentStatus.pending], l.lookUp);
-
-      // Not a JSON list of names — the filter values are comma-joined inside
-      // a single array element. The atServer parses this form, so it is the
-      // contract, however it looks; EnrollVerbBuilder would generate a proper
-      // string list, which is precisely why this hand-built emitter needs its
-      // own pin before any consolidation onto the builder.
-      expect(l.commands.single,
-          'enroll:list:{"enrollmentStatusFilter":["approved,pending"]}\n');
-    });
   });
 
   group('FROZEN: the post-approval handshake key fetches', () {
@@ -142,7 +95,7 @@ void main() {
       final mock = MockAtLookUp();
       final commands = <String>[];
       final apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
-      final iv = AtChopsUtil.generateRandomIV(16);
+      final iv = InitialisationVector.random(16);
       final ivB64 = base64Encode(iv.ivBytes);
       final aes = StringAESEncryptor(AESKey(apkamSymmetricKey));
       when(() => mock.pkamAuthenticate(enrollmentId: '123'))
@@ -181,24 +134,6 @@ void main() {
         'keys:get:keyName:123.default_enc_private_key.__manage$atSign\n',
         'keys:get:keyName:123.default_self_enc_key.__manage$atSign\n',
       ]);
-    });
-  });
-
-  group('FROZEN: the otp verb commands', () {
-    test('otp:get with the default 5-minute ttl', () async {
-      final l = lookUp(response: 'data:ABC123');
-
-      await AtEnrollmentImpl().generateOtp(l.lookUp);
-
-      expect(l.commands.single, 'otp:get:ttl:300000\n');
-    });
-
-    test('otp:put carries the spp and ttl', () async {
-      final l = lookUp(response: 'data:ok');
-
-      await AtEnrollmentImpl().setSpp('ABC123', l.lookUp);
-
-      expect(l.commands.single, 'otp:put:ABC123:ttl:300000\n');
     });
   });
 
@@ -535,14 +470,22 @@ void main() {
       // The at-rest tokens, pinned individually as well as as a set. Asserting
       // only `known` would follow a renamed constant silently, which is the
       // failure a raw-literal pin exists to stop.
+      expect(CryptographicMaterialStatus.pending, 'pending');
       expect(CryptographicMaterialStatus.active, 'active');
       expect(CryptographicMaterialStatus.retired, 'retired');
       expect(CryptographicMaterialStatus.dead, 'dead');
-      expect(CryptographicMaterialStatus.known, {'active', 'retired', 'dead'});
+      expect(CryptographicMaterialStatus.known,
+          {'pending', 'active', 'retired', 'dead'});
 
       // And the forward order, which stopped being declaration index when
       // status became an open String. It is a stated ranking now, so it is
       // pinned like any other contract.
+      expect(
+          CryptographicMaterialStatus.rankOf(
+              CryptographicMaterialStatus.of('pending')),
+          -1,
+          reason: 'before active, and without moving the three positions '
+              'every earlier build pinned');
       expect(
           CryptographicMaterialStatus.rankOf(
               CryptographicMaterialStatus.of('active')),
@@ -557,7 +500,7 @@ void main() {
           2);
       expect(
           CryptographicMaterialStatus.rankOf(
-              CryptographicMaterialStatus.of('pending')),
+              CryptographicMaterialStatus.of('provisional')),
           isNull,
           reason: 'a token this build has never seen has no position in the '
               'forward order, and must not acquire one by accident');

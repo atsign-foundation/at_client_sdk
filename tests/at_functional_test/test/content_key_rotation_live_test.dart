@@ -3,7 +3,6 @@ library;
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/crypto/nskey/ck_manager.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
@@ -33,8 +32,8 @@ void main() {
           publicKey: nskeyPair.publicKeyBytes,
           privateKey: nskeyPair.privateKeyBytes);
 
-    // NOTE: the era default writes legacy, so the value this scenario rotates
-    // needs the PQ providers named explicitly.
+    // NOTE: the era default writes with the legacy provider, so the value this
+    // scenario rotates needs the PQ providers named explicitly.
     final preference =
         TestUtils.getPreference(atSign, posture: legacyPlusPqProviders)
           ..crypto = CryptoConfig.nskey(keyRing: ring);

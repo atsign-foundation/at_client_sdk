@@ -4,7 +4,6 @@
 @Tags(['pq'])
 library;
 
-import 'package:at_auth/at_auth.dart' show AtKeys, InMemoryAtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/config_util.dart';
@@ -193,7 +192,7 @@ void main() {
     // What the stage does decide: which provider a new write defaults to.
     expect(CryptoConfig.forClient(clientAt('legacy')).defaultProviderId,
         legacyCryptoProviderId,
-        reason: 'the pre-capability stage writes legacy, and does not read '
+        reason: 'the pre-capability stage writes with the legacy provider, and does not read '
             'post-quantum data either — moving either is a deliberate step');
     expect(CryptoConfig.forClient(clientAt('pqReady')).defaultProviderId,
         legacyCryptoProviderId,
@@ -208,7 +207,7 @@ void main() {
       () async {
     // A key every post-quantum provider structurally declines: the nskey data
     // path is `(owner, namespace)`-scoped, and this key carries no namespace,
-    // so the defaulted provider falls back to legacy in every cell. That
+    // so the defaulted provider falls back to the legacy provider in every cell. That
     // fallback is what the refusal exists to catch.
     AtKey namespaceless() => AtKey()
       ..key = 'stagearm-phone'

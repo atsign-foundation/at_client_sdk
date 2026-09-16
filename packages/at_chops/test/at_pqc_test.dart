@@ -81,7 +81,7 @@ void main() {
           await AESEncryptionAlgo(key).encrypt(plain, iv: iv),
           reason: 'whichever backend this host resolves, its output is what '
               'the other end of a connection has to be able to read');
-    });
+    }, skip: !aesCtrFfi);
 
     test('aesGcm256 encrypt/decrypt round-trip', () async {
       final AESKey key = AESKey.generate(32);

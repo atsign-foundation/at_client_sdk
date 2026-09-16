@@ -53,14 +53,7 @@ void main() {
 
   test('test to check self encryption key decrypt method without IV', () async {
     SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
-    SymmetricKey selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-
-    AtChops atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
+    SymmetricKey selfEncryptionKey = AESKey.generate(32);
 
     var location = 'san francisco';
     var encryptedLocation =
@@ -79,15 +72,7 @@ void main() {
 
   test('test to check self encryption key decrypt method with IV', () async {
     SelfKeyDecryption selfKeyDecryption = SelfKeyDecryption(mockAtClient);
-    SymmetricKey selfEncryptionKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256);
-
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(null, null);
-    atChopsKeys.selfEncryptionKey = selfEncryptionKey;
-
-    AtChops atChopsImpl = AtChopsImpl(atChopsKeys);
-
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
+    SymmetricKey selfEncryptionKey = AESKey.generate(32);
 
     var location = 'new york';
     var ivBase64String = 'YmFzZTY0IGVuY29kaW5n';

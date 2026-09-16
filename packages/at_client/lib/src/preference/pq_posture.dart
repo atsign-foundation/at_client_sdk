@@ -31,7 +31,7 @@ class PqPosture {
   final EnrollmentKeyExchangeMode keyExchangeMode;
 
   /// Whether the era `CryptoConfig` a client adopts writes post-quantum by
-  /// default (`CryptoConfig.nskey`) or keeps writes legacy while reading
+  /// default (`CryptoConfig.nskey`) or keeps writes on the legacy provider while reading
   /// everything (`CryptoConfig.readsNskeyWritesLegacy`).
   final bool writesPqByDefault;
 
@@ -179,7 +179,7 @@ class PqPosture {
   /// ⚠️ Adoptable only by a deployment that controls every client of its
   /// namespaces and has seeded them — a destination with no published namespace
   /// key, and a write whose key carries no namespace, are both refused rather
-  /// than written legacy.
+  /// than written with the legacy provider.
   static const PqPosture pqActive = PqPosture._(
     authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
     dataSigningKeyAlgorithms: {SigningAlgoType.mldsa65},

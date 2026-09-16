@@ -39,7 +39,7 @@ void main() {
         clauses: [
           'Nothing in this exchange rewrites',
         ]);
-    provenIn('packages/at_auth/test/enrollment_update_test.dart',
+    provenIn('packages/at_client/test/enroll/enrollment_update_test.dart',
         'a rotation sends the new public key, its algorithm and the proof',
         proves: 'the client half of the same clause, as a CLOSED set: the '
             'command a rekey emits carries exactly enrollmentId, '
@@ -84,9 +84,9 @@ void main() {
         clauses: [
           'the atServer refuses it by its own named error, not by',
         ]);
-    provenIn('packages/at_auth/test/enrollment_update_test.dart',
+    provenIn('packages/at_client/test/enroll/enrollment_update_test.dart',
         'nothing this API can compose names namespaces or an approval state',
-        proves: 'the client half, over the command AtEnrollmentImpl().update '
+        proves: 'the client half, over the command EnrollmentUpdater().update '
             'emits for a request naming every field EnrollmentUpdateRequest '
             'has — as a CLOSED SET of keys rather than two named absences. '
             'namespaces has a spelling to look for; an approval state does '

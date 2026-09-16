@@ -280,8 +280,16 @@ class AtKeysAssurance {
     // version, so only pin them when the existing file is already a
     // typed-keys document.
     if (existing.containsKey('version')) {
-      _assertSame(existing['atsign'], candidate['atsign'], 'map.atsign');
-      _assertSame(existing['version'], candidate['version'], 'map.version');
+      // NOTE: a typed document holding no credential — every material
+      // pending, none of the flat secrets — is a request awaiting approval,
+      // and a candidate that drops the typed header is that request
+      // discarded, leaving a store that reads as holding nothing.
+      final emptied = !candidate.containsKey('version') &&
+          !_holdsCredential(existingMaterials, existingLegacy);
+      if (!emptied) {
+        _assertSame(existing['atsign'], candidate['atsign'], 'map.atsign');
+        _assertSame(existing['version'], candidate['version'], 'map.version');
+      }
     } else if (candidate.containsKey('version') &&
         existingLegacy.containsKey('atsign')) {
       // A legacy document may already name its owner under `atsign` — the
@@ -295,13 +303,34 @@ class AtKeysAssurance {
       _assertSame(_asAtsign(existingLegacy.remove('atsign')),
           _asAtsign(candidate['atsign']), 'map.atsign');
     }
-    _assertLegacyPreserved(
-      existingLegacy,
-      _legacyJsonOf(candidate),
-      'map.legacy',
-    );
+    // NOTE: the legacy fields are protected because they are the credential
+    // every published reader authenticates and decrypts with. A document that
+    // holds none — no active typed material and none of the flat secrets —
+    // is not a credential yet: an enrollment's keys filed at submission and
+    // not accepted, or the stub a denied one leaves behind. Its legacy fields
+    // are the pending request's, and the next request may replace them.
+    if (_holdsCredential(existingMaterials, existingLegacy)) {
+      _assertLegacyPreserved(
+        existingLegacy,
+        _legacyJsonOf(candidate),
+        'map.legacy',
+      );
+    }
     _assertMaterialsPreserved(existingMaterials, candidateMaterials);
   }
+
+  /// The legacy fields that are secrets: a document carrying any of them, or
+  /// any active typed material, is a credential the never-lose rule protects.
+  static const _legacySecretFields = {
+    'aesPkamPrivateKey',
+    'aesEncryptPrivateKey',
+    'selfEncryptionKey',
+  };
+
+  bool _holdsCredential(
+          List<CryptographicMaterial> materials, Map<String, dynamic> legacy) =>
+      materials.any((m) => m.status == CryptographicMaterialStatus.active) ||
+      _legacySecretFields.any((field) => legacy[field] != null);
 
   /// Both typed containers of [json], flattened — every material carrying the
   /// owner its container names.
@@ -359,8 +388,12 @@ class AtKeysAssurance {
 
   /// Every existing `(enrollmentId, keyId, role)` must survive in the
   /// candidate with identical fields, except `status`, which may move forward
-  /// (active → retired → dead) but never backward. New keyIds — and new parts
-  /// on an existing keyId — are additions, not losses, so they pass.
+  /// (pending → active → retired → dead) but never backward. New keyIds — and
+  /// new parts on an existing keyId — are additions, not losses, so they
+  /// pass. The one material that may go missing is a **pending** one: it was
+  /// filed at an enrollment's submission and the atServer never accepted it,
+  /// so it protected nothing, and a denied or expired enrollment is removed
+  /// rather than retired.
   ///
   /// Keyed by owner as well as keyId because identity is
   /// `(enrollment, keyId)`. Without it, two enrollments each holding
@@ -385,6 +418,7 @@ class AtKeysAssurance {
         material.role
       )];
       if (counterpart == null) {
+        if (material.status == CryptographicMaterialStatus.pending) continue;
         throw AtKeysAssuranceException('$path is not preserved');
       }
       if (material.withStatus(counterpart.status) != counterpart) {
@@ -422,6 +456,10 @@ class AtKeysAssurance {
     }
 
     for (final entry in existing.entries) {
+      // A field that held nothing has nothing to lose: the document writer
+      // emits every legacy field, null or not, so a value arriving where none
+      // was is a completion rather than a change.
+      if (entry.value == null) continue;
       if (!candidate.containsKey(entry.key)) {
         throw AtKeysAssuranceException('$path.${entry.key} is not preserved');
       }

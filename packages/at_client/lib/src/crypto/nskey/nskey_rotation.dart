@@ -202,8 +202,7 @@ class NskeyRotation {
     // the namespace, revoking needs `__manage`. A caller lacking `__manage` also
     // cannot enumerate enrollments, so without this check the missing privilege
     // surfaces as "no enrollment <id> to revoke", which reads as a wrong id.
-    final callerEnrollmentId =
-        atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
+    final callerEnrollmentId = atClient.enrollmentId;
     final all = await service.fetchEnrollmentRequests();
     if (callerEnrollmentId != null && callerEnrollmentId.isNotEmpty) {
       final me =

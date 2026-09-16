@@ -1,20 +1,90 @@
-## 1.17.0-rc1
+## 2.0.0-rc1
 
+- build: at_server_status is no longer a dependency. Whether an atSign is
+  already activated is asked with at_lookup's `checkAtSignServer`, over a
+  connection the preference's `lookUps` builds.
+- feat: `AtOnboardingPreference.lookUps` is the `AtLookUpFactory` every
+  client opened under the preference builds its connections with: set it
+  for a transport of your own; unset, it is `proxyLookUps()` when the root
+  domain names a proxy and TLS on TCP otherwise. `proxyLookUps()` (new,
+  exported) sends `from:<atSign>` first on every connection, which is what
+  the proxy needs to route it; the commands used to do that on the one
+  connection they built and on none of the client's others.
+- **BREAKING:** `AtOnboardingService` is the three members programs call:
+  `AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
+  `atClient`, over at_client's `Atsign.open` and `AtClientManager.use`; the
+  deprecated `getAtClient()` is removed with the rest.
+  `authenticate()` answers true only when the client's connection is online;
+  an offline client is still opened and held, and its `connection` says why,
+  while a refusal on a device that has never held the atSign online opens
+  nothing. Any client already live for the atSign in the process is stopped
+  first, as the manager's `setCurrentAtSign` stopped the one it replaced. The other members go, to at_client: `onboard` is
+  `Atsign.activate`; `enroll`, `sendEnrollRequest`, `awaitApproval` and
+  `createAtKeysFile` are `Atsign.enroll`, `Atsign.resumeEnrollment` and
+  `PendingEnrollment.client`; `close` is `atClient.stop()`; `isOnboarded` is
+  the atDirectory's status; and `atLookUp`, `atChops`, `atAuth` and
+  `completeActivation` have no replacement, because the client's own
+  connection does what they exposed.
+- **BREAKING:** the enrollment checkpoint file (`*.enrollment.checkpoint`) is
+  gone. The keyfile named on `enroll` is the resume record: it holds the
+  pending keys from submission, and `at_activate enroll` run again for the
+  same app and device resumes the wait for approval.
+- **BREAKING:** `authenticate()` no longer copies the keyfile's keys into the
+  client's local storage; the client reads them from its key source.
+- **BREAKING:** the keyfile `onboard` writes is at_auth's own, and no longer
+  carries the self-encryption key a second time under the atSign as a JSON
+  key.
+- `at_activate onboard` and `enroll` run over `Atsign.activate` and
+  `Atsign.enroll`; `list`, `fetch`, `approve`, `auto`, `deny`, `revoke`,
+  `unrevoke`, `delete`, `otp` and `spp` run over `client.enrollments`. The
+  lines that echoed the atServer's raw response now say what was done.
+- `createAtClient` opens the client through `Atsign.open` and waits for its
+  connection to come online with a budget of `maxConnectAttempts` tries,
+  three seconds apart, instead of re-authenticating in a loop.
+- `AtOnboardingPreference.storageFor(atSign)` is the store a client for the
+  atSign opens under the preference: `storage`, else a Hive store under
+  `storagePath`, the deprecated `hiveStoragePath`, or the per-atSign
+  directory under the user's home.
+
+- refactor: `authenticate` takes the enrollment it authenticated as, and the
+  keys it persists to the local secondary, from the session at_auth hands
+  back rather than from the response's own key fields. The source on that
+  session is the one this service passed in, so it is the same key set — and
+  honouring the hand-off means a caller can supply a source this service
+  never has to open itself.
+- refactor: both flows build their client from the keyfile. `enroll` writes
+  the keyfile for its new enrollment first and hands that source over;
+  `authenticate` hands over the source at_auth just read. Neither sets
+  `atChops`, `enrollmentId`, `signingAlgoType` or `hashingAlgoType` on the
+  lookup any more — the client's own connection installs an authenticator
+  from the key source and stamps what a lookup from before that seam reads,
+  so a connection's algorithm now comes from the key material on both flows
+  rather than from the preference on one of them.
+  ⚠️ `enroll` had been failing on a null check after approval and before the
+  keyfile was written, because it read an `AtChops` off the lookup that
+  at_auth's handshake stopped leaving there. The CLI's live packs found that;
+  its unit tests had not, because they stub the lookup's `atChops`.
+  `AtOnboardingService.atChops` is unchanged: it is the door for a signer
+  that is not a keyfile, such as a secure element's.
+- fix: `sendEnrollRequest` no longer sleeps 500ms after announcing itself on
+  the progress stream. The pause existed so the CLI's narration did not scroll
+  past unread, but it delayed the enrollment submission rather than pacing the
+  display where the reader is, and every automated caller paid it too. The
+  progress events are unchanged. `AtOnboardingServiceImpl.waitBriefly` is
+  removed with it; it was public but on no interface, and its only caller was
+  the line above.
 - **BREAKING:** an invocation with no command is refused instead of being
   treated as `onboard`. `auth -a <atSign> -c <secret>` activated an atSign
   without the word appearing anywhere; it now prints the command list and
   exits 1. `auth onboard -a <atSign> -c <secret>` is the same activation.
   `--help` and `--version` are unaffected.
-- **BREAKING:** `--posture` is resolved by role rather than inherited from
-  at_client. `onboard` and `enroll` default to `legacy` and announce it, so
-  the keys they write stay usable by a legacy app and a default invocation
-  puts no post-quantum machinery in the picture. Every other command defaults
-  to `pqReady` and **refuses** `--posture legacy`: approving a post-quantum
-  enrolment means minting a symmetric key and encapsulating it to the
-  requester's key package, which a posture configuring no post-quantum
-  providers cannot do — at_client already refuses such an approval before it
-  reaches the atServer, and this turns that runtime failure into a usage
-  message. Naming `--posture` explicitly is unchanged on every command.
+- **BREAKING:** an unnamed `--posture` is at_client's default on every
+  command, and `onboard` and `enroll` announce it. The role split that ran
+  `onboard` and `enroll` at `legacy` and every other command at `pqReady`
+  is gone, with the refusal of `--posture legacy` on the approving commands:
+  a post-quantum approval under a posture with no post-quantum providers is
+  refused by at_client when the request is read. One default for the whole
+  SDK, so the CLI moves when at_client's default does.
 - feat: `authenticate()` authenticates as the keyfile's own enrollment (at_auth
   4.0.0-rc2's `AtKeys.enrollmentToAuthenticateAs`): the one enrollment holding
   active typed authentication material, else the flat stored id, else `primary`
@@ -42,11 +112,11 @@
 
 - **Behaviour change, from `at_client` rather than from this package.**
   `authenticate()` builds an `AtClient`, and a client at a post-quantum posture
-  now gives an atSign that holds no enrollment its first one — rewriting the
+  gives an atSign that holds no enrollment its first one — rewriting the
   `.atKeys` file. `AtOnboardingPreference` inherits `AtClientPreference`'s
-  `PqPosture.pqReady` default, so this happens unless a caller names
-  `PqPosture.legacy`. Every `at_activate` command that authenticates is
-  affected.
+  default, `PqPosture.legacy`, so this happens only under a posture a caller
+  names, or under the `pqReady` every `at_activate` command but `onboard` and
+  `enroll` defaults to.
 
 - fix: **an enrolment now owns a data signing key from birth.**
   `sendEnrollRequest` advertised the APKAM authentication key in `_apsk` and

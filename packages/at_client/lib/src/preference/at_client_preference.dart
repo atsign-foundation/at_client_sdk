@@ -1,8 +1,9 @@
 import 'package:at_chops/at_chops.dart';
+import 'package:meta/meta.dart' show internal, visibleForTesting;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
-import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show pqCryptoProviderIds;
+import 'package:at_client/src/client/pq_client_bootstrap.dart'
+    show PqStartupGates;
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -32,6 +33,30 @@ class AtClientPreference {
   /// must not move names [PqPosture.legacy].
   final PqPosture posture;
 
+  /// Which of the post-quantum startup's steps this client runs, or null to
+  /// let [posture] decide — every step when it configures post-quantum
+  /// providers, none when it does not.
+  ///
+  /// ⚠️ Read once, by a startup the client's constructor fires unawaited, so
+  /// naming a set here is the only way to change it: a set handed to a client
+  /// that is already running cannot be applied, which is why
+  /// [rolloutDifferencesFrom] reports it.
+  @visibleForTesting
+  final PqStartupGates? pqStartupGates;
+
+  /// Which post-quantum startup steps this client's bootstrap runs: the set
+  /// [pqStartupGates] names, else every step when [posture] configures the
+  /// post-quantum providers and none when it does not.
+  ///
+  /// The one home for that rule — a client reads this rather than deriving it,
+  /// and it resolves [pqStartupGates] here because only this library may.
+  @internal
+  PqStartupGates get resolvedPqStartupGates =>
+      pqStartupGates ??
+      (posture.configuresPqProviders
+          ? const PqStartupGates()
+          : const PqStartupGates.inert());
+
   /// Which algorithms this client keeps an **active signing key** for — the
   /// keys that sign what its enrollment attests to, which is a different job
   /// from the APKAM authentication key that proves possession on a connection.
@@ -58,6 +83,7 @@ class AtClientPreference {
 
   AtClientPreference(
       {this.posture = PqPosture.legacy,
+      this.pqStartupGates,
       SigningAlgoType? authenticationKeyAlgorithm,
       Set<SigningAlgoType>? dataSigningKeyAlgorithms,
       List<String>? sealsToKeyAlgorithms,
@@ -112,8 +138,9 @@ class AtClientPreference {
     final differences = <String>[];
 
     void compare(String axis, Object? asked, Object? running) {
-      if (asked != running)
+      if (asked != running) {
         differences.add('$axis (asked $asked, running $running)');
+      }
     }
 
     compare('posture.writesPqByDefault', other.posture.writesPqByDefault,
@@ -122,6 +149,7 @@ class AtClientPreference {
         other.posture.configuresPqProviders, posture.configuresPqProviders);
     compare('posture.keyExchangeMode', other.posture.keyExchangeMode.name,
         posture.keyExchangeMode.name);
+    compare('pqStartupGates', other.pqStartupGates, pqStartupGates);
     compare('authenticationKeyAlgorithm', other.authenticationKeyAlgorithm.name,
         authenticationKeyAlgorithm.name);
     compare('disallowLegacyEncryption', other.disallowLegacyEncryption,
@@ -334,13 +362,26 @@ class AtClientPreference {
   /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 1 and 59]
   Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
-  ///[OptionalParameter] when set to true logs TLS Keys to file.
+  /// When true, the TLS keys of every connection are logged to
+  /// [tlsKeysSavePath].
+  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
+      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
+      '..decryptPackets = true) to the verb that opens the client. Read by '
+      'the default factory until removed in 4.0.')
   bool decryptPackets = false;
 
-  ///[OptionalParameter] location where the TLS keys will be saved when [decryptPackets] is set to true
+  /// Where the TLS keys are written when [decryptPackets] is set.
+  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
+      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
+      '..tlsKeysSavePath = ...) to the verb that opens the client. Read by '
+      'the default factory until removed in 4.0.')
   String? tlsKeysSavePath;
 
-  ///[OptionalParameter] path to trusted certificates. Required to create security context.
+  /// Path to the trusted certificates the TLS security context is built from.
+  @Deprecated('The transport is the AtLookUpFactory\'s to configure: pass '
+      'lookUps: secureSocketLookUps(config: SecureSocketConfig()'
+      '..pathToCerts = ...) to the verb that opens the client. Read by the '
+      'default factory until removed in 4.0.')
   String? pathToCerts;
 
   /// [AtClient.put] uses this parameter to decide whether to check for presence of a namespace in the
@@ -353,8 +394,12 @@ class AtClientPreference {
       "namespace presence will become mandatory in next major version of the SDK")
   bool enforceNamespace = true;
 
-  /// Fetch the notifications received when the client is offline. Defaults to true.
-  /// Set to false to ignore the notifications received when device is offline.
+  /// Fetch the notifications received while the client was offline, from the
+  /// last one it received. Defaults to true.
+  ///
+  /// Set to false to ignore those. Notifications received since the client's
+  /// notification service was created are delivered once either way, including
+  /// any that arrived before its monitor connected.
   bool fetchOfflineNotifications = true;
 
   @Deprecated('No longer needed. at_chops will be used by default')
@@ -424,7 +469,7 @@ class AtClientPreference {
   ///
   /// ⚠️ Off by default: the fallback is a silent downgrade to RSA, and it is
   /// forward-only — the first write after the destination publishes a key is
-  /// post-quantum, but records already written under it stay legacy.
+  /// post-quantum, but records already written under it stay legacy-encrypted.
   bool allowLegacyCryptoFallback = false;
 
   /// Whether this client mints and publishes namespace keys at start.

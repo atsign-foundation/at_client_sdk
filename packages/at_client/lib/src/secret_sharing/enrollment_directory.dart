@@ -33,6 +33,12 @@ enum KeyPackageStatus {
   /// cannot read. Behaves like [absent] rather than [rejected]: nobody here
   /// can fix it.
   unsupported,
+
+  /// Advertised, but the check against its enrollment's `_apsk` could not be
+  /// completed, because the `_apsk` could not be fetched. Nothing is known
+  /// about the package either way: a caller does not seal to it now, and the
+  /// same package may verify once the atServer answers.
+  unverified,
 }
 
 /// One enrollment authorised for a namespace, as returned by
@@ -265,11 +271,16 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
         signerAtSign: signerAtSign,
         signerEnrollmentId: enrollmentId,
         expecting: EnvelopeType.keyPackage);
-  } catch (e) {
+  } on AtSigningVerificationException catch (e) {
     _logger.severe('the key package advertised by enrollment $enrollmentId '
         'does not verify against its _apsk, so the key it offers is only as '
         'trustworthy as whatever served it; not sealing to it: $e');
     return (null, KeyPackageStatus.rejected);
+  } catch (e) {
+    _logger.warning('the key package advertised by enrollment $enrollmentId '
+        'could not be checked against its _apsk, which could not be fetched; '
+        'not sealing to it now: $e');
+    return (null, KeyPackageStatus.unverified);
   }
 
   try {

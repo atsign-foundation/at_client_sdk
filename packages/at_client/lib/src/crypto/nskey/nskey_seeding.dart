@@ -2,8 +2,8 @@ import 'dart:async' show unawaited;
 import 'dart:convert' show base64Encode;
 
 import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/enroll/authorised_namespaces.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
-import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
     show NskeyAdvertisement, NskeySeed;
@@ -54,30 +54,11 @@ class NskeySeeding {
     this.rotationPolicy = neverRotateNskey,
   });
 
-  /// The namespaces this client should hold a key for.
-  ///
-  /// An APKAM client is told by its own enrollment record, all the atServer
-  /// returns without `__manage`, while a legacy PKAM client has no enrollment
-  /// and names exactly one — its `preference.namespace`, which is also what a
-  /// grant of `*` seeds, `__manage` being skipped either way.
+  /// The namespaces this client should hold a key for; see
+  /// [authorisedNamespacesOf]. Empty when the enrollment record cannot be read.
   Future<Set<String>> authorisedNamespaces() async {
-    final own = atClient.getPreferences()?.namespace;
-    final ownNamespace =
-        (own == null || own.isEmpty) ? const <String>{} : {own};
-    final enrollmentId = atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
-    if (isAtSignCredential(enrollmentId)) return ownNamespace;
-
     try {
-      final mine = (await atClient.enrollmentService!.fetchEnrollmentRequests())
-          .where((e) => e.enrollmentId == enrollmentId);
-      final granted = {
-        for (final enrollment in mine) ...?enrollment.namespace?.keys
-      };
-      return {
-        ...granted.where(isSeedable),
-        if (granted.contains(EnrollmentConstants.allNamespaces))
-          ...ownNamespace,
-      };
+      return await authorisedNamespacesOf(atClient);
     } catch (e) {
       _logger.info('Could not read this enrollment to find its namespaces, so '
           'nothing is seeded this start: $e');
@@ -85,13 +66,9 @@ class NskeySeeding {
     }
   }
 
-  /// Whether [namespace] can hold a namespace key of its own.
-  ///
-  /// `*` and `__manage` are grants over *other* namespaces rather than
-  /// namespaces data lives in, so nothing ever mints for them; the answer comes
-  /// from the argument alone and no later start can change it.
-  static bool isSeedable(String namespace) =>
-      namespace != '*' && namespace != '__manage' && namespace.isNotEmpty;
+  /// Whether [namespace] can hold a namespace key of its own; see
+  /// [isSeedableNamespace].
+  static bool isSeedable(String namespace) => isSeedableNamespace(namespace);
 
   /// Mints and publishes for every authorised namespace that has no key yet,
   /// then conveys each new private. Returns the namespaces this start published
@@ -284,8 +261,7 @@ class NskeySeeding {
 
     // NOTE: the atSign's own credential is not an enrollment the atServer will
     // answer about, and the verb behind the lookup is APKAM-gated.
-    if (isAtSignCredential(
-        atClient.getRemoteSecondary()?.atLookUp.enrollmentId)) {
+    if (isAtSignCredential(atClient.enrollmentId)) {
       return false;
     }
 

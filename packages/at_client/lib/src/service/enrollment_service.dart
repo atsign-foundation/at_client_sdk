@@ -10,12 +10,10 @@ abstract class EnrollmentService {
   /// ```dart
   /// Example:
   ///
-  ///  AtClientManager atClientManager = await AtClientManager.getInstance()
-  ///                               .setCurrentAtSign('@alice', 'me', AtClientPreferences());
+  ///  final client = await Atsign('@alice').open(keys: keys, preference: preference);
   ///
   ///
-  ///   List<EnrollmentRequest> enrollmentRequests = atClientManager.atClient.encryptionService
-  ///                                                     .fetchEnrollmentRequests();
+  ///   List<EnrollmentRequest> enrollmentRequests = client.enrollmentService.fetchEnrollmentRequests();
   /// ```
   Future<List<Enrollment>> fetchEnrollmentRequests(
       {EnrollmentListRequestParam? enrollmentListParams});
@@ -25,16 +23,14 @@ abstract class EnrollmentService {
   /// Example:
   ///
   /// ```dart
-  ///     AtClientManager atClientManager = await AtClientManager.getInstance()
-  ///                               .setCurrentAtSign('@alice', 'me', AtClientPreferences());
+  ///     final client = await Atsign('@alice').open(keys: keys, preference: preference);
   ///
   ///     EnrollmentRequestDecision enrollmentRequestDecision =
   ///                              EnrollmentRequestDecision.approved(ApprovedRequestDecisionBuilder(
   ///                                            enrollmentId: 'dummy-enrollment-id',
   ///                                            encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
   ///
-  /// AtEnrollmentResponse atEnrollmentResponse = await atClientManager.atClient
-  ///                                                                  .enrollmentService.approve(enrollmentRequestDecision);
+  /// AtEnrollmentResponse atEnrollmentResponse = await client.enrollmentService.approve(enrollmentRequestDecision);
   /// ```
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision);
@@ -44,13 +40,11 @@ abstract class EnrollmentService {
   /// Example:
   ///
   /// ```dart
-  ///      AtClientManager atClientManager = await AtClientManager.getInstance()
-  ///                              .setCurrentAtSign('@alice', 'me', AtClientPreferences());
+  ///      final client = await Atsign('@alice').open(keys: keys, preference: preference);
   ///
   ///     EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.denied('dummy-enrollment-id');
   ///
-  ///    AtEnrollmentResponse atEnrollmentResponse = await atClientManager.atClient
-  ///                                                      .encryptionService.deny(enrollmentRequestDecision);
+  ///    AtEnrollmentResponse atEnrollmentResponse = await client.enrollmentService.deny(enrollmentRequestDecision);
   Future<AtEnrollmentResponse> deny(
       EnrollmentRequestDecision enrollmentRequestDecision);
 
@@ -59,13 +53,11 @@ abstract class EnrollmentService {
   /// Example:
   ///
   /// ```dart
-  /// AtClientManager atClientManager = await AtClientManager.getInstance()
-  ///                              .setCurrentAtSign('@alice', 'me', AtClientPreferences());
+  /// final client = await Atsign('@alice').open(keys: keys, preference: preference);
   ///
   ///     EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('dummy-enrollment-id');
   ///
-  ///    AtEnrollmentResponse atEnrollmentResponse = await atClientManager.atClient
-  ///                                                      .encryptionService.revoke(enrollmentRequestDecision);
+  ///    AtEnrollmentResponse atEnrollmentResponse = await client.enrollmentService.revoke(enrollmentRequestDecision);
   /// ```
   Future<AtEnrollmentResponse> revoke(
       EnrollmentRequestDecision enrollmentRequestDecision);

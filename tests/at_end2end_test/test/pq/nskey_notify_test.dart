@@ -87,6 +87,8 @@ void main() {
       namespace: namespace,
       preference: TestPreferences.getInstance().forCoLocatedClient(bob,
           posture: legacyPlusPqProviders, device: 'bob2-$id'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(bob, device: 'bob2-$id'),
       rootDomain: bobPreference.rootDomain,
       rootPort: bobPreference.rootPort,
       deviceName: 'bob2-$id',
@@ -150,7 +152,7 @@ void main() {
     expect(notification.metadata?.appMetadata?.providerId,
         symmetricAesGcmCryptoProviderId,
         reason: 'without this on the frame the receiver has nothing to route '
-            'by and falls back to legacy, hunting a shared_key a PQ write '
+            'by and falls back to the legacy provider, hunting a shared_key a PQ write '
             'never created');
 
     expect(notification.value, value,
@@ -173,7 +175,7 @@ void main() {
     expect(second.metadata?.appMetadata?.providerId,
         symmetricAesGcmCryptoProviderId,
         reason: 'the frame carries the same routing to every enrollment; a '
-            'receiver handed no providerId falls back to legacy and hunts a '
+            'receiver handed no providerId falls back to the legacy provider and hunts a '
             'shared_key a PQ write never created');
     expect(second.value, value,
         reason: 'and it DECRYPTS on the second enrollment, which is the '

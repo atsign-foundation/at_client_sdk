@@ -1,5 +1,7 @@
 ## 5.18.0
 
+- feat: `Atsign(String)` constructs an atSign the same way `toAtsign()` does,
+  so `Atsign('@alice')` reads as it looks; the two routes cannot disagree.
 - feat: `EnrollmentConstants.primaryEnrollmentId` (`primary`) names the
   enrollment an atSign's own credential authenticates as: the flat keyfile
   material with no enrollment record of its own. `PkamVerbBuilder` keeps it off

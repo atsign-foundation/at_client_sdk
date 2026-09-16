@@ -10,7 +10,6 @@ import 'dart:async' show Completer;
 import 'dart:convert' show jsonDecode;
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeys, InMemoryAtKeysIo;
 import 'package:at_client/at_client.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
@@ -193,33 +192,30 @@ void main() {
   /// `register()` takes no namespace and files into the client's own, and is
   /// idempotent, so one registration per atSign is what the cells need.
   ///
-  /// Built through `AtClientManager`'s PUBLIC constructor: the singleton's
-  /// `setCurrentAtSign` stops the outgoing client, so the singleton route
-  /// would stop each of these as the next one came up.
+  /// Opened directly rather than through the singleton manager, whose switch
+  /// stops the outgoing client and so would stop each of these as the next
+  /// one came up.
   final approvers = <String, AtClient>{};
   Future<AtClient> approverFor(String atSign, String namespace) async {
     final memoised = approvers[atSign];
     if (memoised != null) return memoised;
-    final keysIo = InMemoryAtKeysIo();
-    await keysIo.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
-    final manager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign,
-        namespace,
+    final approver = await Atsign(atSign).open(
+        keys: InMemoryAtKeysIo.holding(
+            atSign, loader.createAtKeysFromDemoKeys(atSign)),
         // ⚠️ legacy, and this is the grid's readiness axis. Seeding is the
         // only posture-gated step in the PQ bootstrap, so an approver at any
         // other posture publishes `public:__nskey.<ns>@<atSign>` before a
         // single cell runs, and every readback assertion then passes for the
         // wrong reason.
-        preferenceFor(slug(atSign), atSign,
+        preference: preferenceFor(slug(atSign), atSign,
             role: 'approver', posture: legacyPlusPqProviders),
-        atKeysIo: keysIo,
-        atChops: loader.createAtChopsFromDemoKeys(atSign),
+        namespace: namespace,
         storage: TestUtils.storageFor(atSign));
-    await loader.setEncryptionKeys(manager.atClient, atSign);
-    await AtClientSecretSharing.forClient(manager.atClient).register();
-    approvers[atSign] = manager.atClient;
-    return manager.atClient;
+    await loader.setEncryptionKeys(approver, atSign);
+    await AtClientSecretSharing.forClient(approver).register();
+    approvers[atSign] = approver;
+    return approver;
   }
 
   /// Whether `public:__nskey.<namespace>@<atSign>` exists, read over the wire.
@@ -413,7 +409,7 @@ void main() {
                     ..useRemoteAtServer = true),
               isTrue,
               reason: '$name -> $ns must write: '
-                  '${ns == nsReady ? "the recipient has published a key" : "this posture writes legacy, which needs none"}');
+                  '${ns == nsReady ? "the recipient has published a key" : "this posture writes with the legacy provider, which needs none"}');
           wrote['$name -> $ns'] = key;
         }
       }
@@ -596,24 +592,18 @@ void main() {
     // socket has connected, PKAMed and written `monitor:`, and the atServer's
     // inbound stream is a BROADCAST stream with no backlog, so a notification
     // enqueued in that window is never delivered to that connection at all.
-    // Waiting on a notification actually arriving is the only sufficient gate;
-    // `currentListenerState == listening` is set straight after writing the
-    // command and says nothing about the atServer having processed it.
-    //
-    // The atServer's periodic `statsNotification` is both that readiness
-    // signal and the positive control: seeing it and not ours distinguishes a
-    // monitor that receives nothing from one that receives everything except
+    // `listening` is the gate - see [awaitMonitorListening] for what that
+    // does and does not prove. Every key the monitor delivers is still
+    // recorded, so a failure can say whether it received everything except
     // the thing under test.
     final listener = cells['r-pqActive']!.client.notificationService
         as NotificationServiceImpl;
 
     final seen = <String>[];
-    final monitorProvenLive = Completer<void>();
     final arrived = <String, Completer<AtNotification>>{};
 
     final subscription = listener.subscribe(shouldDecrypt: true).listen((n) {
       seen.add(n.key);
-      if (!monitorProvenLive.isCompleted) monitorProvenLive.complete();
       for (final entry in arrived.entries) {
         if (n.key.toLowerCase().contains(entry.key) &&
             !entry.value.isCompleted) {
@@ -623,14 +613,8 @@ void main() {
     });
     addTearDown(subscription.cancel);
 
-    await monitorProvenLive.future.timeout(
-      const Duration(seconds: 90),
-      onTimeout: () => throw StateError(
-          'no notification of any kind reached the listener within 90s, so '
-          'the monitor is not up. Notifying now would repeat the race this '
-          'gate exists to close, and a delivery failure afterwards would be '
-          'attributed to the posture rather than to readiness'),
-    );
+    await awaitMonitorListening(listener,
+        timeout: const Duration(seconds: 90));
 
     final stamp = DateTime.now().microsecondsSinceEpoch;
     for (final entry in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {

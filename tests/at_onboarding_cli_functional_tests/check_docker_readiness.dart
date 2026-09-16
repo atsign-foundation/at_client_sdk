@@ -10,12 +10,12 @@ void main() {
   int atsignPort = virtualenvSecondaryPort(25017);
   String rootServer = 'vip.ve.atsign.zone';
 
-  SecureSocket _secureSocket;
+  SecureSocket secureSocket;
 
   test('checking for test environment readiness', () async {
-    _secureSocket = await secureSocketConnection(rootServer, atsignPort);
+    secureSocket = await secureSocketConnection(rootServer, atsignPort);
     print('connection established');
-    socketListener(_secureSocket);
+    socketListener(secureSocket);
     String response = '';
     print('waiting for up to 2 minutes for signing_publickey$atsign');
 
@@ -28,10 +28,10 @@ void main() {
         (response.isEmpty || response == 'data:null\n') && attempt < maxTries) {
       if (attempt > 0) await Future<void>.delayed(const Duration(seconds: 3));
       attempt++;
-      _secureSocket.write('lookup:signing_publickey$atsign\n');
+      secureSocket.write('lookup:signing_publickey$atsign\n');
       response = await read();
     }
-    await _secureSocket.close();
+    await secureSocket.close();
 
     expect(response, isNotEmpty,
         reason: '$atsign never served its signing public key, so the '

@@ -18,7 +18,8 @@ import 'package:test/test.dart';
 /// Bob is given nothing — no config, no providers — and has to open a record
 /// alice sealed to his namespace key. That is the asymmetry under test: alice
 /// must name `CryptoConfig.nskey` to *write* PQ, because the era default
-/// deliberately still writes legacy, while bob needs nothing to *read* it.
+/// deliberately still writes with the legacy provider, while bob needs nothing
+/// to *read* it.
 void main() {
   late String alice;
   late String bob;
@@ -76,8 +77,8 @@ void main() {
     await E2ESyncService.getInstance()
         .syncData(bobClient.syncService, atSign: bob);
 
-    // Alice has to opt in to WRITE pq — the era default would write legacy and
-    // there would be no PQ record to read.
+    // Alice has to opt in to WRITE pq — the era default would write with the
+    // legacy provider and there would be no PQ record to read.
     final aliceClient = await clientFor(alice);
     final aliceRing = PublishedNskeyKeyRing(aliceClient);
     aliceClient.getPreferences()!.crypto =

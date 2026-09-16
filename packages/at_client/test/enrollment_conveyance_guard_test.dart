@@ -9,17 +9,17 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
+import 'package:at_client/src/service/envelope_enrollment_conveyance.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
+    show SignedEnvelope, apskUri;
 
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
-import 'package:at_chops/at_chops.dart';
 
 class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   final List<EnrollmentRequestDecision> approvals = [];
@@ -27,7 +27,7 @@ class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision decision, AtLookUp atLookUp,
-      {AtChops? approverChops}) async {
+      {required ApproverKeyMaterial approverKeys}) async {
     approvals.add(decision);
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);
@@ -48,12 +48,15 @@ void main() {
   setUpAll(() => registerFallbackValue(AtKey()));
   setUp(() => remoteData = {});
 
-  MockAtClient buildMockClient(String enrollmentId, {PqPosture? posture}) =>
-      buildRemoteBackedMockClient(
-          atSign: atSign,
-          enrollmentId: enrollmentId,
-          remoteData: remoteData,
-          posture: posture);
+  MockAtClient buildMockClient(String enrollmentId, {PqPosture? posture}) {
+    final atClient = buildRemoteBackedMockClient(
+        atSign: atSign,
+        enrollmentId: enrollmentId,
+        remoteData: remoteData,
+        posture: posture);
+    stubApproverKeys(atClient);
+    return atClient;
+  }
 
   /// Stubs `enroll:list` to return one pending enrollment carrying [keyPackage]
   /// and **no** `encryptedAPKAMSymmetricKey` — the shape that asks this
@@ -90,6 +93,92 @@ void main() {
               enrollmentId: enrolleeId,
               apkamSymmetricKey: AtBytes.fromString(''),
               atSign: atSign));
+
+  /// The atServer writes the enrollee's `_apsk` at approval, so the check of
+  /// the advertised package can miss it once and find it a moment later.
+  group('a key package whose _apsk fetch fails transiently', () {
+    /// Fails the approver's fetch of the enrollee's `_apsk` for the first
+    /// [failures] attempts, then serves what the atServer holds.
+    int Function() failApskFetches(MockAtClient approver,
+        {required int failures}) {
+      var fetches = 0;
+      final apsk = apskUri(atSign, enrolleeId);
+      when(() => approver.get(
+          any(that: predicate<AtKey>((k) => k.toString() == apsk)),
+          getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
+        fetches++;
+        if (fetches <= failures) {
+          throw AtConnectException(
+              'The connection was closed by this client before a response '
+              'arrived');
+        }
+        return Future.value(AtValue()..value = remoteData[apsk]);
+      });
+      when(() => approver.isStopped).thenReturn(false);
+      return () => fetches;
+    }
+
+    setUp(() => EnvelopeEnrollmentConveyance.verifyRetryPause = Duration.zero);
+    tearDown(() => EnvelopeEnrollmentConveyance.verifyRetryPause =
+        const Duration(seconds: 1));
+
+    test('is checked again, and conveyed to once the fetch answers', () async {
+      final approver = buildMockClient('approver-5');
+      await AtClientSecretSharing.forClient(approver).register();
+      stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson());
+      final fetches = failApskFetches(approver, failures: 2);
+
+      await expectLater(approveWith(approver), completes,
+          reason: 'two fetches failed and the third answered, all within '
+              'the attempts the check is given');
+      expect(fetches(), greaterThanOrEqualTo(3),
+          reason: 'two failed, the third answered; the conveyance that '
+              'follows reads the record again on its own account');
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isNotEmpty,
+          reason: 'the secrets were conveyed once the package verified');
+    });
+
+    test('is reported unverified once the attempts are spent (control)',
+        () async {
+      final approver = buildMockClient('approver-6');
+      await AtClientSecretSharing.forClient(approver).register();
+      stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson());
+      final fetches = failApskFetches(approver, failures: 1000);
+
+      await expectLater(
+          approveWith(approver),
+          throwsA(isA<EnrollmentConveyanceException>().having(
+              (e) => e.keyPackageStatus,
+              'keyPackageStatus',
+              KeyPackageStatus.unverified)));
+      expect(fetches(), EnvelopeEnrollmentConveyance.verifyAttempts,
+          reason: 'every attempt was spent before the check was given up');
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty);
+    });
+  });
+
+  /// Approval seals the approver's own encryption private key and
+  /// self-encryption key for the enrollee, so a client that cannot read both
+  /// has nothing to seal.
+  group('a client that cannot read its own key material', () {
+    test('refuses, and leaves the request pending', () async {
+      // No `stubApproverKeys` here: this client has no local secondary at all,
+      // which is what a client built without a key source looks like.
+      final approver = buildRemoteBackedMockClient(
+          atSign: atSign, enrollmentId: 'approver-1', remoteData: remoteData);
+      stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson());
+
+      await expectLater(
+          approveWith(approver),
+          throwsA(isA<AtClientException>().having((e) => e.message, 'message',
+              contains('cannot read both of them'))));
+
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty,
+          reason: 'and nothing was conveyed - at_auth used to refuse this, '
+              'and the refusal has to stay on this side of the call now that '
+              'approverKeys is required');
+    });
+  });
 
   /// A client whose posture configures no post-quantum providers has neither
   /// the providers to mint, seal and convey nor a reason to.

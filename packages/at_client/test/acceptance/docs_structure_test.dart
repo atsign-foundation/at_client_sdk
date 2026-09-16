@@ -268,8 +268,9 @@ void main() {
                 : claimed.contains(id)
                     ? 'PROVEN'
                     : 'NO SCENARIO';
-        if (stated != actual)
+        if (stated != actual) {
           wrong.add('$id: table says $stated, tree says $actual');
+        }
       }
 
       expect(wrong, isEmpty,

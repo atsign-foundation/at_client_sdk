@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart'
+    show authenticatorForCramSecret, authenticatorForPrivateKey;
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
@@ -38,8 +39,12 @@ void main() {
   /// enrollment whose id the keyfile would carry; the state under test is a
   /// keyfile that names none.
   Future<void> makeLegacyAtSign(String atSign) async {
-    final atLookup = AtLookupImpl(atSign, rootDomain, virtualenvRootPort);
-    await atLookup.cramAuthenticate(at_demos.cramKeyMap[atSign]!);
+    // CRAM is the authenticator; the first command that needs it runs it.
+    final atLookup = secureSocketLookUps()(
+        atSign: atSign,
+        rootDomain: AtRootDomain(rootDomain, virtualenvRootPort),
+        authenticator:
+            authenticatorForCramSecret(atSign, at_demos.cramKeyMap[atSign]!));
     expect(
         await atLookup.executeCommand(
             'update:privatekey:at_pkam_publickey '
@@ -61,9 +66,12 @@ void main() {
   /// `primary` holds `__manage:rw`, so the answer is the whole roster rather
   /// than one record.
   Future<Map<String, dynamic>> enrollmentsOf(String atSign) async {
-    final atLookup = AtLookupImpl(atSign, rootDomain, virtualenvRootPort);
-    expect(
-        await atLookup.authenticate(at_demos.pkamPrivateKeyMap[atSign]), true,
+    final atLookup = secureSocketLookUps()(
+        atSign: atSign,
+        rootDomain: AtRootDomain(rootDomain, virtualenvRootPort),
+        authenticator: authenticatorForPrivateKey(
+            atSign, at_demos.pkamPrivateKeyMap[atSign]!));
+    expect(await atLookup.pkamAuthenticate(), true,
         reason: 'the flat credential must authenticate, or this reader is '
             'measuring its own failure rather than the roster');
     final response = await atLookup.executeCommand('enroll:list\n', auth: true);
@@ -76,9 +84,7 @@ void main() {
       AtOnboardingPreference(posture: posture)
         ..rootDomain = rootDomain
         ..rootPort = virtualenvRootPort
-        ..isLocalStoreRequired = true
-        ..hiveStoragePath = 'storage/hive/$atSign'
-        ..commitLogPath = 'storage/hive/$atSign/commit'
+        ..storagePath = 'storage/hive/$atSign'
         ..atKeysFilePath = testKeysFile(atSign)
         ..downloadPath = testKeysDir
         ..appName = 'wavi'
@@ -90,13 +96,13 @@ void main() {
   Future<void> writeLegacyKeyfile(String atSign) async {
     final aes = at_demos.aesKeyMap[atSign]!;
     final map = <String, String?>{
-      AuthKeyType.pkamPublicKey:
+      AuthKeyType.aesEncryptedPkamPublicKey:
           EncryptionUtil.encryptValue(at_demos.pkamPublicKeyMap[atSign]!, aes),
-      AuthKeyType.pkamPrivateKey:
+      AuthKeyType.aesEncryptedPkamPrivateKey:
           EncryptionUtil.encryptValue(at_demos.pkamPrivateKeyMap[atSign]!, aes),
-      AuthKeyType.encryptionPublicKey: EncryptionUtil.encryptValue(
+      AuthKeyType.aesEncryptedEncryptionPublicKey: EncryptionUtil.encryptValue(
           at_demos.encryptionPublicKeyMap[atSign]!, aes),
-      AuthKeyType.encryptionPrivateKey: EncryptionUtil.encryptValue(
+      AuthKeyType.aesEncryptedEncryptionPrivateKey: EncryptionUtil.encryptValue(
           at_demos.encryptionPrivateKeyMap[atSign]!, aes),
       AuthKeyType.selfEncryptionKey: aes,
       atSign: aes,
@@ -113,7 +119,7 @@ void main() {
     expect(await service.authenticate(), true,
         reason: 'authentication is with the FLAT key; a failure here is the '
             'fixture, not the behaviour under test');
-    final client = await service.atClient;
+    final client = service.atClient;
     return client!;
   }
 
@@ -176,9 +182,12 @@ void main() {
         reason: 'the enrollment the client authenticates as is one the '
             'atServer holds, not a second one it left behind');
 
-    final legacy = AtLookupImpl(retrofits, rootDomain, virtualenvRootPort);
-    expect(
-        await legacy.authenticate(at_demos.pkamPrivateKeyMap[retrofits]), true,
+    final legacy = secureSocketLookUps()(
+        atSign: retrofits,
+        rootDomain: AtRootDomain(rootDomain, virtualenvRootPort),
+        authenticator: authenticatorForPrivateKey(
+            retrofits, at_demos.pkamPrivateKeyMap[retrofits]!));
+    expect(await legacy.pkamAuthenticate(), true,
         reason: 'a retrofit that silently invalidated the legacy credential '
             'would lock out every sibling clone of the keyfile that has not '
             'upgraded, with no CRAM secret left to recover with');

@@ -15,12 +15,7 @@ import 'package:at_auth/at_auth.dart'
     show ApskSigningKey, apskSigningKeys, publicKeyKidOfBase64;
 import 'package:collection/collection.dart' show ListEquality;
 import 'package:at_chops/at_chops.dart'
-    show
-        HashingAlgoType,
-        MlDsa65PureDartAlgo,
-        RsaKeyPair,
-        RsaSigningAlgo,
-        SigningAlgoType;
+    show MlDsa65PureDartAlgo, RsaSignatureAlgo, SigningAlgoType;
 import 'package:at_commons/at_commons.dart'
     show AtSigningVerificationException, EnrollmentConstants;
 
@@ -410,10 +405,8 @@ Map<String, String> _signatureOver(
   final Uint8List signatureBytes;
   switch (signingAlgo) {
     case SigningAlgoType.rsa2048:
-      signatureBytes = RsaSigningAlgo(
-              RsaKeyPair.create(keys.publicKey, keys.privateKey),
-              HashingAlgoType.sha256)
-          .sign(signingInput);
+      signatureBytes = RsaSignatureAlgo.rsa2048().signBytesSync(signingInput,
+          secretKey: base64Decode(keys.privateKey));
     case SigningAlgoType.mldsa65:
       signatureBytes = MlDsa65PureDartAlgo.signBytesSync(signingInput,
           secretKey: base64Decode(keys.privateKey));
@@ -610,10 +603,10 @@ Future<void> verifyEnvelope(
           publicKey: base64Decode(key.pub),
         );
       case SigningAlgoType.rsa2048:
-        ok = RsaSigningAlgo(null, HashingAlgoType.sha256).verify(
+        ok = await RsaSignatureAlgo.rsa2048().verifyBytes(
           signingInput,
-          signatureBytes,
-          publicKey: key.pub,
+          signature: signatureBytes,
+          publicKey: base64Decode(key.pub),
         );
       default:
         throw AtSigningVerificationException(

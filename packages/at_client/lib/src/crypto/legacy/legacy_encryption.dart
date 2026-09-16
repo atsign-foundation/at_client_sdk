@@ -10,6 +10,8 @@ import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_logger.dart';
+
+import 'string_crypto.dart';
 import 'package:meta/meta.dart';
 
 abstract class AtKeyEncryption {
@@ -76,7 +78,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
         EncryptionUtil.md5CheckSum(await _getSharedWithPublicKey(atKey));
     // Hashed the encryption public key with sha512. This is to ensure the encryption
     // public key of the receiver are same during encryption and decryption process.
-    String hash = await AtChops.hashWith(HashingAlgoType.sha512)
+    String hash = SHA512HashingAlgo()
         .hash((await _getSharedWithPublicKey(atKey)).codeUnits);
     atKey.metadata.pubKeyHash =
         PublicKeyHash(hash, HashingAlgoType.sha512.name);
@@ -130,9 +132,8 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     /// - If found existing in either local or atServer, decrypt it and return
     encryptedSharedKey =
         defaultResponseParser.parse(encryptedSharedKey!).response;
-    final decryptionResult = await _atClient.atChops!
-        .decryptString(encryptedSharedKey, EncryptionKeyType.rsa2048);
-    return decryptionResult.result;
+    return await decryptStringFromBase64(
+        encryptedSharedKey, await atSignDecryptionAlgo(_atClient));
   }
 
   /// Create a new symmetric shared key and share it.
@@ -146,14 +147,11 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     _logger.info(
         "Creating new shared symmetric key as ${atKey.sharedBy} for ${atKey.sharedWith}");
     // Generate new symmetric key
-    var newSymmetricKeyBase64 =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+    var newSymmetricKeyBase64 = AESKey.generate(32).key;
     // Encrypt the new symmetric key with our public key
-    var atChopsEncryptionResult = await _atClient.atChops!
-        .encryptString(newSymmetricKeyBase64, EncryptionKeyType.rsa2048);
-    var encryptedSharedKeyMyCopy = atChopsEncryptionResult.result;
-    _logger.info(
-        'encryptedSharedKeyMyCopy from atChops: $encryptedSharedKeyMyCopy');
+    var encryptedSharedKeyMyCopy = await encryptStringToBase64(
+        newSymmetricKeyBase64, await atSignEncryptionAlgo(_atClient));
+    _logger.info('encryptedSharedKeyMyCopy: $encryptedSharedKeyMyCopy');
 
     // Store my copy for future use
     // First, store to atServer
@@ -207,11 +205,7 @@ abstract class AbstractAtKeyEncryption implements AtKeyEncryption {
     ///         (ii) Encrypt the symmetric key with their public key
     var rsaEncryptionAlgo = RsaEncryptionAlgo();
     rsaEncryptionAlgo.atPublicKey = AtPublicKey.fromString(sharedWithPublicKey);
-    var encryptionResult = await _atClient.atChops!.encryptString(
-        symmetricKeyBase64, EncryptionKeyType.rsa2048,
-        encryptionAlgorithm: rsaEncryptionAlgo);
-    String encryptedSharedSymmetricKey = encryptionResult.result!;
-    return encryptedSharedSymmetricKey;
+    return await encryptStringToBase64(symmetricKeyBase64, rsaEncryptionAlgo);
   }
 
   /// Always encrypts the symmetric key we are using and returns it for
@@ -345,17 +339,10 @@ class SelfKeyEncryption implements AtKeyEncryption {
           'Invalid value type found: ${value.runtimeType}. Valid value type is String');
     }
 
-    // Get SelfEncryptionKey from atChops
-    // https://github.com/atsign-foundation/at_client_sdk/issues/1294 causes selfEncryptionKey to be null in atChops.
-    // Fetch from LocalSecondary until the above issue is fixed.
-    selfEncryptionKey = atClient.atChops?.atChopsKeys.selfEncryptionKey?.key;
-    if (selfEncryptionKey.isNullOrEmpty) {
-      // Fetch Self Encryption Key from Local Secondary
-      // Remove this call after the atChops has self encryption key populated from AtClientMobile.
-      selfEncryptionKey =
-          await _getSelfEncryptionKey(atClient.getLocalSecondary()!);
-    }
-    // If selfEncryptionKey is null in atChops and in Local Secondary throw exception.
+    // The local secondary resolves this across every tier the client has:
+    // an injected AtChops, then its key source, then the keystore.
+    selfEncryptionKey =
+        await _getSelfEncryptionKey(atClient.getLocalSecondary()!);
     if (selfEncryptionKey.isNullOrEmpty) {
       throw SelfKeyNotFoundException(
           'Failed to encrypt the data caused by Self encryption key not found',
@@ -363,24 +350,23 @@ class SelfKeyEncryption implements AtKeyEncryption {
           exceptionScenario: ExceptionScenario.encryptionFailed);
     }
 
-    AtEncryptionResult encryptionResultFromAtChops;
+    String encryptedValue;
     try {
       InitialisationVector iV;
       if (atKey.metadata.ivNonce != null) {
-        iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+        iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
       } else {
-        iV = AtChopsUtil.generateIVLegacy();
+        iV = InitialisationVector.legacy();
       }
       var encryptionAlgo = AESEncryptionAlgo(AESKey(selfEncryptionKey!));
-      encryptionResultFromAtChops = await atClient.atChops!.encryptString(
-          value, EncryptionKeyType.aes256,
-          encryptionAlgorithm: encryptionAlgo, iv: iV);
+      encryptedValue =
+          await encryptStringToBase64(value, encryptionAlgo, iv: iV);
     } on AtEncryptionException catch (e) {
       _logger.severe(
           'encryption exception during self encryption of key: ${atKey.key}. Reason: ${e.toString()}');
       rethrow;
     }
-    return encryptionResultFromAtChops.result;
+    return encryptedValue;
   }
 
   Future<String?> _getSelfEncryptionKey(LocalSecondary localSecondary) async {
@@ -410,20 +396,19 @@ class SharedKeyEncryption extends AbstractAtKeyEncryption {
     // Call super.encrypt to take care of getting hold of the correct
     // encryption key and setting it in super.sharedKey
     await super.encrypt(atKey, value);
-    AtEncryptionResult encryptionResultFromAtChops;
+    String encryptedValue;
     try {
       InitialisationVector iV;
       atKey.metadata.ivNonce ??= EncryptionUtil.generateIV();
-      iV = AtChopsUtil.generateIVFromBase64String(atKey.metadata.ivNonce!);
+      iV = InitialisationVector.fromBase64(atKey.metadata.ivNonce!);
       var encryptionAlgo = AESEncryptionAlgo(AESKey(sharedKey));
-      encryptionResultFromAtChops = await _atClient.atChops!.encryptString(
-          value, EncryptionKeyType.aes256,
-          encryptionAlgorithm: encryptionAlgo, iv: iV);
+      encryptedValue =
+          await encryptStringToBase64(value, encryptionAlgo, iv: iV);
     } on AtEncryptionException catch (e) {
       _logger.severe(
           'encryption exception during shared key encryption of key: ${atKey.key}. Reason: ${e.toString()}');
       rethrow;
     }
-    return encryptionResultFromAtChops.result;
+    return encryptedValue;
   }
 }

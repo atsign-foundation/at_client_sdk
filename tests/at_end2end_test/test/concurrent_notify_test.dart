@@ -17,10 +17,9 @@ import 'package:uuid/uuid.dart';
 /// `appMetadata.providerId`, a real atServer delivers to a real monitor, and
 /// the receiver routes by that id to hand the test back a decrypted value.
 ///
-/// `AtClientManager` is a singleton whose `setCurrentAtSign` stops the outgoing
-/// client and unsets its `notificationService`, so `ConcurrentClients` gives
-/// each atSign its own manager and a subscription taken on one survives the
-/// other coming up.
+/// `AtClientManager` is a singleton whose switch stops the outgoing client,
+/// so `ConcurrentClients` gives each atSign its own manager and a subscription
+/// taken on one survives the other coming up.
 void main() {
   late String alice;
   late String bob;

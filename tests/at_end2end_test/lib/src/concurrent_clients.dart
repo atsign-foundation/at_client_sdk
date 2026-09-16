@@ -5,16 +5,15 @@ import 'package:at_utils/at_logger.dart';
 /// Two atSigns' clients, live at the same time.
 ///
 /// One `AtClientManager` per atSign — the public constructor, not the
-/// singleton — each owning its own client, `notificationService` and
-/// `syncService`. Under the singleton, `setCurrentAtSign` stops the outgoing
-/// client and unsets its `notificationService`, so a subscription taken before
-/// a switch is dead by the time there is anything to send it.
+/// singleton — each holding its own client, `notificationService` and
+/// `syncService`. Under the singleton, a switch stops the outgoing client, so
+/// a subscription taken before a switch is dead by the time there is anything
+/// to send it.
 ///
-/// ⚠️ While a [ConcurrentClients] is open, nothing may call
-/// `AtClientManager.getInstance().setCurrentAtSign` for either of its atSigns:
-/// `AtClientImpl`'s instance cache is keyed by atSign and nothing else, so the
-/// call hands the *same cached* client a freshly built `notificationService`,
-/// silently replacing the one this holds a subscription on. The symptom is a
+/// ⚠️ While a [ConcurrentClients] is open, nothing may bring up either of its
+/// atSigns through `TestSuiteInitializer` on the singleton: a client already
+/// running as the same principal is stopped and a new one opened, and the
+/// subscription this holds goes with the stopped one. The symptom is a
 /// subscription that stays open and never fires, which reads as "the
 /// notification was not sent".
 class ConcurrentClients {

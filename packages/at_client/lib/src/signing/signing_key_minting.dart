@@ -1,13 +1,10 @@
 import 'package:at_auth/at_auth.dart'
-    show
-        AtEnrollment,
-        EnrollmentUpdateRequest,
-        CryptographicMaterialAlgorithm,
-        KeyEntryStatus,
-        WrittenAtKeysIo;
+    show CryptographicMaterialAlgorithm, KeyEntryStatus, WrittenAtKeysIo;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65KeyPair, RsaKeyPair, SigningAlgoType;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/enroll/enrollment_update_request.dart';
+import 'package:at_client/src/enroll/enrollment_updater.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart'
     show ApkamSigning, serialiseApskWrite;
@@ -27,10 +24,10 @@ import 'package:at_utils/at_utils.dart' show AtSignLogger, AtUtils;
 /// filed after the addition, so that at every instant every key this client
 /// might sign with is named in the advertisement.
 class SigningKeyMinting with ApkamSigning {
-  /// Reconciles [atClient]'s signing keys, publishing through [enrollment] when
-  /// one is supplied and a fresh [AtEnrollment] otherwise.
-  SigningKeyMinting(this.atClient, {AtEnrollment? enrollment})
-      : _enrollment = enrollment ?? AtEnrollment.create();
+  /// Reconciles [atClient]'s signing keys, publishing through [updater] when
+  /// one is supplied and a fresh [EnrollmentUpdater] otherwise.
+  SigningKeyMinting(this.atClient, {EnrollmentUpdater? updater})
+      : _updater = updater ?? EnrollmentUpdater();
 
   @override
   final AtClient atClient;
@@ -38,7 +35,7 @@ class SigningKeyMinting with ApkamSigning {
   @override
   final AtSignLogger logger = AtSignLogger('SigningKeyMinting');
 
-  final AtEnrollment _enrollment;
+  final EnrollmentUpdater _updater;
 
   /// Mints, advertises and files what the in-use set names and the enrollment
   /// lacks; retires what it holds and the set no longer names, leaving a
@@ -71,7 +68,7 @@ class SigningKeyMinting with ApkamSigning {
     // authentication keypair reports would instead stop an mldsa65 signing key
     // from ever being minted.
     final authenticationIsAlsoTheSigningKey = held.isEmpty &&
-        authenticationSigningKey?.algorithm == SigningAlgoType.rsa2048;
+        (await authenticationSigningKey)?.algorithm == SigningAlgoType.rsa2048;
     final missing = [
       for (final algorithm in SigningAlgoType.strongestFirst)
         if (wanted.contains(algorithm) &&
@@ -172,22 +169,22 @@ class SigningKeyMinting with ApkamSigning {
             ),
           ...await withdrawnSigningKeys,
         ], (key) => key.algorithm),
-        authentication: authenticationSigningKey);
+        authentication: await authenticationSigningKey);
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
 
-    if (isAtSignCredential(atLookUp?.enrollmentId)) {
+    if (isAtSignCredential(atClient.enrollmentId)) {
       // NOTE: the unlocked variant — the caller holds the lock for the whole
       // publish-then-file section, and re-acquiring it here deadlocks.
       await publishPublicSigningKeyLocked(value: apskValueOf(entries));
       return;
     }
     final bare = bareApskValueOf(entries);
-    await _enrollment.update(
+    await _updater.update(
         EnrollmentUpdateRequest(
-            enrollmentId: atLookUp!.enrollmentId!,
+            enrollmentId: atClient.enrollmentId!,
             signingKeys: bare == null ? entries : null,
             apskLegacy: bare),
-        atLookUp);
+        atLookUp!);
   }
 
   Future<void> _file(

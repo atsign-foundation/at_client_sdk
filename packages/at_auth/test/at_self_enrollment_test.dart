@@ -280,7 +280,9 @@ void main() {
     final denials = commands.where((c) => c.startsWith('enroll:deny')).toList();
     expect(denials, hasLength(1),
         reason: 'the abort must deny the enrollment it just created');
-    expect(denials.single, contains('new-123'));
+    // FROZEN: the same command at_client's `client.enrollments.deny` sends,
+    // built through the one EnrollVerbBuilder; the atServer parses this.
+    expect(denials.single, 'enroll:deny:{"enrollmentId":"new-123"}\n');
   });
 
   test(
@@ -364,11 +366,10 @@ void main() {
         reason: 'the legacy enrollment has no typed signing material; its '
             'RSA keypair lives in the flat fields');
 
-    final atChops = after.toAtChopsForEnrollment('new-123');
+    final keyPair = after.authenticationKeyPairFor('new-123')!;
+    expect(keyPair.algorithm, SigningAlgoType.mldsa65);
     const challenge = '_deadbeef@alice:cafe';
-    final result = atChops.sign(AtSigningInput(challenge)
-      ..signingAlgoType = SigningAlgoType.mldsa65
-      ..signingMode = AtSigningMode.pkam);
+    final signature = signPkamChallenge(keyPair, challenge);
     final publicKey = after
         .getKey('new-123', 'auth:mldsa65:1',
             CryptographicMaterialRole.publicAuthentication)!
@@ -376,11 +377,11 @@ void main() {
         .toString();
     final ok = await MlDsa65PureDartAlgo().verifyBytes(
         Uint8List.fromList(challenge.codeUnits),
-        signature: base64Decode(result.result),
+        signature: base64Decode(signature),
         publicKey: base64Decode(publicKey));
     expect(ok, true,
         reason: 'this is the atServer\'s verify side: the whole client chain '
-            '(keyfile -> AtChops -> pkam dispatch) must be genuinely ML-DSA');
+            '(keyfile -> keypair -> pkam signing) must be genuinely ML-DSA');
   });
 
   group('an enrollment that owns a signing key from birth', () {
@@ -483,16 +484,15 @@ void main() {
   /// such a connection is a retrofit of `primary` and is approved outright.
   /// The client therefore never approves its own request.
   group('a client holding no enrollment does not approve its own request', () {
-    late final AtEncryptionKeyPair encryptionKeyPair;
+    late final RsaKeyPair encryptionKeyPair;
     late final String selfEncryptionKey;
 
     setUpAll(() {
       // A real keypair: the submitter wraps the symmetric key to the public
       // half and the approver unwraps it with the private half, so a stub
       // would leave the round trip untested.
-      encryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
-      selfEncryptionKey =
-          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+      encryptionKeyPair = RsaKeyPair.generate();
+      selfEncryptionKey = AESKey.generate(32).key;
     });
 
     AtKeys keysFor({String? enrollmentId}) => AtKeys()
@@ -509,9 +509,6 @@ void main() {
     /// BOTH arms meet — and approves or denies whatever is asked of it after.
     MockAtLookUp parkingLookUp() {
       final mock = MockAtLookUp();
-      when(() => mock.atChops).thenReturn(AtChopsImpl(
-          AtChopsKeys.create(encryptionKeyPair, null)
-            ..selfEncryptionKey = AESKey(selfEncryptionKey)));
       when(() =>
           mock.executeCommand(any(that: startsWith('enroll:request:')),
               auth: any(named: 'auth'))).thenAnswer(

@@ -16,11 +16,11 @@ void main() {
 
   /// The AtKeys at_auth hands the builder: the APKAM keypair it just
   /// generated, and no enrollmentId — the atServer has not assigned one.
-  Future<(InMemoryAtKeysIo, AtKeys, AtPkamKeyPair)> freshKeys() async {
-    final apkam = AtChopsUtil.generateAtPkamKeyPair();
-    final keys = AtKeys()
-      ..apkamPublicKey = AtBytes.fromString(apkam.atPublicKey.publicKey)
-      ..apkamPrivateKey = AtBytes.fromString(apkam.atPrivateKey.privateKey);
+  Future<(InMemoryAtKeysIo, AtKeys, RsaKeyPair)> freshKeys() async {
+    final apkam = RsaKeyPair.generate();
+    final keys = AtKeys.legacy(
+        apkamPublicKey: apkam.atPublicKey.publicKey,
+        apkamPrivateKey: apkam.atPrivateKey.privateKey);
     final io = InMemoryAtKeysIo();
     await io.write(atSign, keys);
     return (io, keys, apkam);

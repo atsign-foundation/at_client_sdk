@@ -18,6 +18,7 @@ import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart'
     show PublishedNskeyKeyRing, requestAndFileNskeyPrivate;
 import 'package:at_client/src/enroll/privilege_resolver.dart';
+import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/key_package_minting.dart'
@@ -125,6 +126,50 @@ class PqStartupGates {
   /// broadcasts a pull. Off means the key ring is built without the
   /// conveyance-request hook.
   final bool askOnReadMiss;
+
+  /// The gates that are off, in declaration order, or `every step` when none
+  /// are — so a difference between two sets reads as the steps it changes.
+  @override
+  String toString() {
+    final off = [
+      for (final gate in _named.entries)
+        if (!gate.value) gate.key
+    ];
+    return off.isEmpty ? 'every step' : 'every step but ${off.join(', ')}';
+  }
+
+  /// NOTE: by value, because only `const` instances are canonicalized — a
+  /// caller writing `PqStartupGates()` without `const` would otherwise differ
+  /// from the default over a difference that does not exist.
+  @override
+  bool operator ==(Object other) {
+    if (other is! PqStartupGates) return false;
+    final mine = _named.values.toList();
+    final theirs = other._named.values.toList();
+    for (var i = 0; i < mine.length; i++) {
+      if (mine[i] != theirs[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hashAll(_named.values);
+
+  Map<String, bool> get _named => {
+        'hydrateHeldSecrets': hydrateHeldSecrets,
+        'collectConveyedKeys': collectConveyedKeys,
+        'startEnvelopeListener': startEnvelopeListener,
+        'mintInUseSigningKeys': mintInUseSigningKeys,
+        'reconcileKeyPackage': reconcileKeyPackage,
+        'seedNamespaceKeys': seedNamespaceKeys,
+        'requestRootPrivate': requestRootPrivate,
+        'requestMissingPrivates': requestMissingPrivates,
+        'publishRootLink': publishRootLink,
+        'publishChainLink': publishChainLink,
+        'sweepUnanchoredEnrollments': sweepUnanchoredEnrollments,
+        'reconcileEnrollmentSnapshot': reconcileEnrollmentSnapshot,
+        'askOnReadMiss': askOnReadMiss,
+      };
 }
 
 /// One PQ startup per client — the single owner of the nskey key ring,
@@ -367,7 +412,10 @@ class PqClientBootstrap {
     try {
       await sharing.startListening();
     } catch (e) {
-      _logger.warning('Could not start the envelope listener for $_atSign; '
+      logSwallowed(
+          _logger,
+          e,
+          'Could not start the envelope listener for $_atSign; '
           'this client will not answer other enrollments\' secret requests '
           'and will not pick up envelopes that arrive later: $e');
     }
@@ -384,7 +432,10 @@ class PqClientBootstrap {
       // rather than building a second, whose events nothing can hear.
       await collectConveyedKeyMaterial(_atClient, keysIo, ring: ring);
     } catch (e, st) {
-      _logger.warning('Collecting conveyed key material failed for $_atSign; '
+      logSwallowed(
+          _logger,
+          e,
+          'Collecting conveyed key material failed for $_atSign; '
           'this enrollment holds only what it already had, and the next '
           'start retries: $e, $st');
     }
@@ -471,7 +522,10 @@ class PqClientBootstrap {
         namespace: askIn,
       );
     } catch (e, st) {
-      _logger.warning('Could not ask for the signing root private for '
+      logSwallowed(
+          _logger,
+          e,
+          'Could not ask for the signing root private for '
           '$_atSign; this enrollment stays unanchored and the next start '
           'retries: $e, $st');
     }
@@ -507,7 +561,10 @@ class PqClientBootstrap {
       await chain.publishOwnRootLink(
           isFullyPrivileged: _privilege.isFullyPrivileged, keysIo: _keysIo);
     } catch (e, st) {
-      _logger.warning('Anchoring $_atSign to its signing root failed; the '
+      logSwallowed(
+          _logger,
+          e,
+          'Anchoring $_atSign to its signing root failed; the '
           'enrollment falls back to its approval-chain link and the next '
           'start retries: $e, $st');
     }
@@ -518,7 +575,10 @@ class PqClientBootstrap {
     try {
       await chain.publishPendingLink();
     } catch (e, st) {
-      _logger.warning('Publishing the approval-chain link failed for '
+      logSwallowed(
+          _logger,
+          e,
+          'Publishing the approval-chain link failed for '
           '$_atSign; the enrollment stays unsigned, which verifiers '
           'tolerate, and the next start retries: $e, $st');
     }
@@ -536,7 +596,10 @@ class PqClientBootstrap {
         await _sweepUnanchored();
       }
     } catch (e, st) {
-      _logger.warning('The chain sweep failed for $_atSign; unanchored '
+      logSwallowed(
+          _logger,
+          e,
+          'The chain sweep failed for $_atSign; unanchored '
           'enrollments stay unanchored, which verifiers tolerate, and the '
           'next privileged start retries: $e, $st');
     }

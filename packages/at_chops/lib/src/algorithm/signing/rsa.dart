@@ -87,7 +87,13 @@ final class RsaSignatureAlgo implements AtSignatureAlgorithm {
   /// would label the signature with the wrong [signingAlgoType].
   @override
   Future<Uint8List> signBytes(Uint8List message,
-      {required Uint8List secretKey}) async {
+          {required Uint8List secretKey}) async =>
+      signBytesSync(message, secretKey: secretKey);
+
+  /// Synchronous [signBytes]. The PKCS#1 v1.5 computation is synchronous, and
+  /// this exposes it to callers that cannot await — envelope signing builds a
+  /// signed document in a synchronous path.
+  Uint8List signBytesSync(Uint8List message, {required Uint8List secretKey}) {
     final RSAPrivateKey key = _parsePrivateKey(secretKey);
     return switch (hashingAlgoType) {
       HashingAlgoType.sha256 => key.createSHA256Signature(message),

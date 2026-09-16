@@ -19,7 +19,6 @@
     'and the runner has never collected it: it does not end in _test.dart.')
 library;
 
-import 'package:at_client/at_client.dart';
 import 'package:at_contact/src/at_contacts_impl.dart';
 import 'package:at_contact/src/model/at_contact.dart';
 import 'package:at_contact/src/model/at_group.dart';
@@ -31,10 +30,8 @@ Future<void> main() async {
   late AtContactsImpl atContactsImpl;
   AtGroup? atGroup;
   var atSign = '@sitaram🛠';
-  var preference = TestUtil.getPreferenceLocal();
   try {
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atSign, 'me', preference);
+    var atClientManager = await TestUtil.openAsCurrent(atSign);
     atClientManager.atClient.syncService.sync();
     atContactsImpl = await AtContactsImpl.getInstance(atSign);
     // set contact details

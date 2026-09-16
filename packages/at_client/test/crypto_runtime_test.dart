@@ -122,7 +122,8 @@ void main() {
 
         expect(id, 'preparing');
         expect(atKey.metadata.appMetadata, isNull,
-            reason: 'the put pre-pass may fall back to legacy after this '
+            reason:
+                'the put pre-pass may fall back to the legacy provider after this '
                 'call; a key stamped with the provider that then declined '
                 'would claim a scheme its value was never sealed under');
         expect(preparing.prepareCalls, 1);

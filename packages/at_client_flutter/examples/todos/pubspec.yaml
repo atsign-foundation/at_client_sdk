@@ -9,10 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  at_client: ^3.11.0
+  at_client: ^3.15.0-rc1
   at_client_flutter:
     path: ../../
-  at_auth: ^4.0.0-rc1
   at_commons: ^5.8.0
   at_lookup: ^3.5.0
   at_chops: ^3.0.0

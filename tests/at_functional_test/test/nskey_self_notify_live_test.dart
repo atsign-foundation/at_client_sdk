@@ -7,9 +7,7 @@ library;
 
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -53,20 +51,16 @@ void main() {
     await AtClientSecretSharing.forClient(approver).register();
   });
 
-  /// An enrollment with its **own** local store.
+  /// An enrollment with its **own** local store, which `enrolAndAuthenticate`
+  /// gives every enrollment through `FunctionalStorage.forPrincipal`.
   ///
-  /// `TestUtils.getPreference` keys `hiveStoragePath` on the atSign alone, so
-  /// without this every enrollment of one atSign lands in one directory. The
-  /// notification replay watermark is a `local:` record in that store, and a
-  /// self notification reaches every listening monitor of the atSign, so a
-  /// shared store lets the sibling's monitor advance the watermark past a
+  /// The notification replay watermark is a `local:` record in that store, and
+  /// a self notification reaches every listening monitor of the atSign, so a
+  /// shared store would let the sibling's monitor advance the watermark past a
   /// notification this client has not received.
   Future<EnrolledClient> enrol(String device) {
     final preference =
         TestUtils.getPreference(atSign, posture: legacyPlusPqProviders);
-    preference
-      ..hiveStoragePath = 'test/hive/client/$atSign/$device-$runId'
-      ..commitLogPath = 'test/hive/client/$atSign/$device-$runId';
     return enrolAndAuthenticate(
       approver: approver,
       atSign: atSign,
@@ -82,16 +76,6 @@ void main() {
 
   test('a self notification reaches a second enrollment and decrypts',
       timeout: Timeout(Duration(minutes: 3)), () async {
-    // NOTE: raised HERE, not in `setUpAll`. `TestUtils.initAtClient` sets
-    // `AtSignLogger.root_level` as its first statement, so a level set before
-    // it is silently undone. `finest` is what this file needs: the monitor's
-    // `RECEIVED notification` frames, which distinguish a receiver that got the
-    // treaty and discarded it from one that never saw it, log at `finer`.
-    AtSignLogger.root_level = 'finest';
-    expect(AtSignLogger.root_level, 'finest',
-        reason: 'the level must survive setup, or every conclusion drawn from '
-            'the absence of a log line below is a claim about the filter');
-
     // NOTE: the nskey is minted by the APPROVER, before either enrollment
     // exists. Conveyance at approval can only hand over material the approver
     // already holds, so a later mint leaves the receiver with no private for
@@ -165,20 +149,16 @@ void main() {
     final notifications =
         receiver.client.notificationService as NotificationServiceImpl;
     // No `regex:` — subscribe to everything and filter here. A wrong regex
-    // fails identically to a notification that never arrived. Every key the
-    // monitor delivers is recorded instead: the atServer's `statsNotification`
-    // arrives every ~15s once a monitor is listening, so it is the positive
-    // control that separates a dead monitor from a missing treaty.
+    // fails identically to a notification that never arrived, so every key the
+    // monitor delivers is recorded and named in the failure instead.
     final seen = <String>[];
     final received = Completer<AtNotification>();
     // The one sent while this listener's monitor is closed; declared here
     // because the listener has to be watching before it is sent.
     final queued = Completer<AtNotification>();
-    final monitorProvenLive = Completer<void>();
     final subscription =
         notifications.subscribe(shouldDecrypt: true).listen((n) {
       seen.add(n.key);
-      if (!monitorProvenLive.isCompleted) monitorProvenLive.complete();
       if (n.key.contains('treaty$runId') && !received.isCompleted) {
         received.complete(n);
       }
@@ -187,25 +167,29 @@ void main() {
       }
     });
     addTearDown(subscription.cancel);
+    // What the receiver was handed and did NOT deliver. With `seen` this
+    // separates a notification that arrived and could not be opened, or is
+    // still waiting for its key, from one that never arrived.
+    final dropped = <DroppedNotification>[];
+    final droppedSubscription = notifications.droppedEvents.listen(dropped.add);
+    addTearDown(droppedSubscription.cancel);
+    var parked = 0;
+    final parkedSubscription =
+        notifications.parkedEvents.listen((_) => parked++);
+    addTearDown(parkedSubscription.cancel);
+    String undelivered() => '  it dropped ${dropped.length}: '
+        '${dropped.map((d) => d.reason).toList()}\n'
+        '  it parked $parked, waiting for a key';
 
-    // NOTE: wait until THIS listener has been handed a notification before
-    // notifying anything. The atServer's inbound notification stream is a
-    // broadcast stream and `MonitorVerbHandler` subscribes to it only when it
-    // processes the `monitor:` command, so a notification enqueued before that
-    // instant is never delivered on that connection at all. The only recovery
-    // is the `monitor:…:<epochMillis>` form, and the client sends an epoch only
-    // once it has a last-received-notification time, which a first-ever monitor
-    // does not. `currentListenerState == listening` is NOT this gate — the
-    // Monitor sets it straight after writing the command, which says nothing
-    // about the atServer having processed it. A `statsNotification` actually
-    // arriving does.
-    await monitorProvenLive.future.timeout(
-      Duration(seconds: 60),
-      onTimeout: () => throw StateError(
-          'no notification of any kind reached the listener within 60s, so the '
-          'monitor is not up; notifying now would repeat the race this gate '
-          'exists to close'),
-    );
+    // NOTE: wait until the monitor is REGISTERED before notifying anything.
+    // `MonitorVerbHandler` subscribes to the atServer's inbound stream only
+    // when it processes the `monitor:` command; a notification enqueued before
+    // that instant reaches this connection only through the replay the
+    // `monitor:…:<epochMillis>` form asks for, which a first monitor now sends
+    // from the service's creation time. Waiting keeps this row about live
+    // delivery rather than replay. See [awaitMonitorListening] for why
+    // `listening` answers this and what it still cannot promise.
+    await awaitMonitorListening(notifications);
 
     // The provider is chosen PER CALL, not by posture: a per-call algorithm
     // overrides the posture's value for that one axis, and the migration
@@ -221,6 +205,7 @@ void main() {
           'the treaty notification did not reach the second enrollment within '
           '90s, and the notify above reported `delivered`.\n'
           "  the monitor saw ${seen.length}: $seen\n"
+          '${undelivered()}\n'
           '${seen.isNotEmpty ? "  It IS receiving, so this is not monitor readiness." : "  It received NOTHING, not even statsNotification, so the "
               "monitor is not up and this says nothing about delivery."}'),
     );
@@ -234,8 +219,11 @@ void main() {
         symmetricAesGcmCryptoProviderId,
         reason: 'providerId must travel ON THE FRAME. A stored key carries its '
             'appMetadata in the record; a notification has to carry it in the '
-            'notification, and without it the receiver falls back to legacy '
+            'notification, and without it the receiver falls back to the legacy provider '
             'and hunts a shared_key a PQ write never created');
+
+    expect(dropped.where((d) => d.key.contains('treaty$runId')), isEmpty,
+        reason: 'delivered once and dropped for no other subscriber either');
 
     expect(notification.value, value,
         reason: 'the second enrollment opens the content key with the nskey '
@@ -327,7 +315,8 @@ void main() {
           'asked only for what followed the reconnect — which is what happened '
           'while the two enrollments shared one store, because the SENDER\'s '
           'monitor received this and moved the shared watermark past it.\n'
-          '  the monitor saw ${seen.length}: $seen'),
+          '  the monitor saw ${seen.length}: $seen\n'
+          '${undelivered()}'),
     );
 
     expect(afterOutage.metadata?.appMetadata?.providerId,

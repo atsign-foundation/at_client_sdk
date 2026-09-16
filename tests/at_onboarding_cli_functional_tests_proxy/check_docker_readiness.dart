@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:at_onboarding_cli_functional_tests_proxy/virtualenv_ports.dart';
+
 import 'lib/docker_utils.dart';
 
 const List<String> requiredContainers = ['at_proxyserver', 'at_virtualenv'];
@@ -9,9 +11,10 @@ const Duration retryDelay = Duration(seconds: 3);
 
 /// Where this suite's clients connect: the proxy, which answers an atDirectory
 /// lookup with its OWN address so every later connection comes back through
-/// it. `cli_test.dart` passes exactly this as `proxy:vip.ve.atsign.zone:443`.
+/// it. `cli_test.dart` passes exactly this as
+/// `proxy:vip.ve.atsign.zone:$PROXY_PORT`.
 const String proxyHost = 'vip.ve.atsign.zone';
-const int proxyPort = 443;
+final int proxyPort = virtualenvProxyPort;
 
 /// A pre-provisioned atSign, used only for a stateless `from:`.
 ///
@@ -67,7 +70,7 @@ Future<bool> proxyServesSecondary() async {
         return true;
       }
       print('attempt $attempt of $serveMaxTries: the proxy is listening but '
-          'the atServer has not answered yet');
+          '$text');
     } catch (e) {
       print('attempt $attempt of $serveMaxTries: cannot reach the proxy at '
           '$proxyHost:$proxyPort yet ($e)');

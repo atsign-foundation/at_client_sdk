@@ -27,7 +27,7 @@ Future<void> main() async {
   final priorRs = prior?['rs256'] as Map<String, dynamic>?;
   final priorMl = prior?['mlDsa65'] as Map<String, dynamic>?;
 
-  final rsaPair = AtChopsUtil.generateAtPkamKeyPair();
+  final rsaPair = RsaKeyPair.generate();
   final rsaPublic =
       priorRs?['apskPublicKey'] as String? ?? rsaPair.atPublicKey.publicKey;
   final rsaPrivate =

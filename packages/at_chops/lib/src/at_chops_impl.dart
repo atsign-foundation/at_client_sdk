@@ -222,13 +222,20 @@ class AtChopsImpl extends AtChops {
     switch (encryptionKeyType) {
       case EncryptionKeyType.rsa2048:
       case EncryptionKeyType.rsa4096:
-        return RsaEncryptionAlgo.fromKeyPair(_getEncryptionKeyPair(keyName)!);
+        var keyPair = _getEncryptionKeyPair(keyName);
+        if (keyPair == null) {
+          throw AtEncryptionException('Encryption keypair not found for keyName: $keyName');
+        }
+        return RsaEncryptionAlgo.fromKeyPair(keyPair);
       case EncryptionKeyType.ecc:
         throw AtEncryptionException('EncryptionKeyType.ecc not supported');
       case EncryptionKeyType.aes128:
-        return AESEncryptionAlgo(_getSymmetricKey(keyName)! as AESKey);
       case EncryptionKeyType.aes256:
-        return AESEncryptionAlgo(_getSymmetricKey(keyName)! as AESKey);
+        var symmetricKey = _getSymmetricKey(keyName);
+        if (symmetricKey == null) {
+          throw AtEncryptionException('Symmetric key not found for keyName: $keyName');
+        }
+        return AESEncryptionAlgo(symmetricKey as AESKey);
       default:
         throw AtEncryptionException(
             'Cannot find encryption algorithm for encryption key type $encryptionKeyType');
@@ -240,7 +247,7 @@ class AtChopsImpl extends AtChops {
   // at_client to handle provider-level crypto routing.
   AtEncryptionKeyPair? _getEncryptionKeyPair(String? keyName) {
     if (keyName == null) {
-      return atChopsKeys.atEncryptionKeyPair!;
+      return atChopsKeys.atEncryptionKeyPair;
     }
     // #TODO For now return atEncryptionKeyPair which can be rsa2048 or rsa4096.
     // #TODO  When we remove atChopsKeys from AtChopsImpl constructor, plugin implementation for different keyNames
@@ -252,9 +259,9 @@ class AtChopsImpl extends AtChops {
   // at_client to handle provider-level crypto routing.
   SymmetricKey? _getSymmetricKey(String? keyName) {
     if (keyName == null || keyName == KeyNames.selfEncryptionKey) {
-      return atChopsKeys.selfEncryptionKey!;
+      return atChopsKeys.selfEncryptionKey;
     } else if (keyName == KeyNames.apkamSymmetricKey) {
-      return atChopsKeys.apkamSymmetricKey!;
+      return atChopsKeys.apkamSymmetricKey;
     }
     return null;
   }

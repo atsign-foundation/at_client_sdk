@@ -11,7 +11,6 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -65,27 +64,20 @@ void main() {
     /// Authenticates on a fresh connection, signing RSA with the enrollment's
     /// real keypair while telling the atServer [claimedAlgo].
     Future<String?> authenticateClaiming(String claimedAlgo) async {
-      final lookup = AtLookupImpl(atSign, rootDomain, TestUtils.rootServerPort);
+      final lookup = TestUtils.unauthenticatedLookUp(atSign);
       try {
         final challenge = (await lookup.executeCommand('from:$atSign\n'))!
             .trim()
             .replaceFirst(RegExp(r'^data:'), '');
 
-        final chops = AtChopsImpl(AtChopsKeys.create(
-          AtEncryptionKeyPair.create(
-              enrolled.keys.defaultEncryptionPublicKey!.toString(), ''),
-          AtPkamKeyPair.create(enrolled.keys.apkamPublicKey!.toString(),
-              enrolled.keys.apkamPrivateKey!.toString()),
-        ));
-
         // Always RSA — this is the enrollment's actual key, and the record says
         // so. Only the claim below varies.
-        final signature = chops
-            .sign(AtSigningInput(challenge)
-              ..signingAlgoType = SigningAlgoType.rsa2048
-              ..hashingAlgoType = HashingAlgoType.sha256
-              ..signingMode = AtSigningMode.pkam)
-            .result;
+        final keyPair =
+            enrolled.keys.authenticationKeyPairFor(enrolled.enrollmentId)!;
+        expect(keyPair.algorithm, SigningAlgoType.rsa2048,
+            reason: 'the enrollment was submitted under rsa2048, so its '
+                'genuine signature is an RSA one');
+        final signature = signPkamChallenge(keyPair, challenge);
 
         final command = (PkamVerbBuilder()
               ..signingAlgo = claimedAlgo

@@ -41,6 +41,16 @@ void main() {
     atClient = _MockAtClient();
     dataEvents = StreamController<DataEvent>.broadcast();
     when(() => atClient.atSign).thenReturn(selfAtSign);
+    // NOTE: the collection fetches a sub-object's envelope when a data event
+    // names one. A read of a key nothing stored is what this fixture should
+    // answer; unstubbed it answers null into a non-nullable Future<AtValue>
+    // and the fetch reports a defect instead of a miss.
+    when(() => atClient.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async =>
+            throw AtKeyNotFoundException('${inv.positionalArguments[0]}'));
+    when(() => atClient.get(any())).thenAnswer((inv) async =>
+        throw AtKeyNotFoundException('${inv.positionalArguments[0]}'));
   });
 
   tearDown(() async {

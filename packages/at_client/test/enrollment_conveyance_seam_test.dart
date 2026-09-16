@@ -15,7 +15,6 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
-import 'package:at_chops/at_chops.dart';
 
 class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   final List<EnrollmentRequestDecision> approvals = [];
@@ -23,7 +22,7 @@ class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision decision, AtLookUp atLookUp,
-      {AtChops? approverChops}) async {
+      {required ApproverKeyMaterial approverKeys}) async {
     approvals.add(decision);
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);
@@ -112,6 +111,7 @@ void main() {
       {String recordEnrollmentId = enrolleeId}) {
     final approver = buildRemoteBackedMockClient(
         atSign: atSign, enrollmentId: 'approver-1', remoteData: remoteData);
+    stubApproverKeys(approver);
     final key = '$recordEnrollmentId.new.enrollments.__manage$atSign';
     final secondary = approver.getRemoteSecondary()!;
     stubApproveListReads(secondary, 'data:${jsonEncode({key: record})}');
@@ -155,6 +155,30 @@ void main() {
         reason: 'the refusal is about conveyance, not the approval itself — '
             'the server-side approve had already happened when it fired');
     expect(conveyance.conveyed, hasLength(1));
+  });
+
+  test(
+      'a key package that could not be checked fails the approval naming '
+      'the check, not the package', () async {
+    final conveyance = _StatusConveyance(KeyPackageStatus.unverified);
+    final enrollment = _RecordingAtEnrollment();
+
+    await expectLater(
+        approveThrough(conveyance, enrollment: enrollment),
+        throwsA(isA<EnrollmentConveyanceException>()
+            .having(
+                (e) => e.message,
+                'message',
+                allOf(contains('could not be checked'),
+                    isNot(contains('Revoke'))))
+            .having((e) => e.keyPackageStatus, 'keyPackageStatus',
+                KeyPackageStatus.unverified)),
+        reason: 'a fetch that failed during the check says nothing about the '
+            'package, so the approver is not told to revoke a device whose '
+            'package was never examined');
+
+    expect(enrollment.approvals, hasLength(1),
+        reason: 'the server-side approval had already happened');
   });
 
   test('the conveyance refusal still reads as an AtEnrollmentException',

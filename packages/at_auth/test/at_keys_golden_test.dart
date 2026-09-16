@@ -72,7 +72,9 @@ void main() {
 
       // The golden, spelled out: legacy flat fields first (merged, not
       // nested — upgrading a legacy file is additive), then version/atsign,
-      // then the atSign's own keys, then one entry per enrollment carrying
+      // then an always-empty top-level `keys` array, which readers in the
+      // field may expect wherever there is a `version`, then the atSign's own
+      // keys, then one entry per enrollment carrying
       // its snapshot and its keys. `operations` is omitted when empty, and so
       // is a snapshot field nobody has reconciled yet — absent means "not
       // known", where an empty namespaces map would state "no grants". A key
@@ -89,6 +91,7 @@ void main() {
           '"note":"kept",'
           '"version":1,'
           '"atsign":"@alice",'
+          '"keys":[],'
           '"atsignKeys":['
           '{"keyId":"nskey.buzz.abc123","material":['
           '{"role":"privateDecapsulation","algorithm":"xwing",'

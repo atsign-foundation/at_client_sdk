@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:at_client/src/lifecycle/lookups.dart';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart'
@@ -12,12 +13,13 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/secondary_address_finder_source.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
 
@@ -31,12 +33,20 @@ class RemoteSecondary implements Secondary {
 
   late AtLookUp atLookUp;
 
+  /// The atDirectory lookup this connection resolves its atServer with, or
+  /// null to read the process-wide one per lookup.
+  SecondaryAddressFinder? _secondaryAddressFinder;
+
+  // ignore: deprecated_member_use
   AtChops? _atChops;
 
+  // ignore: deprecated_member_use
   AtChops? get atChops => _atChops;
 
+  // ignore: deprecated_member_use
   set atChops(AtChops? value) {
     _atChops = value;
+    // ignore: deprecated_member_use
     atLookUp.atChops = value;
     _installAuthenticator();
   }
@@ -52,6 +62,18 @@ class RemoteSecondary implements Secondary {
   /// bare signer names the same one the lookup was told to use.
   late final SigningAlgoType _signingAlgoType;
 
+  /// Where this connection's outcomes are reported, when the client gave it
+  /// one: every verb that comes back says online, every one that cannot get
+  /// out or is refused says which.
+  AtConnection? _connection;
+
+  void _reportSuccess() => _connection?.report(AtConnectionState.online());
+
+  void _reportFailure(Object error) {
+    final state = classifyConnectionFailure(error);
+    if (state != null) _connection?.report(state);
+  }
+
   /// Hands the lookup an authenticator, so authentication is decided from the
   /// keystore rather than from credentials parked on at_lookup.
   ///
@@ -59,9 +81,9 @@ class RemoteSecondary implements Secondary {
   /// constructor sets `atLookUp.atChops` directly - hooking only the setter
   /// installs nothing on the path that matters.
   ///
-  /// Installed beside `atChops`, not instead of it: at_auth's
-  /// `EnrollmentApprover` reads that field for enrollment crypto, which is not
-  /// authentication.
+  /// The credential fields stay written on the lookup beside it: they are
+  /// at_lookup's ladder, which a lookup from before the seam still
+  /// authenticates from, and they go with that ladder in the at_lookup major.
   void _installAuthenticator() {
     final lookUp = atLookUp;
     // `AtLookUp` does not declare the seam - that interface is frozen because
@@ -70,11 +92,16 @@ class RemoteSecondary implements Secondary {
       return;
     }
 
+    // The keyfile's keypair signs when it holds one for this enrollment; the
+    // AtChops beside it is the door for a keyfile that holds none - a client
+    // built from an AtChops with a stand-in key source, which the live packs
+    // build. The rule is at_auth's, in the authenticator.
     final io = _atKeysIo;
     if (io != null) {
       lookUp.authenticator = authenticatorFor(
         io,
         _atSign,
+        // ignore: deprecated_member_use
         enrollmentId: lookUp.enrollmentId,
         chops: _atChops,
       );
@@ -90,6 +117,7 @@ class RemoteSecondary implements Secondary {
       lookUp.authenticator = authenticatorForChops(
         _atSign,
         chops,
+        // ignore: deprecated_member_use
         enrollmentId: lookUp.enrollmentId,
         signingAlgo: _signingAlgoType,
         // The same preference field the constructor stamps on the lookup, so
@@ -106,6 +134,7 @@ class RemoteSecondary implements Secondary {
       lookUp.authenticator = authenticatorForPrivateKey(
         _atSign,
         privateKey,
+        // ignore: deprecated_member_use
         enrollmentId: lookUp.enrollmentId,
       );
       return;
@@ -113,8 +142,9 @@ class RemoteSecondary implements Secondary {
 
     // Last in the ladder's own order. Nothing in this tree sets
     // `preference.cramSecret` - every in-tree CRAM goes through onboarding,
-    // which builds its own lookup - but the field is public API, so a consumer
-    // that sets it must keep working through the seam.
+    // which authenticates with the secret it is handed - but the field is
+    // public API, so a consumer that sets it must keep working through the
+    // seam.
     final cramSecret = _cramSecret;
     if (cramSecret != null) {
       lookUp.authenticator = authenticatorForCramSecret(_atSign, cramSecret);
@@ -129,21 +159,29 @@ class RemoteSecondary implements Secondary {
   /// [signingAlgoType] overrides the preference's PKAM signing algorithm: the
   /// algorithm is a property of the enrollment record, and one preference can
   /// serve clients on two enrollments of one atSign with different algorithms.
+  ///
+  /// [connection] is the client's connection state, which every verb here
+  /// then reports into; a secondary built without one reports nowhere.
+  ///
+  /// [secondaryAddressFinder] resolves the atServer address; with none, the
+  /// process-wide finder is read per lookup.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
+      // ignore: deprecated_member_use
       AtChops? atChops,
       AtLookUp? atLookUp,
       String? enrollmentId,
       SigningAlgoType? signingAlgoType,
-      AtKeysIo? atKeysIo}) {
+      AtKeysIo? atKeysIo,
+      AtConnection? connection,
+      SecondaryAddressFinder? secondaryAddressFinder,
+      AtLookUpFactory? lookUps}) {
     _atSign = AtUtils.fixAtSign(atSign);
+    _secondaryAddressFinder = secondaryAddressFinder;
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
+    _connection = connection;
     privateKey ??= preference.privateKey;
-    SecureSocketConfig secureSocketConfig = SecureSocketConfig()
-      ..decryptPackets = preference.decryptPackets
-      ..pathToCerts = preference.pathToCerts
-      ..tlsKeysSavePath = preference.tlsKeysSavePath;
     _atChops = atChops;
     _atKeysIo = atKeysIo;
     _privateKey = privateKey;
@@ -153,16 +191,15 @@ class RemoteSecondary implements Secondary {
     // _installAuthenticator supplies below from whichever of the four shapes
     // this client actually holds.
     this.atLookUp = atLookUp ??
-        AtLookUp.withSecureSocket(
+        (lookUps ?? defaultLookUps(preference))(
           atSign: atSign,
           rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
-          transport: secureSocketTransport(secureSocketConfig),
           authenticator: null,
-          secondaryAddressFinder: processSecondaryAddressFinder() ??
-              CacheableSecondaryAddressFinder(
-                  preference.rootDomain, preference.rootPort),
+          secondaryAddressFinder:
+              secondaryAddressFinder ?? processSecondaryAddressFinder(),
           clientConfig: _getClientConfig(),
         );
+    // ignore: deprecated_member_use
     this.atLookUp.enrollmentId = enrollmentId;
     final resolvedSigningAlgo =
         // ignore: deprecated_member_use_from_same_package
@@ -170,8 +207,11 @@ class RemoteSecondary implements Secondary {
     logger.finer(
         'signingAlgoType: $resolvedSigningAlgo hashingAlgoType: ${preference.hashingAlgoType}');
     _signingAlgoType = resolvedSigningAlgo;
+    // ignore: deprecated_member_use
     this.atLookUp.signingAlgoType = resolvedSigningAlgo;
+    // ignore: deprecated_member_use
     this.atLookUp.hashingAlgoType = preference.hashingAlgoType;
+    // ignore: deprecated_member_use
     this.atLookUp.atChops = atChops;
     _installAuthenticator();
   }
@@ -215,12 +255,15 @@ class RemoteSecondary implements Secondary {
       logger.finer('Command sent to server: ${builder.buildCommand()}');
       verbResult = (await atLookUp.executeVerb(builder))!;
       logger.finer('Response from server: $verbResult');
+      _reportSuccess();
       return verbResult;
     } on AtException catch (e) {
+      _reportFailure(e);
       throw e
         ..stack(AtChainedException(_getIntent(builder),
             ExceptionScenario.remoteVerbExecutionFailed, e.message));
     } on AtLookUpException catch (e) {
+      _reportFailure(e);
       var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
         ..stack(AtChainedException(_getIntent(builder),
@@ -255,12 +298,18 @@ class RemoteSecondary implements Secondary {
     try {
       String? verbResult;
       verbResult = await atLookUp.executeCommand(atCommand, auth: auth);
+      // NOTE: only an authenticated command proves the credentials; an
+      // unauthenticated one that comes back says the atServer is reachable,
+      // which is not the same thing, and is reported by the next one.
+      if (auth) _reportSuccess();
       return verbResult;
     } on AtException catch (e) {
+      _reportFailure(e);
       e.stack(AtChainedException(Intent.fetchData,
           ExceptionScenario.remoteVerbExecutionFailed, e.message));
       rethrow;
     } on AtLookUpException catch (e) {
+      _reportFailure(e);
       var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
         ..stack(AtChainedException(Intent.fetchData,
@@ -290,12 +339,20 @@ class RemoteSecondary implements Secondary {
       ..limit = _preference.syncPageLimit;
 
     var atCommand = syncVerbBuilder.buildCommand();
-    return await atLookUp.executeCommand(atCommand, auth: true);
+    try {
+      final result = await atLookUp.executeCommand(atCommand, auth: true);
+      _reportSuccess();
+      return result;
+    } catch (e) {
+      _reportFailure(e);
+      rethrow;
+    }
   }
 
   Future<String?> findSecondaryUrl() async {
     var secondaryAddress =
-        await processSecondaryAddressFinder()!.findSecondary(_atSign);
+        await (_secondaryAddressFinder ?? processSecondaryAddressFinder()!)
+            .findSecondary(_atSign);
     return secondaryAddress.toString();
   }
 

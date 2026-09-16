@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
-import 'package:at_client/src/service/notification_service.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -148,6 +146,49 @@ void main() {
   });
 
   tearDown(() async => muxable.dispose());
+
+  group('the client connection state', () {
+    late AtConnection connection;
+
+    setUp(() {
+      connection = AtConnection(
+          atSign: '@alice',
+          attempt: (_) async =>
+              AtConnectionState.offline(AtConnectionCause.unattempted));
+      monitor = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference(),
+        lookUp: muxable,
+        handleNotification: (String n) async => received.add(n),
+        getLastNotificationTime: () async => null,
+        connection: connection,
+      );
+      monitor.logger.level = 'severe';
+    });
+
+    test('is told online when the monitor reaches listening', () async {
+      expect(connection.current.isOnline, isFalse);
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(monitor.currentState, NotificationListenerState.listening);
+      expect(connection.current.isOnline, isTrue,
+          reason: 'a monitor that is receiving is an authenticated connection '
+              'to the atServer');
+    });
+
+    test('is not told offline when the connection drops', () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.dropConnection();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(monitor.currentState, NotificationListenerState.notConnected);
+      expect(connection.current.isOnline, isTrue,
+          reason: 'a dropped monitor says nothing about whether the atServer '
+              'is reachable; the next failing verb does');
+    });
+  });
 
   group('start', () {
     test('reaches listening, and passes a null watermark through', () async {
@@ -430,6 +471,34 @@ void main() {
   /// `listening` for ever while deaf, which is what the public contract on
   /// `NotificationService.currentListenerState` promises it will not do.
   group('a connection that is up but silent', () {
+    /// Counts `notConnected` -> `listening` cycles off the public state
+    /// stream, which is what a rebuild looks like to a subscriber.
+    ///
+    /// The budget comes from [AtClientPreference], so both arms below run in
+    /// milliseconds; nothing here depends on how often a real atServer
+    /// happens to send stats notifications.
+    ({List<NotificationListenerState> seen, int Function() rebuilds})
+        watchStateOf(Monitor m) {
+      final seen = <NotificationListenerState>[];
+      m.currentStateStream.listen(seen.add);
+      return (
+        seen: seen,
+        rebuilds: () {
+          var n = 0;
+          var wasListening = false;
+          for (final state in seen) {
+            if (state == NotificationListenerState.listening) {
+              wasListening = true;
+            } else if (wasListening) {
+              n++;
+              wasListening = false;
+            }
+          }
+          return n;
+        },
+      );
+    }
+
     Monitor monitorWithBudget(Duration budget) {
       final m = Monitor(
         atSign: '@alice',
@@ -443,19 +512,32 @@ void main() {
       return m;
     }
 
-    test('is rebuilt', () async {
+    test('is rebuilt, and the rebuild completes back to listening', () async {
       monitor = monitorWithBudget(const Duration(milliseconds: 40));
+      final watch = watchStateOf(monitor);
       monitor.start();
       await Future.delayed(const Duration(milliseconds: 20));
       expect(muxable.startCalls, 1);
 
       await Future.delayed(const Duration(milliseconds: 150));
 
-      expect(muxable.startCalls, greaterThan(1),
+      // The PUBLIC state stream first: it is the whole contract a subscriber
+      // has, and the fake's counter is an implementation detail behind it.
+      expect(watch.rebuilds(), greaterThan(0),
           reason: 'nothing arrived for longer than the budget on a connection '
-              'that never went down, so the monitor tore it down and asked '
-              'for a new one - at_lookup sees a healthy socket here and will '
-              'never do it');
+              'that never went down, so the monitor tore it down and built a '
+              'new one, observable as a notConnected -> listening cycle on '
+              'currentStateStream. at_lookup cannot do this: it sees a socket '
+              'that is up and answering');
+      expect(muxable.startCalls, greaterThan(1),
+          reason: 'and the rebuild reached the muxable as a fresh '
+              'startNotifications, rather than being satisfied by the old '
+              'connection');
+      expect(monitor.currentState, NotificationListenerState.listening,
+          reason: 'and it finished: torn down, started again and monitoring, '
+              'rather than left notConnected. A watchdog that rebuilds into '
+              'nothing is worse than one that never fires, because the '
+              'connection it discarded was working');
       monitor.stop();
     });
 
@@ -463,6 +545,7 @@ void main() {
       // Budget comfortably longer than the delivery gap: the check fires one
       // budget after connect, so a gap anywhere near it races the first tick.
       monitor = monitorWithBudget(const Duration(milliseconds: 100));
+      final watch = watchStateOf(monitor);
       monitor.start();
 
       for (var i = 0; i < 12; i++) {
@@ -470,13 +553,19 @@ void main() {
         muxable.deliver('notification: {"id":"$i"}');
       }
 
-      expect(muxable.startCalls, 1,
+      expect(watch.rebuilds(), 0,
           reason: 'the check is about SILENCE, not about elapsed time - a busy '
               'connection outlives many budgets and must not be rebuilt under '
-              'a working client');
+              'a working client, and no notConnected -> listening cycle '
+              'reached a subscriber');
+      expect(muxable.startCalls, 1,
+          reason: 'and nothing reached the muxable as a second '
+              'startNotifications either');
       // Handling is serialised now, so the last delivery is still in flight.
       await Future.delayed(const Duration(milliseconds: 40));
-      expect(received, hasLength(12));
+      expect(received, hasLength(12),
+          reason: 'the premise of the arm above: nothing arrived would make '
+              '"it was not rebuilt" prove nothing about silence');
       monitor.stop();
     });
 

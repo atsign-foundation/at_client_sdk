@@ -13,7 +13,7 @@ void main() {
     //       app-named crypto config.
     // WHEN  its era CryptoConfig is adopted at construction.
     // THEN  new writes default to the nskey data path (AES-GCM provider),
-    //       while a migration-postured client's stay legacy — and an
+    //       while a migration-postured client's stay legacy-encrypted — and an
     //       app-named config still beats both.
     provenIn('packages/at_client/test/at_client_impl_test.dart',
         'the pqActive posture makes PQ writes the adopted era default',
@@ -22,19 +22,19 @@ void main() {
           'new writes default to the nskey data path (the AES-GCM provider)',
         ]);
     provenIn('packages/at_client/test/at_client_impl_test.dart',
-        'the default posture keeps writes legacy in the adopted era set',
+        'the default posture keeps writes on the legacy provider in the adopted era set',
         proves: 'the 3.x arm: the post-quantum providers registered, writes '
-            'stay legacy');
+            'stay with the legacy provider');
     provenIn('packages/at_client/test/at_client_impl_test.dart',
         'the legacy posture configures no post-quantum providers',
         proves: 'and the arm below it: the earliest stage registers none of '
-            'them, so "a migration-postured client\'s writes stay legacy" is '
+            'them, so "a migration-postured client\'s writes stay legacy-encrypted" is '
             'a claim about the middle stage rather than about every stage '
-            'that writes legacy');
+            'that writes with the legacy provider');
     provenIn('tests/at_functional_test/test/pq_stage_arm_test.dart',
         'UC-C1.1 · the era default follows the stage on a live client',
         proves: 'all three stages side by side on real clients: the middle '
-            'stage still writes legacy, which is what makes it a stage of its '
+            'stage still writes with the legacy provider, which is what makes it a stage of its '
             'own rather than a name for the last one');
     provenIn('tests/at_functional_test/test/pq_stage_arm_test.dart',
         'each stage reaches its own constructed client',
@@ -59,7 +59,7 @@ void main() {
         proves: 'the coupling: a posture asking for the refusal must write '
             'post-quantum, or it refuses its own writes');
     provenIn('packages/at_client/test/disallow_legacy_encryption_test.dart',
-        'a client configured to write legacy',
+        'a client configured to write with the legacy provider',
         proves: 'what the flag does once set: the legacy write is refused');
     // NOTE: the four above are unit arms against a mock, which never runs
     // AtClientImpl's initialisation — a posture that reached the constant and
@@ -86,15 +86,16 @@ void main() {
     // THEN  no RSA-wrapped apkamSymmetricKey rides the wire; the approver
     //       mints and conveys instead.
     provenIn(
-        'packages/at_onboarding_cli/test/enroll_key_exchange_mode_test.dart',
-        'PqPosture.pqActive submits a pq request',
-        proves: 'the middle the other three do not reach: a real production '
-            'builder reading a posture and choosing the constructor from it. '
-            'The request captured off the AtEnrollment seam under '
-            'PqPosture.pqActive carries EnrollmentKeyExchangeMode.pq and both '
-            'the callbacks a pq request needs, where the same service under '
-            'PqPosture.legacy submits the wrapped-key shape. Mutating the '
-            'service to keep the unnamed constructor reddens it.');
+        'packages/at_client/test/lifecycle/enroll_test.dart',
+        'pqActive advertises an mldsa65 signing key, in the structured '
+            'spelling',
+        proves: 'the middle the other three do not reach: the production '
+            'submitter, Atsign.enroll, reading a posture and choosing the '
+            'request shape from it. The enroll:request captured off the '
+            'mocked atServer under PqPosture.pqActive carries a key package '
+            'and no RSA-wrapped symmetric key, where the same call under '
+            'PqPosture.legacy sends the wrapped-key shape. Mutating enroll '
+            'to take legacy whatever the posture says reddens it.');
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'pqActive is post-quantum by default',
         proves: 'the posture carries EnrollmentKeyExchangeMode.pq');
@@ -105,7 +106,7 @@ void main() {
           'rides the wire; the approver mints and conveys instead',
         ]);
     provenIn('packages/at_auth/test/enrollment_test.dart',
-        'the default mode is legacy',
+        'the default key exchange mode is EnrollmentKeyExchangeMode.legacy',
         proves: 'the 3.x wire stays byte-identical until a posture or the '
             '4.x major flips it');
   });

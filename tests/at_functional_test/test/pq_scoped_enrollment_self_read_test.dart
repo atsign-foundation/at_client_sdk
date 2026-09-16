@@ -4,7 +4,6 @@
 @Tags(['pq'])
 library;
 
-import 'package:at_auth/at_auth.dart' show AtKeys, InMemoryAtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart'
@@ -105,12 +104,7 @@ void main() {
         // non-rsa2048 one there, so an ML-DSA-authenticating enrollment must
         // own a signing key. rsa2048 rather than ML-DSA keeps `_apsk` in the
         // bare form.
-        dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})
-      // A store of its own: two clients of one atSign sharing a storage path
-      // share their keystore, and this one holds only what its own approval
-      // conveyed.
-      ..hiveStoragePath = 'test/hive/client/$atSign/scoped-$runId'
-      ..commitLogPath = 'test/hive/client/$atSign/scoped-$runId';
+        dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048});
 
     final scoped = await enrolAndAuthenticate(
       approver: approver,

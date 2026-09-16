@@ -1,4 +1,4 @@
-import 'package:at_auth/at_auth.dart';
+import 'package:at_client/at_client.dart' show NamespacePermission;
 import 'package:flutter/material.dart';
 
 class NamespaceChip extends StatelessWidget {

@@ -65,7 +65,7 @@ void main() {
       when(() => atClient.getCurrentAtSign()).thenReturn(alice);
 
       expect(await CryptoRuntime(atClient).isReadyFor(bob, namespace), isTrue,
-          reason: 'the SDK default for this release is legacy');
+          reason: 'the SDK default for this release is the legacy provider');
     });
   });
 

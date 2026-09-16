@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
@@ -71,15 +74,28 @@ class PutRequestTransformer
       CryptoRuntime.providerIdFor(_atClient, options.cryptoProviderId,
           atKey: atKey);
 
+  /// Signs a public value with the atSign's encryption private key, which is
+  /// what a reader verifies the signature against.
+  ///
+  /// The bytes are frozen: `put_request_test.dart` pins the signature for a
+  /// fixed key and value.
   void _signPublicData(
       UpdateVerbBuilder updateVerbBuilder, String? encryptionPrivateKey) {
     if (encryptionPrivateKey.isNull) {
       throw AtPrivateKeyNotFoundException('Failed to sign the public data');
     }
-    final atSigningInput = AtSigningInput(updateVerbBuilder.value)
-      ..signingMode = AtSigningMode.data;
-    final signingResult = _atClient.atChops!.sign(atSigningInput);
-    updateVerbBuilder.atKey.metadata.dataSignature = signingResult.result;
+    final value = updateVerbBuilder.value;
+    final Uint8List dataBytes;
+    if (value is String) {
+      dataBytes = Uint8List.fromList(utf8.encode(value));
+    } else if (value is Uint8List) {
+      dataBytes = value;
+    } else {
+      throw InvalidDataException('Unrecognized type of data: $value');
+    }
+    updateVerbBuilder.atKey.metadata.dataSignature = base64Encode(
+        RsaSignatureAlgo.rsa2048().signBytesSync(dataBytes,
+            secretKey: base64Decode(encryptionPrivateKey!)));
   }
 
   void _encodeIfValueContainsNewLine(UpdateVerbBuilder updateVerbBuilder) {

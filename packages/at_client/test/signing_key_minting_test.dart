@@ -2,17 +2,17 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart'
     show
-        AtEnrollment,
         AtEnrollmentResponse,
         AtKeys,
         CryptographicMaterialRole,
-        EnrollmentUpdateRequest,
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         KeyEntryStatus,
         CryptographicMaterialStatus;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart'
+    show EnrollmentUpdateRequest, EnrollmentUpdater;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, EnvelopeType, signEnvelope, verifyEnvelope;
 import 'package:at_client/src/signing/signing_key_minting.dart'
@@ -23,10 +23,12 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
+import 'test_utils/ml_dsa_keyfile.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
-class MockAtEnrollment extends Mock implements AtEnrollment {}
+class MockEnrollmentUpdater extends Mock implements EnrollmentUpdater {}
 
 /// Giving an enrollment signing keys of its own, per the in-use set.
 void main() {
@@ -34,9 +36,9 @@ void main() {
   const enrollmentId = 'enroll-a';
 
   late MockAtClient atClient;
-  late MockAtEnrollment enrollment;
+  late MockEnrollmentUpdater enrollment;
   late MockAtLookUp atLookUp;
-  late AtChops atChops;
+  late RsaKeyPair apkamPair;
   late InMemoryAtKeysIo keysIo;
 
   /// Every `enroll:update` the minter sent, and what `_apsk` each advertised.
@@ -46,8 +48,10 @@ void main() {
   /// "advertised, then filed" from "filed, then advertised".
   late List<List<String>> heldWhenPublished;
 
-  String pkamPublicKey() =>
-      atChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+  /// The enrollment's authentication public key as its keyfile holds it.
+  late String authenticationPublicKey;
+
+  String pkamPublicKey() => authenticationPublicKey;
 
   Future<List<String>> heldKeyIds() async {
     final keys = await keysIo.read(atSign);
@@ -65,15 +69,15 @@ void main() {
   });
 
   setUp(() async {
-    atChops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
-    keysIo = InMemoryAtKeysIo();
-    await keysIo.write(atSign, AtKeys(atsign: atSign.toAtsign()));
+    apkamPair = pkamKeyPairFor(atSign, enrollmentId);
+    // Flat, as an OTP-enrolled rsa2048 keyfile is: the enrollment's typed
+    // section starts empty, and filling it is what the minter does.
+    keysIo = keysHoldingApkam(atSign, null, apkamPair);
+    authenticationPublicKey = apkamPair.atPublicKey.publicKey;
     updates = [];
     heldWhenPublished = [];
 
     atClient = MockAtClient();
-    when(() => atClient.atChops).thenReturn(atChops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.atKeysIo).thenReturn(keysIo);
     when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
@@ -83,9 +87,9 @@ void main() {
     atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-    when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+    when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
-    enrollment = MockAtEnrollment();
+    enrollment = MockEnrollmentUpdater();
     when(() => enrollment.update(any(), any())).thenAnswer((i) async {
       updates.add(i.positionalArguments[0] as EnrollmentUpdateRequest);
       heldWhenPublished.add(await heldKeyIds());
@@ -94,14 +98,25 @@ void main() {
   });
 
   SigningKeyMinting minter() =>
-      SigningKeyMinting(atClient, enrollment: enrollment);
+      SigningKeyMinting(atClient, updater: enrollment);
 
   /// Makes this client a **retrofitted** enrollment: its authentication key is
   /// ML-DSA-65, so the authentication and data signing keys are two different
   /// keys and the enrollment genuinely lacks any rsa2048 signing key until one
   /// is minted.
-  void asRetrofittedEnrollment() =>
-      recordResolvedSigningAlgo(atClient, SigningAlgoType.mldsa65);
+  Future<void> asRetrofittedEnrollment() async {
+    recordResolvedSigningAlgo(atClient, SigningAlgoType.mldsa65);
+    final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+    authenticationPublicKey = base64Encode(pair.publicKey);
+    await keysIo.flush(
+        atSign.toAtsign(),
+        AtKeys(atsign: atSign.toAtsign())
+          ..fileApkamMaterial(
+              enrollmentId: enrollmentId,
+              algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+              publicKey: authenticationPublicKey,
+              privateKey: base64Encode(pair.secretKey)));
+  }
 
   /// One reconciliation, returning what it minted and asserting it retired
   /// nothing.
@@ -210,7 +225,7 @@ void main() {
       // NOTE: every deployed `_apsk` consumer base64-decodes the value as an
       // RSA key, so a one-entry JSON array here would break anything already
       // running.
-      asRetrofittedEnrollment();
+      await asRetrofittedEnrollment();
       when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
           dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048}));
 
@@ -232,7 +247,7 @@ void main() {
     });
 
     test('several algorithms are advertised strongest first', () async {
-      asRetrofittedEnrollment();
+      await asRetrofittedEnrollment();
       when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
           dataSigningKeyAlgorithms: const {
             SigningAlgoType.rsa2048,
@@ -266,7 +281,7 @@ void main() {
     late List<String> published;
 
     setUp(() {
-      when(() => atLookUp.enrollmentId).thenReturn(null);
+      when(() => atClient.enrollmentId).thenReturn(null);
       published = [];
       when(() => atClient.get(any(),
               getRequestOptions: any(named: 'getRequestOptions')))
@@ -323,7 +338,7 @@ void main() {
     /// The starting position: this enrollment holds an RSA-2048 signing key of
     /// its own and advertises it.
     Future<void> atRollout1() async {
-      asRetrofittedEnrollment();
+      await asRetrofittedEnrollment();
       inUse({SigningAlgoType.rsa2048});
       expect((await minter().reconcileSigningKeys()).minted,
           [SigningAlgoType.rsa2048]);
@@ -534,8 +549,8 @@ void main() {
     });
 
     test('an envelope signed before the withdrawal still verifies', () async {
-      asRetrofittedEnrollment();
-      when(() => atLookUp.enrollmentId).thenReturn(null);
+      await asRetrofittedEnrollment();
+      when(() => atClient.enrollmentId).thenReturn(null);
       final published = <String>[];
       when(() => atClient.get(any(),
           getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
@@ -582,8 +597,8 @@ void main() {
     test(
         'a two-member in-use set signs twice, and a one-algorithm verifier '
         'still verifies', () async {
-      asRetrofittedEnrollment();
-      when(() => atLookUp.enrollmentId).thenReturn(null);
+      await asRetrofittedEnrollment();
+      when(() => atClient.enrollmentId).thenReturn(null);
       final published = <String>[];
       when(() => atClient.get(any(),
           getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
@@ -662,7 +677,7 @@ void main() {
       // rather than rsa2048 specifically, would empty `missing` here and leave
       // `_apsk` advertising the ML-DSA authentication key as its sole active
       // signing entry — the auth/signing split collapsing silently.
-      asRetrofittedEnrollment();
+      await asRetrofittedEnrollment();
       inUse({SigningAlgoType.mldsa65});
 
       expect((await minter().reconcileSigningKeys()).minted,
@@ -678,7 +693,7 @@ void main() {
     });
 
     test('and a RETROFITTED enrollment still mints rsa2048', () async {
-      asRetrofittedEnrollment();
+      await asRetrofittedEnrollment();
       inUse({SigningAlgoType.rsa2048});
 
       expect((await minter().reconcileSigningKeys()).minted,

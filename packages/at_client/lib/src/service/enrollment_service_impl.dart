@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart' show AtChopsUtil, EncryptionKeyType;
+import 'package:at_chops/at_chops.dart' show AESKey;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart' as privilege;
@@ -94,6 +94,40 @@ class EnrollmentServiceImpl implements EnrollmentService {
   static bool isFullyPrivileged(Map<String, dynamic>? namespaces) =>
       privilege.isFullyPrivileged(namespaces);
 
+  /// This client's encryption private key and self-encryption key, resolved by
+  /// the local secondary across every tier it has.
+  ///
+  /// The keystore reports an absent key by throwing; here that is one tier
+  /// missing, not a failure. Reaching the end with either one unresolved is a
+  /// refusal rather than a null handed onward: approval seals both for the
+  /// enrollee, so a client that cannot read its own material must not flip
+  /// the record to approved and fail afterwards.
+  Future<ApproverKeyMaterial> _approverKeys() async {
+    final local = _atClient.getLocalSecondary();
+    Future<String?> resolve(Future<String?> Function() read) async {
+      try {
+        return await read();
+      } on KeyNotFoundException {
+        return null;
+      }
+    }
+
+    final encryptionPrivateKey =
+        local == null ? null : await resolve(local.getEncryptionPrivateKey);
+    final selfEncryptionKey =
+        local == null ? null : await resolve(local.getEncryptionSelfKey);
+    if (encryptionPrivateKey == null || selfEncryptionKey == null) {
+      throw AtClientException.message(
+          'approving an enrollment seals this atSign\'s encryption private '
+          'key and its self-encryption key for the enrollee, and this client '
+          'cannot read both of them');
+    }
+    return (
+      encryptionPrivateKey: encryptionPrivateKey,
+      selfEncryptionKey: selfEncryptionKey,
+    );
+  }
+
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision) async {
@@ -123,8 +157,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
     String? mintedApkamSymmetricKey;
     var decision = enrollmentRequestDecision;
     if (mintsSymmetricKey) {
-      mintedApkamSymmetricKey =
-          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+      mintedApkamSymmetricKey = AESKey.generate(32).key;
       decision = EnrollmentRequestDecision.approvedWithMintedKey(
         enrollmentId: enrollmentRequestDecision.enrollmentId,
         apkamSymmetricKey: mintedApkamSymmetricKey,
@@ -134,7 +167,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
 
     final response = await _atEnrollmentImpl.approve(
         decision, _atClient.getRemoteSecondary()!.atLookUp,
-        approverChops: _atClient.atChops);
+        approverKeys: await _approverKeys());
 
     // NOTE: re-read after the approval, not before — the atServer publishes
     // the enrollment's _apsk at that point, and the advertised key package
@@ -162,6 +195,16 @@ class EnrollmentServiceImpl implements EnrollmentService {
             response: response,
             keyPackageStatus: status);
       }
+      if (status == KeyPackageStatus.unverified) {
+        throw EnrollmentConveyanceException(
+            'Enrollment ${enrollment.enrollmentId} is approved, but the key '
+            'package it advertised could not be checked against its _apsk, '
+            'which could not be fetched, so no secrets were shared with it '
+            'and it cannot complete until they are. Nothing about the '
+            'package was refused; the check needs the atServer.',
+            response: response,
+            keyPackageStatus: status);
+      }
     }
 
     return response;
@@ -179,15 +222,33 @@ class EnrollmentServiceImpl implements EnrollmentService {
 
   @override
   Future<AtEnrollmentResponse> deny(
-      EnrollmentRequestDecision enrollmentRequestDecision) async {
-    return _atEnrollmentImpl.deny(
-        enrollmentRequestDecision, _atClient.getRemoteSecondary()!.atLookUp);
-  }
+          EnrollmentRequestDecision enrollmentRequestDecision) =>
+      _decide(EnrollVerbBuilder()
+        ..enrollmentId = enrollmentRequestDecision.enrollmentId
+        ..operation = EnrollOperationEnum.deny);
 
   @override
   Future<AtEnrollmentResponse> revoke(
-      EnrollmentRequestDecision enrollmentRequestDecision) async {
-    return _atEnrollmentImpl.revoke(
-        enrollmentRequestDecision, _atClient.getRemoteSecondary()!.atLookUp);
+          EnrollmentRequestDecision enrollmentRequestDecision) =>
+      _decide(EnrollVerbBuilder()
+        ..enrollmentId = enrollmentRequestDecision.enrollmentId
+        ..operation = EnrollOperationEnum.revoke
+        ..force = enrollmentRequestDecision.force);
+
+  /// Runs a decision verb on the client's own connection and hands back the
+  /// enrollment and status the atServer answered with; anything but `data:`
+  /// is the atServer's refusal, thrown.
+  Future<AtEnrollmentResponse> _decide(EnrollVerbBuilder builder) async {
+    final command = builder.buildCommand();
+    final response = await _atClient.getRemoteSecondary()!.executeVerb(builder);
+    if (!response.startsWith('data:')) {
+      throw AtEnrollmentException(
+          '${command.trim()} for ${_atClient.getCurrentAtSign()} was '
+          'refused: $response');
+    }
+    final decoded = jsonDecode(response.substring('data:'.length).trim())
+        as Map<String, dynamic>;
+    return AtEnrollmentResponse(decoded['enrollmentId'] as String,
+        getEnrollStatusFromString(decoded['status'] as String));
   }
 }

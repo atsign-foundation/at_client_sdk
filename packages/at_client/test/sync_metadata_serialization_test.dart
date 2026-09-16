@@ -11,8 +11,8 @@ import 'package:test/test.dart';
 /// `Metadata.toAtProtocolFragment` so it cannot drift from the direct-write
 /// path. A parallel serializer that dropped `appMetadata` sends a synced record
 /// to the atServer without it, a cross-atSign `lookup:all` then returns a null
-/// `providerId`, and CryptoRuntime falls back to legacy and hunts a shared_key
-/// a PQ write never created.
+/// `providerId`, and CryptoRuntime falls back to the legacy provider and hunts
+/// a shared_key a PQ write never created.
 void main() {
   group('SyncServiceImpl.metadataToString', () {
     test('delegates to Metadata.toAtProtocolFragment — cannot re-drift', () {

@@ -1,6 +1,9 @@
+// A client with no key source signs from its AtChops, and several tests here are
+// about that shape, so this file names the AtChops on purpose.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
@@ -15,6 +18,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/test_keypairs.dart';
 
 /// A bare mock, shadowing the shared one in `test_utils/mocks.dart` whose
 /// concrete `getPreferences()` override cannot be stubbed.
@@ -78,14 +82,26 @@ void main() {
     final advertised = <String, String>{};
     final advertisedStamps = <String, DateTime>{};
     final advertisementReads = <GetRequestOptions?>[];
-    final chops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+    final pair = pkamKeyPairFor(atSign, 'enroll-a');
+    final chops = AtChopsImpl(AtChopsKeys.create(
+        null,
+        AtPkamKeyPair.create(
+            pair.atPublicKey.publicKey, pair.atPrivateKey.privateKey)));
 
     when(() => atClient.atChops).thenReturn(chops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
-    when(() => lookUp.enrollmentId).thenReturn('enroll-a');
+    when(() => atClient.enrollmentId).thenReturn('enroll-a');
+    // NOTE: an EMPTY roster, and said rather than left unstubbed. A read miss
+    // broadcasts a pull to the namespace's other enrollments, and here there
+    // are none - which is the situation these tests are in. Matched on the
+    // command so no other verb is answered by accident;
+    // `listForNamespace` refuses to read an unparseable response as an empty
+    // roster on purpose, because that would withhold key material from every
+    // member of the namespace.
+    when(() => secondary.executeCommand(any(that: startsWith('enroll:listns')),
+        auth: any(named: 'auth'))).thenAnswer((_) async => 'data:[]');
     when(() => atClient.put(any(), any(),
             putRequestOptions: any(named: 'putRequestOptions')))
         .thenAnswer((_) async => true);
@@ -509,7 +525,7 @@ void main() {
     when(() => other.getCurrentAtSign()).thenReturn(atSign);
     when(() => other.getRemoteSecondary()).thenReturn(otherSecondary);
     when(() => otherSecondary.atLookUp).thenReturn(otherLookUp);
-    when(() => otherLookUp.enrollmentId).thenReturn('enroll-minter');
+    when(() => other.enrollmentId).thenReturn('enroll-minter');
 
     final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
     final minted = await xWing.keyPairFromSeed(xWing.newSeed());

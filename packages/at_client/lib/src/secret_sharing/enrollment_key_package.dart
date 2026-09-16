@@ -50,9 +50,8 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
   return (AtKeysIo keysIo) async {
     final AtKeys keys = await keysIo.read(atSign);
 
-    final apkamPublicKey = keys.apkamPublicKey;
-    final apkamPrivateKey = keys.apkamPrivateKey;
-    if (apkamPublicKey == null || apkamPrivateKey == null) {
+    final apkam = keys.authenticationKeyPairFor(null);
+    if (apkam == null) {
       throw StateError(
           'enrollmentKeyPackageBuilder: no APKAM keypair in the AtKeys for '
           '$atSign, so the key package cannot be signed');
@@ -132,8 +131,8 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
           else
             ApkamSigningKeys(
               algorithm: signingAlgo,
-              publicKey: apkamPublicKey.toString(),
-              privateKey: apkamPrivateKey.toString(),
+              publicKey: apkam.publicKey,
+              privateKey: apkam.privateKey,
             )
         ],
       ).toJson(),

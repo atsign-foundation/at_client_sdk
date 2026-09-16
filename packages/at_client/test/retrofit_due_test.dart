@@ -1,6 +1,4 @@
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:test/test.dart';
 
 /// When a posture drives an enrollment onto stronger key material, each row

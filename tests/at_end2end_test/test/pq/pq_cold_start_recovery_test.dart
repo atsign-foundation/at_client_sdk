@@ -208,7 +208,7 @@ void main() {
     expect(await writerClient.put(toRecipient('cold'), 'before'), isTrue);
     final cold = await writerClient.get(toRecipient('cold'));
     expect(cold.metadata?.appMetadata?.providerId, legacyCryptoProviderId,
-        reason: 'the fallback is legacy and says so on the record — a '
+        reason: 'the fallback is the legacy provider and says so on the record — a '
             'downgrade nobody can see afterwards is the thing being guarded '
             'against');
     expect(cold.metadata?.appMetadata?.additional?['ckKid'], isNull,
@@ -244,7 +244,7 @@ void main() {
         reason: 'the first write after the recipient\'s key appears is PQ '
             'with no flag to flip. The app never touched '
             'allowLegacyCryptoFallback again and saw no refusal to react to, '
-            'so if this stayed legacy it would stay legacy forever without '
+            'so if this stayed legacy-encrypted it would stay so forever without '
             'anything saying so');
 
     expect(
@@ -253,7 +253,7 @@ void main() {
             ?.appMetadata
             ?.providerId,
         legacyCryptoProviderId,
-        reason: 'records written under the fallback stay legacy; the flip is '
+        reason: 'records written under the fallback stay legacy-encrypted; the flip is '
             'forward-only and re-encrypting is an explicit migration');
   }, timeout: Timeout(Duration(minutes: 5)));
 }

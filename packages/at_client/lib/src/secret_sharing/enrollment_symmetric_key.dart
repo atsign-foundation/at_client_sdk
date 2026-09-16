@@ -105,7 +105,7 @@ Future<(String, Uint8List, String)> _keyPackageHalves(AtKeys keys) async {
   // atSign's container, and a caller driving the providers directly, where no
   // enrollment id is filed at all.
   final CryptographicMaterial? private =
-      keyPackageMaterial(keys, enrollmentId: keys.enrollmentId) ??
+      keyPackageMaterial(keys, enrollmentId: keys.storedEnrollmentId) ??
           keyPackageMaterial(keys);
   if (private == null) {
     throw StateError(

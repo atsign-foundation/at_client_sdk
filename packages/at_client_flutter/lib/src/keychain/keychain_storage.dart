@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth.dart' show AtKeys;
+import 'package:at_client/at_client.dart' show Passcode;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:biometric_storage/biometric_storage.dart'
@@ -11,15 +12,16 @@ import 'package:biometric_storage/biometric_storage.dart'
         StorageFileInitOptions,
         Win32BiometricStoragePlugin;
 import 'package:flutter/cupertino.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'keychain_data.dart';
-import 'keychain_store.dart';
 
-final _maxEnrollmentAuthenticationRetryInHours = 48;
+part 'keychain_store.dart';
+
 const int _kWindowSegmentDataLength =
     2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
 
-/// Service to manage keychain CRUD operations for Atsigns, enrollments and SPPs
+/// Service to manage keychain CRUD operations for Atsigns and SPPs
 class KeychainStorage {
   static final _logger = AtSignLogger('KeychainStorage');
   static bool isWindows = Platform.isWindows;
@@ -42,12 +44,57 @@ class KeychainStorage {
   /// Returns [AtKeysData] containing all persisted [AtKeys] entries, or `null`
   /// if no key data has been stored yet
   Future<AtKeysData?> readAtKeysData() async {
-    final data = await _read(keychainStoreName: (await AtKeysStore.getName()));
+    final data = await _readAtKeysDataRaw();
     if (data != null) {
       final json = jsonDecode(data);
       return AtKeysData.fromJson(json);
     }
     return null;
+  }
+
+  // Current behaviour:
+  // 2.x.x (current):
+  //   if `:` is absent and `_` is present, copy `_` to `:` but leave `_`.
+  //
+  // TODO(3.0.0): copy `_` to `:` then remove `_`.
+  //
+  // Since each app version runs in its own sandbox, there is no risk of an
+  // older and newer version running simultaneously.
+  Future<String?> _readAtKeysDataRaw() async {
+    // 1. Read the current `:`-delimited store. If it exists, it is the
+    // authoritative store and no migration is needed.
+    final currentName = await AtKeysStore.getName();
+    final data = await _read(keychainStoreName: currentName);
+    if (data != null) {
+      return data;
+    }
+
+    // See migration sequencing comment above.
+    // 2.x.x: only copy `_` to `:`, leave `_` in place.
+
+    final keychainStorageImproperName = await _getImproperAtKeysStoreName();
+    String? improperDataString;
+    try {
+      improperDataString = await _read(
+        keychainStoreName: keychainStorageImproperName,
+      );
+    } catch (e, s) {
+      _logger.info('No legacy atKeysData found in keychain.', e, s);
+      return null;
+    }
+    if (improperDataString == null) {
+      return null;
+    }
+
+    _logger.info(
+      'Migrating AtKeysData from legacy keychain store '
+      '"$keychainStorageImproperName" to "$currentName"',
+    );
+    await _write(
+      biometricStoreName: currentName,
+      keychainData: AtKeysData.fromJson(jsonDecode(improperDataString)),
+    );
+    return improperDataString;
   }
 
   /// Get the stored keys for a specific Atsign
@@ -157,9 +204,7 @@ class KeychainStorage {
   Future<void> appendAtKeysToKeychain({required AtKeys keys}) async {
     String? existingData;
     try {
-      existingData = await _read(
-        keychainStoreName: (await AtKeysStore.getName()),
-      );
+      existingData = await _readAtKeysDataRaw();
     } catch (e) {
       _logger.info(
         'No existing atKeysData found in keychain. A new one will be created.',
@@ -186,9 +231,7 @@ class KeychainStorage {
   ///   [atSign] - Atsign whose persisted keys should be removed
   Future<void> removeAtsignFromKeychain(String atSign) async {
     try {
-      final data = await _read(
-        keychainStoreName: (await AtKeysStore.getName()),
-      );
+      final data = await _readAtKeysDataRaw();
       if (data != null) {
         final atKeysData = AtKeysData.fromJson(jsonDecode(data));
         final wanted = _normalized(atSign);
@@ -208,88 +251,22 @@ class KeychainStorage {
     }
   }
 
-  /// Delete all persisted Atsign key data from the keychain
+  /// Delete all persisted Atsign key data from the keychain, including any
+  /// data still held under the legacy pre-2.0.0 `_` delimited store name.
+  /// TODO(3.0.0): remove the `_` cleanup once `_` stores are deleted during
+  /// migration (see [_readAtKeysDataRaw] sequencing comment).
   Future<void> deleteAllAtKeysData() async {
     try {
-      final BiometricStorageFile biometricStore =
-          await _getBiometricStorageFile(await AtKeysStore.getName());
-      await biometricStore.delete();
+      await _delete(keychainStoreName: await AtKeysStore.getName());
     } catch (e, s) {
       _logger.info('_getAtClientData', e, s);
       print(s);
     }
-  }
-
-  // Functions for EnrollmentStore CRUD operations
-  /// Read stored enrollment data for an Atsign
-  ///
-  ///   [atSign] - Atsign whose enrollment data should be retrieved
-  ///
-  /// Returns [EnrollmentData] if present, otherwise `null`
-  Future<EnrollmentData?> readEnrollmentData(String atSign) async {
-    final String? data = await _read(
-      keychainStoreName: EnrollmentStore(atSign).getName(),
-    );
-    if (data != null) {
-      final Map<String, dynamic> jsonData = jsonDecode(data);
-      return EnrollmentData.fromJson(jsonData);
-    }
-    return null;
-  }
-
-  /// Write enrollment data for an Atsign to the keychain
-  ///
-  ///   [atSign] - Atsign associated with the enrollment
-  ///
-  ///   [enrollmentData] - [EnrollmentData] to persist
-  Future<void> writeEnrollmentData({
-    required String atSign,
-    required EnrollmentData enrollmentData,
-  }) async {
-    await _write(
-      biometricStoreName: EnrollmentStore(atSign).getName(),
-      keychainData: enrollmentData,
-    );
-  }
-
-  /// Delete stored enrollment data for an Atsign
-  ///
-  ///   [atSign] - Atsign whose enrollment data should be removed
-  Future<void> deleteEnrollmentData(String atSign) async {
-    final BiometricStorageFile biometricStore = await _getBiometricStorageFile(
-      EnrollmentStore(atSign).getName(),
-    );
-    await biometricStore.delete();
-  }
-
-  /// Validate whether stored enrollment data is still within the retry window
-  ///
-  ///   [atSign] - Atsign whose enrollment should be validated
-  ///
-  /// Returns `true` if the stored enrollment exists and is still valid.
-  /// Returns `false` if no enrollment exists, validation fails, or the stored
-  /// enrollment has expired. Expired enrollment data is removed automatically.
-  Future<bool> validateEnrollment(String atSign) async {
     try {
-      var data = await readEnrollmentData(atSign);
-      if (data == null) {
-        return false;
-      }
-      if (DateTime.now()
-              .toUtc()
-              .difference(
-                DateTime.fromMillisecondsSinceEpoch(
-                  data.enrollmentSubmissionTimeEpoch,
-                ),
-              )
-              .inHours >=
-          _maxEnrollmentAuthenticationRetryInHours) {
-        await deleteEnrollmentData(atSign);
-        return false;
-      }
-      return true;
-    } catch (e) {
-      return false;
+      await _delete(keychainStoreName: await _getImproperAtKeysStoreName());
+    } catch (e, s) {
+      _logger.info('_getAtClientData', e, s);
+      print(s);
     }
   }
 
@@ -297,12 +274,12 @@ class KeychainStorage {
   ///
   ///   [atSign] - Atsign associated with the SPP
   ///
-  ///   [otp] - [Otp] value to persist
+  ///   [passcode] - the [Passcode] the atSign accepted
   ///
   /// Appends the value to the existing SPP list after removing expired entries
   /// and any matching duplicate value
-  Future<void> saveSpp(String atSign, Otp otp) async {
-    final spp = SppData(value: otp.value, expiry: otp.expiry);
+  Future<void> saveSpp(String atSign, Passcode passcode) async {
+    final spp = SppData(value: passcode.value, expiry: passcode.expiry);
 
     SppListData sppListData;
     try {
@@ -461,6 +438,55 @@ class KeychainStorage {
       _logger.severe('_read failed with $e', e, s);
       rethrow;
     }
+  }
+
+  Future<void> _delete({required String keychainStoreName}) async {
+    final store = await _getBiometricStorageFile(keychainStoreName);
+    if (!isWindows) {
+      await store.delete();
+      return;
+    }
+
+    final segmentNames = <String>[];
+    try {
+      final storedData = await store.read();
+      if (storedData != null && storedData.isNotEmpty) {
+        final int segmentCount;
+        final String segmentPrefix;
+        if (storedData.startsWith('{')) {
+          final Map metadata = jsonDecode(storedData);
+          segmentCount = metadata['segmentCount'];
+          segmentPrefix = '${keychainStoreName}_segment';
+        } else {
+          segmentCount = int.tryParse(storedData) ?? 0;
+          segmentPrefix = '${await getPackageName()}_data';
+        }
+        for (int i = 0; i < segmentCount; i++) {
+          segmentNames.add('${segmentPrefix}_$i');
+        }
+      }
+    } catch (e, s) {
+      _logger.warning(
+        'Failed to read Windows keychain segment metadata for deletion',
+        e,
+        s,
+      );
+    }
+
+    for (final segmentName in segmentNames) {
+      try {
+        final segmentStore = await _getBiometricStorageFile(segmentName);
+        await segmentStore.delete();
+      } catch (e, s) {
+        _logger.warning(
+          'Failed to delete Windows keychain segment "$segmentName"',
+          e,
+          s,
+        );
+      }
+    }
+
+    await store.delete();
   }
 
   Future<void> _write({

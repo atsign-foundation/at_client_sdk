@@ -1,46 +1,139 @@
 ## 4.0.0-rc2
 
-- feat: `FileAtKeysIo` keeps a copy of the keyfile at the moment its shape
-  stops being the flat one every published build reads. The `.bak` beside it
-  is rolling — the next write replaces it, and a client's startup makes
-  several within seconds — so it preserves nothing an operator could come
-  back to. The new `<keyfile>.pre-v1` is keyed on the transition rather than
-  on the write and is never overwritten, and the upgrade is announced at
-  `shout`, the one level a CLI that has silenced its logging still shows.
-  Detected from the two documents rather than from a flag a caller passes.
-- **BREAKING:** `signingAlgoType` moves off `AuthRequest` and onto
-  `AtOnboardingRequest`, where it becomes a required constructor argument. It
-  defaulted to `rsa2048` on the shared base, which let an activation inherit an
-  algorithm its caller never chose — the state that produced the same defect
-  `AtEnrollmentRequest.signingAlgo` already guards against on the enrolment
-  door, where the argument is required for that reason. Authentication is
-  unaffected and loses a field it never read: the algorithm an existing keyfile
-  authenticates with is resolved from that keyfile, so a caller-settable value
-  there could only ever be wrong silently. Callers of `AtOnboardingRequest`
-  state the algorithm they want; `rsa2048` reproduces the previous behaviour.
-- **BREAKING:** a self-enrollment no longer approves its own request, and no
-  longer sends `encryptedAPKAMSymmetricKey`. The atServer migrates a legacy
-  credential into an enrollment named `primary` and approves a retrofit of it
-  outright, so the `pending` answer the self-approval existed for no longer
-  comes back; measured live on 2026-09-08, where the server answered
-  `approved`. A `pending` answer is now denied and thrown whatever the session
-  names, which is what an atServer that does not auto-approve gets, and those
-  are not supported. The symmetric key existed only so the client could
-  approve itself, and the atServer requires one only for a request carrying an
-  otp.
-- **BREAKING:** `AtAuthRequest.enrollmentId` is removed. The keys decide which
-  enrollment authenticates, through the new
-  `AtKeys.enrollmentToAuthenticateAs()`: the one enrollment holding active
-  typed authentication material, else the flat stored id, else `primary` for a
-  keyfile that predates enrollments. A retrofitted keyfile therefore
-  authenticates as its successor with nothing passed, where it used to
-  authenticate as the legacy enrollment unless the caller named the successor.
-  A keyfile holding several live enrollments throws naming them, as the
-  resolver always has. `primary` never reaches the wire: at_commons 5.18.0's
-  `PkamVerbBuilder` omits it, so the floor moves to that release.
-- feat: `AtKeys.holdsAuthenticationMaterial` — whether the document holds
-  typed authentication material or the flat APKAM keypair. A document holding
-  neither authenticates as nothing, whatever its flat id says.
+at_auth is the protocol layer under at_client's lifecycle verbs. What an
+application used to call here — logging in, approving and deciding
+enrollments — is `Atsign.open`, `Atsign.enroll` and `client.enrollments` in
+at_client, and this release removes the surface those replace.
+
+### Removed
+
+- **BREAKING:** `AtAuth`, with `authenticate`, `onboard`, `atChops`,
+  `atLookUp` and `completeActivation`, and the request and response objects
+  `AtAuthRequest`, `AtAuthResponse`, `AuthRequest`, `AuthResponse`,
+  `AtOnboardingRequest` and `AtOnboardingResponse`. Activation is
+  `activateAtSign(...)`; logging in is at_client's `Atsign.open`, and
+  `Atsign.authenticatesAs` is the check that builds no client.
+  `RetryOptions` keeps its export, from a file of its own.
+- **BREAKING:** `AtEnrollment` keeps `submit`, `approve` and
+  `waitForApproval`. `deny`, `revoke`, `list`, `generateOtp` and `setSpp` are
+  at_client's `client.enrollments`, run on the client's own connection, and
+  `Otp` and `defaultOtpExpiry` go with them. `update` and
+  `EnrollmentUpdateRequest` are at_client's `EnrollmentUpdater`, exported
+  from `package:at_client/at_client_mixins.dart`.
+- **BREAKING:** `AtAuthSession` carries no `atLookUp`. A session is what a
+  client is built from — the atSign, where its atServer is looked up, the key
+  source and the enrollment the keys authenticate as — and the client opens
+  a connection of its own.
+- **BREAKING:** `httpsProbe`, `defaultProbe` and `secureSocketProbe` are
+  removed, and at_auth builds no connection of its own. The atServer check
+  before an activation asks over the activation's own lookup with at_lookup's
+  `checkAtSignServer`: the atDirectory through that lookup's finder, the
+  atServer over its transport. at_auth no longer depends on
+  at_server_status, and nothing its main barrel reaches imports
+  `at_lookup_io.dart`.
+- **BREAKING:** `AtKeys.toAtChops` and `.toAtChopsForEnrollment` are
+  library-private; `AtKeys.authenticationFor` is the public route, and
+  `authenticationKeyPairFor`, `encryptionKeyPair` and `selfEncryptionKey`
+  hand back the material without an `AtChops` around it.
+- **BREAKING:** `AtKeys.copyWith` is removed; use `addKey`.
+- **BREAKING:** `KeyIOMixin` and its `decryptAtKeysWithSelfEncKey`,
+  `encryptAtKeysWithSelfEncKey`, `generateKeyPairs` and `decodeAtKeys` are
+  removed. A `.atKeys` document is read and written through
+  `FileAtKeysIo.read`/`.write`, which apply the passphrase envelope and the
+  self-encryption; `passphraseCodec` on `AtKeysIo` remains for a caller that
+  needs the envelope alone.
+- **BREAKING:** the registrar's legacy aliases `ActivateApiEndpoint` and
+  `RegistrarApiEndpoint.login`/`.validate` are removed; use
+  `RegistrarApiEndpoint.requestOtp`/`.validateOtp`.
+- `example/authenticate.dart` is gone with `authenticate`;
+  `example/onboard.dart` runs over `activateAtSign`.
+
+### Changed
+
+- **BREAKING:** `activateAtSign` requires `atLookUp` and
+  `AtEnrollment.waitForApproval` requires `atLookup`, each an
+  `AtLookupMuxable`, because each installs an authenticator on it. Neither
+  builds a connection when none is given, and neither closes the one it is
+  given. The at_lookup floor moves to `^3.7.0-rc2`, the release carrying
+  `checkAtSignServer`.
+- **BREAKING:** `AtEnrollment.approve` takes `approverKeys`, an
+  `ApproverKeyMaterial` holding the approver's encryption private key and
+  self-encryption key, and it is required: approval reads nothing off the
+  connection any more, and `approverChops` is removed. `approve` no longer
+  writes the unwrapped APKAM symmetric key into the caller's `AtChops`.
+- **BREAKING:** no caller names the enrollment to authenticate as. The keys
+  decide, through `AtKeys.enrollmentToAuthenticateAs()`: the one enrollment
+  holding active typed authentication material, else the flat stored id,
+  else `primary` for a keyfile that predates enrollments. A retrofitted
+  keyfile therefore authenticates as its successor with nothing passed. A
+  keyfile holding several live enrollments throws naming them. `primary`
+  never reaches the wire: at_commons 5.18.0's `PkamVerbBuilder` omits it, so
+  the floor moves to that release.
+- **BREAKING:** a self-enrollment no longer approves its own request and no
+  longer sends `encryptedAPKAMSymmetricKey`: the atServer approves a
+  retrofit outright, and a `pending` answer is denied and thrown.
+- A PKAM challenge is signed from the keypair the keyfile holds for the
+  enrollment, through one rule in every authenticator at_auth builds: the
+  keyfile's keypair signs when it holds one, and an injected `AtChops` signs
+  when it holds none. The bytes are unchanged and pinned against openssl.
+- `waitForApproval` no longer pauses 500 ms before every PKAM attempt when
+  `logProgress` is set; the progress events and the retry interval are
+  unchanged.
+- `AtKeys.metadata` is no longer deprecated: it carries a legacy keyfile's
+  entries outside the flat schema, and the typed document has no
+  equivalent.
+- A typed keyfile (`"version": 1`) is written with an empty top-level
+  `"keys": []` again, as 3.3.0 wrote it. at_auth 3.3.0 refuses a versioned
+  keyfile without the array, so a keyfile written by 4.0.0-rc1 could not be
+  read by an application still on 3.3.0. Typed material stays in
+  `enrollments` and `atsignKeys`, and a document holding none is still
+  written in the legacy shape with neither field.
+
+### Added
+
+- `activateAtSign(atSign: ..., cramSecret: ..., keys: ..., signingAlgo: ...,
+  atLookUp: ...)`: CRAM activation as a parameter list. It waits for the
+  atServer, mints the keys, submits and authenticates as the first
+  enrollment, writes the keys to the store named and completes the
+  activation, answering the enrollment id. The `atLookUp` it runs over is
+  taken as having already reached the atServer unless `awaitProvisioning` is
+  set, for a caller that has not reached the atServer on it yet.
+- `CryptographicMaterialStatus.pending`, the status of an enrollment's key
+  material between submission and approval, ranking before `active`.
+  `AtKeys.activatePending`, `AtKeys.discardEnrollment` and
+  `AtKeys.pendingEnrollmentIds` manage it, and a flush may drop pending
+  material. A store written by an earlier build carries `pending` through
+  unchanged as a token it does not know.
+- `AtKeys.fileLegacyMaterial` and `AtKeys.legacy`, the one writer of the flat
+  keyfile document that names no deprecated member, with
+  `AtKeys.enrollmentSymmetricKey` and `AtKeys.storedEnrollmentId` reading the
+  two flat fields the typed accessors did not cover. The seven flat fields
+  stay deprecated, and their annotations now name these.
+- `AtKeys.holdsAuthenticationMaterial`, `AtKeys.authenticationKeyPairFor`,
+  `.encryptionKeyPair` and `.selfEncryptionKey`. The last two prefer typed
+  material under the atSign and fall back to the flat fields, with the
+  algorithm checked rather than assumed from the role.
+- `InMemoryAtKeysIo.holding(atSign, keys)`: an in-memory store already
+  holding a key set, for a caller that has keys in hand and needs a source.
+- `FileAtKeysIo` keeps a one-off `<keyfile>.pre-v1` copy of the flat
+  document the first time it writes typed material into it, announced at
+  `shout`; the rolling `.bak` is unchanged.
+
+### Fixed
+
+- The never-lose rule on the flat legacy fields protects a credential and
+  nothing else: a null field may gain a value, and a document holding no
+  active typed material and none of the three flat secrets may have its
+  legacy fields replaced. An approval can therefore fill the fields its
+  submission left empty, and a store emptied by a denial can take the next
+  request.
+- A typed document holding no credential — every material pending — may go
+  back to the legacy shape, which is what a denied enrollment leaves behind.
+- A keyfile whose atSign material is typed derives a working `AtChops`; a
+  typed-only document produced empty encryption keys.
+- The enrolment handshake installs an authenticator on its lookup and never
+  writes at_lookup's credential fields; both were written, and one was never
+  read.
 
 ## 4.0.0-rc1
 

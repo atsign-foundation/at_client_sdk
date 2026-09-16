@@ -93,7 +93,7 @@ class AuthorisationListTile extends StatelessWidget {
                           ).colorScheme.primary.withValues(alpha: 0.3),
                           label: Text(badgeCount.toString()),
                         ),
-                      if (trailing != null) trailing!,
+                      ?trailing,
                     ],
                   ),
                 ),

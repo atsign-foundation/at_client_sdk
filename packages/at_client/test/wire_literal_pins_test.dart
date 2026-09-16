@@ -30,7 +30,7 @@ import 'package:at_chops/at_chops.dart'
     show
         AESKey,
         AesGcm256EncryptionAlgo,
-        AtChopsUtil,
+        RsaKeyPair,
         InitialisationVector,
         MlDsa65PureDartAlgo,
         MlKem1024PureDartAlgo,
@@ -855,7 +855,7 @@ void main() {
     });
 
     test('the envelope members, their order, and unpadded base64url', () {
-      final pair = AtChopsUtil.generateAtPkamKeyPair();
+      final pair = RsaKeyPair.generate();
       final envelope = signEnvelope({
         'hello': 'world'
       }, keys: [
@@ -902,7 +902,7 @@ void main() {
       String kidOf(String pubB64) =>
           sha256.convert(base64Decode(pubB64)).toString().substring(0, 16);
 
-      final rsaPair = AtChopsUtil.generateAtPkamKeyPair();
+      final rsaPair = RsaKeyPair.generate();
       expect(
           headerOf(signEnvelope({
             'p': 1
@@ -936,7 +936,7 @@ void main() {
     });
 
     test('the header omits enid entirely when no enrollment is supplied', () {
-      final pair = AtChopsUtil.generateAtPkamKeyPair();
+      final pair = RsaKeyPair.generate();
       final envelope = signEnvelope({
         'hello': 'world'
       }, keys: [

@@ -138,14 +138,31 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/crypto/crypto.dart',
   'package:at_client/src/crypto/crypto_runtime.dart',
   'package:at_client/src/key_stream/key_stream.dart',
+  'package:at_client/src/lifecycle/at_connection.dart',
+  'package:at_client/src/lifecycle/atsign_lifecycle.dart',
+  'package:at_client/src/lifecycle/enrollments.dart',
+  'package:at_client/src/lifecycle/pending_enrollment.dart',
+  'package:at_client/src/listener/at_sign_change_listener.dart',
   'package:at_client/src/listener/connectivity_listener.dart',
+  'package:at_client/src/listener/switch_at_sign_event.dart',
   'package:at_client/src/manager/at_client_manager.dart',
   'package:at_client/src/preference/at_client_preference.dart',
   'package:at_client/src/preference/pq_posture.dart',
-  // show-narrowed to EnrollmentKeyExchangeMode: PqPosture.keyExchangeMode
-  // holds one, and its per-axis override must be nameable without importing
-  // at_auth directly.
+  // show-narrowed to the key stores an app names (AtKeys, AtKeysIo,
+  // WrittenAtKeysIo, InMemoryAtKeysIo), the grant type an enrollment's
+  // namespaces read as (NamespacePermission), and EnrollmentKeyExchangeMode:
+  // an app opens, activates and enrols through this package and must not
+  // have to import at_auth for what those verbs take and answer.
   'package:at_auth/at_auth.dart',
+  // show-narrowed to FileAtKeysIo, the keyfile store, for the same reason.
+  'package:at_auth/at_auth_io.dart',
+  // show-narrowed to AtLookUpFactory and AtCommandExecutor: the
+  // communications leg of the platform bundle, which the verbs take as
+  // lookUps:, for the same reason again. From the io-free barrel, so the type
+  // an app implements never reads as io-bound.
+  'package:at_lookup/at_lookup.dart',
+  // show-narrowed to secureSocketLookUps, the TLS default, the one io export.
+  'package:at_lookup/at_lookup_io.dart',
   // show-narrowed to SigningAlgoType: AtClientPreference.dataSigningKeyAlgorithms
   // takes a set of them and AtClientImpl.signingAlgoType returns one.
   'package:at_chops/at_chops.dart',
@@ -179,8 +196,15 @@ const Set<String> _atClientMixinsBarrelExports = {
   'package:at_client/src/mixins/apkam_signing.dart',
   'package:at_client/src/mixins/at_client_envelope_signer.dart',
   'package:at_client/src/mixins/envelope_signing.dart',
+  // show-narrowed to SignedEnvelope, the type EnvelopeSigning.wrapAndSign
+  // returns.
+  'package:at_client/src/signing/envelope_signature.dart',
   'package:at_client/src/enroll/pq_native_onboard.dart',
   'package:at_client/src/enroll/self_retrofit.dart',
+  // `EnrollmentUpdater` is the one emitter of `enroll:update`, and the live
+  // packs drive it directly to rekey and amend an enrollment they hold.
+  'package:at_client/src/enroll/enrollment_update_request.dart',
+  'package:at_client/src/enroll/enrollment_updater.dart',
   // `mintAdvertisedSigningKey` is the one home for minting the data signing
   // keypair an enrollment owns from birth, and `at_onboarding_cli` mints one
   // on the enrolment path — so it has to be reachable from outside at_client,

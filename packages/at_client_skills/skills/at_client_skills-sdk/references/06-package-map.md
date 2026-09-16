@@ -36,7 +36,8 @@ one entry. You do not need to add `at_client` separately.
   `ApkamDialog`
 - `KeychainStorage` — device keychain (iOS Keychain, Android Keystore)
 - `KeychainAtKeysIo` — read/write keys from the device keychain
-- `AtClientPreference`, `AtClientManager` — Flutter-aware client lifecycle
+- `RegistrarService` (re-exported from at_auth) — the registrar client CRAM
+  onboarding needs
 - Flutter extensions on core types
   (`import 'package:at_client_flutter/extensions.dart'`)
 
@@ -44,20 +45,16 @@ one entry. You do not need to add `at_client` separately.
 
 ### APKAM enrollment / custom auth
 
-```sh
-dart pub add at_auth
-```
+No extra package. Onboarding, login and enrollment are verbs on `Atsign` in
+`at_client` (`open`, `activate`, `enroll`, `resumeEnrollment`), and the
+approving side is `client.enrollments`; see
+[15-client-lifecycle.md](15-client-lifecycle.md). An app building its own UI
+calls those; a Flutter app uses the dialogs. **Do not add `at_auth`**: it is the
+protocol layer under `at_client`, its 4.0 removed the request and response
+types apps used to hold, and the one type an app may want from it,
+`RegistrarService`, is re-exported by `at_client_flutter`.
 
-`at_auth` provides `AtAuthRequest`, `AuthResponse`, `AtOnboardingRequest`,
-`AtEnrollmentResponse`, and `RegistrarService`. Required if you are building
-custom auth flows or using APKAM enrollment outside the dialog helpers.
-
-`AtRootDomain` (the `_setupAtClient` parameter type) is still required, but it
-comes from `at_commons` — surfaced via `at_client` / `at_client_flutter`, not
-`at_auth`.
-
-For standard Flutter apps using the `at_client_flutter` dialogs, `at_auth` is a
-transitive dependency — you may not need to add it explicitly.
+`AtRootDomain` comes from `at_commons`, surfaced via `at_client`.
 
 ---
 
@@ -191,16 +188,15 @@ them directly if you're using their types directly in your own API.
 ### Dart CLI / server app
 
 ```sh
-dart pub add at_client at_cli_commons at_auth
-# at_auth only if you need AtAuthRequest / custom auth flows
+dart pub add at_client at_cli_commons
+# at_cli_commons for CLIBase; the lifecycle verbs are in at_client
 ```
 
 ### Flutter mobile / desktop app
 
 ```sh
-dart pub add at_client_flutter at_auth path_provider
-# at_client_flutter re-exports at_client — one dep is enough
-# at_auth only if using RegistrarService or custom APKAM flows
+dart pub add at_client_flutter path_provider
+# at_client_flutter re-exports at_client (and RegistrarService) — one dep is enough
 # path_provider for getApplicationSupportDirectory()
 ```
 
@@ -208,6 +204,5 @@ dart pub add at_client_flutter at_auth path_provider
 
 ```dart
 import 'package:at_client_flutter/at_client_flutter.dart';  // includes all of at_client
-import 'package:at_client_flutter/extensions.dart';          // .toAtsign(), etc.
-import 'package:at_auth/at_auth.dart';
+import 'package:at_client_flutter/extensions.dart';          // FileAtKeysIo.getAtsign(), etc.
 ```

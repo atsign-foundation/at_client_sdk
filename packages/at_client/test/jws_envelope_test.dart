@@ -21,12 +21,12 @@ import 'test_utils/envelope_tamper.dart';
 /// ML-DSA-65's 4412 decodes fine, so a suite exercising only ML-DSA goes green
 /// on code that cannot decode a single RSA signature.
 void main() {
-  late AtPkamKeyPair rsaPair;
+  late RsaKeyPair rsaPair;
   late ({Uint8List publicKey, Uint8List secretKey}) mlDsaPair;
   const payload = {'hello': 'world', 'n': 1};
 
   setUpAll(() async {
-    rsaPair = AtChopsUtil.generateAtPkamKeyPair();
+    rsaPair = RsaKeyPair.generate();
     mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   });
 

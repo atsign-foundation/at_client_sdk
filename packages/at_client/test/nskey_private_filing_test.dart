@@ -8,8 +8,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
     show NskeyAdvertisement, NskeySeed;
-import 'package:at_client/src/secret_sharing/algo_ids.dart'
-    show SecretSharingAlgos;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:test/test.dart';
 

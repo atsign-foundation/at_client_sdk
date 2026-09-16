@@ -39,24 +39,19 @@ void main() {
     var bobMockAtClient = MockAtClientImpl();
     var bobMockLocalSecondary = MockLocalSecondary();
     // set up encryption key pair for @alice. This will be used during encryption process
-    var aliceEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+    var aliceEncryptionKeyPair = RsaKeyPair.generate();
     var aliceEncryptionPublicKey = aliceEncryptionKeyPair.atPublicKey.publicKey;
     // Set up encryption key pair for @bob. This will be used during decryption process
-    var bobEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+    var bobEncryptionKeyPair = RsaKeyPair.generate();
     var bobEncryptionPublicKey = bobEncryptionKeyPair.atPublicKey.publicKey;
 
     // Generate the AES for encrypting the location value
-    var aesSharedKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
-    // set atChops for bob
-    AtChopsKeys bobAtChopsKeys = AtChopsKeys.create(bobEncryptionKeyPair, null);
-    var bobAtChopsImpl = AtChopsImpl(bobAtChopsKeys);
-    when(() => bobMockAtClient.atChops).thenAnswer((_) => bobAtChopsImpl);
+    var aesSharedKey = AESKey.generate(32).key;
+    // @bob's key material, answered where a client reads it
     when(() => bobMockAtClient.getLocalSecondary())
         .thenAnswer((_) => bobMockLocalSecondary);
     when(() => bobMockAtClient.getCurrentAtSign()).thenReturn('@bob');
-    when(() => bobMockLocalSecondary.getEncryptionPublicKey('@bob'))
-        .thenAnswer((_) => Future.value(bobEncryptionPublicKey));
+    stubEncryptionKeyPair(bobMockLocalSecondary, '@bob', bobEncryptionKeyPair);
     var sharedKeyDecryption = SharedWithMeDecryption(bobMockAtClient);
 
     // encrypted AES key @bob:shared_key@alice
@@ -71,13 +66,9 @@ void main() {
         EncryptionUtil.md5CheckSum(bobEncryptionPublicKey);
     var location = 'California';
 
-    // set atChops for alice
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(aliceEncryptionKeyPair, null);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
+    // @alice's key material, answered where a client reads it
     when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
-    when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
-        .thenAnswer((_) => Future.value(aliceEncryptionPublicKey));
+    stubEncryptionKeyPair(mockLocalSecondary, '@alice', aliceEncryptionKeyPair);
     when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
         .thenAnswer((Invocation invocation) {
       final builder = invocation.positionalArguments[0] as LLookupVerbBuilder;
@@ -119,26 +110,20 @@ void main() {
     var bobMockAtClient = MockAtClientImpl();
     var bobMockLocalSecondary = MockLocalSecondary();
     // set up encryption key pair for @alice. This will be used during encryption process
-    var aliceEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+    var aliceEncryptionKeyPair = RsaKeyPair.generate();
     var aliceEncryptionPublicKey = aliceEncryptionKeyPair.atPublicKey.publicKey;
     // Set up encryption key pair for @bob. This will be used during decryption process
-    var bobEncryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
+    var bobEncryptionKeyPair = RsaKeyPair.generate();
     var bobEncryptionPublicKey = bobEncryptionKeyPair.atPublicKey.publicKey;
 
     // Generate the AES for encrypting the location value
-    var actualSymmetricKeyBeingUsed =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
-    var aDifferentSymmetricKey =
-        AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
-    // set atChops for bob
-    AtChopsKeys bobAtChopsKeys = AtChopsKeys.create(bobEncryptionKeyPair, null);
-    var bobAtChopsImpl = AtChopsImpl(bobAtChopsKeys);
-    when(() => bobMockAtClient.atChops).thenAnswer((_) => bobAtChopsImpl);
+    var actualSymmetricKeyBeingUsed = AESKey.generate(32).key;
+    var aDifferentSymmetricKey = AESKey.generate(32).key;
+    // @bob's key material, answered where a client reads it
     when(() => bobMockAtClient.getLocalSecondary())
         .thenAnswer((_) => bobMockLocalSecondary);
     when(() => bobMockAtClient.getCurrentAtSign()).thenReturn('@bob');
-    when(() => bobMockLocalSecondary.getEncryptionPublicKey('@bob'))
-        .thenAnswer((_) => Future.value(bobEncryptionPublicKey));
+    stubEncryptionKeyPair(bobMockLocalSecondary, '@bob', bobEncryptionKeyPair);
     var sharedKeyDecryption = SharedWithMeDecryption(bobMockAtClient);
 
     // local copy of the AES key that @alice maintains - shared_key.bob@alice
@@ -153,13 +138,9 @@ void main() {
         EncryptionUtil.md5CheckSum(bobEncryptionPublicKey);
     var location = 'California';
 
-    // set atChops for alice
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(aliceEncryptionKeyPair, null);
-    var atChopsImpl = AtChopsImpl(atChopsKeys);
-    when(() => mockAtClient.atChops).thenAnswer((_) => atChopsImpl);
+    // @alice's key material, answered where a client reads it
     when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
-    when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
-        .thenAnswer((_) => Future.value(aliceEncryptionPublicKey));
+    stubEncryptionKeyPair(mockLocalSecondary, '@alice', aliceEncryptionKeyPair);
     when(() => mockLocalSecondary.executeVerb(any<LLookupVerbBuilder>()))
         .thenAnswer((Invocation invocation) {
       final builder = invocation.positionalArguments[0] as LLookupVerbBuilder;

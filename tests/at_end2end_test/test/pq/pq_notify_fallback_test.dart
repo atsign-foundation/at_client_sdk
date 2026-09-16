@@ -111,7 +111,7 @@ void main() {
             'exception told the app to opt into what it had already opted '
             'into');
     expect(notifyKey.metadata.appMetadata?.providerId, legacyCryptoProviderId,
-        reason: 'and it went out under legacy explicitly, stamped on the key '
+        reason: 'and it went out with the legacy provider explicitly, stamped on the key '
             'the notification carried — never a silent downgrade');
 
     // The differential: same verb, same recipient, same namespace, only the

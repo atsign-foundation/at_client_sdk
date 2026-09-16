@@ -129,6 +129,22 @@ void main() {
       expect(atKey, 'phone.wavi.demos');
     });
 
+    test('a key named like the namespace still gets the namespace appended',
+        () {
+      // A `probe` key under the `probe` namespace is `probe.probe`; reading
+      // the last dot-segment saw the name, took it for the namespace, and
+      // put the key at `probe` on a get after a put at `probe.probe`.
+      String atKey = AtClientUtil.getKeyWithNameSpace(
+          AtKey.self('probe').build(),
+          (AtClientPreference()..namespace = 'probe'));
+      expect(atKey, 'probe.probe');
+      expect(
+          AtClientUtil.getKeyWithNameSpace(AtKey.self('probe.probe').build(),
+              (AtClientPreference()..namespace = 'probe')),
+          'probe.probe',
+          reason: 'the control: a key that already ends in the namespace');
+    });
+
     test(
         'A test to verify namespace is not appended when namespaceAware is set to false',
         () {

@@ -255,11 +255,11 @@ void main() {
   });
 
   group('verifyEnvelope, every published form', () {
-    late AtPkamKeyPair rsaPair;
+    late RsaKeyPair rsaPair;
     late ({Uint8List publicKey, Uint8List secretKey}) mlDsaPair;
 
     setUpAll(() async {
-      rsaPair = AtChopsUtil.generateAtPkamKeyPair();
+      rsaPair = RsaKeyPair.generate();
       mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
     });
 

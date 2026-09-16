@@ -15,11 +15,15 @@ import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/mocks.dart';
+
+import 'test_utils/recorded_logs.dart';
+
 void main() {
   const storageDir = 'test/hive';
   const atSign = '@alice';
 
-  Future<LocalSecondary> setUpLocalSecondary() async {
+  Future<LocalSecondary> setUpLocalSecondary({AtSyncQueue? syncQueue}) async {
     AtClientImpl.atClientInstanceMap.remove(atSign);
     final atClientManager = AtClientManager(atSign);
     final preference = AtClientPreference()
@@ -33,7 +37,8 @@ void main() {
       preference,
       atClientManager: atClientManager,
     );
-    return LocalSecondary(atClient);
+    atClient.syncService = MockSyncService();
+    return LocalSecondary(atClient, syncQueue: syncQueue);
   }
 
   Future<void> tearDownLocalSecondary() async {
@@ -320,6 +325,77 @@ void main() {
         isTrue,
         reason: 'receiver-initiated delete still allowed',
       );
+    });
+  });
+
+  group('LocalSecondary sync-queue failures', () {
+    final logs = RecordedLogs();
+    setUpAll(() => logs.installOn());
+    setUp(() => logs.records.clear());
+    tearDown(() async => await tearDownLocalSecondary());
+
+    UpdateVerbBuilder publicEmail() => UpdateVerbBuilder()
+      ..atKey = (AtKey()
+        ..key = 'email'
+        ..sharedBy = atSign
+        ..metadata = (Metadata()..isPublic = true))
+      ..value = 'alice@example.com';
+
+    Iterable<String> matching(String fragment) => logs.records
+        .where((r) => r.message.contains(fragment))
+        .map((r) => '${r.level}: ${r.message.split('\n').first}');
+
+    test(
+        'a write that cannot be queued is shouted about, and does not claim '
+        'to have asked for a drain', () async {
+      // A real queue in a real failure state - constructed and never opened,
+      // so every enqueue throws. Injected, so the lazy open that would
+      // otherwise repair it never runs.
+      final localSecondary = await setUpLocalSecondary(
+          syncQueue: AtSyncQueue(atSign: atSign, storagePath: storageDir));
+      final builder = publicEmail();
+
+      await localSecondary.executeVerb(builder, sync: true);
+
+      final atKey = builder.buildKey();
+      expect(matching('failed to enqueue $atKey'), hasLength(1),
+          reason: 'nothing will push a write that never reached the queue '
+              'until the periodic safety net finds it, so the write has to be '
+              'named at shout. Saw: ${matching('enqueue')}');
+      expect(logs.at('SHOUT').where((m) => m.contains(atKey)), hasLength(1),
+          reason: 'and at SHOUT rather than a lower level');
+      expect(matching('is queued for sync, but'), isEmpty,
+          reason: 'the drain trigger must not be reported at all here - it '
+              'was never reached, and a line about it would say the write is '
+              'queued when it is not. Saw: ${matching('queued for sync')}');
+    });
+
+    test('a write that cannot be queued still lands in the keystore', () async {
+      final localSecondary = await setUpLocalSecondary(
+          syncQueue: AtSyncQueue(atSign: atSign, storagePath: storageDir));
+      final builder = publicEmail();
+
+      await localSecondary.executeVerb(builder, sync: true);
+
+      final value = await localSecondary
+          .executeVerb(LLookupVerbBuilder()..atKey = builder.atKey);
+      expect(value, contains('alice@example.com'),
+          reason: 'failing to queue a write for sync must not fail the write. '
+              'The local store is the record the user reads');
+    });
+
+    test('a healthy sync queue shouts about nothing', () async {
+      final localSecondary = await setUpLocalSecondary();
+      final builder = publicEmail();
+
+      await localSecondary.executeVerb(builder, sync: true);
+
+      expect(await localSecondary.peekSyncQueue(), [builder.buildKey()],
+          reason: 'the control has to actually queue, or it proves nothing '
+              'about the arm above');
+      expect(logs.at('SHOUT'), isEmpty,
+          reason: 'a write that queued cleanly must produce no shout. Saw: '
+              '${logs.at('SHOUT')}');
     });
   });
 }

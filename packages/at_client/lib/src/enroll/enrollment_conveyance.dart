@@ -23,9 +23,11 @@ abstract interface class EnrollmentConveyance {
   /// ([KeyPackageStatus.absent]) or one this version cannot read
   /// ([KeyPackageStatus.unsupported]) is left alone, neither being anything
   /// the caller can fix. A package that was advertised and refused
-  /// ([KeyPackageStatus.rejected]) is reported rather than thrown, so the
-  /// caller can decide what a just-approved device that will be unable to
-  /// decrypt anything means for the approval it has already performed.
+  /// ([KeyPackageStatus.rejected]), or whose check could not be completed
+  /// because its `_apsk` could not be fetched ([KeyPackageStatus.unverified]),
+  /// is reported rather than thrown, so the caller can decide what a
+  /// just-approved device that will be unable to decrypt anything means for
+  /// the approval it has already performed.
   ///
   /// [mintedApkamSymmetricKey] is the key the approver minted on the
   /// enrollment's behalf, when the request carried none of its own; it is
@@ -70,6 +72,7 @@ class EnrollmentConveyanceException extends AtEnrollmentException {
 
   /// The advertised key package's status when the conveyance stopped:
   /// [KeyPackageStatus.rejected] when the package itself was the refusal,
+  /// [KeyPackageStatus.unverified] when its check could not be completed,
   /// [KeyPackageStatus.present] when the package was fine and the conveyance
   /// refused for another reason — the message says which.
   final KeyPackageStatus keyPackageStatus;
