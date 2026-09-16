@@ -41,6 +41,10 @@
 - Document `AtRpcCallbacks` — the route for a peer that both answers and makes
   requests, the `ack` responses `call()` hides, and that `sendRequest` widens
   the allow list (`references/13-rpc.md`).
+- Note that NoPorts carries its own access control (`--managers` and/or a
+  `--policy-manager` atsign running an `NPA`) — a pointer to `noports_core`
+  and its docs, not a description of its internals
+  (`references/06-package-map.md`).
 - Evals: the two auth evals follow the new flows; new evals cover logout /
   switching, the connection state, public keys, notification confirmation,
   headless enrolment, error handling, waiting for sync, the deprecated

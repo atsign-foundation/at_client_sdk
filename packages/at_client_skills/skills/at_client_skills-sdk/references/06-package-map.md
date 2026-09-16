@@ -98,6 +98,21 @@ class. Docs: <https://docs.noports.com/>. Add only when the app needs raw
 TCP/socket connectivity to remote machines; ordinary data exchange belongs in
 `AtCollection<T>` / notifications.
 
+**NoPorts has its own access control**, separate from anything else in this
+skill — a device daemon decides which client atsigns may reach it, and that is
+daemon-side configuration rather than anything your Dart app sets. Sharing,
+collection permissions and enrolment namespaces do not govern it. The daemon
+takes a static allow list (`--managers`) and/or a `--policy-manager` atsign
+asked per request; at least one is required, and when both are given the
+policy manager decides for atsigns absent from the list.
+
+If a static list is not enough, `package:noports_core/npa.dart` is the
+extension point: implement `NPARequestHandler.doAuthCheck`, which is handed
+the daemon atsign, device name, device group and client atsign, and return a
+decision. `NPAImpl` runs it as an [`AtRpcCallbacks`](13-rpc.md) service, so
+writing a policy manager is an ordinary `AtRpc` responder. The rest lives in
+`noports_core` and the NoPorts docs.
+
 ---
 
 ### Streaming (pre-release)

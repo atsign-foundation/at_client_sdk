@@ -19,7 +19,8 @@ description: >
   publish intentionally public data (AtKey.public / isPublic), what
   exceptions to catch around an SDK call (AtException, getTraceMessage),
   whether an AtClient method is deprecated (notify, startMonitor, uploadFile),
-  how to implement AtRpcCallbacks for a peer that both serves and calls, which
+  how to implement AtRpcCallbacks for a peer that both serves and calls, how
+  NoPorts decides which atsigns may reach a device, which
   pub.dev packages to add, how to unit-test without a live atServer, or
   whether to use AtCollection vs notifications+SQLite. Warns
   against deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
