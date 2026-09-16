@@ -280,22 +280,30 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
   }
 }
 
-/// The key package inside [advertised] without checking its signature, or
-/// null when there is none this version can read.
+/// The key package inside [advertised] without checking its signature, and
+/// why there is none when there is not.
+///
+/// The status matters to the caller: [KeyPackageStatus.rejected] is a package
+/// that is not one, which nothing can ever be sealed to, where
+/// [KeyPackageStatus.unsupported] is one a newer client wrote and this
+/// version cannot read — a version skew, not a fault.
 ///
 /// Anything the package receives this way is only as trustworthy as the
 /// atServer that served it; [verifyAdvertisedKeyPackage] is the checked read.
 @experimental
-KeyPackage? readAdvertisedKeyPackage(Object? advertised,
+(KeyPackage?, KeyPackageStatus) readAdvertisedKeyPackage(Object? advertised,
     {required String enrollmentId}) {
-  if (advertised == null) return null;
+  if (advertised == null) return (null, KeyPackageStatus.absent);
   final envelope = _advertisedEnvelope(advertised,
       enrollmentId: enrollmentId, report: false);
-  if (envelope == null) return null;
+  if (envelope == null) return (null, KeyPackageStatus.rejected);
   try {
-    return KeyPackage.fromPayload(envelope.payload, enrollmentId: enrollmentId);
+    return (
+      KeyPackage.fromPayload(envelope.payload, enrollmentId: enrollmentId),
+      KeyPackageStatus.present
+    );
   } catch (_) {
-    return null;
+    return (null, KeyPackageStatus.unsupported);
   }
 }
 

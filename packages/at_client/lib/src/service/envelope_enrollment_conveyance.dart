@@ -66,8 +66,21 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
           'package to seal it from. Call register() on '
           'AtClientSecretSharing.forClient(atClient) before approving.');
     }
-    final package = readAdvertisedKeyPackage(pending.metadata?['keyPackage'],
+    final (package, status) = readAdvertisedKeyPackage(
+        pending.metadata?['keyPackage'],
         enrollmentId: pending.enrollmentId!);
+    // NOTE: refused before the approval, which is spent once it lands: a
+    // package that is not one can never be sealed to, so approving would
+    // authorise a device that can never decrypt anything and no later
+    // approval would repair it. A package this version merely cannot READ is
+    // a version skew and approves as it always did.
+    if (status == KeyPackageStatus.rejected) {
+      throw AtEnrollmentException(
+          'Enrollment ${pending.enrollmentId} advertised a key package that '
+          'is not one, so its symmetric key cannot be sealed to anything. It '
+          'stays pending: approve it once the enrolling device advertises a '
+          'package that can be read.');
+    }
     if (package == null) return;
     await sharing.shareSecretWith(
         package,

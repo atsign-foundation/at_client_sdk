@@ -1413,7 +1413,10 @@ class AtClientImpl implements AtClient {
       _availableTimer = null;
       await _availableSub?.cancel();
       _availableSub = null;
-      if (!_dataEventsCtrl.isClosed) await _dataEventsCtrl.close();
+      // NOTE: not awaited, for the reason [AtConnection.close] gives: a
+      // paused subscriber to `dataEvents` would otherwise hold the stop open
+      // for as long as it stays paused.
+      if (!_dataEventsCtrl.isClosed) unawaited(_dataEventsCtrl.close());
     });
 
     // NOTE: type-tested, not cast. These fields are declared as the

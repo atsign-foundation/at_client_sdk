@@ -370,7 +370,11 @@ class Monitor {
     stop();
     await lookUp.close();
     await _lifecycle;
-    await currentStateStreamController.close();
+    // NOTE: not awaited. `close()` on a broadcast controller completes only
+    // once every subscriber has taken the done event, and a PAUSED one never
+    // does - so awaiting it here would hang the stop this belongs to. The
+    // paused subscriber still gets `done`, when it resumes.
+    unawaited(currentStateStreamController.close());
   }
 
   Future<void> _teardown() async {

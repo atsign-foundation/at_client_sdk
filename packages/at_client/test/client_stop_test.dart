@@ -122,6 +122,26 @@ void main() {
       expect(tries, 0, reason: 'a stopped client has no connection to try');
     });
 
+    test('a paused listener on changes does not hold up the close', () async {
+      final connection = AtConnection(
+          atSign: '@paused', attempt: (_) async => AtConnectionState.online());
+      var ended = false;
+      final subscription =
+          connection.changes.listen((_) {}, onDone: () => ended = true);
+      subscription.pause();
+
+      await connection.close().timeout(const Duration(seconds: 2),
+          onTimeout: () => fail('close waited for a subscriber that is '
+              'paused, which is a stop that never returns'));
+
+      expect(ended, isFalse, reason: 'a paused subscriber has taken nothing');
+      subscription.resume();
+      await Future.delayed(Duration.zero);
+      expect(ended, isTrue,
+          reason: 'and it still gets the done event when it resumes: the '
+              'stream is closed, not abandoned');
+    });
+
     test('a close during awaitOnline ends the wait at once', () async {
       final connection = AtConnection(
           atSign: '@waiting',
@@ -166,6 +186,23 @@ void main() {
           reason: 'the lookup is closed first, so the start fails at once, '
               'and the teardown has run by the time close returns');
       expect(() => monitor.start(), throwsA(isA<StoppedException>()));
+    });
+
+    test('a paused listener on its state stream does not hold it up', () async {
+      final monitor = monitorOn(_GatedMuxable());
+      var ended = false;
+      final subscription =
+          monitor.currentStateStream.listen((_) {}, onDone: () => ended = true);
+      subscription.pause();
+
+      await monitor.close().timeout(const Duration(seconds: 2),
+          onTimeout: () => fail('close waited for a paused subscriber'));
+
+      subscription.resume();
+      await Future.delayed(Duration.zero);
+      expect(ended, isTrue,
+          reason: 'the paused listener still gets its done event, once it '
+              'is reading again');
     });
   });
 
@@ -401,6 +438,22 @@ void main() {
       for (final lookUp in built) {
         verify(() => lookUp.close()).called(1);
       }
+    });
+
+    test('a paused listener on dataEvents does not hold up the stop', () async {
+      final running = await client('@pauseddata');
+      var ended = false;
+      final subscription =
+          running.dataEvents.listen((_) {}, onDone: () => ended = true);
+      subscription.pause();
+
+      await running.stop().timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('stop waited for a subscriber that is '
+              'paused, and an application is free to pause one'));
+
+      subscription.resume();
+      await Future.delayed(Duration.zero);
+      expect(ended, isTrue);
     });
 
     test('ends a collection it built, and the collection\'s scheduler',

@@ -8,6 +8,8 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/enroll/privilege_resolver.dart'
+    show EnrollmentPrivilegeResolver;
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/envelope_enrollment_conveyance.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
@@ -20,6 +22,16 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
+
+/// An approver that counts as fully privileged, so the conveyance under test
+/// is the key package read and nothing else.
+class _AlwaysPrivileged implements EnrollmentPrivilegeResolver {
+  @override
+  Future<bool> isFullyPrivileged() async => true;
+
+  @override
+  Future<bool> isEnrollmentFullyPrivileged(String enrollmentId) async => true;
+}
 
 class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   final List<EnrollmentRequestDecision> approvals = [];
@@ -87,12 +99,63 @@ void main() {
     return await enrollee.signedKeyPackagePayload();
   }
 
-  Future<AtEnrollmentResponse> approveWith(AtClient approver) =>
-      EnrollmentServiceImpl(approver, _RecordingAtEnrollment()).approve(
-          EnrollmentRequestDecision.approved(
+  Future<AtEnrollmentResponse> approveWith(AtClient approver,
+          {_RecordingAtEnrollment? enrollment}) =>
+      EnrollmentServiceImpl(approver, enrollment ?? _RecordingAtEnrollment())
+          .approve(EnrollmentRequestDecision.approved(
               enrollmentId: enrolleeId,
               apkamSymmetricKey: AtBytes.fromString(''),
               atSign: atSign));
+
+  group('a key package that is not a key package', () {
+    test('is refused before the approval, which cannot be taken back',
+        () async {
+      final approver = buildMockClient('approver-7');
+      await AtClientSecretSharing.forClient(approver).register();
+      stubPendingEnrollment(approver, 'this is not an envelope at all');
+      final enrollment = _RecordingAtEnrollment();
+
+      await expectLater(
+          approveWith(approver, enrollment: enrollment),
+          throwsA(isA<AtEnrollmentException>()
+              .having((e) => e.message, 'message', contains('is not one'))));
+
+      expect(enrollment.approvals, isEmpty,
+          reason: 'nothing can be sealed to it, so approving would spend the '
+              'request on a device that could never decrypt anything');
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty);
+    });
+
+    test('a package a newer client wrote is left alone, not refused', () async {
+      final approver = buildMockClient('approver-8');
+      await AtClientSecretSharing.forClient(approver).register();
+      // A signed envelope this version reads, carrying a payload it does not:
+      // the shape a client one version ahead advertises. Driven at the
+      // conveyance, because the approval that follows checks the signature
+      // and this payload is deliberately not the signed one.
+      final advertised = (await advertisedKeyPackage()).toJson();
+      advertised['payload'] = base64Url
+          .encode(utf8.encode(jsonEncode({'v': 99, 'somethingNew': true})))
+          .replaceAll('=', '');
+      final enrollment = Enrollment()
+        ..enrollmentId = enrolleeId
+        ..appName = 'buzz'
+        ..deviceName = 'pixel'
+        ..namespace = {'buzz': 'rw'}
+        ..metadata = {'keyPackage': advertised};
+
+      await expectLater(
+          EnvelopeEnrollmentConveyance(approver,
+                  listEnrollments: ({enrollmentListParams}) async => [],
+                  privilege: _AlwaysPrivileged())
+              .conveyMintedApkamSymmetricKey(enrollment, 'MINTED'),
+          completes,
+          reason: 'a version skew is nothing this approver can fix, and '
+              'refusing would block approvals across one');
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty,
+          reason: 'and nothing was sealed to a package it cannot read');
+    });
+  });
 
   /// The atServer writes the enrollee's `_apsk` at approval, so the check of
   /// the advertised package can miss it once and find it a moment later.

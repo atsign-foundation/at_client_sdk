@@ -3,6 +3,17 @@
 - fix: a notification is no longer lost when the atServer has said anything
   else on the monitor connection first; the connection stayed up and the
   client stopped receiving. Fixed in at_lookup's framing.
+- fix: `stop()` no longer waits on a paused subscriber. Closing a broadcast
+  stream completes only once every subscriber has taken the done event, and a
+  paused one never does, so an application that had paused the connection's
+  `changes`, the monitor's listener state or `dataEvents` held the stop open
+  for as long as it stayed paused. Those closes are no longer awaited, and a
+  paused subscriber still gets its done event when it resumes.
+- fix: an enrollment whose advertised key package is not a key package is
+  refused before `enroll:approve`, while the request is still repairable;
+  approving would have spent it on a device that could never be sealed to. A
+  package a newer client wrote, which this version cannot read, approves as
+  before: a version skew is nothing the approver can fix.
 - fix: `RemoteSecondary.closeConnection` ends the remote secondary for good;
   use `AtLookupMuxable.dropConnection` for a connection that reconnects.
 - fix: `stop()` returns, and the process can exit, when the client's
