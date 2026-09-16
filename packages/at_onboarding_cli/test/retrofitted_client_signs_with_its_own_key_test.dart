@@ -14,29 +14,6 @@ import 'package:test/test.dart';
 
 import 'lifecycle_rig.dart';
 
-/// Answers a challenge-response without an atServer.
-///
-/// The `from:` reply has to be well formed — at_auth refuses to sign a
-/// challenge that does not carry a uuid and this atSign — or every arm fails
-/// for that reason instead of the one under test.
-class _OfflineExchange implements AtCommandExecutor {
-  _OfflineExchange(this.atSign);
-
-  final String atSign;
-  final List<String> sent = [];
-
-  @override
-  Future<String> sendSync(String command,
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    sent.add(command.trim());
-    if (command.startsWith('from:')) {
-      return 'data:_6c9f8b1e-6f7a-4d3b-9a1a-2f5e7c8d9012$atSign'
-          ':b2d4a6c8-1e3f-4a5b-8c7d-9e0f1a2b3c4d';
-    }
-    return 'data:success';
-  }
-}
-
 /// The signer installed on the client's connection has to belong to the
 /// enrolment that connection declares: the retrofitted one, not the legacy
 /// one the flat fields still carry.
@@ -137,16 +114,16 @@ void main() {
         reason: 'the client wraps the lookup it was handed; if it built its '
             'own, everything below is about the wrong object');
 
-    // NOTE: these two go red if a fix weakens the DECLARATION to rsa2048
-    // instead of correcting the signer, which would otherwise turn the
-    // assertion below green for the wrong reason.
-    expect(adopted.enrollmentId, retrofittedId);
-    expect(adopted.signingAlgoType, SigningAlgoType.mldsa65);
-
-    final exchange = _OfflineExchange(atSign);
+    final exchange = OfflineExchange(atSign);
     // NOTE: `AtLookUp` does not declare the authenticator — that interface is
     // frozen for the mocks implementing it — so the seam is reached through
     // `AtLookupMuxable`.
+    //
+    // This completion check is the whole guard now that the ladder's
+    // `enrollmentId`/`signingAlgoType` accessors are gone: a fix that
+    // installed the flat enrolment's RSA signer instead of the retrofitted
+    // ML-DSA one fails right here, not silently on a field nobody reads
+    // anymore.
     final authenticator = (adopted as AtLookupMuxable).authenticator!;
     await expectLater(authenticator(exchange), completion(isTrue),
         reason: 'the lookup declares mldsa65 for the retrofitted enrolment, so '

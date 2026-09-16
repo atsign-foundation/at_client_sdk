@@ -1,6 +1,5 @@
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
 /// Performs one authentication on a connection that is already open, using
@@ -166,80 +165,11 @@ abstract interface class AtLookUp {
   /// used by this instance of AtLookup
   Future<void> close();
 
-  /// set an instance of  [AtChops] for signing and verification operations.
-  ///
-  /// Deprecated as a *credential*. Authentication runs through an injected
-  /// [AtAuthenticator] instead, so at_lookup no longer needs to hold key
-  /// material to authenticate. Callers that read this for crypto which is not
-  /// authentication should be handed their own key material - that is what
-  /// at_auth EnrollmentApprover.approve takes its approverKeys for.
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
-  set atChops(AtChops? atChops);
-
   OutboundConnection? get connection;
-
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
-  AtChops? get atChops;
 
   set secondaryAddressFinder(SecondaryAddressFinder secondaryAddressFinder);
 
   SecondaryAddressFinder get secondaryAddressFinder;
-
-  /// Signing algorithm for pkam signature
-  ///
-  /// Deprecated together with [hashingAlgoType]: the two are read on the same
-  /// lines when the PKAM signature is built, so they are one setting and they
-  /// move together.
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  set signingAlgoType(SigningAlgoType signingAlgoType);
-
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  SigningAlgoType get signingAlgoType;
-
-  /// Hashing algorithm for pkam signature
-  ///
-  /// Deprecated together with [signingAlgoType]; see the note there.
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  set hashingAlgoType(HashingAlgoType hashingAlgoType);
-
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  HashingAlgoType get hashingAlgoType;
-
-  /// EnrollmentId has to be set for clients that are enrolled through APKAM.
-  ///
-  /// This is the enrollment the *next* authentication will use, which is
-  /// deliberately not [AtConnectionMetaData.authenticatedAsEnrollmentId] -
-  /// what a live socket actually authenticated as. That distinction survives
-  /// the deprecation; the two are not interchangeable.
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
-      'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
-      'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
-  set enrollmentId(String? enrollmentId);
-
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
-      'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
-      'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
-  String? get enrollmentId;
 }
 
 /// An [AtLookUp] that also carries the atServer's asynchronous notification
