@@ -34,6 +34,10 @@
 - Document waiting for sync to settle — `waitUntilCaughtUp`, its snapshot
   semantics, the mandatory `timeout`, and why polling `isSyncInProgress` is a
   check-then-act race (`references/11-sync.md`).
+- Document the deprecated `AtClient` methods — the `notify*` / `startMonitor`
+  family, the file-transfer and stream methods that moved to the app layer,
+  the compaction jobs, `atChops`, and the deprecated `AtClientPreference`
+  fields (`references/01-deprecation-guide.md`; `SKILL.md` §19).
 - Evals: the two auth evals follow the new flows; new evals cover logout /
   switching, the connection state, public keys, notification confirmation,
   headless enrolment, error handling and waiting for sync.

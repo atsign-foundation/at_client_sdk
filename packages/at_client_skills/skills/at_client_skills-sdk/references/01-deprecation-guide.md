@@ -99,6 +99,53 @@ await collection.delete(item);
 
 ---
 
+## Deprecated `AtClient` methods
+
+These are still on `AtClient`, so they compile and autocomplete — but each is
+annotated `@Deprecated` and several are slated for removal at the next major.
+Reaching for one is the usual sign an agent is working from older examples.
+
+| Was | Now |
+| --- | --- |
+| `atClient.notify(...)`, `notifyAll(...)`, `notifyChange(...)` | `atClient.notificationService.send(...)` |
+| `atClient.startMonitor(...)` | `atClient.notificationService.subscribe(...)` |
+| `atClient.uploadFile/downloadFile/reuploadFiles/shareFiles` | Nothing in the SDK — moved to the app layer |
+| `atClient.stream(...)`, `sendStreamAck(...)` | Nothing in the SDK — same as above |
+| `atClient.startCompactionJob()`, `stopCompactionJob()` | Nothing — just stop calling them |
+| `atClient.atChops` (getter and setter) | Build the client from its keyfile; nothing outside `at_client` needs it |
+
+**The notification family.** `startMonitor` is annotated *"Obsolete. Use the
+NotificationService"*, and the three `notify*` methods likewise. The whole
+group predates `NotificationService`; send with `send(...)` and receive with
+`subscribe(...)` — see [16-notifications.md](16-notifications.md). On
+`NotificationParams`, `forText` is *"No longer supported"* and `messageType`
+is superseded by `MessageType.key`.
+
+**File transfer has no SDK replacement.** All four methods are annotated
+*"Method will be removed from SDK since method is moved to app layer"*, and
+the stream pair carries its own removal notice. There is no drop-in: encrypt
+the file client-side, upload the ciphertext wherever you like, and share the
+URL and decryption key as a normal encrypted item. That pattern is in
+[10-architecture-guide.md](10-architecture-guide.md).
+
+**Compaction is already gone.** `startCompactionJob` / `stopCompactionJob`
+are annotated as removed along with commit-log compaction itself, which the
+commit-log-free keystore did away with. Nothing replaces them — code calling
+them is doing nothing and can drop the calls.
+
+### Deprecated `AtClientPreference` fields
+
+| Was | Now |
+| --- | --- |
+| `hiveStoragePath`, `commitLogPath` | `HiveAtClientStorage(atSign:, storagePath:)` passed as `storage` |
+| `decryptPackets`, `tlsKeysSavePath`, `pathToCerts` | `lookUps: secureSocketLookUps(config: SecureSocketConfig(...))` |
+| `syncStrategy` | `SyncService` |
+| `useAtChops` | Nothing — at_chops is used by default |
+
+The transport fields moved because configuring the socket is the
+`AtLookUpFactory`'s job, not the preference's — see
+[15-client-lifecycle.md](15-client-lifecycle.md).
+
 ## Deprecated Packages
 
 | Package                 | Status          | Use instead                                               |

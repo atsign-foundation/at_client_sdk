@@ -17,7 +17,9 @@ description: >
   agents or CLIs (CLIBase) or coordinate multiple agent instances, how to read
   or write directly against the remote atServer (useRemoteAtServer), how to
   publish intentionally public data (AtKey.public / isPublic), what
-  exceptions to catch around an SDK call (AtException, getTraceMessage), which
+  exceptions to catch around an SDK call (AtException, getTraceMessage),
+  whether an AtClient method is deprecated (notify, startMonitor, uploadFile),
+  which
   pub.dev packages to add, how to unit-test without a live atServer, or
   whether to use AtCollection vs notifications+SQLite. Warns
   against deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
@@ -717,10 +719,17 @@ what each operation throws and the two normalisation traps.
 | `AtClientManager.setCurrentAtSign(...)`, `fromAuthSession(...)`                                                                                              | `Atsign(a).open(...)` then `AtClientManager.getInstance().use(client)` |
 | `AtAuthRequest`, `AuthResponse`, `AuthService`, `FlutterEnrollmentService` (at_client_flutter 1.x); importing `at_auth` in an app                              | The dialogs hand back the `AtClient` (§10); the `Atsign` verbs (§11) |
 | `AtClientPreference.hiveStoragePath`, `.commitLogPath`                                                                                                       | `HiveAtClientStorage(atSign:, storagePath:)` passed as `storage` |
+| `atClient.notify(...)`, `notifyAll(...)`, `notifyChange(...)`, `startMonitor(...)`                                                                           | `atClient.notificationService.send(...)` / `.subscribe(...)` |
+| `atClient.uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`, `stream(...)`, `sendStreamAck(...)`                                                     | Nothing in the SDK — moved to the app layer (§13) |
+| `atClient.startCompactionJob()`, `stopCompactionJob()`                                                                                                       | Nothing — compaction went with the commit-log-free keystore |
+
+These still compile and autocomplete, which is why agents working from older
+examples reach for them.
 
 Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md)
 for the full migration table from old `AtCollectionModel` patterns to
-`AtCollection<T>`.
+`AtCollection<T>`, and the deprecated `AtClient` methods and
+`AtClientPreference` fields.
 
 ---
 
