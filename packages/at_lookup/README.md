@@ -17,7 +17,7 @@ To add this package as the dependency, add it to your pubspec.yaml
 
 ```dart  
 dependencies:
-  at_lookup: ^3.0.5
+  at_lookup: ^4.0.0-rc1
 ```
 
 #### Add to your project
