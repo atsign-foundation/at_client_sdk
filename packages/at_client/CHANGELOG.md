@@ -71,10 +71,8 @@
 - fix: `stop()` ends what the client started and used to leave running: a
   wait of up to five minutes for a conveyed nskey private, which now fails
   with `StoppedException`; the pause before answering a secret request; an
-  envelope sweep in flight; a collection's `availableEvents` scheduler; the
-  sync and notification services a setter replaced on a cached client; and
-  the connections of deprecated `stream` transfers. A `stream` call closes
-  its own connection however it ends, not only on `stream:done`.
+  envelope sweep in flight; a collection's `availableEvents` scheduler; and
+  the sync and notification services a setter replaced on a cached client.
 - fix: an `AtCollection` ends when its client stops: `watch()` and every
   stream built on it are done.
 - fix: the envelope signer's public-key cache holds no timers; an entry

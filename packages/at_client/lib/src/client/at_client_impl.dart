@@ -1446,16 +1446,6 @@ class AtClientImpl implements AtClient {
     await attempt(
         'stopping replaced services', () => Future.wait(_replacedServiceStops));
 
-    await attempt('closing stream transfers', () async {
-      for (final receiver in List.of(_streamReceivers)) {
-        receiver.cancel();
-      }
-      await Future.wait([
-        for (final connection in List.of(_streamConnections))
-          connection.closeConnection()
-      ]);
-    });
-
     if (_remoteSecondary != null) {
       await attempt('closing remote secondary connection',
           () async => _remoteSecondary!.closeConnection());
@@ -2451,44 +2441,33 @@ class AtClientImpl implements AtClient {
     // closes it; built the same way as the client's, so it authenticates as
     // the same enrollment with the same routine.
     var remoteSecondary = buildRemoteSecondary();
-    _streamConnections.add(remoteSecondary);
-    try {
-      var result = await remoteSecondary.executeCommand(command, auth: true);
-      _logger.finer('ack message:$result');
-      if (result != null && result.startsWith('stream:ack')) {
-        result = result.replaceAll('stream:ack ', '');
-        result = result.trim();
-        _logger.finer('ack received for streamId:$streamId');
-        remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
-        // `readResponse` rather than reaching through to the listener: this
-        // path has already written the bytes to the socket itself, so it needs
-        // the read half alone. The listener is not in at_lookup's barrel.
-        var streamResult = await (remoteSecondary.atLookUp as AtLookupMuxable)
-            .readResponse(
-                maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
-        if (streamResult.startsWith('stream:done')) {
-          streamResponse.status = AtStreamStatus.complete;
-        }
-      } else if (result != null && result.startsWith('error:')) {
-        result = result.replaceFirst(RegExp('^error:'), '');
-        streamResponse.errorCode = result.split('-')[0];
-        streamResponse.errorMessage = result.split('-')[1];
-        streamResponse.status = AtStreamStatus.error;
-      } else {
-        streamResponse.status = AtStreamStatus.noAck;
+    var result = await remoteSecondary.executeCommand(command, auth: true);
+    _logger.finer('ack message:$result');
+    if (result != null && result.startsWith('stream:ack')) {
+      result = result.replaceAll('stream:ack ', '');
+      result = result.trim();
+      _logger.finer('ack received for streamId:$streamId');
+      remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
+      // `readResponse` rather than reaching through to the listener: this
+      // path has already written the bytes to the socket itself, so it needs
+      // the read half alone. The listener is not in at_lookup's barrel.
+      var streamResult = await (remoteSecondary.atLookUp as AtLookupMuxable)
+          .readResponse(
+              maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
+      if (streamResult.startsWith('stream:done')) {
+        await remoteSecondary.atLookUp.connection!.close();
+        streamResponse.status = AtStreamStatus.complete;
       }
-    } finally {
-      _streamConnections.remove(remoteSecondary);
-      await remoteSecondary.closeConnection();
+    } else if (result != null && result.startsWith('error:')) {
+      result = result.replaceFirst(RegExp('^error:'), '');
+      streamResponse.errorCode = result.split('-')[0];
+      streamResponse.errorMessage = result.split('-')[1];
+      streamResponse.status = AtStreamStatus.error;
+    } else {
+      streamResponse.status = AtStreamStatus.noAck;
     }
     return streamResponse;
   }
-
-  /// The connections [stream] calls have open, so [stop] closes them.
-  final Set<RemoteSecondary> _streamConnections = {};
-
-  /// The transfers [sendStreamAck] calls are receiving, so [stop] ends them.
-  final Set<StreamNotificationHandler> _streamReceivers = {};
 
   @override
   @Deprecated("Obsolete, will be removed in v4")
@@ -2501,9 +2480,6 @@ class AtClientImpl implements AtClient {
     Function streamReceiveCallBack,
   ) async {
     var handler = StreamNotificationHandler();
-    _streamReceivers.add(handler);
-    unawaited(
-        handler.done.whenComplete(() => _streamReceivers.remove(handler)));
     handler.remoteSecondary = getRemoteSecondary();
     handler.localSecondary = getLocalSecondary();
     handler.preference = _preference;
