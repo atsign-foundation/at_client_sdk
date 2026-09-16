@@ -1,5 +1,8 @@
 ## 3.15.0-rc1
 
+- fix: `RemoteSecondary.closeConnection` ends the remote secondary for good;
+  use `AtLookupMuxable.dropConnection` for a connection that reconnects.
+
 - fix: `stop()` returns, and the process can exit, when the client's
   connections are waiting on an atServer or atDirectory that accepted them
   and never answered, not even the TLS handshake. It used to wait for ever.

@@ -278,6 +278,11 @@ class SyncServiceImpl implements SyncService {
   @override
   void addProgressListener(SyncProgressListener listener) {
     _syncProgressListeners.add(listener);
+    if (_closed) {
+      scheduleMicrotask(() {
+        listener.onSyncProgressEvent(_buildStoppedProgress());
+      });
+    }
   }
 
   @override
@@ -1705,10 +1710,20 @@ class SyncServiceImpl implements SyncService {
     if (_ownsRemoteSecondary) await _remoteSecondary.closeConnection();
   }
 
+  SyncProgress _buildStoppedProgress() {
+    return SyncProgress()
+      ..atSign = currentAtSign
+      ..syncStatus = SyncStatus.failure
+      ..atClientException = AtClientException(
+          error_codes['AtClientException'], 'SyncService has been stopped')
+      ..message = 'SyncService stopped'
+      ..stopped = true;
+  }
+
   void _drainSyncQueue() {
     // 1. Drain the sync request queue with errors
-    final exception = AtClientException(
-        error_codes['AtClientException'], 'SyncService has been stopped');
+    final progress = _buildStoppedProgress();
+    final exception = progress.atClientException;
 
     while (syncRequests.isNotEmpty) {
       final request = syncRequests.removeFirst();
@@ -1720,13 +1735,6 @@ class SyncServiceImpl implements SyncService {
     }
 
     // 2. Notify progress listeners of the failure
-    var progress = SyncProgress()
-      ..atSign = currentAtSign
-      ..syncStatus = SyncStatus.failure
-      ..atClientException = exception
-      ..message = 'SyncService stopped'
-      ..stopped = true;
-
     for (var listener in _syncProgressListeners) {
       try {
         listener.onSyncProgressEvent(progress);

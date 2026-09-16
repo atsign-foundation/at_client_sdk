@@ -188,5 +188,22 @@ void main() {
       verify(() => atClientB.get(any(),
           getRequestOptions: any(named: 'getRequestOptions'))).called(2);
     });
+
+    test('cachePubKey drops expired entries on insert', () async {
+      final cachingVerifier = TestEnvelopeSigner(atClientB,
+          publicKeyCacheSettings: (
+            cacheExpiry: Duration(milliseconds: 50),
+            resetOnLookup: false
+          ));
+
+      cachingVerifier.cachePubKey('@alice', 'enrollA', 'keyA');
+      expect(cachingVerifier.pubKeyCache, hasLength(1));
+
+      await Future.delayed(Duration(milliseconds: 100));
+
+      cachingVerifier.cachePubKey('@bob', 'enrollB', 'keyB');
+      expect(cachingVerifier.pubKeyCache, hasLength(1));
+      expect(cachingVerifier.pubKeyCache.keys.single, '@bob#enrollB');
+    });
   });
 }

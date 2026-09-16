@@ -75,10 +75,17 @@ class AtRpcClient implements AtRpcCallbacks {
           '${rpc.atClient.getCurrentAtSign()} has stopped');
     }
     AtRpcReq request = AtRpcReq.create(payload);
-    completerMap[request.reqId] = Completer();
+    final completer = Completer<Map<String, dynamic>>();
+    completerMap[request.reqId] = completer;
+    completer.future.ignore();
     logger.info('Sending request to $serverAtsign : $request');
-    await rpc.sendRequest(toAtSign: serverAtsign, request: request);
-    return completerMap[request.reqId]!.future;
+    try {
+      await rpc.sendRequest(toAtSign: serverAtsign, request: request);
+    } catch (_) {
+      completerMap.remove(request.reqId);
+      rethrow;
+    }
+    return completer.future;
   }
 
   @override
