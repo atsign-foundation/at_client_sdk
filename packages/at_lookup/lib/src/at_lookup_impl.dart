@@ -136,13 +136,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Represents the client configurations.
   late Map<String, dynamic> _clientConfig;
 
-  // Holds what the deprecated `atChops` accessors set. The type cannot leave
-  // while those accessors are part of this class's API, so it goes when the
-  // credential ladder does.
-  // TODO(4.0): remove with the credential ladder.
-  // ignore: deprecated_member_use
-  AtChops? _atChops;
-
   /// Prefer [AtLookUp.withSecureSocket].
   ///
   /// This takes a `String, int` root pair where [AtRootDomain] validates the
@@ -577,12 +570,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   }
 
   /// Runs [authenticate] against this connection, under the same mutex the
-  /// ladder's own methods take.
+  /// PKAM methods below take.
   ///
-  /// [enrollmentId] is what gets recorded on the connection. It is a parameter
-  /// rather than always this object's field because the two can differ: a
-  /// caller reaching [pkamAuthenticate] names the enrollment in that call,
-  /// while a verb going through [_process] has only the field to go on.
+  /// [enrollmentId] is what gets recorded on the connection. Only a caller
+  /// that names one - [pkamAuthenticate] - gets it recorded; a verb going
+  /// through [_process] names none, since the authenticator it runs is opaque
+  /// and does not report which enrollment it signed as.
   Future<void> _authenticateWith(AtAuthenticator authenticate,
       {String? enrollmentId}) async {
     await createConnection();
@@ -595,11 +588,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         throw UnAuthenticatedException('Failed connecting to $_currentAtSign.'
             ' The authenticator reported failure');
       }
-      // The enrollment id still comes from the caller or this object, because
-      // the ladder still needs the field. When the ladder goes, so does the
-      // field, and the authenticator - which is the side that knows the
-      // enrollment - becomes the only thing that can supply it.
-      _recordAuthentication(enrollmentId: enrollmentId ?? this.enrollmentId);
+      _recordAuthentication(enrollmentId: enrollmentId);
     } finally {
       _pkamAuthenticationMutex.release();
     }
@@ -662,63 +651,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   @override
   Future<bool> pkamAuthenticate({String? enrollmentId}) async {
-    // Prefer an injected authenticator here too, not only in [_process].
-    // at_auth reaches this method directly rather than through a verb, so a
-    // seam wired only into [_process] would leave the authenticate() path
-    // still running the ladder - the seam would look connected and do nothing
-    // on the one call that matters most.
-    if (authenticator != null) {
-      await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
-      return _connection!.getMetaData()!.isAuthenticated;
+    final authenticate = authenticator;
+    if (authenticate == null) {
+      throw UnAuthenticatedException('pkamAuthenticate requires an '
+          'AtAuthenticator - pass one to AtLookUp.withSecureSocket.');
     }
-    await createConnection();
-    try {
-      await _pkamAuthenticationMutex.acquire();
-      if (!_connection!.getMetaData()!.isAuthenticated) {
-        await _sendCommand((FromVerbBuilder()
-              ..atSign = _currentAtSign
-              ..clientConfig = _clientConfig)
-            .buildCommand());
-        var fromResponse = await (messageListener.read());
-        logger.finer('from result:$fromResponse');
-        if (fromResponse.isEmpty) {
-          return false;
-        }
-        fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
-        fromResponse = validatedFromChallenge(fromResponse, _currentAtSign);
-        logger.finer('fromResponse $fromResponse');
-        logger.finer(
-            'signingAlgoType: $signingAlgoType hashingAlgoType:$hashingAlgoType');
-        // TODO(4.0): remove with the credential ladder; at_chops directs this
-        // to calling an AtSigningAlgorithm implementation directly.
-        // ignore: deprecated_member_use
-        final atSigningInput = AtSigningInput(fromResponse)
-          ..signingAlgoType = signingAlgoType
-          ..hashingAlgoType = hashingAlgoType
-          // ignore: deprecated_member_use
-          ..signingMode = AtSigningMode.pkam;
-        var signingResult = _atChops!.sign(atSigningInput);
-        var pkamBuilder = PkamVerbBuilder()
-          ..signingAlgo = signingAlgoType.name
-          ..hashingAlgo = hashingAlgoType.name
-          ..enrollmentlId = enrollmentId
-          ..signature = signingResult.result;
-        logger.finer('pkamCommand:${pkamBuilder.buildCommand()}');
-        await _sendCommand(pkamBuilder.buildCommand());
-
-        var pkamResponse = await messageListener.read();
-        if (pkamResponse == 'data:success') {
-          logger.info('auth success');
-          _recordAuthentication(enrollmentId: enrollmentId);
-        } else {
-          throw UnAuthenticatedException(
-              'Failed connecting to $_currentAtSign. $pkamResponse');
-        }
-      }
-      return _connection!.getMetaData()!.isAuthenticated;
-    } finally {
-      _pkamAuthenticationMutex.release();
-    }
+    await _authenticateWith(authenticate, enrollmentId: enrollmentId);
+    return _connection!.getMetaData()!.isAuthenticated;
   }
 
   final Mutex _cramAuthenticationMutex = Mutex();
@@ -794,17 +733,14 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       if (auth && _isAuthRequired()) {
         if (authenticator != null) {
           await _authenticateWith(authenticator!);
-        } else if (_atChops != null) {
-          logger.finer('calling pkam using atchops');
-          await pkamAuthenticate(enrollmentId: enrollmentId);
         } else if (privateKey != null) {
           logger.finer('calling pkam without atchops');
           await authenticate(privateKey);
         } else if (cramSecret != null) {
           await cramAuthenticate(cramSecret!);
         } else {
-          throw UnAuthenticatedException(
-              'Unable to perform atLookup auth. atChops object is not set');
+          throw UnAuthenticatedException('Unable to perform atLookup auth. '
+              'No AtAuthenticator, privateKey, or cramSecret is set.');
         }
       }
       try {
@@ -1192,7 +1128,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       await createConnection();
       if (_isAuthRequired()) {
         if (authenticator != null) {
-          await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
+          await _authenticateWith(authenticator!);
         } else {
           throw UnAuthenticatedException(
               'monitor requires authentication and no authenticator is set');
@@ -1268,42 +1204,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     await _connection!.write(command);
   }
 
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
-  @override
-  set atChops(AtChops? atChops) {
-    _atChops = atChops;
-  }
-
-  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
-      'instead - at_auth builds one with authenticatorForChops(). '
-      'Removed with the credential ladder in the next major release.')
-  @override
-  AtChops? get atChops => _atChops;
-
-  /// To use a specific signing algorithm other than default one for pkam auth, set the [SigningAlgoType] and [HashingAlgoType]
-  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  @override
-  HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
-
-  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
-      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
-      'Removed with the credential ladder in the next major release.')
-  @override
-  SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
-
-  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
-      'builds. To ask "which enrollment am I", read your own client state - '
-      'not this field, and not '
-      'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
-      'live connection authenticated as rather than what the next '
-      'authentication will use. '
-      'Removed with the credential ladder in the next major release.')
-  @override
-  String? enrollmentId;
 }
 
 /// Builds the listener that reads an open connection.

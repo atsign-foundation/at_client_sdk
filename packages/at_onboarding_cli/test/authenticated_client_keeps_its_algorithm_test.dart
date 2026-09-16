@@ -78,9 +78,6 @@ void main() {
     // NOTE: a real lookup rather than a mock — the client's connection stamps
     // it, and a mock would keep nothing to read back. It points at a port
     // nothing listens on, so the open comes back offline without a network.
-    // The stamping under test is the credential ladder, so its fields are
-    // named here on purpose.
-    // ignore: deprecated_member_use
     final own = AtLookupImpl(
         atSign, InternetAddress.loopbackIPv4.address, preference.rootPort,
         secondaryAddressFinder: ProxySecondaryAddressFinder(
@@ -98,15 +95,25 @@ void main() {
         reason: 'the client\'s connection wraps the lookup it was handed; if '
             'it built its own, the assertions below are about the wrong '
             'object');
-    // ignore: deprecated_member_use
-    expect(own.signingAlgoType, SigningAlgoType.mldsa65,
-        reason: 'the keyfile holds ML-DSA material for this enrollment and '
-            'the preference says rsa2048; the key material is what the '
-            'connection has to sign with');
-    // ignore: deprecated_member_use
-    expect(own.enrollmentId, enrollmentId);
     expect(own.authenticator, isNotNull,
         reason: 'the connection authenticates from the keyfile through the '
             'seam, not from credentials parked on the lookup');
+
+    // The keyfile holds only ML-DSA material for this enrollment — no RSA
+    // key at all. If the connection signed per the preference (rsa2048)
+    // instead of per the keyfile, at_chops would find nothing to sign with
+    // and this would fail rather than complete.
+    final exchange = OfflineExchange(atSign);
+    // NOTE: `AtLookUp` does not declare the authenticator — that interface is
+    // frozen for the mocks implementing it — so the seam is reached through
+    // `AtLookupMuxable`.
+    final authenticator = (own as AtLookupMuxable).authenticator!;
+    await expectLater(authenticator(exchange), completion(isTrue),
+        reason: 'the keyfile holds ML-DSA material for this enrollment and '
+            'the preference says rsa2048; the key material is what the '
+            'connection has to sign with');
+    expect(exchange.sent.where((c) => c.startsWith('pkam:')), isNotEmpty,
+        reason: 'a green that never reached the pkam: verb would mean the '
+            'authenticator short-circuited rather than signed');
   });
 }

@@ -7,8 +7,7 @@
 ///
 /// The instrument is at_chops' RSA verifier: the two sources hold different
 /// keypairs, and which public key the PKAM signature verifies under says which
-/// source signed. A lookup without the authenticator seam is covered in
-/// `remote_secondary_test.dart`.
+/// source signed.
 library;
 
 import 'dart:convert';
@@ -25,10 +24,6 @@ import 'test_utils/mocks.dart';
 
 /// `AtLookupImpl` implements `AtLookupMuxable`, so this double has the seam.
 class MockMuxableLookUp extends Mock implements AtLookupImpl {}
-
-/// The frozen interface alone: no authenticator seam, only the credential
-/// fields.
-class MockPlainLookUp extends Mock implements AtLookUp {}
 
 /// Runs an installed [AtAuthenticator] for real and records what it sent.
 class _RecordingExecutor implements AtCommandExecutor {
@@ -149,19 +144,6 @@ void main() {
 
       expect(await verifiesUnder(chopsPair, await pkamSignatureBy(lookUp)),
           isTrue);
-    });
-
-    test('a lookup without the seam keeps the credential fields', () async {
-      // at_lookup's ladder, which such a lookup authenticates from; the
-      // fields stay written and leave with the ladder in the at_lookup major.
-      final lookUp = MockPlainLookUp();
-      final chops = chopsOf(chopsPair);
-      RemoteSecondary(atSign, preference,
-          atLookUp: lookUp, atChops: chops, atKeysIo: await keyfile());
-
-      // The ladder write is the assertion.
-      // ignore: deprecated_member_use
-      verify(() => lookUp.atChops = chops).called(1);
     });
   });
 

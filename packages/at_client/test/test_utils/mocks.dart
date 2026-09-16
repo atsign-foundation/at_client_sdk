@@ -73,15 +73,12 @@ class MockSecondaryAddressFinder extends Mock
 class MockRemoteSecondary extends Mock implements RemoteSecondary {
   MockRemoteSecondary() {
     when(() => closeConnection()).thenAnswer((_) async {});
-    // A real RemoteSecondary always has a lookup, and it carries no
-    // enrollment id unless one was named - so a client built on this is fully
-    // privileged, which is what the fixtures that stub their own lookup also
-    // choose. Only the lookup itself is answered: what it would send is the
-    // fixture's business, and a test needing that supersedes this.
+    // A real RemoteSecondary always has a lookup, so a client built on this
+    // is fully privileged, which is what the fixtures that stub their own
+    // lookup also choose. Only the lookup itself is answered: what it would
+    // send is the fixture's business, and a test needing that supersedes
+    // this.
     final atLookUp = MockAtLookupImpl();
-    // the bridge reads the enrollment id off the lookup until the ladder goes
-    // ignore: deprecated_member_use
-    when(() => atLookUp.enrollmentId).thenReturn(null);
     when(() => this.atLookUp).thenReturn(atLookUp);
   }
 }
