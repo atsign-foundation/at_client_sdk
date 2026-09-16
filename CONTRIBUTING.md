@@ -114,9 +114,29 @@ open a follow-up `at_client_skills` PR to keep the skill accurate.
 ```
 packages/at_client_skills/skills/at_client_skills-sdk/
   SKILL.md              ← main skill body (edit this for API changes)
-  references/           ← 10 reference files (one per topic area)
-  evals/evals.json      ← 14 eval definitions (add new ones when adding new guidance)
+  references/           ← reference files, one per topic area
+  evals/evals.json      ← eval definitions (add one when adding new guidance)
 ```
+
+### What belongs in the skill
+
+The skill documents the SDK this repo publishes. For packages it does not own,
+document the **decision and the entry point, not the API**:
+
+- **Our packages** — anything under `packages/` (`at_client`,
+  `at_client_flutter`, `at_commons`, `at_auth`, and the rest): document the
+  API — signatures, defaults, what a call throws, the traps.
+- **Everything else** — packages this repo does not build, currently
+  `noports_core` and `at_stream`: say that a choice exists, what governs it,
+  and name the library or type to reach for. Then stop, and link to that
+  package's own docs.
+
+The reason is drift ownership. We notice when our own APIs change, because we
+change them; we do not track a sibling repo's release train, so an API
+reproduced from one goes stale silently and nothing here catches it.
+
+If an ecosystem package needs real depth, it wants its own skill rather than a
+section in this one.
 
 ### End-to-end validation (maintainers)
 
