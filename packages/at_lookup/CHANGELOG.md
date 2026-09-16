@@ -22,6 +22,11 @@
   now `AtLookupMessageListenerFactory`. Anything constructing an
   `OutboundConnectionImpl` itself changes with it, including code reaching
   `src/connection/` through `implementation_imports`.
+- breaking: `AtLookUp`'s credential-ladder members (`atChops`, `enrollmentId`,
+  `signingAlgoType`, `hashingAlgoType`, `authenticate_cram`, and
+  `executeVerb`'s `sync` param) are removed. A connection's authenticated
+  enrollment is now `AtConnectionMetaData.authenticatedAsEnrollmentId`, read
+  through `AtLookUp.connection?.getMetaData()`.
 
 ## 3.7.0-rc2
 

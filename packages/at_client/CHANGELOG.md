@@ -1,3 +1,9 @@
+## 3.15.0-rc2
+- `RemoteSecondary` reads and writes credential state through the
+  `AtAuthenticator` seam only, matching `at_lookup` ^4.0.0-rc1's removal of
+  its `atChops`/`enrollmentId`/`signingAlgoType`/`hashingAlgoType` ladder.
+  `RemoteSecondary`'s own public surface is unchanged.
+
 ## 3.15.0-rc1
 - breaking: `AtClientUtil.findSecondary` is removed. Use
   `RemoteSecondary.findSecondaryUrl`.
