@@ -1295,6 +1295,16 @@ class AtClientImpl implements AtClient {
   @override
   bool get isStopped => _isStopped;
 
+  /// The teardown in flight, shared by every caller.
+  ///
+  /// Held so that a second [stop] returns when the teardown has finished
+  /// rather than the moment it sees [isStopped], and sees the same defect if
+  /// it raised one. Without it a caller awaiting a stop somebody else had
+  /// already begun was handed a client whose connections and timers were
+  /// still live. Cleared by [start], so a restarted client can be stopped
+  /// again.
+  Future<void>? _stopping;
+
   Future<void> start() async {
     if (!_isStopped) {
       _logger.finer('start() called, but atClient is not stopped. Ignoring');
@@ -1305,6 +1315,7 @@ class AtClientImpl implements AtClient {
           'build a new client rather than restarting this one');
     }
     _isStopped = false;
+    _stopping = null;
   }
 
   @override
@@ -1312,19 +1323,30 @@ class AtClientImpl implements AtClient {
 
   /// Stops this client and hands back its storage, left open for a successor
   /// whatever its [AtClientStorage.closedByClient] says; the successor closes
-  /// it. Null when this client held none, or was already stopped.
+  /// it. Null when this client held none, was already stopped, or when
+  /// another caller had already begun the teardown this one joins.
   Future<AtClientStorage?> stopHandingOverStorage() async {
     final storage = _storage;
+    // NOTE: only the caller that STARTS the teardown hands the storage on. A
+    // second one joins a teardown already running - which may be an ordinary
+    // stop, releasing the storage - and handing the same store to a second
+    // successor would give two clients one store.
+    final handsItOver = _stopping == null && !_isStopped;
     await _stop(keepStorageOpen: true);
-    return storage;
+    return handsItOver ? storage : null;
   }
 
-  Future<void> _stop({required bool keepStorageOpen}) async {
+  Future<void> _stop({required bool keepStorageOpen}) {
+    final inFlight = _stopping;
+    if (inFlight != null) return inFlight;
     if (_isStopped) {
       _logger.finer('stop() called: but client is already stopped. Ignoring.');
-      return;
+      return Future.value();
     }
+    return _stopping = _tearDown(keepStorageOpen: keepStorageOpen);
+  }
 
+  Future<void> _tearDown({required bool keepStorageOpen}) async {
     _isStopped = true;
     _logger.info('stop() called: stopping at_client for $_atSign');
 

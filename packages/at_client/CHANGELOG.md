@@ -1,5 +1,13 @@
 ## 3.15.0-rc1
 
+- fix: concurrent `stop()` callers share one teardown. A second caller used
+  to return the moment it saw the client flagged stopped, which is before
+  the first caller's teardown has closed anything, so it was handed a client
+  whose connections and timers were still live and never saw a defect the
+  teardown raised. Each caller now returns when that teardown has finished.
+  `stopHandingOverStorage()` joins the same teardown and hands the storage on
+  only to the caller that started it, so two successors cannot be given one
+  store.
 - fix: `stop()` no longer waits on a paused subscriber. Closing a broadcast
   stream completes only once every subscriber has taken the done event, and a
   paused one never does, so an application that had paused the connection's

@@ -411,6 +411,80 @@ void main() {
           ..monitorAutoStart = false,
         lookUps: recording) as AtClientImpl;
 
+    test('a second stop waits for the teardown the first one started',
+        () async {
+      final stopping = await client('@twostops');
+      // The first connection to be closed parks, so the teardown is provably
+      // still running when the second caller arrives.
+      final closing = Completer<void>();
+      when(() => built.first.close()).thenAnswer((_) => closing.future);
+
+      final first = stopping.stop();
+      await Future.delayed(const Duration(milliseconds: 20));
+      var secondReturned = false;
+      final second = stopping.stop().then((_) => secondReturned = true);
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(secondReturned, isFalse,
+          reason: 'a caller that awaits stop() is told the client is torn '
+              'down. Returning while the first teardown is still running '
+              'hands it a client whose connections and timers are still '
+              'live, which is the whole property this is for');
+
+      closing.complete();
+      await Future.wait([first, second]);
+      expect(secondReturned, isTrue);
+      for (final lookUp in built) {
+        verify(() => lookUp.close()).called(1);
+      }
+    });
+
+    test('a hand-over that joins a stop already running hands nothing over',
+        () async {
+      final stopping = await client('@handover');
+      final closing = Completer<void>();
+      when(() => built.first.close()).thenAnswer((_) => closing.future);
+
+      final first = stopping.stop();
+      await Future.delayed(const Duration(milliseconds: 20));
+      final handedOver = stopping.stopHandingOverStorage();
+      closing.complete();
+      await first;
+
+      expect(await handedOver, isNull,
+          reason: 'the teardown already running is an ordinary stop, which '
+              'releases the storage; handing the same store to a successor '
+              'as well would give two clients one store');
+    });
+
+    test('a client restarted after a stop tears down again on the next stop',
+        () async {
+      // A client with no local store is the one that can restart: releasing
+      // storage is what makes a stop final, and this one holds none.
+      final restartable = await buildAtClient(
+          atSign: '@restartable',
+          namespace: 'wavi',
+          preference: AtClientPreference()
+            ..isLocalStoreRequired = false
+            ..namespace = 'wavi'
+            ..monitorAutoStart = false,
+          lookUps: recording) as AtClientImpl;
+      int teardowns() => recorded
+          .at('INFO')
+          .where((m) => m.contains('stopping at_client for @restartable'))
+          .length;
+      await restartable.stop();
+      expect(teardowns(), 1);
+
+      await restartable.start();
+      await restartable.stop();
+
+      expect(teardowns(), 2,
+          reason: 'the second stop ran a teardown of its own. Holding the '
+              'first one\'s future past a restart would answer this caller '
+              'from it and tear down nothing');
+    });
+
     test('closes every connection it opened: its own, sync\'s, the monitor\'s',
         () async {
       final stopping = await client('@closesall');
