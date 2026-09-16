@@ -69,9 +69,6 @@ void main() {
         () async {
       final lookUp = MockAtLookupImpl();
       when(() => lookUp.isConnectionAvailable()).thenReturn(false);
-      // the bridge reads the enrollment id off the lookup until the ladder goes
-      // ignore: deprecated_member_use
-      when(() => lookUp.enrollmentId).thenReturn(null);
       late AtClient client;
       // What the remote does when the stop closes its lookup underneath a
       // request in flight: classifies the failure and reports it.
