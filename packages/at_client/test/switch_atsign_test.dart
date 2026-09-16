@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
@@ -12,6 +13,10 @@ void main() {
         ..hiveStoragePath = 'test/hive'
         ..commitLogPath = 'test/hive/path';
       final mockAtLookUp = MockAtLookUp();
+      // The real RemoteSecondary wraps this lookup, and closing the client
+      // closes the lookup - so an unstubbed close() answers null into the
+      // Future<void> the teardown awaits.
+      when(() => mockAtLookUp.close()).thenAnswer((_) async {});
       await atClientManager.setCurrentAtSign(
           aliceAtSign, 'wavi', alicePreference,
           atLookUp: mockAtLookUp);

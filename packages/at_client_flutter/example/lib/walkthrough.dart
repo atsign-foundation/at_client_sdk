@@ -1,5 +1,3 @@
-import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/at_auth_io.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/extensions.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -39,20 +37,18 @@ Future<T?> _safeExecute<T>(
 Future<void> onboard(BuildContext context) async {
   await _safeExecute('onboard', () async {
     _logger.info('Step 1: Showing AtSignSelectionDialog');
-    AuthRequest? authRequest = await AtSignSelectionDialog.show(context);
-    if (!context.mounted || authRequest == null) {
+    final selection = await AtSignSelectionDialog.show(context);
+    if (!context.mounted || selection == null) {
       _logger.warning(
         'User cancelled or context not mounted after AtSignSelectionDialog',
       );
       return;
     }
 
-    _logger.info(
-      'Step 2: Showing RegistrarCramDialog for ${authRequest.atSign}',
-    );
+    _logger.info('Step 2: Showing RegistrarCramDialog for ${selection.atSign}');
     var cramKey = await RegistrarCramDialog.show(
       context,
-      (authRequest as AtOnboardingRequest),
+      selection.atSign,
       registrar: registrar,
     );
     if (!context.mounted || cramKey == null) {
@@ -62,47 +58,28 @@ Future<void> onboard(BuildContext context) async {
       return;
     }
 
+    final storage = await _storage(selection.atSign);
+    if (!context.mounted) return;
+
     _logger.info('Step 3: Showing CramDialog to complete onboarding');
-    var response = await CramDialog.show(
+    // The activation writes the atSign's first keys to the keychain and
+    // opens a client on them; the app owns that client.
+    final client = await CramDialog.show(
       context,
-      request: authRequest,
+      atSign: selection.atSign,
+      rootDomain: selection.rootDomain,
       cramKey: cramKey,
+      preference: _preference(),
+      storage: storage,
     );
-    if (response == null || !response.isSuccessful) {
+    if (client == null) {
       _logger.warning('CramDialog failed or user cancelled');
       return;
     }
 
-    _logger.info('Step 5: Setting up atClient instance');
-    // 5. very important! now that we have authenticated, we can create an atClient instance
-    var dir = await getApplicationSupportDirectory();
-    _logger.info('Application support directory: ${dir.path}');
-
-    var acp = AtClientPreference()..namespace = namespace;
-    // closedByClient: this app picks the location and the client still closes
-    // the store when it stops, so there is nothing to tear down.
-    var storage = HiveAtClientStorage(
-      atSign: response.atSign,
-      storagePath: dir.path,
-      closedByClient: true,
-    );
-
-    _logger.info('Setting current atSign: ${response.atSign}');
-    // Hand the client the session; it rebuilds its own authenticated connection
-    // from the session's key source rather than adopting auth's.
-    await AtClientManager.getInstance().fromAuthSession(
-      response.session!,
-      acp,
-      storage: storage,
-    );
-
-    _logger.info('Navigation to HomePage');
-    if (context.mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomePage()),
-      );
-    }
+    _logger.info('Step 4: Making the client current');
+    _adopt(client);
+    if (context.mounted) _goHome(context);
   });
 }
 
@@ -127,39 +104,38 @@ Future<void> authenticateWithKeychain(BuildContext context) async {
       return;
     }
 
+    if (!context.mounted) return;
     _logger.info('Step 2: Showing AtSignSelectionDialog with existing atSigns');
-    AuthRequest? request = await AtSignSelectionDialog.show(
+    final selection = await AtSignSelectionDialog.show(
       context,
       existingAtSigns: atSigns,
     );
-    if (request == null) {
+    if (selection == null) {
       _logger.warning('User cancelled AtSignSelectionDialog');
       return;
     }
 
-    _logger.info(
-      'Step 3: Creating AuthRequest with KeychainAtKeysIo for ${request.atSign}',
-    );
-    var authRequest = AtAuthRequest(
-      request.atSign,
-      atKeysIo: KeychainAtKeysIo(),
-      rootDomain: request.rootDomain,
-    );
+    final storage = await _storage(selection.atSign);
+    if (!context.mounted) return;
 
-    _logger.info('Step 4: Showing PkamDialog');
-    var response = await PkamDialog.show(
+    _logger.info('Step 3: Showing PkamDialog, opening on the keychain');
+    final client = await PkamDialog.show(
       context,
-      request: authRequest,
-      backupKeys: [KeychainAtKeysIo()],
+      atSign: selection.atSign,
+      rootDomain: selection.rootDomain,
+      keys: KeychainAtKeysIo(),
+      preference: _preference(),
+      storage: storage,
     );
-    if (response == null || !response.isSuccessful) {
+    if (client == null) {
       _logger.warning('PkamDialog failed or user cancelled');
       return;
     }
 
-    _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, response);
-  }, context: context);
+    _logger.info('Step 4: Making the client current');
+    _adopt(client);
+    if (context.mounted) _goHome(context);
+  });
 }
 
 /// Authenticate using an atKeys file from the file system
@@ -174,83 +150,73 @@ Future<void> authenticateWithFile(BuildContext context) async {
     }
 
     _logger.info('Step 2: Processing selected file');
-    var atSign = atKeysIo.getAtsign();
+    final atSign = atKeysIo.getAtsign();
     _logger.info('Extracted atSign from filename: $atSign');
 
-    _logger.info('Step 3: Creating AuthRequest with file-based AtKeysIo');
-    var authRequest = AtAuthRequest(
-      atSign,
-      atKeysIo: atKeysIo,
-      rootDomain: AtRootDomain.atsignDomain,
-    );
+    final storage = await _storage(atSign);
+    if (!context.mounted) return;
 
-    _logger.info('Step 4: Showing PkamDialog');
-    var response = await PkamDialog.show(
+    _logger.info('Step 3: Showing PkamDialog, opening on the file');
+    // backupKeys: the file's keys are copied into the keychain once the
+    // client is open, so the next login can come from the keychain.
+    final client = await PkamDialog.show(
       context,
-      request: authRequest,
+      atSign: atSign,
+      keys: atKeysIo,
+      preference: _preference(),
+      storage: storage,
       backupKeys: [KeychainAtKeysIo()],
     );
-    if (response == null || !response.isSuccessful) {
+    if (client == null) {
       _logger.warning('PkamDialog failed or user cancelled');
       return;
     }
 
-    _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, response);
-  }, context: context);
+    _logger.info('Step 4: Making the client current');
+    _adopt(client);
+    if (context.mounted) _goHome(context);
+  });
 }
 
 Future<void> authenticateWithApkam(BuildContext context) async {
   await _safeExecute('authenticateWithApkam', () async {
     _logger.info('Step 1: Showing AtSignSelectionDialog');
-    AuthRequest? request = await AtSignSelectionDialog.show(context);
-    if (request == null) {
+    final selection = await AtSignSelectionDialog.show(context);
+    if (selection == null) {
       _logger.warning('User cancelled AtSignSelectionDialog');
       return;
     }
 
-    _logger.info('Step 2: Showing ApkamActivationDialog for ${request.atSign}');
-    AtEnrollmentResponse? enrollmentResponse = await ApkamActivationDialog.show(
+    final storage = await _storage(selection.atSign);
+    if (!context.mounted) return;
+
+    _logger.info(
+      'Step 2: Showing ApkamActivationDialog for ${selection.atSign}',
+    );
+    // The dialog submits the enrollment request, waits for an enrolled client
+    // to approve it, and hands back the client that opens on the approved
+    // keys. Those keys are filed in the keychain, which is also where a
+    // request submitted earlier for this app and device is resumed from.
+    final client = await ApkamActivationDialog.show(
       context,
-      atSign: request.atSign,
-      rootDomain: request.rootDomain,
+      atSign: selection.atSign,
+      rootDomain: selection.rootDomain,
       appName: namespace,
       deviceName: 'default',
       namespaces: {namespace: 'rw'},
+      preference: _preference(),
+      keys: KeychainAtKeysIo(),
+      storage: storage,
     );
-
-    if (enrollmentResponse == null) {
-      _logger.severe('Enrollment failed: enrollmentResponse is null');
-      throw AtAuthenticationException(
-        "Enrollment failed: enrollmentResponse is null",
-      );
-    }
-
-    if (enrollmentResponse.atAuthKeys == null) {
-      _logger.severe('Enrollment failed: atAuthKeys missing');
-      throw AtAuthenticationException('Enrollment failed: atAuthKeys missing');
-    }
-
-    _logger.info('Step 3: Creating AuthRequest with atAuthKeys');
-    AtAuthRequest authRequest = AtAuthRequest(
-      request.atSign,
-      atAuthKeys: enrollmentResponse.atAuthKeys!,
-      rootDomain: request.rootDomain,
-    );
-    _logger.info('Step 4: Showing PkamDialog');
-    var response = await PkamDialog.show(
-      context,
-      request: authRequest,
-      backupKeys: [KeychainAtKeysIo()],
-    );
-    if (response == null || !response.isSuccessful) {
-      _logger.warning('PkamDialog failed or user cancelled');
+    if (client == null) {
+      _logger.warning('ApkamActivationDialog failed or user cancelled');
       return;
     }
 
-    _logger.info('Step 5: Setting up atClient');
-    await _setupAtClient(context, response);
-  }, context: context);
+    _logger.info('Step 3: Making the client current');
+    _adopt(client);
+    if (context.mounted) _goHome(context);
+  });
 }
 
 Future<void> exportKeys(BuildContext context) async {
@@ -330,58 +296,35 @@ Future<String?> _openFileSaveDialog({
   }
 }
 
-/// Helper method to set up the atClient instance and navigate to home page
-Future<void> _setupAtClient(BuildContext context, AuthResponse response) async {
-  _logger.info('Setting up atClient for ${response.atSign}');
+AtClientPreference _preference() => AtClientPreference()..namespace = namespace;
 
+/// Where this app keeps [atSign]'s local store. closedByClient: this app
+/// picks the location and the client still closes the store when it stops,
+/// so there is nothing to tear down.
+Future<HiveAtClientStorage> _storage(String atSign) async {
   var dir = await getApplicationSupportDirectory();
-  _logger.info('Using directory: ${dir.path}');
-
-  var acp = AtClientPreference()..namespace = namespace;
-  // closedByClient: this app picks the location and the client still closes the
-  // store when it stops, so there is nothing to tear down.
-  var storage = HiveAtClientStorage(
-    atSign: response.atSign,
+  _logger.info('Application support directory: ${dir.path}');
+  return HiveAtClientStorage(
+    atSign: atSign,
     storagePath: dir.path,
     closedByClient: true,
   );
+}
 
-  if (response.enrollmentId == null) {
-    _logger.warning("EnrollmentId is null");
-  }
-  final session = response.session;
-  if (session != null) {
-    // Preferred path: hand over the session; the client rebuilds its own
-    // authenticated connection from the session's key source.
-    await AtClientManager.getInstance().fromAuthSession(
-      session,
-      acp,
-      storage: storage,
-    );
-  } else {
-    // Transitional fallback for flows that hand back only atAuthKeys with no
-    // AtKeysIo source (e.g. APKAM enrollment): adopt auth's already-
-    // authenticated AtChops/AtLookUp directly.
-    await AtClientManager.getInstance().setCurrentAtSign(
-      response.atSign,
-      namespace,
-      acp,
-      enrollmentId: response.enrollmentId,
-      atChops: response.atChops,
-      atLookUp: response.atLookUp,
-      storage: storage,
-    );
-  }
+/// Every dialog hands back a client the app owns. This app keeps one current
+/// client in [AtClientManager], since its pages read it from there, whether or
+/// not the page that asked for it is still showing.
+void _adopt(AtClient client) {
+  _logger.info('Making the client for ${client.getCurrentAtSign()} current');
+  AtClientManager.getInstance().use(client);
+}
 
-  if (context.mounted) {
-    _logger.info('Navigating to HomePage');
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const HomePage()),
-    );
-  } else {
-    _logger.warning('Context not mounted, skipping navigation');
-  }
+void _goHome(BuildContext context) {
+  _logger.info('Navigating to HomePage');
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(builder: (context) => const HomePage()),
+  );
 }
 
 /// remove all atsigns from the keychain
@@ -410,6 +353,7 @@ Future<void> removeAtsign(BuildContext context) async {
       return;
     }
 
+    if (!context.mounted) return;
     String? atsign = await showDialog<String>(
       context: context,
       builder: (BuildContext context) {

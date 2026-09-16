@@ -1,14 +1,17 @@
 # Flutter Auth Guide
 
 `at_client_flutter` provides four authentication flows as dialog-based helpers.
-All flows end with the same `_setupAtClient(...)` call.
+Every dialog hands back the **`AtClient` it opened**, or `null` when the user
+cancelled or the dialog failed. The app owns that client: it uses it, makes it
+current if its screens read `AtClientManager`, and `stop()`s it when done.
+Nothing in these flows imports `at_auth`.
 
 ## Dependencies
 
 Add the packages with `dart pub add` (pins the latest compatible versions):
 
 ```sh
-dart pub add at_client_flutter at_auth path_provider
+dart pub add at_client_flutter path_provider
 # at_client_flutter re-exports at_client; path_provider is for
 # getApplicationSupportDirectory()
 ```
@@ -22,56 +25,87 @@ its atServer must be registered in the **atDirectory** (the atServer address
 registry). Activation happens once, via Flow 1 (CRAM) below or an onboarding
 app / the registrar.
 
-Authenticating an atsign that isn't activated (or a typo) fails lookup with:
+Opening an atsign that isn't activated (or a typo) comes back **refused** with
+cause `noAtServer`: the atDirectory has no atServer for it. On the first open
+of those keys on a device that is a thrown `AtOpenRefusedException`, since
+there is nothing local to serve. Activate it first (Flow 1), then Flows 2–4
+(existing keys / keychain / APKAM) will resolve it.
 
-```text
-SecondaryNotFoundException: No entry in atDirectory for @alice
+---
+
+## Shared helpers (all flows)
+
+```dart
+import 'package:at_client_flutter/at_client_flutter.dart';
+import 'package:at_client_flutter/extensions.dart';   // FileAtKeysIo.getAtsign()
+import 'package:path_provider/path_provider.dart';
+
+const namespace = 'my_namespace';
+
+AtClientPreference _preference() => AtClientPreference()
+  ..namespace = namespace
+  ..syncRegex = namespace;   // scope sync to this app (see 11-sync.md)
+
+/// Where this app keeps the atSign's local store. closedByClient: the client
+/// closes it when it stops, so there is nothing to tear down.
+Future<HiveAtClientStorage> _storage(String atSign) async {
+  final dir = await getApplicationSupportDirectory();
+  return HiveAtClientStorage(
+      atSign: atSign, storagePath: dir.path, closedByClient: true);
+}
+
+/// Screens that read AtClientManager.getInstance().atClient need this; an app
+/// that passes the client around does not.
+void _adopt(AtClient client) => AtClientManager.getInstance().use(client);
 ```
 
-That means the atsign has no atServer registered yet — activate it first (Flow
-1), then Flows 2–4 (existing keys / keychain / APKAM) will resolve it.
+`AtClientPreference.hiveStoragePath` and `commitLogPath` are deprecated: the
+storage object above is where the store lives, and it is what the dialogs and
+the `Atsign` verbs take as `storage`.
 
 ---
 
 ## Flow 1: New atsign — CRAM Activation (first-time only)
 
 Use when a developer wants to activate a brand-new atsign for a user.
-Requires a `RegistrarService` configured with a registrar URL and API key.
+Requires a `RegistrarService` (re-exported by `at_client_flutter`) configured
+with a registrar URL and API key.
 
 ```dart
-import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_auth/at_auth.dart';
-
-// Configure registrar (typically once at app startup)
 final registrar = RegistrarService(
   registrarUrl: 'my.atsign.com',
-  apiKey: 'your-api-key',        // get from atsign.com developer portal
+  apiKey: 'your-api-key',        // from the atsign.com developer portal
 );
 
 Future<void> activateNewAtSign(BuildContext context) async {
-  // Step 1: User picks / types an atSign
-  AuthRequest? authRequest = await AtSignSelectionDialog.show(context);
-  if (authRequest == null || !context.mounted) return;
+  // Step 1: the user picks / types an atSign and a root domain
+  final selection = await AtSignSelectionDialog.show(context);   // AtsignSelection?
+  if (selection == null || !context.mounted) return;
 
-  // Step 2: Obtain CRAM key from registrar
-  final cramKey = await RegistrarCramDialog.show(
-    context,
-    authRequest as AtOnboardingRequest,
-    registrar: registrar,
-  );
+  // Step 2: the registrar emails an OTP; the dialog exchanges it for the CRAM key
+  final cramKey = await RegistrarCramDialog.show(context, selection.atSign,
+      registrar: registrar);
   if (cramKey == null || !context.mounted) return;
 
-  // Step 3: Complete onboarding with CRAM key
-  final response = await CramDialog.show(
+  // Step 3: activate. The dialog polls for the atServer to be provisioned
+  // (5 minutes, every 2 s), mints the atSign's first keys into the keychain
+  // (or `keys:`), opens the client on them and hands it back.
+  final client = await CramDialog.show(
     context,
-    request: authRequest,
+    atSign: selection.atSign,
+    rootDomain: selection.rootDomain,
     cramKey: cramKey,
+    preference: _preference(),
+    storage: await _storage(selection.atSign),
   );
-  if (response == null || !response.isSuccessful) return;
-
-  await _setupAtClient(authRequest.rootDomain, response);
+  if (client == null) return;
+  _adopt(client);
 }
 ```
+
+Pass `progressBuilder` when the default step-by-step rendering does not fit
+your design. Let the dialog wait; do not wrap a retry loop around it. On a
+failure offer *Retry* (show the dialog again) rather than a longer wait.
 
 ---
 
@@ -81,24 +115,23 @@ Use when the user has an `.atKeys` file (typically from a previous device).
 
 ```dart
 Future<void> loginWithFile(BuildContext context) async {
-  // Step 1: User picks the .atKeys file
-  final atKeysIo = await AtKeysFileDialog.show(context);
+  // Step 1: the user picks the .atKeys file
+  final atKeysIo = await AtKeysFileDialog.show(context);   // FileAtKeysIo?
   if (atKeysIo == null || !context.mounted) return;
+  final atSign = atKeysIo.getAtsign();
 
-  // Step 2: Authenticate
-  final authRequest = AtAuthRequest(
-    atKeysIo.getAtsign(),
-    atKeysIo: atKeysIo,
-    rootDomain: AtRootDomain.atsignDomain,
-  );
-  final response = await PkamDialog.show(
+  // Step 2: open on the file. backupKeys copies the keys into the keychain
+  // once the client is open, so the next login can come from the keychain.
+  final client = await PkamDialog.show(
     context,
-    request: authRequest,
-    backupKeys: [KeychainAtKeysIo()],   // saves to device keychain for future logins
+    atSign: atSign,
+    keys: atKeysIo,
+    preference: _preference(),
+    storage: await _storage(atSign),
+    backupKeys: [KeychainAtKeysIo()],
   );
-  if (response == null || !response.isSuccessful) return;
-
-  await _setupAtClient(authRequest.rootDomain, response);
+  if (client == null) return;
+  _adopt(client);
 }
 ```
 
@@ -137,7 +170,7 @@ Android Keystore).
 
 ```dart
 Future<void> loginWithKeychain(BuildContext context) async {
-  // Step 1: Read atSigns already stored on this device
+  // Step 1: the atSigns already stored on this device
   final atSigns = await KeychainStorage().getAllAtsigns();
   if (atSigns.isEmpty) {
     _showMessage(context, 'No atSigns in keychain. Onboard one first.');
@@ -145,27 +178,22 @@ Future<void> loginWithKeychain(BuildContext context) async {
   }
   if (!context.mounted) return;
 
-  // Step 2: User picks an atSign from the list
-  final request = await AtSignSelectionDialog.show(
-    context,
-    existingAtSigns: atSigns,
-  );
-  if (request == null || !context.mounted) return;
+  // Step 2: the user picks one
+  final selection =
+      await AtSignSelectionDialog.show(context, existingAtSigns: atSigns);
+  if (selection == null || !context.mounted) return;
 
-  // Step 3: Authenticate from keychain
-  final authRequest = AtAuthRequest(
-    request.atSign,
-    atKeysIo: KeychainAtKeysIo(),
-    rootDomain: request.rootDomain,
-  );
-  final response = await PkamDialog.show(
+  // Step 3: open on the keychain
+  final client = await PkamDialog.show(
     context,
-    request: authRequest,
-    backupKeys: [KeychainAtKeysIo()],
+    atSign: selection.atSign,
+    rootDomain: selection.rootDomain,
+    keys: KeychainAtKeysIo(),
+    preference: _preference(),
+    storage: await _storage(selection.atSign),
   );
-  if (response == null || !response.isSuccessful) return;
-
-  await _setupAtClient(authRequest.rootDomain, response);
+  if (client == null) return;
+  _adopt(client);
 }
 ```
 
@@ -173,121 +201,96 @@ Future<void> loginWithKeychain(BuildContext context) async {
 
 ## Flow 4: APKAM — New Device Enrollment
 
-Use when a user wants to add a new device to an existing atsign.
-The manager device (another phone already authenticated) must approve
-the enrollment.
+Use when a user wants to add a new device to an existing atsign. A device
+already holding the atSign's keys (the "manager") approves the request, from
+`client.enrollments` or the `EnrollmentRequestList` widget.
 
 ```dart
 Future<void> loginWithApkam(BuildContext context) async {
-  // Step 1: User picks an atSign to enroll this device with
-  final request = await AtSignSelectionDialog.show(context);
-  if (request == null || !context.mounted) return;
+  // Step 1: the user picks the atSign to enroll this device with
+  final selection = await AtSignSelectionDialog.show(context);
+  if (selection == null || !context.mounted) return;
 
-  // Step 2: Send enrollment request (user approves on another device)
-  final enrollment = await ApkamActivationDialog.show(
+  // Step 2: the dialog submits the request, waits for the approval, and
+  // hands back the client opened on the approved keys. The keys are filed in
+  // `keys` (the keychain by default); a request already pending there is
+  // resumed rather than submitted again, so a restart mid-wait is fine.
+  final client = await ApkamActivationDialog.show(
     context,
-    atSign: request.atSign,
-    rootDomain: request.rootDomain,
-    appName: 'my_app',             // must match what the manager device sees
+    atSign: selection.atSign,
+    rootDomain: selection.rootDomain,
+    appName: namespace,              // what the manager device sees
     deviceName: 'default',
-    namespaces: {'my_namespace': 'rw'},   // permissions this device needs
+    namespaces: {namespace: 'rw'},   // the permissions this device needs
+    preference: _preference(),
+    keys: KeychainAtKeysIo(),
+    storage: await _storage(selection.atSign),
   );
-  if (enrollment?.atAuthKeys == null || !context.mounted) return;
-
-  // Step 3: Authenticate with the enrolled keys
-  final authRequest = AtAuthRequest(
-    request.atSign,
-    atAuthKeys: enrollment!.atAuthKeys!,
-    rootDomain: request.rootDomain,
-  );
-  final response = await PkamDialog.show(
-    context,
-    request: authRequest,
-    backupKeys: [KeychainAtKeysIo()],
-  );
-  if (response == null || !response.isSuccessful) return;
-
-  await _setupAtClient(authRequest.rootDomain, response);
+  if (client == null) return;
+  _adopt(client);
 }
 ```
 
----
+There is no second `PkamDialog`: the enrolled client is the one handed back.
 
-## Post-Auth Setup (all flows)
-
-After any successful authentication, initialize `AtClient`:
+**The approve side**, on the manager device:
 
 ```dart
-import 'package:path_provider/path_provider.dart' show getApplicationSupportDirectory;
-
-// Takes just the root domain (from authRequest.rootDomain), so this helper is
-// independent of which auth flow produced the request — it works for all four.
-Future<void> _setupAtClient(
-  AtRootDomain atRootDomain,
-  AuthResponse response,
-) async {
-  final dir = await getApplicationSupportDirectory();
-
-  final acp = AtClientPreference()
-    ..rootDomain    = atRootDomain.rootDomain
-    ..rootPort      = atRootDomain.rootPort
-    ..namespace     = 'my_namespace'
-    ..syncRegex     = 'my_namespace'   // scope sync to this app (see references/11-sync.md)
-    ..commitLogPath  = dir.path
-    ..hiveStoragePath = dir.path;
-
-  await AtClientManager.getInstance().setCurrentAtSign(
-    response.atSign,
-    'my_namespace',
-    acp,
-    enrollmentId: response.enrollmentId,
-    atChops:  response.atChops,
-    atLookUp: response.atLookUp,
-  );
-}
+final pending = await client.enrollments.pending();
+await client.enrollments.approve(pending.first.enrollmentId!);   // or deny(id)
+client.enrollments.requests.listen((r) => ...);                  // new requests as they arrive
+final passcode = await client.enrollments.otp();                 // what the new device types
 ```
 
-**AtClientPreference required fields:**
-
-| Field | Type | Description |
-| ------- | ------ | ------------- |
-| `namespace` | `String` | App namespace — must match `AtCollection` namespace suffix |
-| `commitLogPath` | `String` | Path to local commit log directory |
-| `hiveStoragePath` | `String` | Path to Hive storage directory |
-| `rootDomain` | `String` | atServer root domain (from `authRequest.rootDomain.rootDomain`) |
-| `rootPort` | `int` | atServer root port (from `authRequest.rootDomain.rootPort`) |
-
-**Strongly recommended:** set `..syncRegex = '<your namespace>'` (shown above).
-Without it, sync covers the atsign's entire keystore and can wedge — see
-[references/11-sync.md](11-sync.md).
-
-**Important:** Use `atChops` and `atLookUp` from the `response` (not freshly
-created) — these are already authenticated instances.
+or drop in `EnrollmentRequestList(atClient: client)`, which renders the roster
+and decides.
 
 ---
 
-## Logout
+## What the client comes back as
+
+`PkamDialog` (Flow 2, 3) and the client Flow 4 hands back are `Atsign.open`
+underneath: **one bounded connect attempt**, seconds long, and the client comes
+back whether the atServer was reached or not.
 
 ```dart
-AtClientManager.getInstance().reset();
+final state = client.connection.current;   // online | offline | refused, with a cause
+client.connection.changes.listen((s) => setState(() => _state = s));
 ```
+
+- **offline** — the client serves its local store and syncs when the atServer
+  is reached. A 1.x app treated this as a failed login; a 2.0 app decides, and
+  usually shows an indicator rather than blocking.
+- **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
+  `enrollmentNotApproved`) — the atServer rejected the keys. Ask the user.
+- A **first** open of these keys on a device that is refused throws
+  `AtOpenRefusedException` instead, since nothing is held locally to serve.
+
+See [15-client-lifecycle.md](15-client-lifecycle.md) for the full state model,
+the services and the shutdown checklist.
 
 ---
 
-## Getting the AtClient After Setup
+## Logout, and switching atsigns
 
 ```dart
-final atClient = AtClientManager.getInstance().atClient;
-// Then: await atClient.collection<Todo>('todos.my_namespace', ttl, ...);
+await client.stop();   // stops sync, notifications and the connection; closes the store
 ```
+
+Opening the same atSign again while its client is live is refused with a
+`StateError`, so every sign-in stops the previous client first. To switch
+users: `stop()` the current client, run the flow for the next one, `_adopt`
+the client it hands back. `AtClientManager.getInstance().reset()` is a test
+hook, not a logout.
 
 ---
 
 ## Canonical Examples
 
 <!-- pyml disable-num-lines 2 md013-->
-- [packages/at_client_flutter/examples/todos/lib/onboarding.dart](../../../../at_client_flutter/examples/todos/lib/onboarding.dart) — Flows 2, 3, 4 with `_setupAtClient`
-- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — All 4 flows in one file
+- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — all four flows, plus the `_storage` and `_adopt` helpers
+- [packages/at_client_flutter/example/lib/apkam_example.dart](../../../../at_client_flutter/example/lib/apkam_example.dart) — the approve/deny side of APKAM
+- [packages/at_client_flutter/examples/todos/lib/onboarding.dart](../../../../at_client_flutter/examples/todos/lib/onboarding.dart) — Flows 2 and 3 in a real app
 
 ---
 
@@ -295,17 +298,16 @@ final atClient = AtClientManager.getInstance().atClient;
 
 ```dart
 import 'package:at_client_flutter/at_client_flutter.dart';
-// Exports: AtSignSelectionDialog, PkamDialog, CramDialog, RegistrarCramDialog,
-//          AtKeysFileDialog, ApkamActivationDialog, ApkamDialog, KeychainStorage,
-//          KeychainAtKeysIo, AtClientPreference, AtClientManager
+// Exports all of at_client plus: AtSignSelectionDialog (→ AtsignSelection),
+// PkamDialog, CramDialog, RegistrarCramDialog, AtKeysFileDialog,
+// ApkamActivationDialog, EnrollmentRequestList, KeychainStorage,
+// KeychainAtKeysIo, and RegistrarService (the one at_auth type an app wants).
 
 import 'package:at_client_flutter/extensions.dart';
-// Adds FileAtKeysIo.getAtsign() helper (used in Flow 2).
-// Note: String.toAtsign() comes from at_client/at_client.dart, NOT this import.
-
-import 'package:at_auth/at_auth.dart';
-// AtAuthRequest, AuthResponse, AtAuthenticationException, AtOnboardingRequest,
-// AtEnrollmentResponse, RegistrarService
-// Note: AtRootDomain comes from at_commons (surfaced via at_client_flutter),
-// not at_auth.
+// Adds FileAtKeysIo.getAtsign() (used in Flow 2).
+// Note: String.toAtsign() comes from at_client, NOT this import.
 ```
+
+No `import 'package:at_auth/at_auth.dart'`: `AtAuthRequest`, `AuthResponse`,
+`AtOnboardingRequest` and `AtEnrollmentResponse` are gone with the services
+that took them. `AtRootDomain` comes from `at_commons`, via `at_client`.

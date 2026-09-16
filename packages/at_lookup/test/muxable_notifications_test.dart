@@ -2,11 +2,27 @@ import 'dart:async';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'at_lookup_test_utils.dart';
 import 'fake_at_server_transport.dart';
+
+/// Captures what at_lookup logs, so a claim about a level is asserted.
+///
+/// Installed from `setUpAll`, before any lookup is built: each instance binds
+/// the default handler as it stands when its logger is constructed.
+class _RecordedLogs implements LoggingHandler {
+  final List<({String level, String message})> records = [];
+
+  @override
+  void call(dynamic record) => records
+      .add((level: '${record.level.name}', message: '${record.message}'));
+
+  Iterable<String> at(String level) =>
+      records.where((r) => r.level == level).map((r) => r.message);
+}
 
 /// [AtLookupMuxable] - the notification stream, over a REAL listener.
 ///
@@ -18,6 +34,11 @@ import 'fake_at_server_transport.dart';
 void main() {
   const host = '127.0.0.1';
   const port = 12345;
+  final recorded = _RecordedLogs();
+
+  setUpAll(() {
+    AtSignLogger.defaultLoggingHandler = recorded;
+  });
 
   late MockSecondaryAddressFinder addressFinder;
 
@@ -532,6 +553,7 @@ void main() {
       await atLookup.startNotifications();
       final sub = atLookup.notifications.listen((_) {});
       sub.pause();
+      recorded.records.clear();
 
       Object? thrown;
       final pending = atLookup.executeCommand('noop:0\n').then<void>(
@@ -550,6 +572,23 @@ void main() {
       expect(thrown, isNotNull,
           reason: 'closing must fail the request in flight, and while paused '
               'only the abort inside _closeConnection can do it');
+      expect(
+          thrown,
+          isA<ConnectionInvalidException>().having(
+              (e) => e.message,
+              'message',
+              'The connection was closed by this client before a response '
+                  'arrived'),
+          reason: 'this side closed it on purpose, and the failure says so '
+              'rather than sending the caller to look at the network');
+      expect(
+          recorded.at('INFO'),
+          contains(contains(
+              'Connection closed by this client with a request in flight')),
+          reason: 'the abort is logged once, where it is decided');
+      expect(recorded.at('SEVERE'), isEmpty,
+          reason: 'a close this client asked for is not an error in sending '
+              'to the server, and at_lookup used to log it as one twice');
 
       sub.resume();
     });

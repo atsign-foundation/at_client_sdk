@@ -12,7 +12,7 @@ import 'package:at_onboarding_cli/src/cli/auth_cli_args.dart';
 import 'package:at_onboarding_cli/src/util/at_file_util.dart';
 import 'package:at_onboarding_cli/src/util/at_onboarding_preference.dart';
 import 'package:test/test.dart';
-import 'at_onboarding_cli_test.dart';
+import 'keyfile_helpers.dart';
 
 void main() {
   final baseDirPath = 'test/keys';
@@ -54,9 +54,7 @@ void main() {
       testAtSign = '@alice_decrypt_test';
       passPhrase = 'test_passphrase_123';
 
-      // Generate test AtKeys
-      AtChopsKeys atChopsKeys = getRandomAtChopsKeys();
-      testAtKeys = _getAtAuthKeysFromAtChopsKeys(atChopsKeys);
+      testAtKeys = randomLegacyKeys();
 
       encryptedAtKeysFile =
           File('${tempDir.path}/${testAtSign}_encrypted.atKeys');
@@ -103,18 +101,18 @@ void main() {
       AtKeys decryptedKeys = await decryptedFileIo.read(testAtSign);
 
       // Verify all keys match
-      expect(decryptedKeys.apkamPublicKey.toString(),
-          equals(testAtKeys.apkamPublicKey.toString()));
-      expect(decryptedKeys.apkamPrivateKey.toString(),
-          equals(testAtKeys.apkamPrivateKey.toString()));
-      expect(decryptedKeys.defaultEncryptionPublicKey.toString(),
-          equals(testAtKeys.defaultEncryptionPublicKey.toString()));
-      expect(decryptedKeys.defaultEncryptionPrivateKey.toString(),
-          equals(testAtKeys.defaultEncryptionPrivateKey.toString()));
-      expect(decryptedKeys.defaultSelfEncryptionKey.toString(),
-          equals(testAtKeys.defaultSelfEncryptionKey.toString()));
-      expect(decryptedKeys.apkamSymmetricKey.toString(),
-          equals(testAtKeys.apkamSymmetricKey.toString()));
+      final decryptedApkam = decryptedKeys.authenticationKeyPairFor(null)!;
+      final testApkam = testAtKeys.authenticationKeyPairFor(null)!;
+      expect(decryptedApkam.publicKey, equals(testApkam.publicKey));
+      expect(decryptedApkam.privateKey, equals(testApkam.privateKey));
+      expect(decryptedKeys.encryptionKeyPair!.atPublicKey.publicKey,
+          equals(testAtKeys.encryptionKeyPair!.atPublicKey.publicKey));
+      expect(decryptedKeys.encryptionKeyPair!.atPrivateKey.privateKey,
+          equals(testAtKeys.encryptionKeyPair!.atPrivateKey.privateKey));
+      expect(decryptedKeys.selfEncryptionKey!.key,
+          equals(testAtKeys.selfEncryptionKey!.key));
+      expect(decryptedKeys.enrollmentSymmetricKey!.key,
+          equals(testAtKeys.enrollmentSymmetricKey!.key));
     });
 
     test('Decrypt command appends .atKeys extension if not present', () async {
@@ -221,38 +219,6 @@ void main() {
   });
 }
 
-// Helper function to create AtKeys from AtChopsKeys
-AtKeys _getAtAuthKeysFromAtChopsKeys(AtChopsKeys atChopsKeys) {
-  AtKeys atAuthKeys = AtKeys();
-
-  if (atChopsKeys.atPkamKeyPair?.atPublicKey.publicKey != null) {
-    atAuthKeys.apkamPublicKey =
-        AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey);
-  }
-  if (atChopsKeys.atPkamKeyPair?.atPrivateKey.privateKey != null) {
-    atAuthKeys.apkamPrivateKey =
-        AtBytes.fromString(atChopsKeys.atPkamKeyPair!.atPrivateKey.privateKey);
-  }
-  if (atChopsKeys.atEncryptionKeyPair?.atPublicKey.publicKey != null) {
-    atAuthKeys.defaultEncryptionPublicKey = AtBytes.fromString(
-        atChopsKeys.atEncryptionKeyPair!.atPublicKey.publicKey);
-  }
-  if (atChopsKeys.atEncryptionKeyPair?.atPrivateKey.privateKey != null) {
-    atAuthKeys.defaultEncryptionPrivateKey = AtBytes.fromString(
-        atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey);
-  }
-  if (atChopsKeys.selfEncryptionKey?.key != null) {
-    atAuthKeys.defaultSelfEncryptionKey =
-        AtBytes.fromString(atChopsKeys.selfEncryptionKey!.key);
-  }
-  if (atChopsKeys.apkamSymmetricKey?.key != null) {
-    atAuthKeys.apkamSymmetricKey =
-        AtBytes.fromString(atChopsKeys.apkamSymmetricKey!.key);
-  }
-
-  return atAuthKeys;
-}
-
 /// Tests that `--posture` is honoured on every command, not on activation
 /// alone.
 ///
@@ -327,12 +293,11 @@ void postureArgumentTests() {
                 'reviews it:\n${(byFile[path] ?? const []).join('\n')}');
       }
       final args = byFile['lib/src/cli/auth_cli_args.dart'] ?? const <String>[];
-      expect(args, hasLength(6),
-          reason: 'expected the three postureNames entries plus the three '
-              'lines that decide a role default — the legacy an enroller '
-              'falls to, the legacy an approver refuses, and the pqReady it '
-              'falls to. Anything else is a fourth opinion about what a '
-              'command runs at:\n${args.join('\n')}');
+      expect(args, hasLength(3),
+          reason: 'expected the three postureNames entries and nothing else: '
+              'an unnamed posture is at_client\'s default, inherited through '
+              'AtOnboardingPreference(), so no line here decides one. '
+              'Anything else is a default in disguise:\n${args.join('\n')}');
     });
 
     test('every command that builds a client passes the posture to it', () {
@@ -381,26 +346,28 @@ void postureArgumentTests() {
       expect(AuthCliArgs.postureNames['pqActive'], same(PqPosture.pqActive));
     });
 
-    test('an unnamed posture stays null rather than resolving to legacy', () {
+    test('an unnamed posture stays null rather than resolving to a stage', () {
       // NOTE: `postureIn` keeps "the caller said nothing" distinct from any
-      // stage name; the two roles below default it in opposite directions, so
-      // collapsing it here would make one of them unstateable.
+      // stage name, so the callers below can tell an inherited default from a
+      // named one and say so.
       final parsed = args.createStatusCommandParser().parse([]);
       expect(AuthCliArgs.postureIn(parsed), isNull);
     });
 
-    test('an enroller with no --posture runs legacy, and says so', () {
+    test(
+        'an enroller with no --posture runs at at_client\'s default, and says so',
+        () {
       final parsed = args.createEnrollCommandParser().parse([]);
       final resolved = AuthCliArgs.postureForEnroller(parsed);
-      expect(resolved.posture, same(PqPosture.legacy),
-          reason: 'the keys onboard and enroll write have to stay usable by a '
-              'legacy app, and a default invocation puts no post-quantum '
-              'machinery in the picture');
+      final inherited = AtOnboardingPreference().posture;
+      expect(resolved.posture, same(inherited),
+          reason: 'one default for the whole SDK: when at_client moves its '
+              'default, every command here moves with it');
       expect(resolved.notice, isNotNull,
           reason: 'a default this consequential is announced, or a caller who '
               'wanted a post-quantum enrolment finds out when a peer cannot '
               'read something');
-      expect(resolved.notice, contains('legacy'));
+      expect(resolved.notice, contains(AuthCliArgs.nameOf(inherited)));
     });
 
     test('an enroller that names a posture gets it, with nothing announced',
@@ -413,24 +380,21 @@ void postureArgumentTests() {
           reason: 'nothing was defaulted, so there is nothing to tell anyone');
     });
 
-    test('an approver with no --posture runs pqReady', () {
+    test('an approver with no --posture runs at at_client\'s default', () {
       final parsed = args.createStatusCommandParser().parse([]);
-      expect(AuthCliArgs.postureForApprover(parsed), same(PqPosture.pqReady),
-          reason: 'approving a post-quantum enrolment means minting a '
-              'symmetric key and encapsulating it to the requester\'s key '
-              'package, which needs the post-quantum providers');
+      expect(AuthCliArgs.postureForApprover(parsed),
+          same(AtOnboardingPreference().posture),
+          reason: 'the same default as an enroller: at_client decides, and a '
+              'post-quantum approval under a posture with no post-quantum '
+              'providers is refused by at_client when the request is read');
     });
 
-    test('an approver naming legacy is refused, and told why', () {
+    test('an approver may name legacy', () {
       final parsed =
           args.createStatusCommandParser().parse(['--posture', 'legacy']);
-      expect(
-          () => AuthCliArgs.postureForApprover(parsed),
-          throwsA(isA<ArgumentError>().having((e) => e.message, 'message',
-              contains('configures no post-quantum providers'))),
-          reason: 'at_client already refuses such an approval before it '
-              'reaches the atServer; refusing the argument turns that runtime '
-              'failure into a usage message');
+      expect(AuthCliArgs.postureForApprover(parsed), same(PqPosture.legacy),
+          reason: 'listing, passcodes and a legacy approval all run there; '
+              'only a post-quantum approval is refused, by at_client');
     });
 
     test('a bare invocation is refused rather than treated as onboard',
@@ -448,8 +412,7 @@ void postureArgumentTests() {
       final parsed =
           args.createStatusCommandParser().parse(['--posture', 'pqActive']);
       expect(AuthCliArgs.postureForApprover(parsed), same(PqPosture.pqActive),
-          reason: 'pqReady is the default rather than the ceiling — what is '
-              'refused is dropping BELOW what an approver needs');
+          reason: 'a named posture wins over the inherited default');
     });
 
     test('a named posture is the one that comes back', () {

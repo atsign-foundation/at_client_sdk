@@ -1,0 +1,253 @@
+import 'dart:async';
+
+import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
+    show enrollmentApkamSymmetricKeyResolver;
+import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUpFactory, AtLookupMuxable;
+import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_progress.dart';
+
+/// An enrollment this device has submitted and the atSign's manager has not
+/// yet decided.
+///
+/// The keys the submission minted are already in [keys], filed under
+/// [enrollmentId] as `pending` material together with the app, device and
+/// namespaces asked for, so a restart finds them with
+/// `Atsign.resumeEnrollment` and picks up here. [client] waits for the
+/// decision: approval completes the keys in the store, moves them to
+/// active, and opens a client the caller owns; denial removes them and
+/// throws.
+class PendingEnrollment {
+  final Atsign atSign;
+  final String enrollmentId;
+  final String app;
+  final String device;
+  final Map<String, String> namespaces;
+
+  /// The store the submission wrote, which approval completes.
+  final WrittenAtKeysIo keys;
+  final AtRootDomain rootDomain;
+  final SigningAlgoType signingAlgo;
+  final EnrollmentKeyExchangeMode keyExchangeMode;
+  final AtLookupMuxable? _atLookUp;
+  final AtLookUpFactory _lookUps;
+  final AtEnrollment _enrollment = AtEnrollment.create();
+  final AtSignLogger _logger;
+
+  /// What the wait is doing, as it does it.
+  Stream<ProgressEvent> get progress => _enrollment.progressStream;
+
+  /// [lookUps] builds the connection the approval handshake runs on and the
+  /// ones the client opened on the completed keys uses; [atLookUp] is a
+  /// connection for the handshake instead, for a caller that already holds
+  /// one, and is left open.
+  PendingEnrollment({
+    required this.atSign,
+    required this.enrollmentId,
+    required this.app,
+    required this.device,
+    required this.namespaces,
+    required this.keys,
+    required this.rootDomain,
+    required this.signingAlgo,
+    required this.keyExchangeMode,
+    AtLookupMuxable? atLookUp,
+    required AtLookUpFactory lookUps,
+  })  : _atLookUp = atLookUp,
+        _lookUps = lookUps,
+        _logger = AtSignLogger('PendingEnrollment ($atSign)');
+
+  /// Waits for the manager's decision, and on approval completes the keys in
+  /// [keys] and moves them to active.
+  ///
+  /// The wait for a decision has no bound: somebody decides on their own
+  /// schedule. [maxRetries] budgets consecutive failures to reach the
+  /// atServer, and [retryInterval] is the pause between polls. A denial
+  /// removes this enrollment from [keys] and throws [AtEnrollmentException].
+  Future<void> awaitApproval({
+    Duration retryInterval = AtEnrollment.defaultRetryInterval,
+    int maxRetries = AtEnrollment.defaultMaxRetries,
+  }) async {
+    final stored = await keys.read(atSign);
+    if (!stored.pendingEnrollmentIds.contains(enrollmentId)) {
+      throw AtEnrollmentException(
+          '$atSign holds nothing pending for enrollment $enrollmentId: it was '
+          'already completed, or removed after a denial');
+    }
+
+    // The handshake proves possession of the keypair filed at submission, so
+    // it is handed a copy with that keypair live. The store itself moves only
+    // once the atServer has said yes.
+    final handshakeKeys = AtKeys.fromJson(stored.toJson())
+      ..activatePending(enrollmentId);
+    final response = AtEnrollmentResponse(
+      enrollmentId,
+      EnrollmentStatus.pending,
+      atSign: atSign,
+      rootDomain: rootDomain,
+      atAuthKeys: handshakeKeys,
+      session: AtAuthSession(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          atKeysIo: InMemoryAtKeysIo.holding(atSign, handshakeKeys),
+          enrollmentId: enrollmentId),
+      apkamSymmetricKeyResolver: keyExchangeMode == EnrollmentKeyExchangeMode.pq
+          ? enrollmentApkamSymmetricKeyResolver(atSign)
+          : null,
+    );
+
+    // The handshake's connection, built the way the application chose and
+    // closed when it is done; a supplied one is the caller's to close.
+    final handshake = _atLookUp ??
+        _lookUps(atSign: atSign, rootDomain: rootDomain, authenticator: null);
+    try {
+      await _enrollment.waitForApproval(response,
+          retryInterval: retryInterval,
+          maxRetries: maxRetries,
+          atLookup: handshake);
+    } on AtEnrollmentException catch (e) {
+      if (e.message.contains('denied')) await _discard();
+      rethrow;
+    } finally {
+      if (_atLookUp == null) await handshake.close();
+    }
+
+    await keys.update(atSign, (stored) {
+      _completeFrom(stored, handshakeKeys);
+      if (signingAlgo == SigningAlgoType.rsa2048) {
+        _fileFlat(stored);
+      } else {
+        stored.activatePending(enrollmentId);
+      }
+      return true;
+    });
+    _logger.info('enrollment $enrollmentId of $atSign is approved and its '
+        'keys are complete');
+  }
+
+  /// Waits for the decision, then opens a client on the completed keys.
+  ///
+  /// The client is the caller's to stop. See `Atsign.open` for [preference],
+  /// [namespace], [storage] and [connectBudget]; see [awaitApproval] for
+  /// [retryInterval] and [maxRetries] and for what a denial does.
+  Future<AtClient> client(
+    AtClientPreference preference, {
+    String? namespace,
+    AtClientStorage? storage,
+    Duration retryInterval = AtEnrollment.defaultRetryInterval,
+    int maxRetries = AtEnrollment.defaultMaxRetries,
+    Duration connectBudget = AtConnection.defaultBudget,
+  }) async {
+    await awaitApproval(retryInterval: retryInterval, maxRetries: maxRetries);
+    return atSign.open(
+        keys: keys,
+        preference: preference,
+        namespace: namespace,
+        storage: storage,
+        atLookUp: _atLookUp,
+        lookUps: _lookUps,
+        connectBudget: connectBudget);
+  }
+
+  /// Copies onto [stored] what the approval released into [completed]: the
+  /// atSign's encryption private key and self-encryption key, the symmetric
+  /// key that carried them, and the flat spelling of the enrollment every
+  /// published reader looks for.
+  ///
+  /// NOTE: this and [_fileFlat] write the legacy document shape on the
+  /// approval's behalf, filling only what the store does not hold yet, so
+  /// the flat fields are named directly here.
+  void _completeFrom(AtKeys stored, AtKeys completed) {
+    // ignore: deprecated_member_use
+    stored.enrollmentId = enrollmentId;
+    // ignore: deprecated_member_use
+    stored.defaultEncryptionPublicKey ??= stored
+        .keysForEnrollment(enrollmentId)
+        .where((m) =>
+            m.role == CryptographicMaterialRole.publicEncryption &&
+            m.algorithm == CryptographicMaterialAlgorithm.rsa2048)
+        .firstOrNull
+        ?.bytes;
+    // ignore: deprecated_member_use
+    final encryptionPrivateKey = completed.defaultEncryptionPrivateKey;
+    // ignore: deprecated_member_use
+    stored.defaultEncryptionPrivateKey ??= encryptionPrivateKey;
+    // ignore: deprecated_member_use
+    stored.defaultSelfEncryptionKey ??= completed.defaultSelfEncryptionKey;
+    // ignore: deprecated_member_use
+    stored.apkamSymmetricKey ??= completed.apkamSymmetricKey;
+  }
+
+  /// Moves an rsa2048 keypair from the typed pending material into the flat
+  /// APKAM fields, leaving the enrollment slot holding its snapshot and no
+  /// keys: the shape a legacy enrollment has always had, and the one every
+  /// published reader and the self-retrofit expect. Typed active material
+  /// under the enrollment would read as a retrofit already done and block
+  /// the upgrade a post-quantum posture asks for.
+  void _fileFlat(AtKeys stored) {
+    final materials = stored.keysForEnrollment(enrollmentId);
+    AtBytes? bytesOf(CryptographicMaterialRole role) => materials
+        .where((m) =>
+            m.role == role &&
+            m.algorithm == CryptographicMaterialAlgorithm.rsa2048)
+        .firstOrNull
+        ?.bytes;
+    // ignore: deprecated_member_use
+    stored.apkamPublicKey ??=
+        bytesOf(CryptographicMaterialRole.publicAuthentication);
+    // ignore: deprecated_member_use
+    stored.apkamPrivateKey ??=
+        bytesOf(CryptographicMaterialRole.privateAuthentication);
+    final info = stored.enrollmentInfo(enrollmentId);
+    stored.discardEnrollment(enrollmentId);
+    stored.recordEnrollmentSnapshot(enrollmentId,
+        namespaces: info?.namespaces,
+        appName: info?.appName,
+        deviceName: info?.deviceName);
+  }
+
+  Future<void> _discard() async {
+    try {
+      await keys.update(atSign, (stored) {
+        if (!stored.enrollmentIds.contains(enrollmentId)) return false;
+        stored.discardEnrollment(enrollmentId);
+        // The flat fields the submission carried for this request go with
+        // it, so the store reads as holding nothing for the atSign.
+        // ignore: deprecated_member_use
+        if (stored.enrollmentId == enrollmentId) stored.enrollmentId = null;
+        if (stored.enrollmentIds.isEmpty &&
+            !stored.holdsAuthenticationMaterial) {
+          // ignore: deprecated_member_use
+          stored.apkamSymmetricKey = null;
+        }
+        return true;
+      });
+      _logger.info('enrollment $enrollmentId of $atSign was denied; its '
+          'pending keys are removed');
+    } catch (e) {
+      _logger.warning('enrollment $enrollmentId of $atSign was denied, and '
+          'its pending keys could not be removed: $e');
+    }
+  }
+}
+
+/// `open` was asked to open a keyfile that holds nothing but an enrollment
+/// awaiting approval, so there is no credential to authenticate with yet.
+/// `Atsign.resumeEnrollment` is the way to pick it up.
+class AtEnrollmentPendingException extends AtException {
+  final String atSign;
+  final List<String> pendingEnrollmentIds;
+
+  AtEnrollmentPendingException(this.atSign, this.pendingEnrollmentIds)
+      : super('$atSign holds no live credential, only the pending enrollment'
+            '${pendingEnrollmentIds.length == 1 ? '' : 's'} '
+            '${pendingEnrollmentIds.join(', ')}: resume it with '
+            'resumeEnrollment rather than opening it');
+}

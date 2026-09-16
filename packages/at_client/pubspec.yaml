@@ -31,16 +31,16 @@ dependencies:
   at_commons: ^5.18.0
   at_utils: ^3.2.0
   at_chops: ^3.6.0
-  at_lookup: ^3.7.0-rc1
+  at_lookup: ^3.7.0-rc2
   at_auth: ^4.0.0-rc2
   at_persistence_secondary_server: ^5.3.0
   hive: ^2.2.3
   meta: ^1.16.0
   version: ^3.0.2
   mutex: ^3.1.0
+  collection: ^1.16.0
 
 dev_dependencies:
-  collection: ^1.16.0
   lints: ^6.0.0
   test: ^1.25.0
   at_demo_data: ^1.2.0

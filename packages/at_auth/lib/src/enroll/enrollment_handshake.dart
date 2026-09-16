@@ -9,7 +9,7 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -30,16 +30,16 @@ class EnrollmentHandshake {
 
   EnrollmentHandshake(this._progress);
 
-  /// waits for Approval of the enrollmentId related to [enrollmentResponse]
-  /// completes the end of the handshake for the APKAM flow
+  /// Waits over [atLookup] for the enrollment in [enrollmentResponse] to be
+  /// approved, then collects what the approval released into its keys.
   ///
-  /// returns [AtEnrollmentResponse] to intake additional keys provided after submission
+  /// [atLookup] is left open for the caller to close.
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     required Duration retryInterval,
     required bool logProgress,
     required int maxRetries,
-    AtLookUp? atLookup,
+    required AtLookupMuxable atLookup,
   }) async {
     if (enrollmentResponse.atSign == null ||
         enrollmentResponse.atSign!.isEmpty) {
@@ -55,59 +55,36 @@ class EnrollmentHandshake {
           'AtAuthKeys are not avaialbe in the enrollemnt response');
     }
 
-    atLookup ??= AtLookUp.withSecureSocket(
-      atSign: enrollmentResponse.atSign!,
-      rootDomain: enrollmentResponse.rootDomain!,
-      transport: secureSocketTransport(SecureSocketConfig()),
-      // Installed below, from the in-memory keys this handshake just wrote.
-      authenticator: null,
-      secondaryAddressFinder: CacheableSecondaryAddressFinder(
-          enrollmentResponse.rootDomain!.rootDomain,
-          enrollmentResponse.rootDomain!.rootPort),
-    );
+    await _handshake(enrollmentResponse, atLookup,
+        retryInterval: retryInterval,
+        logProgress: logProgress,
+        maxRetries: maxRetries);
+  }
 
-    // An enrollment that advertised a key package holds no symmetric key yet,
-    // and `toAtChops` reads its absence as "these are PKAM keys" — which then
-    // demands the encryption private key this enrollment is here to fetch. Its
-    // APKAM keypair is all PKAM authentication needs, so build the chops from
-    // that directly and fill the symmetric key in once it arrives.
+  Future<void> _handshake(
+    AtEnrollmentResponse enrollmentResponse,
+    AtLookupMuxable atLookup, {
+    required Duration retryInterval,
+    required bool logProgress,
+    required int maxRetries,
+  }) async {
+
+    // PKAM here proves possession of this enrollment's APKAM keypair, which is
+    // all the authenticator reads from these keys: typed material under the
+    // enrollment id where the keyfile holds it, the flat pair as rsa2048
+    // otherwise. The encryption private key and the symmetric key are what
+    // the handshake is about to fetch, and nothing on the way to them is
+    // built around their absence.
     final AtKeys handshakeKeys = enrollmentResponse.atAuthKeys!;
-    final String? handshakeEnrollmentId = enrollmentResponse.enrollmentId;
+    final String handshakeEnrollmentId = enrollmentResponse.enrollmentId;
 
-    // The algorithm this enrollment authenticates with, read from its typed
-    // material. The flat fields carry the keypair's BYTES and no algorithm, so
-    // without this PKAM would sign whatever they hold under at_lookup's
-    // default of rsa2048.
-    final SigningAlgoType? handshakeAlgorithm =
-        handshakeKeys.authenticationAlgorithmFor(handshakeEnrollmentId);
-
-    AtChops atChops = handshakeKeys.apkamSymmetricKey != null
-        ? handshakeKeys.toAtChops()
-        : _apkamChopsAwaitingSymmetricKey(handshakeKeys);
-    atLookup.atChops = atChops;
-
-    // And the algorithm, or PKAM signs this enrollment's challenge with
-    // at_lookup's default — rsa2048 — whatever the keypair actually is. That
-    // fails inside at_chops on a key length, naming neither the enrollment nor
-    // the mismatch.
-    if (handshakeAlgorithm != null) {
-      atLookup.signingAlgoType = handshakeAlgorithm;
-    }
-    // The chops is injected rather than resolved: this enrollment's keys are
-    // deliberately not a complete keyfile yet - the symmetric key is the thing
-    // the handshake is here to fetch - so asking the keystore to build a
-    // signer would demand material that has not arrived.
-    if (atLookup is AtLookupMuxable) {
-      final memory = InMemoryAtKeysIo();
-      await memory.write(
-          enrollmentResponse.atSign!, enrollmentResponse.atAuthKeys!);
-      atLookup.authenticator = authenticatorFor(
-        memory,
-        enrollmentResponse.atSign!,
-        enrollmentId: enrollmentResponse.enrollmentId,
-        chops: atChops,
-      );
-    }
+    final memory = InMemoryAtKeysIo();
+    await memory.write(enrollmentResponse.atSign!, handshakeKeys);
+    atLookup.authenticator = authenticatorFor(
+      memory,
+      enrollmentResponse.atSign!,
+      enrollmentId: handshakeEnrollmentId,
+    );
 
     await _waitForPkamAuthSuccess(
       atLookup,
@@ -131,7 +108,6 @@ class EnrollmentHandshake {
           await resolver(enrollmentResponse.atAuthKeys!, atLookup);
       enrollmentResponse.atAuthKeys!.apkamSymmetricKey =
           AtBytes.fromString(apkamSymmetricKey);
-      atChops.atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
     }
 
     // fetch the following keys from the atServer
@@ -161,8 +137,8 @@ class EnrollmentHandshake {
     // approver's, not this client's.
     InitialisationVector ivOf(Map<String, dynamic> keyResponse) =>
         keyResponse['iv'] == null
-            ? AtChopsUtil.generateIVLegacy()
-            : AtChopsUtil.generateIVFromBase64String(keyResponse['iv']);
+            ? InitialisationVector.legacy()
+            : InitialisationVector.fromBase64(keyResponse['iv']);
 
     String decryptedSelfEncryptionKey = aesEncryption.decrypt(
       selfEncKeyResponse['value'],
@@ -193,7 +169,6 @@ class EnrollmentHandshake {
         rootDomain: enrollmentResponse.rootDomain!,
         atKeysIo: keysIo,
         enrollmentId: enrollmentResponse.enrollmentId,
-        atLookUp: atLookup,
       );
     } else {
       enrollmentResponse.session = null;
@@ -231,25 +206,6 @@ class EnrollmentHandshake {
     return map;
   }
 
-  /// Pkam auth will be retried until server approves/denies/expires the enrollment
-  /// APKAM chops for an enrollment that has not yet been handed its symmetric
-  /// key: enough to PKAM-authenticate, and nothing more.
-  ///
-  /// Deliberately not `AtKeys.toAtChops`, which branches on the symmetric key's
-  /// presence to tell APKAM keys from PKAM keys and so mis-reads this state.
-  AtChops _apkamChopsAwaitingSymmetricKey(AtKeys atKeys) {
-    return AtChopsImpl(AtChopsKeys.create(
-      AtEncryptionKeyPair.create(
-        atKeys.defaultEncryptionPublicKey!.toString(),
-        '',
-      ),
-      AtPkamKeyPair.create(
-        atKeys.apkamPublicKey!.toString(),
-        atKeys.apkamPrivateKey!.toString(),
-      ),
-    ));
-  }
-
   Future<void> _waitForPkamAuthSuccess(
     AtLookUp atLookUp,
     String enrollmentIdFromServer,
@@ -272,7 +228,6 @@ class EnrollmentHandshake {
       _logger.info('Attempting pkam auth');
       if (logProgress) {
         _progress.add('PKAM', 'attempting PKAM auth', ProgressEventType.info);
-        await _waitBriefly();
       }
       bool pkamAuthSucceeded = false;
       bool reachedAtServer = true;
@@ -357,7 +312,4 @@ class EnrollmentHandshake {
     }
   }
 
-  Future<void> _waitBriefly({int millis = 500}) async {
-    await Future.delayed(Duration(milliseconds: millis));
-  }
 }

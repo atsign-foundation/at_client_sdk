@@ -64,12 +64,11 @@ void main() {
   int entryCount() =>
       ((jsonDecode(blob!) as Map<String, dynamic>)['keys'] as List).length;
 
-  AtKeys keysFor(String atSign) => AtKeys()
-    ..apkamPublicKey = AtBytes.fromString(base64Encode(utf8.encode('apkam')))
-    ..defaultSelfEncryptionKey = AtBytes.fromString(
-      base64Encode(utf8.encode('self')),
-    )
-    ..enrollmentId = 'e-$atSign';
+  AtKeys keysFor(String atSign) => AtKeys.legacy(
+    apkamPublicKey: base64Encode(utf8.encode('apkam')),
+    selfEncryptionKey: base64Encode(utf8.encode('self')),
+    enrollmentId: 'e-$atSign',
+  );
 
   CryptographicMaterial material(String keyId) => CryptographicMaterial(
     keyId: keyId,
@@ -77,6 +76,30 @@ void main() {
     algorithm: CryptographicMaterialAlgorithm.aes256,
     bytes: AtBytes.fromString(base64Encode(utf8.encode(keyId))),
     createdAt: DateTime.utc(2026, 1, 1),
+  );
+
+  test(
+    'read of an atSign the keychain does not hold says the source is absent',
+    () async {
+      // The type is what an enrollment reads to tell "no keys yet" from "keys
+      // this process cannot read": it starts on the first and refuses on the
+      // second, so the keychain has to answer the way the file store does.
+      await expectLater(
+        () => io.read('@nobody'),
+        throwsA(isA<AtKeysSourceAbsentException>()),
+      );
+      await io.write('@alice', keysFor('@alice'));
+      await expectLater(
+        () => io.read('@nobody'),
+        throwsA(isA<AtKeysSourceAbsentException>()),
+        reason: 'an entry for another atSign does not make @nobody present',
+      );
+      expect(
+        (await io.read('@alice')).storedEnrollmentId,
+        'e-@alice',
+        reason: 'the control: the atSign the keychain holds reads back',
+      );
+    },
   );
 
   test('write refuses an atSign that already has an entry', () async {
@@ -98,15 +121,15 @@ void main() {
     await io.write('@bob', keysFor('@bob'));
 
     expect(entryCount(), 2);
-    expect((await io.read('@alice')).enrollmentId, 'e-@alice');
-    expect((await io.read('@bob')).enrollmentId, 'e-@bob');
+    expect((await io.read('@alice')).storedEnrollmentId, 'e-@alice');
+    expect((await io.read('@bob')).storedEnrollmentId, 'e-@bob');
   });
 
   test('flush creates the entry when the atSign has none', () async {
     await io.flush('@alice'.toAtsign(), keysFor('@alice'));
 
     expect(entryCount(), 1);
-    expect((await io.read('@alice')).enrollmentId, 'e-@alice');
+    expect((await io.read('@alice')).storedEnrollmentId, 'e-@alice');
   });
 
   test(
@@ -148,7 +171,7 @@ void main() {
     await io.flush('@alice'.toAtsign(), alice);
 
     expect(entryCount(), 2);
-    expect((await io.read('@bob')).enrollmentId, 'e-@bob');
+    expect((await io.read('@bob')).storedEnrollmentId, 'e-@bob');
   });
 
   test(
@@ -200,13 +223,13 @@ void main() {
     await io.write('@Alice', keysFor('@alice'));
 
     expect(
-      (await io.read('@Alice')).enrollmentId,
+      (await io.read('@Alice')).storedEnrollmentId,
       'e-@alice',
       reason: 'the spelling that wrote the entry must find it again',
     );
-    expect((await io.read('@alice')).enrollmentId, 'e-@alice');
+    expect((await io.read('@alice')).storedEnrollmentId, 'e-@alice');
     expect(
-      (await io.read('alice')).enrollmentId,
+      (await io.read('alice')).storedEnrollmentId,
       'e-@alice',
       reason: 'toAtsign() supplies the missing @',
     );

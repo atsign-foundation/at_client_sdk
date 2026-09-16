@@ -1,3 +1,9 @@
+import 'dart:convert';
+
+import 'package:at_auth/at_auth.dart' show NamespacePermission;
+import 'package:at_client/src/response/at_notification.dart';
+import 'package:at_commons/at_commons.dart';
+
 /// Class represents the enrollment details
 class Enrollment {
   String? enrollmentId;
@@ -24,6 +30,30 @@ class Enrollment {
   /// at_secondary_server 3.16.5, which does not project `metadata`;
   /// `enroll:list` and `enroll:listns` return it.
   Map<String, dynamic>? metadata;
+
+  /// [status] as the atServer's vocabulary, or null when the record carries
+  /// none.
+  EnrollmentStatus? get enrollmentStatus {
+    final status = this.status;
+    return status == null ? null : getEnrollStatusFromString(status);
+  }
+
+  /// [namespace] as one permission per namespace, `r` and `rw` read as
+  /// what they grant.
+  List<NamespacePermission> get namespacePermissions => [
+        for (final entry in (namespace ?? const {}).entries)
+          NamespacePermission(
+              namespace: entry.key,
+              read: '${entry.value}'.contains('r'),
+              write: '${entry.value}'.contains('w')),
+      ];
+
+  /// The request a `new.enrollments.__manage` notification announces: its
+  /// id is the key's first segment and its record is the value.
+  static Enrollment fromNotification(AtNotification notification) =>
+      fromJSON(jsonDecode(notification.value!) as Map<String, dynamic>)
+        ..enrollmentId = notification.key.split('.').first
+        ..status ??= EnrollmentStatus.pending.name;
 
   static Enrollment fromJSON(Map<String, dynamic> json) {
     return Enrollment()

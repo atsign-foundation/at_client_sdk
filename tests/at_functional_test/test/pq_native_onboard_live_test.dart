@@ -9,11 +9,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/at_auth_io.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
@@ -65,7 +62,7 @@ void main() {
     expect(enrollmentId, isNotNull);
 
     final keys = await keysIo.read(atSign);
-    expect(keys.apkamPublicKey, isNull,
+    expect(keys.authenticationKeyPairFor(null), isNull,
         reason: 'a PQ-native keyfile keeps its APKAM in the typed section; a '
             'reader that cannot handle that must fail loudly rather than sign '
             'an ML-DSA key with the RSA routine');
@@ -80,13 +77,13 @@ void main() {
             .length,
         1952);
 
-    final reauth = await AtAuth.create().authenticate(
-        AtAuthRequest(atSign, atKeysIo: keysIo)..rootDomain = rootDomain);
-    expect(reauth.isSuccessful, true,
+    expect(
+        await Atsign(atSign)
+            .authenticatesAs(keys: keysIo, rootDomain: rootDomain),
+        enrollmentId,
         reason: 'no RSA APKAM exists anywhere, so this can only have '
-            'succeeded by ML-DSA');
-    expect(reauth.session!.enrollmentId, enrollmentId,
-        reason: 'the keyfile alone names the enrollment: nothing passed an id');
+            'succeeded by ML-DSA; and the keyfile alone names the enrollment, '
+            'since nothing passed an id');
 
     final rootValue = await client
         .getRemoteSecondary()!
@@ -140,8 +137,8 @@ void main() {
             .bytes
             .toString());
 
-    expect(keys.defaultEncryptionPublicKey, isNotNull);
-    expect(keys.defaultSelfEncryptionKey, isNotNull,
+    expect(keys.encryptionKeyPair, isNotNull);
+    expect(keys.selfEncryptionKey, isNotNull,
         reason: 'the PQ data path never touches it, but decisions 37 keeps it '
             'until the ECOSYSTEM is PQ');
     final publicKey = await client
@@ -151,7 +148,7 @@ void main() {
     // with a `public:publickey`, so a presence check passes on provisioning
     // state even if the activation published nothing.
     expect(publicKey?.replaceFirst('data:', '').trim(),
-        keys.defaultEncryptionPublicKey.toString(),
+        keys.encryptionKeyPair!.atPublicKey.publicKey,
         reason: 'UC-B4.2: a legacy peer must be able to send to a brand-new '
             'atSign out of the box, and the key it finds has to be the one '
             'this atSign holds the private half of');

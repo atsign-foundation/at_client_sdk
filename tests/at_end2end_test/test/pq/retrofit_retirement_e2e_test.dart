@@ -8,17 +8,13 @@ library;
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/at_auth_io.dart';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_demo_data/at_demo_data.dart'
-    show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_end2end_test/config/config_util.dart';
+import 'package:at_end2end_test/src/enrollment_approval.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 /// UC-B2.1 / UC-B2.2 — the superseded legacy enrollment, locked out at once.
@@ -52,15 +48,26 @@ void main() {
   /// A genuinely pre-PQ (RSA APKAM) enrollment with its own keyfile.
   Future<String> mintLegacyEnrollment(String label) async {
     final otp = (await owner.getOTP()).response;
+    final file = File(pathFor(label));
+    if (file.existsSync()) file.deleteSync();
+    file.parent.createSync(recursive: true);
+    // The session names the keyfile, so the approval completes the keys
+    // straight into it. FileAtKeysIo.write refuses to overwrite, so a keyfile
+    // a previous run left is removed first.
+    final session = AtAuthSession(
+        atSign: atSign,
+        rootDomain: rootDomain(),
+        atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)));
     final response = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
-            atSign: atSign,
+            session: session,
             appName: 'rt-$label',
             deviceName: 'rt-$label-$runId',
             namespaces: {namespace: 'rw'},
             otp: otp,
             signingAlgo: SigningAlgoType.rsa2048),
-        AtLookupImpl(atSign, rootDomain().rootDomain, rootDomain().rootPort));
+        secureSocketLookUps()(
+            atSign: atSign, rootDomain: rootDomain(), authenticator: null));
     final record = (await owner.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
     await owner.enrollmentService!.approve(EnrollmentRequestDecision.approved(
@@ -69,26 +76,28 @@ void main() {
         apkamSymmetricKey:
             AtBytes.fromString(record.encryptedAPKAMSymmetricKey!)));
 
-    final keys = response.atAuthKeys!
-      ..defaultSelfEncryptionKey = AtBytes.fromString(aesKeyMap[atSign]!)
-      ..defaultEncryptionPrivateKey =
-          AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
-
-    final file = File(pathFor(label));
-    if (file.existsSync()) file.deleteSync();
-    file.parent.createSync(recursive: true);
-    await FileAtKeysIo(filePath: (_) => pathFor(label)).write(atSign, keys);
+    // Awaiting the approval collects the two atSign-wide secrets it released
+    // and writes the completed keys into the keyfile.
+    await awaitEnrollmentApproval(response,
+        atSign: atSign, rootDomain: rootDomain());
     return response.enrollmentId;
   }
 
   /// Authenticates from [label]'s keyfile with no enrollment id named, so the
-  /// flat fields decide — i.e. as the LEGACY enrollment, which is exactly what
-  /// an un-upgraded copy of the keyfile does.
-  Future<AtAuthResponse> authenticateLegacy(String label) async =>
-      AtAuth.create().authenticate(AtAuthRequest(atSign,
-          atKeysIo: FileAtKeysIo(filePath: (_) => pathFor(label)))
-        ..namespace = namespace
-        ..rootDomain = rootDomain());
+  /// keys decide — i.e. as the LEGACY enrollment, which is exactly what an
+  /// un-upgraded copy of the keyfile does — and hands back its session; a
+  /// refusal throws.
+  Future<AtAuthSession> authenticateLegacy(String label) async {
+    final keysIo = FileAtKeysIo(filePath: (_) => pathFor(label));
+    final enrollmentId = await Atsign(atSign)
+        .authenticatesAs(keys: keysIo, rootDomain: rootDomain());
+    return AtAuthSession(
+        atSign: atSign,
+        rootDomain: rootDomain(),
+        atKeysIo: keysIo,
+        namespace: namespace,
+        enrollmentId: enrollmentId);
+  }
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
@@ -108,30 +117,30 @@ void main() {
     await mintLegacyEnrollment('l1');
     await mintLegacyEnrollment('l2');
 
-    expect((await authenticateLegacy('l1')).isSuccessful, isTrue,
+    expect((await authenticateLegacy('l1')).enrollmentId, isNotNull,
         reason: 'precondition: the legacy enrollment works BEFORE its '
             'retrofit — this is the "before" of a before/after pair');
-    expect((await authenticateLegacy('l2')).isSuccessful, isTrue);
+    expect((await authenticateLegacy('l2')).enrollmentId, isNotNull);
 
     // The un-upgraded copy of UC-B2.1: the same legacy keypair on a second
     // host, taken before the retrofit and never upgraded.
     File(pathFor('l1')).copySync(pathFor('l1b'));
 
-    final session = (await authenticateLegacy('l1')).session!;
-    final manager = await selfRetrofit(
+    final session = await authenticateLegacy('l1');
+    final upgraded = await selfRetrofit(
       // Explicit: the parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
-      // Its own store location: the owner client holds the atSign's, and a
-      // dedicated manager carries nothing across.
+      // Its own store location: the owner client holds the atSign's, and
+      // nothing carries across.
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rt-l1-$runId'),
+      storage: TestPreferences.getInstance()
+          .storageForCoLocatedClient(atSign, device: 'rt-l1-$runId'),
       appName: 'rt-l1',
       deviceName: 'rt-l1-$runId',
       namespaces: {namespace: 'rw'},
-      manager: AtClientManager(atSign),
     );
-    final upgraded = manager.atClient;
     expect(AtClientImpl.signingAlgoOf(upgraded), SigningAlgoType.mldsa65,
         reason: 'the retrofit itself must have succeeded, or the revocation '
             'below is being attributed to a retrofit that never happened');
@@ -155,7 +164,7 @@ void main() {
     // The control arm, re-run in the same session, so the refusal above is
     // attributable to this retrofit rather than to the environment or the
     // clock.
-    expect((await authenticateLegacy('l2')).isSuccessful, isTrue,
+    expect((await authenticateLegacy('l2')).enrollmentId, isNotNull,
         reason: 'a second legacy enrollment of the same atSign, minted at the '
             'same moment and never a parent of any retrofit, must be '
             'unaffected — this is what makes the lockout attributable');
@@ -163,7 +172,7 @@ void main() {
     // The remedy, asserted rather than left as advice: a stranded device comes
     // back by an ordinary OTP enrollment.
     await mintLegacyEnrollment('l1c');
-    expect((await authenticateLegacy('l1c')).isSuccessful, isTrue,
+    expect((await authenticateLegacy('l1c')).enrollmentId, isNotNull,
         reason: 'a fresh enrollment authenticates on the same atSign moments '
             'after the superseded one was refused: the route back is enrolling '
             'again, and nothing about the atSign itself is broken');

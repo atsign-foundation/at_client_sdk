@@ -6,7 +6,8 @@ seam designs, the build sequence, the acceptance gates, and the decision log.
 implementations, so that a browser WasmGC build runs without runtime failures. The
 `at_client_web` platform package is the first consumer of the result.
 **Written against:** `trunk` at `20f7f4da5`, 2026-08-13. Status refreshed against
-`9d9e5f7d7`, 2026-08-27. Supersedes the single-file `plan.md` (deleted; recoverable at
+`9d9e5f7d7`, 2026-08-27, and against `gkc-client-lifecycle` on 2026-09-13 for the
+transport leg. Supersedes the single-file `plan.md` (deleted; recoverable at
 `d3e7dcdd5`, the commit that added it).
 
 > This doc is the **high-level WHY + WHAT** only: the neutrality thesis, the tier
@@ -18,6 +19,7 @@ implementations, so that a browser WasmGC build runs without runtime failures. T
 ## Table of contents
 
 - [Document map](#document-map)
+- [Scope note: V1 is remote-only](#scope-note-v1-is-remote-only)
 - [1. The thesis](#1-the-thesis)
 - [2. Why the compiler cannot be the gate](#2-why-the-compiler-cannot-be-the-gate)
 - [3. The tier model](#3-the-tier-model)
@@ -25,9 +27,31 @@ implementations, so that a browser WasmGC build runs without runtime failures. T
 - [5. Ownership boundary against the PQ program](#5-ownership-boundary-against-the-pq-program)
 - [6. The phase trajectory at a glance](#6-the-phase-trajectory-at-a-glance)
 
+## Scope note: V1 is remote-only
+
+**Added 2026-08-30, amended 2026-09-06.** The first browser release **ships** a
+remote-only storage bundle as its default: no SQLite, no VFS, no `sqlite3.wasm`, no Hive
+in the shipped payload. A local store becomes the default in V2, as a speed optimisation.
+See `decisions.md` D-17.
+
+**This is a default, not a prohibition.** Under `decisions.md` D-12 client storage is an
+injected bundle, so remote-only is one implementation of that interface and the SQLite,
+`:memory:` and Hive bundles stay injectable — in the browser too, for a consumer willing to
+pay for one. What V1 fixes is what we ship by default.
+
+That takes an entire hard problem off V1's critical path: the browser lane had two
+independently difficult pieces — a durable local database and a secure key store — and only
+the second is on the path to first release. The default bundle also touches neither of the
+two process globals we do not own.
+
+Everything in the storage lane below remains correct; it is **deferred, not withdrawn**, and
+`decisions.md` D-21 constrains the VFS choice for when it resumes.
+
+---
+
 ## Document map
 
-This is one of **six** docs. Each keeps to its lane; cross-references point at the
+This is one of **seven** docs. Each keeps to its lane; cross-references point at the
 canonical home rather than duplicating it.
 
 | Doc                                                | What lives there                                                                                                                                                                                                                                                                                           |
@@ -35,9 +59,10 @@ canonical home rather than duplicating it.
 | **roadmap.md** (this doc)                          | The WHY + WHAT — the neutrality thesis, the compiler-blindness finding, the three-tier model, goals/non-goals, the PQ ownership boundary, the phase trajectory.                                                                                                                                            |
 | [`design.md`](design.md)                           | The per-capability seam designs — transport, storage bootstrap, sync queue, keys, HTTP, connectivity, logging, filesystem, process/env. Current call sites with `file:line`, the proposed interface, and who implements it on each platform. Plus the dead-end seams and the `AtClientPreference` reframe. |
 | [`implementation-plan.md`](implementation-plan.md) | The build sequence — phases, the task backlog (P/T/I/C/G/D groups), dependency order, and the publish ladder.                                                                                                                                                                                              |
-| [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T6, with the measured evidence for each and an explicit statement of what each tier does *not* prove.                                                                                                                                                                                 |
-| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-11), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
-| [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, and npm packaging.                                                                                                               |
+| [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T6, with the measured evidence for each and an explicit statement of what each tier does *not* prove. Plus §9a: confidentiality, remote-only, deployment and surface-stability gates.                                                                                                  |
+| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-24), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
+| [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, npm packaging, and **the deployment contract** (§8a).                                                                              |
+| [`enterprise-identity.md`](enterprise-identity.md) | atSigns behind a customer's identity provider (Entra/Okta) — the SCIM lifecycle mapping, the atSign-level disable gap, the registrar asks, and the constraints the browser lane must not violate. An *adoption* blocker, not a program blocker.                                                            |
 
 ---
 
@@ -64,9 +89,15 @@ at_client / at_lookup / at_utils / at_auth / at_chops     ← interfaces only
         ▲                    ▲                    ▲
 at_client_web           *_io barrels         at_client_flutter
 (WebSocket,            (SecureSocket,        (keychain, app dirs)
- SQLite-wasm,           file keystore,       — a consumer today,
- IndexedDB keys)        file logging)          an implementer later
+ IndexedDB keys)        file keystore,       — a consumer today,
+                        file logging)          an implementer later
 ```
+
+`SQLite-wasm` was listed in `at_client_web` until 2026-09-02. **D-17 took it out of the
+default**, and did not remove the capability: V1 ships a remote-only bundle, so nothing in
+the default payload needs a local store to back. A consumer may still inject a SQLite
+bundle (`package:at_client/sqlite.dart`, D-12); it becomes the browser default in V2, as a
+*speed* optimisation rather than a correctness one.
 
 **Why not conditional imports.** A conditional import is a compile-time answer to a
 runtime question. It leaves platform knowledge inside the neutral layer, it makes the
@@ -134,18 +165,36 @@ neutral barrel's import graph. Consumers add one import.
 
 ### Tier 3 — platform implementers
 
-- **`at_client_web`** — new, built by this project. WebSocket transport, SQLite-wasm
-  storage, IndexedDB-backed key store, `navigator.onLine` connectivity, console
-  logging.
+A platform implementer supplies the three legs of the platform bundle
+([`design.md` §4](design.md#4-the-platform-bundle-capabilities-are-parameters-on-the-doors),
+[`decisions.md` D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)) — a `WrittenAtKeysIo`, an
+`AtClientStorage` and an `AtLookUpFactory` — and hands them to at_client's entry points.
+at_client is not forked, and nothing below its doors names a platform type.
+
+- **`at_client_web`** — new, built by this project. A WebSocket-backed `AtLookupMuxable`
+  behind an `AtLookUpFactory`, a remote-only `AtClientStorage` as the V1 default
+  (**D-18**), IndexedDB-backed `WrittenAtKeysIo`, `navigator.onLine` connectivity,
+  console logging.
+  *(SQLite-wasm storage left this list 2026-09-02 as the **default**: **D-17** ships V1
+  remote-only. It is not withdrawn. The **backend** ruling in [`design.md`](design.md) §5 —
+  SQLite-wasm over IndexedDB — stands, and under **D-12** a SQLite bundle stays injectable —
+  in a browser once
+  [at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754) gives it a
+  web open path — and becomes the default in V2. Its **VFS** half is a separate and
+  still-open question: **D-21** makes it pick-two, so nothing in §5 settles
+  which VFS V2 gets.)*
 - **`at_client_flutter`** — exists, but is **not** a platform implementer today. It
   implements exactly one abstraction (`KeychainAtKeysIo extends WrittenAtKeysIo`,
-  `packages/at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10`); all path
-  and preference wiring lives in *app* code under `example/`. In this project it is a
-  breaking-change **consumer**. Promoting it to a true implementer is deferred.
+  `packages/at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10`), though
+  since 2.0.0-rc1 its `lib/` does thread the platform bundle: `AtsignFlows` and the
+  three lifecycle dialogs take `keys:`, `storage:` and `lookUps:` and hand them to the
+  verb they run. In this project it is a breaking-change **consumer**. Promoting it to
+  a true implementer is deferred.
 - **`at_client_cli`** — does not exist. `at_onboarding_cli` and `at_cli_commons`
   perform the role informally (`home_directory_util.dart`, the duplicated
-  `ServiceFactoryWithNoOpSyncService`). Extracting a real package is deferred; until
-  then they consume the Tier-2 `_io` barrels.
+  `ServiceFactoryWithNoOpSyncService`). A design for the package is in
+  [`../client-cli/design.md`](../client-cli/design.md); extracting it is deferred, and
+  until then they consume the Tier-2 `_io` barrels.
 
 ### Tier 4 — non-Dart consumers
 
@@ -190,9 +239,10 @@ Two things about this tier are worth stating at roadmap level:
    open strategy under the same `SqliteDatabase`, not a parallel backend.
 
 Goal 4 is **behavioural, not API-level**. Neutrality requires removing native defaults
-(`atKeysIo ??= FileAtKeysIo()`, `atServerStatus ??= AtStatusImpl(...)`, the hardcoded
-`HiveAtPersistenceFactory`, `Socket getSocket()` on `AtConnection`). Those are breaking
-changes and are accepted as such — [`decisions.md`](decisions.md) D-3.
+(the hardcoded `HiveAtPersistenceFactory`, `Socket getSocket()` on `AtConnection`;
+`at_auth`'s `atKeysIo ??= FileAtKeysIo()` and `atServerStatus ??= AtStatusImpl(...)` are
+already gone). Those are breaking changes and are accepted as such —
+[`decisions.md`](decisions.md) D-3.
 
 ### Non-goals
 
@@ -224,14 +274,9 @@ projects **S-5** (at_auth 4.0.0 — the `at_auth_io.dart` barrel, dropping the
 at [`../pq/implementation-plan.md`](../pq/implementation-plan.md) — ⚠️ this cited
 **lines 312–339**, and a line number is not an address: that plan was restructured
 on 2026-08-26 and the range now lands on unrelated prose. Find S-5 and S-6 by name
-in `docs/projects/pq/detail/implementation-plan.md`, which holds the discharged
-gate bodies. ⚠️ **That file is not on trunk and never has been** (0 commits touching
-`docs/projects/pq/detail` on `origin/trunk`, 2026-09-07) — it exists only on
-`gkc-pq-d1-spike`, so this was a live link on the spike and a dead one from the moment
-these docs landed on trunk in #2207. It is deliberately not a link here for that reason.
-That
-plan explicitly names *this* effort as the separate "wasm-port" that owns
-`at_lookup` and `at_chops`.
+in [section 4 of `../pq/detail/implementation-plan.md`](../pq/detail/implementation-plan.md#4-phase-s--structural-enablers--key-management-s-1-s-2-s-3-s-5-s-6-kf-1),
+which holds the discharged gate bodies. That plan explicitly names *this* effort as the
+separate "wasm-port" that owns `at_lookup` and `at_chops`.
 
 This project therefore owns: `at_lookup`, `at_client`, `at_utils`,
 `at_server_status`, the at_chops dependency verification, the persistence work in
@@ -245,7 +290,7 @@ ruling that a removed default is preferable to a conditional default.
 | Phase                   | What lands                                                                                                                         | Gate it turns on | Status as of 2026-08-27                                                                  |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
 | **0 — Ratchet**         | The structural dependency-tree walk, per core package, in CI. Baselined against today's violations so it can only shrink.          | T0               | **Landed** — `tools/wasm_shakedown`, gating at_chops and at_auth only ([#2149], [#2183]) |
-| **1 — Cheap seams**     | Plumb the four seams that already exist and are never passed through; delete `sync_isolate_manager.dart`; fix `at_server_status`.  | T0 shrinks       | **In review** — [#2162] ready, [#2163] and [#2164] draft ([#2158])                       |
+| **1 — Cheap seams**     | Plumb the four seams that already exist and are never passed through; delete `sync_isolate_manager.dart`; fix `at_server_status`.  | T0 shrinks       | **2026-09-13:** S4–S6 done ([#2162]); S1–S3 superseded ([#2163], [#2164]) ([#2158])      |
 | **2 — Transport**       | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0.                                               | T0 for at_lookup | Not started ([#2159])                                                                    |
 | **3 — Storage**         | Web SQLite open path in `at_persistence_secondary_server`; selectable backend; backend-neutral `AtSyncQueue`.                      | T2 for storage   | Not started — belongs in `at_server`, unfiled                                            |
 | **4 — Sweep**           | `at_utils` barrel split, connectivity, file transfer off the reachable surface; `at_client` 4.0.0.                                 | T0 green, T1, T2 | Not started                                                                              |

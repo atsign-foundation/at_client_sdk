@@ -3,7 +3,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -32,6 +31,18 @@ class MockLocalSecondary extends Mock implements LocalSecondary {
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
+  // NOTE: the same erasure: an unstubbed `lookUps` answers null into a
+  // non-nullable function type, and the services read it off the impl.
+  @override
+  final AtLookUpFactory lookUps = secureSocketLookUps();
+  // NOTE: `implements` erases the concrete getter AtClientImpl carries, and an
+  // unstubbed mocktail getter answers null, which the runtime refuses for the
+  // non-nullable AtConnection; a Monitor built from this mock reads it.
+  @override
+  final AtConnection connection = AtConnection(
+      atSign: '@alice',
+      attempt: (_) async =>
+          AtConnectionState.offline(AtConnectionCause.unattempted));
   @override
   SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
 
@@ -103,7 +114,7 @@ class RecordingProvider extends CryptoProvider {
 
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
-  AtChops mockAtChops = MockAtChops();
+  final mockAtChops = MockAtChops();
   AtClientManager mockAtClientManager = MockAtClientManager();
   FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
@@ -724,7 +735,7 @@ void main() {
               .having((e) => '$e', 'message', contains('joined by a dot'))),
           reason: 'an id in no namespace cannot be encrypted for a recipient. '
               'Before this, it reached the crypto layer, declined every '
-              'post-quantum provider, fell back to legacy and surfaced as a '
+              'post-quantum provider, fell back to the legacy provider and surfaced as a '
               'refusal about encryption — three layers from the mistake');
 
       expect(recorder.seen, isNull,
@@ -1400,8 +1411,10 @@ void main() {
     });
 
     test(
-        'getLastNotificationTime() returns null if checkOfflineNotifications is set to false',
+        'getLastNotificationTime() answers the service\'s creation time, and '
+        'ignores the stored watermark, when fetchOfflineNotifications is false',
         () async {
+      registerFallbackValue(FakeAtKey());
       when(() => mockAtClientImpl.getPreferences())
           .thenAnswer((_) => AtClientPreference()
             ..namespace = 'wavi'
@@ -1409,18 +1422,97 @@ void main() {
 
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
           .thenAnswer((_) async => true);
+      // A watermark from long before this service existed, which a client
+      // fetching offline notifications would resume from.
+      when(() => mockAtClientImpl.get(any())).thenAnswer((_) async =>
+          AtValue()..value = jsonEncode({'epochMillis': 1234567890123}));
 
+      final beforeCreate = DateTime.now().millisecondsSinceEpoch;
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           monitor: fakeMonitor) as NotificationServiceImpl;
-
+      final afterCreate = DateTime.now().millisecondsSinceEpoch;
       notificationServiceImpl.stopAllSubscriptions();
-      expect(await notificationServiceImpl.getLastNotificationTime(), null);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // NOTE: the mock client is shared across this file, so calls other tests
+      // made are still recorded on it.
+      clearInteractions(mockAtClientImpl);
+      expect(
+          await notificationServiceImpl.getLastNotificationTime(),
+          allOf(greaterThanOrEqualTo(beforeCreate),
+              lessThanOrEqualTo(afterCreate)),
+          reason: 'nothing received before the service existed, and '
+              'everything since — not null, which is delivered nothing sent '
+              'before `monitor:` went out');
+      verifyNever(() => mockAtClientImpl.put(any(), any(),
+          putRequestOptions: any(named: 'putRequestOptions')));
+      verifyNever(() => mockAtClientImpl.get(any()));
+    });
+
+    group('with fetchOfflineNotifications false, after a notification arrives',
+        () {
+      late NotificationServiceImpl service;
+      late int createdAtMillis;
+
+      Future<void> receive(String id, int epochMillis) =>
+          service.handleNotificationReceipt('notification: '
+              '{"id":"$id","from":"@alice","to":"@alice",'
+              '"key":"$id.wavi@alice","value":null,"operation":"update",'
+              '"epochMillis":$epochMillis,'
+              '"messageType":"MessageType.key","isEncrypted":false}');
+
+      setUp(() async {
+        registerFallbackValue(FakeAtKey());
+        when(() => mockAtClientImpl.getPreferences())
+            .thenAnswer((_) => AtClientPreference()
+              ..namespace = 'wavi'
+              ..fetchOfflineNotifications = false);
+        when(() =>
+                mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+            .thenAnswer((_) async => true);
+        when(() => mockAtClientImpl.get(any())).thenAnswer((_) async =>
+            AtValue()..value = jsonEncode({'epochMillis': 1234567890123}));
+        when(() => mockAtClientImpl.put(any(), any(),
+                putRequestOptions: any(named: 'putRequestOptions')))
+            .thenAnswer((_) async => true);
+
+        service = await NotificationServiceImpl.create(mockAtClientImpl,
+            monitor: fakeMonitor) as NotificationServiceImpl;
+        createdAtMillis = (await service.getLastNotificationTime())!;
+      });
+
+      tearDown(() => service.stopAllSubscriptions());
+
+      test(
+          'getLastNotificationTime() answers that notification\'s time, '
+          'without reading the store', () async {
+        await receive('1', createdAtMillis + 5000);
+        clearInteractions(mockAtClientImpl);
+
+        expect(await service.getLastNotificationTime(), createdAtMillis + 5000,
+            reason: 'a reconnect resumes after what this service has already '
+                'delivered, so the atServer replays none of it');
+        verifyNever(() => mockAtClientImpl.get(any()));
+      });
+
+      test('an earlier notification does not move it back', () async {
+        await receive('1', createdAtMillis + 5000);
+        await receive('2', createdAtMillis + 2000);
+
+        expect(await service.getLastNotificationTime(), createdAtMillis + 5000);
+      });
+
+      test('a stats notification does not move it', () async {
+        await receive('-1', createdAtMillis + 5000);
+
+        expect(await service.getLastNotificationTime(), createdAtMillis);
+      });
     });
 
     test(
-        'getLastNotificationTime() returns null if checkOfflineNotifications is true but there is no stored value',
-        () async {
+        'getLastNotificationTime() answers, and seeds, the service\'s creation '
+        'time when there is no stored value', () async {
       registerFallbackValue(FakeAtKey());
 
       when(() => mockAtClientImpl.getPreferences())
@@ -1431,9 +1523,14 @@ void main() {
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
           .thenAnswer((_) async => true);
 
+      final beforeCreate = DateTime.now().millisecondsSinceEpoch;
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
           monitor: fakeMonitor) as NotificationServiceImpl;
+      final afterCreate = DateTime.now().millisecondsSinceEpoch;
+      // Long enough that "when it was created" and "when it was asked" are
+      // different numbers.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
 
       notificationServiceImpl.stopAllSubscriptions();
 
@@ -1448,7 +1545,28 @@ void main() {
       // the mock doesn't throw when no legacy keys are present.
       when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
 
-      expect(await notificationServiceImpl.getLastNotificationTime(), null);
+      // NOTE: the mock client is shared across this file, so puts other tests
+      // made are still recorded on it.
+      clearInteractions(mockAtClientImpl);
+      final beforeAsk = DateTime.now().millisecondsSinceEpoch;
+      final answered = await notificationServiceImpl.getLastNotificationTime();
+
+      expect(
+          answered,
+          allOf(greaterThanOrEqualTo(beforeCreate),
+              lessThanOrEqualTo(afterCreate)),
+          reason: 'the creation time: a monitor asking for nothing sent before '
+              '`monitor:` misses replies to what the app sent before that');
+      expect(answered, lessThan(beforeAsk),
+          reason: 'not the time of the call, which is when the monitor '
+              'connects');
+      final seeded = verify(() => mockAtClientImpl.put(any(), captureAny(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .captured
+          .single as String;
+      expect((jsonDecode(seeded) as Map)['epochMillis'], answered,
+          reason: 'seeded with the same time, so a reconnect before any '
+              'notification arrives resumes from the same point');
     });
 
     /// The test case verifies the following:
@@ -1643,7 +1761,10 @@ void main() {
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
 
-      expect(await service.getLastNotificationTime(), isNull);
+      // NOTE: the mock client is shared across this file, so puts other tests
+      // made are still recorded on it.
+      clearInteractions(mockAtClientImpl);
+      expect(await service.getLastNotificationTime(), isNotNull);
 
       final captured = verify(() => mockAtClientImpl.put(any(), captureAny(),
           putRequestOptions: captureAny(named: 'putRequestOptions'))).captured;
@@ -1659,7 +1780,7 @@ void main() {
       expect((captured[1] as PutRequestOptions).shouldEncrypt, isFalse,
           reason: 'routing a never-synced record through the shared-data '
               'crypto path is what made it refusable: every post-quantum '
-              'provider declines a local key and the fallback is legacy');
+              'provider declines a local key and the fallback is the legacy provider');
     });
 
     test('a write failure does not escape into the connect sequence', () async {
@@ -1669,7 +1790,8 @@ void main() {
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenThrow(AtKeyException('keystore unavailable'));
 
-      await expectLater(service.getLastNotificationTime(), completion(isNull),
+      await expectLater(
+          service.getLastNotificationTime(), completion(isNotNull),
           reason: 'seeding the watermark is an optimisation — failing to seed '
               'it costs one replayed window, where letting the failure out '
               'costs the listener entirely');

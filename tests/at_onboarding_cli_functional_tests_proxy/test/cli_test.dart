@@ -2,15 +2,16 @@ import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_demo_data/at_demo_data.dart';
-import '../lib/features/onboard_command.dart';
-import '../lib/features/otp_command.dart';
-import '../lib/features/enroll_command.dart';
-import '../lib/features/list_enrollments_command.dart';
-import '../lib/features/approve_command.dart';
-import '../lib/features/validate_keys.dart';
-import '../lib/features/cleanup_utils.dart';
+import 'package:at_onboarding_cli_functional_tests_proxy/features/onboard_command.dart';
+import 'package:at_onboarding_cli_functional_tests_proxy/features/otp_command.dart';
+import 'package:at_onboarding_cli_functional_tests_proxy/features/enroll_command.dart';
+import 'package:at_onboarding_cli_functional_tests_proxy/features/list_enrollments_command.dart';
+import 'package:at_onboarding_cli_functional_tests_proxy/features/approve_command.dart';
+import 'package:at_onboarding_cli_functional_tests_proxy/features/validate_keys.dart';
+import 'package:at_onboarding_cli_functional_tests_proxy/features/cleanup_utils.dart';
+import 'package:at_onboarding_cli_functional_tests_proxy/virtualenv_ports.dart';
 
-const String rootServer = 'proxy:vip.ve.atsign.zone:443';
+final String rootServer = 'proxy:vip.ve.atsign.zone:$virtualenvProxyPort';
 const String appName = 'noports';
 const String namespaces = 'sshnp:rw,sshrvd:rw';
 

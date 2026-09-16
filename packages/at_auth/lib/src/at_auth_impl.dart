@@ -1,12 +1,10 @@
 import 'dart:async';
 
-import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/auth/at_authenticator.dart';
-import 'package:at_auth/src/auth/probe_default.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/onboarding_mint.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
@@ -19,10 +17,9 @@ import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup_io.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -39,8 +36,10 @@ class AtAuthImpl implements AtAuth {
     _progressController.add(progressEvent);
   }
 
-  @override
-  AtChops? atChops;
+  /// The signer a caller injected through [AtAuth.create], else the one
+  /// [authenticate] and [onboard] build from the keys they resolved.
+  // ignore: deprecated_member_use
+  AtChops? _chops;
 
   CramAuthenticator? cramAuthenticator;
 
@@ -48,36 +47,18 @@ class AtAuthImpl implements AtAuth {
 
   AtEnrollment atEnrollment;
 
-  @visibleForTesting
-  AtServerStatus? atServerStatus;
-
-  @visibleForTesting
-  SecondaryAddressFinder? secondaryAddressFinder;
-
-  /// How to test that the atServer is up before trying to use it, or null for
-  /// the platform's default.
-  ///
-  /// Called once per connection attempt, before the atServer is contacted in
-  /// earnest, so an atServer that is still starting is reported as such rather
-  /// than as a protocol failure. Throwing means not-up-yet and is retried;
-  /// returning means reachable.
-  ///
-  /// The default is `secureSocketProbe` under `dart:io` and [httpsProbe]
-  /// elsewhere, chosen by conditional import — see `probe_default.dart` for
-  /// why one implementation cannot serve both.
-  Future<void> Function(String host, int port)? probeSocket;
-
   @override
-  AtLookUp? atLookUp;
+  final AtLookupMuxable atLookUp;
 
   AtAuthImpl(
-      {this.atLookUp,
-      this.atChops,
+      {required this.atLookUp,
+      // ignore: deprecated_member_use
+      AtChops? atChops,
       this.cramAuthenticator,
       this.pkamAuthenticator,
-      this.atServerStatus,
       AtEnrollment? atEnrollment})
-      : atEnrollment = atEnrollment ?? AtEnrollment.create();
+      : _chops = atChops,
+        atEnrollment = atEnrollment ?? AtEnrollment.create();
 
   /// The keystore the authenticator should read, matching the precedence
   /// [authenticate] itself uses.
@@ -98,20 +79,6 @@ class AtAuthImpl implements AtAuth {
     final memory = InMemoryAtKeysIo();
     await memory.write(atSign, resolved);
     return memory;
-  }
-
-  /// Hands [lookUp] the authenticator, when it is the implementation that has
-  /// somewhere to put it.
-  ///
-  /// `AtLookUp` does not declare it - that interface is frozen because mocks
-  /// implement it - so any other implementation keeps the existing behaviour.
-  void _installAuthenticator(AtLookUp? lookUp, AtAuthenticator authenticator) {
-    if (lookUp is AtLookupMuxable) {
-      lookUp.authenticator = authenticator;
-    } else {
-      _logger.finer('${lookUp.runtimeType} has no authenticator seam; '
-          'leaving authentication on the credential fields');
-    }
   }
 
   @override
@@ -144,17 +111,6 @@ class AtAuthImpl implements AtAuth {
     }
 
     final enrollmentId = atAuthKeys.enrollmentToAuthenticateAs();
-    atLookUp ??= AtLookUp.withSecureSocket(
-      atSign: atAuthRequest.atSign,
-      rootDomain: atAuthRequest.rootDomain,
-      transport: secureSocketTransport(SecureSocketConfig()),
-      // Installed a few lines below, once the algorithm has been resolved
-      // from the keyfile.
-      authenticator: null,
-      secondaryAddressFinder: CacheableSecondaryAddressFinder(
-          atAuthRequest.rootDomain.rootDomain,
-          atAuthRequest.rootDomain.rootPort),
-    );
     // A typed-material enrollment (a self-retrofit's) authenticates with its
     // own signing keypair and algorithm, resolved from the keyfile rather
     // than caller-supplied; the flat fields keep carrying the original
@@ -162,28 +118,26 @@ class AtAuthImpl implements AtAuth {
     // only reader of either source. ??= to support mocking.
     final algorithm = atAuthKeys.authenticationAlgorithmFor(enrollmentId);
     if (algorithm != null) {
-      atLookUp!.signingAlgoType = algorithm;
+      atLookUp.signingAlgoType = algorithm;
     }
     atChops ??= atAuthKeys.authenticationFor(enrollmentId).chops;
-    atLookUp!.atChops = atChops;
+    atLookUp.atChops = atChops;
     // Installed alongside atChops, not instead of it. at_lookup prefers the
     // authenticator, so this is the route that runs - but the field is still
     // read for work that is not authentication at all (enrollment_approver
     // takes the encryption private key out of it), so it cannot go yet.
-    _installAuthenticator(
-        atLookUp,
-        authenticatorFor(
-          await _keysSourceFor(atAuthRequest.atSign, atAuthKeys,
-              // Only when the request supplied a source and no keys of its
-              // own. An explicit AtKeys wins here exactly as it wins above,
-              // so the authenticator reads what this method read.
-              reReadable: atAuthRequest.atAuthKeys == null
-                  ? atAuthRequest.atKeysIo
-                  : null),
-          atAuthRequest.atSign,
-          enrollmentId: enrollmentId,
-          chops: atChops,
-        ));
+    atLookUp.authenticator = authenticatorFor(
+      await _keysSourceFor(atAuthRequest.atSign, atAuthKeys,
+          // Only when the request supplied a source and no keys of its
+          // own. An explicit AtKeys wins here exactly as it wins above,
+          // so the authenticator reads what this method read.
+          reReadable: atAuthRequest.atAuthKeys == null
+              ? atAuthRequest.atKeysIo
+              : null),
+      atAuthRequest.atSign,
+      enrollmentId: enrollmentId,
+      chops: atChops,
+    );
 
     _logger.finer('Authenticating using PKAM');
     pkamAuthenticator ??= PkamAuthenticator();
@@ -191,7 +145,7 @@ class AtAuthImpl implements AtAuth {
     try {
       pkamResponse
         ..isSuccessful = (await pkamAuthenticator!.authenticate(
-            atAuthRequest.atSign, atLookUp!,
+            atAuthRequest.atSign, atLookUp,
             enrollmentId: enrollmentId))
         ..atAuthKeys = atAuthKeys
         ..atLookUp = atLookUp
@@ -254,17 +208,6 @@ class AtAuthImpl implements AtAuth {
     String? publicKeyId,
   }) async {
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
-    atLookUp ??= AtLookUp.withSecureSocket(
-      atSign: atOnboardingRequest.atSign,
-      rootDomain: atOnboardingRequest.rootDomain,
-      transport: secureSocketTransport(SecureSocketConfig()),
-      // Onboarding installs its own once it knows whether this is the CRAM
-      // leg or the PKAM one.
-      authenticator: null,
-      secondaryAddressFinder: CacheableSecondaryAddressFinder(
-          atOnboardingRequest.rootDomain.rootDomain,
-          atOnboardingRequest.rootDomain.rootPort),
-    );
 
     //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
     AtKeys? existingKeys;
@@ -290,7 +233,7 @@ class AtAuthImpl implements AtAuth {
     var cramAuthResult = await cramAuthenticator!.authenticate(
       atOnboardingRequest.atSign,
       cramSecret,
-      atLookUp!,
+      atLookUp,
     );
     if (!cramAuthResult) {
       _addProgress(
@@ -328,35 +271,35 @@ class AtAuthImpl implements AtAuth {
     _atAuthKeys = mint.keys;
 
     // A PQ-native activation authenticates with the keypair just minted, which
-    // is not in the flat fields toAtChops() reads — and the enrollment it will
-    // be filed under does not exist yet, so toAtChopsForEnrollment() has
-    // nothing to resolve either. Build the chops from the minted halves
+    // is not in the flat fields `authenticationFor` reads for an enrollment
+    // naming no algorithm — and the enrollment it will be filed under does
+    // not exist yet, so there is nothing to resolve. Build the chops from the
+    // minted halves
     // directly, and name the algorithm: at_lookup defaults to rsa2048 and
     // would otherwise sign an ML-DSA key with the RSA routine.
     if (atOnboardingRequest.signingAlgoType != SigningAlgoType.rsa2048) {
-      atChops ??= AtChopsImpl(AtChopsKeys.create(
-          null, AtPkamKeyPair.create(mint.apkamPublicKey, mint.apkamPrivateKey))
+      // ignore: deprecated_member_use
+      _chops ??= AtChopsImpl(AtChopsKeys.create(
+          null,
+          // ignore: deprecated_member_use
+          AtPkamKeyPair.create(mint.apkamPublicKey, mint.apkamPrivateKey))
         ..selfEncryptionKey = _atAuthKeys.defaultSelfEncryptionKey == null
             ? null
             : AESKey(_atAuthKeys.defaultSelfEncryptionKey!.toString()));
-      atLookUp!.signingAlgoType = atOnboardingRequest.signingAlgoType;
     } else {
-      atChops ??= _atAuthKeys.toAtChops();
+      _chops ??= _atAuthKeys.authenticationFor(null).chops;
     }
-    atLookUp!.atChops = atChops;
     // The algorithm is named rather than derived here. A PQ-native activation
     // signs with the keypair minted a few lines above, which is in no keyfile,
     // under an enrollment the atServer has not created yet - so there is
     // nothing for the keystore to resolve, and the rsa2048 default would sign
     // an ML-DSA key with the RSA routine.
-    _installAuthenticator(
-        atLookUp,
-        authenticatorFor(
-          await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
-          atOnboardingRequest.atSign,
-          chops: atChops,
-          signingAlgo: atOnboardingRequest.signingAlgoType,
-        ));
+    atLookUp.authenticator = authenticatorFor(
+      await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
+      atOnboardingRequest.atSign,
+      chops: _chops,
+      signingAlgo: atOnboardingRequest.signingAlgoType,
+    );
 
     //3. send onboarding enrollment
     String? enrollmentIdFromServer;
@@ -365,7 +308,7 @@ class AtAuthImpl implements AtAuth {
     enrollmentIdFromServer = await _sendOnboardingEnrollment(
       atOnboardingRequest,
       _atAuthKeys,
-      atLookUp!,
+      atLookUp,
       mint,
     );
     _atAuthKeys.enrollmentId = enrollmentIdFromServer;
@@ -380,19 +323,17 @@ class AtAuthImpl implements AtAuth {
     // records it as authenticated for this enrollment: the two ends disagree
     // about who is on the connection, and the enrollment-record-authoritative
     // signing-algorithm check never runs.
-    _installAuthenticator(
-        atLookUp,
-        authenticatorFor(
-          await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
-          atOnboardingRequest.atSign,
-          enrollmentId: enrollmentIdFromServer,
-          chops: atChops,
-          signingAlgo: atOnboardingRequest.signingAlgoType,
-        ));
+    atLookUp.authenticator = authenticatorFor(
+      await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
+      atOnboardingRequest.atSign,
+      enrollmentId: enrollmentIdFromServer,
+      chops: _chops,
+      signingAlgo: atOnboardingRequest.signingAlgoType,
+    );
 
     //4. Close connection to server
     try {
-      await atLookUp!.close();
+      await atLookUp.close();
     } on Exception catch (e) {
       _logger.severe('error while closing connection to server: $e');
     }
@@ -401,7 +342,7 @@ class AtAuthImpl implements AtAuth {
     pkamAuthenticator ??= PkamAuthenticator();
     try {
       var pkamResponse = await pkamAuthenticator!.authenticate(
-          atOnboardingRequest.atSign, atLookUp!,
+          atOnboardingRequest.atSign, atLookUp,
           enrollmentId: enrollmentIdFromServer);
       if (!pkamResponse) {
         _addProgress(
@@ -457,16 +398,10 @@ class AtAuthImpl implements AtAuth {
       await completeActivation();
     }
 
-    atOnboardingResponse
-      ..isSuccessful = true
-      ..atAuthKeys = _atAuthKeys
-      ..atLookUp = atLookUp
-      ..atChops = atChops;
+    atOnboardingResponse.isSuccessful = true;
 
-    // Hand back the same explicit session as authenticate(), so a
-    // freshly-onboarded atSign flows straight into the client. atKeysIo is
-    // guaranteed non-null here - onboarding refuses without one above; the
-    // guard mirrors authenticate() for parity.
+    // The session a freshly activated atSign's client opens from. atKeysIo
+    // is non-null here: onboarding refuses without one above.
     if (atOnboardingRequest.atKeysIo != null) {
       atOnboardingResponse.session = AtAuthSession(
         atSign: atOnboardingRequest.atSign,
@@ -474,7 +409,6 @@ class AtAuthImpl implements AtAuth {
         namespace: atOnboardingRequest.namespace,
         atKeysIo: atOnboardingRequest.atKeysIo!,
         enrollmentId: enrollmentIdFromServer,
-        atLookUp: atLookUp,
       );
     }
 
@@ -503,7 +437,7 @@ class AtAuthImpl implements AtAuth {
             ..ttr = -1))
         ..value = encryptionPublicKey;
       String? encryptKeyUpdateResult =
-          await atLookUp!.executeVerb(updateBuilder);
+          await atLookUp.executeVerb(updateBuilder);
       _logger
           .info('Encryption public key update result $encryptKeyUpdateResult');
     } else {
@@ -518,7 +452,7 @@ class AtAuthImpl implements AtAuth {
     // whichever material was minted.
     DeleteVerbBuilder deleteBuilder = DeleteVerbBuilder()
       ..atKey = (AtKey()..key = AtConstants.atCramSecret);
-    String? deleteResponse = await atLookUp!.executeVerb(deleteBuilder);
+    String? deleteResponse = await atLookUp.executeVerb(deleteBuilder);
     _logger.info('Cram secret delete response : $deleteResponse');
   }
 
@@ -558,7 +492,7 @@ class AtAuthImpl implements AtAuth {
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
       atEnrollmentResponse =
-          await atEnrollment.submit(firstEnrollmentRequest, atLookUp!);
+          await atEnrollment.submit(firstEnrollmentRequest, atLookUp);
     } on AtEnrollmentException catch (e) {
       throw AtAuthenticationException('Enrollment error: $e');
     }
@@ -595,7 +529,7 @@ class AtAuthImpl implements AtAuth {
   ///
   /// A PQ-native activation's APKAM goes in as typed material — the flat
   /// fields stay empty, so `AtAuthImpl.authenticate` resolves this enrollment
-  /// through `signingAlgorithmForEnrollment` / `toAtChopsForEnrollment` and
+  /// through `signingAlgorithmForEnrollment` / `authenticationFor` and
   /// signs ML-DSA with no caller-supplied algorithm anywhere. An `rsa2048`
   /// activation already wrote its APKAM to the flat fields and adds nothing
   /// here, which is what keeps a legacy keyfile byte-identical.
@@ -616,17 +550,11 @@ class AtAuthImpl implements AtAuth {
         enrollmentId: enrollmentId);
   }
 
-  /// Validates the atSign server status depending on whether it's onboarding or authentication.
+  /// Waits, over [atLookUp], until the atDirectory knows the atSign and its
+  /// atServer answers.
   ///
-  /// For onboarding, it checks that the root server is found, the secondary server is running,
-  /// and the atSign is not already activated.
-  ///
-  /// For authentication, it checks that the root server is found, the secondary server is running,
-  /// and the atSign is already activated.
-  ///
-  /// Throws an [AtException] if any of the checks fail.
-  /// Uses retry logic based on the [RetryOptions] provided in the [AuthRequest].
-  /// This method is used internally before onboarding or authentication operations.
+  /// Retried until the request's overall deadline, then throws an
+  /// [AtTimeoutException] carrying the last failure.
   @override
   Future<void> validateAtServer(AuthRequest atRequest) async {
     // Floor the poll interval so a zero/tiny retryDelay can't hammer the network
@@ -652,12 +580,6 @@ class AtAuthImpl implements AtAuth {
     bool validated = false;
     Object? lastError;
 
-    //support mocking
-    atServerStatus ??= AtStatusImpl(
-      rootUrl: atRequest.rootDomain.rootDomain,
-      rootPort: atRequest.rootDomain.rootPort,
-    );
-
     while (DateTime.now().isBefore(deadline)) {
       attempt++;
       try {
@@ -666,78 +588,22 @@ class AtAuthImpl implements AtAuth {
             '#[$attempt] : looking up ${atRequest.atSign} in atDirectory',
             ProgressEventType.info);
 
-        // Bound each network call by the budget remaining before the deadline,
-        // so no single call can overshoot the overall timeout.
-        Duration remaining =
-            AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
-        var atStatus =
-            await atServerStatus!.get(atRequest.atSign).timeout(remaining);
-
-        // 3 Checks for onboarding:
-        //   1. Root server should be found
-        //   2. Secondary server should be running
-        //   3. atSign should not be activated already
-        if (atRequest is AtOnboardingRequest) {
-          if (atStatus.rootStatus != RootStatus.found) {
-            throw AtException(
-                'Could not find root server: ${atRequest.rootDomain.rootDomain}');
-          }
-          if (atStatus.serverStatus == ServerStatus.error ||
-              atStatus.atSignStatus == AtSignStatus.notFound) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} secondary server is not running. '
-                'Cannot perform onboarding. ${atStatus.serverStatus} ${atStatus.atSignStatus}');
-          }
-          if (atStatus.atSignStatus == AtSignStatus.activated) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} is already onboarded. Cannot perform onboarding again.');
-          }
-        }
-
-        // 3 Checks for authentication:
-        //   1. Root server should be found
-        //   2. Secondary server should be running
-        //   3. atSign should be activated already
-        else if (atRequest is AtAuthRequest) {
-          if (atStatus.rootStatus == RootStatus.notFound ||
-              atStatus.rootStatus == RootStatus.error) {
-            throw AtException(
-                'Could not find root server: ${atRequest.rootDomain.rootDomain}');
-          }
-          if (atStatus.serverStatus == ServerStatus.stopped ||
-              atStatus.serverStatus == ServerStatus.error ||
-              atStatus.serverStatus == ServerStatus.unavailable) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} secondary server is not running. Cannot perform Authentication.');
-          }
-          if (atStatus.atSignStatus == AtSignStatus.teapot ||
-              atStatus.serverStatus == ServerStatus.teapot) {
-            throw AtException(
-                'atSign: ${atRequest.atSign} has not been onboarded. Cannot perform Authentication.');
-          }
-        }
-
-        // AtServer availability probing
-        _addProgress(
-            'Connect',
-            '#[$attempt] : Connecting to ${atRequest.atSign} atServer',
-            ProgressEventType.info);
-
-        secondaryAddressFinder ??= CacheableSecondaryAddressFinder(
-          atRequest.rootDomain.rootDomain,
-          atRequest.rootDomain.rootPort,
-        );
-        remaining = AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
-        SecondaryAddress secondaryAddress = await secondaryAddressFinder!
-            .findSecondary(atRequest.atSign, timeout: remaining);
-
-        remaining = AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
-        try {
-          await (probeSocket ?? defaultProbe)(
-                  secondaryAddress.host, secondaryAddress.port)
-              .timeout(remaining);
-        } catch (e) {
-          throw _ProbeFailed(e);
+        final check = await checkAtSignServer(atLookUp, atRequest.atSign,
+            timeout: AtNetworkTimeouts.cap(deadline.difference(DateTime.now())));
+        switch (check.state) {
+          case AtSignServerState.notInDirectory:
+            throw AtException('atSign: ${atRequest.atSign} is not in the '
+                'atDirectory at ${atRequest.rootDomain.rootDomain}');
+          case AtSignServerState.directoryUnreachable:
+            throw AtException('Could not reach the atDirectory at '
+                '${atRequest.rootDomain.rootDomain}: ${check.cause}');
+          case AtSignServerState.atServerUnreachable:
+            throw _AtServerNotAnswering(check.cause);
+          // NOTE: a public key does not prove the CRAM secret is spent, so an
+          // atSign that looks activated is not refused onboarding here; the
+          // CRAM exchange refuses one that really is.
+          case AtSignServerState.activated:
+          case AtSignServerState.notActivated:
         }
 
         _addProgress(
@@ -748,11 +614,12 @@ class AtAuthImpl implements AtAuth {
         validated = true;
         break; // Exit loop if no exception occurs
       } catch (e) {
-        lastError = e is _ProbeFailed ? e.cause : e;
-        if (e is _ProbeFailed) {
+        lastError = e is _AtServerNotAnswering ? e.cause : e;
+        if (e is _AtServerNotAnswering) {
           // Expected while an atServer is still starting, so it is not an
           // error until the retries run out.
-          _logger.warning('Attempt #[$attempt] Probe failed: ${e.cause}');
+          _logger.warning(
+              'Attempt #[$attempt] atServer not answering: ${e.cause}');
         } else {
           _logger.severe('Attempt #[$attempt] failed: $lastError');
         }
@@ -776,12 +643,11 @@ class AtAuthImpl implements AtAuth {
   }
 }
 
-/// Wraps whatever [AtAuthImpl.probeSocket] threw, so the retry loop can tell an
-/// atServer that is not answering yet — expected while one starts — from a
-/// fault in the steps around the probe.
-class _ProbeFailed implements Exception {
-  _ProbeFailed(this.cause);
-  final Object cause;
+/// An atServer that did not answer, so the retry loop can tell one that is
+/// not up yet - expected while one starts - from any other failure.
+class _AtServerNotAnswering implements Exception {
+  _AtServerNotAnswering(this.cause);
+  final Object? cause;
   @override
   String toString() => '$cause';
 }

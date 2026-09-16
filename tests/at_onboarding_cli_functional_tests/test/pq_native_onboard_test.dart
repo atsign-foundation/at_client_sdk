@@ -11,6 +11,7 @@ import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
+import 'utils/lifecycle.dart';
 import 'utils/test_keys_dir.dart';
 import 'utils/virtualenv_ports.dart';
 
@@ -33,8 +34,7 @@ void main() {
       AtOnboardingPreference(posture: PqPosture.pqReady)
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = virtualenvRootPort
-        ..hiveStoragePath = 'test/storage/hive/$atSign'
-        ..commitLogPath = 'test/storage/hive/$atSign/commit'
+        ..storagePath = 'test/storage/hive/$atSign'
         ..namespace = 'wavi'
         ..cramSecret = at_demos.cramKeyMap[atSign]
         ..atKeysFilePath = keysFilePath
@@ -43,7 +43,7 @@ void main() {
         ..deviceName = 'pq-cli';
 
   setUp(() {
-    // AtAuth.onboard refuses if a keyfile already exists, so a leftover from an
+    // An activation refuses to overwrite a keyfile, so a leftover from an
     // earlier run would make this pass in isolation and fail in the suite.
     for (final path in [keysFilePath, '$keysFilePath.bak']) {
       final file = File(path);
@@ -51,16 +51,15 @@ void main() {
     }
   });
 
-  test('a CLI activation under the pqReady posture is PQ-native', () async {
-    final service = AtOnboardingServiceImpl(atSign, preference());
-    expect(await service.onboard(), true);
+  test('an activation under the pqReady posture is PQ-native', () async {
+    await activateThroughCli(atSign, preference());
 
     final keys = await FileAtKeysIo(filePath: (_) => keysFilePath).read(atSign);
-    final enrollmentId = keys.enrollmentId;
+    final enrollmentId = keys.storedEnrollmentId;
     expect(enrollmentId, isNotEmpty);
 
     // --- 1. the APKAM is ML-DSA, and it is what authenticates --------------
-    expect(keys.apkamPublicKey, isNull,
+    expect(keys.authenticationKeyPairFor(null), isNull,
         reason: 'a PQ-native keyfile keeps its APKAM in the typed section, so '
             'a reader that cannot handle that fails loudly rather than '
             'signing an ML-DSA key with the RSA routine');
@@ -78,11 +77,8 @@ void main() {
     // agrees with it. A client reading its algorithm off the preference signs
     // an ML-DSA key with the RSA routine and every command below throws.
     //
-    // In one process the activation client is still cached under
-    // `(atSign, enrollmentId)` holding the `pqReady` axes, which
-    // `AtClientImpl.create` refuses to hand to a caller naming different ones.
-    // Dropping it here is what process exit does for `at_activate`.
-    await service.atClient!.stop();
+    // The activation's client, built under `pqReady`, was stopped with it;
+    // the reader below is a fresh client under a bare preference.
     AtClientImpl.atClientInstanceMap
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
 
@@ -96,8 +92,7 @@ void main() {
         AtOnboardingPreference(posture: PqPosture.legacy)
           ..rootDomain = 'vip.ve.atsign.zone'
           ..rootPort = virtualenvRootPort
-          ..hiveStoragePath = 'test/storage/hive/$atSign-reader'
-          ..commitLogPath = 'test/storage/hive/$atSign-reader/commit'
+          ..storagePath = 'test/storage/hive/$atSign-reader'
           ..namespace = 'wavi'
           ..atKeysFilePath = keysFilePath);
     expect(await reader.authenticate(), true);
@@ -151,7 +146,7 @@ void main() {
     expect((entries.first as Map)['alg'], 'mldsa65');
 
     // --- and legacy material is still cut and published, BY DEFAULT --------
-    expect(keys.defaultEncryptionPublicKey, isNotNull);
+    expect(keys.encryptionKeyPair, isNotNull);
     final publicKey = await client
         .getRemoteSecondary()!
         .executeCommand('plookup:publickey$atSign\n', auth: true);
@@ -159,7 +154,7 @@ void main() {
     // public:publickey already installed, so a presence check would pass on
     // provisioning state even if the activation had published nothing.
     expect(publicKey?.replaceFirst('data:', '').trim(),
-        keys.defaultEncryptionPublicKey.toString(),
+        keys.encryptionKeyPair!.atPublicKey.publicKey,
         reason: 'a legacy peer must still be able to reach this atSign, and '
             'the key it finds has to be the one this atSign holds the private '
             'half of');
@@ -184,20 +179,18 @@ void main() {
     final activation = AtOnboardingPreference(posture: PqPosture.legacy)
       ..rootDomain = 'vip.ve.atsign.zone'
       ..rootPort = virtualenvRootPort
-      ..hiveStoragePath = 'test/storage/hive/$legacyAtSign'
-      ..commitLogPath = 'test/storage/hive/$legacyAtSign/commit'
+      ..storagePath = 'test/storage/hive/$legacyAtSign'
       ..namespace = 'wavi'
       ..cramSecret = at_demos.cramKeyMap[legacyAtSign]
       ..atKeysFilePath = legacyKeysFile
       ..downloadPath = keysDir
       ..appName = 'wavi'
       ..deviceName = 'legacy-cli';
-    expect(await AtOnboardingServiceImpl(legacyAtSign, activation).onboard(),
-        true);
+    await activateThroughCli(legacyAtSign, activation);
 
     final keys =
         await FileAtKeysIo(filePath: (_) => legacyKeysFile).read(legacyAtSign);
-    expect(keys.apkamPublicKey, isNotNull,
+    expect(keys.authenticationKeyPairFor(null), isNotNull,
         reason: 'a legacy activation keeps its APKAM in the flat fields, '
             'which is what makes it the rsa2048 arm');
 
@@ -211,8 +204,7 @@ void main() {
         AtOnboardingPreference(posture: PqPosture.legacy)
           ..rootDomain = 'vip.ve.atsign.zone'
           ..rootPort = virtualenvRootPort
-          ..hiveStoragePath = 'test/storage/hive/$legacyAtSign-reader'
-          ..commitLogPath = 'test/storage/hive/$legacyAtSign-reader/commit'
+          ..storagePath = 'test/storage/hive/$legacyAtSign-reader'
           ..namespace = 'wavi'
           ..atKeysFilePath = legacyKeysFile);
     expect(await reader.authenticate(), true);

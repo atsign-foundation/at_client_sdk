@@ -129,8 +129,8 @@ void main() {
   /// Notify, on the nskey path, across two atSigns.
   ///
   /// Both notify entry points pick a provider, and a provider chosen before
-  /// the namespace is filled in from the preference falls back to legacy while
-  /// `put` on the identical key uses nskey.
+  /// the namespace is filled in from the preference falls back to the legacy
+  /// provider while `put` on the identical key uses nskey.
   ///
   /// The failure mode is that the *wrong thing succeeds*: a legacy-encrypted
   /// notification is delivered and decrypted perfectly well, so no ordinary

@@ -1,4 +1,4 @@
-import 'dart:async' show Completer;
+import 'dart:async' show Completer, unawaited;
 
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_commons/at_commons.dart' show AtKey, EnrollmentConstants;
@@ -121,7 +121,7 @@ class MintLock {
     } finally {
       // NOTE: released only once the mint has published, so a waiter that wakes
       // here re-reads an advertisement that is already on the atServer.
-      _inFlight.remove(inFlightKey);
+      unawaited(_inFlight.remove(inFlightKey));
       done.complete();
     }
   }

@@ -620,7 +620,8 @@ migration is the app, and an app is an enrollment**: its own AtKeys, its own APK
 keypair, its own namespaces. Apps migrate independently and never have to agree.
 
 **The two releases.**
-1. **Capability (final 3.x).** Rebuild only → a **universal reader** + back-compat
+1. **Capability (4.x, or `PqPosture.pqReady` named today).** A rebuild plus
+   the posture → a **universal reader** + back-compat
    writer: reads anything ever written (legacy or nskey), upgrades its enrollment
    ([§2.5](#25-the-authenticated-self-retrofit-flow-fresh-auto-approved-enrollment)),
    mints/publishes its namespace keys or pulls their privates
@@ -629,19 +630,22 @@ keypair, its own namespaces. Apps migrate independently and never have to agree.
    rebuilt client never loses access. This build must be **rolled out before** the
    next one ships: that release-ordering discipline is the one thing the model asks
    of an app developer, and it replaces every piece of removed machinery.
-2. **Active use (4.x, or an explicit opt-in today).** The app now writes the
+2. **Active use (5.x, or an explicit opt-in today).** The app now writes the
    nskey data path. **The SDK never decides to write PQ — the app tells it
-   to**, implicitly by riding the 4.x default, or explicitly by naming a
+   to**, implicitly by riding the 5.x default (4.x defaults to `pqReady`, the
+   reading stage, per
+   [`decisions.md` 138](detail/decisions.md#138-the-posture-ladder-moves-back-a-stage-2026-09-08)),
+   or explicitly by naming a
    `crypto` config — or, since
    [`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10),
    by building its preference with `PqPosture.pqActive`, which runs
-   the 4.0 flag defaults (era config, `disallowLegacyEncryption`, pq enrollment
+   the 5.0 flag defaults (era config, `disallowLegacyEncryption`, pq enrollment
    key exchange, ML-DSA retrofits) on a 3.x build. It carried a fifth, the JWS
    envelope wrapper, until
    [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
    ruling 1 made one envelope shape unconditional and removed the axis; the
    field is still on the class until that lands.
-   4.0 itself is that posture becoming the default — final-3.x code,
+   5.0 itself is that posture becoming the default — final-3.x code,
    different flag defaults
    ([`decisions.md` 56.4](detail/decisions.md#564-from-the-pq-projects-view-40-is-final-3x-with-different-flag-defaults)).
 
@@ -684,7 +688,8 @@ unless asked.
 strict-mode control, and the app-decides model's own voice: it is how an app states
 "never write with the legacy provider")*. A flag on `AtClientPreference`:
 - **Final at `AtClient` construction (immutable)** — no mid-run flipping, no setter.
-- **Default `false` in 3.x → `true` in 4.0** (the cutover is `R-2`).
+- **Default `false` through 3.x and 4.x → `true` in 5.0** (the cutover is
+  `R-2`'s second stage), and only a posture sets it.
 - Means literally: **never write *new* data using the legacy provider for
   encryption** — use a PQ path or **refuse the write** (a legacy-only recipient ⇒
   refused, never a silent legacy write).
@@ -1403,9 +1408,12 @@ read — secret-sharing envelopes and key-package copies are stored that way.
 ### `AtKeys`/`AtKeysIo` extend-in-place + key stores
 
 The existing **`AtKeys`** is **extended in place** — additive PQ-safe methods
-(`addKey` / `retireKey`; material is **never removed** — `retireKey` moves status
-forward-only, `active` → `retired` → `dead`, since retired bytes are still needed
-to decrypt data they protected), with the legacy key fields/methods **deprecated**
+(`addKey` / `retireKey`; material is **never removed** once live — `retireKey`
+moves status forward-only, `pending` → `active` → `retired` → `dead`, since
+retired bytes are still needed to decrypt data they protected; the one
+exception is `pending` material, an enrollment's keys filed at submission and
+never accepted, which `discardEnrollment` removes), with the legacy key
+fields/methods **deprecated**
 but retained for back-compat so call sites migrate over time (ratified 2026-07-06,
 #2045; the retire-never-remove and `flush()` shapes ratified 2026-07-17 — see
 [`decisions.md`](decisions.md); supersedes the earlier `WritableAtKeys` holder
@@ -1450,18 +1458,24 @@ cache) is decided when S-3/SS-4 execute.
 ### WASM barrel split (`at_auth 4.0.0`)
 
 `at_auth`'s core must compile under `dart2wasm` (the running client, incl. web,
-authenticates via at_auth; only onboarding/setup is desktop/CLI). `dart2wasm`
+reads its keys and builds its authenticator from at_auth while at_client
+drives the PKAM on the client's own connection; only activation/setup is
+desktop/CLI). `dart2wasm`
 errors on any `dart:io` reachable from the entry point, so:
 
 - **`at_auth.dart`** (main barrel, WASM-safe): `AtKeys` (extended in place), the
-  `AtKeysIo` interfaces, `InMemoryAtKeysIo`, the auth core,
+  `AtKeysIo` interfaces, `InMemoryAtKeysIo`, `authenticatorFor` and the
+  enrolment handshakes,
   and the registrar **on `package:http`** (no `dart:io HttpClient`, so it is WASM-safe).
-- **`at_auth_io.dart`** (new non-wasm barrel): `FileAtKeysIo` + the `dart:io`
-  socket-probe default. CLI and `at_client_flutter`'s `file_picker` import it —
-  so `FileAtKeysIo` never leaves `at_auth` (no relocation, no UI→CLI arrow).
-- Two inline-`dart:io` bits in `at_auth_impl.dart` are **extracted**: drop the
-  `atKeysIo ??= FileAtKeysIo()` default (require injection); move `_defaultProbeSocket`
-  to the io barrel, leaving only the injected `probeSocket` hook in the core.
+- **`at_auth_io.dart`** (new non-wasm barrel): `FileAtKeysIo`, the file retrofit
+  serializer and the registrar's `dart:io` client. CLI and `at_client_flutter`'s
+  `file_picker` import it — so `FileAtKeysIo` never leaves `at_auth` (no
+  relocation, no UI→CLI arrow).
+- The inline-`dart:io` bits in `at_auth_impl.dart` are **removed**: the
+  `atKeysIo ??= FileAtKeysIo()` default is dropped (require injection), and at_auth
+  builds no connection of its own — the caller hands it an `AtLookupMuxable`, and
+  its atServer check is at_lookup's neutral `checkAtSignServer` over that lookup,
+  so no reachability probe is left to extract.
 
 ### File partition
 
@@ -2125,8 +2139,10 @@ the one answer that does not exist.
 
 **The keys name the enrollment** —
 [`decisions.md` 132](detail/decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07).
-`AtKeys.enrollmentToAuthenticateAs()` is what `AtAuthImpl.authenticate` and
-`AtClientImpl.create` ask: the one enrollment holding active authentication
+`AtKeys.enrollmentToAuthenticateAs()` is what at_client asks on every route
+into a connection — `Atsign.open` through `AtClientImpl.create`,
+`Atsign.authenticatesAs`, and the authenticated lookup an enrolment or a
+decision runs on: the one enrollment holding active authentication
 material, else the flat stored `enrollmentId`, else `primary`, the atServer's
 name for the atSign's own credential; several throw rather than pick.
 `resolveAuthenticatingEnrollment()` remains the typed-only half of that answer.
@@ -2149,15 +2165,17 @@ sweep — the signature gained its enrollment in row A1.)
 Reading, in order of what a file can contain:
 
 1. no `version` — the legacy flat shape;
-2. `version: 1` with `keys: []` — written by at_auth ≥ 3.3.0 on any flush,
-   carrying nothing a legacy file does not;
-3. `version: 1` with `enrollments[]` and/or `atsignKeys[]`.
+2. `version: 1` with `keys: []` and no containers — written by at_auth 3.3.0
+   on any flush, carrying nothing a legacy file does not;
+3. `version: 1` with `keys: []` beside `enrollments[]` and/or `atsignKeys[]`.
 
-Writing emits (1) when there is no typed material and (3) otherwise. Shape (2)
-is never written again — and a `version: 1` document carrying a top-level
-`keys` is now **refused by name**: `keys` is no longer reserved, so parsing it
-would sweep the whole array into `metadata` as a legacy value and authenticate
-from the flat block as the wrong enrollment.
+Writing emits (1) when there is no typed material and (3) otherwise. The
+top-level `keys` array is always present and always empty in (3), because
+readers in the field may expect it wherever there is a `version`
+([ruling 141](detail/decisions.md#141-a-typed-keyfile-carries-an-empty-top-level-keys-array-2026-09-14)). A `version: 1` document whose top-level `keys` is
+**populated** is **refused by name**: no container reads that array, so parsing
+it would discard the material and authenticate from the flat block as the wrong
+enrollment.
 
 ### 9.3 `_apsk`
 

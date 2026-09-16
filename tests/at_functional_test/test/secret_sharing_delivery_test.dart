@@ -7,8 +7,6 @@ library;
 import 'dart:convert' show base64Decode, jsonDecode;
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';

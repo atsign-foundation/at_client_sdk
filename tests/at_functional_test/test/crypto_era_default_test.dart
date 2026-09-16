@@ -5,7 +5,6 @@
 @Tags(['pq'])
 library;
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
@@ -48,7 +47,7 @@ void main() {
         reason: 'and the content key it cites is unreachable for the same '
             'reason');
     expect(resolved.defaultProviderId, legacyCryptoProviderId,
-        reason: 'the shipped default writes legacy whichever stage it is — '
+        reason: 'the shipped default writes with the legacy provider whichever stage it is — '
             'legacy and pqReady both carry writesPqByDefault false, and it is '
             'pqActive that moves it, which is why this reads the default '
             'rather than naming one');

@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'package:args/args.dart';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_commons/at_commons.dart' show AtRootDomain;
+import 'package:at_lookup/at_lookup_io.dart' show secureSocketLookUps;
 
 /// Perform initial onboarding for an atsign
 /// 1. CRAM authentication
@@ -22,15 +25,29 @@ void main(List<String> args) async {
           mandatory: false,
           defaultsTo: 'root.atsign.org');
     final argResults = parser.parse(args);
+    final rootDomain = AtRootDomain(argResults['rootDomain'], 64);
+    final atLookUp = secureSocketLookUps()(
+        atSign: argResults['atsign'],
+        rootDomain: rootDomain,
+        authenticator: null);
 
-    final atAuth = AtAuth.create();
-    final atSign = argResults['atsign'];
-    final atOnboardingRequest =
-        AtOnboardingRequest(atSign, signingAlgoType: SigningAlgoType.rsa2048)
-          ..rootDomain = argResults['rootDomain'];
-    final atOnboardingResponse =
-        await atAuth.onboard(atOnboardingRequest, argResults['cramsecret']);
-    print('atOnboardingResponse: $atOnboardingResponse');
+    final String enrollmentId;
+    try {
+      enrollmentId = await activateAtSign(
+        atSign: argResults['atsign'],
+        cramSecret: argResults['cramsecret'],
+        keys: FileAtKeysIo(filePath: (_) => argResults['keysFilePath']),
+        signingAlgo: SigningAlgoType.rsa2048,
+        rootDomain: rootDomain,
+        onProgress: (event) => print('${event.group}: ${event.msg}'),
+        atLookUp: atLookUp,
+        awaitProvisioning: true,
+      );
+    } finally {
+      await atLookUp.close();
+    }
+    print('activated ${argResults['atsign']} as enrollment $enrollmentId; '
+        'keys written to ${argResults['keysFilePath']}');
   } on Exception catch (e, trace) {
     print(trace);
   } on ArgumentError catch (e, trace) {

@@ -8,14 +8,9 @@ library;
 import 'dart:convert' show base64Decode;
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart'
-    show AtChopsImpl, AtChopsKeys, AtEncryptionKeyPair, AtPkamKeyPair;
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/config_util.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -50,7 +45,7 @@ void main() {
     final build = enrollmentKeyPackageBuilder(atSign);
 
     final request = AtEnrollmentRequest.pq(
-      atSign: atSign,
+      session: TestUtils.enrollmentSession(atSign),
       appName: namespace,
       deviceName: 'pq-${Uuid().v4().hashCode}',
       namespaces: {namespace: 'rw'},
@@ -68,7 +63,7 @@ void main() {
 
     final response = await AtEnrollment.create().submit(
       request,
-      AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
+      TestUtils.unauthenticatedLookUp(atSign),
     );
     expect(response.enrollStatus, EnrollmentStatus.pending);
 
@@ -116,18 +111,10 @@ void main() {
 
     // NOTE: resolved over the new enrollment's own connection, because only
     // that side shows the atServer letting a connection scoped to the granted
-    // namespace scan for and read the key. Its chops come from the APKAM
-    // keypair alone — `AtKeys.toAtChops` would demand an encryption private
-    // key this enrollment does not hold yet.
+    // namespace scan for and read the key.
     final enrolleeLookup =
-        AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
-          ..enrollmentId = enrolled.enrollmentId
-          ..atChops = AtChopsImpl(AtChopsKeys.create(
-            AtEncryptionKeyPair.create(
-                enrolled.keys.defaultEncryptionPublicKey!.toString(), ''),
-            AtPkamKeyPair.create(enrolled.keys.apkamPublicKey!.toString(),
-                enrolled.keys.apkamPrivateKey!.toString()),
-          ));
+        TestUtils.lookUpAs(atSign, enrolled.keys,
+        enrollmentId: enrolled.enrollmentId);
 
     expect(
         await enrolleeLookup.pkamAuthenticate(

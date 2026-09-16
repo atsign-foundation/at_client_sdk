@@ -14,7 +14,8 @@
 /// [SecondaryAddressFinder] such as `ProxySecondaryAddressFinder`.
 library;
 
-import 'package:at_commons/at_commons.dart' show SecureSocketConfig;
+import 'package:at_commons/at_commons.dart'
+    show AtRootDomain, SecureSocketConfig;
 
 import 'at_lookup.dart';
 import 'src/io/cacheable_secondary_address_finder.dart'
@@ -67,3 +68,34 @@ AtLookupImpl atLookupOverSecureSocket(
             CacheableSecondaryAddressFinder(rootDomain, rootPort),
         transportFactory: SecureSocketTransportFactory(
             secureSocketConfig: secureSocketConfig ?? SecureSocketConfig()));
+
+/// The default [AtLookUpFactory]: every connection over TLS on TCP, under
+/// [config] (the TLS defaults with none), through `AtLookUp.withSecureSocket`.
+///
+/// [onConnect] runs on each connection once it is up and before anything else
+/// is sent on it, which is how a deployment behind a proxy sends the `from:`
+/// the proxy needs first.
+AtLookUpFactory secureSocketLookUps({
+  SecureSocketConfig? config,
+  Future<void> Function(AtCommandExecutor connection)? onConnect,
+}) {
+  final transport = secureSocketTransport(config ?? SecureSocketConfig());
+  return ({
+    required String atSign,
+    required AtRootDomain rootDomain,
+    required AtAuthenticator? authenticator,
+    SecondaryAddressFinder? secondaryAddressFinder,
+    Map<String, dynamic> clientConfig = const {},
+  }) =>
+      AtLookUp.withSecureSocket(
+        atSign: atSign,
+        rootDomain: rootDomain,
+        authenticator: authenticator,
+        transport: transport,
+        secondaryAddressFinder: secondaryAddressFinder ??
+            CacheableSecondaryAddressFinder(
+                rootDomain.rootDomain, rootDomain.rootPort),
+        clientConfig: clientConfig,
+        onConnect: onConnect,
+      );
+}

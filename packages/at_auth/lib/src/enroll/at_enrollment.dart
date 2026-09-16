@@ -3,13 +3,10 @@ import 'dart:async';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_auth/src/enroll/models/approver_key_material.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
-import 'package:at_auth/src/enroll/models/enrollment_update_request.dart';
-import 'package:at_auth/src/enroll/models/otp.dart';
-import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
-import 'package:at_chops/at_chops.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollment {
@@ -29,10 +26,6 @@ abstract class AtEnrollment {
   /// Whether [waitForApproval] narrates itself on [progressStream] when a
   /// caller states no preference.
   static const bool defaultLogProgress = true;
-
-  /// How long a passcode from [generateOtp] or [setSpp] stays valid when a
-  /// caller states no expiry of its own.
-  static const Duration defaultOtpExpiry = Duration(minutes: 5);
 
   Stream<ProgressEvent> get progressStream;
 
@@ -80,8 +73,10 @@ abstract class AtEnrollment {
   ///
   ///     AtEnrollmentResponse atEnrollmentResponse =
   ///         await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
-  ///     await atEnrollmentBase.waitForApproval(atEnrollmentResponse);
-  ///     // atEnrollmentResponse.session -> AtClientManager.fromAuthSession(...)
+  ///     await atEnrollmentBase.waitForApproval(atEnrollmentResponse,
+  ///         atLookup: atLookUp);
+  ///     // atEnrollmentResponse.session.atKeysIo now holds the keys; open a
+  ///     // client on it with at_client's Atsign.open.
   ///```
   ///
   /// The [atLookUp] parameter is used to perform lookups to secondary server to submit an enrollment request.
@@ -128,16 +123,18 @@ abstract class AtEnrollment {
   ///               encryptedAPKAMSymmetricKey: 'dummy-encrypted-apkam-symmetric-key'));
   ///
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.approve(
-  ///       enrollmentRequestDecision, atLookupImpl);
+  ///       enrollmentRequestDecision, atLookupImpl, approverKeys: myKeys);
   /// ```
   ///
-  /// [approverChops] is the approving client's own crypto. What approval needs
-  /// is not authentication - the atSign's encryption private key, its
-  /// self-encryption key - so it does not belong on the network object. While
-  /// null, the implementation falls back to `atLookUp.atChops`.
+  /// [approverKeys] is what approval reads of the approving client's own
+  /// material, and all of it: the atSign's encryption private key, which
+  /// unwraps the symmetric key a legacy enrollee RSA-wrapped to it, and its
+  /// self-encryption key, one of the two secrets sealed for the enrollee.
+  /// Neither is authentication, so the caller hands them over rather than the
+  /// implementation reaching through [atLookUp] for them.
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp,
-      {AtChops? approverChops});
+      {required ApproverKeyMaterial approverKeys});
 
   /// Denies an enrollment request.
   ///
@@ -279,21 +276,20 @@ abstract class AtEnrollment {
   ///         await atEnrollmentBase?.submit(dummyEnrollmentRequest, atLookUp!);
   ///
   /// try{
-  ///   await atEnrollment.waitForApproval(
-  ///     enrollmentResponse: atEnrollmentResponse!,
-  ///   );
+  ///   await atEnrollment.waitForApproval(atEnrollmentResponse!,
+  ///       atLookup: atLookUp);
   /// }catch{
   ///   // Handle errors
   /// }
   /// ```
   /// [atLookup] is the connection the approval handshake runs on — the PKAM
-  /// retries and the post-approval key fetches. When null, one is built from
-  /// the response's atSign and rootDomain.
+  /// retries and the post-approval key fetches — and it is left open for the
+  /// caller to close.
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     bool logProgress = defaultLogProgress,
     int maxRetries = defaultMaxRetries,
     Duration retryInterval = defaultRetryInterval,
-    AtLookUp? atLookup,
+    required AtLookupMuxable atLookup,
   });
 }

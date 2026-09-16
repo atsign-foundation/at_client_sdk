@@ -5,11 +5,7 @@
 library;
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart'
-    show AtChopsImpl, AtChopsKeys, AtEncryptionKeyPair, AtPkamKeyPair;
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart'
     show EnrollmentServiceImpl;
@@ -66,7 +62,7 @@ void main() {
 
     final response = await AtEnrollment.create().submit(
       AtEnrollmentRequest.pq(
-        atSign: atSign,
+        session: TestUtils.enrollmentSession(atSign),
         appName: namespace,
         deviceName: 'scoped-${Uuid().v4().hashCode}',
         namespaces: namespaces,
@@ -81,7 +77,7 @@ void main() {
         // RSA-2048 APKAM keypair.
         signingAlgo: SigningAlgoType.rsa2048,
       ),
-      AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
+      TestUtils.unauthenticatedLookUp(atSign),
     );
 
     await atClient.enrollmentService!
@@ -145,14 +141,8 @@ void main() {
     }
 
     final enrolleeLookup =
-        AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
-          ..enrollmentId = scoped.enrollmentId
-          ..atChops = AtChopsImpl(AtChopsKeys.create(
-            AtEncryptionKeyPair.create(
-                scoped.keys.defaultEncryptionPublicKey!.toString(), ''),
-            AtPkamKeyPair.create(scoped.keys.apkamPublicKey!.toString(),
-                scoped.keys.apkamPrivateKey!.toString()),
-          ));
+        TestUtils.lookUpAs(atSign, scoped.keys,
+        enrollmentId: scoped.enrollmentId);
 
     try {
       expect(
@@ -234,14 +224,8 @@ void main() {
     }
 
     final enrolleeLookup =
-        AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
-          ..enrollmentId = scoped.enrollmentId
-          ..atChops = AtChopsImpl(AtChopsKeys.create(
-            AtEncryptionKeyPair.create(
-                scoped.keys.defaultEncryptionPublicKey!.toString(), ''),
-            AtPkamKeyPair.create(scoped.keys.apkamPublicKey!.toString(),
-                scoped.keys.apkamPrivateKey!.toString()),
-          ));
+        TestUtils.lookUpAs(atSign, scoped.keys,
+        enrollmentId: scoped.enrollmentId);
 
     try {
       expect(
