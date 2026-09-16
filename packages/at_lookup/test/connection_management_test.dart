@@ -30,22 +30,18 @@ void main() {
         return SecondaryAddress('test.test.test', 12345);
       });
       AtLookupImpl atLookup = AtLookupImpl('@alice', 'test.test.test', 64,
-          secondaryAddressFinder: finder,
-          secureSocketFactory: mockSocketFactory);
+          secondaryAddressFinder: finder, transportFactory: transportFactory);
 
       await Future.wait([
         atLookup.createConnection(),
         atLookup.createConnection(),
       ]);
 
-      verify(() =>
-              mockSocketFactory.createSocket('test.test.test', '12345', any()))
-          .called(1);
-      expect(
-          (atLookup.connection!.getSocket() as MockSecureSocket).mockNumber, 1,
-          reason: 'the connection the lookup holds is the one socket opened; '
-              'a second would have replaced it while the first was the one '
-              'being authenticated');
+      expect(transportFactory.created, hasLength(1),
+          reason: 'the mutex serialises createConnection; a second racer '
+              'that opened its own transport would have replaced the '
+              'connection while the first was still the one being '
+              'authenticated');
     });
 
     test(
