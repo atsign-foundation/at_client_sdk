@@ -37,17 +37,12 @@ class RemoteSecondary implements Secondary {
   /// null to read the process-wide one per lookup.
   SecondaryAddressFinder? _secondaryAddressFinder;
 
-  // ignore: deprecated_member_use
   AtChops? _atChops;
 
-  // ignore: deprecated_member_use
   AtChops? get atChops => _atChops;
 
-  // ignore: deprecated_member_use
   set atChops(AtChops? value) {
     _atChops = value;
-    // ignore: deprecated_member_use
-    atLookUp.atChops = value;
     _installAuthenticator();
   }
 
@@ -57,6 +52,10 @@ class RemoteSecondary implements Secondary {
   /// The legacy credential, for a client that was given no keystore.
   String? _privateKey;
   String? _cramSecret;
+
+  /// The enrollment the next authenticator built by [_installAuthenticator]
+  /// should declare.
+  String? _enrollmentId;
 
   /// The algorithm the constructor resolved, so an authenticator built from a
   /// bare signer names the same one the lookup was told to use.
@@ -74,16 +73,12 @@ class RemoteSecondary implements Secondary {
     if (state != null) _connection?.report(state);
   }
 
-  /// Hands the lookup an authenticator, so authentication is decided from the
-  /// keystore rather than from credentials parked on at_lookup.
+  /// Hands the lookup an authenticator built from whichever of the four
+  /// credential shapes this client holds - the only way a lookup
+  /// authenticates now that at_lookup carries no credentials of its own.
   ///
-  /// Called from the constructor as well as the [atChops] setter, because the
-  /// constructor sets `atLookUp.atChops` directly - hooking only the setter
-  /// installs nothing on the path that matters.
-  ///
-  /// The credential fields stay written on the lookup beside it: they are
-  /// at_lookup's ladder, which a lookup from before the seam still
-  /// authenticates from, and they go with that ladder in the at_lookup major.
+  /// Called from the constructor as well as the [atChops] setter, since a
+  /// client can be handed its AtChops after construction.
   void _installAuthenticator() {
     final lookUp = atLookUp;
     // `AtLookUp` does not declare the seam - that interface is frozen because
@@ -101,8 +96,7 @@ class RemoteSecondary implements Secondary {
       lookUp.authenticator = authenticatorFor(
         io,
         _atSign,
-        // ignore: deprecated_member_use
-        enrollmentId: lookUp.enrollmentId,
+        enrollmentId: _enrollmentId,
         chops: _atChops,
       );
       return;
@@ -117,8 +111,7 @@ class RemoteSecondary implements Secondary {
       lookUp.authenticator = authenticatorForChops(
         _atSign,
         chops,
-        // ignore: deprecated_member_use
-        enrollmentId: lookUp.enrollmentId,
+        enrollmentId: _enrollmentId,
         signingAlgo: _signingAlgoType,
         // The same preference field the constructor stamps on the lookup, so
         // the authenticator and the ladder it replaces read it alike.
@@ -134,8 +127,7 @@ class RemoteSecondary implements Secondary {
       lookUp.authenticator = authenticatorForPrivateKey(
         _atSign,
         privateKey,
-        // ignore: deprecated_member_use
-        enrollmentId: lookUp.enrollmentId,
+        enrollmentId: _enrollmentId,
       );
       return;
     }
@@ -167,7 +159,6 @@ class RemoteSecondary implements Secondary {
   /// process-wide finder is read per lookup.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
-      // ignore: deprecated_member_use
       AtChops? atChops,
       AtLookUp? atLookUp,
       String? enrollmentId,
@@ -186,10 +177,10 @@ class RemoteSecondary implements Secondary {
     _atKeysIo = atKeysIo;
     _privateKey = privateKey;
     _cramSecret = preference.cramSecret;
-    // privateKey and cramSecret are no longer set ON the lookup: both are
-    // credentials, and credentials now travel as an authenticator, which
-    // _installAuthenticator supplies below from whichever of the four shapes
-    // this client actually holds.
+    _enrollmentId = enrollmentId;
+    // Credentials travel as an authenticator, which _installAuthenticator
+    // supplies below from whichever of the four shapes this client holds -
+    // none of them are set on the lookup itself.
     this.atLookUp = atLookUp ??
         (lookUps ?? defaultLookUps(preference))(
           atSign: atSign,
@@ -199,20 +190,12 @@ class RemoteSecondary implements Secondary {
               secondaryAddressFinder ?? processSecondaryAddressFinder(),
           clientConfig: _getClientConfig(),
         );
-    // ignore: deprecated_member_use
-    this.atLookUp.enrollmentId = enrollmentId;
     final resolvedSigningAlgo =
         // ignore: deprecated_member_use_from_same_package
         signingAlgoType ?? preference.signingAlgoType;
     logger.finer(
         'signingAlgoType: $resolvedSigningAlgo hashingAlgoType: ${preference.hashingAlgoType}');
     _signingAlgoType = resolvedSigningAlgo;
-    // ignore: deprecated_member_use
-    this.atLookUp.signingAlgoType = resolvedSigningAlgo;
-    // ignore: deprecated_member_use
-    this.atLookUp.hashingAlgoType = preference.hashingAlgoType;
-    // ignore: deprecated_member_use
-    this.atLookUp.atChops = atChops;
     _installAuthenticator();
   }
 
@@ -318,7 +301,7 @@ class RemoteSecondary implements Secondary {
   }
 
   void addStreamData(List<int> data) {
-    atLookUp.connection!.getSocket().add(data);
+    atLookUp.connection!.add(data);
   }
 
   /// Generates digest using from verb response and [secret] and performs a CRAM authentication to

@@ -60,7 +60,7 @@ import 'package:at_client/src/transformer/response_transformer/put_response_tran
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/constants.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
@@ -2377,7 +2377,7 @@ class AtClientImpl implements AtClient {
       result = result.replaceAll('stream:ack ', '');
       result = result.trim();
       _logger.finer('ack received for streamId:$streamId');
-      remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
+      remoteSecondary.atLookUp.connection!.add(encryptedData);
       // `readResponse` rather than reaching through to the listener: this
       // path has already written the bytes to the socket itself, so it needs
       // the read half alone. The listener is not in at_lookup's barrel.

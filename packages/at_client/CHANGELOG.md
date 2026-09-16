@@ -1,4 +1,22 @@
+## 3.15.0-rc2
+- `RemoteSecondary` reads and writes credential state through the
+  `AtAuthenticator` seam only, matching `at_lookup` ^4.0.0-rc1's removal of
+  its `atChops`/`enrollmentId`/`signingAlgoType`/`hashingAlgoType` ladder.
+  `RemoteSecondary`'s own public surface is unchanged.
+
 ## 3.15.0-rc1
+- breaking: `AtClientUtil.findSecondary` is removed. Use
+  `RemoteSecondary.findSecondaryUrl`.
+- feat: at_client builds its connections through `AtLookUp.withSecureSocket`,
+  which returns the muxable that owns reconnect, reauth and heartbeat. Requires
+  `at_lookup` ^3.7.0-rc1. Credentials travel as an `AtAuthenticator` built from
+  whichever of four shapes the client holds - a keystore, chops, a private key,
+  a cram secret - rather than being parked on the lookup, so every connection a
+  client opens is configured alike instead of assembled independently at each
+  site. `AtClientImpl.buildRemoteSecondary` is the single place that builds one;
+  the file-stream path used to build its own with neither enrollment nor
+  credentials. The sync service's own connection now gets the client's key
+  material.
 
 - feat: `at_client_mixins.dart` exports `SignedEnvelope`, the type
   `EnvelopeSigning.wrapAndSign` returns, so a caller can name it without

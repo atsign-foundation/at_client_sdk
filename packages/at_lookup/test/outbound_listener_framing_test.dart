@@ -30,14 +30,14 @@ import 'package:at_lookup/src/connection/outbound_connection_impl.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:test/test.dart';
 
-import 'fake_at_server_socket.dart';
+import 'fake_at_server_transport.dart';
 
 void main() {
   /// Feeds [chunks] to a listener in order and reports what it emitted.
   Future<({String? reply, Object? error, List<String> notifications})> drive(
       List<String> chunks) async {
-    final socket = FakeAtServerSocket();
-    final connection = OutboundConnectionImpl(socket);
+    final transport = FakeAtServerTransport();
+    final connection = OutboundConnectionImpl(transport);
     final listener = OutboundMessageListener(connection);
     final notifications = <String>[];
     listener.onNotification = notifications.add;
@@ -51,7 +51,7 @@ void main() {
         .catchError((Object e) => error = e);
 
     for (final chunk in chunks) {
-      await socket.serverSends(chunk);
+      await transport.serverSends(chunk);
     }
     await reading;
     return (reply: reply, error: error, notifications: notifications);
