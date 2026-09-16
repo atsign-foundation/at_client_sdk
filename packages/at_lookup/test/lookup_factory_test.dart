@@ -4,7 +4,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'at_lookup_test_utils.dart';
-import 'fake_at_server_socket.dart';
+import 'fake_at_server_transport.dart';
 
 /// `AtLookUpFactory` and its default, and the connect-time preamble a proxy
 /// deployment needs: `onConnect` runs once per connection, before anything
@@ -12,23 +12,14 @@ import 'fake_at_server_socket.dart';
 void main() {
   const host = '127.0.0.1';
   const port = 12345;
-  late List<FakeAtServerSocket> sockets;
+  late FakeAtServerTransportFactory transportFactory;
   late MockSecondaryAddressFinder addressFinder;
-  late MockSecureSocketFactory socketFactory;
 
   setUp(() {
-    sockets = [];
+    transportFactory = FakeAtServerTransportFactory();
     addressFinder = MockSecondaryAddressFinder();
-    socketFactory = MockSecureSocketFactory();
-    registerFallbackValue(SecureSocketConfig());
     when(() => addressFinder.findSecondary('@alice'))
         .thenAnswer((_) async => SecondaryAddress(host, port));
-    when(() => socketFactory.createSocket(host, '$port', any()))
-        .thenAnswer((_) async {
-      final s = FakeAtServerSocket();
-      sockets.add(s);
-      return s;
-    });
   });
 
   test('the default factory builds through withSecureSocket, carrying the '
@@ -55,9 +46,7 @@ void main() {
       rootDomain: const AtRootDomain(host, 64),
       authenticator: null,
       secondaryAddressFinder: addressFinder,
-      transport: AtLookupTransport(
-          secureSocketConfig: SecureSocketConfig(),
-          socketFactory: socketFactory),
+      transport: AtLookupTransportFactories(transportFactory: transportFactory),
       onConnect: (connection) async {
         preambleAnswers.add(await connection.sendSync('from:@alice\n'));
       },
@@ -65,38 +54,41 @@ void main() {
 
     final first = lookUp.executeCommand('noop:0\n');
     await Future<void>.delayed(const Duration(milliseconds: 20));
-    await sockets.single.settle();
-    expect(sockets.single.written, ['from:@alice\n'],
+    await transportFactory.created.single.settle();
+    expect(transportFactory.created.single.written, ['from:@alice\n'],
         reason: 'the preamble is the first thing on the wire; the command '
             'waits behind it');
 
-    await sockets.single.serverSends('data:challenge\n@alice@');
-    await sockets.single.settle();
-    expect(sockets.single.written, ['from:@alice\n', 'noop:0\n']);
-    await sockets.single.serverSends('data:ok\n@alice@');
+    await transportFactory.created.single.serverSends('data:challenge\n@alice@');
+    await transportFactory.created.single.settle();
+    expect(transportFactory.created.single.written,
+        ['from:@alice\n', 'noop:0\n']);
+    await transportFactory.created.single.serverSends('data:ok\n@alice@');
     expect(await first, 'data:ok');
     expect(preambleAnswers, ['data:challenge'],
         reason: 'the preamble read its own reply, and the command its own');
 
     final second = lookUp.executeCommand('noop:1\n');
     await Future<void>.delayed(const Duration(milliseconds: 20));
-    await sockets.single.settle();
-    expect(sockets.single.written, ['from:@alice\n', 'noop:0\n', 'noop:1\n'],
+    await transportFactory.created.single.settle();
+    expect(transportFactory.created.single.written,
+        ['from:@alice\n', 'noop:0\n', 'noop:1\n'],
         reason: 'the connection is up, so no second preamble');
-    await sockets.single.serverSends('data:ok\n@alice@');
+    await transportFactory.created.single.serverSends('data:ok\n@alice@');
     await second;
 
-    await sockets.single.serverCloses();
-    await sockets.single.settle();
+    await transportFactory.created.single.serverCloses();
+    await transportFactory.created.single.settle();
     final third = lookUp.executeCommand('noop:2\n');
     await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(sockets, hasLength(2), reason: 'a fresh connection was opened');
-    await sockets.last.settle();
-    expect(sockets.last.written, ['from:@alice\n'],
+    expect(transportFactory.created, hasLength(2),
+        reason: 'a fresh connection was opened');
+    await transportFactory.last.settle();
+    expect(transportFactory.last.written, ['from:@alice\n'],
         reason: 'and the preamble ran on it before the command');
-    await sockets.last.serverSends('data:challenge2\n@alice@');
-    await sockets.last.settle();
-    await sockets.last.serverSends('data:ok\n@alice@');
+    await transportFactory.last.serverSends('data:challenge2\n@alice@');
+    await transportFactory.last.settle();
+    await transportFactory.last.serverSends('data:ok\n@alice@');
     expect(await third, 'data:ok');
     expect(preambleAnswers, ['data:challenge', 'data:challenge2']);
 
@@ -110,16 +102,14 @@ void main() {
       rootDomain: const AtRootDomain(host, 64),
       authenticator: null,
       secondaryAddressFinder: addressFinder,
-      transport: AtLookupTransport(
-          secureSocketConfig: SecureSocketConfig(),
-          socketFactory: socketFactory),
+      transport: AtLookupTransportFactories(transportFactory: transportFactory),
     );
 
     final pending = lookUp.executeCommand('noop:0\n');
     await Future<void>.delayed(const Duration(milliseconds: 20));
-    await sockets.single.settle();
-    expect(sockets.single.written, ['noop:0\n']);
-    await sockets.single.serverSends('data:ok\n@alice@');
+    await transportFactory.created.single.settle();
+    expect(transportFactory.created.single.written, ['noop:0\n']);
+    await transportFactory.created.single.serverSends('data:ok\n@alice@');
     expect(await pending, 'data:ok');
     await lookUp.close();
   });
