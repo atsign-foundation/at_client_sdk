@@ -403,11 +403,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
   /// Catches any exception and throws [AtLookUpException]
   @override
-  Future<String> executeVerb(VerbBuilder builder,
-      {@Deprecated('Inert: nothing reads it. The verb always executes '
-          'on the remote atServer; there is no sync behaviour here '
-          'to control. Removed in 4.0.')
-      sync = false}) async {
+  Future<String> executeVerb(VerbBuilder builder) async {
     _throwIfClosed();
     String verbResult = '';
     try {
@@ -637,7 +633,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
   /// secondary server. This method is executed for all verbs that requires authentication.
-  /// @Deprecated('Use method pkamAuthenticate') Commenting deprecation since it causes issue in dart analyze in the caller
+  @Deprecated('Use method pkamAuthenticate')
   Future<bool> authenticate(String? privateKey) =>
       _whileOpen(() => _authenticateWithPrivateKey(privateKey));
 
@@ -797,16 +793,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     } finally {
       _cramAuthenticationMutex.release();
     }
-  }
-
-  @Deprecated('use AtLookup().cramAuthenticate()')
-  // ignore: non_constant_identifier_names
-  Future<bool> authenticate_cram(String? secret) async {
-    secret ??= cramSecret;
-    if (secret == null) {
-      throw UnAuthenticatedException('Cram secret not passed');
-    }
-    return await cramAuthenticate(secret);
   }
 
   Future<String> _plookup(PLookupVerbBuilder builder) async {

@@ -145,11 +145,7 @@ abstract interface class AtLookUp {
   /// scan
   Future<List<String>> scan({String? regex, String? sharedBy});
 
-  Future<String?> executeVerb(VerbBuilder builder,
-      {@Deprecated('Inert: nothing reads it. The verb always executes '
-          'on the remote atServer; there is no sync behaviour here '
-          'to control. Removed in 4.0.')
-      bool sync = false});
+  Future<String?> executeVerb(VerbBuilder builder);
 
   Future<String?> executeCommand(String command, {bool auth = false});
 
