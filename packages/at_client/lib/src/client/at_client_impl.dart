@@ -31,6 +31,7 @@ import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/util/at_client_util.dart';
+import 'package:at_client/src/util/close_without_waiting.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
@@ -1435,10 +1436,10 @@ class AtClientImpl implements AtClient {
       _availableTimer = null;
       await _availableSub?.cancel();
       _availableSub = null;
-      // NOTE: not awaited, for the reason [AtConnection.close] gives: a
-      // paused subscriber to `dataEvents` would otherwise hold the stop open
-      // for as long as it stays paused.
-      if (!_dataEventsCtrl.isClosed) unawaited(_dataEventsCtrl.close());
+      // Resource takedown: does not wait on subscribers (see
+      // closeWithoutWaiting). A paused subscriber to `dataEvents` would
+      // otherwise hold the stop open for as long as it stays paused.
+      closeWithoutWaiting(_dataEventsCtrl);
     });
 
     // NOTE: type-tested, not cast. These fields are declared as the
