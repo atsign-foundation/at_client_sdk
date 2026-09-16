@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
@@ -82,7 +82,11 @@ void main() {
     // named here on purpose.
     // ignore: deprecated_member_use
     final own = AtLookupImpl(
-        atSign, InternetAddress.loopbackIPv4.address, preference.rootPort);
+        atSign, InternetAddress.loopbackIPv4.address, preference.rootPort,
+        secondaryAddressFinder: ProxySecondaryAddressFinder(
+            InternetAddress.loopbackIPv4.address, preference.rootPort),
+        transportFactory: SecureSocketTransportFactory(
+            secureSocketConfig: SecureSocketConfig()));
     final service = AtOnboardingServiceImpl(atSign, preference, atLookUp: own);
 
     expect(await service.authenticate(), isFalse,

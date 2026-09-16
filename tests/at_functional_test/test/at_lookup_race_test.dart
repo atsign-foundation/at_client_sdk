@@ -81,6 +81,8 @@ void main() {
         rootDomain:
             AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
         transport: secureSocketTransport(SecureSocketConfig()),
+        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+            'vip.ve.atsign.zone', TestUtils.rootServerPort),
         authenticator: null);
     addTearDown(atLookup.close);
 
