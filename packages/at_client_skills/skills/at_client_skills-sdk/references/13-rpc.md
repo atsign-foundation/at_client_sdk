@@ -86,6 +86,72 @@ rpc.start();                   // subscribes to request notifications
 - Requests expire after `AtRpc.defaultNotificationExpiry` (30 s) if not
   delivered.
 
+## Both sides — implementing `AtRpcCallbacks`
+
+`AtRpcClient` and `AtRpc.server` are one-way **by construction**, and each
+throws on the half it does not do: `AtRpcClient.handleRequest` throws
+`UnimplementedError`, and the adapter behind `AtRpc.server` throws the same
+from `handleResponse`. That is fine for a pure caller or a pure responder.
+
+When one atsign needs to do both — a peer that answers requests *and* makes
+them — construct `AtRpc` directly with your own `AtRpcCallbacks`. It is a
+two-method interface, and `isClient` / `isServer` both default to `true`:
+
+```dart
+class RoutePeer implements AtRpcCallbacks {
+  late final AtRpc rpc;
+
+  RoutePeer(AtClient atClient) {
+    rpc = AtRpc(
+      atClient: atClient,
+      baseNameSpace: 'my_app',
+      domainNameSpace: 'route_planning',
+      callbacks: this,                       // both halves land here
+      allowList: {'@partner'.toAtsign()},
+      // isClient and isServer both default to true
+    );
+    rpc.start();
+  }
+
+  @override
+  Future<AtRpcResp> handleRequest(AtRpcReq request, String fromAtSign) async {
+    return AtRpcResp(
+      reqId: request.reqId,
+      respType: AtRpcRespType.success,
+      payload: await planRoute(request.payload),
+    );
+  }
+
+  @override
+  Future<void> handleResponse(AtRpcResp response) async {
+    // Every response type arrives here, including ack.
+    switch (response.respType) {
+      case AtRpcRespType.ack:      // "received, working on it" — progress
+      case AtRpcRespType.success:
+      case AtRpcRespType.nack:
+      case AtRpcRespType.error:
+    }
+  }
+}
+```
+
+**What you gain, and what you take on.** `AtRpcClient.call()` hides the
+response machinery: it keeps a completer per `reqId`, swallows `ack`, completes
+on `success` and raises on anything else. Implementing the interface yourself
+means you see `ack` — the only way to drive a progress indicator for a
+long-running request — but correlating responses to requests becomes your job,
+since nothing is awaiting a future on your behalf.
+
+> **`sendRequest` widens the allow list.** Every send does
+> `allowList.add(toAtSign)` so the reply is accepted when it comes back. A
+> peer's allow list therefore grows as it calls out, and is not purely the
+> inbound boundary you configured. With `allowAll: true` it is not a boundary
+> at all — check `fromAtSign` in `handleRequest` yourself.
+
+Production code implements this interface directly: `NPA` in `noports_core`
+(`abstract class NPA implements AtRpcCallbacks`) is the authorization service
+an `sshnpd` consults, answering auth-check requests over RPC.
+
 ## Multiple server instances
 
 Run N instances of the same responder atsign and set `enableRequestMutex:

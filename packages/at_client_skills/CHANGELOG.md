@@ -38,9 +38,13 @@
   family, the file-transfer and stream methods that moved to the app layer,
   the compaction jobs, `atChops`, and the deprecated `AtClientPreference`
   fields (`references/01-deprecation-guide.md`; `SKILL.md` §19).
+- Document `AtRpcCallbacks` — the route for a peer that both answers and makes
+  requests, the `ack` responses `call()` hides, and that `sendRequest` widens
+  the allow list (`references/13-rpc.md`).
 - Evals: the two auth evals follow the new flows; new evals cover logout /
   switching, the connection state, public keys, notification confirmation,
-  headless enrolment, error handling and waiting for sync.
+  headless enrolment, error handling, waiting for sync, the deprecated
+  `AtClient` methods and `AtRpcCallbacks`.
 
 ## 1.3.0 — 2026-07-31
 

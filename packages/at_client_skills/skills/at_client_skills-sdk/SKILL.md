@@ -19,7 +19,7 @@ description: >
   publish intentionally public data (AtKey.public / isPublic), what
   exceptions to catch around an SDK call (AtException, getTraceMessage),
   whether an AtClient method is deprecated (notify, startMonitor, uploadFile),
-  which
+  how to implement AtRpcCallbacks for a peer that both serves and calls, which
   pub.dev packages to add, how to unit-test without a live atServer, or
   whether to use AtCollection vs notifications+SQLite. Warns
   against deprecated AtCollectionModel, at_common_flutter, at_backupkey_flutter,
@@ -29,7 +29,7 @@ compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
   version: "1.4.0"
-  last_modified: "Tue, 15 Sep 2026"
+  last_modified: "Wed, 16 Sep 2026"
 ---
 
 # atsign-dart-sdk Skill
@@ -597,9 +597,15 @@ rpc.start();
 Requests from atsigns not on `allowList` are discarded before your handler
 runs. Persist durable results via `AtCollection<T>`, not RPC payloads.
 
+Both helpers are one-way: `AtRpcClient.handleRequest` and the server adapter's
+`handleResponse` each throw `UnimplementedError`. For a peer that both answers
+and makes requests, construct `AtRpc` directly with your own `AtRpcCallbacks`
+(`isClient` / `isServer` both default to `true`) — that is also the only way to
+observe `ack` responses.
+
 Read [references/13-rpc.md](references/13-rpc.md) when implementing
-request/response between atsigns — response types, retries, expiry, and the
-multi-instance mutex.
+request/response between atsigns — response types, retries, expiry,
+`AtRpcCallbacks`, and the multi-instance mutex.
 
 ---
 
