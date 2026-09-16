@@ -7,7 +7,7 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
@@ -113,8 +113,12 @@ void main() {
     // NOTE: a real lookup, pointed at a port nothing listens on: the client's
     // connection wraps and stamps it, and the open comes back offline without
     // a network.
-    final own =
-        AtLookupImpl(atSign, InternetAddress.loopbackIPv4.address, port);
+    final own = AtLookupImpl(
+        atSign, InternetAddress.loopbackIPv4.address, port,
+        secondaryAddressFinder: ProxySecondaryAddressFinder(
+            InternetAddress.loopbackIPv4.address, port),
+        transportFactory: SecureSocketTransportFactory(
+            secureSocketConfig: SecureSocketConfig()));
     final service = AtOnboardingServiceImpl(
         atSign,
         AtOnboardingPreference(posture: PqPosture.legacy)
