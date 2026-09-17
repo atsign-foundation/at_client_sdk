@@ -2916,6 +2916,7 @@ interface class AtCollection<T> {
           ),
           emit: ctrl.add,
           label: 'expiresAt-$leadTime',
+          onDispose: ctrl.close,
         )..start();
       },
       onCancel: () async {
@@ -4603,7 +4604,10 @@ final class _CItemTimerScheduler<E extends CEvent, T> {
     required this.makeEvent,
     required this.emit,
     required this.label,
+    this.onDispose,
   });
+
+  final void Function()? onDispose;
 
   /// Begins tracking. Idempotent: a second call is a no-op so the
   /// `availableEvents` getter can call it on every access without
@@ -4742,6 +4746,7 @@ final class _CItemTimerScheduler<E extends CEvent, T> {
     await _updSub?.cancel();
     await _delSub?.cancel();
     _firings.clear();
+    onDispose?.call();
   }
 }
 
