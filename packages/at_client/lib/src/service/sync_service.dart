@@ -182,6 +182,9 @@ class SyncProgress {
   int? pendingPushCount;
   AtClientException? atClientException;
 
+  /// True on the event a stopping service sends last; no event follows it.
+  bool stopped = false;
+
   @override
   String toString() {
     return 'SyncProgress{atSign: $atSign, syncStatus: $syncStatus,'
@@ -258,7 +261,8 @@ extension SyncServiceWaitUntilCaughtUp on SyncService {
   /// and a stalled sync (e.g. network loss for the duration), the
   /// future hangs.
   ///
-  /// Throws [TimeoutException] when [timeout] elapses before catch-up.
+  /// Throws [TimeoutException] when [timeout] elapses before catch-up, and
+  /// [StoppedException] when the service stops first.
   Future<void> waitUntilCaughtUp({
     Duration? timeout,
     void Function(SyncProgress progress)? onProgress,
@@ -287,6 +291,12 @@ extension SyncServiceWaitUntilCaughtUp on SyncService {
         }
       }
       if (completer.isCompleted) return;
+      if (progress.stopped) {
+        detach();
+        completer.completeError(StoppedException('the sync service for '
+            '${progress.atSign} stopped before it caught up'));
+        return;
+      }
       // Don't complete while there are still pending client→server
       // pushes in the local sync queue. commit-id equality alone is
       // not sufficient: writes that arrived in the queue AFTER the

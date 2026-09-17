@@ -85,18 +85,25 @@ void main() {
       expect(response, 'data:phone@alice_12345675');
     });
 
-    test('A test to validate data contains new line character', () async {
-      await outboundMessageListener.messageHandler(
-          'data:value_contains_\nin_the_value\n@alice@'.codeUnits);
-      var response = await outboundMessageListener.read();
-      expect(response, 'data:value_contains_\nin_the_value');
+    test('A newline ends a message, so a second line is a second message',
+        () async {
+      await outboundMessageListener
+          .messageHandler('data:first\nerror:AT0011-second\n@alice@'.codeUnits);
+
+      expect(await outboundMessageListener.read(), 'data:first');
+      expect(await outboundMessageListener.read(), 'error:AT0011-second',
+          reason: 'the atServer writes one message at a time and each ends at '
+              'a newline, so nothing joins these two');
     });
 
-    test('A test to validate data contains new line character and @', () async {
-      await outboundMessageListener.messageHandler(
-          'data:the_key_is\n@bob:phone@alice\n@alice@'.codeUnits);
-      var response = await outboundMessageListener.read();
-      expect(response, 'data:the_key_is\n@bob:phone@alice');
+    test('A prompt belongs to the message it precedes', () async {
+      await outboundMessageListener
+          .messageHandler('data:first\n@alice@data:second\n'.codeUnits);
+
+      expect(await outboundMessageListener.read(), 'data:first');
+      expect(await outboundMessageListener.read(), 'data:second',
+          reason: 'the prompt arrives in the same flow as the end of the '
+              'message before it, and comes off the one it starts');
     });
   });
 

@@ -525,7 +525,7 @@ void main() {
                   'Cannot perform llookup on @alice:location@alice due to insufficient privilege')));
       // llookup on reserved key should be allowed
       var reservedKeyLookupBuilder = LLookupVerbBuilder()..atKey = reservedKey;
-      var reservedKeyResult = await atClient
+      var reservedKeyResult = await enrolledAtClient
           .getLocalSecondary()!
           .executeVerb(reservedKeyLookupBuilder);
       expect(reservedKeyResult, 'data:randomsharedkey');

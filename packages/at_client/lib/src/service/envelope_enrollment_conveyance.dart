@@ -11,6 +11,8 @@ import 'package:at_client/src/enroll/privilege_resolver.dart'
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/secret_sharing/secret_sharing.dart';
+import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
+    show readAdvertisedKeyPackage;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
     show EnvelopeAddressing;
 import 'package:at_client/src/util/enroll_list_request_param.dart';
@@ -48,6 +50,48 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
   @visibleForTesting
   static Duration verifyRetryPause = const Duration(seconds: 1);
 
+  @override
+  Future<void> conveyMintedApkamSymmetricKey(
+      Enrollment pending, String apkamSymmetricKey) async {
+    // NOTE: sealing stamps this approver's own key package id on the envelope,
+    // so it must hold one — and it is deliberately not registered on its
+    // behalf. With no persistence wired, register() mints a fresh seed, so an
+    // implicit call would rotate the advertised package underneath the
+    // approver and orphan anything already sealed to the old one.
+    final sharing = AtClientSecretSharing.forClient(_atClient);
+    if (!sharing.isRegistered) {
+      throw AtEnrollmentException(
+          'Enrollment ${pending.enrollmentId} expects this approver to '
+          'convey its symmetric key, but this client has not registered a key '
+          'package to seal it from. Call register() on '
+          'AtClientSecretSharing.forClient(atClient) before approving.');
+    }
+    final (package, status) = readAdvertisedKeyPackage(
+        pending.metadata?['keyPackage'],
+        enrollmentId: pending.enrollmentId!);
+    // NOTE: refused before the approval, which is spent once it lands: a
+    // package that is not one can never be sealed to, so approving would
+    // authorise a device that can never decrypt anything and no later
+    // approval would repair it. A package this version merely cannot READ is
+    // a version skew and approves as it always did.
+    if (status == KeyPackageStatus.rejected) {
+      throw AtEnrollmentException(
+          'Enrollment ${pending.enrollmentId} advertised a key package that '
+          'is not one, so its symmetric key cannot be sealed to anything. It '
+          'stays pending: approve it once the enrolling device advertises a '
+          'package that can be read.');
+    }
+    if (package == null) return;
+    await sharing.shareSecretWith(
+        package,
+        Secret(
+          namespace: _conveyanceNamespaceFor(pending),
+          name: enrollmentApkamSymmetricKeySecretName,
+          value: apkamSymmetricKey,
+        ),
+        inReplyTo: EnvelopeAddressing.unsolicited);
+  }
+
   /// Seals every secret [enrollment]'s namespaces authorise to the key package
   /// it advertised on its `enroll:request`, so the newly approved device can
   /// read what it has just been authorised for.
@@ -56,8 +100,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
   /// enrollment's `_apsk` at that point and the package cannot be verified
   /// before it exists.
   @override
-  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment,
-      {String? mintedApkamSymmetricKey}) async {
+  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment) async {
     final advertised = enrollment.metadata?['keyPackage'];
     if (advertised == null) return KeyPackageStatus.absent;
 
@@ -86,33 +129,6 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     final KeyPackage package = keyPackage;
 
     final sharing = AtClientSecretSharing.forClient(_atClient);
-
-    // NOTE: sealing stamps this approver's own key package id on the envelope,
-    // so it must hold one — and it is deliberately not registered on its
-    // behalf. With no persistence wired, register() mints a fresh seed, so an
-    // implicit call would rotate the advertised package underneath the
-    // approver and orphan anything already sealed to the old one.
-    if (mintedApkamSymmetricKey != null && !sharing.isRegistered) {
-      throw AtEnrollmentException(
-          'Enrollment ${enrollment.enrollmentId} expects this approver to '
-          'convey its symmetric key, but this client has not registered a key '
-          'package to seal it from. Call register() on '
-          'AtClientSecretSharing.forClient(atClient) before approving.');
-    }
-
-    // NOTE: the symmetric key goes first. Everything else is useless until the
-    // enrollment holds the key that unwraps its own encryption private key,
-    // and it is blocked in waitForApproval polling for exactly this envelope.
-    if (mintedApkamSymmetricKey != null) {
-      await sharing.shareSecretWith(
-          package,
-          Secret(
-            namespace: _conveyanceNamespaceFor(enrollment),
-            name: enrollmentApkamSymmetricKeySecretName,
-            value: mintedApkamSymmetricKey,
-          ),
-          inReplyTo: EnvelopeAddressing.unsolicited);
-    }
 
     // NOTE: the link vouching for this enrollment is conveyed rather than
     // published, because `_apsk` accepts writes only from its own
@@ -207,6 +223,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
               '${enrollment.enrollmentId}');
         }
       } catch (e) {
+        if (e is StoppedException) rethrow;
         _logger.warning('Could not convey held nskey privates to enrollment '
             '${enrollment.enrollmentId}; it can pull them at its next start: '
             '$e');
@@ -241,8 +258,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
             .signingKey(atSign);
     if (rootSigner == null) {
       _logger.warning('Not sweeping root links: this client holds no '
-          'signing-root private yet; the pull at its next start heals '
-          'possession first');
+          'published signing-root private yet; its next start pulls or '
+          'publishes one first');
       return 0;
     }
 
@@ -288,6 +305,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
             inReplyTo: EnvelopeAddressing.unsolicited);
         conveyed++;
       } catch (e) {
+        if (e is StoppedException) rethrow;
         _logger.warning('Could not sweep a root link for enrollment $id: $e');
       }
     }

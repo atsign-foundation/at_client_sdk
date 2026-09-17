@@ -77,6 +77,7 @@ void main() {
   }) client(
       {bool lockHeldElsewhere = false,
       bool publishFails = false,
+      bool publishStops = false,
       String? enrollmentId = 'enrollment-1',
       Uint8List? publishedRoot,
       List<({Uint8List key, KeyEntryStatus status})>? publishedRoots,
@@ -130,6 +131,9 @@ void main() {
         if (publishFails) {
           throw AtLookUpException('AT0011', 'connection closed');
         }
+        if (publishStops) {
+          throw StoppedException('the lookup for $atSign has been closed');
+        }
       }
       return 'data:1';
     });
@@ -141,6 +145,82 @@ void main() {
     await io.write(atSign, AtKeys());
     return io;
   }
+
+  group('a root a stop kept from being published', () {
+    Future<InMemoryAtKeysIo> interruptedMint() async {
+      final io = await keysIo();
+      await expectLater(
+          PqSigningRoot(client(publishStops: true).client, keysIo: io)
+              .mintIfAbsent(isFullyPrivileged: true),
+          throwsA(isA<StoppedException>()));
+      return io;
+    }
+
+    test('is held, and signs nothing until it is published', () async {
+      final io = await interruptedMint();
+      final root = PqSigningRoot(client().client, keysIo: io);
+
+      expect(await root.privateHalf(atSign), isNotNull,
+          reason: 'the stop landed after the filing, and nothing retired it');
+      expect(await root.signingKey(atSign), isNull,
+          reason: 'a link signed with a root the record does not publish '
+              'verifies against nothing');
+    });
+
+    test('is published by the next fully privileged start', () async {
+      final io = await interruptedMint();
+      final filedPublic = (await io.read(atSign))
+          .getAtSignKey(
+              rootSlot1, CryptographicMaterialRole.publicVerification)!
+          .bytes
+          .bytes;
+      final c = client();
+
+      final published = await PqSigningRoot(c.client, keysIo: io)
+          .resumeUnpublished(isFullyPrivileged: () async => true);
+
+      expect(published, filedPublic,
+          reason: 'the filed pair is the root; minting another would orphan '
+              'it and leave the atSign rootless until something mints');
+      final record =
+          c.published.where((b) => b.atKey.key == PqSigningRoot.recordName);
+      expect(record, hasLength(1));
+      expect(
+          (await io.read(atSign))
+              .keys
+              .where((m) => m.role == CryptographicMaterialRole.privateSigning),
+          hasLength(1),
+          reason: 'nothing new is minted');
+    });
+
+    test('a held private with no public half is not replaced by a fresh root',
+        () async {
+      final io = await keysIo();
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      await PqSigningRoot(client().client, keysIo: io)
+          .store(atSign, pair.secretKey);
+      final c = client();
+
+      expect(
+          await PqSigningRoot(c.client, keysIo: io)
+              .resumeUnpublished(isFullyPrivileged: () async => true),
+          isNull);
+      expect(c.published, isEmpty,
+          reason: 'a start only finishes a publish; minting a root is for '
+              'activation and retrofit, which decide the atSign has none');
+    });
+
+    test('is left for a privileged start when this one is not', () async {
+      final io = await interruptedMint();
+      final c = client();
+
+      expect(
+          await PqSigningRoot(c.client, keysIo: io)
+              .resumeUnpublished(isFullyPrivileged: () async => false),
+          isNull);
+      expect(c.published, isEmpty);
+    });
+  });
 
   test('a fully privileged enrollment mints it, private filed first', () async {
     final c = client();
@@ -301,7 +381,9 @@ void main() {
     final hostB = await PqSigningRoot(client(publishedRoot: rootPublic).client,
             keysIo: ioB)
         .signingKey(atSign);
-    final hostA = await PqSigningRoot(a.client, keysIo: ioA).signingKey(atSign);
+    final hostA = await PqSigningRoot(client(publishedRoot: rootPublic).client,
+            keysIo: ioA)
+        .signingKey(atSign);
 
     expect(hostA, isNotNull, reason: 'the minting host holds its own root');
     expect(hostB, isNotNull,

@@ -225,12 +225,25 @@ await client.stop();
 ```
 
 - Stops the sync service, the notification service (and its monitor) and the
-  connection, whose state ends as `offline(stopped)`; releases the storage,
-  closing it when it was built with `closedByClient: true`.
+  connection, whose state ends as `offline(stopped)`; ends the timers and
+  waits the client started; closes every connection it opened or was handed;
+  releases the storage, closing it when it was built with
+  `closedByClient: true`. It returns once all of that has happened.
+- **Work the stop cuts short fails with `StoppedException`** (from
+  `at_commons`), and so does any later call on the client. It is not an
+  `AtException`, so a catch that chooses a fallback for an ordinary failure
+  does not take a stop for one; catch it by type to treat a stop as expected.
+  The client's own background work reports a stop once, at `warning`, with no
+  stack trace.
 - **Does not drain.** A sync round in flight is abandoned at its next step;
   what it had not pushed stays queued on the store for the next client that
   opens on it. If the writes must reach the atServer before the process ends,
   wait until `isInSync()` answers true first.
+- **A push the atServer accepted just before the stop is pushed again.** The
+  stop can land after the atServer commits a batch and before the client takes
+  it off the queue, so the next client on that store pushes it again. A
+  re-pushed update can overwrite a newer write another device made to the same
+  key in between; a re-pushed delete is harmless.
 - A stopped client is not restarted. `isStopped` is true, its services are
   gone, and the atSign can be opened again at once.
 - Every `open` of the same atSign and enrollment, or on the same store, while

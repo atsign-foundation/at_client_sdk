@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_commons/atsign.dart' show Atsign;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_mixins.dart';
@@ -115,6 +116,28 @@ void main() {
         reason: 'filing it would leave this client believing it can open a '
             'namespace it cannot, and the failure would surface later on data '
             'as corruption rather than as a bad key');
+    expect((await io.read(atSign)).keys, isEmpty);
+  });
+
+  test('a stop while the published half is fetched files nothing', () async {
+    final real = await XWingKeyPair.generate();
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, AtKeys());
+    final filer = NskeyPrivateFiling(
+      keysIo: io,
+      atSign: atSign,
+      publishedGeneration: (_, __) async =>
+          throw StoppedException('the lookup for $atSign has been closed'),
+    );
+
+    await expectLater(
+        filer.file(Secret(
+            namespace: namespace,
+            name: '${NskeyPrivateFiling.secretNamePrefix}kid-x',
+            value: base64Encode(real.privateKeyBytes))),
+        throwsA(isA<StoppedException>()),
+        reason: 'nothing published to compare against reads as a pass, so a '
+            'stop taken for "nothing published" files a private unchecked');
     expect((await io.read(atSign)).keys, isEmpty);
   });
 

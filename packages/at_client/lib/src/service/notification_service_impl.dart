@@ -80,8 +80,9 @@ class NotificationServiceImpl extends NotificationService {
   ///
   /// A conveyed private is filed asynchronously, so a value sealed to it can
   /// arrive first, and dropping it would be data loss: nothing re-delivers a
-  /// notification once discarded. In memory, so a restart loses the park and
-  /// re-drives from the watermark instead.
+  /// notification once discarded. In memory, and the watermark has already
+  /// moved past a parked notification, so a stop or restart loses what is
+  /// parked; the stop says how many at `warning`.
   final Map<FiledNskeyPrivate, List<_ParkedNotification>> _parked = {};
 
   /// The most notifications the park may hold; the oldest is dropped, at
@@ -268,6 +269,7 @@ class NotificationServiceImpl extends NotificationService {
             transformsByNotification.putIfAbsent(
                 parked.notification, () => {}));
       } catch (e) {
+        if (isStopped) return;
         _drop(
             parked.notification.key,
             'Re-driving parked notification ${parked.notification.key} '
@@ -323,9 +325,7 @@ class NotificationServiceImpl extends NotificationService {
           // A FRESH lookup, so the connection count is unchanged. Passing
           // `atClient.getRemoteSecondary()!.atLookUp` here instead would
           // collapse the two sockets into one - a one-line change, and NOT
-          // safe yet: no atServer implements `monitor:multiplexed`, so
-          // nothing holds a notification back while a verb response is in
-          // flight.
+          // safe yet, for the reason Monitor's `lookUp` gives.
           lookUp: lookUps(
             atSign: atSign,
             rootDomain:
@@ -445,6 +445,8 @@ class NotificationServiceImpl extends NotificationService {
       try {
         canonicalValue = await atClient.get(lastReceivedNotificationAtKey);
         if (canonicalValue.value == null) canonicalValue = null;
+      } on StoppedException {
+        rethrow;
       } on Exception {
         // Treat read failures as "needs seeding" — the legacy
         // forms become the source of truth.
@@ -470,6 +472,8 @@ class NotificationServiceImpl extends NotificationService {
                 putRequestOptions: _watermarkPutOptions);
             canonicalValue = v;
           }
+        } on StoppedException {
+          rethrow;
         } on Exception catch (e) {
           logger.warning(
               'Migration: failed to seed canonical key from $legacyStr: $e');
@@ -481,6 +485,8 @@ class NotificationServiceImpl extends NotificationService {
       // exists, and pollute the local keystore (#1942).
       try {
         await atClient.delete(AtKey.fromString(legacyStr));
+      } on StoppedException {
+        rethrow;
       } on Exception catch (e) {
         logger.warning('Migration: failed to delete legacy key $legacyStr: $e');
       }
@@ -538,6 +544,8 @@ class NotificationServiceImpl extends NotificationService {
     try {
       await atClient.put(lastReceivedNotificationAtKey, _watermarkValue(n),
           putRequestOptions: _watermarkPutOptions);
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       logger.warning('Failed to seed the last-received-notification '
           'watermark; the next monitor connect will seed it again: $e');
@@ -549,8 +557,28 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   bool isStopped = false;
 
+  /// Stops this service for good: every subscription ends, and the monitor's
+  /// connection is closed before this returns.
   Future<void> stop() async {
     stopAllSubscriptions();
+    await monitor.close();
+  }
+
+  final Completer<void> _stopping = Completer<void>();
+
+  void _throwIfStopped() {
+    if (isStopped) {
+      throw StoppedException('the notification service for '
+          '${atClient.getCurrentAtSign()} has stopped');
+    }
+  }
+
+  /// Waits [duration], or until this service stops, whichever is sooner.
+  Future<void> _pause(Duration duration) async {
+    final elapsed = Completer<void>();
+    final timer = Timer(duration, elapsed.complete);
+    await Future.any([elapsed.future, _stopping.future]);
+    timer.cancel();
   }
 
   @override
@@ -561,6 +589,7 @@ class NotificationServiceImpl extends NotificationService {
       return;
     }
     isStopped = true;
+    _stopping.complete();
 
     if (stopNotificationsListener) {
       stopListening();
@@ -611,29 +640,6 @@ class NotificationServiceImpl extends NotificationService {
         } else {
           logger.finer('Received ${n.key}');
         }
-        // Records the latest notification's time, and saves it to the keys, if
-        // it is not a stats notification.
-        if (n.id != '-1') {
-          if (n.epochMillis > (_lastReceivedMillis ?? 0)) {
-            _lastReceivedMillis = n.epochMillis;
-          }
-          // NOTE: stop() may have landed during the previous write and closed
-          // the store this one goes to.
-          if (isStopped) return;
-          try {
-            await atClient.put(
-                lastReceivedNotificationAtKey, _watermarkValue(n),
-                putRequestOptions: _watermarkPutOptions);
-          } catch (e) {
-            if (isStopped) {
-              logger.finer('Not saving the last received notification ID: '
-                  'the service was stopped during the write ($e)');
-            } else {
-              logSwallowed(logger, e,
-                  'Failed to save last received notification ID: $e');
-            }
-          }
-        }
         // NOTE: a `for` loop, not `_streamListeners.forEach` — `Map.forEach`
         // takes a void callback and discards the Future an `async` one
         // returns, so every await below would run detached and delivery would
@@ -651,6 +657,7 @@ class NotificationServiceImpl extends NotificationService {
           } on NskeyPrivateUnavailableException catch (e) {
             _park(e, n, notificationConfig, streamController);
           } catch (e) {
+            if (isStopped) return;
             // NOTE: `warning`, not `finer` — this notification is dropped here
             // and never retried, and a silent drop is indistinguishable to the
             // subscriber from one that was never sent.
@@ -658,6 +665,28 @@ class NotificationServiceImpl extends NotificationService {
                 n.key,
                 'Dropping notification ${n.key} for subscriber '
                 '(regex "${notificationConfig.regex}"): $e');
+          }
+        }
+        // NOTE: after delivery, never before. A stop between the two then
+        // leaves the watermark behind a notification no subscriber saw, and
+        // the next connection replays it: at least once rather than lost.
+        if (n.id != '-1') {
+          if (n.epochMillis > (_lastReceivedMillis ?? 0)) {
+            _lastReceivedMillis = n.epochMillis;
+          }
+          if (isStopped) return;
+          try {
+            await atClient.put(
+                lastReceivedNotificationAtKey, _watermarkValue(n),
+                putRequestOptions: _watermarkPutOptions);
+          } catch (e) {
+            if (isStopped) {
+              logger.finer('Not saving the last received notification ID: '
+                  'the service was stopped during the write ($e)');
+            } else {
+              logSwallowed(logger, e,
+                  'Failed to save last received notification ID: $e');
+            }
           }
         }
       }
@@ -791,6 +820,7 @@ class NotificationServiceImpl extends NotificationService {
     Set<Atsign>? acceptedSenders,
     required String namespace,
   }) {
+    _throwIfStopped();
     String r = '^$atSign:([^.]+\\.)?$namespace@';
     // Single-subscription controller. Its onPause/onResume hooks are
     // deliberately NOT wired to pause the upstream subscription:
@@ -805,6 +835,12 @@ class NotificationServiceImpl extends NotificationService {
     StreamController<AtNotification> sc = StreamController<AtNotification>();
     StreamSubscription<AtNotification>? notifStreamSubscription;
     sc.onListen = () {
+      if (isStopped) {
+        sc.addError(StoppedException('the notification service for $atSign '
+            'stopped before this subscription was listened to'));
+        unawaited(sc.close());
+        return;
+      }
       Stream<AtNotification> notifStream = subscribe(
         regex: r,
         shouldDecrypt: true,
@@ -1013,11 +1049,12 @@ class NotificationServiceImpl extends NotificationService {
             'status');
       }
       if (firstCheck) {
-        await Future.delayed(Duration(milliseconds: 500));
+        await _pause(Duration(milliseconds: 500));
         firstCheck = false;
       } else {
-        await Future.delayed(Duration(seconds: 2));
+        await _pause(Duration(seconds: 2));
       }
+      if (isStopped) continue;
       status = await atClient.notifyStatus(notificationId);
     }
     return status;
@@ -1029,9 +1066,11 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   Duration? delayedStartListeningTimerDuration;
 
+  /// Throws [StoppedException] once this service has stopped.
   @override
   Stream<AtNotification> subscribe(
       {String? regex, bool shouldDecrypt = false}) {
+    _throwIfStopped();
     logger.finer('subscribe(regex: $regex, shouldDecrypt: $shouldDecrypt');
     regex ??= emptyRegex;
     var notificationConfig = NotificationConfig()
@@ -1072,8 +1111,11 @@ class NotificationServiceImpl extends NotificationService {
     if (atClient.getPreferences()?.monitorAutoStart == true) {
       if (regex == 'statsNotification') {
         delayedStartListeningTimerDuration ??= Duration(seconds: 30);
+        delayedStartListeningTimer?.cancel();
         delayedStartListeningTimer =
-            Timer(delayedStartListeningTimerDuration!, startListening);
+            Timer(delayedStartListeningTimerDuration!, () {
+          if (!isStopped) startListening();
+        });
       } else {
         startListening();
       }
@@ -1176,8 +1218,10 @@ class NotificationServiceImpl extends NotificationService {
           DateTime.parse(atNotificationMap['expiresAt']).millisecondsSinceEpoch;
   }
 
+  /// Throws [StoppedException] once this service has stopped.
   @override
   void startListening() {
+    _throwIfStopped();
     if (monitor.targetState == NotificationListenerState.listening) {
       logger.info('startListening() called, but already targeting listening');
       return;

@@ -2146,11 +2146,16 @@ than exercised in both states by a unit test.
 
 **The poll timeout is not a latency budget, and sizing it as one was a mistake worth
 recording.** It never waits for the human — by the time the resolver runs, the PKAM loop
-has already succeeded, so the approval has happened, however long that took. What is left
-is a mechanical race inside the approver's single `approve()` call: the atServer marks the
-enrollment approved, which is what lets PKAM start succeeding, a moment before at_client
-finishes writing the envelope. 30s is headroom over one or two round trips. If nothing has
-arrived by then the approver did not convey, and waiting longer recovers nothing.
+has already succeeded, so the approval has happened, however long that took. Since
+2026-09-15 the approver conveys the minted key before `enroll:approve`, so the envelope is
+already written when PKAM first succeeds, and 30s rides out scans and lookups that fail
+transiently. If nothing has arrived by then the approver did not convey, and waiting longer
+recovers nothing. This said the approver conveyed after approving, and that the 30s was
+headroom over the race between the atServer marking the enrollment approved and at_client
+finishing the envelope; a stop in that window left the enrollment approved with a key
+nothing held, and the atServer refuses a second approval. The enrollee now tries every
+conveyed key and keeps the one that decrypts what its approval encrypted, because a retried
+or raced approval leaves more than one.
 
 **Still owed:** the functional rails point at a locally built image and must be reverted
 before any client PR, and the new test cannot pass against `vip` until the atServer
@@ -4158,18 +4163,24 @@ the only operation in the system that makes already-written data unreadable:
 the nskey private cannot help once no sealed copy of that CK survives. O(1),
 one record, on ordinary sync rather than the substrate.
 
-Two orderings carry B5a's correctness, and both were red-proven. The delete
-happens **after** the successor is durable — deleting first and then failing the
-conveyance write would leave the destination with no readable past AND no key
-to write the next value under, the one state worse than not rotating. And the
-superseded `ckKid` is read from the **current-CK pointer** as well as the cache,
-because the process that cut it may not be this one; without that a rotation
-from a freshly started client supersedes nothing, leaves the old conveyance
-live, and reports a forward secrecy it did not deliver.
+Two orderings carry B5a's correctness. The delete happens **before** the
+successor is cut. This said the delete came after the successor was durable,
+because deleting first and then failing the conveyance write would leave the
+destination with no key to write the next value under. That was false: the next
+write resumes from the pointer, finds the record gone, and cuts a fresh key
+(`deletes before cutting the successor, and the next write cuts one` in
+`ck_manager_test.dart`), whereas cutting first let a stop between the cut and the
+delete leave the superseded record readable for good. Reordered on 2026-09-15 by
+the deterministic client stop work. And the superseded `ckKid` is read from the
+**current-CK pointer** as well as the cache, because the process that cut it may
+not be this one; without that a rotation from a freshly started client
+supersedes nothing, leaves the old conveyance live, and reports a forward secrecy
+it did not deliver.
 
-A delete that fails is `severe` and does not roll back the rotation. Writes are
-correct from there on; what was lost is the forward secrecy, and a caller that
-believes it rotated for FS has to hear that it did not.
+A delete that fails throws, before anything is cut, so a caller that rotated for
+forward secrecy hears that it did not get it. This said a failed delete was
+`severe` and did not roll back the rotation, which logged the loss while
+reporting success.
 
 ### 47.2 Deleting the record is half of it; eviction is the other half
 
@@ -4305,7 +4316,8 @@ revoke-before-rotate ordering, conveying without reading the durable copy back,
 revoking an unknown enrollment, abandoning the remaining namespaces after one
 fails, falling back to in-memory key storage, the `__manage` guard, deleting
 before the successor is durable, deleting without evicting, a failed delete
-rolling back the rotation, the missing pointer fallback, the eviction listener's
+rolling back the rotation (both orderings since reversed, see
+[47.1](#471-the-two-levers-kept-apart-on-purpose)), the missing pointer fallback, the eviction listener's
 direction and `commitOp` guards, the last-dot key split, the listener never
 being registered, and the narrow catch in the enrollment path.
 
@@ -13037,11 +13049,13 @@ Two things, and the second is why the first is safe:
    the mint *"never withdraws a key anything could have signed with"*. That is
    false in one state neither rule 2 nor enrolment-time minting removes: an
    enrollment that authenticates **post-quantum** and holds **no** data signing
-   key — the heal path. There the mint publishes a fresh key, the authentication
-   key stops being named, and a signer reading between the publish and the file
-   takes the authentication fallback and produces an envelope nothing can
-   verify. `serialiseApskWrite` does not close it: that lock serialises `_apsk`
-   **writers**, and this is a **reader**.
+   key — the heal path. A signer reading between the mint's two writes signs
+   under a key the advertisement does not name. `serialiseApskWrite` does not
+   close it: that lock serialises `_apsk` **writers**, and this is a
+   **reader**. Since 2026-09-15 a mint files before it publishes, so that signer
+   signs under the minted key and the envelope verifies once the publish lands.
+   This said the mint published first, and that the signer took the
+   authentication fallback and produced an envelope nothing could verify.
 
    **What the deletion actually rests on** (gkc, 2026-08-30): that state has no
    holder outside this tree. Nothing released carries post-quantum key material,

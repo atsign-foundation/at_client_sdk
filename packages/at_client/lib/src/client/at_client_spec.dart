@@ -160,16 +160,22 @@ abstract class AtClient {
 
   /// Stops everything this client runs: the keystore-event timers, the
   /// data-event stream, the sync and notification services and the
-  /// connection, whose state ends as `offline(stopped)`. The client's claim
-  /// on its storage is released; storage built with `closedByClient: true`,
-  /// and the Hive store opened from `preference.hiveStoragePath`, is closed,
-  /// while storage the caller supplied otherwise stays open for the caller
-  /// to close.
+  /// connection, whose state ends as `offline(stopped)`. Every connection the
+  /// client opened is closed by the time this returns, the monitor's and
+  /// sync's included, and so is one it was handed. The client's claim on its
+  /// storage is released; storage built with `closedByClient: true`, and the
+  /// Hive store opened from `preference.hiveStoragePath`, is closed, while
+  /// storage the caller supplied otherwise stays open for the caller to
+  /// close.
   ///
-  /// Does not drain: a sync round in flight is abandoned at its next step,
-  /// and what it had not pushed stays queued for the next client on this
-  /// store. An app that wants its writes on the atServer first waits until
-  /// `syncService.isInSync()` answers true.
+  /// Does not drain: work in flight is not awaited, and fails with
+  /// [StoppedException] where the stop cut it off. A sync round is abandoned
+  /// at its next step, and what it had not pushed stays queued for the next
+  /// client on this store. An app that wants its writes on the atServer first
+  /// waits until `syncService.isInSync()` answers true.
+  ///
+  /// After this, a read or write of local storage throws [StoppedException],
+  /// and the services are gone: reading one throws [StateError].
   ///
   /// A stopped client cannot be restarted, and the atSign can be opened
   /// again at once: the refusal of a second live client for the same

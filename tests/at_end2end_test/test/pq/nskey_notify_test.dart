@@ -206,7 +206,7 @@ void main() {
     });
     addTearDown(connectionWatch.cancel);
 
-    await secondNotifications.monitor.lookUp.close();
+    await secondNotifications.monitor.lookUp.dropConnection();
 
     await wentDown.future.timeout(
       Duration(seconds: 30),
