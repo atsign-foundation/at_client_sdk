@@ -1,8 +1,9 @@
 ## 3.15.0-rc1
 
 - fix: a notification is no longer lost when the atServer has said anything
-  else on the monitor connection first; the connection stayed up and the
-  client stopped receiving. Fixed in at_lookup's framing.
+  else on the monitor connection first - the connection stayed up and the
+  client stopped receiving - and a reply arriving in the same chunk as a
+  notification is no longer lost either. Fixed in at_lookup's framing.
 - fix: concurrent `stop()` callers share one teardown. A second caller used
   to return the moment it saw the client flagged stopped, which is before
   the first caller's teardown has closed anything, so it was handed a client
