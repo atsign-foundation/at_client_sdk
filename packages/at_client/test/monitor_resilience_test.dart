@@ -380,15 +380,25 @@ void main() {
       await startListening();
       await deliver('before');
 
-      service.stopAllSubscriptions(stopNotificationsListener: true);
+      service.stopListening();
       await server.waitUntil(
           () =>
               service.currentListenerState ==
               NotificationListenerState.notConnected,
           what: 'the listener stopping');
-
       expect(server.sockets.where((s) => !s.destroyed), isEmpty,
           reason: 'a stopped listener holds no connection');
+
+      service.startListening();
+      await connected();
+      await deliver('after');
+
+      expect(received.map((n) => n.id), ['before', 'after'],
+          reason: 'a service that stops listening on purpose - while it has '
+              'no work to do, or over a maintenance window - has to come '
+              'back to the same subscriber when it starts again');
+      expect(server.connectCount, 2,
+          reason: 'on a new connection, since the old one was closed');
     });
   });
 
