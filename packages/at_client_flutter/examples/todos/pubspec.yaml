@@ -22,6 +22,12 @@ dependencies:
   path: ^1.9.1
   cupertino_icons: ^1.0.8
 
+# TODO(at_chops-4.0.0): restore the `at_chops: path: ../../../at_chops/` override
+# below once at_client has migrated off the at_chops 3.x facade — 4.0.0 removed
+# AtChops/AtChopsImpl/AtChopsUtil and the AtSigning*/AtEncryption* result types,
+# which at_client still uses. Until then this example builds against the
+# published at_chops 3.x, which means it does NOT exercise local at_chops
+# changes.
 dependency_overrides:
   at_client:
     path: ../../../at_client/
@@ -31,8 +37,6 @@ dependency_overrides:
     path: ../../../at_lookup/
   at_commons:
     path: ../../../at_commons/
-  at_chops:
-    path: ../../../at_chops/
 
 dev_dependencies:
   flutter_test:

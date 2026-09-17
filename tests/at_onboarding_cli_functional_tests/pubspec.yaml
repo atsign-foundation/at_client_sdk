@@ -14,5 +14,6 @@ dependencies:
   at_demo_data: ^1.2.0
 
 dev_dependencies:
+  elliptic: ^0.3.10 # test-only: secp256r1 keys for the secure-element mock
   lints: ^6.0.0
   test: ^1.25.0
