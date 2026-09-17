@@ -201,6 +201,40 @@ void main() {
     expect(published, hasLength(1));
   });
 
+  test('a generation filed but never published is published, not minted again',
+      () async {
+    final c = client();
+    final filer = await filing();
+    final secondary = c.client.getRemoteSecondary()!;
+    var refuse = true;
+    when(() => secondary.executeVerb(
+        any(
+            that: isA<UpdateVerbBuilder>()
+                .having((b) => b.atKey.key, 'key', '__nskey')),
+        sync: any(named: 'sync'))).thenAnswer((inv) async {
+      if (refuse) throw StoppedException('the client stopped');
+      final builder = inv.positionalArguments[0] as UpdateVerbBuilder;
+      c.advertised[builder.atKey.namespace!] = builder.value as String;
+      return 'data:1';
+    });
+    await expectLater(
+        PublishedNskeyKeyRing(c.client, privateFiling: filer)
+            .mintAndPublish(namespace),
+        throwsA(isA<StoppedException>()));
+    final filed = await filer.filedFor(namespace);
+    expect(filed, hasLength(1), reason: 'the stop landed after the filing');
+
+    refuse = false;
+    final advertisement =
+        await PublishedNskeyKeyRing(c.client, privateFiling: filer)
+            .mintAndPublish(namespace);
+
+    expect(advertisement.nskeyKid, filed.single.nskeyKid,
+        reason: 'minting again would publish a generation beside a filed '
+            'private that nothing will ever advertise');
+    expect(await filer.filedFor(namespace), hasLength(1));
+  });
+
   test('a ring built from the client alone files into the client\'s keyfile',
       () async {
     final c = client();

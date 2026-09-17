@@ -80,6 +80,8 @@ void main() {
     int succeedFor = 999,
     required String payload,
     String? apskPublicKey,
+    Exception Function()? fetchFailure,
+    Exception Function()? apskFailure,
   }) {
     final fetches = <int>[];
     final atClient = MockAtClient();
@@ -92,11 +94,13 @@ void main() {
     Future<AtValue> answer(Invocation invocation) async {
       final key = invocation.positionalArguments.first as AtKey;
       if (key.key != '__nskey') {
+        if (apskFailure != null) throw apskFailure();
         return AtValue()..value = apskPublicKey ?? bobsApskPublicKey();
       }
       fetches.add(1);
       if (fetches.length > succeedFor) {
-        throw SecondaryConnectException('atServer unreachable');
+        throw fetchFailure?.call() ??
+            SecondaryConnectException('atServer unreachable');
       }
       return AtValue()..value = payload;
     }
@@ -165,6 +169,23 @@ void main() {
               'rotated because of a revocation is the one to stop sealing to');
     });
 
+    test('a stop during a re-fetch is not read as nothing published', () async {
+      final c = client(
+          succeedFor: 1,
+          payload: await signedPayloadFor(bobKey),
+          fetchFailure: () => StoppedException('the client has stopped'));
+      final ring = PublishedNskeyKeyRing(c.atClient,
+          advertisementTtl: const Duration(milliseconds: 1),
+          advertisementStaleGrace: const Duration(milliseconds: 1));
+      await ring.currentPublic(bob, namespace);
+      await Future.delayed(const Duration(milliseconds: 30));
+
+      await expectLater(
+          ring.currentPublic(bob, namespace), throwsA(isA<StoppedException>()),
+          reason: 'nothing published sends a write to the legacy fallback, '
+              'which a stopping client can still complete locally');
+    });
+
     test('an atSign that has never published resolves to nothing', () async {
       final atClient = MockAtClient();
       when(() => atClient.getCurrentAtSign()).thenReturn(alice);
@@ -200,6 +221,20 @@ void main() {
           reason: 'served by the same lookup a peer would use, signature '
               'check included — which is what makes "one verify path, '
               'same-atSign and cross-atSign" true rather than aspirational');
+    });
+
+    test(
+        'a stop while checking our own advertisement is not read as '
+        'unpublished', () async {
+      final c = client(
+          payload: await signedPayloadFor(bobKey),
+          apskFailure: () => StoppedException('the client has stopped'));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).publishedRecord(alice, namespace),
+          throwsA(isA<StoppedException>()),
+          reason: 'unpublished invites a mint, which files a private this '
+              'client then never publishes');
     });
 
     /// A client holding nothing locally for the advertisement, whose atServer

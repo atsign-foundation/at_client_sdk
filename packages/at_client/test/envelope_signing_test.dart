@@ -155,10 +155,26 @@ void main() {
 
       verify(() => atClientB.get(any(),
           getRequestOptions: any(named: 'getRequestOptions'))).called(1);
-      // Cancel the purge timer so the test suite doesn't hang on it
-      for (final v in cachingVerifier.pubKeyCache.values) {
-        v.$2.cancel();
-      }
+    });
+
+    test('an expired entry is fetched again, with no timer left to purge it',
+        () async {
+      final cachingVerifier = TestEnvelopeSigner(atClientB,
+          publicKeyCacheSettings: (
+            cacheExpiry: Duration(milliseconds: 50),
+            resetOnLookup: false
+          ));
+      stubApskGet(atClientB, pkamPublicKey(keyA));
+
+      final envelope = await signerA.wrapAndSign({'a': 1});
+      await cachingVerifier.verifyEnvelopeSignature(envelope,
+          signerAtSign: atSign);
+      await Future.delayed(const Duration(milliseconds: 100));
+      await cachingVerifier.verifyEnvelopeSignature(envelope,
+          signerAtSign: atSign);
+
+      verify(() => atClientB.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions'))).called(2);
     });
 
     test('with caching disabled, the _apsk key is fetched every time',
@@ -171,6 +187,23 @@ void main() {
 
       verify(() => atClientB.get(any(),
           getRequestOptions: any(named: 'getRequestOptions'))).called(2);
+    });
+
+    test('cachePubKey drops expired entries on insert', () async {
+      final cachingVerifier = TestEnvelopeSigner(atClientB,
+          publicKeyCacheSettings: (
+            cacheExpiry: Duration(milliseconds: 50),
+            resetOnLookup: false
+          ));
+
+      cachingVerifier.cachePubKey('@alice', 'enrollA', 'keyA');
+      expect(cachingVerifier.pubKeyCache, hasLength(1));
+
+      await Future.delayed(Duration(milliseconds: 100));
+
+      cachingVerifier.cachePubKey('@bob', 'enrollB', 'keyB');
+      expect(cachingVerifier.pubKeyCache, hasLength(1));
+      expect(cachingVerifier.pubKeyCache.keys.single, '@bob#enrollB');
     });
   });
 }

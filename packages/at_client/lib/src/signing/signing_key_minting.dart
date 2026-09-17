@@ -20,9 +20,12 @@ import 'package:at_utils/at_utils.dart' show AtSignLogger, AtUtils;
 /// algorithm the set names and the enrollment does not hold, and retiring
 /// every one it holds that the set no longer names.
 ///
-/// A key is published before it is filed, and a withdrawal from service is
-/// filed after the addition, so that at every instant every key this client
-/// might sign with is named in the advertisement.
+/// A key is filed before it is published, so a stop between the two leaves
+/// the keyfile holding it and the next start's `_apsk` republish advertises
+/// it; the other order could leave a key advertised that nothing holds. A
+/// signer in between signs under a key the advertisement names only once the
+/// publish lands. A withdrawal from service is filed after the publish, so an
+/// outgoing key is never unadvertised while it is still what signs.
 class SigningKeyMinting with ApkamSigning {
   /// Reconciles [atClient]'s signing keys, publishing through [updater] when
   /// one is supplied and a fresh [EnrollmentUpdater] otherwise.
@@ -90,7 +93,7 @@ class SigningKeyMinting with ApkamSigning {
     ];
     if (missing.isNotEmpty) {
       logger.info('Minted ${missing.map((a) => a.name).join(', ')} signing '
-          'key(s) for $enrollmentId; publishing before filing');
+          'key(s) for $enrollmentId; filing before publishing');
     }
     if (superseded.isNotEmpty) {
       logger.info(
@@ -100,16 +103,15 @@ class SigningKeyMinting with ApkamSigning {
           'verifies');
     }
 
-    // NOTE: publish and file are one critical section. In the window between
-    // them another writer in this process composes from a keyfile that does not
-    // yet hold the minted key and overwrites what was just advertised.
+    // NOTE: file, publish and retire are one critical section, so no other
+    // `_apsk` writer in this process composes from the keyfile half way.
     await serialiseApskWrite(atClient, () async {
-      await _publish(
-          _strongestFirst([...minted, ...keeping], (key) => key.algorithm),
-          retiring: superseded);
       for (final key in minted) {
         await _file(io, atSign, key);
       }
+      await _publish(
+          _strongestFirst([...minted, ...keeping], (key) => key.algorithm),
+          retiring: superseded);
       for (final key in superseded) {
         await _retire(io, atSign, key.algorithm);
       }
