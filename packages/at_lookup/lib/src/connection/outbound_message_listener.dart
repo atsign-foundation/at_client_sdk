@@ -34,21 +34,13 @@ class OutboundMessageListener {
   final AtConnection _connection;
   Function? syncCallback;
 
-  /// Where asynchronous `notification:` lines go, if anywhere.
+  /// Where `notification:` messages go, if anywhere.
   ///
-  /// The atServer frames the two kinds of message differently. A verb response
-  /// ends `\n@<atSign>@` - the newline, then the prompt saying it is ready for
-  /// the next command. A notification is not a reply to anything, so no prompt
-  /// follows it and it ends at a bare `\n`.
-  ///
-  /// While this is null the second framing is not applied at all and the
-  /// listener behaves exactly as it did before it existed. That is deliberate:
-  /// routing notifications to a callback nobody installed would drop them, and
-  /// a dropped notification is indistinguishable from one the atServer never
-  /// sent.
+  /// A notification answers no request, so nothing is waiting to read it: with
+  /// no callback installed there is nowhere to put one and it is dropped, with
+  /// a warning saying so.
   void Function(String notification)? onNotification;
   final int newLineCodeUnit = 10;
-  final int atCharCodeUnit = 64;
   late DateTime _lastReceivedTime;
 
   OutboundMessageListener(this._connection, {int bufferCapacity = 10240000}) {
@@ -144,108 +136,70 @@ class OutboundMessageListener {
     _notifyDisconnect();
   }
 
-  /// Handles messages on the inbound client's connection and calls the verb executor
-  /// Closes the inbound connection in case of any error.
-  /// Throw a [BufferOverFlowException] if buffer is unable to hold incoming data
+  /// Reads the connection a line at a time and hands each message to whatever
+  /// it belongs to.
+  ///
+  /// The atServer writes one message at a time and every message ends at a
+  /// newline, so a line IS a message: nothing has to be inferred from where a
+  /// prompt falls. A message may carry the prompt for the next command at its
+  /// start - `@alice@data:ok` - which [_stripPrompt] takes off, and what is
+  /// left says which kind of message it is. `data:` and `error:` answer a
+  /// request this client made, so they go to the reader waiting for one;
+  /// `notification:` was not asked for and goes to [onNotification]; a kind
+  /// added to the protocol later takes its own route here rather than being
+  /// mistaken for either.
+  ///
+  /// Throws a [BufferOverFlowException] if the buffer cannot hold the data.
   Future<void> messageHandler(List<int> data) async {
-    String result;
-    int offset;
     _lastReceivedTime = DateTime.now();
-    // check buffer overflow
     _checkBufferOverFlow(data);
-    // If the data contains a new line character, add until the new line char to buffer
-    // Everything before the LAST newline is appended without being examined
-    // for the `\n@` terminator, and that is not an optimisation - it is what
-    // makes multi-line values work. A `data:` value may itself contain `\n@`
-    // (a key name follows a newline inside the value), and inspecting those
-    // bytes would end the response early and truncate it.
-    //
-    // Notifications need the opposite: they end at a bare newline, so every
-    // newline in that skipped region IS a message boundary. Hence two passes
-    // over it - the notification check byte by byte, the `\n@` check only from
-    // the last newline on, exactly as before.
-    if (data.contains(newLineCodeUnit)) {
-      offset = data.lastIndexOf(newLineCodeUnit);
-      final head = data.getRange(0, offset).toList();
-      if (onNotification == null) {
-        _buffer.append(head);
-      } else {
-        for (final byte in head) {
-          _buffer.addByte(byte);
-          if (byte == newLineCodeUnit) {
-            _routeIfNotification();
-          }
-        }
-      }
-    } else {
-      offset = 0;
-    }
-    // Loop from last index to until the end of data.
-    // If a new line character and followed by @ character is found, then it is end
-    // of server response. process the data.
-    // Else add the byte to buffer.
-    for (int element = offset; element < data.length; element++) {
-      // If element is @ character and lastCharacter in the buffer is \n,
-      // then complete data is received. process it.
-      if (data[element] == atCharCodeUnit &&
-          (_buffer.length() > 0 && _buffer.getData().last == newLineCodeUnit)) {
-        // remove the terminating character (last \n) from the server response.
-        // preserve other new line characters.
-        List<int> temp = (_buffer.getData().toList())..removeLast();
-        result = utf8.decode(temp);
-        result = _stripPrompt(result);
-        logger.finer('RECEIVED $result');
-        _queue.add(result);
-        _wakeReaders();
-        //clear the buffer after adding result to queue
-        _buffer.clear();
-        _buffer.addByte(data[element]);
-      } else {
-        _buffer.addByte(data[element]);
-        if (data[element] == newLineCodeUnit && onNotification != null) {
-          _routeIfNotification();
-        }
+    for (final byte in data) {
+      _buffer.addByte(byte);
+      if (byte == newLineCodeUnit) {
+        _deliverMessage();
       }
     }
   }
 
-  /// Surface the line the buffer just completed, if it is a notification.
-  ///
-  /// Called only when the buffer just gained a newline, and it reads THAT
-  /// LINE rather than the whole buffer: anything already sitting in front of
-  /// it — a line the atServer sent that is not a notification and carries no
-  /// prompt to complete it — would otherwise prefix every notification after
-  /// it, so none of them would be recognised and each would be swallowed into
-  /// whatever response the next prompt completes. The connection stays up
-  /// throughout, so the caller goes deaf with nothing to see.
-  ///
-  /// A verb response whose VALUE contains newlines is still left alone: its
-  /// lines begin `data:` or `error:`, never `notification:`. A value carrying
-  /// a line that does begin `notification:` would be routed as one — nothing
-  /// on a monitor connection sends such a value, and being deaf is worse.
-  void _routeIfNotification() {
+  /// Delivers the message the buffer just completed.
+  void _deliverMessage() {
     final bytes = _buffer.getData();
-    if (bytes.isEmpty || bytes.last != newLineCodeUnit) return;
-    final lineStart = bytes.lastIndexOf(newLineCodeUnit, bytes.length - 2) + 1;
-    final body = bytes.sublist(lineStart, bytes.length - 1);
+    final body = bytes.sublist(0, bytes.length - 1);
+    _buffer.clear();
     if (body.isEmpty) return;
-    final String stripped;
+    final String message;
     try {
-      stripped = _stripPrompt(utf8.decode(body));
-    } catch (_) {
-      // Not decodable yet - more bytes are coming. Leave the buffer alone.
+      message = _stripPrompt(utf8.decode(body));
+    } catch (e) {
+      // A line always holds whole UTF-8 sequences - a newline byte cannot be
+      // part of one - so this is the atServer sending bytes that are not
+      // UTF-8 at all. Dropping the line keeps it out of the next message.
+      logger.warning('Undecodable line dropped: $e');
       return;
     }
-    if (!stripped.startsWith('notification:')) return;
+    if (message.isEmpty) return;
+    if (message.startsWith('notification:')) {
+      _deliverNotification(message);
+      return;
+    }
+    logger.finer('RECEIVED $message');
+    _queue.add(message);
+    _wakeReaders();
+  }
 
-    logger.finer('NOTIFICATION $stripped');
-    // Only the notification goes: what came before it stays for the reader
-    // that response belongs to.
-    final kept = bytes.sublist(0, lineStart);
-    _buffer.clear();
-    if (kept.isNotEmpty) _buffer.append(kept);
+  void _deliverNotification(String notification) {
+    final callback = onNotification;
+    if (callback == null) {
+      // Warned, not swallowed: a notification nobody routed is gone for good,
+      // and a client that never hears it cannot tell that from one the
+      // atServer never sent.
+      logger.warning(
+          'Notification dropped - nothing is listening for one: $notification');
+      return;
+    }
+    logger.finer('NOTIFICATION $notification');
     try {
-      onNotification!(stripped);
+      callback(notification);
     } catch (e, st) {
       logger.shout('onNotification threw $e - notification dropped\n$st');
     }

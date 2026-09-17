@@ -1,28 +1,19 @@
 /// Framing when a verb reply and a notification share one connection.
 ///
 /// The notification connection carries verb traffic - the heartbeat probes it
-/// with `noop:0` - so the listener has to keep two frame shapes apart in one
-/// byte stream: a
-/// notification is a line ending `\n`, a reply ends `\n@<prompt>@`. Neither
-/// may consume the other.
+/// with `noop:0` - so the listener has to keep the kinds apart in one byte
+/// stream. Two properties of the protocol make that deterministic: every
+/// message from the atServer ends at a newline, and the atServer writes one
+/// message at a time. A line is therefore a message, and what it begins with -
+/// once the prompt that may precede it is off - says which kind it is, so
+/// neither kind can consume the other whatever order they arrive in.
 ///
 /// Every case here is a real arrival pattern, and only those: the atServer
-/// writes each frame with a single write, so one frame never appears INSIDE
+/// writes each message with a single write, so one never appears INSIDE
 /// another. What TCP is free to do is split a write anywhere and coalesce
-/// adjacent ones, so two whole frames can reach the client in one chunk, or
-/// one frame across several - which is what these cover.
-///
-/// ⛔ Still known broken, and covered below: a complete reply followed by a
-/// notification in ONE chunk loses the REPLY. The notification does arrive -
-/// it is read as the line it is, whatever sits in front of it. The scan over
-/// everything before a chunk's last newline looks only for notifications,
-/// never for the `\n@` reply terminator - deliberately, because a `data:`
-/// value may contain `\n@` and inspecting those bytes would truncate it (the
-/// last test here is that control). Disambiguating the two needs a delimiter
-/// the protocol does not have yet - an atServer that terminated every
-/// notification the way it terminates a reply would supply one. On a monitor
-/// connection the lost reply is a heartbeat answer, and an unanswered probe
-/// rebuilds the connection.
+/// adjacent ones, so two whole messages can reach the client in one chunk, or
+/// one across several - which is what these cover, along with the prompt for
+/// the next command arriving in the same flow as the end of the last message.
 library;
 
 import 'dart:async';
@@ -112,32 +103,27 @@ void main() {
               'prompt completes');
     });
 
-    test('a reply coalesced in front of a notification loses only the reply',
+    test('a reply, its prompt and a notification in one chunk keep both',
         () async {
       final out = await drive(['$reply\n@alice@$notif\n']);
 
       expect(out.notifications, [notif],
-          reason: 'the notification is the last line of the chunk, and it is '
-              'read as a line: what precedes it cannot hide it');
-      expect(out.reply, isNull,
-          reason: 'the reply is still lost - its terminator was consumed as '
-              'part of the notification line. This is the known gap the '
-              'header describes, and on a monitor connection it costs one '
-              'heartbeat answer, which rebuilds the connection');
+          reason: 'the prompt sits at the start of the notification, and a '
+              'message is recognised by what it begins with once that is off');
+      expect(out.reply, reply,
+          reason: 'the reply ended at its own newline, so the prompt that '
+              'followed it in the same chunk belongs to the notification and '
+              'takes nothing with it');
     });
 
-    test('a multi-line reply value containing a prompt is NOT truncated',
-        () async {
-      // The control, and the reason the framing is careful: a `data:` value
-      // may itself contain `\n@`, which must not be mistaken for the end of
-      // the response. If a fix for the cases above breaks this, it has traded
-      // one truncation for another.
-      const multiline = 'data:first\n@bob:key@alice';
-      final out = await drive(['$multiline\n@alice@']);
+    test('a value carrying @ signs keeps them', () async {
+      // The control on stripping the prompt: only one at the START of the
+      // message comes off, so a value full of them is still the value.
+      const withAts = 'data:@bob:key@alice';
+      final out = await drive(['$withAts\n@alice@']);
 
-      expect(out.reply, multiline,
-          reason: 'the inner `\\n@` belongs to the value, and only the final '
-              'one terminates the response');
+      expect(out.reply, withAts,
+          reason: 'the @ signs are inside the message, not in front of it');
       expect(out.notifications, isEmpty);
     });
   });
