@@ -292,6 +292,7 @@ extension SyncServiceWaitUntilCaughtUp on SyncService {
       }
       if (completer.isCompleted) return;
       if (progress.stopped) {
+        detach();
         completer.completeError(StoppedException('the sync service for '
             '${progress.atSign} stopped before it caught up'));
         return;
