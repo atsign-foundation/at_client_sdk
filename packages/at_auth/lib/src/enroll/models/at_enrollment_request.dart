@@ -129,23 +129,26 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   final FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)?
       metadataBuilder;
 
-  /// Obtains this enrollment's `apkamSymmetricKey` once the approver has
-  /// delivered it, for a request whose [metadataBuilder] advertised a key
-  /// package.
+  /// Offers each `apkamSymmetricKey` an approver conveyed to this enrollment,
+  /// for a request whose [metadataBuilder] advertised a key package.
   ///
   /// Such a request never generates the symmetric key and never RSA-wraps one:
   /// the approver mints it and encapsulates it to the advertised public half,
-  /// so it has to be collected after approval rather than carried in. This
-  /// runs inside `waitForApproval`, after PKAM authentication succeeds — the
-  /// earliest point at which the enrollment can read anything — and is handed
-  /// the authenticated [AtLookUp] plus the [AtKeys] holding the key package's
+  /// so it has to be collected rather than carried in. This runs inside
+  /// `waitForApproval`, after PKAM authentication succeeds — the earliest
+  /// point at which the enrollment can read anything — and is handed the
+  /// authenticated [AtLookUp] plus the [AtKeys] holding the key package's
   /// private half.
+  ///
+  /// A stream, because an approval that was retried or raced by a second
+  /// approver leaves more than one conveyed key: the handshake keeps the first
+  /// that decrypts what the approval encrypted, and cancels the rest.
   ///
   /// Supplied by — and only by — [AtEnrollmentRequest.pq], which requires it:
   /// without one a pq request would authenticate and then be unable to decrypt
   /// anything. Null on a legacy request, which carries its own symmetric key
   /// in and has nothing to collect.
-  final FutureOr<String> Function(AtKeys keys, AtLookUp atLookUp)?
+  final Stream<String> Function(AtKeys keys, AtLookUp atLookUp)?
       apkamSymmetricKeyResolver;
 
   /// The algorithm this enrollment's APKAM **authentication** keypair is
@@ -241,7 +244,7 @@ class AtEnrollmentRequest extends EnrollmentRequest {
     required this.namespaces,
     required FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)
         this.metadataBuilder,
-    required FutureOr<String> Function(AtKeys keys, AtLookUp atLookUp)
+    required Stream<String> Function(AtKeys keys, AtLookUp atLookUp)
         this.apkamSymmetricKeyResolver,
     this.apkamKeysExpiryDuration,
     required this.signingAlgo,

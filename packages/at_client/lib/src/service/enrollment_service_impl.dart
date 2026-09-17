@@ -154,10 +154,15 @@ class EnrollmentServiceImpl implements EnrollmentService {
           'approve it from a client whose posture does');
     }
 
-    String? mintedApkamSymmetricKey;
+    final approverKeys = await _approverKeys();
     var decision = enrollmentRequestDecision;
     if (mintsSymmetricKey) {
-      mintedApkamSymmetricKey = AESKey.generate(32).key;
+      final mintedApkamSymmetricKey = AESKey.generate(32).key;
+      // NOTE: conveyed before the approval, which encrypts this enrollment's
+      // keys under it and cannot be repeated: a stop in between otherwise
+      // leaves an approved enrollment whose key nothing holds.
+      await _conveyance.conveyMintedApkamSymmetricKey(
+          pending!, mintedApkamSymmetricKey);
       decision = EnrollmentRequestDecision.approvedWithMintedKey(
         enrollmentId: enrollmentRequestDecision.enrollmentId,
         apkamSymmetricKey: mintedApkamSymmetricKey,
@@ -167,7 +172,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
 
     final response = await _atEnrollmentImpl.approve(
         decision, _atClient.getRemoteSecondary()!.atLookUp,
-        approverKeys: await _approverKeys());
+        approverKeys: approverKeys);
 
     // NOTE: re-read after the approval, not before — the atServer publishes
     // the enrollment's _apsk at that point, and the advertised key package
@@ -178,8 +183,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
     if (enrollment != null) {
       final KeyPackageStatus status;
       try {
-        status = await _conveyance.conveySecretsTo(enrollment,
-            mintedApkamSymmetricKey: mintedApkamSymmetricKey);
+        status = await _conveyance.conveySecretsTo(enrollment);
       } on EnrollmentConveyanceException {
         rethrow;
       } on AtEnrollmentException catch (e) {

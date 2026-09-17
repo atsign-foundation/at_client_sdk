@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/util/close_without_waiting.dart';
+import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:meta/meta.dart' show visibleForTesting;
 
 /// Receives notifications from the atServer.
 ///
@@ -53,13 +56,10 @@ class Monitor {
   ///
   /// Hand this a **fresh** instance to keep today's two-connection
   /// arrangement, or the one `RemoteSecondary` already holds to collapse them
-  /// into one. ⚠️ Sharing is not safe yet, and that is not a matter of taste.
-  /// No atServer implements `monitor:multiplexed`, so nothing holds a
-  /// notification back while a verb response is in flight, and one written
-  /// into the middle of a response is absorbed into it. Second reason:
-  /// [_onNotification] pauses this connection while it hands a notification
-  /// on, so on a shared one the handler's own put would wait for a response
-  /// on the socket it has just paused.
+  /// into one. ⚠️ Sharing is not safe yet: [_onNotification] pauses this
+  /// connection while it hands a notification on, so on a shared one the
+  /// handler's own put would wait for a response on the socket it has just
+  /// paused.
   final AtLookupMuxable lookUp;
 
   Future<void> Function(String jsonEncoded) handleNotification;
@@ -119,7 +119,12 @@ class Monitor {
 
   /// The same backoff at_lookup uses for a lost connection, so a failed first
   /// connect and a dropped one recover on one schedule rather than two.
-  static const List<Duration> _startRetryDelays = [
+  ///
+  /// Settable for the same reason as `heartbeatInterval`: a test of what a
+  /// client does across several failed starts would otherwise spend a second
+  /// on the first and minutes on the rest.
+  @visibleForTesting
+  static List<Duration> startRetryDelays = const [
     Duration(seconds: 1),
     Duration(seconds: 2),
     Duration(seconds: 3),
@@ -133,6 +138,10 @@ class Monitor {
   void _enqueue(Future<void> Function() step) {
     _lifecycle =
         _lifecycle.then((_) => step()).catchError((Object e, StackTrace st) {
+      if (e is StoppedException) {
+        logger.info('Monitor lifecycle step ended by the stop');
+        return;
+      }
       logger.shout('Monitor lifecycle step failed: $e\n$st');
     });
   }
@@ -159,7 +168,12 @@ class Monitor {
   ///
   /// Reconnection is [lookUp]'s, so this does not loop: it subscribes once and
   /// the connection state arrives as events.
+  ///
+  /// Throws [StoppedException] once [close] has been called.
   void start() {
+    if (_closed) {
+      throw StoppedException('the notification monitor for $atSign is closed');
+    }
     if (targetState == NotificationListenerState.listening) {
       logger.shout('start() called, but targetState is already "listening"');
       return;
@@ -202,6 +216,12 @@ class Monitor {
       try {
         return await getLastNotificationTime();
       } catch (e) {
+        if (e is StoppedException ||
+            _targetState != NotificationListenerState.listening) {
+          logger.finer('Not reading the last-notification watermark: the '
+              'monitor has been stopped');
+          return null;
+        }
         logger.warning('Could not read the last-notification watermark, so the '
             'monitor is (re)starting without one: $e');
         return null;
@@ -225,6 +245,10 @@ class Monitor {
       _armSilenceTimer();
       logger.info('monitor started');
     } catch (e) {
+      if (_targetState != NotificationListenerState.listening) {
+        logger.info('stop() arrived while starting, which ended the start');
+        return;
+      }
       logger.warning('Failed to start notifications: $e');
       _scheduleStartRetry();
     }
@@ -235,7 +259,7 @@ class Monitor {
     _startRetry?.cancel();
     if (_targetState != NotificationListenerState.listening) return;
     final delay =
-        _startRetryDelays[_startRetryIx.clamp(0, _startRetryDelays.length - 1)];
+        startRetryDelays[_startRetryIx.clamp(0, startRetryDelays.length - 1)];
     _startRetryIx++;
     logger.info('retrying the notification start in ${delay.inSeconds}s');
     _startRetry = Timer(delay, () {
@@ -333,6 +357,19 @@ class Monitor {
   }
 
   Future<void> _stop() => _teardown();
+
+  bool _closed = false;
+
+  /// Stops the monitor for good: ends [lookUp], so a start in flight fails at
+  /// once, and returns when the teardown has run.
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    stop();
+    await lookUp.close();
+    await _lifecycle;
+    closeWithoutWaiting(currentStateStreamController);
+  }
 
   Future<void> _teardown() async {
     // Stop first, then cancel. `stopNotifications` closes the notification

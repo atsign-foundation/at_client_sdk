@@ -126,22 +126,20 @@ void main() {
   });
 
   test(
-      'UC-G1.9a · the client mints what the in-use set names, advertising '
-      'before filing', () {
+      'UC-G1.9a · the client mints what the in-use set names, filing before '
+      'advertising', () {
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'mints, advertises and files the algorithm the set names',
         proves: 'the mint itself, and that the key reaches the keyfile');
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
-        'publishes BEFORE filing',
-        proves: 'the ordering, and the whole of what the ordering buys: a '
-            'second WRITER composing from the keyfile mid-mint would publish '
-            'an advertisement the minted key is missing from, and everything '
-            'signed under that key afterwards would be unverifiable. It says '
-            'nothing about a concurrent READER, which is a window ruling 126 '
-            'accepts rather than closes - see the correction on the row',
+        'files BEFORE publishing',
+        proves: 'the ordering, and what it buys: a stop between the two leaves '
+            'a key the keyfile holds, where publishing first could leave one '
+            'advertised that nothing holds. It says nothing about a concurrent '
+            'READER, a window ruling 126 accepts rather than closes',
         clauses: [
-          'so no other writer composing from the keyfile republishes an '
-              'advertisement the minted key is missing from',
+          'so a stop between the two leaves a key held for the next start\'s '
+              'republish rather than a key advertised that nothing holds',
         ]);
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'the advertisement names the minted key and drops the auth key',

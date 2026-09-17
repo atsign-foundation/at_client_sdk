@@ -179,6 +179,7 @@ class PqSigningChain {
       );
       childKey = value.value as String;
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('No readable _apsk for enrollment $childEnrollmentId, '
           'so no chain link was signed for it; it stays unsigned: $e');
       return null;
@@ -214,6 +215,7 @@ class PqSigningChain {
       );
       childKey = value.value as String;
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('No readable _apsk for enrollment $childEnrollmentId, '
           'so no root link was signed for it; it stays unsigned: $e');
       return null;
@@ -324,6 +326,7 @@ class PqSigningChain {
       );
       return _fieldFrom(value, field);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.info('No _apsk readable for enrollment $enrollmentId: $e');
       return null;
     }
@@ -368,6 +371,7 @@ class PqSigningChain {
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.info('No _apsk published for $enrollmentId yet, so there is '
           'nothing to anchor: $e');
       return false;
@@ -518,6 +522,7 @@ class PqSigningChain {
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('This enrollment has no readable _apsk to publish a '
           'root link onto: $e');
       return false;
@@ -577,6 +582,7 @@ class PqSigningChain {
       await sharing.verifyEnvelopeSignature(link,
           signerAtSign: atSign, expecting: EnvelopeType.chainLink);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('Conveyed chain link does not verify against the '
           'enrollment it names as signer, so publishing it would advertise a '
           'link no verifier can follow: $e');
@@ -590,6 +596,7 @@ class PqSigningChain {
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.warning('This enrollment has no readable _apsk to publish a '
           'chain link onto: $e');
       return false;
@@ -688,6 +695,7 @@ class PqSigningChain {
       await verifier.verifyEnvelopeSignature(link,
           signerAtSign: atSign, expecting: EnvelopeType.chainLink);
     } catch (e) {
+      if (e is StoppedException) rethrow;
       return 'the link on $enrollmentId does not verify against the '
           'enrollment it names as signer: $e';
     }
@@ -758,6 +766,7 @@ class PqSigningChain {
       );
       return value.value as String?;
     } catch (e) {
+      if (e is StoppedException) rethrow;
       return null;
     }
   }
@@ -774,6 +783,7 @@ class PqSigningChain {
       final roots = await PqSigningRoot.publishedRoots(_atClient, atSign);
       return roots.where((r) => r.vouchesForPastOperations).toList();
     } catch (e) {
+      if (e is StoppedException) rethrow;
       _logger.info('No readable signing root for $atSign: $e');
       return const [];
     }

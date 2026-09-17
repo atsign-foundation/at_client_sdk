@@ -72,6 +72,11 @@ at_client, and this release removes the surface those replace.
 - **BREAKING:** a self-enrollment no longer approves its own request and no
   longer sends `encryptedAPKAMSymmetricKey`: the atServer approves a
   retrofit outright, and a `pending` answer is denied and thrown.
+- **BREAKING:** `apkamSymmetricKeyResolver` on `AtEnrollmentRequest.pq`
+  and `AtEnrollmentResponse` returns a `Stream<String>` of conveyed keys
+  rather than one key. `waitForApproval` keeps the first under which both
+  fetched keys decrypt, and keeps none when no key does, so a key conveyed
+  by a retried or raced approval is skipped rather than kept.
 - A PKAM challenge is signed from the keypair the keyfile holds for the
   enrollment, through one rule in every authenticator at_auth builds: the
   keyfile's keypair signs when it holds one, and an injected `AtChops` signs
@@ -134,6 +139,9 @@ at_client, and this release removes the surface those replace.
 - The enrolment handshake installs an authenticator on its lookup and never
   writes at_lookup's credential fields; both were written, and one was never
   read.
+- Activation drops its CRAM-authenticated connection with
+  `dropConnection()` before PKAM-authenticating on the same lookup. `close()`
+  now ends a lookup, so the PKAM after it would be refused.
 
 ## 4.0.0-rc1
 
