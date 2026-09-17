@@ -1,7 +1,18 @@
 ## 3.7.0-rc2
 
+- fix: the listener reads the connection a line at a time, and each line is
+  one message from the atServer: the prompt that may precede it comes off,
+  and what it begins with says where it goes - `data:` and `error:` to the
+  reader waiting for a reply, `notification:` to whoever asked for
+  notifications. It used to look for a reply's terminating prompt instead, so
+  anything the atServer said first and did not terminate - an error line, a
+  banner, half a reply - sat in front of every notification after it and none
+  were recognised: the connection stayed up and the client went deaf with
+  nothing to see. A notification and a reply that arrive in one chunk now
+  both survive, where one of them used to be lost.
+- `AtLookupImpl.notificationReconnectDelays` is settable, so a test of what
+  happens across several outages does not spend a second on each.
 - chore: bump at_commons dependency to ^5.18.0.
-
 - fix: a TLS connect is bounded from the TCP connect to the end of the
   handshake. `SecureSocket.connect(timeout:)` bounds only the TCP part, so a
   peer that accepted the connection and never answered the handshake left

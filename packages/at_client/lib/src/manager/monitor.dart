@@ -7,6 +7,7 @@ import 'package:at_client/src/util/close_without_waiting.dart';
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:meta/meta.dart' show visibleForTesting;
 
 /// Receives notifications from the atServer.
 ///
@@ -121,7 +122,12 @@ class Monitor {
 
   /// The same backoff at_lookup uses for a lost connection, so a failed first
   /// connect and a dropped one recover on one schedule rather than two.
-  static const List<Duration> _startRetryDelays = [
+  ///
+  /// Settable for the same reason as `heartbeatInterval`: a test of what a
+  /// client does across several failed starts would otherwise spend a second
+  /// on the first and minutes on the rest.
+  @visibleForTesting
+  static List<Duration> startRetryDelays = const [
     Duration(seconds: 1),
     Duration(seconds: 2),
     Duration(seconds: 3),
@@ -256,7 +262,7 @@ class Monitor {
     _startRetry?.cancel();
     if (_targetState != NotificationListenerState.listening) return;
     final delay =
-        _startRetryDelays[_startRetryIx.clamp(0, _startRetryDelays.length - 1)];
+        startRetryDelays[_startRetryIx.clamp(0, startRetryDelays.length - 1)];
     _startRetryIx++;
     logger.info('retrying the notification start in ${delay.inSeconds}s');
     _startRetry = Timer(delay, () {

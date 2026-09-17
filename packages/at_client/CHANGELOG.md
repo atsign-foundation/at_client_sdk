@@ -1,5 +1,9 @@
 ## 3.15.0-rc1
 
+- fix: a notification is no longer lost when the atServer has said anything
+  else on the monitor connection first - the connection stayed up and the
+  client stopped receiving - and a reply arriving in the same chunk as a
+  notification is no longer lost either. Fixed in at_lookup's framing.
 - fix: concurrent `stop()` callers share one teardown. A second caller used
   to return the moment it saw the client flagged stopped, which is before
   the first caller's teardown has closed anything, so it was handed a client
@@ -21,7 +25,6 @@
   before: a version skew is nothing the approver can fix.
 - fix: `RemoteSecondary.closeConnection` ends the remote secondary for good;
   use `AtLookupMuxable.dropConnection` for a connection that reconnects.
-
 - fix: `stop()` returns, and the process can exit, when the client's
   connections are waiting on an atServer or atDirectory that accepted them
   and never answered, not even the TLS handshake. It used to wait for ever.

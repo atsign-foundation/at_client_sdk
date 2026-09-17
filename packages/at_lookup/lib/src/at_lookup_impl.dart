@@ -1027,7 +1027,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   // subsystem that is not it.
 
   /// Delays between reconnect attempts. The last is repeated indefinitely.
-  static const List<Duration> notificationReconnectDelays = [
+  ///
+  /// Settable for the same reason as [heartbeatInterval]: a test of what
+  /// happens over several outages would otherwise spend a second on the first
+  /// reconnect of each one, and minutes on one that keeps failing.
+  static List<Duration> notificationReconnectDelays = const [
     Duration(seconds: 1),
     Duration(seconds: 2),
     Duration(seconds: 3),
