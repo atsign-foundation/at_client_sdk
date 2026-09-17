@@ -1156,14 +1156,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   /// Probe a quiet connection with `noop:0`.
   ///
-  /// ⚠️ This makes the notification connection carry verb traffic, which is
-  /// the arrangement [AtLookupMuxable] warns about: no atServer implements the
-  /// `multiplexed` interlock, so a notification written between this command
-  /// and its reply is absorbed into the reply rather than routed. The window
-  /// is one short round trip every [heartbeatInterval], and it is the same
-  /// exposure at_client's Monitor has had all along - this moves that
-  /// behaviour, it does not add it. It closes when an atServer implements the
-  /// flag.
+  /// This makes the notification connection carry verb traffic: a notification
+  /// arriving between this command and its reply is a message of its own and is
+  /// routed as one, and the reply still arrives.
   Future<void> _heartbeat() async {
     if (!_isNotifying) return;
     final generation = _notifyGeneration;

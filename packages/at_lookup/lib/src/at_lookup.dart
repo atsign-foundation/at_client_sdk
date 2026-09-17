@@ -248,18 +248,19 @@ abstract interface class AtLookUp {
 }
 
 /// An [AtLookUp] that also carries the atServer's asynchronous notification
-/// stream, so one class knows both of the atServer's framings.
+/// stream, so one class reads every kind of message the atServer sends.
 ///
-/// A verb response ends `\n@<atSign>@` — the newline, then the prompt saying
-/// the atServer is ready for the next command. A notification is not a reply
-/// to anything, so no prompt follows it and it ends at a bare `\n`. Everything
-/// that reads one of those framings has, until now, been written twice.
+/// Every message ends at a newline and the atServer writes one at a time, so
+/// each line is a message: the prompt it may carry at the start comes off, and
+/// what is left says where it goes — `data:` and `error:` answer a request
+/// this client made, `notification:` answers nothing. Everything that read the
+/// atServer has, until now, been written twice.
 ///
-/// ## This does NOT make one connection safe for both
+/// ## Sharing a connection between the two
 ///
-/// ⚠️ **Give this a connection of its own.** The notification stream and verb
-/// request-response must not share a socket today, and the flag that was
-/// supposed to make that safe does not work.
+/// A notification arriving between a command and its reply is routed as the
+/// message it is and the reply still arrives, so the kinds cannot corrupt one
+/// another on one socket.
 ///
 /// `MonitorVerbBuilder.multiplexed` documents itself as telling the atServer
 /// that a connection carries both, so that "the server will only send
@@ -269,15 +270,14 @@ abstract interface class AtLookUp {
 /// proven positive on `selfNotifications`, which returns 16. The monitor
 /// verb's syntax — shared by both sides, in at_commons — *does* capture
 /// `multiplexed` as a named group, so the atServer parses the flag, ignores
-/// it, and does not refuse it. Setting it buys nothing and reports success.
+/// it, and does not refuse it. Setting it buys nothing and reports success —
+/// and the interleaving it was meant to prevent is not what breaks a client
+/// reading whole lines.
 ///
-/// The consequence is concrete: the atServer's monitor handler subscribes to
-/// its notification stream and writes each notification to the connection as
-/// it arrives, with nothing gating that write on a request being in flight. A
-/// notification landing mid-response is appended to a buffer whose prefix is
-/// already `data:`, so the framing check — which tests that prefix — will not
-/// route it, and it is absorbed into the verb response instead. Corruption,
-/// not a dropped message, and only under concurrency.
+/// ⚠️ at_client's `Monitor` still takes a connection of its own, for a reason
+/// of its own: it pauses the connection while handing a notification on, so on
+/// a shared one a handler that writes would wait for its reply on the socket
+/// it has just paused.
 abstract interface class AtLookupMuxable implements AtLookUp {
   /// Notifications from the atServer, as the raw lines it sent.
   ///

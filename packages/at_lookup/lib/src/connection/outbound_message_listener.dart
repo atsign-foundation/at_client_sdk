@@ -32,7 +32,6 @@ class OutboundMessageListener {
   bool _closedLocally = false;
 
   final AtConnection _connection;
-  Function? syncCallback;
 
   /// Where `notification:` messages go, if anywhere.
   ///

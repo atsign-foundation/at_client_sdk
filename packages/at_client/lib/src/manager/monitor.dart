@@ -56,13 +56,10 @@ class Monitor {
   ///
   /// Hand this a **fresh** instance to keep today's two-connection
   /// arrangement, or the one `RemoteSecondary` already holds to collapse them
-  /// into one. ⚠️ Sharing is not safe yet, and that is not a matter of taste.
-  /// No atServer implements `monitor:multiplexed`, so nothing holds a
-  /// notification back while a verb response is in flight, and one written
-  /// into the middle of a response is absorbed into it. Second reason:
-  /// [_onNotification] pauses this connection while it hands a notification
-  /// on, so on a shared one the handler's own put would wait for a response
-  /// on the socket it has just paused.
+  /// into one. ⚠️ Sharing is not safe yet: [_onNotification] pauses this
+  /// connection while it hands a notification on, so on a shared one the
+  /// handler's own put would wait for a response on the socket it has just
+  /// paused.
   final AtLookupMuxable lookUp;
 
   Future<void> Function(String jsonEncoded) handleNotification;

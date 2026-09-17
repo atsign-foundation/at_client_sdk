@@ -325,9 +325,7 @@ class NotificationServiceImpl extends NotificationService {
           // A FRESH lookup, so the connection count is unchanged. Passing
           // `atClient.getRemoteSecondary()!.atLookUp` here instead would
           // collapse the two sockets into one - a one-line change, and NOT
-          // safe yet: no atServer implements `monitor:multiplexed`, so
-          // nothing holds a notification back while a verb response is in
-          // flight.
+          // safe yet, for the reason Monitor's `lookUp` gives.
           lookUp: lookUps(
             atSign: atSign,
             rootDomain:
