@@ -1004,19 +1004,33 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       return;
     }
     final stored = await secretStore.putIfNewer(secret);
-    if (!stored) {
+    if (!stored && !_isTheSecretHeld(secret)) {
       logger.info('Ignoring secret ${secret.namespace}:${secret.name} from '
-          'kpid ${received.fromKpid}: already hold a same-or-newer one');
+          'kpid ${received.fromKpid}: already hold a newer one');
       return;
     }
-    // NOTE: before the sweep deletes the envelope, so the envelope is the copy
-    // that survives a filing that fails or a stop that lands first.
-    await fileReceivedSecret?.call(secret);
+    // NOTE: emitted before the filing. The store holds the secret by now, so
+    // anything waiting on it is owed it whether or not the filing works - and
+    // a filing that throws is retried, so the wait would otherwise never end.
     _receivedSecretsController.add(ReceivedSecret(
       secret: secret,
       fromKpid: received.fromKpid,
       fromEnrollmentId: received.fromEnrollmentId,
     ));
+    // NOTE: before the sweep deletes the envelope, so the envelope is the copy
+    // that survives a filing that fails or a stop that lands first. The retry
+    // that envelope buys reaches this line because the guard above lets the
+    // secret this client already holds through.
+    await fileReceivedSecret?.call(secret);
+  }
+
+  /// Whether [secret] is the one [secretStore] already holds, rather than a
+  /// stale copy of it that a newer one has replaced.
+  bool _isTheSecretHeld(Secret secret) {
+    final held = secretStore.getSecret(secret.namespace, secret.name);
+    return held != null &&
+        held.value == secret.value &&
+        held.version == secret.version;
   }
 
   /// Shares one secret with one key package.

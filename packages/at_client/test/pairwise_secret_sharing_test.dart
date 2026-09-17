@@ -508,6 +508,68 @@ void main() {
               'the next stop');
     });
 
+    test('a secret that cannot be filed still reaches whoever waits for it',
+        () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage);
+      final received = <ReceivedSecret>[];
+      final sub = sharerB.receivedSecrets.listen(received.add);
+      sharerB.fileReceivedSecret =
+          (secret) async => throw Exception('the keyfile is not writable');
+
+      expect(await sharerB.sweepOnce(), 0);
+      await Future.delayed(Duration.zero); // let the stream deliver
+
+      expect(received.map((r) => r.secret.value), ['v1'],
+          reason: 'the store holds it by now, so a waiter is owed it whether '
+              'the filing worked or not - it hangs out its timeout otherwise');
+      await sub.cancel();
+    });
+
+    test('the retry a kept envelope buys reaches the filing', () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage);
+      sharerB.fileReceivedSecret =
+          (secret) async => throw Exception('the keyfile is not writable');
+      expect(await sharerB.sweepOnce(), 0);
+
+      // The next start: a fresh client, the envelope still there, and a store
+      // that kept what the attempt that failed had already committed to it.
+      final restarted = buildSharer('enroll-b', seedB);
+      await restarted.register();
+      await restarted.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v1'));
+      final filed = <String>[];
+      restarted.fileReceivedSecret = (secret) async => filed.add(secret.value);
+
+      expect(await restarted.sweepOnce(), 1);
+
+      expect(filed, ['v1'],
+          reason: 'the envelope is kept for a retry, so the retry has to get '
+              'past the store already holding what it carries');
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty,
+          reason: 'and the envelope goes once the filing has worked');
+    });
+
+    test('a stale copy of a secret we hold is not filed', () async {
+      await sharerB.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: 'token', value: 'new', version: 2));
+      await sharerA.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: 'token', value: 'old', version: 1));
+      await sharerA.shareAllSecretsWith(sharerB.myKeyPackage);
+      final filed = <String>[];
+      sharerB.fileReceivedSecret = (secret) async => filed.add(secret.value);
+
+      expect(await sharerB.sweepOnce(), 1);
+
+      expect(filed, isEmpty,
+          reason: 'filing an older secret would put stale key material in the '
+              'keyfile, and the store has already refused it');
+      expect(sharerB.secretStore.getSecret('myapp', 'token')!.value, 'new');
+    });
+
     test('a dotted application namespace survives the round trip intact',
         () async {
       // regression: AtKey.namespace is only the LAST dot segment, so the

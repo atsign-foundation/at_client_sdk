@@ -235,12 +235,8 @@ class PqClientBootstrap {
     // NOTE: every sweep deletes the envelopes it handles, not only the one at
     // start, so the key material they carry is filed as each arrives.
     sharing.fileReceivedSecret = (secret) async {
-      try {
-        await filing?.filePending([secret]);
-        await root.filePendingPrivate(_atSign, [secret]);
-      } catch (e, st) {
-        _logger.warning('Failed to file received secret ${secret.name}: $e', e, st);
-      }
+      await filing?.filePending([secret]);
+      await root.filePendingPrivate(_atSign, [secret]);
     };
     chain = PqSigningChain(_atClient);
     minting = SigningKeyMinting(_atClient);

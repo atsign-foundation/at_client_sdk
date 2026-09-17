@@ -1,5 +1,15 @@
 ## 3.15.0-rc1
 
+- fix: a received secret reaches whoever is waiting for it even when filing it
+  to the keyfile fails. The secret is in the store by then, so the wait was
+  ending in a timeout over a secret this client held. The envelope is still
+  kept for a retry when the filing fails, and that retry now gets past the
+  store already holding what the envelope carries, so the filing is actually
+  redone; a stale copy of a secret is still neither stored nor filed.
+- fix: `expiringSoonEvents` ends its stream when the collection stops, so
+  `await for` over it returns instead of waiting for ever.
+- fix: `waitUntilCaughtUp` removes its progress listener when the sync service
+  stops, as it already did on every other way of finishing.
 - fix: a notification is no longer lost when the atServer has said anything
   else on the monitor connection first - the connection stayed up and the
   client stopped receiving - and a reply arriving in the same chunk as a
